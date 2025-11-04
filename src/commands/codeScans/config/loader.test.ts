@@ -1,0 +1,197 @@
+/**
+ * Configuration Loader Tests
+ */
+
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { loadConfig, loadConfigOrDefault, ConfigLoadError } from './loader';
+import { SeverityLevel } from './schema';
+
+describe('Configuration Loader', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    // Create a temporary directory for test files
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'code-scan-test-'));
+  });
+
+  afterEach(() => {
+    // Clean up temporary directory
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  describe('loadConfig', () => {
+    it('should load valid configuration file', () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      fs.writeFileSync(
+        configPath,
+        'minimumSeverity: high\nuseFilesystem: true',
+      );
+
+      const config = loadConfig(configPath);
+
+      expect(config).toEqual({
+        minimumSeverity: SeverityLevel.HIGH,
+        useFilesystem: true,
+      });
+    });
+
+    it('should apply defaults for missing optional fields', () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      fs.writeFileSync(configPath, '{}'); // Empty object
+
+      const config = loadConfig(configPath);
+
+      expect(config).toEqual({
+        minimumSeverity: SeverityLevel.HIGH,
+        useFilesystem: true,
+      });
+    });
+
+    it('should accept all valid severity levels', () => {
+      const testCases: Array<[SeverityLevel, string]> = [
+        [SeverityLevel.LOW, 'low'],
+        [SeverityLevel.MEDIUM, 'medium'],
+        [SeverityLevel.HIGH, 'high'],
+        [SeverityLevel.CRITICAL, 'critical'],
+      ];
+
+      for (const [expectedLevel, levelString] of testCases) {
+        const configPath = path.join(tempDir, `config-${levelString}.yaml`);
+        fs.writeFileSync(
+          configPath,
+          `minimumSeverity: ${levelString}\nuseFilesystem: false`,
+        );
+
+        const config = loadConfig(configPath);
+
+        expect(config.minimumSeverity).toBe(expectedLevel);
+        expect(config.useFilesystem).toBe(false);
+      }
+    });
+
+    it('should throw ConfigLoadError if file does not exist', () => {
+      const nonExistentPath = path.join(tempDir, 'does-not-exist.yaml');
+
+      expect(() => loadConfig(nonExistentPath)).toThrow(ConfigLoadError);
+      expect(() => loadConfig(nonExistentPath)).toThrow('Configuration file not found');
+    });
+
+    it('should throw ConfigLoadError if file cannot be parsed', () => {
+      const configPath = path.join(tempDir, 'invalid.yaml');
+      fs.writeFileSync(configPath, '{ invalid yaml content [[[');
+
+      expect(() => loadConfig(configPath)).toThrow(ConfigLoadError);
+      expect(() => loadConfig(configPath)).toThrow('Failed to parse YAML');
+    });
+
+    it('should throw ConfigLoadError if validation fails', () => {
+      const configPath = path.join(tempDir, 'invalid-schema.yaml');
+      fs.writeFileSync(
+        configPath,
+        'minimumSeverity: invalid-level\nuseFilesystem: not-a-boolean',
+      );
+
+      expect(() => loadConfig(configPath)).toThrow(ConfigLoadError);
+      expect(() => loadConfig(configPath)).toThrow('Invalid configuration');
+    });
+
+    it('should handle boolean useFilesystem values', () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      fs.writeFileSync(
+        configPath,
+        'minimumSeverity: medium\nuseFilesystem: false',
+      );
+
+      const config = loadConfig(configPath);
+
+      expect(config.useFilesystem).toBe(false);
+    });
+
+    it('should accept minSeverity as an alias for minimumSeverity', () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      fs.writeFileSync(
+        configPath,
+        'minSeverity: critical\nuseFilesystem: false',
+      );
+
+      const config = loadConfig(configPath);
+
+      expect(config.minimumSeverity).toBe(SeverityLevel.CRITICAL);
+      expect(config.useFilesystem).toBe(false);
+    });
+
+    it('should prefer minSeverity over minimumSeverity when both provided', () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      fs.writeFileSync(
+        configPath,
+        'minSeverity: low\nminimumSeverity: high\nuseFilesystem: true',
+      );
+
+      const config = loadConfig(configPath);
+
+      expect(config.minimumSeverity).toBe(SeverityLevel.LOW);
+      expect(config.useFilesystem).toBe(true);
+    });
+
+    it('should accept all valid severity levels with minSeverity alias', () => {
+      const testCases: Array<[SeverityLevel, string]> = [
+        [SeverityLevel.LOW, 'low'],
+        [SeverityLevel.MEDIUM, 'medium'],
+        [SeverityLevel.HIGH, 'high'],
+        [SeverityLevel.CRITICAL, 'critical'],
+      ];
+
+      for (const [expectedLevel, levelString] of testCases) {
+        const configPath = path.join(tempDir, `config-min-${levelString}.yaml`);
+        fs.writeFileSync(
+          configPath,
+          `minSeverity: ${levelString}\nuseFilesystem: false`,
+        );
+
+        const config = loadConfig(configPath);
+
+        expect(config.minimumSeverity).toBe(expectedLevel);
+        expect(config.useFilesystem).toBe(false);
+      }
+    });
+  });
+
+  describe('loadConfigOrDefault', () => {
+    it('should return default config when no path provided', () => {
+      const config = loadConfigOrDefault();
+
+      expect(config).toEqual({
+        minimumSeverity: SeverityLevel.HIGH,
+        useFilesystem: true,
+      });
+    });
+
+    it('should load config when path provided', () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      fs.writeFileSync(
+        configPath,
+        'minimumSeverity: critical\nuseFilesystem: false',
+      );
+
+      const config = loadConfigOrDefault(configPath);
+
+      expect(config).toEqual({
+        minimumSeverity: SeverityLevel.CRITICAL,
+        useFilesystem: false,
+      });
+    });
+
+    it('should return default config when empty string provided', () => {
+      const config = loadConfigOrDefault('');
+
+      expect(config).toEqual({
+        minimumSeverity: SeverityLevel.HIGH,
+        useFilesystem: true,
+      });
+    });
+  });
+});

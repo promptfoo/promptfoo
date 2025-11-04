@@ -1,0 +1,282 @@
+/**
+ * GitHub Action Entry Point
+ *
+ * Main entry point for the promptfoo code-scan GitHub Action
+ */
+
+import * as core from '@actions/core';
+import * as exec from '@actions/exec';
+import * as github from '@actions/github';
+import * as fs from 'fs';
+import { generateConfigFile } from './config';
+import { getGitHubContext } from './github';
+import { type Comment, type ScanResponse } from '../../src/types/codeScan';
+
+/**
+ * Get emoji and rank for severity level
+ */
+function getSeverityDisplay(severity?: string): { emoji: string; rank: number } {
+  switch (severity?.toLowerCase()) {
+    case 'critical':
+      return { emoji: '🔴', rank: 4 };
+    case 'high':
+      return { emoji: '🟠', rank: 3 };
+    case 'medium':
+      return { emoji: '🟡', rank: 2 };
+    case 'low':
+      return { emoji: '🔵', rank: 1 };
+    default:
+      return { emoji: '⚪', rank: 0 };
+  }
+}
+
+/**
+ * Format severity for display
+ */
+function formatSeverity(severity?: string): string {
+  if (!severity) return '';
+  const { emoji } = getSeverityDisplay(severity);
+  const capitalizedSeverity = severity.charAt(0).toUpperCase() + severity.slice(1);
+  return `_${emoji} ${capitalizedSeverity}_\n\n`;
+}
+
+async function run(): Promise<void> {
+  try {
+    // Get action inputs
+    const serverUrl = core.getInput('server-url');
+    const minimumSeverity = core.getInput('min-severity') || core.getInput('minimum-severity');
+    const failOn = core.getInput('fail-on-vulnerabilities');
+    const configPath = core.getInput('config-path');
+    const githubToken = core.getInput('github-token', { required: true });
+
+    core.info('🔍 Starting Promptfoo Code Scan...');
+
+    // Validate we're in a PR context
+    const context = getGitHubContext();
+    core.info(`📋 Scanning PR #${context.number} in ${context.owner}/${context.repo}`);
+
+    // Get OIDC token from GitHub to prove workflow identity
+    try {
+      const oidcToken = await core.getIDToken('promptfoo');
+      core.info('🔐 Got OIDC token for server authentication');
+
+      // Set as environment variable for CLI to use
+      process.env.GITHUB_OIDC_TOKEN = oidcToken;
+    } catch (error) {
+      core.warning(
+        `Failed to get OIDC token: ${error instanceof Error ? error.message : String(error)}`
+      );
+      core.warning('Comment posting to PRs will not work without OIDC token');
+    }
+
+    // Generate config file if not provided
+    let finalConfigPath = configPath;
+    if (!configPath) {
+      finalConfigPath = generateConfigFile(minimumSeverity);
+      core.info(`📝 Generated temporary config at ${finalConfigPath}`);
+    }
+
+    // Fetch base branch to ensure it exists for git diff
+    // In GitHub Actions, even with fetch-depth: 0, the base branch might not exist as a local ref
+    const baseBranch = process.env.GITHUB_BASE_REF || 'main';
+    core.info(`📥 Fetching base branch: ${baseBranch}...`);
+    try {
+      await exec.exec('git', ['fetch', 'origin', `${baseBranch}:${baseBranch}`]);
+      core.info(`✅ Base branch ${baseBranch} fetched successfully`);
+    } catch (error) {
+      core.warning(
+        `Failed to fetch base branch ${baseBranch}: ${error instanceof Error ? error.message : String(error)}`
+      );
+      core.warning('Git diff may fail if base branch is not available');
+    }
+
+    // Install promptfoo globally from git (until code-scans command is published)
+    // TODO: Replace with 'npm install -g promptfoo' once the code-scans command is released
+    core.info('📦 Installing promptfoo from git...');
+    await exec.exec('npm', ['install', '-g', 'git+https://github.com/promptfoo/promptfoo.git#']);
+    core.info('✅ Promptfoo installed successfully');
+
+    // Build CLI command
+    const repoPath = process.env.GITHUB_WORKSPACE || process.cwd();
+    const cliArgs = [
+      'code-scans',
+      'run',
+      repoPath,
+      '--server-url', serverUrl,
+      '--config', finalConfigPath!,
+      '--compare', 'HEAD', // Use HEAD to handle detached HEAD state in GitHub Actions
+      '--json', // JSON output for parsing
+      '--github-pr', `${context.owner}/${context.repo}#${context.number}`, // Pass PR context for server-side comment posting
+    ];
+
+    core.info(`🚀 Running promptfoo code-scans run...`);
+
+    // Run promptfoo CLI and capture output
+    let scanOutput = '';
+    let scanError = '';
+
+    const exitCode = await exec.exec('promptfoo', cliArgs, {
+      listeners: {
+        stdout: (data: Buffer) => {
+          scanOutput += data.toString();
+        },
+        stderr: (data: Buffer) => {
+          scanError += data.toString();
+        },
+      },
+      ignoreReturnCode: true,
+    });
+
+    if (exitCode !== 0) {
+      core.error(`CLI exited with code ${exitCode}`);
+      core.error(`Error output: ${scanError}`);
+      throw new Error(`Code scan failed with exit code ${exitCode}`);
+    }
+
+    core.info('✅ Scan completed successfully');
+
+    // Parse JSON output from CLI (full ScanResponse object)
+    let scanResponse: ScanResponse;
+    try {
+      scanResponse = JSON.parse(scanOutput);
+    } catch (error) {
+      throw new Error(`Failed to parse CLI output as JSON: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    const { comments, commentsPosted, review } = scanResponse;
+    core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
+
+    // If server didn't post comments, post them as fallback
+    if ((comments.length > 0 || review) && commentsPosted === false) {
+      core.info('📝 Server could not post comments - posting as fallback...');
+
+      try {
+        const octokit = github.getOctokit(githubToken);
+
+        // Construct review body (append minimum severity if provided)
+        let reviewBody = review || '';
+        if (minimumSeverity && reviewBody) {
+          const capitalizedSeverity = minimumSeverity.charAt(0).toUpperCase() + minimumSeverity.slice(1);
+          reviewBody += `\n\n_Minimum severity threshold for this scan: ${capitalizedSeverity}_`;
+        }
+
+        // Sort comments by severity (descending: critical > high > medium > low)
+        const sortedComments = [...comments].sort((a, b) => {
+          const rankA = getSeverityDisplay(a.severity).rank;
+          const rankB = getSeverityDisplay(b.severity).rank;
+          return rankB - rankA;
+        });
+
+        // Separate line-specific comments from general PR comments
+        const lineComments = sortedComments.filter((c) => c.file && c.finding);
+        const generalComments = sortedComments.filter((c) => !c.file && c.finding);
+
+        // Post review with line-specific comments
+        if (lineComments.length > 0 || reviewBody) {
+          core.info(`📌 Posting PR review${lineComments.length > 0 ? ` with ${lineComments.length} line-specific comments` : ''}...`);
+
+          await octokit.rest.pulls.createReview({
+            owner: context.owner,
+            repo: context.repo,
+            pull_number: context.number,
+            event: 'COMMENT',
+            body: reviewBody || undefined,
+            comments: lineComments.length > 0 ? lineComments.map((c) => {
+              // Combine severity, finding, fix, and AI agent prompt into comment body
+              let body = formatSeverity(c.severity) + c.finding;
+              if (c.fix) {
+                body += `\n\n<details>\n<summary>💡 Suggested Fix</summary>\n\n${c.fix}\n</details>`;
+              }
+              if (c.aiAgentPrompt) {
+                body += `\n\n<details>\n<summary>🤖 AI Agent Prompt</summary>\n\n${c.aiAgentPrompt}\n</details>`;
+              }
+              return {
+                path: c.file!,
+                line: c.line || undefined,
+                start_line: c.startLine || undefined,
+                side: 'RIGHT' as const,
+                start_side: c.startLine ? ('RIGHT' as const) : undefined,
+                body,
+              };
+            }) : undefined,
+          });
+
+          core.info('✅ PR review posted successfully');
+        }
+
+        // Post general PR comments
+        if (generalComments.length > 0) {
+          core.info(`💬 Posting ${generalComments.length} general comments...`);
+
+          for (const comment of generalComments) {
+            // Combine severity, finding, fix, and AI agent prompt for general comments
+            let body = formatSeverity(comment.severity) + comment.finding;
+            if (comment.fix) {
+              body += `\n\n<details>\n<summary>💡 Suggested Fix</summary>\n\n${comment.fix}\n</details>`;
+            }
+            if (comment.aiAgentPrompt) {
+              body += `\n\n<details>\n<summary>🤖 AI Agent Prompt</summary>\n\n${comment.aiAgentPrompt}\n</details>`;
+            }
+
+            await octokit.rest.issues.createComment({
+              owner: context.owner,
+              repo: context.repo,
+              issue_number: context.number,
+              body,
+            });
+          }
+
+          core.info('✅ General comments posted successfully');
+        }
+
+        core.info('✅ All comments posted to PR by action');
+      } catch (error) {
+        core.error(`Failed to post comments: ${error instanceof Error ? error.message : String(error)}`);
+        core.warning('Comments could not be posted to PR');
+      }
+    } else if (comments.length > 0 && commentsPosted === true) {
+      core.info('✅ Comments posted to PR by scan server');
+    } else if (comments.length > 0) {
+      // commentsPosted is undefined - old server version
+      core.info('✅ Comments returned (server version does not indicate if posted)');
+    } else {
+      core.info('✨ No vulnerabilities found!');
+    }
+
+    if (process.env.ACT === 'true' && comments.length > 0) {
+      core.info('🧪 Running in act - showing comment preview:');
+      comments.forEach((comment, index) => {
+        core.info(`  ${index + 1}. ${comment.file}:${comment.line}`);
+        const preview = comment.fix
+          ? `${comment.finding.substring(0, 80)}... [+ suggested fix]`
+          : comment.finding.substring(0, 100);
+        core.info(`     ${preview}${comment.finding.length > 100 ? '...' : ''}`);
+      });
+    }
+
+    // Handle failure mode
+    if (failOn !== 'false' && comments.length > 0) {
+      // For now, fail if failOn is 'high' or 'critical' and we have any comments
+      // TODO: Parse severity from comment body for more granular control
+      const shouldFail = (failOn === 'high' || failOn === 'critical') && comments.length > 0;
+
+      if (shouldFail) {
+        core.setFailed(`Found vulnerabilities at or above ${failOn} severity`);
+      }
+    }
+
+    // Cleanup temp config if we generated one
+    if (!configPath && finalConfigPath) {
+      fs.unlinkSync(finalConfigPath);
+    }
+
+  } catch (error) {
+    if (error instanceof Error) {
+      core.setFailed(error.message);
+    } else {
+      core.setFailed(String(error));
+    }
+  }
+}
+
+run();
