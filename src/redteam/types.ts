@@ -53,6 +53,7 @@ export type PluginConfig = {
     score: number;
     reason: string;
   }[];
+  gradingGuidance?: string;
   severity?: Severity;
   language?: string | string[];
   prompt?: string;

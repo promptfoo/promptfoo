@@ -56,10 +56,192 @@ For each turn:
 
 ## Configuration Options
 
-| Option         | Type   | Description                                                                                 |
-| -------------- | ------ | ------------------------------------------------------------------------------------------- |
-| `instructions` | string | Template for user instructions. Supports Nunjucks templating with access to test variables. |
-| `maxTurns`     | number | Maximum number of conversation turns. Defaults to 10.                                       |
+| Option            | Type                | Description                                                                                                                    |
+| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                    |
+| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                          |
+| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats). |
+
+## Starting from a Specific Conversation State
+
+By default, simulated user conversations start from scratch. However, you can provide initial conversation history to test scenarios that occur mid-conversation.
+
+This is useful for:
+
+- **Testing specific states** - Skip to the payment stage without simulating the entire booking flow
+- **Regression testing** - Reproduce bugs that occur deep in conversations
+- **Cost/performance optimization** - Avoid generating unnecessary turns when testing specific interactions
+
+### Using `vars.initialMessages`
+
+Define initial messages per test for maximum flexibility:
+
+```yaml
+defaultTest:
+  provider:
+    id: 'promptfoo:simulated-user'
+    config:
+      maxTurns: 3
+
+tests:
+  - vars:
+      instructions: You've selected a flight and want to pay with travel certificates
+      initialMessages:
+        - role: user
+          content: I need a flight from New York to Seattle on May 20th
+        - role: assistant
+          content: I found a direct flight for $325. Would you like to book it?
+        - role: user
+          content: Yes, that works for me
+```
+
+### Using `config.initialMessages`
+
+Define shared initial messages at the provider level when multiple tests start from the same state:
+
+```yaml
+tests:
+  - provider:
+      id: 'promptfoo:simulated-user'
+      config:
+        maxTurns: 3
+        initialMessages:
+          - role: user
+            content: I've selected my flight and I'm ready to book
+          - role: assistant
+            content: Great! How would you like to pay?
+    vars:
+      instructions: Ask to use travel certificates
+
+  - provider:
+      id: 'promptfoo:simulated-user'
+      config:
+        maxTurns: 3
+        initialMessages:
+          - role: user
+            content: I've selected my flight and I'm ready to book
+          - role: assistant
+            content: Great! How would you like to pay?
+    vars:
+      instructions: Ask about adding extra baggage
+```
+
+### Hybrid Approach
+
+Set default initial messages and override when needed:
+
+```yaml
+defaultTest:
+  provider:
+    id: 'promptfoo:simulated-user'
+    config:
+      maxTurns: 5
+      initialMessages:
+        - role: user
+          content: I need help with my booking
+        - role: assistant
+          content: I'd be happy to help! What do you need?
+
+tests:
+  - vars:
+      instructions: Ask to change flight date # Uses default initialMessages
+
+  - vars:
+      instructions: Request refund for canceled flight
+      initialMessages: # Overrides default
+        - role: user
+          content: My flight was canceled
+        - role: assistant
+          content: I'm sorry to hear that. Let me help you
+```
+
+**Note:** `vars.initialMessages` takes precedence over `config.initialMessages`.
+
+### Loading from Files
+
+For longer conversation histories, you can load initial messages from external files using `file://`. Supported formats include JSON and YAML:
+
+```yaml
+tests:
+  - vars:
+      instructions: You've selected a flight and want to pay with travel certificates
+      initialMessages: file://./conversation-history.json # or .yaml/.yml
+```
+
+#### JSON Format
+
+**File:** `conversation-history.json`
+
+```json
+[
+  {
+    "role": "user",
+    "content": "I need a flight from New York to Seattle on May 20th"
+  },
+  {
+    "role": "assistant",
+    "content": "I'd be happy to help! May I have your user ID?"
+  },
+  {
+    "role": "user",
+    "content": "It's mia_li_3668"
+  },
+  {
+    "role": "assistant",
+    "content": "Thank you! I found a direct economy flight for $325. Would you like to book this?"
+  },
+  {
+    "role": "user",
+    "content": "Yes, that works for me"
+  }
+]
+```
+
+#### YAML Format
+
+**File:** `conversation-history.yaml`
+
+```yaml
+- role: user
+  content: I need a flight from New York to Seattle on May 20th
+- role: assistant
+  content: I'd be happy to help! May I have your user ID?
+- role: user
+  content: It's mia_li_3668
+- role: assistant
+  content: Thank you! I found a direct economy flight for $325. Would you like to book this?
+- role: user
+  content: Yes, that works for me
+```
+
+#### File Loading Summary
+
+This works for both `vars.initialMessages` and `config.initialMessages`:
+
+```yaml
+tests:
+  - provider:
+      id: 'promptfoo:simulated-user'
+      config:
+        maxTurns: 3
+        initialMessages: file://./shared-conversation-state.json
+    vars:
+      instructions: Ask to use travel certificates
+```
+
+:::info How maxTurns Works with Initial Messages
+
+`maxTurns` controls the number of **new** conversation turns to simulate AFTER the initial messages. Initial messages don't count toward `maxTurns`.
+
+For example:
+
+- `initialMessages`: 4 messages (2 user + 2 assistant = 2 exchanges)
+- `maxTurns`: 3
+- **Result**: 4 initial messages + up to 3 new turns = up to 10 total messages
+
+This allows you to control how much new interaction happens while testing from a specific conversation state.
+
+:::
 
 ## Example
 

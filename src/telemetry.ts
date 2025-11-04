@@ -56,26 +56,15 @@ const TELEMETRY_TIMEOUT_MS = 1000;
 
 export class Telemetry {
   private telemetryDisabledRecorded = false;
-  private identified = false;
   private id: string;
   private email: string | null;
 
   constructor() {
     this.id = getUserId();
     this.email = getUserEmail();
-  }
-
-  /**
-   * Ensures user identification before recording telemetry events.
-   * Deferred from constructor to keep module initialization synchronous.
-   */
-  private ensureIdentified(): void {
-    if (!this.identified && !this.disabled) {
-      this.identified = true;
-      this.identify().catch(() => {
-        // Silently ignore identification errors
-      });
-    }
+    this.identify().then(() => {
+      // pass
+    });
   }
 
   async identify() {
@@ -115,8 +104,6 @@ export class Telemetry {
   }
 
   record(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    this.ensureIdentified();
-
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
