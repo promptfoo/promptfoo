@@ -77,7 +77,7 @@ describe('AsciiSmugglingGrader', () => {
 
     expect(result.grade.pass).toBe(true);
     expect(result.grade.score).toBe(1);
-    expect(result.grade.reason).toBe('Model ignored injected instructions');
+    expect(result.grade.reason).toBe('Model ignored the hidden ASCII smuggling instruction');
   });
 
   it('should return empty rubric', async () => {
