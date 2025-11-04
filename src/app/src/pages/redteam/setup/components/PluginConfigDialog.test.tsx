@@ -1,17 +1,6 @@
-import {
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import PluginConfigDialog from './PluginConfigDialog';
 
@@ -49,13 +38,13 @@ describe('PluginConfigDialog - OSS', () => {
           config={{}}
           onClose={mockOnClose}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
       expect(screen.getByText(/Plugin-specific rules that take priority/)).toBeInTheDocument();
       expect(
-        screen.getByPlaceholderText(/For this financial app, discussing fund names/)
+        screen.getByPlaceholderText(/For this financial app, discussing fund names/),
       ).toBeInTheDocument();
     });
 
@@ -67,7 +56,7 @@ describe('PluginConfigDialog - OSS', () => {
           config={{ gradingGuidance: 'Medical terminology is expected and allowed' }}
           onClose={mockOnClose}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       const guidanceField = screen.getByPlaceholderText(/For this financial app/);
@@ -82,7 +71,7 @@ describe('PluginConfigDialog - OSS', () => {
           config={{}}
           onClose={mockOnClose}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       const guidanceField = screen.getByPlaceholderText(/For this financial app/);
@@ -98,7 +87,7 @@ describe('PluginConfigDialog - OSS', () => {
           'competitors',
           expect.objectContaining({
             gradingGuidance: 'Our brand names are not competitor mentions',
-          })
+          }),
         );
       });
     });
@@ -111,7 +100,7 @@ describe('PluginConfigDialog - OSS', () => {
           config={{ gradingGuidance: '   ' }}
           onClose={mockOnClose}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
@@ -131,7 +120,7 @@ describe('PluginConfigDialog - OSS', () => {
           config={{ targetSystems: ['system1', 'system2'] }}
           onClose={mockOnClose}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       const guidanceField = screen.getByPlaceholderText(/For this financial app/);
@@ -148,7 +137,7 @@ describe('PluginConfigDialog - OSS', () => {
           expect.objectContaining({
             gradingGuidance: 'BOLA guidance',
             targetSystems: ['system1', 'system2'],
-          })
+          }),
         );
       });
     });
@@ -163,7 +152,7 @@ describe('PluginConfigDialog - OSS', () => {
           config={{}}
           onClose={mockOnClose}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       // Should show BOLA-specific field
@@ -182,7 +171,7 @@ describe('PluginConfigDialog - OSS', () => {
           config={{}}
           onClose={mockOnClose}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       // Should show BFLA-specific field
@@ -201,7 +190,7 @@ describe('PluginConfigDialog - OSS', () => {
           config={{}}
           onClose={mockOnClose}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       // Should show prompt-extraction-specific field
@@ -219,7 +208,7 @@ describe('PluginConfigDialog - OSS', () => {
           config={{}}
           onClose={mockOnClose}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       // Should show gradingGuidance field even for plugins with no specific config
@@ -242,7 +231,7 @@ describe('PluginConfigDialog - OSS', () => {
           config={{}}
           onClose={mockOnClose}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
@@ -263,7 +252,7 @@ describe('PluginConfigDialog - OSS', () => {
           config={{}}
           onClose={mockOnClose}
           onSave={mockOnSave}
-        />
+        />,
       );
 
       expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
@@ -271,4 +260,3 @@ describe('PluginConfigDialog - OSS', () => {
     });
   });
 });
-
