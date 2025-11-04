@@ -8,6 +8,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
@@ -322,13 +323,23 @@ export default function PluginConfigDialog({
         {/* Grading Guidance - available for all plugins */}
         {specificConfig && <Box sx={{ my: 3 }} />}
         <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            Grading Guidance (Optional)
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Plugin-specific rules that take priority over general grading criteria
-          </Typography>
+          <FormControlLabel
+            htmlFor="plugin-grading-guidance-input"
+            label={
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Grading Guidance (Optional)
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Plugin-specific rules that take priority over general grading criteria
+                </Typography>
+              </Box>
+            }
+            control={<Box />}
+            sx={{ alignItems: 'flex-start', ml: 0, mb: 2 }}
+          />
           <TextField
+            id="plugin-grading-guidance-input"
             fullWidth
             multiline
             rows={4}
