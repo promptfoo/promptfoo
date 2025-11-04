@@ -64,7 +64,7 @@ export function modelScanCommand(program: Command): void {
 
     .action(async (paths: string[], options) => {
       if (!paths || paths.length === 0) {
-        console.error(
+        logger.error(
           'No paths specified. Please provide at least one model file or directory to scan.',
         );
         process.exit(1);
@@ -81,25 +81,25 @@ export function modelScanCommand(program: Command): void {
           const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
           const replacement = DEPRECATED_OPTIONS_MAP[fullOption];
           if (replacement) {
-            console.warn(
+            logger.warn(
               `⚠️  Warning: The '${fullOption}' option is deprecated. Please use '${replacement}' instead.`,
             );
           } else {
             // Provide specific guidance for common cases
             if (fullOption === '--jfrog-api-token') {
-              console.warn(
+              logger.warn(
                 `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_API_TOKEN environment variable instead.`,
               );
             } else if (fullOption === '--jfrog-access-token') {
-              console.warn(
+              logger.warn(
                 `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_ACCESS_TOKEN environment variable instead.`,
               );
             } else if (fullOption === '--registry-uri') {
-              console.warn(
+              logger.warn(
                 `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_URL or MLFLOW_TRACKING_URI environment variable instead.`,
               );
             } else {
-              console.warn(
+              logger.warn(
                 `⚠️  Warning: The '${fullOption}' option is deprecated and has been removed. It may be handled automatically or via environment variables. See documentation for details.`,
               );
             }
@@ -110,9 +110,9 @@ export function modelScanCommand(program: Command): void {
       // Check if modelaudit is installed
       const isModelAuditInstalled = await checkModelAuditInstalled();
       if (!isModelAuditInstalled) {
-        console.error('ModelAudit is not installed.');
-        console.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
-        console.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
+        logger.error('ModelAudit is not installed.');
+        logger.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
+        logger.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
         process.exit(1);
       }
 
@@ -176,20 +176,20 @@ export function modelScanCommand(program: Command): void {
 
         // Optional: Handle any unsupported options (though shouldn't occur with our CLI)
         if (result.unsupportedOptions.length > 0) {
-          console.warn(`Unsupported options detected: ${result.unsupportedOptions.join(', ')}`);
+          logger.warn(`Unsupported options detected: ${result.unsupportedOptions.join(', ')}`);
         }
       } catch (error) {
         if (error instanceof z.ZodError) {
-          console.error('Invalid model audit options provided:');
+          logger.error('Invalid model audit options provided:');
           error.errors.forEach((err) => {
-            console.error(`  - ${err.path.join('.')}: ${err.message}`);
+            logger.error(`  - ${err.path.join('.')}: ${err.message}`);
           });
           process.exit(1);
         }
         throw error;
       }
 
-      console.info(`Running model scan on: ${paths.join(', ')}`);
+      logger.info(`Running model scan on: ${paths.join(', ')}`);
 
       // Set up environment for delegation
       const delegationEnv = {
@@ -229,17 +229,17 @@ export function modelScanCommand(program: Command): void {
         });
 
         modelAudit.on('error', (error) => {
-          console.error(`Failed to start modelaudit: ${error.message}`);
-          console.info('Make sure modelaudit is installed and available in your PATH.');
-          console.info('Install it using: pip install modelaudit');
+          logger.error(`Failed to start modelaudit: ${error.message}`);
+          logger.info('Make sure modelaudit is installed and available in your PATH.');
+          logger.info('Install it using: pip install modelaudit');
           process.exit(1);
         });
 
         modelAudit.on('close', async (code) => {
           if (code !== null && code !== 0 && code !== 1) {
-            console.error(`Model scan process exited with code ${code}`);
+            logger.error(`Model scan process exited with code ${code}`);
             if (stderr) {
-              console.error(`Error output: ${stderr}`);
+              logger.error(`Error output: ${stderr}`);
             }
             process.exit(code);
           }
@@ -248,7 +248,7 @@ export function modelScanCommand(program: Command): void {
           try {
             const jsonOutput = stdout.trim();
             if (!jsonOutput) {
-              console.error('No output received from model scan');
+              logger.error('No output received from model scan');
               process.exit(1);
             }
 
@@ -317,11 +317,11 @@ export function modelScanCommand(program: Command): void {
 
             // Display summary to user (unless they requested JSON format)
             if (options.format !== 'json') {
-              console.log('\n' + chalk.bold('Model Audit Summary'));
-              console.log('=' + '='.repeat(50));
+              logger.info('\n' + chalk.bold('Model Audit Summary'));
+              logger.info('=' + '='.repeat(50));
 
               if (results.has_errors || (results.failed_checks ?? 0) > 0) {
-                console.log(chalk.yellow(`⚠  Found ${results.failed_checks || 0} issues`));
+                logger.info(chalk.yellow(`⚠  Found ${results.failed_checks || 0} issues`));
 
                 // Show issues grouped by severity
                 if (results.issues && results.issues.length > 0) {
@@ -346,46 +346,46 @@ export function modelScanCommand(program: Command): void {
                           : severity === 'warning'
                             ? chalk.yellow
                             : chalk.blue;
-                      console.log(
+                      logger.info(
                         `\n${color.bold(severity.toUpperCase())} (${severityIssues.length}):`,
                       );
                       severityIssues.slice(0, 5).forEach((issue) => {
-                        console.log(`  • ${issue.message}`);
+                        logger.info(`  • ${issue.message}`);
                         if (issue.location) {
-                          console.log(`    ${chalk.gray(issue.location)}`);
+                          logger.info(`    ${chalk.gray(issue.location)}`);
                         }
                       });
                       if (severityIssues.length > 5) {
-                        console.log(`  ${chalk.gray(`... and ${severityIssues.length - 5} more`)}`);
+                        logger.info(`  ${chalk.gray(`... and ${severityIssues.length - 5} more`)}`);
                       }
                     }
                   });
                 }
               } else {
-                console.log(
+                logger.info(
                   chalk.green(`✓ No issues found. ${results.passed_checks || 0} checks passed.`),
                 );
               }
 
-              console.log(
+              logger.info(
                 `\nScanned ${results.files_scanned ?? 0} files (${((results.bytes_scanned ?? 0) / 1024 / 1024).toFixed(2)} MB)`,
               );
-              console.log(`Duration: ${((results.duration ?? 0) / 1000).toFixed(2)} seconds`);
-              console.log(chalk.green(`\n✓ Results saved to database with ID: ${audit.id}`));
+              logger.info(`Duration: ${((results.duration ?? 0) / 1000).toFixed(2)} seconds`);
+              logger.info(chalk.green(`\n✓ Results saved to database with ID: ${audit.id}`));
             }
 
             // Save to file if requested
             if (options.output) {
               const fs = await import('fs');
               fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
-              console.info(`Results also saved to ${options.output}`);
+              logger.info(`Results also saved to ${options.output}`);
             }
 
             process.exit(code || 0);
           } catch (error) {
-            console.error(`Failed to parse or save scan results: ${error}`);
+            logger.error(`Failed to parse or save scan results: ${error}`);
             if (options.verbose) {
-              console.error(`Raw output: ${stdout}`);
+              logger.error(`Raw output: ${stdout}`);
             }
             process.exit(1);
           }
@@ -394,15 +394,15 @@ export function modelScanCommand(program: Command): void {
         const modelAudit = spawn('modelaudit', args, { stdio: 'inherit', env: delegationEnv });
 
         modelAudit.on('error', (error) => {
-          console.error(`Failed to start modelaudit: ${error.message}`);
-          console.info('Make sure modelaudit is installed and available in your PATH.');
-          console.info('Install it using: pip install modelaudit');
+          logger.error(`Failed to start modelaudit: ${error.message}`);
+          logger.info('Make sure modelaudit is installed and available in your PATH.');
+          logger.info('Install it using: pip install modelaudit');
           process.exit(1);
         });
 
         modelAudit.on('close', (code) => {
           if (code !== null && code !== 0 && code !== 1) {
-            console.error(`Model scan process exited with code ${code}`);
+            logger.error(`Model scan process exited with code ${code}`);
           }
           process.exit(code || 0);
         });
