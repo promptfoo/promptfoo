@@ -12,7 +12,7 @@ export interface GptOssSafeguardConfig {
   // Support for multiple grader configurations
   multiGrader?: Array<{
     model: string;
-    reasoning_effort?: 'low' | 'medium' | 'minimal' | null;
+    reasoning_effort?: 'low' | 'medium' | 'high' | 'minimal' | null;
   }>;
 }
 
@@ -267,7 +267,7 @@ ${outputFormatInstructions}`;
   async classifyMulti(
     policy: string,
     content: string,
-    graderConfigs: Array<{ model: string; reasoning_effort?: 'low' | 'medium' | 'minimal' | null }>,
+    graderConfigs: Array<{ model: string; reasoning_effort?: 'low' | 'medium' | 'high' | 'minimal' | null }>,
   ): Promise<Array<GptOssSafeguardResponse & { graderModel: string; reasoningEffort: string | null }>> {
     const formattedPolicy = this.formatPolicy(policy);
 

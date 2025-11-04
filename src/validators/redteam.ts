@@ -279,7 +279,7 @@ export const RedteamConfigSchema = z
                 z.object({
                   model: z.string().describe('Model to use for this grader'),
                   reasoning_effort: z
-                    .enum(['low', 'medium', 'minimal'])
+                    .enum(['low', 'medium', 'high', 'minimal'])
                     .nullable()
                     .optional()
                     .describe('Reasoning effort level for this grader'),

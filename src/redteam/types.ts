@@ -137,7 +137,7 @@ type CommonOptions = {
       apiKey?: string;
       multiGrader?: Array<{
         model: string;
-        reasoning_effort?: 'low' | 'medium' | 'minimal' | null;
+        reasoning_effort?: 'low' | 'medium' | 'high' | 'minimal' | null;
       }>;
     };
   };
@@ -178,7 +178,7 @@ export interface RedteamFileConfig extends CommonOptions {
       apiKey?: string;
       multiGrader?: Array<{
         model: string;
-        reasoning_effort?: 'low' | 'medium' | 'minimal' | null;
+        reasoning_effort?: 'low' | 'medium' | 'high' | 'minimal' | null;
       }>;
     };
   };
