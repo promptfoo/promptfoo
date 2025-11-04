@@ -20,10 +20,10 @@ export const ConfigSchema = z
       .nativeEnum(SeverityLevel)
       .optional()
       .describe('Alias for minSeverity'),
-    useFilesystem: z
+    diffsOnly: z
       .boolean()
-      .default(true)
-      .describe('Enable filesystem MCP server for broader codebase exploration'),
+      .default(false)
+      .describe('Only scan PR diffs, skip filesystem exploration (default: explore full repo)'),
     apiKey: z
       .string()
       .optional()
@@ -50,5 +50,5 @@ export type Config = z.infer<typeof ConfigSchema>;
 
 export const DEFAULT_CONFIG: Config = {
   minimumSeverity: SeverityLevel.HIGH,
-  useFilesystem: true,
+  diffsOnly: false,
 };

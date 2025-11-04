@@ -17,7 +17,7 @@ import type { ScanConfig, SeverityLevel } from '../../src/types/codeScan';
 export function generateConfigFile(minimumSeverity: string): string {
   const config: ScanConfig = {
     minimumSeverity: minimumSeverity as SeverityLevel,
-    useFilesystem: true, // Always enable filesystem for GitHub Actions
+    diffsOnly: false, // Always enable full repo exploration for GitHub Actions (never diffs-only)
   };
 
   // Create temp file
@@ -25,7 +25,7 @@ export function generateConfigFile(minimumSeverity: string): string {
   const configPath = path.join(tempDir, `code-scan-config-${Date.now()}.yaml`);
 
   // Write YAML
-  const yamlContent = `minimumSeverity: ${config.minimumSeverity}\nuseFilesystem: ${config.useFilesystem}\n`;
+  const yamlContent = `minimumSeverity: ${config.minimumSeverity}\ndiffsOnly: ${config.diffsOnly}\n`;
   fs.writeFileSync(configPath, yamlContent, 'utf8');
 
   return configPath;

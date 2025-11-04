@@ -54,7 +54,7 @@ promptfoo code-scans run [repo-path] [options]
 | `--compare <ref>` | Branch/commit to scan | `HEAD` |
 | `--config <path>` | Path to config file | `.promptfoo-code-scan.yaml` |
 | `--server-url <url>` | Scan server URL | `https://api.promptfoo.dev` |
-| `--use-filesystem` | Enable broader codebase exploration | false |
+| `--diffs-only` | Scan only PR diffs, skip filesystem exploration | false |
 | `--json` | Output results as JSON | false |
 | `--github-pr <owner/repo#number>` | Post comments to GitHub PR | None |
 
@@ -99,8 +99,8 @@ Create a `.promptfoo-code-scan.yaml` file in your repository root:
 # Both minSeverity and minimumSeverity are supported
 minSeverity: high
 
-# Enable filesystem MCP server for broader codebase exploration
-useFilesystem: true
+# Scan only PR diffs without filesystem exploration (default: false = explore full repo)
+diffsOnly: false
 
 # Optional: API key (alternative to promptfoo auth login)
 # apiKey: your-api-key-here

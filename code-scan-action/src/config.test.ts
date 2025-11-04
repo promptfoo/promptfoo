@@ -20,7 +20,7 @@ describe('generateConfigFile', () => {
 
     const content = fs.readFileSync(configPath, 'utf8');
     expect(content).toContain('minimumSeverity: high');
-    expect(content).toContain('useFilesystem: true');
+    expect(content).toContain('diffsOnly: false');
 
     // Cleanup
     fs.unlinkSync(configPath);
@@ -40,11 +40,11 @@ describe('generateConfigFile', () => {
     }
   });
 
-  it('should always enable filesystem', () => {
+  it('should always enable full repo exploration (never diffs-only)', () => {
     const configPath = generateConfigFile('medium');
     const content = fs.readFileSync(configPath, 'utf8');
 
-    expect(content).toContain('useFilesystem: true');
+    expect(content).toContain('diffsOnly: false');
 
     // Cleanup
     fs.unlinkSync(configPath);

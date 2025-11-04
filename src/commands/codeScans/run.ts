@@ -57,7 +57,7 @@ export interface ScanOptions {
   config?: string;
   serverUrl?: string;
   apiKey?: string; // Promptfoo API key for authentication
-  useFilesystem?: boolean; // Allow overriding filesystem setting
+  diffsOnly?: boolean; // Only scan PR diffs, skip filesystem exploration
   base?: string; // Base branch or commit to compare against
   compare?: string; // Compare branch or commit
   json?: boolean; // Output results as JSON
@@ -186,8 +186,8 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
   const config: Config = loadConfigOrDefault(options.config);
 
   // Allow options to override config file settings
-  if (options.useFilesystem !== undefined) {
-    config.useFilesystem = options.useFilesystem;
+  if (options.diffsOnly !== undefined) {
+    config.diffsOnly = options.diffsOnly;
   }
 
   // Allow CLI flags to override config severity (minSeverity takes precedence over minimumSeverity)
@@ -197,7 +197,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
   }
 
   console.error(`   Minimum severity: ${config.minimumSeverity}`);
-  console.error(`   Filesystem access: ${config.useFilesystem ? 'enabled' : 'disabled'}\n`);
+  console.error(`   Scan mode: ${config.diffsOnly ? 'diffs-only' : 'full repo exploration'}\n`);
 
   // Step 2: Resolve repository path
   const absoluteRepoPath = path.resolve(repoPath);
@@ -236,7 +236,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     console.error();
 
     // Step 4: Optionally start MCP filesystem server + bridge
-    if (config.useFilesystem) {
+    if (!config.diffsOnly) {
       console.error('🔌 Setting up MCP filesystem access...');
 
       // Generate unique session ID
@@ -339,7 +339,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       metadata,
       config: {
         minimumSeverity: config.minimumSeverity,
-        useFilesystem: config.useFilesystem,
+        diffsOnly: config.diffsOnly,
       },
       sessionId, // Include session ID if MCP is enabled
       pullRequest, // Include PR context if --github-pr flag provided
@@ -482,7 +482,7 @@ export function runCommand(program: Command): void {
     .option('--compare <ref>', 'Compare branch or commit')
     .option('-c, --config <path>', 'Path to config file')
     .option('--server-url <url>', 'Server URL (default: https://api.promptfoo.dev)')
-    .option('--use-filesystem', 'Enable filesystem access via MCP')
+    .option('--diffs-only', 'Scan only PR diffs, skip filesystem exploration')
     .option('--json', 'Output results as JSON')
     .option('--github-pr <owner/repo#number>', 'GitHub PR to post comments to')
     .option('--min-severity <level>', 'Minimum severity level (low|medium|high|critical)')
@@ -490,7 +490,7 @@ export function runCommand(program: Command): void {
     .action(async (repoPath: string, cmdObj: ScanOptions) => {
       telemetry.record('command_used', {
         name: 'code-scans run',
-        useFilesystem: cmdObj.useFilesystem ?? false,
+        diffsOnly: cmdObj.diffsOnly ?? false,
         hasGithubPr: !!cmdObj.githubPr,
       });
 
