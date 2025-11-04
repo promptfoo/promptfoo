@@ -12,10 +12,10 @@ import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
 
 interface PluginConfigDialogProps {
@@ -94,6 +94,8 @@ export default function PluginConfigDialog({
       return null;
     }
 
+    let specificConfig;
+
     switch (plugin) {
       case 'policy':
         // Show read-only list of all configured policies
@@ -103,43 +105,44 @@ export default function PluginConfigDialog({
         );
 
         if (policyPlugins.length === 0) {
-          return (
+          specificConfig = (
             <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
               No custom policies configured. Add policies in the Custom Policies section.
             </Typography>
           );
-        }
-
-        return (
-          <Box>
-            <Typography variant="subtitle2" sx={{ mb: 2 }}>
-              Configured Custom Policies ({policyPlugins.length})
-            </Typography>
-            {policyPlugins.map((policyPlugin, index) => (
-              <Paper
-                key={index}
-                variant="outlined"
-                sx={{ p: 2, mb: 2, backgroundColor: 'grey.50' }}
-              >
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ mb: 1, display: 'block' }}
+        } else {
+          specificConfig = (
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 2 }}>
+                Configured Custom Policies ({policyPlugins.length})
+              </Typography>
+              {policyPlugins.map((policyPlugin, index) => (
+                <Paper
+                  key={index}
+                  variant="outlined"
+                  sx={{ p: 2, mb: 2, backgroundColor: 'grey.50' }}
                 >
-                  Policy {index + 1}
-                </Typography>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
-                  {typeof policyPlugin.config.policy === 'string'
-                    ? policyPlugin.config.policy
-                    : policyPlugin.config.policy?.text || 'No policy text'}
-                </Typography>
-              </Paper>
-            ))}
-            <Typography variant="caption" color="text.secondary">
-              To edit or add policies, use the Custom Policies section in Available Plugins.
-            </Typography>
-          </Box>
-        );
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ mb: 1, display: 'block' }}
+                  >
+                    Policy {index + 1}
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                    {typeof policyPlugin.config.policy === 'string'
+                      ? policyPlugin.config.policy
+                      : policyPlugin.config.policy?.text || 'No policy text'}
+                  </Typography>
+                </Paper>
+              ))}
+              <Typography variant="caption" color="text.secondary">
+                To edit or add policies, use the Custom Policies section in Available Plugins.
+              </Typography>
+            </Box>
+          );
+        }
+        break;
       case 'intent':
         // Show read-only list of all configured custom intents
         const intentPlugin = redTeamConfig.plugins.find(
@@ -148,11 +151,12 @@ export default function PluginConfigDialog({
         );
 
         if (!intentPlugin?.config?.intent) {
-          return (
+          specificConfig = (
             <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
               No custom intents configured. Add intents in the Custom Prompts section.
             </Typography>
           );
+          break;
         }
 
         const intents = intentPlugin.config.intent;
@@ -161,14 +165,15 @@ export default function PluginConfigDialog({
           .filter((intent: any) => typeof intent === 'string' && intent.trim());
 
         if (flatIntents.length === 0) {
-          return (
+          specificConfig = (
             <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
               No custom intents configured. Add intents in the Custom Prompts section.
             </Typography>
           );
+          break;
         }
 
-        return (
+        specificConfig = (
           <Box>
             <Typography variant="subtitle2" sx={{ mb: 2 }}>
               Configured Custom Intents ({flatIntents.length})
@@ -196,9 +201,10 @@ export default function PluginConfigDialog({
             </Typography>
           </Box>
         );
+        break;
       case 'prompt-extraction':
         const key = 'systemPrompt';
-        return (
+        specificConfig = (
           <Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               The Prompt Extraction plugin tests whether an attacker can extract your system prompt
@@ -217,6 +223,7 @@ export default function PluginConfigDialog({
             />
           </Box>
         );
+        break;
       case 'bfla':
       case 'bola':
       case 'ssrf':
@@ -242,7 +249,7 @@ export default function PluginConfigDialog({
 
         // Ensure we always have at least one item
         const currentArray = (localConfig[arrayKey] as string[]) || [''];
-        return (
+        specificConfig = (
           <Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               {getExplanation()}
@@ -277,8 +284,9 @@ export default function PluginConfigDialog({
             </Button>
           </Box>
         );
+        break;
       case 'indirect-prompt-injection':
-        return (
+        specificConfig = (
           <Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Indirect Prompt Injection tests whether untrusted content can influence your AI
@@ -302,15 +310,50 @@ export default function PluginConfigDialog({
             </Typography>
           </Box>
         );
+        break;
       default:
-        return null;
+        specificConfig = null;
     }
+
+    return (
+      <>
+        {specificConfig}
+
+        {/* Grading Guidance - available for all plugins */}
+        {specificConfig && <Box sx={{ my: 3 }} />}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Grading Guidance (Optional)
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Plugin-specific rules that take priority over general grading criteria
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            rows={4}
+            placeholder="e.g., For this financial app, discussing fund names is required and should pass."
+            value={localConfig.gradingGuidance || ''}
+            onChange={(e) =>
+              setLocalConfig((prev) => ({ ...prev, gradingGuidance: e.target.value }))
+            }
+          />
+        </Box>
+      </>
+    );
   };
 
   const handleSave = () => {
     if (plugin && localConfig) {
-      if (JSON.stringify(config) !== JSON.stringify(localConfig)) {
-        onSave(plugin, localConfig);
+      const configToSave = { ...localConfig };
+
+      // Remove empty gradingGuidance
+      if (!configToSave.gradingGuidance || configToSave.gradingGuidance.trim() === '') {
+        delete configToSave.gradingGuidance;
+      }
+
+      if (JSON.stringify(config) !== JSON.stringify(configToSave)) {
+        onSave(plugin, configToSave);
       }
       onClose();
     }
