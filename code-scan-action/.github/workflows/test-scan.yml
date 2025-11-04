@@ -12,6 +12,7 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    container: catthehacker/ubuntu:full-latest  # Full image with build tools for native dependencies
 
     steps:
       - name: Checkout code
@@ -38,11 +39,8 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install CLI dependencies
-        run: cd cli && npm install
-
       - name: Run Promptfoo Code Scan
-        uses: ./action # Action is in action/ subdirectory
+        uses: ./ # Action is in root directory
         with:
           server-url: 'http://host.docker.internal:2095'
           minimum-severity: 'medium'

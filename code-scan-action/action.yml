@@ -26,6 +26,12 @@ inputs:
   config-path:
     description: 'Path to YAML configuration file'
     required: false
+  guidance:
+    description: 'Custom guidance for the security scan'
+    required: false
+  guidance-file:
+    description: 'Path to file containing custom guidance'
+    required: false
   github-token:
     description: 'GitHub token for authentication (default: github.token)'
     required: false

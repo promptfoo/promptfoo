@@ -6,6 +6,7 @@
 
 import path from 'path';
 import crypto from 'crypto';
+import fs from 'fs';
 import type { ChildProcess } from 'node:child_process';
 import type { Command } from 'commander';
 import { io, type Socket } from 'socket.io-client';
@@ -64,6 +65,8 @@ export interface ScanOptions {
   githubPr?: string; // GitHub PR to post comments to (format: owner/repo#number)
   minimumSeverity?: string; // Minimum severity level to report
   minSeverity?: string; // Alias for minimumSeverity
+  guidance?: string; // Custom guidance for the security scan
+  guidanceFile?: string; // Path to file containing custom guidance
 }
 
 /**
@@ -194,6 +197,30 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
   if (options.minSeverity || options.minimumSeverity) {
     const cliSeverity = (options.minSeverity || options.minimumSeverity) as string;
     config.minimumSeverity = cliSeverity as Config['minimumSeverity'];
+  }
+
+  // Handle guidance options (mutually exclusive)
+  let guidance: string | undefined = undefined;
+  if (options.guidance && options.guidanceFile) {
+    throw new Error('Cannot specify both --guidance and --guidance-file options');
+  }
+
+  // CLI options take precedence over config
+  if (options.guidance) {
+    guidance = options.guidance;
+  } else if (options.guidanceFile) {
+    const absoluteGuidancePath = path.resolve(options.guidanceFile);
+    try {
+      guidance = fs.readFileSync(absoluteGuidancePath, 'utf-8');
+      console.error(`   Loaded guidance from: ${absoluteGuidancePath}`);
+    } catch (error) {
+      throw new Error(
+        `Failed to read guidance file: ${absoluteGuidancePath} - ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  } else if (config.guidance) {
+    // Config loader already read guidanceFile and populated guidance field
+    guidance = config.guidance;
   }
 
   console.error(`   Minimum severity: ${config.minimumSeverity}`);
@@ -340,6 +367,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       config: {
         minimumSeverity: config.minimumSeverity,
         diffsOnly: config.diffsOnly,
+        guidance,
       },
       sessionId, // Include session ID if MCP is enabled
       pullRequest, // Include PR context if --github-pr flag provided
@@ -487,11 +515,14 @@ export function runCommand(program: Command): void {
     .option('--github-pr <owner/repo#number>', 'GitHub PR to post comments to')
     .option('--min-severity <level>', 'Minimum severity level (low|medium|high|critical)')
     .option('--minimum-severity <level>', 'Alias for min-severity (low|medium|high|critical)')
+    .option('--guidance <text>', 'Custom guidance for the security scan')
+    .option('--guidance-file <path>', 'Path to file containing custom guidance')
     .action(async (repoPath: string, cmdObj: ScanOptions) => {
       telemetry.record('command_used', {
         name: 'code-scans run',
         diffsOnly: cmdObj.diffsOnly ?? false,
         hasGithubPr: !!cmdObj.githubPr,
+        hasGuidance: !!(cmdObj.guidance || cmdObj.guidanceFile),
       });
 
       await executeScan(repoPath, cmdObj);

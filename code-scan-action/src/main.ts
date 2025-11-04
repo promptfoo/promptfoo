@@ -47,7 +47,27 @@ async function run(): Promise<void> {
     const minimumSeverity = core.getInput('min-severity') || core.getInput('minimum-severity');
     const failOn = core.getInput('fail-on-vulnerabilities');
     const configPath = core.getInput('config-path');
+    const guidanceText = core.getInput('guidance');
+    const guidanceFile = core.getInput('guidance-file');
     const githubToken = core.getInput('github-token', { required: true });
+
+    // Validate guidance inputs are mutually exclusive
+    if (guidanceText && guidanceFile) {
+      throw new Error('Cannot specify both guidance and guidance-file inputs');
+    }
+
+    // Read guidance file if provided
+    let guidance: string | undefined = undefined;
+    if (guidanceText) {
+      guidance = guidanceText;
+    } else if (guidanceFile) {
+      try {
+        guidance = fs.readFileSync(guidanceFile, 'utf-8');
+        core.info(`📖 Loaded guidance from: ${guidanceFile}`);
+      } catch (error) {
+        throw new Error(`Failed to read guidance file: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
 
     core.info('🔍 Starting Promptfoo Code Scan...');
 
@@ -72,7 +92,7 @@ async function run(): Promise<void> {
     // Generate config file if not provided
     let finalConfigPath = configPath;
     if (!configPath) {
-      finalConfigPath = generateConfigFile(minimumSeverity);
+      finalConfigPath = generateConfigFile(minimumSeverity, guidance);
       core.info(`📝 Generated temporary config at ${finalConfigPath}`);
     }
 
@@ -93,7 +113,14 @@ async function run(): Promise<void> {
     // Install promptfoo globally from git (until code-scans command is published)
     // TODO: Replace with 'npm install -g promptfoo' once the code-scans command is released
     core.info('📦 Installing promptfoo from git...');
-    await exec.exec('npm', ['install', '-g', 'git+https://github.com/promptfoo/promptfoo.git#']);
+
+    // Use sudo in container environments (like ACT) to avoid permission issues
+    const isContainer = process.env.ACT === 'true' || process.env.RUNNER_ENVIRONMENT === 'github-hosted';
+    if (isContainer) {
+      await exec.exec('sudo', ['npm', 'install', '-g', 'git+https://github.com/promptfoo/promptfoo.git#']);
+    } else {
+      await exec.exec('npm', ['install', '-g', 'git+https://github.com/promptfoo/promptfoo.git#']);
+    }
     core.info('✅ Promptfoo installed successfully');
 
     // Build CLI command

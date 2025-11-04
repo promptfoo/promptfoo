@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(code-scans): add `--guidance` and `--guidance-file` CLI options, YAML config fields, and GitHub Action inputs to provide custom security scan instructions; guidance influences vulnerability filtering, severity assessment, tracing depth, file focus, fix proposals, and comment style while preserving core scan methodology
 - feat(integrations): add Microsoft SharePoint dataset support with certificate-based authentication for importing CSV files (#6080)
 - feat(providers): add `initialMessages` support to simulated-user provider for starting conversations from specific states, with support for loading from JSON/YAML files via `file://` syntax (#6090)
 - feat(providers): add local config override support for cloud providers - merge local configuration with cloud provider settings for per-eval customization while keeping API keys centralized (#6100)

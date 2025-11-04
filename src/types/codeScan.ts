@@ -41,6 +41,7 @@ export const GitMetadataSchema = z.object({
 export const ScanConfigSchema = z.object({
   minimumSeverity: z.nativeEnum(SeverityLevel),
   diffsOnly: z.boolean(),
+  guidance: z.string().optional(),
 });
 
 export const PullRequestContextSchema = z.object({

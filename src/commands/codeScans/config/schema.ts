@@ -32,6 +32,17 @@ export const ConfigSchema = z
       .string()
       .optional()
       .describe('Scan server URL (default: https://api.promptfoo.dev)'),
+    guidance: z
+      .string()
+      .optional()
+      .describe('Custom guidance for the security scan'),
+    guidanceFile: z
+      .string()
+      .optional()
+      .describe('Path to file containing custom guidance'),
+  })
+  .refine((data) => !(data.guidance && data.guidanceFile), {
+    message: 'Cannot specify both guidance and guidanceFile',
   })
   .transform((data) => {
     // Resolve severity with precedence: minSeverity > minimumSeverity > default

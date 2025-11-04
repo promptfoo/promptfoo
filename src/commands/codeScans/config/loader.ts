@@ -58,7 +58,24 @@ export function loadConfig(configPath: string): Config {
     throw new ConfigLoadError(`Invalid configuration: ${errors}`);
   }
 
-  return result.data;
+  const config = result.data;
+
+  // If guidanceFile is specified, read it and populate guidance field
+  if (config.guidanceFile) {
+    const guidanceFilePath = path.isAbsolute(config.guidanceFile)
+      ? config.guidanceFile
+      : path.resolve(path.dirname(configPath), config.guidanceFile);
+
+    try {
+      config.guidance = fs.readFileSync(guidanceFilePath, 'utf-8');
+    } catch (error) {
+      throw new ConfigLoadError(
+        `Failed to read guidance file "${guidanceFilePath}": ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  return config;
 }
 
 /**
