@@ -5,6 +5,7 @@ import { z } from 'zod';
 // ============================================================================
 
 export enum SeverityLevel {
+  NONE = 'none',
   LOW = 'low',
   MEDIUM = 'medium',
   HIGH = 'high',
