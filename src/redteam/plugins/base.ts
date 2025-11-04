@@ -434,6 +434,7 @@ export abstract class RedteamGraderBase {
       traceSummary: gradingContext?.traceSummary,
       traceContext: gradingContext?.traceContext,
       traceInsights: gradingContext?.traceContext?.insights,
+      timestamp: new Date().toISOString(),
     };
     // Plugin-specific grading guidance takes priority over general rubric
     const gradingGuidance = test.metadata?.pluginConfig?.gradingGuidance;
@@ -458,11 +459,15 @@ export abstract class RedteamGraderBase {
         '\n\n' +
         graderExamples.map((example) => `EXAMPLE OUTPUT: ${JSON.stringify(example)}`).join('\n');
     }
+
+    const timestampString = `\n\nCurrent timestamp: ${vars.timestamp}`;
+
     const finalRubric =
       this.renderRubric(vars) +
       (additionalRubric ? '\n\n' + additionalRubric : '') +
       gradingGuidanceString +
-      graderExamplesString;
+      graderExamplesString +
+      timestampString;
 
     if (!skipRefusalCheck && (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))) {
       return {
