@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(providers): add `initialMessages` support to simulated-user provider for starting conversations from specific states, with support for loading from JSON/YAML files via `file://` syntax (#6090)
 - feat(providers): add local config override support for cloud providers - merge local configuration with cloud provider settings for per-eval customization while keeping API keys centralized (#6100)
 - feat(providers): add linkedTargetId validation with comprehensive error messages (#6053)
+- feat(webui): add eval copy functionality to duplicate evaluations with all results, configuration, and relationships via UI menu (#6079)
 - feat(redteam): add `gradingGuidance` config option for plugin-specific grading rules to reduce false positives by allowing per-plugin evaluation context (#6106)
 - feat(redteam): add pharmacy plugins (controlled substance compliance, dosage calculation, drug interaction) and insurance plugins (coverage discrimination, network misinformation, PHI disclosure) (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
