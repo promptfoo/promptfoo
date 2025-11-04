@@ -56,7 +56,7 @@ export function modelScanCommand(program: Command): void {
     .option('--no-cache', 'Force disable caching (overrides smart detection)')
     .option('--quiet', 'Silence detection messages')
     .option('--progress', 'Force enable progress reporting (auto-detected by default)')
-    .option('--scan-and-delete', 'Scan and delete downloaded files immediately after scan')
+    .option('--stream', 'Scan and delete downloaded files immediately after scan')
 
     // Miscellaneous
     .option('-v, --verbose', 'Enable verbose output')
@@ -165,7 +165,7 @@ export function modelScanCommand(program: Command): void {
         format: outputFormat,
         output: options.output && !saveToDatabase ? options.output : undefined,
         timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
-        scanAndDelete: options.scanAndDelete,
+        stream: options.stream,
       };
 
       // Use centralized CLI argument parser with error handling
@@ -308,7 +308,7 @@ export function modelScanCommand(program: Command): void {
                   cache: options.cache,
                   quiet: options.quiet,
                   progress: options.progress,
-                  scanAndDelete: options.scanAndDelete,
+                  stream: options.stream,
                 },
               },
               // Revision tracking
