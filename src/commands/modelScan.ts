@@ -56,10 +56,7 @@ export function modelScanCommand(program: Command): void {
     .option('--no-cache', 'Force disable caching (overrides smart detection)')
     .option('--quiet', 'Silence detection messages')
     .option('--progress', 'Force enable progress reporting (auto-detected by default)')
-    .option(
-      '--scan-and-delete',
-      'Scan and delete downloaded files immediately after scan (generates content hash)',
-    )
+    .option('--scan-and-delete', 'Scan and delete downloaded files immediately after scan')
 
     // Miscellaneous
     .option('-v, --verbose', 'Enable verbose output')
@@ -284,7 +281,8 @@ export function modelScanCommand(program: Command): void {
                 }
               }
 
-              // Extract content_hash from modelaudit output if available (--scan-and-delete mode)
+              // Extract content_hash from modelaudit output if available
+              // modelaudit generates content hash during scan for deduplication
               if (results.content_hash) {
                 logger.debug(`Using content_hash from modelaudit output: ${results.content_hash}`);
                 revisionInfo.contentHash = results.content_hash;
