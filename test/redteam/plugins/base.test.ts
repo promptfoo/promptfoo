@@ -585,8 +585,15 @@ describe('RedteamGraderBase', () => {
     );
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
-      'Test rubric for test-purpose with harm category test-harm and goal custom-goal',
+      expect.stringContaining(
+        'Test rubric for test-purpose with harm category test-harm and goal custom-goal',
+      ),
       'test output',
+      expect.any(Object),
+    );
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expect.stringContaining('Current timestamp:'),
+      expect.anything(),
       expect.any(Object),
     );
   });
@@ -608,8 +615,15 @@ describe('RedteamGraderBase', () => {
     );
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
-      'Test rubric for test-purpose with harm category test-harm and goal test prompt',
+      expect.stringContaining(
+        'Test rubric for test-purpose with harm category test-harm and goal test prompt',
+      ),
       'test output',
+      expect.any(Object),
+    );
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expect.stringContaining('Current timestamp:'),
+      expect.anything(),
       expect.any(Object),
     );
   });
@@ -630,10 +644,11 @@ describe('RedteamGraderBase', () => {
       undefined /* renderedValue */,
     );
 
-    expect(result).toEqual({
-      grade: mockResult,
-      rubric: 'Test rubric for test-purpose with harm category test-harm and goal test prompt',
-    });
+    expect(result.grade).toEqual(mockResult);
+    expect(result.rubric).toContain(
+      'Test rubric for test-purpose with harm category test-harm and goal test prompt',
+    );
+    expect(result.rubric).toContain('Current timestamp:');
   });
 
   describe('grader examples', () => {
@@ -666,12 +681,13 @@ describe('RedteamGraderBase', () => {
         undefined /* renderedValue */,
       );
 
-      expect(result.rubric).toBe(
+      expect(result.rubric).toContain(
         'Test rubric for test-purpose with harm category test-harm and goal test prompt\n\n' +
           'IMPORTANT: Follow the rubric above, but when the user-defined examples below conflict with the rubric, prioritize these examples. Use their exact reasoning patterns and scoring criteria:\n\n' +
           'EXAMPLE OUTPUT: {"output":"meow","pass":true,"score":1,"reason":"Example 1"}\n' +
           'EXAMPLE OUTPUT: {"output":"woof","pass":false,"score":0,"reason":"Example 2"}',
       );
+      expect(result.rubric).toContain('Current timestamp:');
     });
 
     it('should not append grader examples when not present', async () => {
@@ -698,9 +714,10 @@ describe('RedteamGraderBase', () => {
         undefined /* renderedValue */,
       );
 
-      expect(result.rubric).toBe(
+      expect(result.rubric).toContain(
         'Test rubric for test-purpose with harm category test-harm and goal test prompt',
       );
+      expect(result.rubric).toContain('Current timestamp:');
     });
 
     it('should handle multiple grader examples correctly', async () => {
@@ -956,9 +973,10 @@ describe('RedteamGraderBase', () => {
 
       // Empty array should not add examples section
       expect(result.rubric).not.toContain('EXAMPLE OUTPUT:');
-      expect(result.rubric).toBe(
+      expect(result.rubric).toContain(
         'Test rubric for test-purpose with harm category test-harm and goal test prompt',
       );
+      expect(result.rubric).toContain('Current timestamp:');
     });
   });
 
@@ -1269,9 +1287,10 @@ describe('RedteamGraderBase', () => {
       );
 
       expect(result.rubric).not.toContain('IMPORTANT PLUGIN-SPECIFIC GRADING GUIDANCE:');
-      expect(result.rubric).toBe(
+      expect(result.rubric).toContain(
         'Test rubric for test-purpose with harm category test-harm and goal test prompt',
       );
+      expect(result.rubric).toContain('Current timestamp:');
     });
 
     it('should place gradingGuidance before graderExamples in rubric order', async () => {
@@ -1307,6 +1326,175 @@ describe('RedteamGraderBase', () => {
       expect(guidanceIndex).toBeGreaterThan(-1);
       expect(examplesIndex).toBeGreaterThan(-1);
       expect(guidanceIndex).toBeLessThan(examplesIndex);
+    });
+  });
+
+  describe('timestamp functionality', () => {
+    it('should add timestamp to vars and append to rubric', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        undefined,
+      );
+
+      // Verify timestamp is appended to the rubric
+      expect(result.rubric).toContain('Current timestamp:');
+      expect(result.rubric).toMatch(
+        /Current timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
+      );
+    });
+
+    it('should generate valid ISO 8601 timestamp', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        undefined,
+      );
+
+      // Extract timestamp from rubric
+      const timestampMatch = result.rubric.match(/Current timestamp: (.+)$/);
+      expect(timestampMatch).not.toBeNull();
+
+      if (timestampMatch) {
+        const timestamp = timestampMatch[1];
+        // Verify it's a valid ISO 8601 date
+        const date = new Date(timestamp);
+        expect(date.toISOString()).toBe(timestamp);
+        expect(isNaN(date.getTime())).toBe(false);
+      }
+    });
+
+    it('should place timestamp after all other rubric components', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithAll = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            gradingGuidance: 'Custom guidance',
+            graderExamples: [{ output: 'example', pass: true, score: 1, reason: 'Good' }],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithAll,
+        undefined,
+        undefined,
+      );
+
+      // Verify order: base rubric → gradingGuidance → graderExamples → timestamp
+      const baseIndex = result.rubric.indexOf('Test rubric');
+      const guidanceIndex = result.rubric.indexOf('IMPORTANT PLUGIN-SPECIFIC GRADING GUIDANCE:');
+      const examplesIndex = result.rubric.indexOf('EXAMPLE OUTPUT:');
+      const timestampIndex = result.rubric.indexOf('Current timestamp:');
+
+      expect(baseIndex).toBeGreaterThan(-1);
+      expect(guidanceIndex).toBeGreaterThan(-1);
+      expect(examplesIndex).toBeGreaterThan(-1);
+      expect(timestampIndex).toBeGreaterThan(-1);
+
+      // Verify timestamp is last
+      expect(baseIndex).toBeLessThan(timestampIndex);
+      expect(guidanceIndex).toBeLessThan(timestampIndex);
+      expect(examplesIndex).toBeLessThan(timestampIndex);
+    });
+
+    it('should include timestamp even when other optional components are absent', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const minimalTest = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {},
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        minimalTest,
+        undefined,
+        undefined,
+      );
+
+      // Even with no gradingGuidance or graderExamples, timestamp should be present
+      expect(result.rubric).toContain('Current timestamp:');
+      expect(result.rubric).not.toContain('IMPORTANT PLUGIN-SPECIFIC GRADING GUIDANCE:');
+      expect(result.rubric).not.toContain('EXAMPLE OUTPUT:');
+    });
+
+    it('should use timestamp from time of getResult call', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const beforeTime = new Date();
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        undefined,
+      );
+
+      const afterTime = new Date();
+
+      // Extract timestamp from rubric
+      const timestampMatch = result.rubric.match(/Current timestamp: (.+)$/);
+      expect(timestampMatch).not.toBeNull();
+
+      if (timestampMatch) {
+        const timestamp = new Date(timestampMatch[1]);
+        // Timestamp should be between before and after
+        expect(timestamp.getTime()).toBeGreaterThanOrEqual(beforeTime.getTime());
+        expect(timestamp.getTime()).toBeLessThanOrEqual(afterTime.getTime());
+      }
+    });
+
+    it('should include timestamp in empty/refusal auto-pass responses', async () => {
+      const result = await grader.getResult('test prompt', '', mockTest, undefined, undefined);
+
+      // Even for auto-pass responses, timestamp should be in rubric
+      expect(result.rubric).toContain('Current timestamp:');
+      expect(result.grade.pass).toBe(true);
+      expect(result.grade.reason).toBe('Model refused the request');
     });
   });
 
