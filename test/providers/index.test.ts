@@ -8,7 +8,6 @@ import dedent from 'dedent';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
-import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
@@ -19,6 +18,7 @@ import {
   HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
+import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { LlamaProvider } from '../../src/providers/llama';
 import {
   OllamaChatProvider,
@@ -90,6 +90,20 @@ jest.mock('../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
 }));
 jest.mock('../../src/providers/websocket');
+
+jest.mock('../../src/globalConfig/cloud', () => ({
+  cloudConfig: {
+    isEnabled: jest.fn().mockReturnValue(false),
+    getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.dev'),
+    getApiKey: jest.fn().mockReturnValue('test-api-key'),
+  },
+}));
+
+jest.mock('../../src/util/cloud', () => ({
+  ...jest.requireActual('../../src/util/cloud'),
+  getProviderFromCloud: jest.fn(),
+  validateLinkedTargetId: jest.fn(),
+}));
 
 const mockFetch = jest.mocked(jest.fn());
 global.fetch = mockFetch;
@@ -314,7 +328,7 @@ describe('call provider apis', () => {
   describe.each([
     ['Array format', [{ generated_text: 'Test output' }]], // Array format
     ['Object format', { generated_text: 'Test output' }], // Object format
-  ])('HuggingfaceTextGenerationProvider callApi with %s', (format, mockedData) => {
+  ])('HuggingfaceTextGenerationProvider callApi with %s', (_format, mockedData) => {
     it('returns expected output', async () => {
       const mockResponse = {
         ...defaultMockResponse,
@@ -390,9 +404,9 @@ describe('call provider apis', () => {
         .spyOn(child_process, 'execFile')
         .mockImplementation(
           (
-            file: string,
-            args: readonly string[] | null | undefined,
-            options: child_process.ExecFileOptions | null | undefined,
+            _file: string,
+            _args: readonly string[] | null | undefined,
+            _options: child_process.ExecFileOptions | null | undefined,
             callback?:
               | null
               | ((
@@ -968,6 +982,38 @@ describe('loadApiProvider', () => {
     expect(provider.label).toBe('foo');
   });
 
+  it('renders environment variables in provider config while preserving runtime vars', async () => {
+    process.env.MY_DEPLOYMENT = 'test-deployment';
+    process.env.AZURE_ENDPOINT = 'test.openai.azure.com';
+    process.env.API_VERSION = '2024-02-15';
+
+    const providerOptions = {
+      config: {
+        apiHost: '{{ env.AZURE_ENDPOINT }}',
+        apiVersion: '{{ env.API_VERSION }}',
+        // This should be preserved for runtime
+        body: { message: '{{ vars.userMessage }}' },
+      },
+    };
+
+    const provider = await loadApiProvider('azure:chat:{{ env.MY_DEPLOYMENT }}', {
+      options: providerOptions,
+    });
+
+    expect(provider).toBeInstanceOf(AzureChatCompletionProvider);
+    // Env vars should be rendered
+    expect((provider as AzureChatCompletionProvider).apiHost).toBe('test.openai.azure.com');
+    expect((provider as AzureChatCompletionProvider).config.apiVersion).toBe('2024-02-15');
+    // Vars templates should be preserved
+    expect((provider as any).config.body).toEqual({
+      message: '{{ vars.userMessage }}',
+    });
+
+    delete process.env.MY_DEPLOYMENT;
+    delete process.env.AZURE_ENDPOINT;
+    delete process.env.API_VERSION;
+  });
+
   it('loadApiProvider with xai', async () => {
     const provider = await loadApiProvider('xai:grok-2');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
@@ -1029,6 +1075,68 @@ describe('loadApiProvider', () => {
       'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
     );
     expect(provider.config.apiKeyEnvar).toBe('DASHSCOPE_API_KEY');
+  });
+
+  describe('linkedTargetId validation', () => {
+    beforeEach(() => {
+      // Reset mocks before each test
+      jest.clearAllMocks();
+    });
+
+    it('should accept valid linkedTargetId', async () => {
+      const { validateLinkedTargetId } = await import('../../src/util/cloud');
+      jest.mocked(validateLinkedTargetId).mockResolvedValue();
+
+      const mockYamlContent = dedent`
+        id: 'openai:gpt-4'
+        config:
+          linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'`;
+      const mockReadFileSync = jest.mocked(fs.readFileSync);
+      mockReadFileSync.mockReturnValue(mockYamlContent);
+
+      const provider = await loadApiProvider('file://path/to/provider.yaml');
+      expect(provider.id()).toBe('openai:gpt-4');
+      expect(validateLinkedTargetId).toHaveBeenCalledWith(
+        'promptfoo://provider/12345678-1234-1234-1234-123456789abc',
+      );
+    });
+
+    it('should throw error when linkedTargetId validation fails', async () => {
+      const { validateLinkedTargetId } = await import('../../src/util/cloud');
+      jest
+        .mocked(validateLinkedTargetId)
+        .mockRejectedValue(
+          new Error(
+            "Target promptfoo://provider/12345678-1234-1234-1234-123456789abc not found in cloud or you don't have access to it",
+          ),
+        );
+
+      const mockYamlContent = dedent`
+        id: 'openai:gpt-4'
+        config:
+          linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'`;
+      const mockReadFileSync = jest.mocked(fs.readFileSync);
+      mockReadFileSync.mockReturnValue(mockYamlContent);
+
+      await expect(loadApiProvider('file://path/to/provider.yaml')).rejects.toThrow(
+        "Target promptfoo://provider/12345678-1234-1234-1234-123456789abc not found in cloud or you don't have access to it",
+      );
+    });
+
+    it('should accept provider config without linkedTargetId', async () => {
+      const { validateLinkedTargetId } = await import('../../src/util/cloud');
+
+      const mockYamlContent = dedent`
+        id: 'openai:gpt-4'
+        config:
+          temperature: 0.7`;
+      const mockReadFileSync = jest.mocked(fs.readFileSync);
+      mockReadFileSync.mockReturnValue(mockYamlContent);
+
+      const provider = await loadApiProvider('file://path/to/provider.yaml');
+      expect(provider.id()).toBe('openai:gpt-4');
+      expect(validateLinkedTargetId).not.toHaveBeenCalled();
+    });
   });
 });
 

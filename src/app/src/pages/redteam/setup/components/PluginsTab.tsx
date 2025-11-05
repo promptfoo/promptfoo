@@ -64,7 +64,6 @@ const ErrorFallback = ({ error }: { error: Error }) => (
 
 // Constants
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
-const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
 
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
@@ -367,8 +366,7 @@ export default function PluginsTab({
   const handleGenerateTestCase = useCallback(
     async (plugin: Plugin) => {
       // For plugins that require config, we need to show config dialog first
-      // This is handled by the config dialog flow
-      if (PLUGINS_SUPPORTING_CONFIG.includes(plugin) && PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
         setSelectedConfigPlugin(plugin);
         setConfigDialogOpen(true);
       }
@@ -656,8 +654,8 @@ export default function PluginsTab({
                             : 'Promptfoo Cloud connection is required for test generation'
                       }
                     />
-                    {/* Config button for plugins that support config */}
-                    {PLUGINS_SUPPORTING_CONFIG.includes(plugin) && (
+                    {/* Config button - available for all plugins (gradingGuidance is universal) */}
+                    {selectedPlugins.has(plugin) && (
                       <Tooltip
                         title={`Configure ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
                       >
@@ -669,7 +667,6 @@ export default function PluginsTab({
                           }}
                           sx={{
                             color:
-                              selectedPlugins.has(plugin) &&
                               PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
                               !isPluginConfigured(plugin)
                                 ? 'error.main'

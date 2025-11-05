@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.119.1",
+  "version": "0.119.3",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -185,6 +185,7 @@
     "@aws-sdk/credential-provider-sso": "^3.908.0",
     "@azure/ai-projects": "^1.0.0",
     "@azure/identity": "^4.13.0",
+    "@azure/msal-node": "^3.8.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@biomejs/cli-darwin-arm64": "2.3.1",
     "@biomejs/cli-darwin-x64": "2.3.1",
