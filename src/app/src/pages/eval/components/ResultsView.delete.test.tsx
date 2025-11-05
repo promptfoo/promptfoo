@@ -248,10 +248,7 @@ describe('ResultsView - Delete Functionality', () => {
     await userEvent.click(deleteButton);
 
     await waitFor(() => {
-      expect(mockShowToast).toHaveBeenCalledWith(
-        'Failed to delete eval: Database error',
-        'error',
-      );
+      expect(mockShowToast).toHaveBeenCalledWith('Failed to delete eval: Database error', 'error');
     });
   });
 
@@ -321,10 +318,7 @@ describe('ResultsView - Delete Functionality', () => {
     await userEvent.click(deleteButton);
 
     await waitFor(() => {
-      expect(mockShowToast).toHaveBeenCalledWith(
-        'Failed to delete eval: Network error',
-        'error',
-      );
+      expect(mockShowToast).toHaveBeenCalledWith('Failed to delete eval: Network error', 'error');
     });
   });
 });

@@ -1062,7 +1062,11 @@ export default function ResultsView({
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
-          <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting} variant="outlined">
+          <Button
+            onClick={() => setDeleteDialogOpen(false)}
+            disabled={isDeleting}
+            variant="outlined"
+          >
             Cancel
           </Button>
           <Button
