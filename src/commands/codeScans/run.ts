@@ -64,8 +64,11 @@ function formatSeverity(severity?: string): string {
 }
 
 function countBySeverity(comments: Array<{ severity?: string }>) {
-  // Filter out comments without severity (review-only comments)
-  const issuesOnly = comments.filter((c) => c.severity);
+  // Filter out comments without severity or with severity="none" (review-only comments)
+  const validSeverities = ['critical', 'high', 'medium', 'low'];
+  const issuesOnly = comments.filter(
+    (c) => c.severity && validSeverities.includes(c.severity.toLowerCase()),
+  );
 
   return {
     total: issuesOnly.length,
@@ -522,9 +525,12 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
         printBorder();
       }
 
-      // 4. Detailed findings (only show issues with severity)
+      // 4. Detailed findings (only show issues with valid severity)
       if (severityCounts.total > 0) {
-        const issuesWithSeverity = (comments || []).filter((c) => c.severity);
+        const validSeverities = ['critical', 'high', 'medium', 'low'];
+        const issuesWithSeverity = (comments || []).filter(
+          (c) => c.severity && validSeverities.includes(c.severity.toLowerCase()),
+        );
 
         // Sort by severity (descending)
         const sortedComments = [...issuesWithSeverity].sort((a, b) => {
