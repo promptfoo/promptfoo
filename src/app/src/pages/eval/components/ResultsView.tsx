@@ -518,10 +518,10 @@ export default function ResultsView({
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Failed to delete evaluation');
+        throw new Error(data.error || 'Failed to delete eval');
       }
 
-      showToast('Evaluation deleted successfully', 'success');
+      showToast('Eval deleted', 'success');
 
       // Navigate to next eval or home
       if (nextEvalId) {
@@ -530,9 +530,9 @@ export default function ResultsView({
         navigate('/', { replace: true });
       }
     } catch (error) {
-      console.error('Failed to delete evaluation:', error);
+      console.error('Failed to delete eval:', error);
       showToast(
-        `Failed to delete evaluation: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to delete eval: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'error',
       );
     } finally {
@@ -1024,29 +1024,45 @@ export default function ResultsView({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Delete Evaluation?</DialogTitle>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <DeleteIcon color="error" />
+          Delete eval?
+        </DialogTitle>
         <DialogContent>
           <Alert severity="warning" sx={{ mb: 2 }}>
             This action cannot be undone.
           </Alert>
-          <Typography variant="body1" gutterBottom>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
             You are about to permanently delete:
           </Typography>
-          <Box sx={{ pl: 2, py: 1 }}>
-            <Typography variant="body2" fontWeight="bold" gutterBottom>
-              {config?.description || evalId || 'Unnamed Evaluation'}
+          <Box
+            sx={{
+              mt: 2,
+              p: 2,
+              bgcolor: 'action.hover',
+              borderRadius: 1,
+              border: 1,
+              borderColor: 'divider',
+            }}
+          >
+            <Typography variant="body1" fontWeight="medium" gutterBottom>
+              {config?.description || evalId || 'Unnamed eval'}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              • {totalResultsCount.toLocaleString()} test result
-              {totalResultsCount !== 1 ? 's' : ''}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              • {head.prompts.length} prompt{head.prompts.length !== 1 ? 's' : ''}
-            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                {totalResultsCount.toLocaleString()} result{totalResultsCount !== 1 ? 's' : ''}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                •
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {head.prompts.length} prompt{head.prompts.length !== 1 ? 's' : ''}
+              </Typography>
+            </Box>
           </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting} variant="outlined">
             Cancel
           </Button>
           <Button
@@ -1056,7 +1072,7 @@ export default function ResultsView({
             disabled={isDeleting}
             startIcon={isDeleting ? <CircularProgress size={16} /> : <DeleteIcon />}
           >
-            {isDeleting ? 'Deleting...' : 'Delete Permanently'}
+            {isDeleting ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

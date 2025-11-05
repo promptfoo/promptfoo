@@ -102,13 +102,16 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Dialog should appear
     await waitFor(() => {
-      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
+      expect(screen.getByText('Delete eval?')).toBeInTheDocument();
     });
 
     expect(screen.getByText('This action cannot be undone.')).toBeInTheDocument();
     expect(screen.getByText('Test Eval')).toBeInTheDocument();
-    expect(screen.getByText(/100 test results/)).toBeInTheDocument();
-    expect(screen.getByText(/1 prompt/)).toBeInTheDocument();
+    // Check that results and prompts are shown in the dialog
+    const results = screen.getAllByText(/100 result/);
+    expect(results.length).toBeGreaterThan(0);
+    const prompts = screen.getAllByText(/1 prompt/);
+    expect(prompts.length).toBeGreaterThan(0);
   });
 
   it('should close dialog when cancel is clicked', async () => {
@@ -120,7 +123,7 @@ describe('ResultsView - Delete Functionality', () => {
     await userEvent.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
+      expect(screen.getByText('Delete eval?')).toBeInTheDocument();
     });
 
     // Click cancel
@@ -129,7 +132,7 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Dialog should close
     await waitFor(() => {
-      expect(screen.queryByText('Delete Evaluation?')).not.toBeInTheDocument();
+      expect(screen.queryByText('Delete eval?')).not.toBeInTheDocument();
     });
   });
 
@@ -148,15 +151,15 @@ describe('ResultsView - Delete Functionality', () => {
     await userEvent.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
+      expect(screen.getByText('Delete eval?')).toBeInTheDocument();
     });
 
     // Confirm delete
-    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
     await userEvent.click(deleteButton);
 
     await waitFor(() => {
-      expect(mockShowToast).toHaveBeenCalledWith('Evaluation deleted successfully', 'success');
+      expect(mockShowToast).toHaveBeenCalledWith('Eval deleted', 'success');
     });
 
     // Should navigate to next eval (eval-3)
@@ -179,11 +182,11 @@ describe('ResultsView - Delete Functionality', () => {
     await userEvent.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
+      expect(screen.getByText('Delete eval?')).toBeInTheDocument();
     });
 
     // Confirm delete
-    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
     await userEvent.click(deleteButton);
 
     await waitFor(() => {
@@ -210,11 +213,11 @@ describe('ResultsView - Delete Functionality', () => {
     await userEvent.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
+      expect(screen.getByText('Delete eval?')).toBeInTheDocument();
     });
 
     // Confirm delete
-    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
     await userEvent.click(deleteButton);
 
     await waitFor(() => {
@@ -237,16 +240,16 @@ describe('ResultsView - Delete Functionality', () => {
     await userEvent.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
+      expect(screen.getByText('Delete eval?')).toBeInTheDocument();
     });
 
     // Confirm delete
-    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
     await userEvent.click(deleteButton);
 
     await waitFor(() => {
       expect(mockShowToast).toHaveBeenCalledWith(
-        'Failed to delete evaluation: Database error',
+        'Failed to delete eval: Database error',
         'error',
       );
     });
@@ -273,11 +276,11 @@ describe('ResultsView - Delete Functionality', () => {
     await userEvent.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
+      expect(screen.getByText('Delete eval?')).toBeInTheDocument();
     });
 
     // Confirm delete
-    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
     await userEvent.click(deleteButton);
 
     // Should show loading state
@@ -294,7 +297,7 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Should close dialog
     await waitFor(() => {
-      expect(screen.queryByText('Delete Evaluation?')).not.toBeInTheDocument();
+      expect(screen.queryByText('Delete eval?')).not.toBeInTheDocument();
     });
   });
 
@@ -310,16 +313,16 @@ describe('ResultsView - Delete Functionality', () => {
     await userEvent.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
+      expect(screen.getByText('Delete eval?')).toBeInTheDocument();
     });
 
     // Confirm delete
-    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
     await userEvent.click(deleteButton);
 
     await waitFor(() => {
       expect(mockShowToast).toHaveBeenCalledWith(
-        'Failed to delete evaluation: Network error',
+        'Failed to delete eval: Network error',
         'error',
       );
     });
