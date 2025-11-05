@@ -89,11 +89,23 @@ export function createEvalId(createdAt: Date = new Date()) {
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
-    const query = sql.raw(
-      `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
-FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
-    );
-    // @ts-ignore
+
+    // Handle empty array case
+    if (evals.length === 0) {
+      return {};
+    }
+
+    const evalIds = evals.map((e) => e.id);
+
+    const query = sql`
+      SELECT DISTINCT j.key, eval_id
+      FROM (
+        SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
+        FROM eval_results
+        WHERE eval_id IN (${sql.join(evalIds, sql`, `)})
+      ) t, json_each(t.vars) j
+    `;
+
     const results: { key: string; eval_id: string }[] = await db.all(query);
     const vars = results.reduce((acc: Record<string, string[]>, r) => {
       acc[r.eval_id] = acc[r.eval_id] || [];

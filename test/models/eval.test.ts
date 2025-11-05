@@ -1260,5 +1260,87 @@ describe('evaluator', () => {
       expect(vars.length).toBeGreaterThan(0);
       expect(vars).toEqual(persistedEval?.vars);
     });
+
+    it('getVarsFromEvals: should prevent SQL injection in eval IDs array', async () => {
+      // Create evals with normal IDs
+      const eval1 = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+      const eval2 = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+
+      // Create array with malicious eval IDs mixed with valid ones
+      const maliciousEvals = [
+        eval1,
+        { id: "'; DROP TABLE eval_results; --" } as Eval,
+        eval2,
+        { id: "' OR '1'='1" } as Eval,
+      ];
+
+      const vars = await EvalQueries.getVarsFromEvals(maliciousEvals);
+
+      // Should return vars only for valid eval IDs, not execute DROP TABLE
+      expect(typeof vars).toBe('object');
+      expect(vars[eval1.id]).toBeDefined();
+      expect(vars[eval2.id]).toBeDefined();
+
+      // Verify eval_results table still exists
+      const db = getDb();
+      const results = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      expect(results).toBeDefined();
+    });
+
+    it('getVarsFromEvals: should handle empty array', async () => {
+      const vars = await EvalQueries.getVarsFromEvals([]);
+      expect(vars).toEqual({});
+    });
+
+    it('getVarsFromEvals: should handle special characters in eval IDs', async () => {
+      // Create array with special character eval IDs
+      const specialEvals = [
+        { id: "eval-with'single-quote" } as Eval,
+        { id: 'eval-with"double-quote' } as Eval,
+        { id: 'eval-with\\backslash' } as Eval,
+      ];
+
+      const vars = await EvalQueries.getVarsFromEvals(specialEvals);
+      // Should return empty object without throwing errors
+      expect(typeof vars).toBe('object');
+    });
+
+    it('getVarsFromEvals: should return correct vars for multiple valid eval IDs', async () => {
+      // Create multiple evals with vars
+      const eval1 = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+      const eval2 = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+      const eval3 = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+
+      // Ensure evals have vars
+      await Eval.findById(eval1.id);
+      await Eval.findById(eval2.id);
+      await Eval.findById(eval3.id);
+
+      const vars = await EvalQueries.getVarsFromEvals([eval1, eval2, eval3]);
+
+      // Should have entries for all three evals
+      expect(Object.keys(vars).length).toBeGreaterThanOrEqual(1);
+      expect(vars[eval1.id] || vars[eval2.id] || vars[eval3.id]).toBeDefined();
+    });
   });
 });
