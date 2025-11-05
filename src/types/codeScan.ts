@@ -80,7 +80,6 @@ export const PhaseResultsSchema = z.object({
 
 export const ScanResponseSchema = z.object({
   success: z.boolean(),
-  phases: PhaseResultsSchema,
   review: z.string().optional(),
   comments: z.array(CommentSchema),
   commentsPosted: z.boolean().optional(), // True if server posted comments, false if action should post them
