@@ -351,4 +351,74 @@ describe('ResultsView - Delete Functionality', () => {
       expect(mockShowToast).toHaveBeenCalledWith('Failed to delete eval: Network error', 'error');
     });
   });
+
+  it('should not close delete confirmation dialog by clicking outside or pressing escape when deletion is in progress', async () => {
+    const { callApi } = await import('@app/utils/api');
+    let resolveDelete: () => void;
+    vi.mocked(callApi).mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveDelete = () =>
+          resolve({
+            ok: true,
+            json: async () => ({ message: 'Success' }),
+          } as Response);
+      }),
+    );
+
+    renderWithMockData();
+
+    const actionsButton = screen.getByText('Eval actions');
+    await userEvent.click(actionsButton);
+    await userEvent.click(screen.getByText('Delete'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Delete eval?')).toBeInTheDocument();
+    });
+
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
+    await userEvent.click(deleteButton);
+
+    await userEvent.click(document.body);
+
+    await userEvent.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(screen.getByText('Deleting...')).toBeInTheDocument();
+      expect(screen.getByText('Delete eval?')).toBeInTheDocument();
+    });
+
+    resolveDelete!();
+
+    await waitFor(() => {
+      expect(screen.queryByText('Delete eval?')).not.toBeInTheDocument();
+    });
+  });
+
+  it('should navigate home when deleting an eval not in recentEvals', async () => {
+    const { callApi } = await import('@app/utils/api');
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: 'Eval deleted successfully' }),
+    } as Response);
+
+    renderWithMockData({
+      ...defaultProps,
+      defaultEvalId: 'non-existent-eval',
+    });
+
+    const actionsButton = screen.getByText('Eval actions');
+    await userEvent.click(actionsButton);
+    await userEvent.click(screen.getByText('Delete'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Delete eval?')).toBeInTheDocument();
+    });
+
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
+    await userEvent.click(deleteButton);
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    });
+  });
 });
