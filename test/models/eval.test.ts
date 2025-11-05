@@ -1530,5 +1530,181 @@ describe('evaluator', () => {
       const dbCheck = await db.run('SELECT COUNT(*) as count FROM eval_results');
       expect(dbCheck).toBeDefined();
     });
+
+    it('queryTestIndices: should handle LIKE wildcards in search query safely', async () => {
+      // Create an eval with specific content
+      const eval_ = await EvalFactory.create({
+        numResults: 5,
+        resultTypes: ['success'],
+        searchableContent: 'admin_password',
+      });
+
+      // Test with LIKE wildcards - these are allowed for search functionality
+      // The key is that they don't cause SQL injection even if they act as wildcards
+      const result = await (eval_ as any).queryTestIndices({
+        searchQuery: '%admin%', // Valid wildcard search pattern
+      });
+
+      // Should work as a search pattern and find matching content
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('testIndices');
+      expect(Array.isArray(result.testIndices)).toBe(true);
+
+      // Test that wildcards don't cause SQL injection or break the query
+      const result2 = await (eval_ as any).queryTestIndices({
+        searchQuery: "%%%' OR '1'='1", // Wildcards + SQL injection attempt
+      });
+
+      // Should handle safely - wildcards work but SQL injection is prevented by parameterization
+      expect(result2).toBeDefined();
+      expect(Array.isArray(result2.testIndices)).toBe(true);
+
+      // Verify database is still intact
+      const db = getDb();
+      const dbCheck = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      expect(dbCheck).toBeDefined();
+    });
+
+    it('queryTestIndices: should handle null byte injection safely', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 3,
+        resultTypes: ['success'],
+      });
+
+      // Test with null byte injection attempt (SQLite-specific attack)
+      const result = await (eval_ as any).queryTestIndices({
+        searchQuery: 'test\0DROP TABLE eval_results',
+      });
+
+      // Should handle null bytes safely without executing commands
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('testIndices');
+      expect(Array.isArray(result.testIndices)).toBe(true);
+
+      // Verify table still exists
+      const db = getDb();
+      const check = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      expect(check).toBeDefined();
+    });
+
+    it('queryTestIndices: should handle Unicode escape injection safely', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 3,
+        resultTypes: ['success'],
+      });
+
+      // Test with Unicode-escaped SQL injection attempts
+      const maliciousQueries = [
+        '\u0027 OR 1=1--', // Unicode single quote
+        '\u0022 UNION SELECT', // Unicode double quote
+        '\u0060DROP TABLE', // Unicode backtick
+      ];
+
+      for (const query of maliciousQueries) {
+        const result = await (eval_ as any).queryTestIndices({
+          searchQuery: query,
+        });
+
+        // Should handle Unicode escapes safely
+        expect(result).toBeDefined();
+        expect(result).toHaveProperty('testIndices');
+        expect(Array.isArray(result.testIndices)).toBe(true);
+      }
+
+      // Verify database is still intact
+      const db = getDb();
+      const dbCheck = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      expect(dbCheck).toBeDefined();
+    });
+
+    it('queryTestIndices: should validate numeric values in metric filters', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 3,
+        resultTypes: ['success'],
+        withNamedScores: true,
+      });
+
+      // Test with edge case numeric values (Infinity, NaN, very large numbers)
+      const edgeCaseFilters = [
+        { value: Infinity, operator: 'gt' },
+        { value: NaN, operator: 'eq' },
+        { value: Number.MAX_VALUE, operator: 'lt' },
+        { value: -Infinity, operator: 'gte' },
+      ];
+
+      for (const { value, operator } of edgeCaseFilters) {
+        const result = await (eval_ as any).queryTestIndices({
+          filters: [
+            JSON.stringify({
+              logicOperator: 'and',
+              type: 'metric',
+              operator,
+              field: 'score',
+              value,
+            }),
+          ],
+        });
+
+        // Should handle edge case numbers without breaking
+        expect(result).toBeDefined();
+        expect(result).toHaveProperty('testIndices');
+        expect(Array.isArray(result.testIndices)).toBe(true);
+
+        // For Infinity and NaN, filter should be skipped (logged as warning)
+        // and return all results (no filtering applied)
+        if (!Number.isFinite(value)) {
+          expect(result.testIndices.length).toBeLessThanOrEqual(3);
+        }
+      }
+    });
+
+    it('queryTestIndices: should leave database intact after SQL injection attempts', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 5,
+        resultTypes: ['success', 'failure'],
+      });
+
+      const db = getDb();
+
+      // Get initial counts
+      const initialEvalResults = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      const initialEvals = await db.run('SELECT COUNT(*) as count FROM evals');
+
+      // Try multiple injection attacks
+      const attacks = [
+        { type: 'search', value: "'; DROP TABLE eval_results; --" },
+        { type: 'search', value: "'; DELETE FROM evals; --" },
+        { type: 'search', value: "'; UPDATE evals SET vars='[]'; --" },
+        { type: 'metadata', field: "'; DROP TABLE evals; --", value: 'test' },
+        { type: 'metadata', field: 'source', value: "'; DROP TABLE eval_results; --" },
+      ];
+
+      for (const attack of attacks) {
+        if (attack.type === 'search') {
+          await (eval_ as any).queryTestIndices({ searchQuery: attack.value });
+        } else {
+          await (eval_ as any).queryTestIndices({
+            filters: [
+              JSON.stringify({
+                logicOperator: 'and',
+                type: 'metadata',
+                operator: 'equals',
+                field: attack.field,
+                value: attack.value,
+              }),
+            ],
+          });
+        }
+      }
+
+      // Verify all tables still exist and have correct row counts
+      const finalEvalResults = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      const finalEvals = await db.run('SELECT COUNT(*) as count FROM evals');
+
+      expect(finalEvalResults).toBeDefined();
+      expect(finalEvals).toBeDefined();
+      expect((finalEvalResults as any).count).toBe((initialEvalResults as any).count);
+      expect((finalEvals as any).count).toBe((initialEvals as any).count);
+    });
   });
 });

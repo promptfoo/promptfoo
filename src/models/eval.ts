@@ -553,8 +553,51 @@ export default class Eval {
       }
       const filterConditions: FilterConditionWithOperator[] = [];
 
-      // Helper function to escape JSON path keys (quotes & backslashes) for safe SQLite json_extract() usage
+      /**
+       * Escapes a JSON path key for safe use in SQLite's json_extract() function.
+       *
+       * SECURITY NOTE: JSON paths in SQLite MUST be string literals - they cannot be parameterized.
+       * This is a SQLite limitation, not a choice. We must use sql.raw() for JSON path construction.
+       *
+       * This function provides two-layer escaping:
+       * 1. Escapes backslashes (\) and quotes (") for JSON path syntax
+       * 2. The result is then SQL-escaped (single quotes doubled) before being wrapped in sql.raw()
+       *
+       * Example:
+       *   Input: field"with"quotes
+       *   Step 1 (JSON escaping): field\"with\"quotes
+       *   Step 2 (SQL escaping): $."field\"with\"quotes"  with '' for '
+       *   Step 3 (sql.raw): sql.raw`'$."field\"with\"quotes"'`
+       *
+       * This two-layer approach prevents both JSON path injection and SQL injection.
+       *
+       * @param key - The JSON field name from user input
+       * @returns Escaped field name safe for JSON path construction
+       */
       const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+      /**
+       * Builds a safe JSON path for use in SQLite json_extract() queries.
+       *
+       * SECURITY NOTE: This function uses sql.raw() which is normally unsafe, but is REQUIRED here
+       * because SQLite's json_extract() function only accepts JSON paths as string literals,
+       * not as parameterized values.
+       *
+       * Safety is ensured through double escaping:
+       * 1. JSON path characters are escaped by escapeJsonPathKey()
+       * 2. SQL single quotes are escaped using standard SQL escaping ('' for ')
+       *
+       * @param field - The JSON field name from user input
+       * @returns A sql.raw() fragment containing the safely escaped JSON path
+       */
+      const buildSafeJsonPath = (field: string): ReturnType<typeof sql.raw> => {
+        const escapedField = escapeJsonPathKey(field);
+        const jsonPathContent = `$."${escapedField}"`;
+        // Escape single quotes for SQL string literal (standard SQL escaping)
+        const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
+        // sql.raw() is safe here because we've fully escaped the content
+        return sql.raw(`'${sqlSafeJsonPath}'`);
+      };
 
       opts.filters.forEach((filter) => {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
@@ -565,15 +608,11 @@ export default class Eval {
           // New filters use 'field' for metric name with comparison operators
           const metricKey = field || value;
           if (!metricKey) {
-            // Skip invalid metric filters
+            logger.warn('Invalid metric filter: missing field and value', { filter });
             return;
           }
 
-          const escapedField = escapeJsonPathKey(metricKey);
-          // Escape single quotes for SQL string literal (JSON paths are SQL strings)
-          const jsonPathContent = `$."${escapedField}"`;
-          const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
-          const jsonPath = sql.raw(`'${sqlSafeJsonPath}'`);
+          const jsonPath = buildSafeJsonPath(metricKey);
 
           // Value must be a number
           const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
@@ -604,13 +643,18 @@ export default class Eval {
               // Less than or equal
               condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) <= ${numericValue}`;
             }
+          } else {
+            // Invalid numeric value (NaN, Infinity, etc.)
+            logger.warn('Invalid numeric value in metric filter', {
+              metricKey,
+              value,
+              numericValue,
+              operator,
+            });
+            return;
           }
         } else if (type === 'metadata' && field) {
-          const escapedField = escapeJsonPathKey(field);
-          // Escape single quotes for SQL string literal (JSON paths are SQL strings)
-          const jsonPathContent = `$."${escapedField}"`;
-          const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
-          const jsonPath = sql.raw(`'${sqlSafeJsonPath}'`);
+          const jsonPath = buildSafeJsonPath(field);
 
           if (operator === 'equals') {
             condition = sql`json_extract(metadata, ${jsonPath}) = ${value}`;

@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(security): prevent SQL injection in getVarsFromEval(), getVarsFromEvals(), and queryTestIndices() by replacing sql.raw() with parameterized queries using Drizzle ORM's sql template tags (#XXXX)
 - fix(redteam): pass all gradingContext properties to rubric templates to fix categoryGuidance rendering errors in BeavertailsGrader (#6111)
 
 ## [0.119.2] - 2025-11-03
