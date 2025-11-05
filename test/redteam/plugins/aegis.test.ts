@@ -62,6 +62,7 @@ describe('AegisPlugin', () => {
         },
         metadata: {
           label: 'Safe',
+          purpose: 'test-var',
         },
         assert: [
           {

@@ -156,6 +156,7 @@ describe('VLGuardPlugin', () => {
           vlguardSubcategory: 'disinformation',
           category: 'deception',
           subcategory: 'disinformation',
+          purpose: 'test purpose',
           question: 'test question 1',
         },
       });
@@ -175,6 +176,7 @@ describe('VLGuardPlugin', () => {
           vlguardSubcategory: 'personal data',
           category: 'privacy',
           subcategory: 'personal data',
+          purpose: 'test purpose',
           question: 'test question 2',
         },
       });
