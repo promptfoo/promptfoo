@@ -581,11 +581,73 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 
 evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
+  const startTime = Date.now();
+
+  logger.info('[DELETE /eval/:id] Delete requested', {
+    evalId: id,
+    timestamp: new Date().toISOString(),
+  });
+
   try {
     await deleteEval(id);
-    res.json({ message: 'Eval deleted successfully' });
-  } catch {
-    res.status(500).json({ error: 'Failed to delete eval' });
+
+    const duration = Date.now() - startTime;
+
+    logger.info('[DELETE /eval/:id] Successfully deleted eval', {
+      evalId: id,
+      durationMs: duration,
+    });
+
+    res.json({
+      success: true,
+      message: 'Eval deleted successfully',
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+
+    logger.error('[DELETE /eval/:id] Failed to delete eval', {
+      evalId: id,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      durationMs: duration,
+    });
+
+    // Check for specific error types
+    if (error instanceof Error) {
+      if (error.message.includes('not found')) {
+        res.status(404).json({
+          success: false,
+          error: 'Evaluation not found. It may have already been deleted.',
+          code: 'NOT_FOUND',
+        });
+        return;
+      }
+
+      if (error.message.includes('FOREIGN KEY') || error.message.includes('constraint')) {
+        res.status(409).json({
+          success: false,
+          error: 'Cannot delete evaluation: it is referenced by other records.',
+          code: 'CONSTRAINT_VIOLATION',
+        });
+        return;
+      }
+
+      if (error.message.includes('SQLITE_BUSY') || error.message.includes('database is locked')) {
+        res.status(503).json({
+          success: false,
+          error: 'Database is busy. Please try again in a moment.',
+          code: 'DATABASE_BUSY',
+        });
+        return;
+      }
+    }
+
+    // Generic error
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete evaluation. Please try again.',
+      code: 'INTERNAL_ERROR',
+    });
   }
 });
 

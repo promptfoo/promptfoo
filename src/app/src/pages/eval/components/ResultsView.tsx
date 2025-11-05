@@ -1,9 +1,11 @@
 import React from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { useConfirmDialog } from '@app/hooks/useConfirmDialog';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
+import { ApiError, callApiTyped, type DeleteEvalResponse } from '@app/utils/apiTypes';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ClearIcon from '@mui/icons-material/Clear';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -455,21 +457,109 @@ export default function ResultsView({
     [evalId, showToast],
   );
 
-  const handleDeleteEvalClick = async () => {
-    if (window.confirm('Are you sure you want to delete this evaluation?')) {
-      try {
-        const response = await callApi(`/eval/${evalId}`, {
-          method: 'DELETE',
-        });
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        navigate('/');
-      } catch (error) {
-        console.error('Failed to delete evaluation:', error);
-        alert('Failed to delete evaluation');
-      }
+  const { confirm, ConfirmDialog } = useConfirmDialog();
+
+  /**
+   * Determines the next eval to navigate to after deleting the current one
+   * @returns The eval ID to navigate to, or null to go home
+   */
+  const getNextEvalAfterDelete = (): string | null => {
+    if (!evalId || recentEvals.length === 0) {
+      return null;
     }
+
+    const currentIndex = recentEvals.findIndex((e) => e.id === evalId);
+
+    // If current eval not in list or only one eval, go home
+    if (currentIndex === -1 || recentEvals.length === 1) {
+      return null;
+    }
+
+    // Try next eval first
+    if (currentIndex < recentEvals.length - 1) {
+      return recentEvals[currentIndex + 1].id;
+    }
+
+    // If this is the last eval, go to previous
+    if (currentIndex > 0) {
+      return recentEvals[currentIndex - 1].id;
+    }
+
+    return null;
+  };
+
+  const handleDeleteEvalClick = () => {
+    handleMenuClose();
+
+    if (!evalId) {
+      showToast('Cannot delete: Eval ID not found', 'error');
+      return;
+    }
+
+    const nextEvalId = getNextEvalAfterDelete();
+
+    confirm(
+      {
+        title: 'Delete Evaluation?',
+        warningMessage: 'This action cannot be undone.',
+        message: 'You are about to permanently delete:',
+        itemName: config?.description || evalId || 'Unnamed Evaluation',
+        itemDetails: [
+          `${totalResultsCount.toLocaleString()} test result${totalResultsCount !== 1 ? 's' : ''}`,
+          `${head.prompts.length} prompt${head.prompts.length !== 1 ? 's' : ''}`,
+        ],
+        actionButtonText: 'Delete Permanently',
+        actionButtonColor: 'error',
+        icon: <DeleteIcon />,
+      },
+      async () => {
+        try {
+          const result = await callApiTyped<DeleteEvalResponse>(`/eval/${evalId}`, {
+            method: 'DELETE',
+          });
+
+          if (result.success) {
+            showToast('Evaluation deleted successfully', 'success');
+
+            // Navigate to next eval or home
+            if (nextEvalId) {
+              onRecentEvalSelected(nextEvalId);
+            } else {
+              navigate('/', { replace: true });
+            }
+          }
+        } catch (error) {
+          console.error('Failed to delete evaluation:', error);
+
+          // Handle specific error codes
+          if (error instanceof ApiError) {
+            switch (error.code) {
+              case 'NOT_FOUND':
+                showToast('Evaluation not found. It may have already been deleted.', 'warning');
+                // Still navigate away since eval doesn't exist
+                navigate('/', { replace: true });
+                break;
+              case 'DATABASE_BUSY':
+                showToast('Database is busy. Please try again in a moment.', 'warning');
+                break;
+              case 'CONSTRAINT_VIOLATION':
+                showToast('Cannot delete: evaluation is referenced by other records.', 'error');
+                break;
+              default:
+                showToast(error.message || 'Failed to delete evaluation', 'error');
+            }
+          } else {
+            showToast(
+              `Failed to delete evaluation: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              'error',
+            );
+          }
+
+          // Re-throw to prevent dialog from closing on error
+          throw error;
+        }
+      },
+    );
   };
 
   const [evalSelectorDialogOpen, setEvalSelectorDialogOpen] = React.useState(false);
@@ -947,6 +1037,7 @@ export default function ResultsView({
         itemLabel="results"
       />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
+      <ConfirmDialog />
     </>
   );
 }
