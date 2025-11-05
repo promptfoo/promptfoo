@@ -927,7 +927,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
   'jailbreak:meta':
-    'Meta-agent that dynamically builds attack taxonomy and strategically learns from full attack history',
+    'Agent that dynamically builds an attack taxonomy and learns from attack history',
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
   layer: 'Composes multiple strategies and applies them sequentially',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
