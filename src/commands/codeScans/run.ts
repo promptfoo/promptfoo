@@ -433,11 +433,18 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     // Add heartbeat to show progress during long scans
     let heartbeatInterval: NodeJS.Timeout | undefined;
     if (showSpinner) {
-      let alternate = false;
-      heartbeatInterval = setInterval(() => {
-        alternate = !alternate;
-        spinner!.text = alternate ? 'Still scanning...' : 'Scanning...';
-      }, 10000); // Every 10 seconds
+      const pulse = () => {
+        // Show "Still scanning..." for 3 seconds
+        spinner!.text = 'Still scanning...';
+        setTimeout(() => {
+          if (spinner?.isSpinning) {
+            spinner.text = 'Scanning...';
+          }
+        }, 3000);
+      };
+
+      // Pulse every 10 seconds
+      heartbeatInterval = setInterval(pulse, 10000);
     }
 
     const scanRequest: ScanRequest = {
