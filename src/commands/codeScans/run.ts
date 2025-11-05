@@ -432,19 +432,24 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
     // Add heartbeat to show progress during long scans
     let heartbeatInterval: NodeJS.Timeout | undefined;
+    let firstPulseTimeout: NodeJS.Timeout | undefined;
     if (showSpinner) {
       const pulse = () => {
-        // Show "Still scanning..." for 3 seconds
+        // Show "Still scanning..." for 4 seconds
         spinner!.text = 'Still scanning...';
         setTimeout(() => {
           if (spinner?.isSpinning) {
             spinner.text = 'Scanning...';
           }
-        }, 3000);
+        }, 4000);
       };
 
-      // Pulse every 10 seconds
-      heartbeatInterval = setInterval(pulse, 10000);
+      // First pulse at 8 seconds
+      firstPulseTimeout = setTimeout(() => {
+        pulse();
+        // Then pulse every 12 seconds (8s "Scanning..." + 4s "Still scanning...")
+        heartbeatInterval = setInterval(pulse, 12000);
+      }, 8000);
     }
 
     const scanRequest: ScanRequest = {
@@ -465,6 +470,9 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       const onComplete = (response: ScanResponse) => {
         socket?.off('scan:complete', onComplete);
         socket?.off('scan:error', onError);
+        if (firstPulseTimeout) {
+          clearTimeout(firstPulseTimeout);
+        }
         if (heartbeatInterval) {
           clearInterval(heartbeatInterval);
         }
@@ -474,6 +482,9 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       const onError = (error: { success: false; error: string; message: string }) => {
         socket?.off('scan:complete', onComplete);
         socket?.off('scan:error', onError);
+        if (firstPulseTimeout) {
+          clearTimeout(firstPulseTimeout);
+        }
         if (heartbeatInterval) {
           clearInterval(heartbeatInterval);
         }
