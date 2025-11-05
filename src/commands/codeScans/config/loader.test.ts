@@ -3,9 +3,10 @@
  */
 
 import fs from 'fs';
-import path from 'path';
 import os from 'os';
-import { loadConfig, loadConfigOrDefault, ConfigLoadError } from './loader';
+import path from 'path';
+
+import { ConfigLoadError, loadConfig, loadConfigOrDefault } from './loader';
 import { SeverityLevel } from './schema';
 
 describe('Configuration Loader', () => {

@@ -4,22 +4,29 @@
  * Main command that orchestrates the scanning process.
  */
 
-import path from 'path';
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 import type { ChildProcess } from 'node:child_process';
-import type { Command } from 'commander';
+
+import chalk from 'chalk';
+import ora from 'ora';
 import { io, type Socket } from 'socket.io-client';
+import cliState from '../../cliState';
+import logger, { getLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import { formatDuration } from '../../util/formatDuration';
-import type { PullRequestContext, ScanRequest, ScanResponse } from '../../types/codeScan';
-import { loadConfigOrDefault, type Config } from './config/loader';
+import { printBorder } from '../../util/index';
+import { resolveAuthCredentials } from './auth';
+import { type Config, loadConfigOrDefault } from './config/loader';
 import { validateOnBranch } from './git/diff';
-import { extractMetadata } from './git/metadata';
 import { processDiff } from './git/diffProcessor';
+import { extractMetadata } from './git/metadata';
 import { startFilesystemMcpServer, stopFilesystemMcpServer } from './mcp/filesystem';
 import { SocketIoMcpBridge } from './mcp/transport';
-import { resolveAuthCredentials } from './auth';
+import type { Command } from 'commander';
+
+import type { PullRequestContext, ScanRequest, ScanResponse } from '../../types/codeScan';
 
 interface ParsedGitHubPR {
   owner: string;
@@ -48,10 +55,25 @@ function getSeverityEmoji(severity?: string): string {
 }
 
 function formatSeverity(severity?: string): string {
-  if (!severity) return '';
+  if (!severity) {
+    return '';
+  }
   const emoji = getSeverityEmoji(severity);
   const capitalizedSeverity = severity.charAt(0).toUpperCase() + severity.slice(1);
   return `${emoji} ${capitalizedSeverity}`;
+}
+
+function countBySeverity(comments: Array<{ severity?: string }>) {
+  // Filter out comments without severity (review-only comments)
+  const issuesOnly = comments.filter((c) => c.severity);
+
+  return {
+    total: issuesOnly.length,
+    critical: issuesOnly.filter((c) => c.severity?.toLowerCase() === 'critical').length,
+    high: issuesOnly.filter((c) => c.severity?.toLowerCase() === 'high').length,
+    medium: issuesOnly.filter((c) => c.severity?.toLowerCase() === 'medium').length,
+    low: issuesOnly.filter((c) => c.severity?.toLowerCase() === 'low').length,
+  };
 }
 
 export interface ScanOptions {
@@ -103,7 +125,7 @@ async function createSocketConnection(
   auth: SocketAuthCredentials,
 ): Promise<Socket> {
   return new Promise((resolve, reject) => {
-    console.error(`   Connecting to ${serverUrl}...`);
+    logger.debug(`Connecting to ${serverUrl}...`);
 
     const socket = io(serverUrl, {
       // Use websocket-only transport (polling requires sticky sessions)
@@ -119,24 +141,24 @@ async function createSocketConnection(
 
     // Connection success
     socket.on('connect', () => {
-      console.error(`   ✓ Socket.io connected (id: ${socket.id})`);
+      logger.debug(`Socket.io connected (id: ${socket.id})`);
       resolve(socket);
     });
 
     // Connection error
     socket.on('connect_error', (error) => {
-      console.error('   ❌ Socket.io connection error:', error.message);
+      logger.error(`Socket.io connection error: ${error.message}`);
       reject(new Error(`Failed to connect to server: ${error.message}`));
     });
 
     // Disconnection
     socket.on('disconnect', (reason) => {
-      console.error(`   ℹ️  Socket.io disconnected: ${reason}`);
+      logger.debug(`Socket.io disconnected: ${reason}`);
     });
 
     // Error handling
     socket.on('error', (error) => {
-      console.error('   ❌ Socket.io error:', error);
+      logger.error(`Socket.io error: ${String(error)}`);
     });
 
     // Connection timeout
@@ -150,7 +172,7 @@ async function createSocketConnection(
 
 function registerCleanupHandlers(refs: CleanupRefs): void {
   const cleanup = async (signal: string) => {
-    console.error(`\n\n⚠️  Received ${signal}, cleaning up...`);
+    logger.info(`\n\n⚠️  Received ${signal}, cleaning up...`);
 
     // Cleanup MCP resources
     if (refs.mcpBridge) {
@@ -181,11 +203,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
   const startTime = Date.now();
 
-  // NOTE: Using console.error for progress/info logs to keep stdout clean for JSON output
-  console.error('🔍 Code Scan: Analyzing PR for LLM security vulnerabilities...\n');
-
   // Step 1: Load configuration
-  console.error('📋 Loading configuration...');
   const config: Config = loadConfigOrDefault(options.config);
 
   // Allow options to override config file settings
@@ -212,7 +230,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     const absoluteGuidancePath = path.resolve(options.guidanceFile);
     try {
       guidance = fs.readFileSync(absoluteGuidancePath, 'utf-8');
-      console.error(`   Loaded guidance from: ${absoluteGuidancePath}`);
+      logger.debug(`Loaded guidance from: ${absoluteGuidancePath}`);
     } catch (error) {
       throw new Error(
         `Failed to read guidance file: ${absoluteGuidancePath} - ${error instanceof Error ? error.message : String(error)}`,
@@ -223,12 +241,16 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     guidance = config.guidance;
   }
 
-  console.error(`   Minimum severity: ${config.minimumSeverity}`);
-  console.error(`   Scan mode: ${config.diffsOnly ? 'diffs-only' : 'full repo exploration'}\n`);
-
   // Step 2: Resolve repository path
   const absoluteRepoPath = path.resolve(repoPath);
-  console.error(`📁 Repository: ${absoluteRepoPath}\n`);
+
+  // Display startup messages (always shown via logger.info, goes to stderr for CI-friendliness)
+  logger.info('Scanning code for LLM security vulnerabilities...');
+  logger.info(`  Minimum severity: ${config.minimumSeverity}`);
+  logger.info(`  Scan mode: ${config.diffsOnly ? 'diffs-only' : 'full repo'}`);
+  logger.info('');
+
+  logger.debug(`Repository: ${absoluteRepoPath}`);
 
   // Create mutable refs for cleanup handlers
   // This allows signal handlers to access resources even if created later
@@ -242,6 +264,15 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
   // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
   registerCleanupHandlers(cleanupRefs);
 
+  // Initialize spinner (hide in JSON mode, but still show logger.info status)
+  const isWebUI = Boolean(cliState.webUI);
+  const showSpinner = !isWebUI && !options.json && getLogLevel() !== 'debug';
+
+  let spinner: ReturnType<typeof ora> | undefined;
+  if (showSpinner) {
+    spinner = ora('Initializing...').start();
+  }
+
   try {
     // Determine API key for authentication (waterfall: CLI arg → config file)
     const apiKey = options.apiKey || config.apiKey;
@@ -253,22 +284,38 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       oidcToken: authResult.oidcToken,
     };
 
+    logger.debug(
+      `Server URL: ${options.serverUrl || config.serverUrl || 'https://api.promptfoo.dev'}`,
+    );
+
     // Determine server URL
     const serverUrl = options.serverUrl || config.serverUrl || 'https://api.promptfoo.dev';
 
     // Step 3: Create Socket.IO connection
-    console.error('🔌 Establishing connection...');
+    if (showSpinner) {
+      spinner!.text = 'Connecting to server...';
+    } else {
+      logger.debug('Connecting to server...');
+    }
+
     socket = await createSocketConnection(serverUrl, auth);
     cleanupRefs.socket = socket; // Update ref for signal handlers
-    console.error();
+
+    if (showSpinner) {
+      spinner!.text = 'Connected';
+    }
 
     // Step 4: Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
-      console.error('🔌 Setting up MCP filesystem access...');
+      if (showSpinner) {
+        spinner!.text = 'Setting up filesystem access...';
+      } else {
+        logger.debug('Setting up filesystem access...');
+      }
 
       // Generate unique session ID
       sessionId = crypto.randomUUID();
-      console.error(`   Session ID: ${sessionId}`);
+      logger.debug(`Session ID: ${sessionId}`);
 
       // Start filesystem MCP server
       mcpProcess = startFilesystemMcpServer(absoluteRepoPath);
@@ -285,11 +332,18 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
         repo_root: absoluteRepoPath,
       });
 
-      console.error(`   ✓ MCP filesystem ready\n`);
+      if (showSpinner) {
+        spinner!.text = 'Filesystem ready';
+      }
     }
 
     // Step 5: Validate branch and determine base branch
-    console.error('🔄 Processing git diff...');
+    if (showSpinner) {
+      spinner!.text = 'Processing git diff...';
+    } else {
+      logger.debug('Processing git diff...');
+    }
+
     const simpleGit = (await import('simple-git')).default;
     const git = simpleGit(absoluteRepoPath);
 
@@ -315,7 +369,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     // Determine compare ref (use provided or default to HEAD)
     const compareRef = options.compare || 'HEAD';
 
-    console.error(`   Comparing: ${baseBranch}...${compareRef}`);
+    logger.debug(`Comparing: ${baseBranch}...${compareRef}`);
 
     // Process diff with focused pipeline
     const files = await processDiff(absoluteRepoPath, baseBranch, compareRef);
@@ -323,15 +377,18 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     const includedFiles = files.filter((f) => !f.skipReason && f.patch);
     const skippedFiles = files.filter((f) => f.skipReason);
 
-    console.error(`   Total files changed: ${files.length}`);
-    console.error(`   Files included: ${includedFiles.length}`);
-    console.error(`   Files skipped: ${skippedFiles.length}`);
+    logger.debug(
+      `Files changed: ${files.length} (${includedFiles.length} included, ${skippedFiles.length} skipped)`,
+    );
+
+    if (showSpinner) {
+      spinner!.text = `Processed ${files.length} files`;
+    }
 
     // Step 6: Extract git metadata
-    console.error('\n📝 Extracting git metadata...');
     const metadata = await extractMetadata(absoluteRepoPath, baseBranch, compareRef);
-    console.error(`   Compare ref: ${metadata.branch}`);
-    console.error(`   Commits: ${metadata.commitMessages.length}\n`);
+    logger.debug(`Compare ref: ${metadata.branch}`);
+    logger.debug(`Commits: ${metadata.commitMessages.length}`);
 
     // Step 7: Build pull request context if --github-pr flag provided
     let pullRequest: PullRequestContext | undefined = undefined;
@@ -354,13 +411,17 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
         sha: currentCommit.trim(),
       };
 
-      console.error(
-        `\n📝 GitHub PR context: ${parsed.owner}/${parsed.repo}#${parsed.number} (${pullRequest.sha.substring(0, 7)})`,
+      logger.debug(
+        `GitHub PR context: ${parsed.owner}/${parsed.repo}#${parsed.number} (${pullRequest.sha.substring(0, 7)})`,
       );
     }
 
     // Step 8: Send scan request via Socket.IO
-    console.error('\n🌐 Sending scan request...');
+    if (showSpinner) {
+      spinner!.text = 'Scanning code...';
+    } else {
+      logger.debug('Scanning code...');
+    }
 
     const scanRequest: ScanRequest = {
       files,
@@ -396,10 +457,14 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       socket?.emit('scan:start', scanRequest);
     });
 
-    console.error('   ✓ Scan completed successfully\n');
+    // Stop spinner and show completion
+    if (showSpinner) {
+      spinner!.succeed('Scan complete');
+      logger.info(''); // Newline after spinner
+    }
+
     const endTime = Date.now();
     const duration = endTime - startTime;
-    console.error(`   Duration: ${formatDuration(duration / 1000)}\n`);
 
     // Display results
     if (options.json) {
@@ -407,94 +472,122 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       console.log(JSON.stringify(scanResponse, null, 2));
     } else {
       // Pretty-print results for human consumption
-      console.error('='.repeat(80));
-      console.error('SCAN RESULTS');
-      console.error('='.repeat(80));
-      console.error();
-
       const { comments, review } = scanResponse;
+      const severityCounts = countBySeverity(comments || []);
 
-      // Display review summary if present
-      if (review) {
-        console.error('📋 REVIEW:\n');
-        console.error(review);
+      // 1. Completion message
+      printBorder();
+      logger.info(`${chalk.green('✓')} Scan complete (${formatDuration(duration / 1000)})`);
+      logger.info('');
 
-        // Append minimum severity threshold
-        if (config.minimumSeverity) {
-          const capitalizedSeverity =
-            config.minimumSeverity.charAt(0).toUpperCase() + config.minimumSeverity.slice(1);
-          console.error(`\nMinimum severity threshold for this scan: ${capitalizedSeverity}`);
+      // 2. Issue summary (filter by severity to exclude review-only comments)
+      if (severityCounts.total > 0) {
+        logger.info(
+          chalk.yellow(
+            `⚠  Found ${severityCounts.total} issue${severityCounts.total === 1 ? '' : 's'}`,
+          ),
+        );
+        if (severityCounts.critical > 0) {
+          logger.info(`  ${chalk.red.bold(`Critical: ${severityCounts.critical}`)}`);
+        }
+        if (severityCounts.high > 0) {
+          logger.info(`  ${chalk.red(`High: ${severityCounts.high}`)}`);
+        }
+        if (severityCounts.medium > 0) {
+          logger.info(`  ${chalk.yellow(`Medium: ${severityCounts.medium}`)}`);
+        }
+        if (severityCounts.low > 0) {
+          logger.info(`  ${chalk.cyan(`Low: ${severityCounts.low}`)}`);
         }
 
-        console.error('\n' + '='.repeat(80) + '\n');
+        logger.info('');
+
+        // File count
+        const uniqueFiles = new Set(
+          (comments || []).filter((c) => c.severity && c.file).map((c) => c.file),
+        );
+        logger.info(`  ${chalk.gray('Files affected:')} ${chalk.white(uniqueFiles.size)}`);
+        logger.info(
+          `  ${chalk.gray('Minimum severity threshold:')} ${chalk.white(config.minimumSeverity)}`,
+        );
+      }
+      printBorder();
+
+      // 3. Review summary (if present) - shown even when no issues
+      if (review) {
+        logger.info('');
+        logger.info(chalk.bold('Review Summary:'));
+        logger.info(review);
+        logger.info('');
+        printBorder();
       }
 
-      if (comments && comments.length > 0) {
+      // 4. Detailed findings (only show issues with severity)
+      if (severityCounts.total > 0) {
+        const issuesWithSeverity = (comments || []).filter((c) => c.severity);
+
         // Sort by severity (descending)
-        const sortedComments = [...comments].sort((a, b) => {
+        const sortedComments = [...issuesWithSeverity].sort((a, b) => {
           const severityRank = { critical: 4, high: 3, medium: 2, low: 1 };
           const rankA = severityRank[a.severity?.toLowerCase() as keyof typeof severityRank] || 0;
           const rankB = severityRank[b.severity?.toLowerCase() as keyof typeof severityRank] || 0;
           return rankB - rankA;
         });
 
+        logger.info('');
         for (const comment of sortedComments) {
-          // Display severity
-          const severityDisplay = formatSeverity(comment.severity);
-          if (severityDisplay) {
-            console.error(`\n${severityDisplay}`);
-          }
+          const severity = formatSeverity(comment.severity);
+          const location = comment.line ? `${comment.file}:${comment.line}` : comment.file || '';
 
-          // Display location
-          if (comment.file) {
-            const location = comment.line ? `${comment.file}:${comment.line}` : comment.file;
-            console.error(`📍 ${location}\n`);
-          } else {
-            console.error();
-          }
+          logger.info(`${severity} ${chalk.gray(location)}`);
+          logger.info(comment.finding);
 
-          // Display finding
-          console.error(comment.finding);
-
-          // Display fix
           if (comment.fix) {
-            console.error('\n💡 Suggested Fix:');
-            console.error(comment.fix);
+            logger.info('');
+            logger.info(chalk.bold('Suggested Fix:'));
+            logger.info(comment.fix);
           }
 
-          // Display AI agent prompt
           if (comment.aiAgentPrompt) {
-            console.error('\n🤖 AI Agent Prompt:');
-            console.error(comment.aiAgentPrompt);
+            logger.info('');
+            logger.info(chalk.bold('AI Agent Prompt:'));
+            logger.info(comment.aiAgentPrompt);
           }
-          console.error();
-        }
-      } else {
-        console.error('✨ No vulnerabilities found!\n');
-      }
 
-      console.error('='.repeat(80));
+          logger.info('');
+        }
+        printBorder();
+
+        // 5. Next steps (only if there are issues)
+        if (options.githubPr) {
+          logger.info(`» Comments posted to PR: ${chalk.cyan(options.githubPr)}`);
+          printBorder();
+        }
+      }
     }
   } catch (error) {
-    console.error('\n❌ Error:', error instanceof Error ? error.message : String(error));
+    if (showSpinner && spinner) {
+      spinner.fail('Scan failed');
+    }
+    logger.error(`Scan failed: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   } finally {
     // Cleanup: Stop MCP bridge and server, disconnect socket
     if (mcpBridge) {
-      await mcpBridge.disconnect().catch((err) => {
-        console.error('   ⚠️  Error stopping MCP bridge:', err.message);
+      await mcpBridge.disconnect().catch(() => {
+        logger.debug('MCP bridge cleanup completed');
       });
     }
 
     if (mcpProcess) {
-      await stopFilesystemMcpServer(mcpProcess).catch((err) => {
-        console.error('   ⚠️  Error stopping MCP server:', err.message);
+      await stopFilesystemMcpServer(mcpProcess).catch(() => {
+        logger.debug('MCP server cleanup completed');
       });
     }
 
     if (socket) {
       socket.disconnect();
-      console.error('   ✓ Socket disconnected');
+      logger.debug('Socket disconnected');
     }
   }
 }

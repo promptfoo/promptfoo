@@ -4,7 +4,8 @@
  * Extracts metadata about the current branch and commits.
  */
 
-import simpleGit, { type SimpleGit, type LogResult } from 'simple-git';
+import simpleGit, { type LogResult } from 'simple-git';
+
 import type { GitMetadata } from '../../../types/codeScan';
 
 export class GitMetadataError extends Error {

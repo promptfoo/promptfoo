@@ -6,8 +6,9 @@
 
 import fs from 'fs';
 import path from 'path';
+
 import yaml from 'js-yaml';
-import { ConfigSchema, DEFAULT_CONFIG, type Config } from './schema';
+import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
 
 // Re-export Config type for convenience
 export type { Config };

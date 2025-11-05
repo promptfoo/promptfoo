@@ -1,5 +1,5 @@
-import type { Command } from 'commander';
 import { runCommand } from './run';
+import type { Command } from 'commander';
 
 /**
  * Register the code-scans command group

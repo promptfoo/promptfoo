@@ -2,8 +2,8 @@
  * Git Diff Tests
  */
 
-import { validateOnBranch, extractDiff, GitError } from './diff';
-import type { SimpleGit, StatusResult, DefaultLogFields } from 'simple-git';
+import { extractDiff, GitError, validateOnBranch } from './diff';
+import type { SimpleGit, StatusResult } from 'simple-git';
 
 // Mock simple-git
 jest.mock('simple-git');

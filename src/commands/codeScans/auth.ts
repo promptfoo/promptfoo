@@ -3,13 +3,15 @@
  * Reusable across HTTP requests and socket.io connections
  */
 
+import logger from '../../logger';
+
 // Import promptfoo's cloud config for auth
 let cloudConfig: { getApiKey(): string | undefined } | undefined;
 try {
   // Dynamic import to avoid circular dependencies
   const cloudModule = require('../../globalConfig/cloud');
   cloudConfig = cloudModule.cloudConfig;
-} catch (error) {
+} catch (_error) {
   // Promptfoo auth not available - that's OK, will fall back to other methods
   // Silently fail since other auth methods are available
 }
@@ -36,7 +38,7 @@ export interface AuthCredentials {
 export function resolveAuthCredentials(apiKey?: string): AuthCredentials {
   // 1. API key from argument (CLI --api-key or config file)
   if (apiKey) {
-    console.error('   ✓ Using API key from CLI/config');
+    logger.debug('Using API key from CLI/config');
     return {
       apiKey,
       method: 'cli_arg',
@@ -46,7 +48,7 @@ export function resolveAuthCredentials(apiKey?: string): AuthCredentials {
   // 2. API key from environment variable
   const envApiKey = process.env.PROMPTFOO_API_KEY;
   if (envApiKey) {
-    console.error('   ✓ Using API key from PROMPTFOO_API_KEY env var');
+    logger.debug('Using API key from PROMPTFOO_API_KEY env var');
     return {
       apiKey: envApiKey,
       method: 'config_file', // Use config_file method to indicate env var
@@ -57,7 +59,7 @@ export function resolveAuthCredentials(apiKey?: string): AuthCredentials {
   if (cloudConfig) {
     const storedApiKey = cloudConfig.getApiKey();
     if (storedApiKey) {
-      console.error('   ✓ Using API key from promptfoo auth');
+      logger.debug('Using API key from promptfoo auth');
       return {
         apiKey: storedApiKey,
         method: 'promptfoo_auth',
@@ -68,7 +70,7 @@ export function resolveAuthCredentials(apiKey?: string): AuthCredentials {
   // 4. GitHub OIDC token
   const oidcToken = process.env.GITHUB_OIDC_TOKEN;
   if (oidcToken) {
-    console.error('   ✓ Using GitHub OIDC token');
+    logger.debug('Using GitHub OIDC token');
     return {
       oidcToken,
       method: 'github_oidc',

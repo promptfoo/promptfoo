@@ -7,7 +7,10 @@
  */
 
 import type { ChildProcess } from 'node:child_process';
-import { io, type Socket } from 'socket.io-client';
+
+import { type Socket } from 'socket.io-client';
+import logger from '../../../logger';
+
 import type { JsonRpcMessage } from '../../../types/codeScan';
 
 /**
@@ -47,7 +50,7 @@ export class SocketIoMcpBridge {
       throw new SocketIoMcpBridgeError('Socket must be connected before starting bridge');
     }
 
-    console.error(`   ✓ Using existing socket connection (id: ${this.socket.id})`);
+    logger.debug(`Using existing socket connection (id: ${this.socket.id})`);
     this.startBridging();
   }
 
@@ -66,12 +69,16 @@ export class SocketIoMcpBridge {
       // Process complete lines (JSON-RPC messages are newline-delimited)
       while (true) {
         const newlineIndex = this.readBuffer.indexOf('\n');
-        if (newlineIndex === -1) break;
+        if (newlineIndex === -1) {
+          break;
+        }
 
         const line = this.readBuffer.slice(0, newlineIndex);
         this.readBuffer = this.readBuffer.slice(newlineIndex + 1);
 
-        if (!line.trim()) continue; // Skip empty lines
+        if (!line.trim()) {
+          continue; // Skip empty lines
+        }
 
         try {
           const message = JSON.parse(line);
@@ -122,8 +129,8 @@ export class SocketIoMcpBridge {
               message,
             });
           }
-        } catch (error) {
-          console.error('   ⚠️  Failed to parse MCP output:', line);
+        } catch (_error) {
+          logger.debug(`Failed to parse MCP output: ${line}`);
         }
       }
     });
@@ -151,27 +158,26 @@ export class SocketIoMcpBridge {
         const jsonLine = JSON.stringify(messageToSend) + '\n';
         this.mcpProcess.stdin?.write(jsonLine);
       } catch (error) {
-        console.error(
-          '   ⚠️  Failed to write to MCP stdin:',
-          error instanceof Error ? error.message : String(error),
+        logger.error(
+          `Failed to write to MCP stdin: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     });
 
-    console.error('   ✓ MCP ↔ Socket.io bridge active');
+    logger.debug('MCP ↔ Socket.io bridge active');
   }
 
   /**
    * Stop bridging (socket lifecycle managed externally)
    */
   async disconnect(): Promise<void> {
-    console.error('   Stopping MCP bridge...');
+    logger.debug('Stopping MCP bridge...');
 
     // Clear wire ID map to prevent stale mappings
     this.wireIdMap.clear();
     this.wireIdSeq = 0;
 
-    console.error('   ✓ MCP bridge stopped');
+    logger.debug('MCP bridge stopped');
   }
 
   /**

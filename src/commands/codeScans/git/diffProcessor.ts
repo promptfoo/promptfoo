@@ -9,20 +9,21 @@
  * 5. Generate per-file patches
  */
 
-import { execa } from 'execa';
-import mime from 'mime-types';
-import { isText } from 'istextorbinary';
-import pLimit from 'p-limit';
-import fs from 'fs/promises';
 import path from 'path';
-import type { FileRecord } from '../../../types/codeScan';
+
+import { execa } from 'execa';
+import { isText } from 'istextorbinary';
+import mime from 'mime-types';
+import pLimit from 'p-limit';
 import { annotateDiffWithLineNumbers } from './diffAnnotator';
 import {
   DENYLIST_PATTERNS,
+  isInDenylist,
   MAX_BLOB_SIZE_BYTES,
   MAX_PATCH_SIZE_BYTES,
-  isInDenylist,
 } from './filteringConstants';
+
+import type { FileRecord } from '../../../types/codeScan';
 
 interface RawDiffEntry {
   path: string;
@@ -117,11 +118,15 @@ function parseRawDiff(rawOutput: string): RawDiffEntry[] {
     const metaLine = entries[i];
     const filePath = entries[i + 1];
 
-    if (!metaLine || !filePath) continue;
+    if (!metaLine || !filePath) {
+      continue;
+    }
 
     // Parse: :100644 100644 abc123... def456... M
     const parts = metaLine.trim().split(/\s+/);
-    if (parts.length < 5) continue;
+    if (parts.length < 5) {
+      continue;
+    }
 
     const shaA = parts[2] === '0000000000000000000000000000000000000000' ? null : parts[2];
     const shaB = parts[3] === '0000000000000000000000000000000000000000' ? null : parts[3];
@@ -141,10 +146,14 @@ function parseNumstat(numstatOutput: string): Map<string, NumstatEntry> {
   const map = new Map<string, NumstatEntry>();
 
   for (const line of numstatOutput.split('\n')) {
-    if (!line.trim()) continue;
+    if (!line.trim()) {
+      continue;
+    }
 
     const parts = line.split('\t');
-    if (parts.length < 3) continue;
+    if (parts.length < 3) {
+      continue;
+    }
 
     const added = parts[0] === '-' ? 0 : Number.parseInt(parts[0], 10);
     const removed = parts[1] === '-' ? 0 : Number.parseInt(parts[1], 10);
@@ -208,10 +217,16 @@ async function collectBlobSizes(
   const shas = new Set<string>();
 
   for (const file of files) {
-    if (file.skipReason) continue; // Skip files already marked for skipping
+    if (file.skipReason) {
+      continue; // Skip files already marked for skipping
+    }
 
-    if (file.shaA) shas.add(file.shaA);
-    if (file.shaB) shas.add(file.shaB);
+    if (file.shaA) {
+      shas.add(file.shaA);
+    }
+    if (file.shaB) {
+      shas.add(file.shaB);
+    }
   }
 
   if (shas.size === 0) {
@@ -232,10 +247,14 @@ async function collectBlobSizes(
   const sizeMap = new Map<string, number>();
 
   for (const line of result.stdout.split('\n')) {
-    if (!line.trim()) continue;
+    if (!line.trim()) {
+      continue;
+    }
 
     const parts = line.split(/\s+/);
-    if (parts.length < 3) continue;
+    if (parts.length < 3) {
+      continue;
+    }
 
     const sha = parts[0];
     const size = Number.parseInt(parts[2], 10);
@@ -248,7 +267,9 @@ async function collectBlobSizes(
 
 function attachBlobSizesAndFilter(files: FileRecord[], sizeMap: Map<string, number>): FileRecord[] {
   return files.map((file) => {
-    if (file.skipReason) return file; // Already skipped
+    if (file.skipReason) {
+      return file; // Already skipped
+    }
 
     const beforeSize = file.shaA ? sizeMap.get(file.shaA) : undefined;
     const afterSize = file.shaB ? sizeMap.get(file.shaB) : undefined;
@@ -360,7 +381,7 @@ async function determineTextStatus(repoPath: string, files: FileRecord[]): Promi
   return Promise.all(tasks);
 }
 
-function sanitizePathForFilename(filePath: string): string {
+function _sanitizePathForFilename(filePath: string): string {
   return filePath.replace(/[/\\:*?"<>|]/g, '_');
 }
 

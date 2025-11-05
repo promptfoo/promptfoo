@@ -4,8 +4,10 @@
  * Spawns and manages the @modelcontextprotocol/server-filesystem child process.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { resolve } from 'node:path';
+
+import logger from '../../../logger';
 
 export class FilesystemMcpError extends Error {
   constructor(message: string) {
@@ -26,8 +28,8 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
     throw new FilesystemMcpError(`Root directory must be an absolute path, got: ${rootDir}`);
   }
 
-  console.error(`   Starting filesystem MCP server...`);
-  console.error(`   Root directory: ${rootDir}`);
+  logger.debug('Starting filesystem MCP server...');
+  logger.debug(`Root directory: ${rootDir}`);
 
   try {
     // Spawn the filesystem MCP server
@@ -47,24 +49,24 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
         return;
       }
 
-      // Log other stderr messages
-      process.stderr.write(chunk);
+      // Log other stderr messages as debug
+      logger.debug(`MCP server stderr: ${message.trim()}`);
     });
 
     // Handle process errors
     mcpProcess.on('error', (error) => {
-      console.error('   ❌ MCP server process error:', error.message);
+      logger.error(`MCP server process error: ${error.message}`);
     });
 
     mcpProcess.on('exit', (code, signal) => {
       if (code !== null && code !== 0) {
-        console.error(`   ❌ MCP server exited with code ${code}`);
+        logger.debug(`MCP server exited with code ${code}`);
       } else if (signal) {
-        console.error(`   ℹ️  MCP server terminated by signal ${signal}`);
+        logger.debug(`MCP server terminated by signal ${signal}`);
       }
     });
 
-    console.error(`   ✓ MCP server started (pid: ${mcpProcess.pid})`);
+    logger.debug(`MCP server started (pid: ${mcpProcess.pid})`);
 
     return mcpProcess;
   } catch (error) {
@@ -80,23 +82,23 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
  */
 export async function stopFilesystemMcpServer(process: ChildProcess): Promise<void> {
   if (!process.pid) {
-    console.error('   ℹ️  MCP server already stopped');
+    logger.debug('MCP server already stopped');
     return;
   }
 
-  console.error(`   Stopping MCP server (pid: ${process.pid})...`);
+  logger.debug(`Stopping MCP server (pid: ${process.pid})...`);
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       // Force kill if graceful shutdown takes too long
-      console.error('   ⚠️  MCP server did not exit gracefully, force killing...');
+      logger.debug('MCP server did not exit gracefully, force killing...');
       process.kill('SIGKILL');
       resolve();
     }, 5000); // 5 second timeout
 
     process.on('exit', () => {
       clearTimeout(timeout);
-      console.error('   ✓ MCP server stopped');
+      logger.debug('MCP server stopped');
       resolve();
     });
 

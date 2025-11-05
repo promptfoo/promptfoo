@@ -3,7 +3,7 @@
  */
 
 import { extractMetadata, GitMetadataError } from './metadata';
-import type { SimpleGit, DefaultLogFields, ListLogLine } from 'simple-git';
+import type { SimpleGit } from 'simple-git';
 
 // Mock simple-git
 jest.mock('simple-git');
