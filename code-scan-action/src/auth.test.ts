@@ -30,7 +30,7 @@ describe('getGitHubOIDCToken', () => {
     getIDToken.mockRejectedValue(new Error('OIDC not configured'));
 
     await expect(getGitHubOIDCToken('https://scanner.example.com')).rejects.toThrow(
-      'Failed to get GitHub OIDC token: OIDC not configured'
+      'Failed to get GitHub OIDC token: OIDC not configured',
     );
   });
 });

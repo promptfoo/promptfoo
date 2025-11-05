@@ -152,7 +152,9 @@ describe('Git Metadata', () => {
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
 
-      expect(metadata.commitMessages).toEqual(['abc123d: Add feature\n\nDetailed description here']);
+      expect(metadata.commitMessages).toEqual([
+        'abc123d: Add feature\n\nDetailed description here',
+      ]);
     });
 
     it('should use latest commit for author and timestamp', async () => {

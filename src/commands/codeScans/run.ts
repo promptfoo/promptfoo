@@ -168,7 +168,7 @@ function registerCleanupHandlers(refs: CleanupRefs): void {
   };
 
   // Register handlers for common termination signals
-  process.on('SIGINT', () => cleanup('SIGINT'));  // Ctrl+C
+  process.on('SIGINT', () => cleanup('SIGINT')); // Ctrl+C
   process.on('SIGTERM', () => cleanup('SIGTERM')); // Termination signal
   process.on('SIGQUIT', () => cleanup('SIGQUIT')); // Quit signal
 }
@@ -215,7 +215,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       console.error(`   Loaded guidance from: ${absoluteGuidancePath}`);
     } catch (error) {
       throw new Error(
-        `Failed to read guidance file: ${absoluteGuidancePath} - ${error instanceof Error ? error.message : String(error)}`
+        `Failed to read guidance file: ${absoluteGuidancePath} - ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   } else if (config.guidance) {
@@ -282,7 +282,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       // Announce as runner with repository root for MCP roots/list
       socket.emit('runner:hello', {
         session_id: sessionId,
-        repo_root: absoluteRepoPath
+        repo_root: absoluteRepoPath,
       });
 
       console.error(`   ✓ MCP filesystem ready\n`);
@@ -308,8 +308,8 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
         branches.all.includes('main') || branches.all.includes('origin/main')
           ? 'main'
           : branches.all.includes('master') || branches.all.includes('origin/master')
-          ? 'master'
-          : 'main';
+            ? 'master'
+            : 'main';
     }
 
     // Determine compare ref (use provided or default to HEAD)
@@ -319,7 +319,6 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
     // Process diff with focused pipeline
     const files = await processDiff(absoluteRepoPath, baseBranch, compareRef);
-
 
     const includedFiles = files.filter((f) => !f.skipReason && f.patch);
     const skippedFiles = files.filter((f) => f.skipReason);
@@ -340,7 +339,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       const parsed = parseGitHubPr(options.githubPr);
       if (!parsed) {
         throw new Error(
-          `Invalid --github-pr format: "${options.githubPr}". Expected format: owner/repo#number (e.g., promptfoo/promptfoo#123)`
+          `Invalid --github-pr format: "${options.githubPr}". Expected format: owner/repo#number (e.g., promptfoo/promptfoo#123)`,
         );
       }
 
@@ -355,7 +354,9 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
         sha: currentCommit.trim(),
       };
 
-      console.error(`\n📝 GitHub PR context: ${parsed.owner}/${parsed.repo}#${parsed.number} (${pullRequest.sha.substring(0, 7)})`);
+      console.error(
+        `\n📝 GitHub PR context: ${parsed.owner}/${parsed.repo}#${parsed.number} (${pullRequest.sha.substring(0, 7)})`,
+      );
     }
 
     // Step 8: Send scan request via Socket.IO
@@ -420,7 +421,8 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
         // Append minimum severity threshold
         if (config.minimumSeverity) {
-          const capitalizedSeverity = config.minimumSeverity.charAt(0).toUpperCase() + config.minimumSeverity.slice(1);
+          const capitalizedSeverity =
+            config.minimumSeverity.charAt(0).toUpperCase() + config.minimumSeverity.slice(1);
           console.error(`\nMinimum severity threshold for this scan: ${capitalizedSeverity}`);
         }
 

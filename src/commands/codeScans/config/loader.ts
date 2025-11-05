@@ -54,7 +54,9 @@ export function loadConfig(configPath: string): Config {
   // Validate against schema
   const result = ConfigSchema.safeParse(rawConfig);
   if (!result.success) {
-    const errors = result.error.errors.map((err) => `${err.path.join('.')}: ${err.message}`).join(', ');
+    const errors = result.error.errors
+      .map((err) => `${err.path.join('.')}: ${err.message}`)
+      .join(', ');
     throw new ConfigLoadError(`Invalid configuration: ${errors}`);
   }
 

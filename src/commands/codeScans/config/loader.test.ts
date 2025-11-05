@@ -26,10 +26,7 @@ describe('Configuration Loader', () => {
   describe('loadConfig', () => {
     it('should load valid configuration file', () => {
       const configPath = path.join(tempDir, 'config.yaml');
-      fs.writeFileSync(
-        configPath,
-        'minimumSeverity: high\ndiffsOnly: false',
-      );
+      fs.writeFileSync(configPath, 'minimumSeverity: high\ndiffsOnly: false');
 
       const config = loadConfig(configPath);
 
@@ -61,10 +58,7 @@ describe('Configuration Loader', () => {
 
       for (const [expectedLevel, levelString] of testCases) {
         const configPath = path.join(tempDir, `config-${levelString}.yaml`);
-        fs.writeFileSync(
-          configPath,
-          `minimumSeverity: ${levelString}\ndiffsOnly: true`,
-        );
+        fs.writeFileSync(configPath, `minimumSeverity: ${levelString}\ndiffsOnly: true`);
 
         const config = loadConfig(configPath);
 
@@ -90,10 +84,7 @@ describe('Configuration Loader', () => {
 
     it('should throw ConfigLoadError if validation fails', () => {
       const configPath = path.join(tempDir, 'invalid-schema.yaml');
-      fs.writeFileSync(
-        configPath,
-        'minimumSeverity: invalid-level\ndiffsOnly: not-a-boolean',
-      );
+      fs.writeFileSync(configPath, 'minimumSeverity: invalid-level\ndiffsOnly: not-a-boolean');
 
       expect(() => loadConfig(configPath)).toThrow(ConfigLoadError);
       expect(() => loadConfig(configPath)).toThrow('Invalid configuration');
@@ -101,10 +92,7 @@ describe('Configuration Loader', () => {
 
     it('should handle boolean diffsOnly values', () => {
       const configPath = path.join(tempDir, 'config.yaml');
-      fs.writeFileSync(
-        configPath,
-        'minimumSeverity: medium\ndiffsOnly: true',
-      );
+      fs.writeFileSync(configPath, 'minimumSeverity: medium\ndiffsOnly: true');
 
       const config = loadConfig(configPath);
 
@@ -113,10 +101,7 @@ describe('Configuration Loader', () => {
 
     it('should accept minSeverity as an alias for minimumSeverity', () => {
       const configPath = path.join(tempDir, 'config.yaml');
-      fs.writeFileSync(
-        configPath,
-        'minSeverity: critical\ndiffsOnly: true',
-      );
+      fs.writeFileSync(configPath, 'minSeverity: critical\ndiffsOnly: true');
 
       const config = loadConfig(configPath);
 
@@ -126,10 +111,7 @@ describe('Configuration Loader', () => {
 
     it('should prefer minSeverity over minimumSeverity when both provided', () => {
       const configPath = path.join(tempDir, 'config.yaml');
-      fs.writeFileSync(
-        configPath,
-        'minSeverity: low\nminimumSeverity: high\ndiffsOnly: false',
-      );
+      fs.writeFileSync(configPath, 'minSeverity: low\nminimumSeverity: high\ndiffsOnly: false');
 
       const config = loadConfig(configPath);
 
@@ -147,10 +129,7 @@ describe('Configuration Loader', () => {
 
       for (const [expectedLevel, levelString] of testCases) {
         const configPath = path.join(tempDir, `config-min-${levelString}.yaml`);
-        fs.writeFileSync(
-          configPath,
-          `minSeverity: ${levelString}\ndiffsOnly: true`,
-        );
+        fs.writeFileSync(configPath, `minSeverity: ${levelString}\ndiffsOnly: true`);
 
         const config = loadConfig(configPath);
 
@@ -176,10 +155,7 @@ describe('Configuration Loader', () => {
       fs.writeFileSync(guidanceFilePath, 'Focus on authentication vulnerabilities');
 
       const configPath = path.join(tempDir, 'config.yaml');
-      fs.writeFileSync(
-        configPath,
-        `minimumSeverity: high\nguidanceFile: ${guidanceFilePath}`,
-      );
+      fs.writeFileSync(configPath, `minimumSeverity: high\nguidanceFile: ${guidanceFilePath}`);
 
       const config = loadConfig(configPath);
 
@@ -188,10 +164,7 @@ describe('Configuration Loader', () => {
 
     it('should throw ConfigLoadError when guidanceFile does not exist', () => {
       const configPath = path.join(tempDir, 'config.yaml');
-      fs.writeFileSync(
-        configPath,
-        'minimumSeverity: high\nguidanceFile: ./nonexistent.txt',
-      );
+      fs.writeFileSync(configPath, 'minimumSeverity: high\nguidanceFile: ./nonexistent.txt');
 
       expect(() => loadConfig(configPath)).toThrow(ConfigLoadError);
       expect(() => loadConfig(configPath)).toThrow(/Failed to read guidance file/);
@@ -224,10 +197,7 @@ describe('Configuration Loader', () => {
 
     it('should load config when path provided', () => {
       const configPath = path.join(tempDir, 'config.yaml');
-      fs.writeFileSync(
-        configPath,
-        'minimumSeverity: critical\ndiffsOnly: true',
-      );
+      fs.writeFileSync(configPath, 'minimumSeverity: critical\ndiffsOnly: true');
 
       const config = loadConfigOrDefault(configPath);
 

@@ -46,9 +46,7 @@ export async function validateOnBranch(git: SimpleGit): Promise<string> {
   try {
     const status = await git.status();
     if (status.detached) {
-      throw new GitError(
-        'Not on a branch. Please checkout a branch before running the scan.',
-      );
+      throw new GitError('Not on a branch. Please checkout a branch before running the scan.');
     }
     if (!status.current) {
       throw new GitError('Could not determine current branch.');

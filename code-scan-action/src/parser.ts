@@ -21,7 +21,10 @@ function sliceBetween(str: string, startIdx: number, endIdx: number): string | n
   return str.slice(startIdx, endIdx);
 }
 
-function firstOpenTag(str: string, tag: string): { openStart: number; openEnd: number; attrSrc: string } | null {
+function firstOpenTag(
+  str: string,
+  tag: string,
+): { openStart: number; openEnd: number; attrSrc: string } | null {
   const re = new RegExp(`<${tag}\\b[^>]*>`, 'i');
   const m = re.exec(str);
   if (!m) return null;
@@ -72,7 +75,7 @@ export function extractComments(xmlish: string): ParsedCommentXml[] {
     comments.push({
       file: file?.trim() ?? null,
       line: line != null && /^\s*\d+\s*$/.test(line) ? parseInt(line, 10) : null,
-      body: body?.trim() ?? ''
+      body: body?.trim() ?? '',
     });
   }
 

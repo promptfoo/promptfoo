@@ -16,10 +16,7 @@ export const ConfigSchema = z
       .nativeEnum(SeverityLevel)
       .optional()
       .describe('Minimum severity level for reporting vulnerabilities'),
-    minimumSeverity: z
-      .nativeEnum(SeverityLevel)
-      .optional()
-      .describe('Alias for minSeverity'),
+    minimumSeverity: z.nativeEnum(SeverityLevel).optional().describe('Alias for minSeverity'),
     diffsOnly: z
       .boolean()
       .default(false)
@@ -32,14 +29,8 @@ export const ConfigSchema = z
       .string()
       .optional()
       .describe('Scan server URL (default: https://api.promptfoo.dev)'),
-    guidance: z
-      .string()
-      .optional()
-      .describe('Custom guidance for the security scan'),
-    guidanceFile: z
-      .string()
-      .optional()
-      .describe('Path to file containing custom guidance'),
+    guidance: z.string().optional().describe('Custom guidance for the security scan'),
+    guidanceFile: z.string().optional().describe('Path to file containing custom guidance'),
   })
   .refine((data) => !(data.guidance && data.guidanceFile), {
     message: 'Cannot specify both guidance and guidanceFile',

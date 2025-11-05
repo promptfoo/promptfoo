@@ -66,7 +66,9 @@ describe('GitHub API Client', () => {
       const originalPayload = github.context.payload;
       github.context.payload = {};
 
-      expect(() => getGitHubContext()).toThrow('This action can only be run on pull_request events');
+      expect(() => getGitHubContext()).toThrow(
+        'This action can only be run on pull_request events',
+      );
 
       github.context.payload = originalPayload;
     });
@@ -147,7 +149,7 @@ describe('GitHub API Client', () => {
               body: 'Valid comment',
             },
           ],
-        })
+        }),
       );
     });
 

@@ -52,14 +52,14 @@ That's it! The action will now scan all pull requests and post findings as comme
 
 ### Inputs
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|---------|
-| `github-token` | GitHub token for posting comments | Yes | `${{ github.token }}` |
-| `server-url` | Scan server URL | No | `https://api.promptfoo.dev` |
-| `min-severity` | Minimum severity to report (`low`, `medium`, `high`, `critical`) | No | `high` |
-| `minimum-severity` | Alias for `min-severity` | No | `high` |
-| `fail-on-vulnerabilities` | Fail workflow if vulnerabilities found (`false`, `high`, `critical`) | No | `false` |
-| `config-path` | Path to config file | No | Auto-generated |
+| Input                     | Description                                                          | Required | Default                     |
+| ------------------------- | -------------------------------------------------------------------- | -------- | --------------------------- |
+| `github-token`            | GitHub token for posting comments                                    | Yes      | `${{ github.token }}`       |
+| `server-url`              | Scan server URL                                                      | No       | `https://api.promptfoo.dev` |
+| `min-severity`            | Minimum severity to report (`low`, `medium`, `high`, `critical`)     | No       | `high`                      |
+| `minimum-severity`        | Alias for `min-severity`                                             | No       | `high`                      |
+| `fail-on-vulnerabilities` | Fail workflow if vulnerabilities found (`false`, `high`, `critical`) | No       | `false`                     |
+| `config-path`             | Path to config file                                                  | No       | Auto-generated              |
 
 :::tip
 Both `min-severity` and `minimum-severity` are supported. Use whichever you prefer.
@@ -74,7 +74,7 @@ Both `min-severity` and `minimum-severity` are supported. Use whichever you pref
   uses: promptfoo/code-scan-action@v1
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
-    min-severity: medium  # Report medium and above
+    min-severity: medium # Report medium and above
 ```
 
 **Fail workflow on critical issues:**
@@ -84,7 +84,7 @@ Both `min-severity` and `minimum-severity` are supported. Use whichever you pref
   uses: promptfoo/code-scan-action@v1
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
-    fail-on-vulnerabilities: critical  # Fail on critical findings
+    fail-on-vulnerabilities: critical # Fail on critical findings
 ```
 
 **Use custom config file:**
@@ -128,6 +128,7 @@ User input directly concatenated into LLM prompt without sanitization.
 <summary>💡 Suggested Fix</summary>
 
 Use parameterized prompts or input validation to prevent injection attacks.
+
 </details>
 ```
 
@@ -136,11 +137,12 @@ Use parameterized prompts or input validation to prevent injection attacks.
 The action uses **GitHub OIDC** for authentication with the scan server. No API keys needed!
 
 Required permissions:
+
 ```yaml
 permissions:
-  id-token: write      # For OIDC authentication
+  id-token: write # For OIDC authentication
   pull-requests: write # To post comments
-  contents: read       # To read code
+  contents: read # To read code
 ```
 
 ## What Gets Scanned
@@ -279,6 +281,7 @@ The action and server both try to post comments as fallback. This is expected be
 ### No files scanned
 
 The scanner excludes:
+
 - Dependencies (`node_modules/`, `.venv/`)
 - Build artifacts (`dist/`, `build/`)
 - Binary files

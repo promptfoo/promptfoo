@@ -46,17 +46,17 @@ promptfoo code-scans run [repo-path] [options]
 
 ### Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `repo-path` | Path to repository | Current directory (`.`) |
-| `--api-key <key>` | Promptfoo API key | From `promptfoo auth` or `PROMPTFOO_API_KEY` env var |
-| `--base <ref>` | Base branch/commit to compare against | Auto-detected from git |
-| `--compare <ref>` | Branch/commit to scan | `HEAD` |
-| `--config <path>` | Path to config file | `.promptfoo-code-scan.yaml` |
-| `--server-url <url>` | Scan server URL | `https://api.promptfoo.dev` |
-| `--diffs-only` | Scan only PR diffs, skip filesystem exploration | false |
-| `--json` | Output results as JSON | false |
-| `--github-pr <owner/repo#number>` | Post comments to GitHub PR | None |
+| Option                            | Description                                     | Default                                              |
+| --------------------------------- | ----------------------------------------------- | ---------------------------------------------------- |
+| `repo-path`                       | Path to repository                              | Current directory (`.`)                              |
+| `--api-key <key>`                 | Promptfoo API key                               | From `promptfoo auth` or `PROMPTFOO_API_KEY` env var |
+| `--base <ref>`                    | Base branch/commit to compare against           | Auto-detected from git                               |
+| `--compare <ref>`                 | Branch/commit to scan                           | `HEAD`                                               |
+| `--config <path>`                 | Path to config file                             | `.promptfoo-code-scan.yaml`                          |
+| `--server-url <url>`              | Scan server URL                                 | `https://api.promptfoo.dev`                          |
+| `--diffs-only`                    | Scan only PR diffs, skip filesystem exploration | false                                                |
+| `--json`                          | Output results as JSON                          | false                                                |
+| `--github-pr <owner/repo#number>` | Post comments to GitHub PR                      | None                                                 |
 
 ### Examples
 
@@ -101,7 +101,6 @@ minSeverity: high
 
 # Scan only PR diffs without filesystem exploration (default: false = explore full repo)
 diffsOnly: false
-
 # Optional: API key (alternative to promptfoo auth login)
 # apiKey: your-api-key-here
 
@@ -150,6 +149,7 @@ The scanner analyzes:
 File types scanned include: `.ts`, `.js`, `.py`, `.java`, `.go`, `.rb`, `.php`, and more.
 
 Files automatically excluded:
+
 - Dependencies (`node_modules/`, `.venv/`, etc.)
 - Build artifacts (`dist/`, `build/`, etc.)
 - Lock files

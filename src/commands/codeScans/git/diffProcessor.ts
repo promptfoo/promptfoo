@@ -42,23 +42,60 @@ export { DENYLIST_PATTERNS, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES, isInDenyl
 const PATCH_CONCURRENCY = 8;
 const TEXT_DETECTION_CONCURRENCY = 16;
 
-
 /**
  * Known text file extensions for programming languages
  * These override MIME type detection for common false positives
  */
 const TEXT_FILE_EXTENSIONS = new Set([
-  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
-  '.py', '.rb', '.java', '.c', '.cpp', '.h', '.hpp',
-  '.go', '.rs', '.php', '.swift', '.kt', '.scala',
-  '.css', '.scss', '.sass', '.less',
-  '.html', '.htm', '.xml', '.svg',
-  '.json', '.yaml', '.yml', '.toml', '.ini', '.cfg',
-  '.md', '.txt', '.rst', '.adoc',
-  '.sh', '.bash', '.zsh', '.fish',
-  '.sql', '.graphql', '.proto',
-  '.vue', '.svelte', '.astro',
-  '.tf', '.hcl',
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.py',
+  '.rb',
+  '.java',
+  '.c',
+  '.cpp',
+  '.h',
+  '.hpp',
+  '.go',
+  '.rs',
+  '.php',
+  '.swift',
+  '.kt',
+  '.scala',
+  '.css',
+  '.scss',
+  '.sass',
+  '.less',
+  '.html',
+  '.htm',
+  '.xml',
+  '.svg',
+  '.json',
+  '.yaml',
+  '.yml',
+  '.toml',
+  '.ini',
+  '.cfg',
+  '.md',
+  '.txt',
+  '.rst',
+  '.adoc',
+  '.sh',
+  '.bash',
+  '.zsh',
+  '.fish',
+  '.sql',
+  '.graphql',
+  '.proto',
+  '.vue',
+  '.svelte',
+  '.astro',
+  '.tf',
+  '.hcl',
 ]);
 
 export class DiffProcessorError extends Error {
@@ -119,12 +156,20 @@ function parseNumstat(numstatOutput: string): Map<string, NumstatEntry> {
   return map;
 }
 
-async function discoverChangedFiles(repoPath: string, base: string, compare: string): Promise<FileRecord[]> {
+async function discoverChangedFiles(
+  repoPath: string,
+  base: string,
+  compare: string,
+): Promise<FileRecord[]> {
   // Run git diff --raw and --numstat in parallel
   const [rawResult, numstatResult] = await Promise.all([
-    execa('git', ['diff', '--raw', '-z', '--no-color', '--no-ext-diff', '--no-abbrev', `${base}...${compare}`], {
-      cwd: repoPath,
-    }),
+    execa(
+      'git',
+      ['diff', '--raw', '-z', '--no-color', '--no-ext-diff', '--no-abbrev', `${base}...${compare}`],
+      {
+        cwd: repoPath,
+      },
+    ),
     execa('git', ['diff', '--numstat', `${base}...${compare}`], {
       cwd: repoPath,
     }),
@@ -156,7 +201,10 @@ function filterDenylist(files: FileRecord[]): FileRecord[] {
   });
 }
 
-async function collectBlobSizes(repoPath: string, files: FileRecord[]): Promise<Map<string, number>> {
+async function collectBlobSizes(
+  repoPath: string,
+  files: FileRecord[],
+): Promise<Map<string, number>> {
   const shas = new Set<string>();
 
   for (const file of files) {
@@ -172,10 +220,14 @@ async function collectBlobSizes(repoPath: string, files: FileRecord[]): Promise<
 
   // Use git cat-file --batch-check
   const shaList = Array.from(shas).join('\n');
-  const result = await execa('git', ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'], {
-    cwd: repoPath,
-    input: shaList,
-  });
+  const result = await execa(
+    'git',
+    ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
+    {
+      cwd: repoPath,
+      input: shaList,
+    },
+  );
 
   const sizeMap = new Map<string, number>();
 
@@ -303,9 +355,7 @@ async function determineTextStatusForFile(repoPath: string, file: FileRecord): P
 async function determineTextStatus(repoPath: string, files: FileRecord[]): Promise<FileRecord[]> {
   const limit = pLimit(TEXT_DETECTION_CONCURRENCY);
 
-  const tasks = files.map((file) =>
-    limit(() => determineTextStatusForFile(repoPath, file))
-  );
+  const tasks = files.map((file) => limit(() => determineTextStatusForFile(repoPath, file)));
 
   return Promise.all(tasks);
 }
@@ -314,11 +364,25 @@ function sanitizePathForFilename(filePath: string): string {
   return filePath.replace(/[/\\:*?"<>|]/g, '_');
 }
 
-async function generatePatchForFile(repoPath: string, base: string, compare: string, filePath: string): Promise<string | null> {
+async function generatePatchForFile(
+  repoPath: string,
+  base: string,
+  compare: string,
+  filePath: string,
+): Promise<string | null> {
   try {
     const result = await execa(
       'git',
-      ['diff', '--patch', '--unified=3', '--no-color', '--no-ext-diff', `${base}...${compare}`, '--', filePath],
+      [
+        'diff',
+        '--patch',
+        '--unified=3',
+        '--no-color',
+        '--no-ext-diff',
+        `${base}...${compare}`,
+        '--',
+        filePath,
+      ],
       {
         cwd: repoPath,
       },
@@ -340,7 +404,12 @@ async function generatePatchForFile(repoPath: string, base: string, compare: str
   }
 }
 
-async function generatePatches(repoPath: string, base: string, compare: string, files: FileRecord[]): Promise<FileRecord[]> {
+async function generatePatches(
+  repoPath: string,
+  base: string,
+  compare: string,
+  files: FileRecord[],
+): Promise<FileRecord[]> {
   const limit = pLimit(PATCH_CONCURRENCY);
   const results: FileRecord[] = [];
   const tasks = files.map((file) =>
@@ -371,7 +440,11 @@ async function generatePatches(repoPath: string, base: string, compare: string, 
   return results;
 }
 
-export async function processDiff(repoPath: string, base: string, compare: string = 'HEAD'): Promise<FileRecord[]> {
+export async function processDiff(
+  repoPath: string,
+  base: string,
+  compare: string = 'HEAD',
+): Promise<FileRecord[]> {
   try {
     // Step 1: Discover changed files
     let files = await discoverChangedFiles(repoPath, base, compare);

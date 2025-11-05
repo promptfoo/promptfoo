@@ -65,7 +65,9 @@ async function run(): Promise<void> {
         guidance = fs.readFileSync(guidanceFile, 'utf-8');
         core.info(`📖 Loaded guidance from: ${guidanceFile}`);
       } catch (error) {
-        throw new Error(`Failed to read guidance file: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(
+          `Failed to read guidance file: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
@@ -84,7 +86,7 @@ async function run(): Promise<void> {
       process.env.GITHUB_OIDC_TOKEN = oidcToken;
     } catch (error) {
       core.warning(
-        `Failed to get OIDC token: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to get OIDC token: ${error instanceof Error ? error.message : String(error)}`,
       );
       core.warning('Comment posting to PRs will not work without OIDC token');
     }
@@ -105,7 +107,7 @@ async function run(): Promise<void> {
       core.info(`✅ Base branch ${baseBranch} fetched successfully`);
     } catch (error) {
       core.warning(
-        `Failed to fetch base branch ${baseBranch}: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to fetch base branch ${baseBranch}: ${error instanceof Error ? error.message : String(error)}`,
       );
       core.warning('Git diff may fail if base branch is not available');
     }
@@ -116,11 +118,15 @@ async function run(): Promise<void> {
       'code-scans',
       'run',
       repoPath,
-      '--server-url', serverUrl,
-      '--config', finalConfigPath!,
-      '--compare', 'HEAD', // Use HEAD to handle detached HEAD state in GitHub Actions
+      '--server-url',
+      serverUrl,
+      '--config',
+      finalConfigPath!,
+      '--compare',
+      'HEAD', // Use HEAD to handle detached HEAD state in GitHub Actions
       '--json', // JSON output for parsing
-      '--github-pr', `${context.owner}/${context.repo}#${context.number}`, // Pass PR context for server-side comment posting
+      '--github-pr',
+      `${context.owner}/${context.repo}#${context.number}`, // Pass PR context for server-side comment posting
     ];
 
     // Parse JSON output from CLI (full ScanResponse object)
@@ -161,7 +167,8 @@ async function run(): Promise<void> {
           },
         ],
         commentsPosted: false,
-        review: '🔍 **Security Scan Results**\n\nFound 2 potential security issues. Please review the inline comments for details.',
+        review:
+          '🔍 **Security Scan Results**\n\nFound 2 potential security issues. Please review the inline comments for details.',
       };
 
       core.info('✅ Mock scan completed successfully');
@@ -201,7 +208,9 @@ async function run(): Promise<void> {
       try {
         scanResponse = JSON.parse(scanOutput);
       } catch (error) {
-        throw new Error(`Failed to parse CLI output as JSON: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(
+          `Failed to parse CLI output as JSON: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
@@ -218,7 +227,8 @@ async function run(): Promise<void> {
         // Construct review body (append minimum severity if provided)
         let reviewBody = review || '';
         if (minimumSeverity && reviewBody) {
-          const capitalizedSeverity = minimumSeverity.charAt(0).toUpperCase() + minimumSeverity.slice(1);
+          const capitalizedSeverity =
+            minimumSeverity.charAt(0).toUpperCase() + minimumSeverity.slice(1);
           reviewBody += `\n\n_Minimum severity threshold for this scan: ${capitalizedSeverity}_`;
         }
 
@@ -235,7 +245,9 @@ async function run(): Promise<void> {
 
         // Post review with line-specific comments
         if (lineComments.length > 0 || reviewBody) {
-          core.info(`📌 Posting PR review${lineComments.length > 0 ? ` with ${lineComments.length} line-specific comments` : ''}...`);
+          core.info(
+            `📌 Posting PR review${lineComments.length > 0 ? ` with ${lineComments.length} line-specific comments` : ''}...`,
+          );
 
           await octokit.rest.pulls.createReview({
             owner: context.owner,
@@ -243,24 +255,27 @@ async function run(): Promise<void> {
             pull_number: context.number,
             event: 'COMMENT',
             body: reviewBody || undefined,
-            comments: lineComments.length > 0 ? lineComments.map((c) => {
-              // Combine severity, finding, fix, and AI agent prompt into comment body
-              let body = formatSeverity(c.severity) + c.finding;
-              if (c.fix) {
-                body += `\n\n<details>\n<summary>💡 Suggested Fix</summary>\n\n${c.fix}\n</details>`;
-              }
-              if (c.aiAgentPrompt) {
-                body += `\n\n<details>\n<summary>🤖 AI Agent Prompt</summary>\n\n${c.aiAgentPrompt}\n</details>`;
-              }
-              return {
-                path: c.file!,
-                line: c.line || undefined,
-                start_line: c.startLine || undefined,
-                side: 'RIGHT' as const,
-                start_side: c.startLine ? ('RIGHT' as const) : undefined,
-                body,
-              };
-            }) : undefined,
+            comments:
+              lineComments.length > 0
+                ? lineComments.map((c) => {
+                    // Combine severity, finding, fix, and AI agent prompt into comment body
+                    let body = formatSeverity(c.severity) + c.finding;
+                    if (c.fix) {
+                      body += `\n\n<details>\n<summary>💡 Suggested Fix</summary>\n\n${c.fix}\n</details>`;
+                    }
+                    if (c.aiAgentPrompt) {
+                      body += `\n\n<details>\n<summary>🤖 AI Agent Prompt</summary>\n\n${c.aiAgentPrompt}\n</details>`;
+                    }
+                    return {
+                      path: c.file!,
+                      line: c.line || undefined,
+                      start_line: c.startLine || undefined,
+                      side: 'RIGHT' as const,
+                      start_side: c.startLine ? ('RIGHT' as const) : undefined,
+                      body,
+                    };
+                  })
+                : undefined,
           });
 
           core.info('✅ PR review posted successfully');
@@ -293,7 +308,9 @@ async function run(): Promise<void> {
 
         core.info('✅ All comments posted to PR by action');
       } catch (error) {
-        core.error(`Failed to post comments: ${error instanceof Error ? error.message : String(error)}`);
+        core.error(
+          `Failed to post comments: ${error instanceof Error ? error.message : String(error)}`,
+        );
         core.warning('Comments could not be posted to PR');
       }
     } else if (comments.length > 0 && commentsPosted === true) {
@@ -331,7 +348,6 @@ async function run(): Promise<void> {
     if (!configPath && finalConfigPath) {
       fs.unlinkSync(finalConfigPath);
     }
-
   } catch (error) {
     if (error instanceof Error) {
       core.setFailed(error.message);

@@ -17,7 +17,7 @@ export async function getGitHubOIDCToken(audience: string): Promise<string> {
     return token;
   } catch (error) {
     throw new Error(
-      `Failed to get GitHub OIDC token: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to get GitHub OIDC token: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }

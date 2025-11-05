@@ -37,7 +37,7 @@ export function getGitHubContext(): PullRequestContext {
 export async function postReviewComments(
   token: string,
   context: PullRequestContext,
-  comments: Comment[]
+  comments: Comment[],
 ): Promise<void> {
   if (comments.length === 0) {
     core.info('No comments to post');
@@ -47,8 +47,8 @@ export async function postReviewComments(
   const octokit = new Octokit({ auth: token });
 
   // Separate line-specific comments from general PR comments
-  const lineComments = comments.filter(c => c.file && c.finding);
-  const generalComments = comments.filter(c => !c.file && c.finding);
+  const lineComments = comments.filter((c) => c.file && c.finding);
+  const generalComments = comments.filter((c) => !c.file && c.finding);
 
   // Post line-specific review comments
   if (lineComments.length > 0) {
@@ -60,7 +60,7 @@ export async function postReviewComments(
         repo: context.repo,
         pull_number: context.number,
         event: 'COMMENT',
-        comments: lineComments.map(c => {
+        comments: lineComments.map((c) => {
           // Combine finding and fix into comment body
           let body = c.finding;
           if (c.fix) {
@@ -80,16 +80,19 @@ export async function postReviewComments(
 
       core.info(`✅ Posted ${lineComments.length} line comments successfully`);
     } catch (error) {
-      core.warning(`Failed to post inline comments: ${error instanceof Error ? error.message : String(error)}`);
+      core.warning(
+        `Failed to post inline comments: ${error instanceof Error ? error.message : String(error)}`,
+      );
       core.info('Posting as summary comment instead...');
 
       const summaryBody = lineComments
-        .map(c => {
-          const lineRange = c.startLine && c.line && c.startLine !== c.line
-            ? `${c.file}:${c.startLine}-${c.line}`
-            : c.line
-            ? `${c.file}:${c.line}`
-            : c.file;
+        .map((c) => {
+          const lineRange =
+            c.startLine && c.line && c.startLine !== c.line
+              ? `${c.file}:${c.startLine}-${c.line}`
+              : c.line
+                ? `${c.file}:${c.line}`
+                : c.file;
 
           let commentText = c.finding;
           if (c.fix) {
@@ -130,7 +133,9 @@ export async function postReviewComments(
           body,
         });
       } catch (error) {
-        core.warning(`Failed to post general comment: ${error instanceof Error ? error.message : String(error)}`);
+        core.warning(
+          `Failed to post general comment: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
