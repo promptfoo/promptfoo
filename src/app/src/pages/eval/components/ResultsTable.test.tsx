@@ -6,14 +6,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
+// Create stable mock functions at module level to prevent infinite re-renders
+const mockSetTable = vi.fn();
+const mockFetchEvalData = vi.fn();
+const mockSetFilteredMetrics = vi.fn();
+
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
     config: {},
     evalId: '123',
-    setTable: vi.fn(),
+    setTable: mockSetTable,
     table: null,
     version: 4,
-    fetchEvalData: vi.fn(),
+    fetchEvalData: mockFetchEvalData,
+    setFilteredMetrics: mockSetFilteredMetrics,
     filters: {
       values: {},
       appliedCount: 0,
@@ -128,11 +134,12 @@ describe('ResultsTable Metrics Display', () => {
       config: {},
       evalId: '123',
       inComparisonMode: false,
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTable,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -196,11 +203,12 @@ describe('ResultsTable Metrics Display', () => {
       config: {},
       evalId: '123',
       inComparisonMode: false,
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTableNoMetrics,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -269,11 +277,12 @@ describe('ResultsTable Metrics Display', () => {
         config: {},
         evalId: '123',
         inComparisonMode: false,
-        setTable: vi.fn(),
+        setTable: mockSetTable,
         table: mockTableWithObjectVar,
         version: 4,
         renderMarkdown: true,
-        fetchEvalData: vi.fn(),
+        fetchEvalData: mockFetchEvalData,
+        setFilteredMetrics: mockSetFilteredMetrics,
         filters: {
           values: {},
           appliedCount: 0,
@@ -297,10 +306,11 @@ describe('ResultsTable Metrics Display', () => {
         config: {},
         evalId: '123',
 
-        setTable: vi.fn(),
+        setTable: mockSetTable,
         table: mockTableWithObjectVar,
         version: 4,
-        fetchEvalData: vi.fn(),
+        fetchEvalData: mockFetchEvalData,
+        setFilteredMetrics: mockSetFilteredMetrics,
         filters: {
           values: {},
           appliedCount: 0,
@@ -328,10 +338,11 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-        setTable: vi.fn(),
+        setTable: mockSetTable,
         table: mockTableWithLongVar,
         version: 4,
-        fetchEvalData: vi.fn(),
+        fetchEvalData: mockFetchEvalData,
+        setFilteredMetrics: mockSetFilteredMetrics,
         filters: {
           values: {},
           appliedCount: 0,
@@ -360,11 +371,12 @@ describe('ResultsTable Metrics Display', () => {
         config: {},
         evalId: '123',
         inComparisonMode: false,
-        setTable: vi.fn(),
+        setTable: mockSetTable,
         table: mockTableWithNullVar,
         version: 4,
         renderMarkdown: true,
-        fetchEvalData: vi.fn(),
+        fetchEvalData: mockFetchEvalData,
+        setFilteredMetrics: mockSetFilteredMetrics,
         filters: {
           values: {},
           appliedCount: 0,
@@ -438,10 +450,11 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-        setTable: vi.fn(),
+        setTable: mockSetTable,
         table: mockTableWithMedia,
         version: 4,
-        fetchEvalData: vi.fn(),
+        fetchEvalData: mockFetchEvalData,
+        setFilteredMetrics: mockSetFilteredMetrics,
         filters: {
           values: {},
           appliedCount: 0,
@@ -590,7 +603,7 @@ describe('ResultsTable Row Navigation', () => {
 });
 
 describe('ResultsTable handleRating - highlight toggle fix', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
+  // Use module-level mockSetTable instead of local declaration
   let mockCallApi: any;
 
   const createMockTableWithComponentResults = (componentResults?: any) => ({
@@ -652,7 +665,8 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockSetTable = vi.fn();
+    // Don't create new mock functions - reuse module-level mocks to maintain stable references
+    // mockSetTable = vi.fn(); // REMOVED - use module-level mock
     // Dynamically import and mock callApi
     const apiModule = await import('@app/utils/api');
     mockCallApi = vi.mocked(apiModule.callApi);
@@ -668,7 +682,8 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       setTable: mockSetTable,
       table: mockTable,
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       isFetching: false,
       filteredResultsCount: 1,
       filters: {
@@ -749,7 +764,8 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       table: mockTable,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       isFetching: false,
       filteredResultsCount: 1,
       filters: {
@@ -792,7 +808,8 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       table: mockTable,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       isFetching: false,
       filteredResultsCount: 1,
       filters: {
@@ -879,7 +896,8 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       table: mockTable,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       isFetching: false,
       filteredResultsCount: 1,
       filters: {
@@ -909,7 +927,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
 });
 
 describe('ResultsTable handleRating', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
+  // Use module-level mockSetTable instead of local declaration
 
   const createMockTable = () => ({
     body: [
@@ -960,7 +978,9 @@ describe('ResultsTable handleRating', () => {
   };
 
   beforeEach(() => {
-    mockSetTable = vi.fn();
+    vi.clearAllMocks();
+    // Don't create new mock functions - reuse module-level mocks to maintain stable references
+    // mockSetTable = vi.fn(); // REMOVED - use module-level mock
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
@@ -968,7 +988,8 @@ describe('ResultsTable handleRating', () => {
       setTable: mockSetTable,
       table: createMockTable(),
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -1004,7 +1025,7 @@ describe('ResultsTable handleRating', () => {
 });
 
 describe('ResultsTable handleRating - Fallback to output values', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
+  // Use module-level mockSetTable instead of local declaration
 
   const createMockTableWithMissingGradingResultFields = () => ({
     body: [
@@ -1063,7 +1084,8 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSetTable = vi.fn();
+    // Don't create new mock functions - reuse module-level mocks to maintain stable references
+    // mockSetTable = vi.fn(); // REMOVED - use module-level mock
   });
 
   it('should fallback to output pass and score when gradingResult is missing those fields', async () => {
@@ -1077,7 +1099,8 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
       table: mockTable,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       isFetching: false,
       filteredResultsCount: 1,
       filters: {
@@ -1110,7 +1133,7 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
 });
 
 describe('ResultsTable handleRating - Updating existing human rating', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
+  // Use module-level mockSetTable instead of local declaration
 
   const createMockTableWithComponentResults = (componentResults: any[]) => ({
     body: [
@@ -1171,7 +1194,8 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSetTable = vi.fn();
+    // Don't create new mock functions - reuse module-level mocks to maintain stable references
+    // mockSetTable = vi.fn(); // REMOVED - use module-level mock
   });
 
   it('should update existing human rating in componentResults', async () => {
@@ -1200,7 +1224,8 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
       table: mockTable,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       isFetching: false,
       filteredResultsCount: 1,
       filters: {
@@ -1329,10 +1354,11 @@ describe('ResultsTable Empty State', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: { head: { prompts: [], vars: [] }, body: [] },
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filteredResultsCount: 0,
       totalResultsCount: 0,
       isFetching: false,
@@ -1380,7 +1406,7 @@ describe('ResultsTable', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: {
         head: { prompts: [{ provider: 'test-provider' }], vars: [] },
         body: [
@@ -1392,7 +1418,8 @@ describe('ResultsTable', () => {
         ],
       },
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -1457,10 +1484,11 @@ describe('ResultsTable Search Highlights', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTable,
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -1524,10 +1552,11 @@ describe('ResultsTable Regex Handling', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTable,
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -1592,10 +1621,11 @@ describe('ResultsTable Malformed Markdown Handling', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTable,
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -1642,7 +1672,7 @@ describe('ResultsTable', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: {
         head: { prompts: [{ provider: 'test-provider' }], vars: [] },
         body: [
@@ -1654,7 +1684,8 @@ describe('ResultsTable', () => {
         ],
       },
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -1696,17 +1727,18 @@ describe('ResultsTable', () => {
 
   it('should call fetchEvalData with only applied filters when pagination changes', () => {
     const mockUseTableStore = vi.mocked(useTableStore);
-    const mockFetchEvalData = vi.fn();
+    const localMockFetchEvalData = vi.fn(); // Use local name to avoid shadowing
     mockUseTableStore.mockImplementation(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: {
         head: { prompts: [], vars: [] },
         body: [],
       },
       version: 4,
-      fetchEvalData: mockFetchEvalData,
+      fetchEvalData: localMockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       isFetching: false,
       filteredResultsCount: 1,
       totalResultsCount: 1,
@@ -1738,18 +1770,19 @@ describe('ResultsTable', () => {
 
     const newPageIndex = 1;
 
-    mockFetchEvalData.mockClear();
+    localMockFetchEvalData.mockClear();
 
     mockUseTableStore.mockImplementationOnce(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: {
         head: { prompts: [], vars: [] },
         body: [],
       },
       version: 4,
-      fetchEvalData: mockFetchEvalData,
+      fetchEvalData: localMockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       isFetching: false,
       filteredResultsCount: 1,
       totalResultsCount: 1,
@@ -1778,7 +1811,7 @@ describe('ResultsTable', () => {
     }));
 
     act(() => {
-      mockFetchEvalData('123', {
+      localMockFetchEvalData('123', {
         pageIndex: newPageIndex,
         pageSize: 50,
         filterMode: 'all',
@@ -1796,8 +1829,8 @@ describe('ResultsTable', () => {
       });
     });
 
-    expect(mockFetchEvalData).toHaveBeenCalledTimes(1);
-    expect(mockFetchEvalData).toHaveBeenCalledWith('123', {
+    expect(localMockFetchEvalData).toHaveBeenCalledTimes(1);
+    expect(localMockFetchEvalData).toHaveBeenCalledWith('123', {
       pageIndex: newPageIndex,
       pageSize: 50,
       filterMode: 'all',
@@ -1837,7 +1870,7 @@ describe('ResultsTable Pagination', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: {
         body: [],
         head: {
@@ -1846,7 +1879,8 @@ describe('ResultsTable Pagination', () => {
         },
       },
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filteredResultsCount: 25,
       totalResultsCount: 25,
       filters: {
@@ -1884,10 +1918,11 @@ describe('ResultsTable BaseNumberInput onChange undefined', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: { head: { prompts: [], vars: [] }, body: [] },
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -1931,10 +1966,11 @@ describe('ResultsTable Non-Numeric Input Handling', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: { head: { prompts: [], vars: [] }, body: [] },
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -2056,7 +2092,7 @@ describe('ResultsTable Filtered Metrics Display', () => {
       config: {},
       evalId: '123',
       inComparisonMode: false,
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: {
         ...mockTable,
         head: {
@@ -2081,7 +2117,8 @@ describe('ResultsTable Filtered Metrics Display', () => {
       },
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {
           filter1: {
@@ -2190,10 +2227,11 @@ describe('ResultsTable - No Filters Applied', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTable,
       version: 4,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -2284,11 +2322,12 @@ describe('ResultsTable Pass Rate Display', () => {
       config: {},
       evalId: '123',
       inComparisonMode: false,
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTable,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -2299,7 +2338,7 @@ describe('ResultsTable Pass Rate Display', () => {
     }));
   });
 
-  it('displays 0% filtered pass rate when filtered results have zero test cases but total results have some', () => {
+  it('displays total pass rate when filtered results have zero test cases', () => {
     const mockTableWithZeroFilteredTestCases = {
       body: Array(10).fill({
         outputs: [
@@ -2330,11 +2369,12 @@ describe('ResultsTable Pass Rate Display', () => {
       config: {},
       evalId: '123',
       inComparisonMode: false,
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTableWithZeroFilteredTestCases,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -2351,7 +2391,9 @@ describe('ResultsTable Pass Rate Display', () => {
     }));
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
-    expect(screen.getByText('0.00% passing')).toBeInTheDocument();
+    // When there are zero filtered test cases (0 passing + 0 failing), showing "0.00% passing"
+    // would be misleading as it suggests tests failed. Instead, we show the total pass rate.
+    expect(screen.getByText('50.00% passing')).toBeInTheDocument();
   });
 });
 
@@ -2414,11 +2456,12 @@ describe('ResultsTable Pass Rate Highlighting', () => {
       config: {},
       evalId: '123',
       inComparisonMode: false,
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTable,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -2457,11 +2500,12 @@ describe('ResultsTable Pass Rate Highlighting', () => {
       config: {},
       evalId: '123',
       inComparisonMode: false,
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTableWithZeroFilteredPassRate,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -2563,11 +2607,12 @@ describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
       config: {},
       evalId: '123',
       inComparisonMode: false,
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTable,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {},
         appliedCount: 0,
@@ -2633,11 +2678,12 @@ describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
       config: {},
       evalId: '123',
       inComparisonMode: false,
-      setTable: vi.fn(),
+      setTable: mockSetTable,
       table: mockTableWithFilteredPassRate,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
+      setFilteredMetrics: mockSetFilteredMetrics,
       filters: {
         values: {
           testFilter: {
