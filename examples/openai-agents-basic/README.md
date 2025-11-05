@@ -125,7 +125,7 @@ export const rollDice = tool({
     sides: z.number(),
     count: z.number().default(1),
     modifier: z.number().default(0),
-    purpose: z.string().optional(),
+    purpose: z.string().default(''),
   }),
   execute: async ({ sides, count, modifier, purpose }) => {
     // Returns rolls, total, notation, and detects natural 20/1 for crits

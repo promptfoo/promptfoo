@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(examples): change Zod schema from `.optional()` to `.default('')` for OpenAI Agents SDK compatibility (#6114)
 - fix(redteam): pass all gradingContext properties to rubric templates to fix categoryGuidance rendering errors in BeavertailsGrader (#6111)
 
 ## [0.119.2] - 2025-11-03
@@ -35,7 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- chore(examples): update openai-agents-basic example from weather to D&D dungeon master with gpt-5-nano, comprehensive D&D 5e tools (dice rolling, character stats, inventory), and 9 test scenarios (#6114)
+- chore(examples): update openai-agents-basic example from weather to D&D dungeon master with gpt-5-mini, comprehensive D&D 5e tools (dice rolling, character stats, inventory), and maxTurns increased to 20 (#6114)
 - fix(python): use REQUEST_TIMEOUT_MS for consistent timeout behavior across providers (300s default, previously 120s) (#6098)
 - refactor(redteam): Prevent early (evaluator-based) exits in Jailbreak, Crescendo, and Custom Strategies (#6047)
 - chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings (#6069)
@@ -55,6 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
+- test(examples): add 9 D&D test scenarios for openai-agents-basic (combat, stats, inventory, scenes, saves, crits, edge cases, short rest, magic item) (#6114)
 - test(providers): add coverage for simulated-user initialMessages (vars/config precedence, file:// loading from JSON/YAML, validation, conversation flow when ending with user role) (#6090)
 - test(redteam): add comprehensive tests for `gradingGuidance` feature and `graderExamples` flow-through, including full integration regression tests (#6108)
 - test(webui): add tests for gradingGuidance UI in PluginConfigDialog and CustomIntentPluginSection (#6108)
@@ -62,6 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
+- docs(examples): update openai-agents-basic README for D&D theme with tracing setup and example interactions; shorten openai-agents.md provider documentation (#6114)
 - docs(python): update timeout documentation with REQUEST_TIMEOUT_MS environment variable and add retry logic example for handling rate limits (#6098)
 - docs(redteam): add comprehensive documentation for `jailbreak:meta` strategy including usage guide, comparison with other jailbreak strategies, and integration into strategy tables (#6088)
 - docs(site): add remediation reports documentation (#6083)
