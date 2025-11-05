@@ -271,7 +271,7 @@ For complex scenarios with function calling, you can define structured APIs with
 
 ```yaml
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     config:
       tools:
         - file://functions/search_flights.json
@@ -280,38 +280,6 @@ providers:
 ```
 
 Where `functions/search_flights.json` defines the function schema and `callbacks/airline-functions.js` contains the mock implementation that returns realistic data.
-
-### Testing OpenAI Agents
-
-The Simulated User Provider works seamlessly with the [OpenAI Agents provider](/docs/providers/openai-agents) for testing multi-turn agentic workflows:
-
-```yaml
-prompts:
-  - '{{query}}'
-
-providers:
-  - id: openai:agents:dungeon-master
-    config:
-      agent: file://./agents/dungeon-master-agent.ts
-      tools: file://./tools/game-tools.ts
-      maxTurns: 10
-
-defaultTest:
-  provider:
-    id: 'promptfoo:simulated-user'
-    config:
-      maxTurns: 5
-
-tests:
-  - vars:
-      query: 'I want to explore the ancient crypt'
-      instructions: |
-        You are a cautious adventurer exploring a dungeon.
-        Ask about traps and dangers before proceeding.
-        Request to check your inventory when appropriate.
-```
-
-This enables testing complex agentic systems with realistic multi-turn conversations.
 
 The output will show the full conversation history with each turn separated by "---":
 
