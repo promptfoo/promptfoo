@@ -391,6 +391,8 @@ export default function ProviderTypeSelector({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [isExpanded, setIsExpanded] = useState<boolean>(!selectedProviderType);
+  const [filterEnabled, setFilterEnabled] = useState<boolean>(false);
+  const [isLoadingFilter, setIsLoadingFilter] = useState<boolean>(true);
 
   // Tag filter options
   const tagFilters = [
@@ -413,6 +415,29 @@ export default function ProviderTypeSelector({
       tag: tag,
     });
   };
+
+  // Fetch custom config status from server to determine if provider filtering should be enabled
+  useEffect(() => {
+    const fetchConfigStatus = async () => {
+      try {
+        const response = await fetch('/api/providers/config-status');
+        if (response.ok) {
+          const data = await response.json();
+          setFilterEnabled(data.hasCustomConfig);
+        } else {
+          console.error('Failed to fetch provider config status');
+          setFilterEnabled(false);
+        }
+      } catch (err) {
+        console.error('Error fetching provider config status:', err);
+        setFilterEnabled(false);
+      } finally {
+        setIsLoadingFilter(false);
+      }
+    };
+
+    fetchConfigStatus();
+  }, []);
 
   useEffect(() => {
     if (!provider?.id) {
@@ -920,8 +945,16 @@ export default function ProviderTypeSelector({
     });
   };
 
-  // Filter available options if availableProviderIds is provided, by search term, and by tag
+  // Filter available options if availableProviderIds is provided, by search term, by tag, and by server config
   const filteredProviderOptions = allProviderOptions.filter((option) => {
+    // If server config filtering is enabled, only show: http, websocket, python, javascript
+    if (filterEnabled) {
+      const allowedTypes = ['http', 'websocket', 'python', 'javascript'];
+      if (!allowedTypes.includes(option.value)) {
+        return false;
+      }
+    }
+
     // Filter by availableProviderIds if provided
     const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
 
@@ -941,6 +974,17 @@ export default function ProviderTypeSelector({
   const selectedOption = selectedProviderType
     ? allProviderOptions.find((option) => option.value === selectedProviderType)
     : undefined;
+
+  // Show loading state while fetching filter status
+  if (isLoadingFilter) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <Typography variant="body2" color="text.secondary">
+          Loading provider options...
+        </Typography>
+      </Box>
+    );
+  }
 
   // Show collapsed view when a provider is selected and not in expanded mode
   if (selectedOption && !isExpanded) {

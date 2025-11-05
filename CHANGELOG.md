@@ -17,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(redteam): pass all gradingContext properties to rubric templates to fix categoryGuidance rendering errors in BeavertailsGrader (#6111)
 
+### Added
+
+- feat(webui): add server-side provider list customization via ui-providers.yaml config file stored in .promptfoo directory for self-hosted deployments. When configured, eval creator shows only approved providers; redteam setup restricts to http, websocket, python, and javascript providers for testing custom implementations.
+
 ## [0.119.2] - 2025-11-03
 
 ### Added

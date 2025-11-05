@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
+import { defaultProviders } from '../../constants/defaultProviders';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { createTransformRequest, createTransformResponse } from '../../providers/httpTransforms';
@@ -15,12 +16,69 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
 import { testHTTPProviderConnectivity, testProviderSession } from '../../validators/testProvider';
+import { getAvailableProviders } from '../config/serverConfig';
 import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
 
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 
 export const providersRouter = Router();
+
+// Response schemas
+const GetProvidersResponseSchema = z.object({
+  providers: z.array(z.union([z.string(), ProviderOptionsSchema])),
+  hasCustomConfig: z.boolean(),
+});
+
+const GetConfigStatusResponseSchema = z.object({
+  hasCustomConfig: z.boolean(),
+});
+
+type GetProvidersResponse = z.infer<typeof GetProvidersResponseSchema>;
+type GetConfigStatusResponse = z.infer<typeof GetConfigStatusResponseSchema>;
+
+/**
+ * GET /api/providers
+ *
+ * Returns the list of providers available in the eval creator UI.
+ * If ui-providers.yaml exists in .promptfoo directory, returns those providers.
+ * Otherwise returns the default list of ~600 providers.
+ *
+ * Response:
+ * - providers: Array of provider options (can be string IDs or full config objects)
+ * - hasCustomConfig: Boolean indicating if custom config exists
+ */
+providersRouter.get('/', (_req: Request, res: Response<GetProvidersResponse>): void => {
+  const serverProviders = getAvailableProviders();
+
+  // If server has custom providers, use those; otherwise use defaults
+  const providers = serverProviders.length > 0 ? serverProviders : defaultProviders;
+  const hasCustomConfig = serverProviders.length > 0;
+
+  res.json({ providers, hasCustomConfig });
+});
+
+/**
+ * GET /api/providers/config-status
+ *
+ * Returns whether a custom provider configuration exists.
+ * Used by redteam setup UI to determine whether to filter provider types.
+ *
+ * When custom config exists (hasCustomConfig: true), redteam setup restricts
+ * provider types to: http, websocket, python, javascript for testing custom implementations.
+ *
+ * Response:
+ * - hasCustomConfig: Boolean indicating if ui-providers.yaml exists with providers
+ */
+providersRouter.get(
+  '/config-status',
+  (_req: Request, res: Response<GetConfigStatusResponse>): void => {
+    const serverProviders = getAvailableProviders();
+    const hasCustomConfig = serverProviders.length > 0;
+
+    res.json({ hasCustomConfig });
+  },
+);
 
 // Validation schemas
 const TestRequestTransformSchema = z.object({
