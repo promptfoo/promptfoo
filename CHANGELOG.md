@@ -8,15 +8,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(redteam): add timestamp context to all grading rubrics for time-aware evaluation and temporal context in security assessments (#6110)
+- feat(model-audit): add revision tracking, content hash generation, and deduplication for model scans to prevent re-scanning unchanged models (saving ~99% time and bandwidth); add `--stream` flag to delete downloaded files immediately after scan ([#6058](https://github.com/promptfoo/promptfoo/pull/6058))
+
+### Fixed
+
+- fix(redteam): pass all gradingContext properties to rubric templates to fix categoryGuidance rendering errors in BeavertailsGrader (#6111)
+
+## [0.119.2] - 2025-11-03
+
+### Added
+
+- feat(integrations): add Microsoft SharePoint dataset support with certificate-based authentication for importing CSV files (#6080)
+- feat(providers): add `initialMessages` support to simulated-user provider for starting conversations from specific states, with support for loading from JSON/YAML files via `file://` syntax (#6090)
+- feat(providers): add local config override support for cloud providers - merge local configuration with cloud provider settings for per-eval customization while keeping API keys centralized (#6100)
+- feat(providers): add linkedTargetId validation with comprehensive error messages (#6053)
+- feat(redteam): add `gradingGuidance` config option for plugin-specific grading rules to reduce false positives by allowing per-plugin evaluation context (#6108)
+- feat(webui): add Grading Guidance field to plugin configuration dialogs in open-source UI (#6108)
+- feat(webui): add eval copy functionality to duplicate evaluations with all results, configuration, and relationships via UI menu (#6079)
 - feat(redteam): add pharmacy plugins (controlled substance compliance, dosage calculation, drug interaction) and insurance plugins (coverage discrimination, network misinformation, PHI disclosure) (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 - feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#6086)
 - feat(redteam): OpenTelemetry traces feed back into red team strategies
 - feat(redteam): expand OWASP Agentic preset to cover 8/10 threats with 20 plugins; add 'owasp:agentic:redteam' alias for easy selection (#6099)
+- fix: max concurrency run options override scan template settings
 
 ### Changed
 
-- chore(telemetry): defer PostHog identify() to first telemetry event to keep module initialization synchronous (#6094)
+- fix(python): use REQUEST_TIMEOUT_MS for consistent timeout behavior across providers (300s default, previously 120s) (#6098)
 - refactor(redteam): Prevent early (evaluator-based) exits in Jailbreak, Crescendo, and Custom Strategies (#6047)
 - chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings (#6069)
 - chore(app): larger eval selector dialog (#6063)
@@ -26,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(providers): selective env var rendering in provider config with full Nunjucks filter support (preserves runtime variables for per-test customization) (#6091)
 - fix(core): handle Nunjucks template variables in URL sanitization to prevent parsing errors when sharing evals; add unit tests covering sanitizer behavior for Nunjucks template URLs (#6089)
 - fix(app): Fixes the metric is defined filter (#6082)
 - fix(webui): handle plugin generation when target URL is not set (#6055)
@@ -35,10 +55,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
+- test(providers): add coverage for simulated-user initialMessages (vars/config precedence, file:// loading from JSON/YAML, validation, conversation flow when ending with user role) (#6090)
+- test(redteam): add comprehensive tests for `gradingGuidance` feature and `graderExamples` flow-through, including full integration regression tests (#6108)
+- test(webui): add tests for gradingGuidance UI in PluginConfigDialog and CustomIntentPluginSection (#6108)
 - test(providers): add Python worker regression tests for ENOENT prevention, helpful error messages with function name suggestions, and embeddings-only provider support without call_api function (#6073)
 
 ### Documentation
 
+- docs(python): update timeout documentation with REQUEST_TIMEOUT_MS environment variable and add retry logic example for handling rate limits (#6098)
 - docs(redteam): add comprehensive documentation for `jailbreak:meta` strategy including usage guide, comparison with other jailbreak strategies, and integration into strategy tables (#6088)
 - docs(site): add remediation reports documentation (#6083)
 - docs(site): add custom strategy to the strategies reference table (#6081)
@@ -50,6 +74,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - chore(deps): bump the github-actions group with 4 updates (#6092)
 - chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.920.0 to 3.921.0 (#6075)
 - chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.919.0 to 3.920.0 (#6060)
+
+### Fixed
+
+- fix(redteam): enable layer strategy with multilingual language support; plugins now generate tests in multiple languages even when layer strategy is present (#6084)
+- fix(redteam): reduce multilingual deprecation logging noise by moving from warn to debug level (#6084)
 
 ## [0.119.1] - 2025-10-29
 
@@ -126,6 +155,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(providers): revert eager template rendering that broke runtime variable substitution (5423f80)
+- fix(providers): support environment variables in provider config while preserving runtime variable templates
 - fix(providers): improve Python provider reliability with automatic python3/python detection, worker cleanup, request count tracking, and reduced logging noise (#6034)
 - fix(providers): simulated-user and mischievous-user now respect assistant system prompts in multi-turn conversations (#6020)
 - fix(providers): improve MCP tool schema transformation for OpenAI compatibility (#5965)

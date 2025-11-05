@@ -297,6 +297,18 @@
                             "REPLICATE_API_TOKEN": {
                               "type": "string"
                             },
+                            "SHAREPOINT_BASE_URL": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_CLIENT_ID": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_TENANT_ID": {
+                              "type": "string"
+                            },
                             "VERTEX_API_HOST": {
                               "type": "string"
                             },
