@@ -16,6 +16,7 @@ import cliState from '../../cliState';
 import logger, { getLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import { formatDuration } from '../../util/formatDuration';
+import { TERMINAL_MAX_WIDTH } from '../../constants';
 import { printBorder } from '../../util/index';
 import { resolveAuthCredentials } from './auth';
 import { type Config, loadConfigOrDefault } from './config/loader';
@@ -308,17 +309,10 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     socket = await createSocketConnection(serverUrl, auth);
     cleanupRefs.socket = socket; // Update ref for signal handlers
 
-    if (showSpinner) {
-      spinner!.text = 'Connected';
-    }
-
     // Step 4: Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
-      if (showSpinner) {
-        spinner!.text = 'Setting up filesystem access...';
-      } else {
-        logger.debug('Setting up filesystem access...');
-      }
+        logger.debug('Setting up repo MCP access...');
+      
 
       // Generate unique session ID
       sessionId = crypto.randomUUID();
@@ -339,17 +333,10 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
         repo_root: absoluteRepoPath,
       });
 
-      if (showSpinner) {
-        spinner!.text = 'Filesystem ready';
-      }
     }
 
     // Step 5: Validate branch and determine base branch
-    if (showSpinner) {
-      spinner!.text = 'Processing git diff...';
-    } else {
       logger.debug('Processing git diff...');
-    }
 
     const simpleGit = (await import('simple-git')).default;
     const git = simpleGit(absoluteRepoPath);
@@ -388,9 +375,6 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       `Files changed: ${files.length} (${includedFiles.length} included, ${skippedFiles.length} skipped)`,
     );
 
-    if (showSpinner) {
-      spinner!.text = `Processed ${files.length} files`;
-    }
 
     // Step 6: Extract git metadata
     const metadata = await extractMetadata(absoluteRepoPath, baseBranch, compareRef);
@@ -424,8 +408,9 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     }
 
     // Step 8: Send scan request via Socket.IO
-    if (showSpinner) {
-      spinner!.text = 'Scanning...';
+    if (showSpinner && spinner) {
+      spinner.color = 'green';
+      spinner.text = 'Scanning...';
     } else {
       logger.debug('Scanning code...');
     }
@@ -498,10 +483,9 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       socket?.emit('scan:start', scanRequest);
     });
 
-    // Stop spinner and show completion
+    // Stop spinner silently
     if (showSpinner) {
-      spinner!.succeed('Scan complete');
-      logger.info(''); // Newline after spinner
+      spinner!.stop();
     }
 
     const endTime = Date.now();
@@ -516,40 +500,14 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       const { comments, review } = scanResponse;
       const severityCounts = countBySeverity(comments || []);
 
-      // 1. Completion message
+      // 1. Completion message and issue summary
       printBorder();
       logger.info(`${chalk.green('✓')} Scan complete (${formatDuration(duration / 1000)})`);
-      logger.info('');
-
-      // 2. Issue summary (filter by severity to exclude review-only comments)
       if (severityCounts.total > 0) {
         logger.info(
           chalk.yellow(
-            `⚠  Found ${severityCounts.total} issue${severityCounts.total === 1 ? '' : 's'}`,
+            `⚠ Found ${severityCounts.total} issue${severityCounts.total === 1 ? '' : 's'}`,
           ),
-        );
-        if (severityCounts.critical > 0) {
-          logger.info(`  ${chalk.red.bold(`Critical: ${severityCounts.critical}`)}`);
-        }
-        if (severityCounts.high > 0) {
-          logger.info(`  ${chalk.red(`High: ${severityCounts.high}`)}`);
-        }
-        if (severityCounts.medium > 0) {
-          logger.info(`  ${chalk.yellow(`Medium: ${severityCounts.medium}`)}`);
-        }
-        if (severityCounts.low > 0) {
-          logger.info(`  ${chalk.cyan(`Low: ${severityCounts.low}`)}`);
-        }
-
-        logger.info('');
-
-        // File count
-        const uniqueFiles = new Set(
-          (comments || []).filter((c) => c.severity && c.file).map((c) => c.file),
-        );
-        logger.info(`  ${chalk.gray('Files affected:')} ${chalk.white(uniqueFiles.size)}`);
-        logger.info(
-          `  ${chalk.gray('Minimum severity threshold:')} ${chalk.white(config.minimumSeverity)}`,
         );
       }
       printBorder();
@@ -579,7 +537,8 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
         });
 
         logger.info('');
-        for (const comment of sortedComments) {
+        for (let i = 0; i < sortedComments.length; i++) {
+          const comment = sortedComments[i];
           const severity = formatSeverity(comment.severity);
           const location = comment.line ? `${comment.file}:${comment.line}` : comment.file || '';
 
@@ -598,7 +557,12 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
             logger.info(comment.aiAgentPrompt);
           }
 
-          logger.info('');
+          // Add separator between comments (but not after the last one)
+          if (i < sortedComments.length - 1) {
+            logger.info('');
+            logger.info(chalk.gray('─'.repeat(TERMINAL_MAX_WIDTH)));
+            logger.info('');
+          }
         }
         printBorder();
 
