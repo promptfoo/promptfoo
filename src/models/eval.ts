@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
@@ -533,30 +533,32 @@ export default class Eval {
     const limit = opts.limit ?? 50;
     const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
-    // Build filter conditions
-    const conditions = [`eval_id = '${this.id}'`];
+    // Build filter conditions as SQL fragments
+    const conditions: SQL<unknown>[] = [sql`eval_id = ${this.id}`];
     if (mode === 'errors') {
-      conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
+      conditions.push(sql`failure_reason = ${ResultFailureReason.ERROR}`);
     } else if (mode === 'failures') {
-      conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
+      conditions.push(sql`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
     } else if (mode === 'passes') {
-      conditions.push(`success = 1`);
+      conditions.push(sql`success = 1`);
     } else if (mode === 'highlights') {
-      conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
+      conditions.push(sql`json_extract(grading_result, '$.comment') LIKE ${'!highlight%'}`);
     }
 
     // Add filters
     if (opts.filters && opts.filters.length > 0) {
-      const filterConditions: string[] = [];
-      // Helper function to sanitize SQL string values
-      const sanitizeValue = (val: string) => val.replace(/'/g, "''");
+      interface FilterConditionWithOperator {
+        condition: SQL<unknown>;
+        logicOperator: string;
+      }
+      const filterConditions: FilterConditionWithOperator[] = [];
 
       // Helper function to escape JSON path keys (quotes & backslashes) for safe SQLite json_extract() usage
       const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
       opts.filters.forEach((filter) => {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
-        let condition: string | null = null;
+        let condition: SQL<unknown> | null = null;
 
         if (type === 'metric') {
           // For backward compatibility: old filters use 'value' for metric name with 'equals' operator
@@ -568,6 +570,10 @@ export default class Eval {
           }
 
           const escapedField = escapeJsonPathKey(metricKey);
+          // Escape single quotes for SQL string literal (JSON paths are SQL strings)
+          const jsonPathContent = `$."${escapedField}"`;
+          const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
+          const jsonPath = sql.raw(`'${sqlSafeJsonPath}'`);
 
           // Value must be a number
           const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
@@ -575,146 +581,162 @@ export default class Eval {
           if (operator === 'is_defined' || (operator === 'equals' && !field)) {
             // 'is_defined': new operator that checks if metric exists
             // 'equals' without field: old format for backward compatibility
-            condition = `json_extract(named_scores, '$."${escapedField}"') IS NOT NULL`;
+            condition = sql`json_extract(named_scores, ${jsonPath}) IS NOT NULL`;
           }
           // For the numeric operators, validate that the value is a number
           else if (Number.isFinite(numericValue)) {
             if (operator === 'eq') {
               // Numeric equality
-              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) = ${numericValue}`;
+              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) = ${numericValue}`;
             } else if (operator === 'neq') {
               // Numeric inequality
-              condition = `(json_extract(named_scores, '$."${escapedField}"') IS NOT NULL AND CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) != ${numericValue})`;
+              condition = sql`(json_extract(named_scores, ${jsonPath}) IS NOT NULL AND CAST(json_extract(named_scores, ${jsonPath}) AS REAL) != ${numericValue})`;
             } else if (operator === 'gt') {
               // Greater than
-              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) > ${numericValue}`;
+              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) > ${numericValue}`;
             } else if (operator === 'gte') {
               // Greater than or equal
-              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) >= ${numericValue}`;
+              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) >= ${numericValue}`;
             } else if (operator === 'lt') {
               // Less than
-              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) < ${numericValue}`;
+              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) < ${numericValue}`;
             } else if (operator === 'lte') {
               // Less than or equal
-              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) <= ${numericValue}`;
+              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) <= ${numericValue}`;
             }
           }
         } else if (type === 'metadata' && field) {
-          const sanitizedValue = sanitizeValue(value);
           const escapedField = escapeJsonPathKey(field);
+          // Escape single quotes for SQL string literal (JSON paths are SQL strings)
+          const jsonPathContent = `$."${escapedField}"`;
+          const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
+          const jsonPath = sql.raw(`'${sqlSafeJsonPath}'`);
 
           if (operator === 'equals') {
-            condition = `json_extract(metadata, '$."${escapedField}"') = '${sanitizedValue}'`;
+            condition = sql`json_extract(metadata, ${jsonPath}) = ${value}`;
           } else if (operator === 'contains') {
-            condition = `json_extract(metadata, '$."${escapedField}"') LIKE '%${sanitizedValue}%'`;
+            condition = sql`json_extract(metadata, ${jsonPath}) LIKE ${`%${value}%`}`;
           } else if (operator === 'not_contains') {
-            condition = `(json_extract(metadata, '$."${escapedField}"') IS NULL OR json_extract(metadata, '$."${escapedField}"') NOT LIKE '%${sanitizedValue}%')`;
+            condition = sql`(json_extract(metadata, ${jsonPath}) IS NULL OR json_extract(metadata, ${jsonPath}) NOT LIKE ${`%${value}%`})`;
           } else if (operator === 'exists') {
             // For exists, check if the field is present AND not empty (not null, not empty string, not just whitespace)
             // Use a single json_extract call with LENGTH(TRIM()) for better performance
-            condition = `LENGTH(TRIM(COALESCE(json_extract(metadata, '$."${escapedField}"'), ''))) > 0`;
+            condition = sql`LENGTH(TRIM(COALESCE(json_extract(metadata, ${jsonPath}), ''))) > 0`;
           }
         } else if (type === 'plugin' && operator === 'equals') {
-          const sanitizedValue = sanitizeValue(value);
           // Is the value a category? e.g. `harmful` or `bias`
-          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
-          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(value);
 
           // Plugin ID is stored in metadata.pluginId
           if (isCategory) {
-            condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
+            condition = sql`json_extract(metadata, '$.pluginId') LIKE ${`${value}:%`}`;
           } else {
-            condition = `${pluginIdPath} = '${sanitizedValue}'`;
+            condition = sql`json_extract(metadata, '$.pluginId') = ${value}`;
           }
         } else if (type === 'strategy' && operator === 'equals') {
-          const sanitizedValue = sanitizeValue(value);
-          if (sanitizedValue === 'basic') {
+          if (value === 'basic') {
             // Basic is represented by NULL in the metadata.strategyId field
-            condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
+            condition = sql`(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
           } else {
             // Strategy ID is stored in metadata.strategyId
-            condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
+            condition = sql`json_extract(metadata, '$.strategyId') = ${value}`;
           }
         } else if (type === 'severity' && operator === 'equals') {
-          const sanitizedValue = sanitizeValue(value);
-
           // Severity can be explicit (metadata.severity) or implied by pluginId.
           // When implied by pluginId, ignore cases where an explicit override disagrees.
-          const explicit = `json_extract(metadata, '$.severity') = '${sanitizedValue}'`;
+          const explicit = sql`json_extract(metadata, '$.severity') = ${value}`;
 
           // Get the severity map for all plugins
           const severityMap = getRiskCategorySeverityMap(this.config?.redteam?.plugins);
 
           // Find all plugin IDs that match the requested severity
           const matchingPluginIds = Object.entries(severityMap)
-            .filter(([, severity]) => severity === sanitizedValue)
+            .filter(([, severity]) => severity === value)
             .map(([pluginId]) => pluginId);
 
           // Build pluginId match conditions for this severity
-          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
-          const pluginConditions: string[] = matchingPluginIds.map((pluginId) => {
-            const sanitizedPluginId = sanitizeValue(pluginId);
+          const pluginConditions: SQL<unknown>[] = matchingPluginIds.map((pluginId) => {
             return pluginId.includes(':')
               ? // It's a specific subcategory
-                `${pluginIdPath} = '${sanitizedPluginId}'`
+                sql`json_extract(metadata, '$.pluginId') = ${pluginId}`
               : // It's a category, match any plugin starting with this prefix
-                `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`;
+                sql`json_extract(metadata, '$.pluginId') LIKE ${`${pluginId}:%`}`;
           });
 
           // Final condition: explicit OR (plugin match AND no conflicting override)
           if (pluginConditions.length > 0) {
             // Plugin-derived severity is only applied when there's no conflicting explicitly-defined override
             // in the row's metadata.
-            const overrideOk = `(json_extract(metadata, '$.severity') IS NULL OR json_extract(metadata, '$.severity') = '${sanitizedValue}')`;
-            condition = `(${explicit} OR ((${pluginConditions.join(' OR ')}) AND ${overrideOk}))`;
+            const pluginMatch = sql.join(pluginConditions, sql` OR `);
+            const overrideOk = sql`(json_extract(metadata, '$.severity') IS NULL OR json_extract(metadata, '$.severity') = ${value})`;
+            condition = sql`(${explicit} OR ((${pluginMatch}) AND ${overrideOk}))`;
           } else {
-            condition = `(${explicit})`;
+            condition = sql`(${explicit})`;
           }
         } else if (type === 'policy' && operator === 'equals') {
-          const sanitizedValue = sanitizeValue(value);
-          condition = `(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE '%${sanitizedValue}%')`;
+          condition = sql`(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE ${`%${value}%`})`;
         }
 
         if (condition) {
-          // Apply logic operator if there are already existing filter conditions
-          filterConditions.push(
-            filterConditions.length > 0 ? `${logicOperator} ${condition}` : condition,
-          );
+          filterConditions.push({
+            condition,
+            logicOperator: logicOperator || 'AND',
+          });
         }
       });
+
+      // Combine filter conditions with logic operators
       if (filterConditions.length > 0) {
-        conditions.push(`(${filterConditions.join(' ')})`);
+        let filterClause = filterConditions[0].condition;
+
+        for (let i = 1; i < filterConditions.length; i++) {
+          const { condition: cond, logicOperator } = filterConditions[i];
+          if (logicOperator === 'OR') {
+            filterClause = sql`${filterClause} OR ${cond}`;
+          } else {
+            filterClause = sql`${filterClause} AND ${cond}`;
+          }
+        }
+
+        conditions.push(sql`(${filterClause})`);
       }
     }
 
     // Add search condition if searchQuery is provided
     if (opts.searchQuery && opts.searchQuery.trim() !== '') {
-      const sanitizedSearch = opts.searchQuery.replace(/'/g, "''");
+      const searchPattern = `%${opts.searchQuery}%`;
+
       const searchConditions = [
         // Search in response text
-        `response LIKE '%${sanitizedSearch}%'`,
+        sql`response LIKE ${searchPattern}`,
         // Search in grading result reason
-        `json_extract(grading_result, '$.reason') LIKE '%${sanitizedSearch}%'`,
+        sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
         // Search in grading result comment
-        `json_extract(grading_result, '$.comment') LIKE '%${sanitizedSearch}%'`,
+        sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
         // Search in named scores
-        `json_extract(named_scores, '$') LIKE '%${sanitizedSearch}%'`,
+        sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
         // Search in metadata
-        `json_extract(metadata, '$') LIKE '%${sanitizedSearch}%'`,
+        sql`json_extract(metadata, '$') LIKE ${searchPattern}`,
         // Search in test case vars
-        `json_extract(test_case, '$.vars') LIKE '%${sanitizedSearch}%'`,
+        sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
         // Search in test case metadata
-        `json_extract(test_case, '$.metadata') LIKE '%${sanitizedSearch}%'`,
+        sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern}`,
       ];
-      conditions.push(`(${searchConditions.join(' OR ')})`);
+
+      // Combine search conditions with OR
+      const searchClause = sql.join(searchConditions, sql` OR `);
+      conditions.push(sql`(${searchClause})`);
     }
 
-    const whereSql = conditions.join(' AND ');
+    // Build final WHERE clause
+    const whereSql = sql.join(conditions, sql` AND `);
 
     // Get filtered count
-    const filteredCountQuery = sql.raw(
-      `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
-    );
+    const filteredCountQuery = sql`
+      SELECT COUNT(DISTINCT test_idx) as count
+      FROM eval_results
+      WHERE ${whereSql}
+    `;
     const countStart = Date.now();
     const countResult = await db.get<FilteredCountRow>(filteredCountQuery);
     const countEnd = Date.now();
@@ -722,9 +744,14 @@ export default class Eval {
     const filteredCount = countResult?.count || 0;
 
     // Query for test indices based on filters
-    const idxQuery = sql.raw(
-      `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
-    );
+    const idxQuery = sql`
+      SELECT DISTINCT test_idx
+      FROM eval_results
+      WHERE ${whereSql}
+      ORDER BY test_idx
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
     const idxStart = Date.now();
     const rows = await db.all<TestIndexRow>(idxQuery);
     const idxEnd = Date.now();

@@ -1342,5 +1342,193 @@ describe('evaluator', () => {
       expect(Object.keys(vars).length).toBeGreaterThanOrEqual(1);
       expect(vars[eval1.id] || vars[eval2.id] || vars[eval3.id]).toBeDefined();
     });
+
+    it('queryTestIndices: should prevent SQL injection in search query', async () => {
+      // Create an eval with search able content
+      const eval_ = await EvalFactory.create({
+        numResults: 5,
+        resultTypes: ['success', 'failure'],
+        searchableContent: 'safe_search_term',
+      });
+
+      // Test with SQL injection attempts in search query
+      const maliciousSearchQueries = [
+        "' OR 1=1--",
+        "'; DROP TABLE eval_results; --",
+        "' UNION SELECT * FROM evals--",
+        "admin'--",
+        "' OR 'x'='x",
+        "%' OR 1=1--",
+      ];
+
+      for (const maliciousQuery of maliciousSearchQueries) {
+        const result = await (eval_ as any).queryTestIndices({
+          searchQuery: maliciousQuery,
+        });
+
+        // Should return results without throwing errors or executing SQL injection
+        expect(result).toBeDefined();
+        expect(result).toHaveProperty('testIndices');
+        expect(result).toHaveProperty('filteredCount');
+        expect(Array.isArray(result.testIndices)).toBe(true);
+      }
+
+      // Verify database is still intact
+      const db = getDb();
+      const dbCheck = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      expect(dbCheck).toBeDefined();
+    });
+
+    it('queryTestIndices: should prevent SQL injection in metadata filters', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 3,
+        resultTypes: ['success'],
+      });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"test"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+
+      // Test with SQL injection in filter value
+      const maliciousFilter = JSON.stringify({
+        logicOperator: 'and',
+        type: 'metadata',
+        operator: 'equals',
+        field: 'source',
+        value: "test' OR '1'='1",
+      });
+
+      const result = await (eval_ as any).queryTestIndices({
+        filters: [maliciousFilter],
+      });
+
+      // Should not match any results (the malicious value doesn't exist in DB)
+      expect(result.filteredCount).toBe(0);
+      expect(result.testIndices).toEqual([]);
+
+      // Verify database is still intact
+      const dbCheck = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      expect(dbCheck).toBeDefined();
+    });
+
+    it('queryTestIndices: should prevent SQL injection in metadata field names', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 3,
+        resultTypes: ['success'],
+      });
+
+      // Test with SQL injection in filter field name
+      const maliciousFilter = JSON.stringify({
+        logicOperator: 'and',
+        type: 'metadata',
+        operator: 'equals',
+        field: "source' OR '1'='1' --",
+        value: 'test',
+      });
+
+      const result = await (eval_ as any).queryTestIndices({
+        filters: [maliciousFilter],
+      });
+
+      // Should return results without throwing errors
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('testIndices');
+      expect(Array.isArray(result.testIndices)).toBe(true);
+
+      // Verify database is still intact
+      const db = getDb();
+      const dbCheck = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      expect(dbCheck).toBeDefined();
+    });
+
+    it('queryTestIndices: should handle special characters in search and filters safely', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 4,
+        resultTypes: ['success', 'failure'],
+        searchableContent: "test's content",
+      });
+
+      // Test with various special characters that should be safely handled
+      const specialCharQueries = [
+        "test's content",
+        'test"content',
+        'test\\content',
+        'test%content',
+        'test_content',
+        'test\ncontent',
+      ];
+
+      for (const query of specialCharQueries) {
+        const result = await (eval_ as any).queryTestIndices({
+          searchQuery: query,
+        });
+
+        expect(result).toBeDefined();
+        expect(Array.isArray(result.testIndices)).toBe(true);
+      }
+    });
+
+    it('queryTestIndices: should prevent SQL injection in plugin filter', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 3,
+        resultTypes: ['success'],
+      });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:test"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+
+      // Test with SQL injection in plugin value
+      const maliciousFilter = JSON.stringify({
+        logicOperator: 'and',
+        type: 'plugin',
+        operator: 'equals',
+        value: "harmful' OR '1'='1",
+      });
+
+      const result = await (eval_ as any).queryTestIndices({
+        filters: [maliciousFilter],
+      });
+
+      // Should not match (malicious value doesn't exist)
+      expect(result.filteredCount).toBe(0);
+
+      // Verify database is still intact
+      const dbCheck = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      expect(dbCheck).toBeDefined();
+    });
+
+    it('queryTestIndices: should prevent SQL injection in strategy filter', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 3,
+        resultTypes: ['success'],
+      });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"strategyId":"test-strategy"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+
+      // Test with SQL injection in strategy value
+      const maliciousFilter = JSON.stringify({
+        logicOperator: 'and',
+        type: 'strategy',
+        operator: 'equals',
+        value: "test-strategy' OR '1'='1",
+      });
+
+      const result = await (eval_ as any).queryTestIndices({
+        filters: [maliciousFilter],
+      });
+
+      // Should not match (malicious value doesn't exist)
+      expect(result.filteredCount).toBe(0);
+
+      // Verify database is still intact
+      const dbCheck = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      expect(dbCheck).toBeDefined();
+    });
   });
 });
