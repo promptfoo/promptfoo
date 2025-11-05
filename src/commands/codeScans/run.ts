@@ -248,9 +248,13 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
   const absoluteRepoPath = path.resolve(repoPath);
 
   // Display startup messages (always shown via logger.info, goes to stderr for CI-friendliness)
-  logger.info('Scanning code for LLM security vulnerabilities...');
+  logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
   logger.info(`  Minimum severity: ${config.minimumSeverity}`);
-  logger.info(`  Scan mode: ${config.diffsOnly ? 'diffs-only' : 'full repo'}`);
+  if (config.diffsOnly) {
+    logger.info(`  Diffs only mode (no tracing into full repo)`);
+  } else {
+    logger.info(`  Full repo mode (starts with diffs, but can trace into full repo)`);
+  }
   logger.info('');
 
   logger.debug(`Repository: ${absoluteRepoPath}`);
@@ -421,9 +425,19 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
     // Step 8: Send scan request via Socket.IO
     if (showSpinner) {
-      spinner!.text = 'Scanning code...';
+      spinner!.text = 'Scanning...';
     } else {
       logger.debug('Scanning code...');
+    }
+
+    // Add heartbeat to show progress during long scans
+    let heartbeatInterval: NodeJS.Timeout | undefined;
+    if (showSpinner) {
+      let alternate = false;
+      heartbeatInterval = setInterval(() => {
+        alternate = !alternate;
+        spinner!.text = alternate ? 'Still scanning...' : 'Scanning...';
+      }, 10000); // Every 10 seconds
     }
 
     const scanRequest: ScanRequest = {
@@ -444,12 +458,18 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       const onComplete = (response: ScanResponse) => {
         socket?.off('scan:complete', onComplete);
         socket?.off('scan:error', onError);
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+        }
         resolve(response);
       };
 
       const onError = (error: { success: false; error: string; message: string }) => {
         socket?.off('scan:complete', onComplete);
         socket?.off('scan:error', onError);
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+        }
         reject(new Error(error.message || error.error));
       };
 
