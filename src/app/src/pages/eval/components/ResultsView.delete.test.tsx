@@ -43,9 +43,30 @@ describe('ResultsView - Delete Functionality', () => {
 
   const defaultProps = {
     recentEvals: [
-      { id: 'eval-1', label: 'Eval 1', createdAt: 1000 },
-      { id: 'eval-2', label: 'Eval 2', createdAt: 2000 },
-      { id: 'eval-3', label: 'Eval 3', createdAt: 3000 },
+      {
+        evalId: 'eval-1',
+        datasetId: null,
+        label: 'Eval 1',
+        createdAt: 1000,
+        description: 'Test eval 1',
+        numTests: 10,
+      },
+      {
+        evalId: 'eval-2',
+        datasetId: null,
+        label: 'Eval 2',
+        createdAt: 2000,
+        description: 'Test eval 2',
+        numTests: 10,
+      },
+      {
+        evalId: 'eval-3',
+        datasetId: null,
+        label: 'Eval 3',
+        createdAt: 3000,
+        description: 'Test eval 3',
+        numTests: 10,
+      },
     ],
     onRecentEvalSelected: mockOnRecentEvalSelected,
     defaultEvalId: 'eval-2',
@@ -203,7 +224,16 @@ describe('ResultsView - Delete Functionality', () => {
 
     renderWithMockData({
       ...defaultProps,
-      recentEvals: [{ id: 'eval-1', label: 'Eval 1', createdAt: 1000 }],
+      recentEvals: [
+        {
+          evalId: 'eval-1',
+          datasetId: null,
+          label: 'Eval 1',
+          createdAt: 1000,
+          description: 'Test eval 1',
+          numTests: 10,
+        },
+      ],
       defaultEvalId: 'eval-1',
     });
 

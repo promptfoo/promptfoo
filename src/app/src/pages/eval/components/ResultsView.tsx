@@ -472,7 +472,7 @@ export default function ResultsView({
       return null;
     }
 
-    const currentIndex = recentEvals.findIndex((e) => e.id === evalId);
+    const currentIndex = recentEvals.findIndex((e) => e.evalId === evalId);
 
     // If current eval not in list or only one eval, go home
     if (currentIndex === -1 || recentEvals.length === 1) {
@@ -481,12 +481,12 @@ export default function ResultsView({
 
     // Try next eval first
     if (currentIndex < recentEvals.length - 1) {
-      return recentEvals[currentIndex + 1].id;
+      return recentEvals[currentIndex + 1].evalId;
     }
 
     // If this is the last eval, go to previous
     if (currentIndex > 0) {
-      return recentEvals[currentIndex - 1].id;
+      return recentEvals[currentIndex - 1].evalId;
     }
 
     return null;
@@ -508,7 +508,6 @@ export default function ResultsView({
       return;
     }
 
-    const nextEvalId = getNextEvalAfterDelete();
     setIsDeleting(true);
 
     try {
@@ -524,6 +523,7 @@ export default function ResultsView({
       showToast('Eval deleted', 'success');
 
       // Navigate to next eval or home
+      const nextEvalId = getNextEvalAfterDelete();
       if (nextEvalId) {
         onRecentEvalSelected(nextEvalId);
       } else {

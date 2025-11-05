@@ -590,7 +590,7 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
       error: error instanceof Error ? error.message : String(error),
     });
 
-    if (error instanceof Error && error.message.includes('not found')) {
+    if (error instanceof Error && error.message === `Eval with ID ${id} not found`) {
       res.status(404).json({ error: 'Evaluation not found' });
       return;
     }
