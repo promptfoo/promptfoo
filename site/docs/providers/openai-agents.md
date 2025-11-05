@@ -16,7 +16,7 @@ sidebar_label: OpenAI Agents
 
 # OpenAI Agents
 
-Test multi-turn agentic workflows built with the [@openai/agents](https://github.com/openai/openai-agents-js) SDK. This provider evaluates agents that use tools, hand off between specialists, and handle complex multi-step tasks.
+Test multi-turn agentic workflows built with the [@openai/agents](https://github.com/openai/openai-agents-js) SDK. Evaluate agents that use tools, hand off between specialists, and handle multi-step tasks.
 
 ## Prerequisites
 
