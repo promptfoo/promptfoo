@@ -252,9 +252,9 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
   logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
   logger.info(`  Minimum severity: ${config.minimumSeverity}`);
   if (config.diffsOnly) {
-    logger.info(`  Diffs only mode (no tracing into full repo)`);
+    logger.info(`  Mode: diffs only`);
   } else {
-    logger.info(`  Full repo mode (starts with diffs, but can trace into full repo)`);
+    logger.info(`  Mode: diffs + tracing into repo`);
   }
   logger.info('');
 
@@ -278,7 +278,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
   let spinner: ReturnType<typeof ora> | undefined;
   if (showSpinner) {
-    spinner = ora('Initializing...').start();
+    spinner = ora({ text: '', color: 'green' }).start();
   }
 
   try {
@@ -300,9 +300,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     const serverUrl = options.serverUrl || config.serverUrl || 'https://api.promptfoo.dev';
 
     // Step 3: Create Socket.IO connection
-    if (showSpinner) {
-      spinner!.text = 'Connecting to server...';
-    } else {
+    if (!showSpinner) {
       logger.debug('Connecting to server...');
     }
 
@@ -311,7 +309,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
     // Step 4: Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
-        logger.debug('Setting up repo MCP access...');
+      logger.debug('Setting up repo MCP access...');
       
 
       // Generate unique session ID
@@ -409,7 +407,6 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
     // Step 8: Send scan request via Socket.IO
     if (showSpinner && spinner) {
-      spinner.color = 'green';
       spinner.text = 'Scanning...';
     } else {
       logger.debug('Scanning code...');
@@ -488,6 +485,10 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       spinner!.stop();
     }
 
+    // // TODO: Remove this
+    // console.log(JSON.stringify(scanResponse, null, 2));
+    // process.exit(0);
+
     const endTime = Date.now();
     const duration = endTime - startTime;
 
@@ -512,11 +513,19 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       }
       printBorder();
 
-      // 3. Review summary (if present) - shown even when no issues
-      if (review) {
+      // 3. Review summary - shown even when no issues
+      // If no review field, check for severity="none" comment to use as review
+      let reviewText = review;
+      if (!reviewText && comments && comments.length > 0) {
+        const noneComment = comments.find((c) => c.severity?.toLowerCase() === 'none');
+        if (noneComment) {
+          reviewText = noneComment.finding;
+        }
+      }
+
+      if (reviewText) {
         logger.info('');
-        logger.info(chalk.bold('Review Summary:'));
-        logger.info(review);
+        logger.info(reviewText);
         logger.info('');
         printBorder();
       }
@@ -543,6 +552,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
           const location = comment.line ? `${comment.file}:${comment.line}` : comment.file || '';
 
           logger.info(`${severity} ${chalk.gray(location)}`);
+          logger.info('');
           logger.info(comment.finding);
 
           if (comment.fix) {
