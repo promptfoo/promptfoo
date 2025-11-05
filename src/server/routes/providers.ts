@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
@@ -172,12 +171,11 @@ providersRouter.post(
       }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
-      const serializedError = dedent`
-        [POST /providers/discover] Error calling target purpose discovery
-        error: ${errorMessage}
-        providerOptions: ${JSON.stringify(providerOptions)}`;
-      logger.error(serializedError);
-      res.status(500).json({ error: serializedError });
+      logger.error('Error calling target purpose discovery', {
+        error: e,
+        providerOptions,
+      });
+      res.status(500).json({ error: `Discovery failed: ${errorMessage}` });
       return;
     }
   },
@@ -194,11 +192,10 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
   const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
 
   try {
-    logger.debug(
-      dedent`[POST /providers/http-generator] Calling HTTP provider generator API
-        requestExample: ${requestExample?.substring(0, 200)}
-        hasResponseExample: ${!!responseExample}`,
-    );
+    logger.debug('[POST /providers/http-generator] Calling HTTP provider generator API', {
+      requestExamplePreview: requestExample?.substring(0, 200),
+      hasResponseExample: !!responseExample,
+    });
 
     const response = await fetchWithProxy(`${HOST}/api/v1/http-provider-generator`, {
       method: 'POST',
@@ -213,11 +210,10 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error(
-        dedent`[POST /providers/http-generator] Error from cloud API
-          status: ${response.status}
-          error: ${errorText}`,
-      );
+      logger.error('[POST /providers/http-generator] Error from cloud API', {
+        status: response.status,
+        errorText,
+      });
       res.status(response.status).json({
         error: `HTTP error! status: ${response.status}`,
         details: errorText,
@@ -230,10 +226,9 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     res.status(200).json(data);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(
-      dedent`[POST /providers/http-generator] Error calling HTTP provider generator
-        error: ${errorMessage}`,
-    );
+    logger.error('[POST /providers/http-generator] Error calling HTTP provider generator', {
+      error,
+    });
     res.status(500).json({
       error: 'Failed to generate HTTP configuration',
       details: errorMessage,
@@ -285,7 +280,9 @@ providersRouter.post(
         return;
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`[POST /providers/test-request-transform] Error: ${errorMessage}`);
+      logger.error('[POST /providers/test-request-transform] Error', {
+        error,
+      });
       res.status(200).json({
         success: false,
         error: errorMessage,
@@ -347,7 +344,9 @@ providersRouter.post(
         return;
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`[POST /providers/test-response-transform] Error: ${errorMessage}`);
+      logger.error('[POST /providers/test-response-transform] Error', {
+        error,
+      });
       res.status(200).json({
         success: false,
         error: errorMessage,

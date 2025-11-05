@@ -5,6 +5,7 @@ import { join } from 'path';
 import yaml from 'js-yaml';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { ProviderOptionsSchema } from '../../validators/providers';
 import type { ProviderOptions } from '../../types/providers';
 
 interface ServerConfig {
@@ -62,18 +63,59 @@ export function loadServerConfig(): ServerConfig {
     const content = readFileSync(configPath, 'utf8');
     const config = yaml.load(content) as ServerConfig;
 
+    // Validate basic structure
+    if (config && typeof config !== 'object') {
+      logger.error('Invalid ui-providers.yaml: root must be an object, using defaults', {
+        configPath,
+        actualType: typeof config,
+      });
+      cachedConfig = {};
+      return cachedConfig;
+    }
+
+    if (config?.providers && !Array.isArray(config.providers)) {
+      logger.error('Invalid ui-providers.yaml: providers must be an array, using defaults', {
+        configPath,
+        actualType: typeof config.providers,
+      });
+      cachedConfig = {};
+      return cachedConfig;
+    }
+
     logger.info('Loaded server configuration', {
       configPath,
-      providerCount: config.providers?.length || 0,
+      providerCount: config?.providers?.length || 0,
     });
 
-    cachedConfig = config;
-    return config;
+    cachedConfig = config || {};
+    return cachedConfig;
   } catch (err) {
-    logger.error('Failed to load server config, using defaults', {
-      error: err,
-      configPath,
-    });
+    // Differentiate error types for better debugging
+    if (err instanceof yaml.YAMLException) {
+      logger.error('Invalid YAML syntax in ui-providers.yaml, using defaults', {
+        configPath,
+        error: err,
+        yamlError: err.message,
+        line: (err as any).mark?.line,
+        column: (err as any).mark?.column,
+      });
+    } else if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      // File not found - already logged in getServerConfigPath, this is unexpected
+      logger.warn('Config file disappeared between check and read, using defaults', {
+        configPath,
+        error: err,
+      });
+    } else if ((err as NodeJS.ErrnoException).code === 'EACCES') {
+      logger.error('Permission denied reading ui-providers.yaml, using defaults', {
+        configPath,
+        error: err,
+      });
+    } else {
+      logger.error('Unexpected error loading ui-providers.yaml, using defaults', {
+        configPath,
+        error: err,
+      });
+    }
     cachedConfig = {};
     return cachedConfig;
   }
@@ -91,7 +133,8 @@ export function reloadServerConfig(): ServerConfig {
 
 /**
  * Get the list of available providers
- * @returns Array of provider options
+ * Validates each provider against schema and filters out invalid ones
+ * @returns Array of validated provider options
  */
 export function getAvailableProviders(): ProviderOptions[] {
   const config = loadServerConfig();
@@ -101,6 +144,44 @@ export function getAvailableProviders(): ProviderOptions[] {
     return [];
   }
 
-  // Normalize providers to ProviderOptions format
-  return config.providers.map((p) => (typeof p === 'string' ? { id: p } : p));
+  // Normalize and validate providers
+  const validatedProviders: ProviderOptions[] = [];
+
+  for (let i = 0; i < config.providers.length; i++) {
+    const p = config.providers[i];
+    const normalized = typeof p === 'string' ? { id: p } : p;
+
+    // Validate against schema
+    const result = ProviderOptionsSchema.safeParse(normalized);
+
+    if (!result.success) {
+      logger.warn('Invalid provider configuration in ui-providers.yaml, skipping', {
+        providerIndex: i,
+        provider: normalized,
+        validationErrors: result.error.errors,
+      });
+      continue;
+    }
+
+    // Ensure id is present (required for providers even though schema makes it optional)
+    if (!result.data.id) {
+      logger.warn('Provider missing required "id" field in ui-providers.yaml, skipping', {
+        providerIndex: i,
+        provider: normalized,
+      });
+      continue;
+    }
+
+    validatedProviders.push(result.data);
+  }
+
+  if (validatedProviders.length < config.providers.length) {
+    logger.warn('Some providers were skipped due to validation errors', {
+      totalProviders: config.providers.length,
+      validProviders: validatedProviders.length,
+      skippedCount: config.providers.length - validatedProviders.length,
+    });
+  }
+
+  return validatedProviders;
 }

@@ -947,7 +947,21 @@ export default function ProviderTypeSelector({
 
   // Filter available options if availableProviderIds is provided, by search term, by tag, and by server config
   const filteredProviderOptions = allProviderOptions.filter((option) => {
-    // If server config filtering is enabled, only show: http, websocket, python, javascript
+    /**
+     * When custom provider config exists (ui-providers.yaml), restrict redteam setup to
+     * customizable provider types only: http, websocket, python, javascript.
+     *
+     * Rationale:
+     * - Custom config typically indicates a self-hosted deployment with internal LLM gateways
+     * - These organizations want to test their custom HTTP/WebSocket endpoints, not public APIs
+     * - HTTP/WebSocket providers are the most flexible for custom integrations
+     * - Python/JavaScript providers allow completely custom testing logic
+     * - Restricting to these types focuses the UI on testing custom implementations
+     * - Public API providers (OpenAI, Anthropic, etc.) are still available via HTTP provider
+     *
+     * This restriction is intentional per user requirements. If custom config exists,
+     * assume the admin wants to force teams to test internal systems, not external APIs.
+     */
     if (filterEnabled) {
       const allowedTypes = ['http', 'websocket', 'python', 'javascript'];
       if (!allowedTypes.includes(option.value)) {
