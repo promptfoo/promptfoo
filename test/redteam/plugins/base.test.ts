@@ -1329,6 +1329,276 @@ describe('RedteamGraderBase', () => {
     });
   });
 
+  describe('gradingContext functionality', () => {
+    it('should pass gradingContext traceSummary to rubric vars', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithTemplate = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+        },
+      };
+
+      const TestGraderWithTrace = class extends RedteamGraderBase {
+        id = 'test-grader-trace';
+        rubric = 'Test rubric. Trace summary: {{ traceSummary }}';
+      };
+
+      const traceGrader = new TestGraderWithTrace();
+
+      await traceGrader.getResult(
+        'test prompt',
+        'test output',
+        testWithTemplate,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { traceSummary: 'Important trace summary' },
+      );
+
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('Trace summary: Important trace summary'),
+        'test output',
+        expect.any(Object),
+      );
+    });
+
+    it('should pass gradingContext traceContext to rubric vars', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const TestGraderWithContext = class extends RedteamGraderBase {
+        id = 'test-grader-context';
+        rubric = 'Test rubric. Context data: {{ traceContext.someKey }}';
+      };
+
+      const contextGrader = new TestGraderWithContext();
+
+      await contextGrader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceContext: { someKey: 'someValue', otherKey: 'otherValue' } as any,
+        },
+      );
+
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('Context data: someValue'),
+        'test output',
+        expect.any(Object),
+      );
+    });
+
+    it('should pass gradingContext traceInsights to rubric vars', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const TestGraderWithInsights = class extends RedteamGraderBase {
+        id = 'test-grader-insights';
+        rubric = 'Test rubric. Insights: {{ traceInsights }}';
+      };
+
+      const insightsGrader = new TestGraderWithInsights();
+
+      await insightsGrader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceContext: { insights: ['Key insights from trace'] } as any,
+        },
+      );
+
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('Insights: Key insights from trace'),
+        'test output',
+        expect.any(Object),
+      );
+    });
+
+    it('should handle gradingContext with all trace properties', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const TestGraderWithAllTrace = class extends RedteamGraderBase {
+        id = 'test-grader-all-trace';
+        rubric =
+          'Test rubric. Summary: {{ traceSummary }}, Context: {{ traceContext | dump }}, Insights: {{ traceInsights }}';
+      };
+
+      const allTraceGrader = new TestGraderWithAllTrace();
+
+      await allTraceGrader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceSummary: 'Full trace summary',
+          traceContext: {
+            insights: ['Detailed insights'],
+            requestId: '12345',
+          } as any,
+        },
+      );
+
+      const rubricCall = (matchesLlmRubric as jest.Mock).mock.calls[0][0];
+      expect(rubricCall).toContain('Summary: Full trace summary');
+      expect(rubricCall).toContain('Insights: Detailed insights');
+      expect(rubricCall).toContain('requestId');
+    });
+
+    it('should spread all gradingContext properties into rubric vars', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const TestGraderWithCustomProps = class extends RedteamGraderBase {
+        id = 'test-grader-custom-props';
+        rubric =
+          'Test rubric. Summary: {{ traceSummary }}, Custom: {{ customProperty }}, Category: {{ category }}';
+      };
+
+      const customPropsGrader = new TestGraderWithCustomProps();
+
+      // Pass gradingContext with both standard and custom properties
+      await customPropsGrader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceSummary: 'Trace summary from context',
+          customProperty: 'Custom value',
+          category: 'test_category',
+        } as any,
+      );
+
+      const rubricCall = (matchesLlmRubric as jest.Mock).mock.calls[0][0];
+      // All properties from gradingContext should be available
+      expect(rubricCall).toContain('Summary: Trace summary from context');
+      expect(rubricCall).toContain('Custom: Custom value');
+      expect(rubricCall).toContain('Category: test_category');
+    });
+
+    it('should work when gradingContext is undefined', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined, // no gradingContext
+      );
+
+      expect(result.grade).toEqual(mockResult);
+      expect(matchesLlmRubric).toHaveBeenCalled();
+    });
+
+    it('should work when gradingContext is null', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null as any,
+      );
+
+      expect(result.grade).toEqual(mockResult);
+      expect(matchesLlmRubric).toHaveBeenCalled();
+    });
+
+    it('should merge gradingContext with renderedValue properties', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const TestGraderMerge = class extends RedteamGraderBase {
+        id = 'test-grader-merge';
+        rubric = 'Category: {{ category }}, Summary: {{ traceSummary }}';
+      };
+
+      const mergeGrader = new TestGraderMerge();
+
+      await mergeGrader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        { category: 'from-rendered-value' } as any,
+        undefined,
+        undefined,
+        {
+          traceSummary: 'from-grading-context',
+        },
+      );
+
+      const rubricCall = (matchesLlmRubric as jest.Mock).mock.calls[0][0];
+      // Both should be available in the rubric
+      expect(rubricCall).toContain('Category: from-rendered-value');
+      expect(rubricCall).toContain('Summary: from-grading-context');
+    });
+  });
+
   describe('timestamp functionality', () => {
     it('should add timestamp to vars and append to rubric', async () => {
       const mockResult: GradingResult = {
