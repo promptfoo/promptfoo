@@ -105,11 +105,14 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
 
   static async getVarsFromEval(evalId: string) {
     const db = getDb();
-    const query = sql.raw(
-      `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
-    FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
-    );
-    // @ts-ignore
+    const query = sql`
+      SELECT DISTINCT j.key
+      FROM (
+        SELECT json_extract(eval_results.test_case, '$.vars') as vars
+        FROM eval_results
+        WHERE eval_results.eval_id = ${evalId}
+      ) t, json_each(t.vars) j
+    `;
     const results: { key: string }[] = await db.all(query);
     const vars = results.map((r) => r.key);
 

@@ -1195,4 +1195,70 @@ describe('evaluator', () => {
       expect(limited.filteredCount).toBeGreaterThanOrEqual(limited.testIndices.length);
     });
   });
+
+  describe('EvalQueries SQL Injection Prevention', () => {
+    it('getVarsFromEval: should prevent SQL injection in evalId parameter', async () => {
+      // Create an eval with vars
+      const eval_ = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+
+      // Test with malicious eval ID containing SQL injection attempt
+      const maliciousId = "'; DROP TABLE eval_results; --";
+      const vars = await EvalQueries.getVarsFromEval(maliciousId);
+
+      // Should return empty array, not execute DROP TABLE
+      expect(vars).toEqual([]);
+
+      // Verify eval_results table still exists by querying it
+      const db = getDb();
+      const results = await db.run('SELECT COUNT(*) as count FROM eval_results');
+      expect(results).toBeDefined();
+    });
+
+    it('getVarsFromEval: should handle special characters in eval ID', async () => {
+      // Create an eval with a normal ID
+      const eval_ = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+
+      // Test with special characters that might break SQL
+      const specialIds = [
+        "eval-with'single-quote",
+        'eval-with"double-quote',
+        'eval-with\\backslash',
+        "eval'; UPDATE evals SET vars='[]'--",
+        'eval" OR 1=1--',
+      ];
+
+      for (const testId of specialIds) {
+        const vars = await EvalQueries.getVarsFromEval(testId);
+        // Should return empty array without throwing errors
+        expect(Array.isArray(vars)).toBe(true);
+      }
+    });
+
+    it('getVarsFromEval: should return correct vars for valid eval ID', async () => {
+      // Create an eval with vars
+      const eval_ = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+
+      // Ensure eval has vars by checking via findById
+      const persistedEval = await Eval.findById(eval_.id);
+      expect(persistedEval).toBeDefined();
+      expect(persistedEval?.vars.length).toBeGreaterThan(0);
+
+      // Now test getVarsFromEval with the correct ID
+      const vars = await EvalQueries.getVarsFromEval(eval_.id);
+      expect(vars.length).toBeGreaterThan(0);
+      expect(vars).toEqual(persistedEval?.vars);
+    });
+  });
 });
