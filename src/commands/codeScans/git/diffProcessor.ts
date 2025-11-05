@@ -10,7 +10,6 @@
  */
 
 import { execa } from 'execa';
-import { minimatch } from 'minimatch';
 import mime from 'mime-types';
 import { isText } from 'istextorbinary';
 import pLimit from 'p-limit';
@@ -18,6 +17,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import type { FileRecord } from '../../../types/codeScan';
 import { annotateDiffWithLineNumbers } from './diffAnnotator';
+import {
+  DENYLIST_PATTERNS,
+  MAX_BLOB_SIZE_BYTES,
+  MAX_PATCH_SIZE_BYTES,
+  isInDenylist,
+} from './filteringConstants';
 
 interface RawDiffEntry {
   path: string;
@@ -31,42 +36,8 @@ interface NumstatEntry {
   linesRemoved: number;
 }
 
-const DENYLIST_PATTERNS = [
-  '**/node_modules/**',
-  '**/dist/**',
-  '**/build/**',
-  '**/.next/**',
-  '**/.venv/**',
-  '**/__pycache__/**',
-  '**/*.lock',
-  '**/package-lock.json',
-  '**/yarn.lock',
-  '**/pnpm-lock.yaml',
-  '**/Cargo.lock',
-  '**/poetry.lock',
-  '**/composer.lock',
-  '**/Pipfile.lock',
-  '**/*.min.js',
-  '**/*.map',
-  '**/*.bin',
-  '**/*.exe',
-  '**/*.dll',
-  '**/*.so',
-  '**/*.dylib',
-  '**/*.zip',
-  '**/*.tar',
-  '**/*.gz',
-  '**/*.jpg',
-  '**/*.jpeg',
-  '**/*.png',
-  '**/*.gif',
-  '**/*.pdf',
-  '**/*.mp4',
-  '**/*.mov',
-];
-
-const MAX_BLOB_SIZE_BYTES = 500 * 1024; // 500 KB
-const MAX_PATCH_SIZE_BYTES = 200 * 1024; // 200 KB
+// Re-export for backwards compatibility
+export { DENYLIST_PATTERNS, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES, isInDenylist };
 
 const PATCH_CONCURRENCY = 8;
 const TEXT_DETECTION_CONCURRENCY = 16;
@@ -95,10 +66,6 @@ export class DiffProcessorError extends Error {
     super(message);
     this.name = 'DiffProcessorError';
   }
-}
-
-function isInDenylist(filePath: string): boolean {
-  return DENYLIST_PATTERNS.some((pattern) => minimatch(filePath, pattern));
 }
 
 /**
