@@ -1,590 +1,327 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
-import * as useConfirmDialogModule from '@app/hooks/useConfirmDialog';
-import * as apiTypesModule from '@app/utils/apiTypes';
-import type { EvaluateTable, ResultLightweightWithLabel, UnifiedConfig } from '@promptfoo/types';
-
-// Mock dependencies
-vi.mock('@app/hooks/useConfirmDialog');
-vi.mock('@app/utils/apiTypes');
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
-  fetchUserEmail: vi.fn().mockResolvedValue('test@example.com'),
-  updateEvalAuthor: vi.fn().mockResolvedValue({}),
-}));
-vi.mock('@app/hooks/useToast', () => ({
-  useToast: () => ({ showToast: mockShowToast }),
-}));
-vi.mock('@app/stores/evalConfig', () => ({
-  useStore: () => ({ updateConfig: vi.fn() }),
-}));
-vi.mock('./store', () => ({
-  useTableStore: () => mockTableStore,
-  useResultsViewSettingsStore: () => mockResultsViewSettingsStore,
-}));
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-    useSearchParams: () => [new URLSearchParams(), vi.fn()],
-  };
-});
 
 const mockShowToast = vi.fn();
 const mockNavigate = vi.fn();
 const mockOnRecentEvalSelected = vi.fn();
+const mockUseTableStore = vi.fn();
+const mockUseResultsViewSettingsStore = vi.fn();
 
-const mockConfirm = vi.fn();
-const mockConfirmDialog = vi.fn(() => null);
+// Mock dependencies
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(),
+  fetchUserEmail: vi.fn().mockResolvedValue(null),
+  updateEvalAuthor: vi.fn(),
+}));
 
-const mockTable: EvaluateTable = {
-  head: {
-    prompts: [
-      { raw: 'prompt1', label: 'Prompt 1' },
-      { raw: 'prompt2', label: 'Prompt 2' },
-    ],
-    vars: ['var1', 'var2'],
-  },
-  body: [
-    {
-      outputs: [{}, {}],
-      vars: ['value1', 'value2'],
-      test: {},
-    },
-    {
-      outputs: [{}, {}],
-      vars: ['value3', 'value4'],
-      test: {},
-    },
-  ],
-};
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({ showToast: mockShowToast }),
+}));
 
-const mockConfig: Partial<UnifiedConfig> = {
-  description: 'Test Eval',
-};
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => mockNavigate,
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+}));
 
-const mockTableStore = {
-  table: mockTable,
-  config: mockConfig,
-  evalId: 'test-eval-id',
-  author: null,
-  setAuthor: vi.fn(),
-  filteredResultsCount: 2,
-  totalResultsCount: 2,
-  highlightedResultsCount: 0,
-  filters: {
-    values: {},
-    appliedCount: 0,
-  },
-  removeFilter: vi.fn(),
-  filterMode: 'all' as const,
-  setFilterMode: vi.fn(),
-  setConfig: vi.fn(),
-};
+vi.mock('./store', () => ({
+  useTableStore: () => mockUseTableStore(),
+  useResultsViewSettingsStore: () => mockUseResultsViewSettingsStore(),
+}));
 
-const mockResultsViewSettingsStore = {
-  setInComparisonMode: vi.fn(),
-  columnStates: {},
-  setColumnState: vi.fn(),
-  maxTextLength: 100,
-  wordBreak: 'break-word' as const,
-  showInferenceDetails: false,
-  comparisonEvalIds: [],
-  setComparisonEvalIds: vi.fn(),
-};
-
-const createMockRecentEvals = (count: number): ResultLightweightWithLabel[] => {
-  return Array.from({ length: count }, (_, i) => ({
-    id: `eval-${i}`,
-    label: `Eval ${i}`,
-    description: `Description ${i}`,
-    numTests: 10,
-    createdAt: Date.now() - i * 1000,
-  }));
-};
+vi.mock('@app/stores/evalConfig', () => ({
+  useStore: () => ({
+    updateConfig: vi.fn(),
+  }),
+}));
 
 describe('ResultsView - Delete Functionality', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    // Setup useConfirmDialog mock
-    vi.mocked(useConfirmDialogModule.useConfirmDialog).mockReturnValue({
-      confirm: mockConfirm,
-      ConfirmDialog: mockConfirmDialog,
-      isConfirming: false,
-    });
   });
 
-  it('should show delete option in menu', async () => {
-    const recentEvals = createMockRecentEvals(3);
+  const defaultProps = {
+    recentEvals: [
+      { id: 'eval-1', label: 'Eval 1', createdAt: 1000 },
+      { id: 'eval-2', label: 'Eval 2', createdAt: 2000 },
+      { id: 'eval-3', label: 'Eval 3', createdAt: 3000 },
+    ],
+    onRecentEvalSelected: mockOnRecentEvalSelected,
+    defaultEvalId: 'eval-2',
+  };
 
-    render(
-      <MemoryRouter>
-        <ResultsView
-          recentEvals={recentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />
-      </MemoryRouter>,
-    );
-
-    // Open the eval actions menu
-    const menuButton = screen.getByText('Eval actions');
-    await userEvent.click(menuButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('Delete')).toBeInTheDocument();
-    });
-  });
-
-  it('should open confirmation dialog when delete is clicked', async () => {
-    const recentEvals = createMockRecentEvals(3);
-
-    render(
-      <MemoryRouter>
-        <ResultsView
-          recentEvals={recentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />
-      </MemoryRouter>,
-    );
-
-    // Open menu and click delete
-    const menuButton = screen.getByText('Eval actions');
-    await userEvent.click(menuButton);
-
-    const deleteMenuItem = screen.getByText('Delete');
-    await userEvent.click(deleteMenuItem);
-
-    // Verify confirm was called with correct config
-    await waitFor(() => {
-      expect(mockConfirm).toHaveBeenCalled();
-    });
-
-    const confirmCall = mockConfirm.mock.calls[0];
-    expect(confirmCall[0]).toMatchObject({
-      title: 'Delete Evaluation?',
-      warningMessage: 'This action cannot be undone.',
-      itemName: 'Test Eval',
-    });
-    expect(confirmCall[0].itemDetails).toContain('2 test results');
-    expect(confirmCall[0].itemDetails).toContain('2 prompts');
-  });
-
-  it('should navigate to next eval after successful deletion', async () => {
-    const recentEvals = createMockRecentEvals(3);
-    // Current eval is eval-0, so next should be eval-1
-    const currentEvalId = 'eval-0';
-
-    vi.mocked(apiTypesModule.callApiTyped).mockResolvedValue({
-      success: true,
-      message: 'Eval deleted successfully',
-    });
-
-    const customTableStore = {
-      ...mockTableStore,
-      evalId: currentEvalId,
-    };
-
-    vi.mocked(useConfirmDialogModule.useConfirmDialog).mockImplementation(() => {
-      return {
-        confirm: (config, onConfirm) => {
-          // Immediately execute the confirm callback
-          onConfirm();
-          return Promise.resolve();
+  // Helper to render with mock store data
+  const renderWithMockData = (props = defaultProps) => {
+    mockUseTableStore.mockReturnValue({
+      evalId: props.defaultEvalId,
+      config: { description: 'Test Eval' },
+      table: {
+        head: {
+          prompts: [{ raw: 'Test prompt' }],
+          vars: ['var1'],
         },
-        ConfirmDialog: () => null,
-        isConfirming: false,
-      };
+        body: [],
+      },
+      totalResultsCount: 100,
+      filteredResultsCount: 100,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      filterMode: 'all',
+      setConfig: vi.fn(),
+      setAuthor: vi.fn(),
+      setFilterMode: vi.fn(),
+      removeFilter: vi.fn(),
+      author: null,
     });
 
-    render(
-      <MemoryRouter>
-        <ResultsView
-          recentEvals={recentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId={currentEvalId}
-        />
-      </MemoryRouter>,
-    );
+    mockUseResultsViewSettingsStore.mockReturnValue({
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: false,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+      setInComparisonMode: vi.fn(),
+    });
 
-    const menuButton = screen.getByText('Eval actions');
-    await userEvent.click(menuButton);
+    return render(<ResultsView {...props} />);
+  };
 
+  it('should open delete confirmation dialog when delete is clicked', async () => {
+    renderWithMockData();
+
+    // Open eval actions menu
+    const actionsButton = screen.getByText('Eval actions');
+    await userEvent.click(actionsButton);
+
+    // Click delete
     const deleteMenuItem = screen.getByText('Delete');
     await userEvent.click(deleteMenuItem);
 
+    // Dialog should appear
     await waitFor(() => {
-      expect(mockOnRecentEvalSelected).toHaveBeenCalledWith('eval-1');
+      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
     });
 
-    expect(mockShowToast).toHaveBeenCalledWith('Evaluation deleted successfully', 'success');
+    expect(screen.getByText('This action cannot be undone.')).toBeInTheDocument();
+    expect(screen.getByText('Test Eval')).toBeInTheDocument();
+    expect(screen.getByText(/100 test results/)).toBeInTheDocument();
+    expect(screen.getByText(/1 prompt/)).toBeInTheDocument();
   });
 
-  it('should navigate to previous eval if deleting last eval', async () => {
-    const recentEvals = createMockRecentEvals(3);
-    // Current eval is eval-2 (last one), so should go to eval-1
-    const currentEvalId = 'eval-2';
+  it('should close dialog when cancel is clicked', async () => {
+    renderWithMockData();
 
-    vi.mocked(apiTypesModule.callApiTyped).mockResolvedValue({
-      success: true,
-      message: 'Eval deleted successfully',
-    });
-
-    let capturedConfirmCallback: (() => Promise<void>) | null = null;
-
-    vi.mocked(useConfirmDialogModule.useConfirmDialog).mockImplementation(() => {
-      return {
-        confirm: (config, onConfirm) => {
-          capturedConfirmCallback = onConfirm;
-          return Promise.resolve();
-        },
-        ConfirmDialog: () => null,
-        isConfirming: false,
-      };
-    });
-
-    const customTableStore = {
-      ...mockTableStore,
-      evalId: currentEvalId,
-    };
-
-    // Need to mock the store with custom evalId
-    vi.doMock('./store', () => ({
-      useTableStore: () => customTableStore,
-      useResultsViewSettingsStore: () => mockResultsViewSettingsStore,
-    }));
-
-    render(
-      <MemoryRouter>
-        <ResultsView
-          recentEvals={recentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId={currentEvalId}
-        />
-      </MemoryRouter>,
-    );
-
-    const menuButton = screen.getByText('Eval actions');
-    await userEvent.click(menuButton);
-
-    const deleteMenuItem = screen.getByText('Delete');
-    await userEvent.click(deleteMenuItem);
-
-    // Execute the captured callback
-    if (capturedConfirmCallback) {
-      await capturedConfirmCallback();
-    }
+    // Open delete dialog
+    const actionsButton = screen.getByText('Eval actions');
+    await userEvent.click(actionsButton);
+    await userEvent.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(mockOnRecentEvalSelected).toHaveBeenCalledWith('eval-1');
+      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
+    });
+
+    // Click cancel
+    const cancelButton = screen.getByRole('button', { name: 'Cancel' });
+    await userEvent.click(cancelButton);
+
+    // Dialog should close
+    await waitFor(() => {
+      expect(screen.queryByText('Delete Evaluation?')).not.toBeInTheDocument();
     });
   });
 
-  it('should navigate to home if deleting only eval', async () => {
-    const recentEvals = createMockRecentEvals(1);
+  it('should successfully delete and navigate to next eval', async () => {
+    const { callApi } = await import('@app/utils/api');
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: 'Eval deleted successfully' }),
+    } as Response);
 
-    vi.mocked(apiTypesModule.callApiTyped).mockResolvedValue({
-      success: true,
-      message: 'Eval deleted successfully',
-    });
+    renderWithMockData();
 
-    let capturedConfirmCallback: (() => Promise<void>) | null = null;
-
-    vi.mocked(useConfirmDialogModule.useConfirmDialog).mockImplementation(() => {
-      return {
-        confirm: (config, onConfirm) => {
-          capturedConfirmCallback = onConfirm;
-          return Promise.resolve();
-        },
-        ConfirmDialog: () => null,
-        isConfirming: false,
-      };
-    });
-
-    render(
-      <MemoryRouter>
-        <ResultsView
-          recentEvals={recentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="eval-0"
-        />
-      </MemoryRouter>,
-    );
-
-    const menuButton = screen.getByText('Eval actions');
-    await userEvent.click(menuButton);
-
-    const deleteMenuItem = screen.getByText('Delete');
-    await userEvent.click(deleteMenuItem);
-
-    // Execute the captured callback
-    if (capturedConfirmCallback) {
-      await capturedConfirmCallback();
-    }
+    // Open delete dialog
+    const actionsButton = screen.getByText('Eval actions');
+    await userEvent.click(actionsButton);
+    await userEvent.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
     });
 
-    expect(mockShowToast).toHaveBeenCalledWith('Evaluation deleted successfully', 'success');
+    // Confirm delete
+    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    await userEvent.click(deleteButton);
+
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith('Evaluation deleted successfully', 'success');
+    });
+
+    // Should navigate to next eval (eval-3)
+    expect(mockOnRecentEvalSelected).toHaveBeenCalledWith('eval-3');
   });
 
-  it('should show error toast when deletion fails with ApiError', async () => {
-    const recentEvals = createMockRecentEvals(3);
+  it('should navigate to previous eval when deleting last eval', async () => {
+    const { callApi } = await import('@app/utils/api');
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: 'Eval deleted successfully' }),
+    } as Response);
 
-    const apiError = new apiTypesModule.ApiError('Database is busy', 'DATABASE_BUSY', 503);
+    // Current eval is the last one (eval-3)
+    renderWithMockData({ ...defaultProps, defaultEvalId: 'eval-3' });
 
-    vi.mocked(apiTypesModule.callApiTyped).mockRejectedValue(apiError);
-
-    let capturedConfirmCallback: (() => Promise<void>) | null = null;
-
-    vi.mocked(useConfirmDialogModule.useConfirmDialog).mockImplementation(() => {
-      return {
-        confirm: (config, onConfirm) => {
-          capturedConfirmCallback = onConfirm;
-          return Promise.resolve();
-        },
-        ConfirmDialog: () => null,
-        isConfirming: false,
-      };
-    });
-
-    render(
-      <MemoryRouter>
-        <ResultsView
-          recentEvals={recentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />
-      </MemoryRouter>,
-    );
-
-    const menuButton = screen.getByText('Eval actions');
-    await userEvent.click(menuButton);
-
-    const deleteMenuItem = screen.getByText('Delete');
-    await userEvent.click(deleteMenuItem);
-
-    // Execute the captured callback
-    if (capturedConfirmCallback) {
-      await expect(capturedConfirmCallback()).rejects.toThrow();
-    }
+    // Open delete dialog
+    const actionsButton = screen.getByText('Eval actions');
+    await userEvent.click(actionsButton);
+    await userEvent.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(mockShowToast).toHaveBeenCalledWith(
-        'Database is busy. Please try again in a moment.',
-        'warning',
-      );
+      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
     });
 
-    // Should NOT navigate on error
-    expect(mockNavigate).not.toHaveBeenCalled();
-    expect(mockOnRecentEvalSelected).not.toHaveBeenCalled();
+    // Confirm delete
+    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    await userEvent.click(deleteButton);
+
+    await waitFor(() => {
+      expect(mockOnRecentEvalSelected).toHaveBeenCalledWith('eval-2');
+    });
   });
 
-  it('should handle NOT_FOUND error and navigate away', async () => {
-    const recentEvals = createMockRecentEvals(3);
+  it('should navigate home when deleting only eval', async () => {
+    const { callApi } = await import('@app/utils/api');
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: 'Eval deleted successfully' }),
+    } as Response);
 
-    const apiError = new apiTypesModule.ApiError(
-      'Evaluation not found',
-      'NOT_FOUND',
-      404,
-    );
-
-    vi.mocked(apiTypesModule.callApiTyped).mockRejectedValue(apiError);
-
-    let capturedConfirmCallback: (() => Promise<void>) | null = null;
-
-    vi.mocked(useConfirmDialogModule.useConfirmDialog).mockImplementation(() => {
-      return {
-        confirm: (config, onConfirm) => {
-          capturedConfirmCallback = onConfirm;
-          return Promise.resolve();
-        },
-        ConfirmDialog: () => null,
-        isConfirming: false,
-      };
+    renderWithMockData({
+      ...defaultProps,
+      recentEvals: [{ id: 'eval-1', label: 'Eval 1', createdAt: 1000 }],
+      defaultEvalId: 'eval-1',
     });
 
-    render(
-      <MemoryRouter>
-        <ResultsView
-          recentEvals={recentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />
-      </MemoryRouter>,
-    );
-
-    const menuButton = screen.getByText('Eval actions');
-    await userEvent.click(menuButton);
-
-    const deleteMenuItem = screen.getByText('Delete');
-    await userEvent.click(deleteMenuItem);
-
-    // Execute the captured callback
-    if (capturedConfirmCallback) {
-      await expect(capturedConfirmCallback()).rejects.toThrow();
-    }
+    // Open delete dialog
+    const actionsButton = screen.getByText('Eval actions');
+    await userEvent.click(actionsButton);
+    await userEvent.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(mockShowToast).toHaveBeenCalledWith(
-        'Evaluation not found. It may have already been deleted.',
-        'warning',
-      );
+      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
     });
 
-    // Should navigate away even on NOT_FOUND
+    // Confirm delete
+    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    await userEvent.click(deleteButton);
+
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
     });
   });
 
-  it('should handle CONSTRAINT_VIOLATION error', async () => {
-    const recentEvals = createMockRecentEvals(3);
+  it('should show error toast on delete failure', async () => {
+    const { callApi } = await import('@app/utils/api');
+    vi.mocked(callApi).mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: 'Database error' }),
+    } as Response);
 
-    const apiError = new apiTypesModule.ApiError(
-      'Cannot delete: evaluation is referenced by other records',
-      'CONSTRAINT_VIOLATION',
-      409,
-    );
+    renderWithMockData();
 
-    vi.mocked(apiTypesModule.callApiTyped).mockRejectedValue(apiError);
+    // Open delete dialog
+    const actionsButton = screen.getByText('Eval actions');
+    await userEvent.click(actionsButton);
+    await userEvent.click(screen.getByText('Delete'));
 
-    let capturedConfirmCallback: (() => Promise<void>) | null = null;
-
-    vi.mocked(useConfirmDialogModule.useConfirmDialog).mockImplementation(() => {
-      return {
-        confirm: (config, onConfirm) => {
-          capturedConfirmCallback = onConfirm;
-          return Promise.resolve();
-        },
-        ConfirmDialog: () => null,
-        isConfirming: false,
-      };
+    await waitFor(() => {
+      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
     });
 
-    render(
-      <MemoryRouter>
-        <ResultsView
-          recentEvals={recentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />
-      </MemoryRouter>,
-    );
-
-    const menuButton = screen.getByText('Eval actions');
-    await userEvent.click(menuButton);
-
-    const deleteMenuItem = screen.getByText('Delete');
-    await userEvent.click(deleteMenuItem);
-
-    // Execute the captured callback
-    if (capturedConfirmCallback) {
-      await expect(capturedConfirmCallback()).rejects.toThrow();
-    }
+    // Confirm delete
+    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    await userEvent.click(deleteButton);
 
     await waitFor(() => {
       expect(mockShowToast).toHaveBeenCalledWith(
-        'Cannot delete: evaluation is referenced by other records.',
-        'error',
-      );
-    });
-
-    // Should NOT navigate on constraint violation
-    expect(mockNavigate).not.toHaveBeenCalled();
-  });
-
-  it('should handle generic Error', async () => {
-    const recentEvals = createMockRecentEvals(3);
-
-    const genericError = new Error('Network failure');
-
-    vi.mocked(apiTypesModule.callApiTyped).mockRejectedValue(genericError);
-
-    let capturedConfirmCallback: (() => Promise<void>) | null = null;
-
-    vi.mocked(useConfirmDialogModule.useConfirmDialog).mockImplementation(() => {
-      return {
-        confirm: (config, onConfirm) => {
-          capturedConfirmCallback = onConfirm;
-          return Promise.resolve();
-        },
-        ConfirmDialog: () => null,
-        isConfirming: false,
-      };
-    });
-
-    render(
-      <MemoryRouter>
-        <ResultsView
-          recentEvals={recentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />
-      </MemoryRouter>,
-    );
-
-    const menuButton = screen.getByText('Eval actions');
-    await userEvent.click(menuButton);
-
-    const deleteMenuItem = screen.getByText('Delete');
-    await userEvent.click(deleteMenuItem);
-
-    // Execute the captured callback
-    if (capturedConfirmCallback) {
-      await expect(capturedConfirmCallback()).rejects.toThrow();
-    }
-
-    await waitFor(() => {
-      expect(mockShowToast).toHaveBeenCalledWith(
-        'Failed to delete evaluation: Network failure',
+        'Failed to delete evaluation: Database error',
         'error',
       );
     });
   });
 
-  it('should show error if evalId is missing', async () => {
-    const recentEvals = createMockRecentEvals(3);
-
-    const customTableStore = {
-      ...mockTableStore,
-      evalId: null,
-    };
-
-    vi.doMock('./store', () => ({
-      useTableStore: () => customTableStore,
-      useResultsViewSettingsStore: () => mockResultsViewSettingsStore,
-    }));
-
-    render(
-      <MemoryRouter>
-        <ResultsView
-          recentEvals={recentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-        />
-      </MemoryRouter>,
+  it('should show loading state during deletion', async () => {
+    const { callApi } = await import('@app/utils/api');
+    let resolveDelete: () => void;
+    vi.mocked(callApi).mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveDelete = () =>
+          resolve({
+            ok: true,
+            json: async () => ({ message: 'Success' }),
+          } as Response);
+      }),
     );
 
-    const menuButton = screen.getByText('Eval actions');
-    await userEvent.click(menuButton);
+    renderWithMockData();
 
-    const deleteMenuItem = screen.getByText('Delete');
-    await userEvent.click(deleteMenuItem);
+    // Open delete dialog
+    const actionsButton = screen.getByText('Eval actions');
+    await userEvent.click(actionsButton);
+    await userEvent.click(screen.getByText('Delete'));
 
-    // Since evalId is null, confirm should not be called
-    // Instead, should show error toast immediately
     await waitFor(() => {
-      expect(mockShowToast).toHaveBeenCalledWith('Cannot delete: Eval ID not found', 'error');
+      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
     });
 
-    expect(mockConfirm).not.toHaveBeenCalled();
+    // Confirm delete
+    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    await userEvent.click(deleteButton);
+
+    // Should show loading state
+    await waitFor(() => {
+      expect(screen.getByText('Deleting...')).toBeInTheDocument();
+    });
+
+    // Buttons should be disabled
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Deleting...' })).toBeDisabled();
+
+    // Resolve delete
+    resolveDelete!();
+
+    // Should close dialog
+    await waitFor(() => {
+      expect(screen.queryByText('Delete Evaluation?')).not.toBeInTheDocument();
+    });
+  });
+
+  it('should handle network errors gracefully', async () => {
+    const { callApi } = await import('@app/utils/api');
+    vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
+
+    renderWithMockData();
+
+    // Open delete dialog
+    const actionsButton = screen.getByText('Eval actions');
+    await userEvent.click(actionsButton);
+    await userEvent.click(screen.getByText('Delete'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Delete Evaluation?')).toBeInTheDocument();
+    });
+
+    // Confirm delete
+    const deleteButton = screen.getByRole('button', { name: 'Delete Permanently' });
+    await userEvent.click(deleteButton);
+
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'Failed to delete evaluation: Network error',
+        'error',
+      );
+    });
   });
 });

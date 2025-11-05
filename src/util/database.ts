@@ -438,55 +438,19 @@ export async function getEvalFromId(hash: string) {
 }
 
 export async function deleteEval(evalId: string) {
-  logger.debug('[deleteEval] Starting deletion', { evalId });
-
   const db = getDb();
-
-  const rowsDeleted = {
-    evalsToPrompts: 0,
-    evalsToDatasets: 0,
-    evalsToTags: 0,
-    evalResults: 0,
-    evals: 0,
-  };
-
   db.transaction(() => {
     // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
-    const r1 = db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
-    rowsDeleted.evalsToPrompts = r1.changes;
-
-    const r2 = db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
-    rowsDeleted.evalsToDatasets = r2.changes;
-
-    const r3 = db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
-    rowsDeleted.evalsToTags = r3.changes;
-
-    const r4 = db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
-    rowsDeleted.evalResults = r4.changes;
-
-    logger.debug('[deleteEval] Deleted related records', {
-      evalId,
-      evalsToPrompts: rowsDeleted.evalsToPrompts,
-      evalsToDatasets: rowsDeleted.evalsToDatasets,
-      evalsToTags: rowsDeleted.evalsToTags,
-      evalResults: rowsDeleted.evalResults,
-    });
+    db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
+    db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
+    db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
+    db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
 
     // Finally, delete the eval record
-    const r5 = db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
-    rowsDeleted.evals = r5.changes;
-
-    if (r5.changes === 0) {
+    const deletedIds = db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
+    if (deletedIds.changes === 0) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
-  });
-
-  const totalRows = Object.values(rowsDeleted).reduce((a, b) => a + b, 0);
-
-  logger.info('[deleteEval] Deletion complete', {
-    evalId,
-    rowsDeleted,
-    totalRows,
   });
 }
 

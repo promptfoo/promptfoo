@@ -1,11 +1,9 @@
 import React from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
-import { useConfirmDialog } from '@app/hooks/useConfirmDialog';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
-import { ApiError, callApiTyped, type DeleteEvalResponse } from '@app/utils/apiTypes';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ClearIcon from '@mui/icons-material/Clear';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -17,8 +15,13 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
@@ -31,6 +34,7 @@ import Stack from '@mui/material/Stack';
 import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import invariant from '@promptfoo/util/invariant';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -343,6 +347,8 @@ export default function ResultsView({
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
   const [editNameDialogOpen, setEditNameDialogOpen] = React.useState(false);
   const [copyDialogOpen, setCopyDialogOpen] = React.useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const allColumns = React.useMemo(
     () => [
@@ -457,8 +463,6 @@ export default function ResultsView({
     [evalId, showToast],
   );
 
-  const { confirm, ConfirmDialog } = useConfirmDialog();
-
   /**
    * Determines the next eval to navigate to after deleting the current one
    * @returns The eval ID to navigate to, or null to go home
@@ -496,70 +500,45 @@ export default function ResultsView({
       return;
     }
 
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!evalId) {
+      return;
+    }
+
     const nextEvalId = getNextEvalAfterDelete();
+    setIsDeleting(true);
 
-    confirm(
-      {
-        title: 'Delete Evaluation?',
-        warningMessage: 'This action cannot be undone.',
-        message: 'You are about to permanently delete:',
-        itemName: config?.description || evalId || 'Unnamed Evaluation',
-        itemDetails: [
-          `${totalResultsCount.toLocaleString()} test result${totalResultsCount !== 1 ? 's' : ''}`,
-          `${head.prompts.length} prompt${head.prompts.length !== 1 ? 's' : ''}`,
-        ],
-        actionButtonText: 'Delete Permanently',
-        actionButtonColor: 'error',
-        icon: <DeleteIcon />,
-      },
-      async () => {
-        try {
-          const result = await callApiTyped<DeleteEvalResponse>(`/eval/${evalId}`, {
-            method: 'DELETE',
-          });
+    try {
+      const response = await callApi(`/eval/${evalId}`, {
+        method: 'DELETE',
+      });
 
-          if (result.success) {
-            showToast('Evaluation deleted successfully', 'success');
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete evaluation');
+      }
 
-            // Navigate to next eval or home
-            if (nextEvalId) {
-              onRecentEvalSelected(nextEvalId);
-            } else {
-              navigate('/', { replace: true });
-            }
-          }
-        } catch (error) {
-          console.error('Failed to delete evaluation:', error);
+      showToast('Evaluation deleted successfully', 'success');
 
-          // Handle specific error codes
-          if (error instanceof ApiError) {
-            switch (error.code) {
-              case 'NOT_FOUND':
-                showToast('Evaluation not found. It may have already been deleted.', 'warning');
-                // Still navigate away since eval doesn't exist
-                navigate('/', { replace: true });
-                break;
-              case 'DATABASE_BUSY':
-                showToast('Database is busy. Please try again in a moment.', 'warning');
-                break;
-              case 'CONSTRAINT_VIOLATION':
-                showToast('Cannot delete: evaluation is referenced by other records.', 'error');
-                break;
-              default:
-                showToast(error.message || 'Failed to delete evaluation', 'error');
-            }
-          } else {
-            showToast(
-              `Failed to delete evaluation: ${error instanceof Error ? error.message : 'Unknown error'}`,
-              'error',
-            );
-          }
-
-          // Re-throw to prevent dialog from closing on error
-          throw error;
-        }
-      },
-    );
+      // Navigate to next eval or home
+      if (nextEvalId) {
+        onRecentEvalSelected(nextEvalId);
+      } else {
+        navigate('/', { replace: true });
+      }
+    } catch (error) {
+      console.error('Failed to delete evaluation:', error);
+      showToast(
+        `Failed to delete evaluation: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+    }
   };
 
   const [evalSelectorDialogOpen, setEvalSelectorDialogOpen] = React.useState(false);
@@ -1037,7 +1016,50 @@ export default function ResultsView({
         itemLabel="results"
       />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
-      <ConfirmDialog />
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => !isDeleting && setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Delete Evaluation?</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            This action cannot be undone.
+          </Alert>
+          <Typography variant="body1" gutterBottom>
+            You are about to permanently delete:
+          </Typography>
+          <Box sx={{ pl: 2, py: 1 }}>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              {config?.description || evalId || 'Unnamed Evaluation'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              • {totalResultsCount.toLocaleString()} test result
+              {totalResultsCount !== 1 ? 's' : ''}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              • {head.prompts.length} prompt{head.prompts.length !== 1 ? 's' : ''}
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color="error"
+            variant="contained"
+            disabled={isDeleting}
+            startIcon={isDeleting ? <CircularProgress size={16} /> : <DeleteIcon />}
+          >
+            {isDeleting ? 'Deleting...' : 'Delete Permanently'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }
