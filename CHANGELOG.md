@@ -4,12 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.119.4] - 2025-11-06
 
 ### Added
 
 - feat(cli): add `code-scans run` command for scanning code changes for LLM security vulnerabilities including prompt injection, PII exposure, and excessive agency - uses AI agents to trace data flows, analyze vulnerabilities across batches, and suggest fixes with configurable severity thresholds (#6121)
 - feat(github-action): add Code Scan GitHub Action for automated PR security scanning with GitHub App OIDC authentication or manual API token setup; automatically posts review comments with severity levels and suggested fixes (#6121)
+- feat(redteam): pass policy text to intent extraction for custom policy tests, enabling more accurate and self-contained testing objectives that include specific policy requirements (#6116)
 - feat(redteam): add timestamp context to all grading rubrics for time-aware evaluation and temporal context in security assessments (#6110)
 - feat(model-audit): add revision tracking, content hash generation, and deduplication for model scans to prevent re-scanning unchanged models (saving ~99% time and bandwidth); add `--stream` flag to delete downloaded files immediately after scan ([#6058](https://github.com/promptfoo/promptfoo/pull/6058))
 
