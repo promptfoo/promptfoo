@@ -8,7 +8,6 @@ import {
   normalizeApostrophes,
   removePrefix,
 } from '../../src/redteam/util';
-
 import type { CallApiContextParams, ProviderResponse } from '../../src/types';
 
 jest.mock('../../src/cache');
@@ -344,8 +343,17 @@ describe('extractGoalFromPrompt', () => {
     );
 
     // Verify the actual policy text is in the body
-    const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
-    const bodyString = callArgs[1].body as string;
+    const fetchCalls = jest.mocked(fetchWithCache).mock.calls;
+    expect(fetchCalls.length).toBeGreaterThan(0);
+    const requestInit = fetchCalls[0][1];
+    if (!requestInit) {
+      throw new Error('Expected request init to be defined');
+    }
+    const bodyString = (requestInit as any).body as string | undefined;
+    expect(bodyString).toBeDefined();
+    if (!bodyString) {
+      throw new Error('Expected request body to be defined');
+    }
     const bodyObj = JSON.parse(bodyString);
     expect(bodyObj.policy).toBe(policyText);
   });
@@ -369,8 +377,17 @@ describe('extractGoalFromPrompt', () => {
     expect(result).toBe('goal without policy');
 
     // Verify that the API was called without policy in the request body
-    const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
-    const bodyString = callArgs[1].body as string;
+    const fetchCalls = jest.mocked(fetchWithCache).mock.calls;
+    expect(fetchCalls.length).toBeGreaterThan(0);
+    const requestInit = fetchCalls[0][1];
+    if (!requestInit) {
+      throw new Error('Expected request init to be defined');
+    }
+    const bodyString = (requestInit as any).body as string | undefined;
+    expect(bodyString).toBeDefined();
+    if (!bodyString) {
+      throw new Error('Expected request body to be defined');
+    }
     const bodyObj = JSON.parse(bodyString);
     expect(bodyObj.policy).toBeUndefined();
   });
@@ -395,8 +412,17 @@ describe('extractGoalFromPrompt', () => {
     expect(result).toBe('goal without policy');
 
     // Verify that the API was called without policy in the request body
-    const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
-    const bodyString = callArgs[1].body as string;
+    const fetchCalls = jest.mocked(fetchWithCache).mock.calls;
+    expect(fetchCalls.length).toBeGreaterThan(0);
+    const requestInit = fetchCalls[0][1];
+    if (!requestInit) {
+      throw new Error('Expected request init to be defined');
+    }
+    const bodyString = (requestInit as any).body as string | undefined;
+    expect(bodyString).toBeDefined();
+    if (!bodyString) {
+      throw new Error('Expected request body to be defined');
+    }
     const bodyObj = JSON.parse(bodyString);
     expect(bodyObj.policy).toBeUndefined();
   });
