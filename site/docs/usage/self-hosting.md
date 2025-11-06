@@ -361,7 +361,7 @@ docker run -d --name promptfoo_container -p 3000:3000 \
 
 ### Provider Customization
 
-Customize which LLM providers appear in the eval creator and redteam setup UIs. This is useful for:
+Customize which LLM providers appear in the eval creator UI. This is useful for:
 
 - **Cost control** - Limit to cheaper models
 - **Compliance** - Only show approved models
@@ -370,9 +370,7 @@ Customize which LLM providers appear in the eval creator and redteam setup UIs. 
 
 Place a `ui-providers.yaml` file in your `.promptfoo` directory (the same directory where the database is stored).
 
-**Behavior:**
-- **Eval Creator**: Shows only the providers listed in the config file
-- **Redteam Setup**: When config exists, restricts provider types to HTTP, WebSocket, Python, and JavaScript for testing custom implementations
+When this config file exists, the eval creator will show only the providers listed in the file.
 
 **Example configuration:**
 
@@ -474,7 +472,7 @@ spec:
 
 - If no config file exists, all default providers are shown
 - If config exists with providers, ONLY those providers are shown
-- Users can still add custom providers via the "Reference Local Provider" button
+- When custom config exists, the "Reference Local Provider" button and "Configure Environment" (API keys) section are hidden
 - Environment variables (`${VAR_NAME}`) are supported in config values
 - Changes require server restart
 

@@ -29,6 +29,7 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderOptions | null>(null);
   const [isAddLocalDialogOpen, setIsAddLocalDialogOpen] = React.useState(false);
   const [serverProviders, setServerProviders] = React.useState<ProviderOptions[]>([]);
+  const [hasCustomConfig, setHasCustomConfig] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
 
   // Fetch providers from server on mount
@@ -41,10 +42,12 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
         }
         const data = await response.json();
         setServerProviders(data.providers);
+        setHasCustomConfig(data.hasCustomConfig || false);
       } catch (err) {
         console.error('Failed to load providers from server:', err);
         // Fallback to defaults
         setServerProviders(defaultProviders);
+        setHasCustomConfig(false);
       } finally {
         setIsLoading(false);
       }
@@ -60,7 +63,23 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
 
   const allProviders = React.useMemo(() => {
     // Use server providers (which might be custom or defaults)
-    return [...serverProviders, ...customProviders];
+    const combined = [...serverProviders, ...customProviders];
+
+    // Sort by group first, then by label within each group
+    return combined.sort((a, b) => {
+      const groupA = getProviderGroupUtil(a);
+      const groupB = getProviderGroupUtil(b);
+
+      // First sort by group
+      if (groupA !== groupB) {
+        return groupA.localeCompare(groupB);
+      }
+
+      // Then sort by label within the same group
+      const labelA = typeof a === 'string' ? a : a.label || a.id || '';
+      const labelB = typeof b === 'string' ? b : b.label || b.id || '';
+      return labelA.localeCompare(labelB);
+    });
   }, [serverProviders, customProviders]);
 
   const handleProviderClick = (provider: ProviderOptions | string) => {
@@ -198,20 +217,22 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
             />
           )}
         />
-        <Button
-          variant="outlined"
-          onClick={() => setIsAddLocalDialogOpen(true)}
-          startIcon={<FolderOpenIcon />}
-          sx={{
-            height: '56px',
-            whiteSpace: 'nowrap',
-            px: 3,
-            minWidth: 'fit-content',
-            alignSelf: 'flex-start',
-          }}
-        >
-          Reference Local Provider
-        </Button>
+        {!hasCustomConfig && (
+          <Button
+            variant="outlined"
+            onClick={() => setIsAddLocalDialogOpen(true)}
+            startIcon={<FolderOpenIcon />}
+            sx={{
+              height: '56px',
+              whiteSpace: 'nowrap',
+              px: 3,
+              minWidth: 'fit-content',
+              alignSelf: 'flex-start',
+            }}
+          >
+            Reference Local Provider
+          </Button>
+        )}
       </Box>
 
       <AddLocalProviderDialog

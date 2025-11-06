@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(webui): add server-side provider list customization via ui-providers.yaml config file stored in .promptfoo directory for self-hosted deployments. When configured, eval creator shows only approved providers; redteam setup restricts to http, websocket, python, and javascript providers for testing custom implementations.
+- feat(webui): add server-side provider list customization via ui-providers.yaml config file stored in .promptfoo directory for self-hosted deployments. When configured, eval creator shows only approved providers.
 
 ## [0.119.2] - 2025-11-03
 
