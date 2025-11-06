@@ -394,6 +394,12 @@ export default function ProviderTypeSelector({
   const [filterEnabled, setFilterEnabled] = useState<boolean>(false);
   const [isLoadingFilter, setIsLoadingFilter] = useState<boolean>(true);
 
+  // Sync internal state when providerType prop changes
+  useEffect(() => {
+    setSelectedProviderType(providerType);
+    setIsExpanded(!providerType);
+  }, [providerType]);
+
   // Tag filter options
   const tagFilters = [
     { key: 'agents', label: 'Agents' },
