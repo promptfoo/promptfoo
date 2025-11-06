@@ -1,305 +1,160 @@
 ---
-sidebar_label: Code Scan Action
+sidebar_label: GitHub Action
+sidebar_position: 2
 description: Automatically scan pull requests for LLM security vulnerabilities with the promptfoo Code Scan GitHub Action. Find prompt injection, PII exposure, and jailbreak risks in CI/CD.
 ---
 
-# Code Scan GitHub Action
+# GitHub Action
 
 Automatically scan pull requests for LLM security vulnerabilities using the [promptfoo Code Scan Action](https://github.com/promptfoo/code-scan-action).
 
-The action runs on every pull request and posts detailed security findings with severity levels and suggested fixes directly as PR comments.
+After scanning, the action posts findings with severity levels and suggested fixes as PR review comments.
 
-![Code Scan Action results on PR](/img/docs/code-scan-action-comment.png)
+![Code Scan Action results on PR](../assets/code-scanner-example.png)
 
 ## Quick Start
 
-Add this workflow to your repository at `.github/workflows/code-scan.yml`:
+The easiest way to get started is by installing the Promptfoo Scanner GitHub App:
 
-```yaml
-name: 'Code Security Scan'
+1. **Install the GitHub App**: Go to [github.com/apps/promptfoo-scanner](https://github.com/apps/promptfoo-scanner) and install the app
+2. **Select repositories**: Choose which repositories to enable scanning for
+3. **Submit your email or sign in**: You'll be redirected to promptfoo.dev to either submit your email or sign in to your account (an account is not required—just a valid email address)
+4. **Review the setup PR**: A pull request will be automatically opened in each respository you selected in step 2—it adds the Code Scan Action workflow to `.github/workflows/promptfoo-code-scan.yml`
+5. **Merge the PR**: you can tweak the workflow configuration if desired, and merge when ready.
 
-on:
-  pull_request:
-    branches: [main]
+Once merged, the scanner will automatically run on future pull requests, posting review comments for any security issues found.
 
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    permissions:
-      # Required to post comments on PRs
-      pull-requests: write
-      # Required for GitHub OIDC authentication
-      id-token: write
-      # Required to read repository contents
-      contents: read
+:::info
+When using the GitHub App:
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          # Fetch full history for accurate diff
-          fetch-depth: 0
-
-      - name: Run Code Scan
-        uses: promptfoo/code-scan-action@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-```
-
-That's it! The action will now scan all pull requests and post findings as comments.
+- Authentication is handled automatically with GitHub OIDC. No API key, token, or other configuration is needed.
+- No Promptfoo Cloud account is needed—just a valid email address.
+  :::
 
 ## Configuration
 
-### Inputs
+### Action Inputs
 
-| Input                     | Description                                                          | Required | Default                     |
-| ------------------------- | -------------------------------------------------------------------- | -------- | --------------------------- |
-| `github-token`            | GitHub token for posting comments                                    | Yes      | `${{ github.token }}`       |
-| `server-url`              | Scan server URL                                                      | No       | `https://api.promptfoo.dev` |
-| `min-severity`            | Minimum severity to report (`low`, `medium`, `high`, `critical`)     | No       | `high`                      |
-| `minimum-severity`        | Alias for `min-severity`                                             | No       | `high`                      |
-| `fail-on-vulnerabilities` | Fail workflow if vulnerabilities found (`false`, `high`, `critical`) | No       | `false`                     |
-| `config-path`             | Path to config file                                                  | No       | Auto-generated              |
+Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can be used as action inputs:
 
-:::tip
-Both `min-severity` and `minimum-severity` are supported. Use whichever you prefer.
-:::
+| Input              | Description                                                      | Default                     |
+| ------------------ | ---------------------------------------------------------------- | --------------------------- |
+| `server-url`       | Code scan server URL                                             | `https://api.promptfoo.dev` |
+| `min-severity`     | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `high`                      |
+| `minimum-severity` | Alias for `min-severity`                                         | `high`                      |
+| `config-path`      | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |
+| `guidance`         | Custom guidance to tailor the scan (see [CLI docs][1])           | None                        |
+| `guidance-file`    | Path to file containing custom guidance (see [CLI docs][1])      | None                        |
+
+[1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
 
 ### Examples
 
 **Scan with custom severity threshold:**
 
 ```yaml
-- name: Run Code Scan
+- name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v1
   with:
-    github-token: ${{ secrets.GITHUB_TOKEN }}
-    min-severity: medium # Report medium and above
+    min-severity: high # Report high and critical severity issues only (if omitted, all severity levels are reported)
 ```
 
-**Fail workflow on critical issues:**
+**Use custom guidance:**
 
 ```yaml
-- name: Run Code Scan
+- name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v1
   with:
-    github-token: ${{ secrets.GITHUB_TOKEN }}
-    fail-on-vulnerabilities: critical # Fail on critical findings
+    guidance: |
+      Focus on the document ingestion flow.
+      Treat any potential PII exposure as critical severity.
 ```
 
-**Use custom config file:**
+**Load custom guidance from a file:**
 
 ```yaml
-- name: Run Code Scan
+- name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v1
   with:
-    github-token: ${{ secrets.GITHUB_TOKEN }}
+    guidance-file: ./promptfoo-scan-guidance.md
+```
+
+**Use config file:**
+
+```yaml
+- name: Run Promptfoo Code Scan
+  uses: promptfoo/code-scan-action@v1
+  with:
     config-path: .promptfoo-code-scan.yaml
 ```
 
-## Configuration File
+### Configuration File
 
-Create a `.promptfoo-code-scan.yaml` in your repository root:
+Create a `.promptfoo-code-scan.yaml` in your repository root. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
 
 ```yaml
 # Minimum severity level to report
-minimumSeverity: high
+minSeverity: high
 
-# Scan only PR diffs without filesystem exploration (default: false = explore full repo)
+# Scan only PR diffs without filesystem exploration (default: false)
 diffsOnly: false
+
+# Custom guidance to tailor the scan
+guidance: |
+  Focus on authentication and authorization vulnerabilities.
+  Treat any PII exposure as high severity.
 ```
 
-## How It Works
+## Manual Installation
 
-1. **Triggers on PR**: Action runs when a pull request is opened or updated
-2. **Fetches changes**: Compares PR branch against base branch
-3. **Analyzes code**: AI-powered analysis identifies security issues
-4. **Posts findings**: Comments are added to the PR with severity levels and fixes
+You can also install the action manually without the GitHub App. When using manual installation:
 
-### Sample PR Comment
+- Some features may not be available through the manual action installation, so the GitHub App is the recommended way to use the action
+- PR comments appear to come from the generic `github-actions[bot]` instead of the official Promptfoo Scanner bot with the Promptfoo logo
+- A Promptfoo Cloud account is required (rather than just a valid email address when using the GitHub App). You can [sign up or sign in here.](https://www.promptfoo.app/login)
+- You'll need a [Promptfoo API token](https://www.promptfoo.app/api-tokens) for authentication
 
-```markdown
-🔴 Critical: Prompt injection vulnerability
-**File**: src/chat/handler.ts:45
+### Workflow Configuration
 
-User input directly concatenated into LLM prompt without sanitization.
-
-<details>
-<summary>💡 Suggested Fix</summary>
-
-Use parameterized prompts or input validation to prevent injection attacks.
-
-</details>
-```
-
-## Authentication
-
-The action uses **GitHub OIDC** for authentication with the scan server. No API keys needed!
-
-Required permissions:
+Add this workflow to your repository at `.github/workflows/promptfoo-code-scan.yml`:
 
 ```yaml
-permissions:
-  id-token: write # For OIDC authentication
-  pull-requests: write # To post comments
-  contents: read # To read code
-```
-
-## What Gets Scanned
-
-The scanner analyzes:
-
-- ✅ LLM prompts and templates
-- ✅ API calls to LLM providers
-- ✅ User input handling
-- ✅ Output sanitization
-- ✅ Sensitive data exposure
-- ✅ Prompt injection vectors
-- ✅ Jailbreak attempts
-
-## Security Findings
-
-### Severity Levels
-
-- **Critical** 🔴: Immediate security risk, fix ASAP
-- **High** 🟠: Significant issue, prioritize fixing
-- **Medium** 🟡: Moderate risk, should be addressed
-- **Low** 🔵: Minor issue or best practice
-
-### Common Vulnerabilities Detected
-
-1. **Prompt Injection**
-   - Unsanitized user input in prompts
-   - Insufficient input validation
-   - Missing context isolation
-
-2. **Data Exposure**
-   - PII in logs or responses
-   - Sensitive data in prompt history
-   - Inadequate output filtering
-
-3. **Jailbreak Risks**
-   - Missing system message protection
-   - Weak role enforcement
-   - Insufficient output validation
-
-4. **API Security**
-   - Hardcoded API keys
-   - Missing rate limiting
-   - Insecure credential storage
-
-## Advanced Usage
-
-### Multiple Workflows
-
-Run different severity levels for different branches:
-
-```yaml
-name: 'Code Scan - Strict'
+name: Promptfoo Code Scan
 
 on:
   pull_request:
-    branches: [main, production]
+    types: [opened]
 
 jobs:
-  scan:
+  security-scan:
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write
-      id-token: write
       contents: read
+      pull-requests: write
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: promptfoo/code-scan-action@v1
+      - name: Run Promptfoo Code Scan
+        uses: promptfoo/code-scan-action@v1
         with:
+          api-key: ${{ secrets.PROMPTFOO_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          min-severity: medium
-          fail-on-vulnerabilities: high
+          min-severity: medium # or any other severity threshold: low, medium, high, critical
+          # ... other configuration options...
 ```
 
-### Conditional Execution
+## CLI Alternative
 
-Only scan specific file types:
+The GitHub Action calls the `promptfoo code-scans run` command under the hood. You can also use the CLI independently for local scanning or in other CI environments.
 
-```yaml
-on:
-  pull_request:
-    paths:
-      - '**.ts'
-      - '**.js'
-      - '**.py'
-      - '**.java'
-```
+See the [CLI documentation](/docs/code-scanning/cli) for local scanning and additional options.
 
-### Matrix Strategy
+## Cloud and Enterprise
 
-Scan multiple configurations:
+The code scanner runs on Promptfoo Cloud by default. For organizations that need to run scans on their own infrastructure, the Enterprise plan is available.
 
-```yaml
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        severity: [medium, high, critical]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: promptfoo/code-scan-action@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          min-severity: ${{ matrix.severity }}
-```
-
-## Troubleshooting
-
-### No comments posted
-
-1. **Check permissions**: Ensure `pull-requests: write` is set
-2. **Verify OIDC**: Ensure `id-token: write` permission exists
-3. **Check fetch-depth**: Use `fetch-depth: 0` to get full git history
-
-### Action fails with "Not a git repository"
-
-Ensure you're using `actions/checkout@v4`:
-
-```yaml
-- uses: actions/checkout@v4
-  with:
-    fetch-depth: 0
-```
-
-### Comments appear twice
-
-The action and server both try to post comments as fallback. This is expected behavior when server posting fails.
-
-### No files scanned
-
-The scanner excludes:
-
-- Dependencies (`node_modules/`, `.venv/`)
-- Build artifacts (`dist/`, `build/`)
-- Binary files
-- Files > 500KB
-
-Ensure your PR includes actual source code changes.
-
-## Best Practices
-
-1. **Use fetch-depth: 0**: Ensures accurate diffs
-2. **Set min-severity**: Focus on actionable findings
-3. **Use fail-on-vulnerabilities**: Enforce security standards
-4. **Monitor action logs**: Check for authentication or scanning issues
-5. **Regular updates**: Use `@v1` for automatic minor version updates
-
-## Learn More
-
-- [Code Scans CLI Guide](../guides/code-scans.md)
-- [Red Team Testing](/docs/red-team/)
-- [Security Best Practices](/docs/guides/llm-security-best-practices/)
-- [GitHub Action Source](https://github.com/promptfoo/code-scan-action)
+[Contact us](https://www.promptfoo.dev/contact/) to learn more about Enterprise options.
