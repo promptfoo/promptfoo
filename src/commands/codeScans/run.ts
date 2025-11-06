@@ -82,7 +82,7 @@ function countBySeverity(comments: Array<{ severity?: string }>) {
 
 export interface ScanOptions {
   config?: string;
-  serverUrl?: string;
+  apiHost?: string; // Promptfoo API host URL
   apiKey?: string; // Promptfoo API key for authentication
   diffsOnly?: boolean; // Only scan PR diffs, skip filesystem exploration
   base?: string; // Base branch or commit to compare against
@@ -125,13 +125,13 @@ function parseGitHubPr(prString: string): ParsedGitHubPR | null {
 }
 
 async function createSocketConnection(
-  serverUrl: string,
+  apiHost: string,
   auth: SocketAuthCredentials,
 ): Promise<Socket> {
   return new Promise((resolve, reject) => {
-    logger.debug(`Connecting to ${serverUrl}...`);
+    logger.debug(`Connecting to ${apiHost}...`);
 
-    const socket = io(serverUrl, {
+    const socket = io(apiHost, {
       // Use websocket-only transport (polling requires sticky sessions)
       transports: ['websocket'],
       reconnection: true,
@@ -207,7 +207,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
   const startTime = Date.now();
 
-  // Step 1: Load configuration
+  // Load configuration
   const config: Config = loadConfigOrDefault(options.config);
 
   // Allow options to override config file settings
@@ -245,7 +245,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     guidance = config.guidance;
   }
 
-  // Step 2: Resolve repository path
+  // Resolve repository path
   const absoluteRepoPath = path.resolve(repoPath);
 
   // Display startup messages (always shown via logger.info, goes to stderr for CI-friendliness)
@@ -290,24 +290,24 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     const auth: SocketAuthCredentials = {
       apiKey: authResult.apiKey,
       oidcToken: authResult.oidcToken,
-    };
+    };  
+
+    // Determine API host URL
+    const apiHost = options.apiHost || config.apiHost || 'https://api.promptfoo.dev';
 
     logger.debug(
-      `Server URL: ${options.serverUrl || config.serverUrl || 'https://api.promptfoo.dev'}`,
+      `Promptfoo API host URL: ${apiHost}`,
     );
 
-    // Determine server URL
-    const serverUrl = options.serverUrl || config.serverUrl || 'https://api.promptfoo.dev';
-
-    // Step 3: Create Socket.IO connection
+    // Create Socket.IO connection
     if (!showSpinner) {
       logger.debug('Connecting to server...');
     }
 
-    socket = await createSocketConnection(serverUrl, auth);
+    socket = await createSocketConnection(apiHost, auth);
     cleanupRefs.socket = socket; // Update ref for signal handlers
 
-    // Step 4: Optionally start MCP filesystem server + bridge
+    // Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
       logger.debug('Setting up repo MCP access...');
 
@@ -331,7 +331,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       });
     }
 
-    // Step 5: Validate branch and determine base branch
+    // Validate branch and determine base branch
     logger.debug('Processing git diff...');
 
     const simpleGit = (await import('simple-git')).default;
@@ -371,12 +371,12 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       `Files changed: ${files.length} (${includedFiles.length} included, ${skippedFiles.length} skipped)`,
     );
 
-    // Step 6: Extract git metadata
+    // Extract git metadata
     const metadata = await extractMetadata(absoluteRepoPath, baseBranch, compareRef);
     logger.debug(`Compare ref: ${metadata.branch}`);
     logger.debug(`Commits: ${metadata.commitMessages.length}`);
 
-    // Step 7: Build pull request context if --github-pr flag provided
+    // Build pull request context if --github-pr flag provided
     let pullRequest: PullRequestContext | undefined = undefined;
     if (options.githubPr) {
       const parsed = parseGitHubPr(options.githubPr);
@@ -402,7 +402,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       );
     }
 
-    // Step 8: Send scan request via Socket.IO
+    // Send scan request via Socket.IO
     if (showSpinner && spinner) {
       spinner.text = 'Scanning...';
     } else {
@@ -481,10 +481,6 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     if (showSpinner) {
       spinner!.stop();
     }
-
-    // // TODO: Remove this
-    // console.log(JSON.stringify(scanResponse, null, 2));
-    // process.exit(0);
 
     const endTime = Date.now();
     const duration = endTime - startTime;
@@ -619,7 +615,7 @@ export function runCommand(program: Command): void {
     .option('--base <ref>', 'Base branch or commit to compare against')
     .option('--compare <ref>', 'Compare branch or commit')
     .option('-c, --config <path>', 'Path to config file')
-    .option('--server-url <url>', 'Server URL (default: https://api.promptfoo.dev)')
+    .option('--api-host <url>', 'Promptfoo API host URL (default: https://api.promptfoo.dev)')
     .option('--diffs-only', 'Scan only PR diffs, skip filesystem exploration')
     .option('--json', 'Output results as JSON')
     .option('--github-pr <owner/repo#number>', 'GitHub PR to post comments to')

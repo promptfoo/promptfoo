@@ -51,7 +51,7 @@ promptfoo code-scans run [repo-path] [options]
 | `--config <path>`                 | Path to config file                                                                                 | `.promptfoo-code-scan.yaml`                          |
 | `--guidance <text>`               | Custom guidance to tailor the scan                                                                  | None                                                 |
 | `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                 |
-| `--server-url <url>`              | Scan server URL                                                                                     | `https://api.promptfoo.dev`                          |
+| `--api-host <url>`                | Promptfoo API host URL                                                                               | `https://api.promptfoo.dev`                          |
 | `--diffs-only`                    | Scan only PR diffs, don't explore full repo                                                         | false                                                |
 | `--json`                          | Output results as JSON                                                                              | false                                                |
 | `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                 |
@@ -111,8 +111,8 @@ guidance: |
 # Optional: API key (alternative to promptfoo auth login)
 # apiKey: your-api-key-here
 
-# Optional: Custom server URL
-# serverUrl: https://api.promptfoo.dev
+# Optional: Promptfoo API host URL
+# apiHost: https://api.promptfoo.dev
 ```
 
 ## Custom Guidance
@@ -172,11 +172,3 @@ promptfoo code-scans run
 ```bash
 promptfoo code-scans run --api-key your-api-key
 ```
-
-## Cloud and Enterprise
-
-Scans run on Promptfoo Cloud by default. For organizations that need to run scans on their own infrastructure, please [contact us](https://www.promptfoo.dev/contact/) to learn more about Enterprise options.
-
-## Learn More
-
-- [GitHub Action Integration](/docs/code-scanning/github-action)

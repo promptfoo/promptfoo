@@ -39,7 +39,7 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 
 | Input              | Description                                                      | Default                     |
 | ------------------ | ---------------------------------------------------------------- | --------------------------- |
-| `server-url`       | Code scan server URL                                             | `https://api.promptfoo.dev` |
+| `api-host`         | Promptfoo API host URL                                           | `https://api.promptfoo.dev` |
 | `min-severity`     | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `high`                      |
 | `minimum-severity` | Alias for `min-severity`                                         | `high`                      |
 | `config-path`      | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |
@@ -146,15 +146,3 @@ jobs:
           min-severity: medium # or any other severity threshold: low, medium, high, critical
           # ... other configuration options...
 ```
-
-## CLI Alternative
-
-The GitHub Action calls the `promptfoo code-scans run` command under the hood. You can also use the CLI independently for local scanning or in other CI environments.
-
-See the [CLI documentation](/docs/code-scanning/cli) for local scanning and additional options.
-
-## Cloud and Enterprise
-
-The code scanner runs on Promptfoo Cloud by default. For organizations that need to run scans on their own infrastructure, the Enterprise plan is available.
-
-[Contact us](https://www.promptfoo.dev/contact/) to learn more about Enterprise options.

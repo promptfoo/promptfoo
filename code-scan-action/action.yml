@@ -7,10 +7,10 @@ branding:
   color: 'blue'
 
 inputs:
-  server-url:
-    description: 'Code scan server URL'
+  api-host:
+    description: 'Promptfoo API host url'
     required: false
-    default: https://freddy-uninvestable-jenae.ngrok-free.dev
+    default: https://api.promptfoo.dev
   min-severity:
     description: 'Minimum severity level to report (low|medium|high|critical)'
     required: false

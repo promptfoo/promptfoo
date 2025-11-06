@@ -41,6 +41,6 @@ jobs:
       - name: Run Promptfoo Code Scan
         uses: ./ # Action is in root directory
         with:
-          server-url: 'http://host.docker.internal:2095'
+          api-host: 'http://host.docker.internal:2095'
           minimum-severity: 'medium'
           github-token: ${{ secrets.GITHUB_TOKEN }}

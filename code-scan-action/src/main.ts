@@ -43,7 +43,7 @@ function formatSeverity(severity?: string): string {
 async function run(): Promise<void> {
   try {
     // Get action inputs
-    const serverUrl = core.getInput('server-url');
+    const apiHost = core.getInput('api-host');
     const minimumSeverity = core.getInput('min-severity') || core.getInput('minimum-severity');
     const configPath = core.getInput('config-path');
     const guidanceText = core.getInput('guidance');
@@ -117,8 +117,8 @@ async function run(): Promise<void> {
       'code-scans',
       'run',
       repoPath,
-      '--server-url',
-      serverUrl,
+      '--api-host',
+      apiHost,
       '--config',
       finalConfigPath!,
       '--compare',

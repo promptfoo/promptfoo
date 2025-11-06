@@ -25,7 +25,7 @@ export const ConfigSchema = z
       .string()
       .optional()
       .describe('Promptfoo API key for authentication (alternative to promptfoo auth login)'),
-    serverUrl: z
+    apiHost: z
       .string()
       .optional()
       .describe('Scan server URL (default: https://api.promptfoo.dev)'),

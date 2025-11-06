@@ -35,7 +35,7 @@ jobs:
 | ------------------ | --------------------------------------------------------------- | --------------------------- |
 | `min-severity`     | Minimum severity to report: `low`, `medium`, `high`, `critical` | `high`                      |
 | `minimum-severity` | Alias for `min-severity`                                        | `high`                      |
-| `server-url`       | Code scan server URL                                            | `https://api.promptfoo.dev` |
+| `api-host`         | Promptfoo API host URL                                           | `https://api.promptfoo.dev` |
 
 **Note:** Both `min-severity` and `minimum-severity` are supported. Use whichever you prefer.
 

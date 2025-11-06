@@ -23,9 +23,7 @@ sidebar_position: 1
 
 # Code Scanning
 
-Promptfoo Code Scanning uses AI agents to find LLM-related vulnerabilities in your codebase and helps you fix them before you merge.
-
-By focusing specifically on LLM-related vulnerabilities, it catches issues that more general security scanners can miss.
+Promptfoo Code Scanning uses AI agents to find LLM-related vulnerabilities in your codebase and helps you fix them before you merge. By focusing specifically on LLM-related vulnerabilities, it finds issues that more general security scanners might miss.
 
 ## How It Works
 
@@ -37,7 +35,7 @@ This agentic approach catches subtle security issues that span multiple files, w
 
 ### GitHub Action (Recommended)
 
-Automatically scan pull requests with findings posted as review comments.
+Automatically scan pull requests with findings posted as review comments. This is the recommended way to use the scanner if your code is on GitHub.
 
 [Set up GitHub Action →](./github-action.md)
 
@@ -77,7 +75,6 @@ guidance: |
   Use Zod schemas for validation when suggesting fixes.
 ```
 
-## Next Steps
+## Cloud and Enterprise
 
-- [Set up the GitHub Action](./github-action.md) for automated PR scanning and review (recommended for most users)
-- [Use the CLI](./cli.md) for local scanning or custom CI integration (recommended for more advanced use cases)
+Scans run on Promptfoo Cloud by default. For organizations that need to run scans on their own infrastructure, code scanning is available in [Promptfoo Enterprise On-Prem.](../enterprise)
