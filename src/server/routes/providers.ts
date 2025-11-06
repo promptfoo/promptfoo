@@ -23,19 +23,6 @@ import type { ProviderOptions, ProviderTestResponse } from '../../types/provider
 
 export const providersRouter = Router();
 
-// Response schemas
-const GetProvidersResponseSchema = z.object({
-  providers: z.array(z.union([z.string(), ProviderOptionsSchema])),
-  hasCustomConfig: z.boolean(),
-});
-
-const GetConfigStatusResponseSchema = z.object({
-  hasCustomConfig: z.boolean(),
-});
-
-type GetProvidersResponse = z.infer<typeof GetProvidersResponseSchema>;
-type GetConfigStatusResponse = z.infer<typeof GetConfigStatusResponseSchema>;
-
 /**
  * GET /api/providers
  *
@@ -47,14 +34,22 @@ type GetConfigStatusResponse = z.infer<typeof GetConfigStatusResponseSchema>;
  * - providers: Array of provider options (can be string IDs or full config objects)
  * - hasCustomConfig: Boolean indicating if custom config exists
  */
-providersRouter.get('/', (_req: Request, res: Response<GetProvidersResponse>): void => {
-  const serverProviders = getAvailableProviders();
+providersRouter.get('/', (_req: Request, res: Response): void => {
+  try {
+    const serverProviders = getAvailableProviders();
 
-  // If server has custom providers, use those; otherwise use defaults
-  const providers = serverProviders.length > 0 ? serverProviders : defaultProviders;
-  const hasCustomConfig = serverProviders.length > 0;
+    // If server has custom providers, use those; otherwise use defaults
+    const providers = serverProviders.length > 0 ? serverProviders : defaultProviders;
+    const hasCustomConfig = serverProviders.length > 0;
 
-  res.json({ providers, hasCustomConfig });
+    res.json({ providers, hasCustomConfig });
+  } catch (error) {
+    logger.error('[GET /api/providers] Error loading providers', { error });
+    res.status(500).json({
+      providers: defaultProviders,
+      hasCustomConfig: false,
+    });
+  }
 });
 
 /**
@@ -69,15 +64,17 @@ providersRouter.get('/', (_req: Request, res: Response<GetProvidersResponse>): v
  * Response:
  * - hasCustomConfig: Boolean indicating if ui-providers.yaml exists with providers
  */
-providersRouter.get(
-  '/config-status',
-  (_req: Request, res: Response<GetConfigStatusResponse>): void => {
+providersRouter.get('/config-status', (_req: Request, res: Response): void => {
+  try {
     const serverProviders = getAvailableProviders();
     const hasCustomConfig = serverProviders.length > 0;
 
     res.json({ hasCustomConfig });
-  },
-);
+  } catch (error) {
+    logger.error('[GET /api/providers/config-status] Error loading config status', { error });
+    res.status(500).json({ hasCustomConfig: false });
+  }
+});
 
 // Validation schemas
 const TestRequestTransformSchema = z.object({

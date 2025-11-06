@@ -76,7 +76,7 @@ export const defaultProviders: ProviderOptions[] = (
     },
     {
       id: 'openai:o3',
-      label: 'OpenAI: GPT-o3 (with thinking)',
+      label: 'OpenAI: o3 (with thinking)',
       config: {
         organization: '',
         isReasoningModel: true,
@@ -86,7 +86,7 @@ export const defaultProviders: ProviderOptions[] = (
     },
     {
       id: 'openai:o4-mini',
-      label: 'OpenAI: GPT-o4 Mini (with thinking)',
+      label: 'OpenAI: o4-mini (with thinking)',
       config: {
         organization: '',
         isReasoningModel: true,
@@ -96,7 +96,7 @@ export const defaultProviders: ProviderOptions[] = (
     },
     {
       id: 'openai:o3-mini',
-      label: 'OpenAI: GPT-o3 Mini (with thinking)',
+      label: 'OpenAI: o3-mini (with thinking)',
       config: {
         organization: '',
         isReasoningModel: true,
@@ -299,17 +299,6 @@ export const defaultProviders: ProviderOptions[] = (
         region: 'us-east-1',
       },
     },
-    {
-      id: 'bedrock-agent:YOUR_AGENT_ID',
-      label: 'Bedrock: Agent',
-      config: {
-        agentId: 'YOUR_AGENT_ID',
-        agentAliasId: 'YOUR_ALIAS_ID',
-        region: 'us-east-1',
-        enableTrace: false,
-        temperature: 0.5,
-      },
-    },
   ])
   .concat([
     {
@@ -476,7 +465,7 @@ export const defaultProviders: ProviderOptions[] = (
     },
     {
       id: 'vertex:claude-4-5-haiku@20251001',
-      label: 'Vertex: Claude 3.5 Haiku',
+      label: 'Vertex: Claude 4.5 Haiku',
       config: {
         region: 'us-east5',
         anthropic_version: 'vertex-2023-10-16',

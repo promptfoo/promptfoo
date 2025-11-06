@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
+import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -39,6 +40,7 @@ function ErrorFallback({
 }
 
 const EvaluateTestSuiteCreator = () => {
+  const { showToast } = useToast();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [hasCustomConfig, setHasCustomConfig] = useState(false);
 
@@ -65,20 +67,32 @@ const EvaluateTestSuiteCreator = () => {
 
   // Fetch config status to determine if ConfigureEnvButton should be shown
   useEffect(() => {
+    let isMounted = true;
+
     const fetchConfigStatus = async () => {
       try {
         const response = await callApi('/providers/config-status');
         if (response.ok) {
           const data = await response.json();
-          setHasCustomConfig(data.hasCustomConfig || false);
+          if (isMounted) {
+            setHasCustomConfig(data.hasCustomConfig || false);
+          }
         }
       } catch (err) {
         console.error('Failed to fetch provider config status:', err);
-        setHasCustomConfig(false);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+        showToast(`Failed to load configuration status: ${errorMessage}`, 'error');
+        if (isMounted) {
+          setHasCustomConfig(false);
+        }
       }
     };
 
     fetchConfigStatus();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const extractVarsFromPrompts = (prompts: string[]): string[] => {

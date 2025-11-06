@@ -397,7 +397,7 @@ providers:
     config:
       method: POST
       headers:
-        Authorization: 'Bearer ${GATEWAY_TOKEN}'
+        Authorization: Bearer YOUR_TOKEN_HERE
         Content-Type: application/json
 
   # Cloud providers with regions
@@ -448,21 +448,27 @@ data:
 ---
 apiVersion: apps/v1
 kind: Deployment
+metadata:
+  name: promptfoo
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: promptfoo
   template:
+    metadata:
+      labels:
+        app: promptfoo
     spec:
       containers:
         - name: promptfoo
+          image: promptfoo/promptfoo:latest
           volumeMounts:
-            - name: data
-              mountPath: /home/promptfoo/.promptfoo
             - name: config
-              mountPath: /home/promptfoo/.promptfoo/ui-providers.yaml
+              mountPath: /root/.promptfoo/ui-providers.yaml
               subPath: ui-providers.yaml
+              readOnly: true
       volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: promptfoo-data
         - name: config
           configMap:
             name: promptfoo-ui-providers
@@ -473,7 +479,6 @@ spec:
 - If no config file exists, all default providers are shown
 - If config exists with providers, ONLY those providers are shown
 - When custom config exists, the "Reference Local Provider" button and "Configure Environment" (API keys) section are hidden
-- Environment variables (`${VAR_NAME}`) are supported in config values
 - Changes require server restart
 
 ## Specifications

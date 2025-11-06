@@ -14,6 +14,7 @@ import {
   getProviderGroup as getProviderGroupUtil,
 } from '../../../../../constants/defaultProviders';
 import { callApi } from '../../../utils/api';
+import { useToast } from '../../../hooks/useToast';
 import { useProvidersStore } from '../../../store/providersStore';
 import AddLocalProviderDialog from './AddLocalProviderDialog';
 import ProviderConfigDialog from './ProviderConfigDialog';
@@ -25,6 +26,7 @@ interface ProviderSelectorProps {
 }
 
 const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
+  const { showToast } = useToast();
   const { customProviders, addCustomProvider } = useProvidersStore();
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderOptions | null>(null);
   const [isAddLocalDialogOpen, setIsAddLocalDialogOpen] = React.useState(false);
@@ -34,6 +36,8 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
 
   // Fetch providers from server on mount
   React.useEffect(() => {
+    let isMounted = true;
+
     const fetchProviders = async () => {
       try {
         const response = await callApi('/providers');
@@ -41,19 +45,32 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
           throw new Error('Failed to load providers from server');
         }
         const data = await response.json();
-        setServerProviders(data.providers);
-        setHasCustomConfig(data.hasCustomConfig || false);
+
+        if (isMounted) {
+          setServerProviders(data.providers);
+          setHasCustomConfig(data.hasCustomConfig || false);
+        }
       } catch (err) {
         console.error('Failed to load providers from server:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+        showToast(`Failed to load provider configuration: ${errorMessage}`, 'error');
         // Fallback to defaults
-        setServerProviders(defaultProviders);
-        setHasCustomConfig(false);
+        if (isMounted) {
+          setServerProviders(defaultProviders);
+          setHasCustomConfig(false);
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchProviders();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleAddLocalProvider = (provider: ProviderOptions) => {
