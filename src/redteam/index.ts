@@ -4,6 +4,7 @@ import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -929,7 +930,12 @@ export async function synthesize({
           const promptVar = testCase.vars?.[injectVar];
           const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
+          // For policy plugin, pass the policy text to improve intent extraction
+          const policy =
+            testCase.metadata && 'policy' in testCase.metadata
+              ? (testCase.metadata.policy as string)
+              : undefined;
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
           (testCase.metadata as any).goal = extractedGoal;
         }
@@ -993,7 +999,12 @@ export async function synthesize({
           const promptVar = testCase.vars?.[injectVar];
           const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
+          // For policy plugin, pass the policy text to improve intent extraction
+          const policy =
+            testCase.metadata && 'policy' in testCase.metadata
+              ? (testCase.metadata.policy as string)
+              : undefined;
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
           (testCase.metadata as any).goal = extractedGoal;
         }
