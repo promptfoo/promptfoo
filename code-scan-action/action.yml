@@ -19,10 +19,6 @@ inputs:
     description: 'Alias for min-severity (low|medium|high|critical)'
     required: false
     default: 'high'
-  fail-on-vulnerabilities:
-    description: 'Fail the workflow if vulnerabilities are found (false|high|critical)'
-    required: false
-    default: 'false'
   config-path:
     description: 'Path to YAML configuration file'
     required: false

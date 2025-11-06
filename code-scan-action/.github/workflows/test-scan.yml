@@ -43,5 +43,4 @@ jobs:
         with:
           server-url: 'http://host.docker.internal:2095'
           minimum-severity: 'medium'
-          fail-on-vulnerabilities: 'false'
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -45,7 +45,6 @@ async function run(): Promise<void> {
     // Get action inputs
     const serverUrl = core.getInput('server-url');
     const minimumSeverity = core.getInput('min-severity') || core.getInput('minimum-severity');
-    const failOn = core.getInput('fail-on-vulnerabilities');
     const configPath = core.getInput('config-path');
     const guidanceText = core.getInput('guidance');
     const guidanceFile = core.getInput('guidance-file');
@@ -140,14 +139,6 @@ async function run(): Promise<void> {
       // Mock scan response with sample findings
       scanResponse = {
         success: true,
-        phases: {
-          inventory: 'completed',
-          tracing: 'completed',
-          analysis: 'completed',
-          filtering: 'completed',
-          fixes: 'completed',
-          comments: 'completed',
-        },
         comments: [
           {
             file: 'src/example.ts',
@@ -331,17 +322,6 @@ async function run(): Promise<void> {
           : comment.finding.substring(0, 100);
         core.info(`     ${preview}${comment.finding.length > 100 ? '...' : ''}`);
       });
-    }
-
-    // Handle failure mode
-    if (failOn !== 'false' && comments.length > 0) {
-      // For now, fail if failOn is 'high' or 'critical' and we have any comments
-      // TODO: Parse severity from comment body for more granular control
-      const shouldFail = (failOn === 'high' || failOn === 'critical') && comments.length > 0;
-
-      if (shouldFail) {
-        core.setFailed(`Found vulnerabilities at or above ${failOn} severity`);
-      }
     }
 
     // Cleanup temp config if we generated one
