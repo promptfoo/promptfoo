@@ -1954,6 +1954,10 @@ describe('Language configuration', () => {
           expectedPolicy: 'Valid policy',
         },
         {
+          metadata: { policy: { id: 'abc123', text: 'Policy from object' } },
+          expectedPolicy: 'Policy from object',
+        },
+        {
           metadata: { policy: '' },
           expectedPolicy: '', // Empty string is extracted but filtered later by util.ts
         },
