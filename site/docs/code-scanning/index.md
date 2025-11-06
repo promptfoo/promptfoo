@@ -15,7 +15,7 @@ keywords:
     PR review,
     security automation,
     GitHub Action security,
-    vulnerability scanner
+    vulnerability scanner,
   ]
 sidebar_label: Overview
 sidebar_position: 1

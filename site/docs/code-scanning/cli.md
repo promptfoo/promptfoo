@@ -51,7 +51,7 @@ promptfoo code-scans run [repo-path] [options]
 | `--config <path>`                 | Path to config file                                                                                 | `.promptfoo-code-scan.yaml`                          |
 | `--guidance <text>`               | Custom guidance to tailor the scan                                                                  | None                                                 |
 | `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                 |
-| `--api-host <url>`                | Promptfoo API host URL                                                                               | `https://api.promptfoo.dev`                          |
+| `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.dev`                          |
 | `--diffs-only`                    | Scan only PR diffs, don't explore full repo                                                         | false                                                |
 | `--json`                          | Output results as JSON                                                                              | false                                                |
 | `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                 |

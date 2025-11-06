@@ -290,14 +290,12 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     const auth: SocketAuthCredentials = {
       apiKey: authResult.apiKey,
       oidcToken: authResult.oidcToken,
-    };  
+    };
 
     // Determine API host URL
     const apiHost = options.apiHost || config.apiHost || 'https://api.promptfoo.dev';
 
-    logger.debug(
-      `Promptfoo API host URL: ${apiHost}`,
-    );
+    logger.debug(`Promptfoo API host URL: ${apiHost}`);
 
     // Create Socket.IO connection
     if (!showSpinner) {
