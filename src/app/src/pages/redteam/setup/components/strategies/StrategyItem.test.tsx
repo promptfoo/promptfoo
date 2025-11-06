@@ -129,7 +129,7 @@ describe('StrategyItem', () => {
     it('renders multiple badges when a strategy belongs to multiple categories', () => {
       const multiCategoryStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'jailbreak',
+        id: 'jailbreak:meta',
       };
 
       render(
@@ -302,7 +302,7 @@ describe('StrategyItem', () => {
     it('renders without overlap when multiple pills and settings button are present', () => {
       const multiBadgeStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'jailbreak',
+        id: 'jailbreak:meta',
       };
 
       render(

@@ -9,7 +9,7 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
-export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
+export const DEFAULT_STRATEGIES = ['basic', 'jailbreak:meta', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
 export const MULTI_TURN_STRATEGIES = [
@@ -69,8 +69,8 @@ export const ADDITIONAL_STRATEGIES = [
   'hex',
   'homoglyph',
   'image',
+  'jailbreak',
   'jailbreak:likert',
-  'jailbreak:meta',
   'jailbreak:tree',
   'layer',
   'leetspeak',
@@ -153,13 +153,7 @@ export function isEncodingStrategy(strategyId: string | undefined): boolean {
 /**
  * Strategies that should not have language configuration applied to them.
  */
-export const LANGUAGE_DISALLOWED_STRATEGIES = new Set([
-  'audio',
-  'video',
-  'image',
-  'layer',
-  'math-prompt',
-]);
+export const LANGUAGE_DISALLOWED_STRATEGIES = new Set(['audio', 'video', 'image', 'math-prompt']);
 
 /**
  * Determines if a strategy should not use language configuration

@@ -290,7 +290,7 @@ export const RedteamConfigSchema = z
         // Lazy require to avoid mock interference in tests during module initialization
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const logger = require('../logger').default;
-        logger.warn(
+        logger.debug(
           '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
         );
 
