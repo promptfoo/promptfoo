@@ -156,6 +156,7 @@ describe('StrategyStats', () => {
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
+          plugins={[]}
         />,
       );
 
@@ -193,6 +194,7 @@ describe('StrategyStats', () => {
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
+          plugins={[]}
         />,
       );
 
@@ -213,6 +215,7 @@ describe('StrategyStats', () => {
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
+          plugins={[]}
         />,
       );
 
@@ -270,6 +273,7 @@ describe('StrategyStats', () => {
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
+          plugins={[]}
         />,
       );
 
@@ -290,6 +294,7 @@ describe('StrategyStats', () => {
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
+          plugins={[]}
         />,
       );
 
@@ -314,6 +319,7 @@ describe('StrategyStats', () => {
         strategyStats={strategyStatsWithZeroTotal}
         failuresByPlugin={failuresByPlugin}
         passesByPlugin={passesByPlugin}
+        plugins={[]}
       />,
     );
 
@@ -340,6 +346,7 @@ describe('StrategyStats', () => {
         strategyStats={strategyStats}
         failuresByPlugin={failuresByPluginWithUnexpectedJson}
         passesByPlugin={passesByPlugin}
+        plugins={[]}
       />,
     );
 
@@ -380,6 +387,7 @@ describe('StrategyStats', () => {
         strategyStats={strategyStats}
         failuresByPlugin={failuresByPluginWithArrayOutput}
         passesByPlugin={passesByPlugin}
+        plugins={[]}
       />,
     );
 
@@ -413,6 +421,7 @@ describe('StrategyStats', () => {
         strategyStats={{}}
         failuresByPlugin={failuresByPlugin}
         passesByPlugin={passesByPlugin}
+        plugins={[]}
       />,
     );
 
@@ -431,6 +440,7 @@ describe('StrategyStats', () => {
         strategyStats={strategyStatsWithNoExamples}
         failuresByPlugin={{}}
         passesByPlugin={{}}
+        plugins={[]}
       />,
     );
 
@@ -506,6 +516,7 @@ describe('StrategyStats', () => {
         strategyStats={strategyStatsWithSpecialChars}
         failuresByPlugin={failuresByPluginWithSpecialChars}
         passesByPlugin={passesByPluginWithSpecialChars}
+        plugins={[]}
       />,
     );
 
@@ -520,6 +531,7 @@ describe('StrategyStats', () => {
         strategyStats={strategyStats}
         failuresByPlugin={failuresByPlugin}
         passesByPlugin={passesByPlugin}
+        plugins={[]}
       />,
     );
 
@@ -564,6 +576,7 @@ describe('StrategyStats', () => {
           strategyStats={strategyStats}
           failuresByPlugin={testFailuresByPlugin}
           passesByPlugin={passesByPlugin}
+          plugins={[]}
         />,
       );
 
