@@ -1,43 +1,27 @@
 # Promptfoo Code Scan GitHub Action
 
-Scan pull requests for LLM security vulnerabilities using AI-powered analysis.
+Automatically scan pull requests for LLM security vulnerabilities using AI-powered analysis.
 
-## Usage
+## About Code Scanning
 
-```yaml
-name: Promptfoo Code Scan
+Promptfoo Code Scanning uses AI agents to find LLM-related vulnerabilities in your codebase and helps you fix them before you merge. By focusing specifically on LLM-related vulnerabilities, it finds issues that more general security scanners might miss.
 
-on:
-  pull_request:
-    types: [opened]
+The scanner examines code changes for common LLM security risks including prompt injection, PII exposure, and excessive agency. Rather than just analyzing the surface-level diff, it traces data flows deep into your codebase to understand how user inputs reach LLM prompts, how outputs are used, and what capabilities your LLM has access to.
 
-permissions:
-  id-token: write
-  contents: read
-  pull-requests: write
+After scanning, the action posts findings with severity levels and suggested fixes as PR review comments.
 
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+## Quick Start
 
-      - uses: promptfoo/code-scan-action@v0
-        with:
-          min-severity: medium
-```
+**Recommended:** Install the [Promptfoo Scanner GitHub App](https://github.com/apps/promptfoo-scanner) for the easiest setup:
 
-## Inputs
+1. Go to [github.com/apps/promptfoo-scanner](https://github.com/apps/promptfoo-scanner) and install the app
+2. Select which repositories to enable scanning for
+3. Submit your email or sign in (no account required—just a valid email address)
+4. Review and merge the setup PR that's automatically opened in your repository
 
-| Input              | Description                                                     | Default                     |
-| ------------------ | --------------------------------------------------------------- | --------------------------- |
-| `min-severity`     | Minimum severity to report: `low`, `medium`, `high`, `critical` | `high`                      |
-| `minimum-severity` | Alias for `min-severity`                                        | `high`                      |
-| `api-host`         | Promptfoo API host URL                                           | `https://api.promptfoo.dev` |
+Once merged, the scanner will automatically run on future pull requests. Authentication is handled automatically with GitHub OIDC—no API key needed.
 
-**Note:** Both `min-severity` and `minimum-severity` are supported. Use whichever you prefer.
+**[Read the full documentation →](https://promptfoo.dev/docs/code-scanning/github-action)** for configuration options, manual installation, and more.
 
 ## License
 

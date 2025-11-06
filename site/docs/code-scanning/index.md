@@ -33,26 +33,22 @@ This agentic approach catches subtle security issues that span multiple files, w
 
 ## Getting Started
 
-### GitHub Action (Recommended)
+### GitHub Action
 
-Automatically scan pull requests with findings posted as review comments. This is the recommended way to use the scanner if your code is on GitHub.
-
-[Set up GitHub Action →](./github-action.md)
+Automatically scan pull requests with findings posted as review comments. This is the recommended way to use the scanner if your code is on GitHub. [Set up the GitHub Action →](./github-action.md)
 
 ### CLI Command
 
-Run scans locally or in any CI environment.
-
-[Use CLI →](./cli.md)
+Run scans locally or in any CI environment. [Use the CLI →](./cli.md)
 
 ## Severity Levels
 
 Findings are classified by severity to help you prioritize:
 
 - **Critical** 🔴: Immediate security risk
-- **High** 🟠: Significant issue that should be fixed soon
-- **Medium** 🟡: Moderate risk to address
-- **Low** 🔵: Minor issue or best practice
+- **High** 🟠: Significant issue
+- **Medium** 🟡: Moderate risk
+- **Low** 🔵: Minor issue
 
 Configure minimum severity thresholds in your scan settings.
 
