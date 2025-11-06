@@ -33,6 +33,10 @@ export const FileRecordSchema = z.object({
 export const GitMetadataSchema = z.object({
   branch: z.string(),
   baseBranch: z.string(),
+  baseRef: z.string(), // Original git ref (e.g., "main", "v1.0")
+  baseSha: z.string(), // Resolved SHA (e.g., "a1b2c3d...")
+  compareRef: z.string(), // Original git ref (e.g., "feature-branch")
+  compareSha: z.string(), // Resolved SHA
   commitMessages: z.array(z.string()),
   author: z.string(),
   timestamp: z.string(),

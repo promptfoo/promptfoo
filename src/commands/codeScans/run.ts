@@ -310,7 +310,6 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     // Step 4: Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
       logger.debug('Setting up repo MCP access...');
-      
 
       // Generate unique session ID
       sessionId = crypto.randomUUID();
@@ -330,11 +329,10 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
         session_id: sessionId,
         repo_root: absoluteRepoPath,
       });
-
     }
 
     // Step 5: Validate branch and determine base branch
-      logger.debug('Processing git diff...');
+    logger.debug('Processing git diff...');
 
     const simpleGit = (await import('simple-git')).default;
     const git = simpleGit(absoluteRepoPath);
@@ -372,7 +370,6 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     logger.debug(
       `Files changed: ${files.length} (${includedFiles.length} included, ${skippedFiles.length} skipped)`,
     );
-
 
     // Step 6: Extract git metadata
     const metadata = await extractMetadata(absoluteRepoPath, baseBranch, compareRef);

@@ -30,6 +30,14 @@ export async function extractMetadata(
   const git = simpleGit(repoPath);
 
   try {
+    // Store original refs
+    const baseRef = baseBranch;
+    const compareRefValue = compareRef;
+
+    // Resolve to exact SHAs
+    const baseSha = (await git.revparse([baseBranch])).trim();
+    const compareSha = (await git.revparse([compareRef])).trim();
+
     // Get commits between base and compare ref
     const log: LogResult = await git.log({
       from: baseBranch,
@@ -50,6 +58,10 @@ export async function extractMetadata(
     return {
       branch: compareRef,
       baseBranch,
+      baseRef,
+      baseSha,
+      compareRef: compareRefValue,
+      compareSha,
       commitMessages,
       author,
       timestamp,
