@@ -116,7 +116,7 @@
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@jest/globals": "^30.2.0",
     "@libsql/client": "^0.15.15",
-    "@swc/core": "^1.13.20",
+    "@swc/core": "^1.15.0",
     "@swc/jest": "^0.2.39",
     "@types/async": "^3.2.25",
     "@types/better-sqlite3": "^7.6.13",
