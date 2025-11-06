@@ -14,6 +14,11 @@ jest.mock('../src/logger', () => ({
   setLogLevel: jest.fn(),
 }));
 
+// Mock code scan commands to avoid ESM import issues with execa
+jest.mock('../src/commands/codeScans', () => ({
+  codeScanCommand: jest.fn(),
+}));
+
 describe('addCommonOptionsRecursively', () => {
   const originalExit = process.exit;
   let program: Command;
