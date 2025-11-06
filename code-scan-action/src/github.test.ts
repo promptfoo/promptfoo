@@ -110,6 +110,9 @@ describe('GitHub API Client', () => {
           {
             path: 'src/auth.ts',
             line: 42,
+            start_line: undefined,
+            side: 'RIGHT',
+            start_side: undefined,
             body: 'SQL injection vulnerability',
           },
         ],
@@ -146,6 +149,9 @@ describe('GitHub API Client', () => {
             {
               path: 'src/auth.ts',
               line: 42,
+              start_line: undefined,
+              side: 'RIGHT',
+              start_side: undefined,
               body: 'Valid comment',
             },
           ],

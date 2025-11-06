@@ -17,6 +17,7 @@ describe('Git Metadata', () => {
     // Create a mock SimpleGit instance
     mockGit = {
       log: jest.fn(),
+      revparse: jest.fn(),
     } as unknown as jest.Mocked<SimpleGit>;
 
     // Mock the default import
@@ -54,12 +55,19 @@ describe('Git Metadata', () => {
       };
 
       mockGit.log.mockResolvedValue(mockLog as any);
+      mockGit.revparse.mockImplementation(async (args: string[]) => {
+        return args[0] === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
+      });
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
 
       expect(metadata).toEqual({
         branch: 'feature/test',
         baseBranch: 'main',
+        baseRef: 'main',
+        baseSha: 'base-sha-123456',
+        compareRef: 'feature/test',
+        compareSha: 'compare-sha-789012',
         commitMessages: ['abc1234: Add LLM integration', 'def5678: Fix prompt handling'],
         author: 'Test User',
         timestamp: '2025-01-15T10:30:00Z',
@@ -93,6 +101,9 @@ describe('Git Metadata', () => {
       };
 
       mockGit.log.mockResolvedValue(mockLog as any);
+      mockGit.revparse.mockImplementation(async (args: string[]) => {
+        return args[0] === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
+      });
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
 
@@ -108,6 +119,9 @@ describe('Git Metadata', () => {
       };
 
       mockGit.log.mockResolvedValue(mockLog as any);
+      mockGit.revparse.mockImplementation(async (args: string[]) => {
+        return args[0] === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
+      });
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
 
@@ -149,6 +163,9 @@ describe('Git Metadata', () => {
       };
 
       mockGit.log.mockResolvedValue(mockLog as any);
+      mockGit.revparse.mockImplementation(async (args: string[]) => {
+        return args[0] === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
+      });
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
 
@@ -186,6 +203,9 @@ describe('Git Metadata', () => {
       };
 
       mockGit.log.mockResolvedValue(mockLog as any);
+      mockGit.revparse.mockImplementation(async (args: string[]) => {
+        return args[0] === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
+      });
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
 
