@@ -55,8 +55,8 @@ describe('Git Metadata', () => {
       };
 
       mockGit.log.mockResolvedValue(mockLog as any);
-      mockGit.revparse.mockImplementation(async (args: string[]) => {
-        return args[0] === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
+      (mockGit.revparse.mockImplementation as any)(async (option: string) => {
+        return option === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
       });
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
@@ -101,8 +101,8 @@ describe('Git Metadata', () => {
       };
 
       mockGit.log.mockResolvedValue(mockLog as any);
-      mockGit.revparse.mockImplementation(async (args: string[]) => {
-        return args[0] === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
+      (mockGit.revparse.mockImplementation as any)(async (option: string) => {
+        return option === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
       });
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
@@ -119,8 +119,8 @@ describe('Git Metadata', () => {
       };
 
       mockGit.log.mockResolvedValue(mockLog as any);
-      mockGit.revparse.mockImplementation(async (args: string[]) => {
-        return args[0] === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
+      (mockGit.revparse.mockImplementation as any)(async (option: string) => {
+        return option === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
       });
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
@@ -163,8 +163,8 @@ describe('Git Metadata', () => {
       };
 
       mockGit.log.mockResolvedValue(mockLog as any);
-      mockGit.revparse.mockImplementation(async (args: string[]) => {
-        return args[0] === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
+      (mockGit.revparse.mockImplementation as any)(async (option: string) => {
+        return option === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
       });
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
@@ -203,8 +203,8 @@ describe('Git Metadata', () => {
       };
 
       mockGit.log.mockResolvedValue(mockLog as any);
-      mockGit.revparse.mockImplementation(async (args: string[]) => {
-        return args[0] === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
+      (mockGit.revparse.mockImplementation as any)(async (option: string) => {
+        return option === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
       });
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
