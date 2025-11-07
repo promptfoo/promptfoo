@@ -497,9 +497,9 @@ export class CrescendoProvider implements ApiProvider {
         }
         logger.debug(`[Crescendo] Continuing to round ${roundNum + 1}`);
       } catch (error) {
-        logger.error(
-          `[Crescendo] Error Running crescendo step.  Error: ${(error as Error).message}`,
-        );
+        logger.error(`[Crescendo] Error Running crescendo step`, {
+          error: (error as Error).message,
+        });
       }
     }
 
