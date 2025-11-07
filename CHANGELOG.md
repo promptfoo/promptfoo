@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(redteam): store rendered grading rubric in assertion.value for agentic strategies to display in UI Value column (#XXXX)
+- fix(redteam): store rendered grading rubric in assertion.value for agentic strategies to display in UI Value column (#6125)
 
 ## [0.119.4] - 2025-11-06
 
