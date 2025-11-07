@@ -131,7 +131,7 @@
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/jsdom": "^21.1.7",
-    "@types/node": "^24.7.2",
+    "@types/node": "^24.9.1",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
     "@types/pdf-parse": "^1.1.5",
