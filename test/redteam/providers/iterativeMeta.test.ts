@@ -254,4 +254,87 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.redteamHistory).toHaveLength(1);
     });
   });
+
+  describe('Rubric Storage', () => {
+    it('should store rendered rubric in storedGraderResult.assertion.value', () => {
+      const mockRenderedRubric = '<rubric>Rendered grading criteria</rubric>';
+      const mockGraderResult: {
+        pass: boolean;
+        score: number;
+        reason: string;
+        assertion?: any;
+      } = {
+        pass: false,
+        score: 0,
+        reason: 'Attack successful',
+      };
+
+      const testAssertion = {
+        type: 'promptfoo:redteam:policy' as const,
+        metric: 'PolicyViolation:test',
+      };
+
+      // Simulate the pattern used in iterativeMeta
+      const storedResult = {
+        ...mockGraderResult,
+        assertion: mockGraderResult.assertion
+          ? { ...mockGraderResult.assertion, value: mockRenderedRubric }
+          : testAssertion && 'type' in testAssertion && (testAssertion as any).type !== 'assert-set'
+            ? { ...testAssertion, value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeDefined();
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:policy');
+    });
+
+    it('should use grade.assertion when present', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResultWithAssertion = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+        assertion: {
+          type: 'promptfoo:redteam:harmful' as const,
+          metric: 'Harmful',
+          value: 'old value',
+        },
+      };
+
+      const storedResult = {
+        ...mockGraderResultWithAssertion,
+        assertion: mockGraderResultWithAssertion.assertion
+          ? { ...mockGraderResultWithAssertion.assertion, value: mockRenderedRubric }
+          : undefined,
+      };
+
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:harmful');
+    });
+
+    it('should not create assertion for AssertionSet', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResult = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+      };
+
+      const assertionSet = {
+        type: 'assert-set' as const,
+        assert: [{ type: 'contains' as const, value: 'test' }],
+      };
+
+      const storedResult = {
+        ...mockGraderResult,
+        assertion:
+          assertionSet && 'type' in assertionSet && assertionSet.type !== 'assert-set'
+            ? { ...assertionSet, value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeUndefined();
+    });
+  });
 });

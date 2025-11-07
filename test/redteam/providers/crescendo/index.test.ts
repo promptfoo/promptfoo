@@ -634,8 +634,9 @@ describe('CrescendoProvider', () => {
     // Should exit early due to grader failure
     expect(result.metadata?.stopReason).toBe('Grader failed');
 
-    // Should store the grader result for later use
-    expect(result.metadata?.storedGraderResult).toEqual(mockGraderResult);
+    // Should store the grader result for later use (includes assertion field)
+    expect(result.metadata?.storedGraderResult).toMatchObject(mockGraderResult);
+    expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
   });
 
   it('should not create synthetic grader result when internal evaluator succeeds', async () => {
@@ -690,7 +691,8 @@ describe('CrescendoProvider', () => {
     const result = await provider.callApi(prompt, context);
 
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
-    expect(result.metadata?.storedGraderResult).toEqual({ pass: true });
+    expect(result.metadata?.storedGraderResult).toMatchObject({ pass: true });
+    expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
   });
 
   it('should stop when max backtracks reached', async () => {
