@@ -7,7 +7,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import type { ChildProcess } from 'node:child_process';
+import type { ChildProcess } from 'child_process';
 
 import chalk from 'chalk';
 import ora from 'ora';

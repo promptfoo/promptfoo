@@ -4,8 +4,8 @@
  * Spawns and manages the @modelcontextprotocol/server-filesystem child process.
  */
 
-import { type ChildProcess, spawn } from 'node:child_process';
-import { isAbsolute, resolve } from 'node:path';
+import { type ChildProcess, spawn } from 'child_process';
+import { isAbsolute, resolve } from 'path';
 
 import logger from '../../../logger';
 

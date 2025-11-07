@@ -6,7 +6,7 @@
  * - Listens to socket → writes to MCP stdin
  */
 
-import type { ChildProcess } from 'node:child_process';
+import type { ChildProcess } from 'child_process';
 
 import { type Socket } from 'socket.io-client';
 import logger from '../../../logger';
