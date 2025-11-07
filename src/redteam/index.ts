@@ -4,6 +4,7 @@ import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -39,6 +40,27 @@ import { loadStrategy, Strategies, validateStrategies } from './strategies/index
 import { pluginMatchesStrategyTargets } from './strategies/util';
 import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
 import { extractGoalFromPrompt, getShortPluginId } from './util';
+
+function getPolicyText(metadata: TestCase['metadata'] | undefined): string | undefined {
+  if (!metadata || metadata.policy === undefined || metadata.policy === null) {
+    return undefined;
+  }
+
+  const policyValue = metadata.policy as unknown;
+
+  if (typeof policyValue === 'string') {
+    return policyValue;
+  }
+
+  if (typeof policyValue === 'object') {
+    const policyObject = policyValue as { text?: string };
+    return typeof policyObject.text === 'string' && policyObject.text.length > 0
+      ? policyObject.text
+      : undefined;
+  }
+
+  return undefined;
+}
 
 const MAX_MAX_CONCURRENCY = 20;
 
@@ -929,7 +951,9 @@ export async function synthesize({
           const promptVar = testCase.vars?.[injectVar];
           const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
+          // For policy plugin, pass the policy text to improve intent extraction
+          const policy = getPolicyText(testCase.metadata);
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
           (testCase.metadata as any).goal = extractedGoal;
         }
@@ -993,7 +1017,9 @@ export async function synthesize({
           const promptVar = testCase.vars?.[injectVar];
           const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
+          // For policy plugin, pass the policy text to improve intent extraction
+          const policy = getPolicyText(testCase.metadata);
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
           (testCase.metadata as any).goal = extractedGoal;
         }
