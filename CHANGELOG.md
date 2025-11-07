@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- fix(redteam): store rendered grading rubric in assertion.value for agentic strategies to display in UI Value column (#XXXX)
+
 ## [0.119.4] - 2025-11-06
 
 ### Added

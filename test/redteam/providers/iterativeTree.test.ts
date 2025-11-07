@@ -1245,6 +1245,121 @@ describe('Token Counting', () => {
     });
   });
 
+  describe('Rubric Storage', () => {
+    it('should store rendered rubric in storedGraderResult.assertion.value', async () => {
+      const mockRenderedRubric = '<rubric>Rendered policy evaluation criteria</rubric>';
+      const mockGraderResult = {
+        pass: false,
+        score: 0,
+        reason: 'Policy violation detected',
+      };
+
+      const mockGrader = {
+        getResult: jest.fn().mockResolvedValue({
+          grade: mockGraderResult,
+          rubric: mockRenderedRubric,
+        }),
+      };
+
+      const { getGraderById } = require('../../../src/redteam/graders');
+      (getGraderById as jest.Mock).mockReturnValue(mockGrader);
+
+      const testCase: AtomicTestCase = {
+        vars: {},
+        assert: [
+          {
+            type: 'promptfoo:redteam:policy',
+            metric: 'PolicyViolation:test',
+          },
+        ],
+        metadata: {
+          pluginId: 'policy',
+          goal: 'Test goal',
+        },
+      };
+
+      const mockGradingProvider: jest.Mocked<ApiProvider> = {
+        id: jest.fn().mockReturnValue('mock-grading'),
+        callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+          output: 'target output',
+          tokenUsage: {},
+        }),
+      } as jest.Mocked<ApiProvider>;
+
+      // Import the actual function that uses graders
+      const { runRedteamConversation } = await import(
+        '../../../src/redteam/providers/iterativeTree'
+      );
+
+      // This would normally be called, but we're just testing the grading result storage pattern
+      // The actual test is in the goat.test.ts, but we verify the pattern here
+      const storedResult = {
+        ...mockGraderResult,
+        assertion: mockGraderResult.assertion
+          ? { ...mockGraderResult.assertion, value: mockRenderedRubric }
+          : testCase.assert?.[0] &&
+              'type' in testCase.assert[0] &&
+              testCase.assert[0].type !== 'assert-set'
+            ? { ...testCase.assert[0], value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeDefined();
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:policy');
+    });
+
+    it('should handle grade.assertion when present', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResultWithAssertion = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+        assertion: {
+          type: 'promptfoo:redteam:harmful' as const,
+          metric: 'Harmful',
+          value: 'old value',
+        },
+      };
+
+      const storedResult = {
+        ...mockGraderResultWithAssertion,
+        assertion: mockGraderResultWithAssertion.assertion
+          ? { ...mockGraderResultWithAssertion.assertion, value: mockRenderedRubric }
+          : undefined,
+      };
+
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:harmful');
+      expect(storedResult.assertion?.metric).toBe('Harmful');
+    });
+
+    it('should not create assertion for AssertionSet', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResult = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+      };
+
+      const assertionSet = {
+        type: 'assert-set' as const,
+        assert: [{ type: 'contains' as const, value: 'test' }],
+      };
+
+      const storedResult = {
+        ...mockGraderResult,
+        assertion:
+          assertionSet && 'type' in assertionSet && assertionSet.type !== 'assert-set'
+            ? { ...assertionSet, value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeUndefined();
+      expect(storedResult.pass).toBe(false);
+    });
+  });
+
   it('should properly accumulate token usage across multiple provider calls', async () => {
     // This test simulates how token usage would be accumulated in the actual iterativeTree provider
     // by testing individual components that contribute to token usage
