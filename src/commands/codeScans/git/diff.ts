@@ -22,17 +22,19 @@ async function getBaseBranch(git: SimpleGit): Promise<string> {
   try {
     // Check if main exists
     const branches = await git.branch();
-    if (branches.all.includes('main') || branches.all.includes('origin/main')) {
+    if (branches.all.includes('main')) {
       return 'main';
     }
-    if (branches.all.includes('master') || branches.all.includes('origin/master')) {
+    if (branches.all.includes('master')) {
       return 'master';
     }
-    // Default to main
-    return 'main';
+
+    throw new GitError(
+      'Could not find a default base branch (main or master). Please specify a base branch or commit to compare against with --base',
+    );
   } catch (error) {
     throw new GitError(
-      `Failed to determine base branch: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to determine base branch: ${error instanceof Error ? error.message : String(error)}. Please specify a base branch or commit to compare against with --base`,
     );
   }
 }

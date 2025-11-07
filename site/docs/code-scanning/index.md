@@ -74,3 +74,10 @@ guidance: |
 ## Cloud and Enterprise
 
 Scans run on Promptfoo Cloud by default. For organizations that need to run scans on their own infrastructure, code scanning is available in [Promptfoo Enterprise On-Prem.](../enterprise)
+
+## See Also
+
+- [GitHub Action](./github-action.md)
+- [CLI Command](./cli.md)
+- [Promptfoo Scanner GitHub App](https://github.com/apps/promptfoo-scanner)
+- [Promptfoo Code Scan Action](https://github.com/promptfoo/code-scan-action)

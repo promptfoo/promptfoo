@@ -16,7 +16,7 @@ jest.mock('../src/logger', () => ({
 
 // Mock code scan commands to avoid ESM import issues with execa
 jest.mock('../src/commands/codeScans', () => ({
-  codeScanCommand: jest.fn(),
+  codeScansCommand: jest.fn(),
 }));
 
 describe('addCommonOptionsRecursively', () => {

@@ -27,58 +27,19 @@ import { startFilesystemMcpServer, stopFilesystemMcpServer } from './mcp/filesys
 import { SocketIoMcpBridge } from './mcp/transport';
 import type { Command } from 'commander';
 
-import type { PullRequestContext, ScanRequest, ScanResponse } from '../../types/codeScan';
-
-interface ParsedGitHubPR {
-  owner: string;
-  repo: string;
-  number: number;
-}
-
-interface SocketAuthCredentials {
-  apiKey?: string;
-  oidcToken?: string;
-}
-
-function getSeverityEmoji(severity?: string): string {
-  switch (severity?.toLowerCase()) {
-    case 'critical':
-      return '🔴';
-    case 'high':
-      return '🟠';
-    case 'medium':
-      return '🟡';
-    case 'low':
-      return '🔵';
-    default:
-      return '⚪';
-  }
-}
-
-function formatSeverity(severity?: string): string {
-  if (!severity) {
-    return '';
-  }
-  const emoji = getSeverityEmoji(severity);
-  const capitalizedSeverity = severity.charAt(0).toUpperCase() + severity.slice(1);
-  return `${emoji} ${capitalizedSeverity}`;
-}
-
-function countBySeverity(comments: Array<{ severity?: string }>) {
-  // Filter out comments without severity or with severity="none" (review-only comments)
-  const validSeverities = ['critical', 'high', 'medium', 'low'];
-  const issuesOnly = comments.filter(
-    (c) => c.severity && validSeverities.includes(c.severity.toLowerCase()),
-  );
-
-  return {
-    total: issuesOnly.length,
-    critical: issuesOnly.filter((c) => c.severity?.toLowerCase() === 'critical').length,
-    high: issuesOnly.filter((c) => c.severity?.toLowerCase() === 'high').length,
-    medium: issuesOnly.filter((c) => c.severity?.toLowerCase() === 'medium').length,
-    low: issuesOnly.filter((c) => c.severity?.toLowerCase() === 'low').length,
-  };
-}
+import type {
+  ParsedGitHubPR,
+  PullRequestContext,
+  ScanRequest,
+  ScanResponse,
+  SocketAuthCredentials,
+} from '../../types/codeScan';
+import {
+  CodeScanSeverity,
+  formatSeverity,
+  countBySeverity,
+  getSeverityRank,
+} from '../../types/codeScan';
 
 export interface ScanOptions {
   config?: string;
@@ -137,10 +98,7 @@ async function createSocketConnection(
       reconnection: true,
       reconnectionDelay: 500,
       reconnectionDelayMax: 10000,
-      auth: {
-        token: auth.apiKey,
-        oidcToken: auth.oidcToken,
-      },
+      auth,
     });
 
     // Connection success
@@ -190,7 +148,7 @@ function registerCleanupHandlers(refs: CleanupRefs): void {
       refs.socket.disconnect();
     }
 
-    process.exit(130); // Standard exit code for SIGINT
+    // don't force exit, let global cleanup run if needed
   };
 
   // Register handlers for common termination signals
@@ -286,11 +244,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     const apiKey = options.apiKey || config.apiKey;
 
     // Resolve auth credentials for socket.io
-    const authResult = resolveAuthCredentials(apiKey);
-    const auth: SocketAuthCredentials = {
-      apiKey: authResult.apiKey,
-      oidcToken: authResult.oidcToken,
-    };
+    const auth = resolveAuthCredentials(apiKey);
 
     // Determine API host URL
     const apiHost = options.apiHost || config.apiHost || 'https://api.promptfoo.dev';
@@ -508,7 +462,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       // If no review field, check for severity="none" comment to use as review
       let reviewText = review;
       if (!reviewText && comments && comments.length > 0) {
-        const noneComment = comments.find((c) => c.severity?.toLowerCase() === 'none');
+        const noneComment = comments.find((c) => c.severity === CodeScanSeverity.NONE);
         if (noneComment) {
           reviewText = noneComment.finding;
         }
@@ -523,16 +477,20 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
       // 4. Detailed findings (only show issues with valid severity)
       if (severityCounts.total > 0) {
-        const validSeverities = ['critical', 'high', 'medium', 'low'];
+        const validSeverities = [
+          CodeScanSeverity.CRITICAL,
+          CodeScanSeverity.HIGH,
+          CodeScanSeverity.MEDIUM,
+          CodeScanSeverity.LOW,
+        ];
         const issuesWithSeverity = (comments || []).filter(
-          (c) => c.severity && validSeverities.includes(c.severity.toLowerCase()),
+          (c) => c.severity && validSeverities.includes(c.severity),
         );
 
         // Sort by severity (descending)
         const sortedComments = [...issuesWithSeverity].sort((a, b) => {
-          const severityRank = { critical: 4, high: 3, medium: 2, low: 1 };
-          const rankA = severityRank[a.severity?.toLowerCase() as keyof typeof severityRank] || 0;
-          const rankB = severityRank[b.severity?.toLowerCase() as keyof typeof severityRank] || 0;
+          const rankA = a.severity ? getSeverityRank(a.severity) : 0;
+          const rankB = b.severity ? getSeverityRank(b.severity) : 0;
           return rankB - rankA;
         });
 
@@ -579,7 +537,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       spinner.fail('Scan failed');
     }
     logger.error(`Scan failed: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(1);
+    process.exitCode = 1; // set exit code to 1 to indicate failure, but don't force exit, let global cleanup run if needed
   } finally {
     // Cleanup: Stop MCP bridge and server, disconnect socket
     if (mcpBridge) {

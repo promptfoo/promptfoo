@@ -7,7 +7,7 @@ import os from 'os';
 import path from 'path';
 
 import { ConfigLoadError, loadConfig, loadConfigOrDefault } from './loader';
-import { SeverityLevel } from './schema';
+import { CodeScanSeverity } from '../../../types/codeScan';
 
 describe('Configuration Loader', () => {
   let tempDir: string;
@@ -32,7 +32,7 @@ describe('Configuration Loader', () => {
       const config = loadConfig(configPath);
 
       expect(config).toEqual({
-        minimumSeverity: SeverityLevel.HIGH,
+        minimumSeverity: CodeScanSeverity.HIGH,
         diffsOnly: false,
       });
     });
@@ -44,17 +44,17 @@ describe('Configuration Loader', () => {
       const config = loadConfig(configPath);
 
       expect(config).toEqual({
-        minimumSeverity: SeverityLevel.HIGH,
+        minimumSeverity: CodeScanSeverity.HIGH,
         diffsOnly: false,
       });
     });
 
     it('should accept all valid severity levels', () => {
-      const testCases: Array<[SeverityLevel, string]> = [
-        [SeverityLevel.LOW, 'low'],
-        [SeverityLevel.MEDIUM, 'medium'],
-        [SeverityLevel.HIGH, 'high'],
-        [SeverityLevel.CRITICAL, 'critical'],
+      const testCases: Array<[CodeScanSeverity, string]> = [
+        [CodeScanSeverity.LOW, 'low'],
+        [CodeScanSeverity.MEDIUM, 'medium'],
+        [CodeScanSeverity.HIGH, 'high'],
+        [CodeScanSeverity.CRITICAL, 'critical'],
       ];
 
       for (const [expectedLevel, levelString] of testCases) {
@@ -106,7 +106,7 @@ describe('Configuration Loader', () => {
 
       const config = loadConfig(configPath);
 
-      expect(config.minimumSeverity).toBe(SeverityLevel.CRITICAL);
+      expect(config.minimumSeverity).toBe(CodeScanSeverity.CRITICAL);
       expect(config.diffsOnly).toBe(true);
     });
 
@@ -116,16 +116,16 @@ describe('Configuration Loader', () => {
 
       const config = loadConfig(configPath);
 
-      expect(config.minimumSeverity).toBe(SeverityLevel.LOW);
+      expect(config.minimumSeverity).toBe(CodeScanSeverity.LOW);
       expect(config.diffsOnly).toBe(false);
     });
 
     it('should accept all valid severity levels with minSeverity alias', () => {
-      const testCases: Array<[SeverityLevel, string]> = [
-        [SeverityLevel.LOW, 'low'],
-        [SeverityLevel.MEDIUM, 'medium'],
-        [SeverityLevel.HIGH, 'high'],
-        [SeverityLevel.CRITICAL, 'critical'],
+      const testCases: Array<[CodeScanSeverity, string]> = [
+        [CodeScanSeverity.LOW, 'low'],
+        [CodeScanSeverity.MEDIUM, 'medium'],
+        [CodeScanSeverity.HIGH, 'high'],
+        [CodeScanSeverity.CRITICAL, 'critical'],
       ];
 
       for (const [expectedLevel, levelString] of testCases) {
@@ -191,7 +191,7 @@ describe('Configuration Loader', () => {
       const config = loadConfigOrDefault();
 
       expect(config).toEqual({
-        minimumSeverity: SeverityLevel.HIGH,
+        minimumSeverity: CodeScanSeverity.HIGH,
         diffsOnly: false,
       });
     });
@@ -203,7 +203,7 @@ describe('Configuration Loader', () => {
       const config = loadConfigOrDefault(configPath);
 
       expect(config).toEqual({
-        minimumSeverity: SeverityLevel.CRITICAL,
+        minimumSeverity: CodeScanSeverity.CRITICAL,
         diffsOnly: true,
       });
     });
@@ -212,7 +212,7 @@ describe('Configuration Loader', () => {
       const config = loadConfigOrDefault('');
 
       expect(config).toEqual({
-        minimumSeverity: SeverityLevel.HIGH,
+        minimumSeverity: CodeScanSeverity.HIGH,
         diffsOnly: false,
       });
     });

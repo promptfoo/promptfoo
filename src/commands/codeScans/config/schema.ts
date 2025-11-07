@@ -5,18 +5,18 @@
  */
 
 import { z } from 'zod';
-import { SeverityLevel } from '../../../types/codeScan';
+import { CodeScanSeverity } from '../../../types/codeScan';
 
 // Re-export for convenience
-export { SeverityLevel };
+export { CodeScanSeverity };
 
 export const ConfigSchema = z
   .object({
     minSeverity: z
-      .nativeEnum(SeverityLevel)
+      .nativeEnum(CodeScanSeverity)
       .optional()
       .describe('Minimum severity level for reporting vulnerabilities'),
-    minimumSeverity: z.nativeEnum(SeverityLevel).optional().describe('Alias for minSeverity'),
+    minimumSeverity: z.nativeEnum(CodeScanSeverity).optional().describe('Alias for minSeverity'),
     diffsOnly: z
       .boolean()
       .default(false)
@@ -34,7 +34,7 @@ export const ConfigSchema = z
   })
   .transform((data) => {
     // Resolve severity with precedence: minSeverity > minimumSeverity > default
-    const minimumSeverity = data.minSeverity ?? data.minimumSeverity ?? SeverityLevel.HIGH;
+    const minimumSeverity = data.minSeverity ?? data.minimumSeverity ?? CodeScanSeverity.HIGH;
 
     // Remove minimumSeverity from output (it's just an alias)
     const { minimumSeverity: _, ...rest } = data;
@@ -48,6 +48,6 @@ export const ConfigSchema = z
 export type Config = z.infer<typeof ConfigSchema>;
 
 export const DEFAULT_CONFIG: Config = {
-  minimumSeverity: SeverityLevel.HIGH,
+  minimumSeverity: CodeScanSeverity.HIGH,
   diffsOnly: false,
 };

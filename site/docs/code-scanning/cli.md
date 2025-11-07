@@ -1,4 +1,5 @@
 ---
+title: CLI Command
 sidebar_label: CLI Command
 sidebar_position: 3
 description: Scan code changes for LLM security vulnerabilities using the promptfoo code-scans command.
@@ -172,3 +173,8 @@ promptfoo code-scans run
 ```bash
 promptfoo code-scans run --api-key your-api-key
 ```
+
+## See Also
+
+- [Code Scanning Overview](./index.md)
+- [GitHub Action](./github-action.md)

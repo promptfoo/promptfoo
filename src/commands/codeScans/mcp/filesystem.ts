@@ -5,7 +5,7 @@
  */
 
 import { type ChildProcess, spawn } from 'node:child_process';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 
 import logger from '../../../logger';
 
@@ -23,21 +23,27 @@ export class FilesystemMcpError extends Error {
  */
 export function startFilesystemMcpServer(rootDir: string): ChildProcess {
   // Validate rootDir is absolute
-  const absoluteRootDir = resolve(rootDir);
-  if (absoluteRootDir !== rootDir) {
+  if (!isAbsolute(rootDir)) {
     throw new FilesystemMcpError(`Root directory must be an absolute path, got: ${rootDir}`);
   }
 
+  // Normalize the absolute path for consistent usage
+  const absoluteRootDir = resolve(rootDir);
+
   logger.debug('Starting filesystem MCP server...');
-  logger.debug(`Root directory: ${rootDir}`);
+  logger.debug(`Root directory: ${absoluteRootDir}`);
 
   try {
     // Spawn the filesystem MCP server
     // Using npx to run @modelcontextprotocol/server-filesystem
-    const mcpProcess = spawn('npx', ['-y', '@modelcontextprotocol/server-filesystem', rootDir], {
-      stdio: ['pipe', 'pipe', 'pipe'], // stdin/stdout/stderr all piped
-      cwd: rootDir,
-    });
+    const mcpProcess = spawn(
+      'npx',
+      ['-y', '@modelcontextprotocol/server-filesystem', absoluteRootDir],
+      {
+        stdio: ['pipe', 'pipe', 'pipe'], // stdin/stdout/stderr all piped
+        cwd: absoluteRootDir,
+      },
+    );
 
     // Filter stderr to suppress expected timeout warnings
     mcpProcess.stderr?.on('data', (chunk: Buffer) => {

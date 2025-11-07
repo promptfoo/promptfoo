@@ -7,7 +7,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { ScanConfig, SeverityLevel } from '../../src/types/codeScan';
+import { randomUUID } from 'crypto';
+import type { ScanConfig, CodeScanSeverity } from '../../src/types/codeScan';
 
 /**
  * Generate a temporary YAML config file from action inputs
@@ -17,14 +18,14 @@ import type { ScanConfig, SeverityLevel } from '../../src/types/codeScan';
  */
 export function generateConfigFile(minimumSeverity: string, guidance?: string): string {
   const config: ScanConfig = {
-    minimumSeverity: minimumSeverity as SeverityLevel,
+    minimumSeverity: minimumSeverity as CodeScanSeverity,
     diffsOnly: false, // Always enable full repo exploration for GitHub Actions (never diffs-only)
     guidance,
   };
 
   // Create temp file
   const tempDir = os.tmpdir();
-  const configPath = path.join(tempDir, `code-scan-config-${Date.now()}.yaml`);
+  const configPath = path.join(tempDir, `code-scan-config-${randomUUID()}.yaml`);
 
   // Write YAML
   let yamlContent = `minimumSeverity: ${config.minimumSeverity}\ndiffsOnly: ${config.diffsOnly}\n`;

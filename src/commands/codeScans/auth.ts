@@ -4,6 +4,7 @@
  */
 
 import logger from '../../logger';
+import type { SocketAuthCredentials } from '../../types/codeScan';
 
 // Import promptfoo's cloud config for auth
 let cloudConfig: { getApiKey(): string | undefined } | undefined;
@@ -17,15 +18,6 @@ try {
 }
 
 /**
- * Resolved auth credentials
- */
-export interface AuthCredentials {
-  apiKey?: string;
-  oidcToken?: string;
-  method?: 'cli_arg' | 'config_file' | 'promptfoo_auth' | 'github_oidc';
-}
-
-/**
  * Resolve authentication credentials using waterfall approach:
  * 1. API key from CLI argument or config file (passed as parameter)
  * 2. PROMPTFOO_API_KEY environment variable
@@ -35,14 +27,11 @@ export interface AuthCredentials {
  * @param apiKey Optional API key from CLI arg or config file
  * @returns Resolved auth credentials
  */
-export function resolveAuthCredentials(apiKey?: string): AuthCredentials {
+export function resolveAuthCredentials(apiKey?: string): SocketAuthCredentials {
   // 1. API key from argument (CLI --api-key or config file)
   if (apiKey) {
     logger.debug('Using API key from CLI/config');
-    return {
-      apiKey,
-      method: 'cli_arg',
-    };
+    return { apiKey };
   }
 
   // 2. API key from environment variable
@@ -51,7 +40,6 @@ export function resolveAuthCredentials(apiKey?: string): AuthCredentials {
     logger.debug('Using API key from PROMPTFOO_API_KEY env var');
     return {
       apiKey: envApiKey,
-      method: 'config_file', // Use config_file method to indicate env var
     };
   }
 
@@ -62,7 +50,6 @@ export function resolveAuthCredentials(apiKey?: string): AuthCredentials {
       logger.debug('Using API key from promptfoo auth');
       return {
         apiKey: storedApiKey,
-        method: 'promptfoo_auth',
       };
     }
   }
@@ -73,7 +60,6 @@ export function resolveAuthCredentials(apiKey?: string): AuthCredentials {
     logger.debug('Using GitHub OIDC token');
     return {
       oidcToken,
-      method: 'github_oidc',
     };
   }
 

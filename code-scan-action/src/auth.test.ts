@@ -12,7 +12,7 @@ jest.mock('@actions/core', () => ({
 
 describe('getGitHubOIDCToken', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   it('should return OIDC token for given audience', async () => {

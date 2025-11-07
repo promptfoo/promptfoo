@@ -6,7 +6,7 @@
  */
 
 /**
- * Annotate a unified diff patch with absolute line numbers.
+ * Annotate a single file unified diff patch with absolute line numbers.
  *
  * For each line that exists in the NEW file (context lines and added lines),
  * prepends the absolute line number in the format "L##: ".
@@ -33,7 +33,7 @@
  * L21: + added line
  * ```
  */
-export function annotateDiffWithLineNumbers(patch: string): string {
+export function annotateSingleFileDiffWithLineNumbers(patch: string): string {
   if (!patch || patch.trim() === '') {
     return patch;
   }
@@ -43,7 +43,9 @@ export function annotateDiffWithLineNumbers(patch: string): string {
   let currentNewLine = 0;
   let inHunk = false;
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isLastLine = i === lines.length - 1;
     // Check if this is a hunk header: @@ -start,count +start,count @@
     const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
 
@@ -78,8 +80,11 @@ export function annotateDiffWithLineNumbers(patch: string): string {
     } else if (line.startsWith('\\')) {
       // Special marker like "\ No newline at end of file" - preserve as-is
       result.push(line);
+    } else if (line === '' && isLastLine) {
+      // Trailing empty line (from string split) - preserve as-is without annotation
+      result.push(line);
     } else {
-      // Empty line or other content - treat as context line if in hunk
+      // Empty lines within hunks or other content - treat as context line
       result.push(`L${currentNewLine}: ${line}`);
       currentNewLine++;
     }

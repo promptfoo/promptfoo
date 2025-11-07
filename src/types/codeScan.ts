@@ -4,12 +4,139 @@ import { z } from 'zod';
 // Enums
 // ============================================================================
 
-export enum SeverityLevel {
-  NONE = 'none',
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
+export enum CodeScanSeverity {
   CRITICAL = 'critical',
+  HIGH = 'high',
+  MEDIUM = 'medium',
+  LOW = 'low',
+  NONE = 'none',
+}
+
+// ============================================================================
+// Severity Utility Types
+// ============================================================================
+
+export interface SeverityDisplay {
+  emoji: string;
+  rank: number;
+}
+
+export interface SeverityCounts {
+  total: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+// ============================================================================
+// Severity Utility Functions
+// ============================================================================
+
+/**
+ * Get emoji representation for a severity level
+ * @param severity - The severity level
+ * @returns Emoji string representing the severity
+ */
+export function getSeverityEmoji(severity: CodeScanSeverity): string {
+  switch (severity) {
+    case CodeScanSeverity.CRITICAL:
+      return '🔴';
+    case CodeScanSeverity.HIGH:
+      return '🟠';
+    case CodeScanSeverity.MEDIUM:
+      return '🟡';
+    case CodeScanSeverity.LOW:
+      return '🔵';
+    case CodeScanSeverity.NONE:
+      return '👍';
+  }
+}
+
+/**
+ * Get numeric rank for a severity level (used for sorting)
+ * @param severity - The severity level
+ * @returns Numeric rank (higher = more severe)
+ */
+export function getSeverityRank(severity: CodeScanSeverity): number {
+  switch (severity) {
+    case CodeScanSeverity.CRITICAL:
+      return 4;
+    case CodeScanSeverity.HIGH:
+      return 3;
+    case CodeScanSeverity.MEDIUM:
+      return 2;
+    case CodeScanSeverity.LOW:
+      return 1;
+    case CodeScanSeverity.NONE:
+      return -1;
+  }
+}
+
+/**
+ * Get display information for a severity level (emoji + rank)
+ * @param severity - The severity level
+ * @returns Object with emoji and rank properties
+ */
+export function getSeverityDisplay(severity: CodeScanSeverity): SeverityDisplay {
+  return {
+    emoji: getSeverityEmoji(severity),
+    rank: getSeverityRank(severity),
+  };
+}
+
+/**
+ * Format severity level for display
+ * @param severity - The severity level (optional, returns empty string if undefined)
+ * @param style - Display style ('plain' or 'markdown')
+ * @returns Formatted severity string
+ */
+export function formatSeverity(
+  severity: CodeScanSeverity | undefined,
+  style: 'plain' | 'markdown' = 'plain',
+): string {
+  if (!severity) {
+    return '';
+  }
+
+  const emoji = getSeverityEmoji(severity);
+  const displayText = severity === CodeScanSeverity.NONE ? 'All Clear' : capitalize(severity);
+
+  if (style === 'markdown') {
+    return `_${emoji} ${displayText}_\n\n`;
+  }
+
+  return `${emoji} ${displayText}`;
+}
+
+/**
+ * Count comments by severity level
+ * @param comments - Array of comments with severity property (optional severity)
+ * @returns Object with counts for each severity level
+ */
+export function countBySeverity(comments: Array<{ severity?: CodeScanSeverity }>): SeverityCounts {
+  const validSeverities = [
+    CodeScanSeverity.CRITICAL,
+    CodeScanSeverity.HIGH,
+    CodeScanSeverity.MEDIUM,
+    CodeScanSeverity.LOW,
+  ];
+  const issuesOnly = comments.filter((c) => c.severity && validSeverities.includes(c.severity));
+
+  return {
+    total: issuesOnly.length,
+    critical: issuesOnly.filter((c) => c.severity === CodeScanSeverity.CRITICAL).length,
+    high: issuesOnly.filter((c) => c.severity === CodeScanSeverity.HIGH).length,
+    medium: issuesOnly.filter((c) => c.severity === CodeScanSeverity.MEDIUM).length,
+    low: issuesOnly.filter((c) => c.severity === CodeScanSeverity.LOW).length,
+  };
+}
+
+/**
+ * Helper function to capitalize the first letter of a string
+ */
+function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 // ============================================================================
@@ -43,7 +170,7 @@ export const GitMetadataSchema = z.object({
 });
 
 export const ScanConfigSchema = z.object({
-  minimumSeverity: z.nativeEnum(SeverityLevel),
+  minimumSeverity: z.nativeEnum(CodeScanSeverity),
   diffsOnly: z.boolean(),
   guidance: z.string().optional(),
 });
@@ -69,7 +196,7 @@ export const CommentSchema = z.object({
   line: z.number().nullable(),
   finding: z.string(),
   fix: z.string().nullable().optional(),
-  severity: z.nativeEnum(SeverityLevel).optional(),
+  severity: z.nativeEnum(CodeScanSeverity).optional(),
   aiAgentPrompt: z.string().nullable().optional(),
 });
 
@@ -105,10 +232,6 @@ export type Comment = z.infer<typeof CommentSchema>;
 export type PhaseResults = z.infer<typeof PhaseResultsSchema>;
 export type ScanResponse = z.infer<typeof ScanResponseSchema>;
 
-// ============================================================================
-// MCP / JSON-RPC Types
-// ============================================================================
-
 /**
  * JSON-RPC 2.0 message structure for MCP communication
  * Used for Socket.IO transport and MCP server communication
@@ -126,4 +249,17 @@ export interface JsonRpcMessage {
   };
   // Allow additional properties for internal routing (e.g., _batch_id)
   [key: string]: unknown;
+}
+
+// Socket types
+export interface SocketAuthCredentials {
+  apiKey?: string;
+  oidcToken?: string;
+}
+
+// GitHub types
+export interface ParsedGitHubPR {
+  owner: string;
+  repo: string;
+  number: number;
 }

@@ -10,35 +10,13 @@ import * as github from '@actions/github';
 import * as fs from 'fs';
 import { generateConfigFile } from './config';
 import { getGitHubContext } from './github';
-import { type Comment, type ScanResponse, SeverityLevel } from '../../src/types/codeScan';
-
-/**
- * Get emoji and rank for severity level
- */
-function getSeverityDisplay(severity?: string): { emoji: string; rank: number } {
-  switch (severity?.toLowerCase()) {
-    case 'critical':
-      return { emoji: '🔴', rank: 4 };
-    case 'high':
-      return { emoji: '🟠', rank: 3 };
-    case 'medium':
-      return { emoji: '🟡', rank: 2 };
-    case 'low':
-      return { emoji: '🔵', rank: 1 };
-    default:
-      return { emoji: '⚪', rank: 0 };
-  }
-}
-
-/**
- * Format severity for display
- */
-function formatSeverity(severity?: string): string {
-  if (!severity) return '';
-  const { emoji } = getSeverityDisplay(severity);
-  const capitalizedSeverity = severity.charAt(0).toUpperCase() + severity.slice(1);
-  return `_${emoji} ${capitalizedSeverity}_\n\n`;
-}
+import {
+  type Comment,
+  type ScanResponse,
+  CodeScanSeverity,
+  formatSeverity,
+  getSeverityRank,
+} from '../../src/types/codeScan';
 
 async function run(): Promise<void> {
   try {
@@ -117,8 +95,7 @@ async function run(): Promise<void> {
       'code-scans',
       'run',
       repoPath,
-      '--api-host',
-      apiHost,
+      ...(apiHost ? ['--api-host', apiHost] : []),
       '--config',
       finalConfigPath!,
       '--compare',
@@ -144,7 +121,7 @@ async function run(): Promise<void> {
             file: 'src/example.ts',
             line: 42,
             finding: 'Potential security issue: API key hardcoded in source code',
-            severity: SeverityLevel.HIGH,
+            severity: CodeScanSeverity.HIGH,
             fix: 'Move API key to environment variable and use process.env.API_KEY instead',
             aiAgentPrompt: 'Review the API key storage and suggest secure alternatives',
           },
@@ -153,7 +130,7 @@ async function run(): Promise<void> {
             line: 15,
             startLine: 10,
             finding: 'SQL injection vulnerability: User input not sanitized before query',
-            severity: SeverityLevel.CRITICAL,
+            severity: CodeScanSeverity.CRITICAL,
             fix: 'Use parameterized queries or an ORM to prevent SQL injection',
           },
         ],
@@ -166,7 +143,7 @@ async function run(): Promise<void> {
     } else {
       // Run real scan in production
       core.info('📦 Installing promptfoo from git...');
-      await exec.exec('npm', ['install', '-g', 'git+https://github.com/promptfoo/promptfoo.git#']);
+      await exec.exec('npm', ['install', '-g', 'git+https://github.com/promptfoo/promptfoo.git']);
       core.info('✅ Promptfoo installed successfully');
 
       core.info(`🚀 Running promptfoo code-scans run...`);
@@ -225,8 +202,8 @@ async function run(): Promise<void> {
 
         // Sort comments by severity (descending: critical > high > medium > low)
         const sortedComments = [...comments].sort((a, b) => {
-          const rankA = getSeverityDisplay(a.severity).rank;
-          const rankB = getSeverityDisplay(b.severity).rank;
+          const rankA = a.severity ? getSeverityRank(a.severity) : 0;
+          const rankB = b.severity ? getSeverityRank(b.severity) : 0;
           return rankB - rankA;
         });
 

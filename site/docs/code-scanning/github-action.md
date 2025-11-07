@@ -1,4 +1,5 @@
 ---
+title: GitHub Action
 sidebar_label: GitHub Action
 sidebar_position: 2
 description: Automatically scan pull requests for LLM security vulnerabilities with the promptfoo Code Scan GitHub Action. Find prompt injection, PII exposure, and jailbreak risks in CI/CD.
@@ -146,3 +147,10 @@ jobs:
           min-severity: medium # or any other severity threshold: low, medium, high, critical
           # ... other configuration options...
 ```
+
+## See Also
+
+- [Code Scanning Overview](./index.md)
+- [CLI Command](./cli.md)
+- [Promptfoo Scanner GitHub App](https://github.com/apps/promptfoo-scanner)
+- [Promptfoo Code Scan Action](https://github.com/promptfoo/code-scan-action)

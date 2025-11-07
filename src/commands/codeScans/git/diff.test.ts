@@ -111,30 +111,23 @@ index 123..456 100644
       expect(mockGit.diff).toHaveBeenCalledWith(['master...HEAD']);
     });
 
-    it('should default to main when neither main nor master exists', async () => {
-      const mockDiff = 'diff content';
-
+    it('should throw GitError when neither main nor master exists', async () => {
       // Mock status (for validateOnBranch)
       mockGit.status.mockResolvedValue({
         current: 'feature/test',
         detached: false,
       } as StatusResult);
 
-      // Mock neither branch exists (defaults to main)
+      // Mock neither branch exists - should throw error
       mockGit.branch.mockResolvedValue({
         all: ['feature/test'],
         branches: {},
         current: 'feature/test',
         detached: false,
       } as any);
-      mockGit.diff.mockResolvedValue(mockDiff);
 
-      const result = await extractDiff('/fake/repo');
-
-      expect(result).toEqual({
-        diff: mockDiff,
-        baseBranch: 'main',
-      });
+      await expect(extractDiff('/fake/repo')).rejects.toThrow(GitError);
+      await expect(extractDiff('/fake/repo')).rejects.toThrow('Failed to determine base branch');
     });
 
     it('should throw GitError if no changes detected', async () => {
