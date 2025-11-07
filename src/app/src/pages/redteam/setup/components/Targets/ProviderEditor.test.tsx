@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderEditor, { defaultHttpTarget } from './ProviderEditor';
 
@@ -103,7 +103,7 @@ describe('ProviderEditor', () => {
     });
   });
 
-  it('should update provider and providerType when a new provider type is selected in ProviderTypeSelector', () => {
+  it('should update provider and providerType when a new provider type is selected in ProviderTypeSelector', async () => {
     const initialProvider: ProviderOptions = {
       ...defaultHttpTarget(),
       label: 'My Test Provider',
@@ -116,6 +116,11 @@ describe('ProviderEditor', () => {
 
     const configEditor = screen.getByTestId('provider-config-editor');
     expect(configEditor).toHaveAttribute('data-providertype', 'http');
+
+    // Wait for ProviderTypeSelector to finish loading
+    await waitFor(() => {
+      expect(screen.queryByText('Loading provider options...')).not.toBeInTheDocument();
+    });
 
     // Component starts in collapsed view showing the selected provider, click Change to expand
     const changeButton = screen.getByRole('button', { name: 'Change' });

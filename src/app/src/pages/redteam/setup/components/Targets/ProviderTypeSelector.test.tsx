@@ -2,7 +2,7 @@ import React from 'react';
 
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import ProviderTypeSelector from './ProviderTypeSelector';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 
@@ -24,26 +24,7 @@ vi.mock('@app/hooks/useTelemetry', () => ({
   }),
 }));
 
-// Mock fetch for API calls
-const mockFetch = vi.fn().mockResolvedValue({
-  ok: true,
-  json: async () => ({ hasCustomConfig: false }),
-});
-
 describe('ProviderTypeSelector', () => {
-  let originalFetch: typeof global.fetch;
-
-  beforeEach(() => {
-    // Save original fetch and set mock
-    originalFetch = global.fetch;
-    vi.stubGlobal('fetch', mockFetch);
-  });
-
-  afterEach(() => {
-    // Restore original fetch after each test
-    vi.stubGlobal('fetch', originalFetch);
-    mockFetch.mockClear();
-  });
   it('should update selectedProviderType and call setProvider with the correct provider configuration when a provider type card is selected', async () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
