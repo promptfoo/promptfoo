@@ -401,6 +401,11 @@ Content-Type: application/json
 
       renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
+      // Wait for ProviderTypeSelector to finish loading
+      await waitFor(() => {
+        expect(screen.queryByText('Loading provider options...')).not.toBeInTheDocument();
+      });
+
       // Component starts in collapsed view showing HTTP provider, click Change to expand
       const changeButton = screen.getByRole('button', { name: 'Change' });
       fireEvent.click(changeButton);
@@ -521,6 +526,11 @@ Content-Type: application/json
       });
 
       renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Wait for ProviderTypeSelector to finish loading
+      await waitFor(() => {
+        expect(screen.queryByText('Loading provider options...')).not.toBeInTheDocument();
+      });
 
       // Component starts in collapsed view showing HTTP provider, click Change to expand
       const changeButton = screen.getByRole('button', { name: 'Change' });

@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
+import { ToastProvider } from '@app/contexts/ToastContext';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -54,7 +55,11 @@ vi.mock('./YamlEditor', () => ({
 
 const renderWithTheme = (component: React.ReactNode) => {
   const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
+  return render(
+    <ToastProvider>
+      <ThemeProvider theme={theme}>{component}</ThemeProvider>
+    </ToastProvider>,
+  );
 };
 
 describe('EvaluateTestSuiteCreator', () => {
