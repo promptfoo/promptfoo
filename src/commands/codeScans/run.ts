@@ -39,6 +39,7 @@ import {
   formatSeverity,
   countBySeverity,
   getSeverityRank,
+  validateSeverity,
 } from '../../types/codeScan';
 
 export interface ScanOptions {
@@ -176,7 +177,8 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
   // Allow CLI flags to override config severity (minSeverity takes precedence over minimumSeverity)
   if (options.minSeverity || options.minimumSeverity) {
     const cliSeverity = (options.minSeverity || options.minimumSeverity) as string;
-    config.minimumSeverity = cliSeverity as Config['minimumSeverity'];
+    // Validate severity input (throws ZodError if invalid)
+    config.minimumSeverity = validateSeverity(cliSeverity);
   }
 
   // Handle guidance options (mutually exclusive)

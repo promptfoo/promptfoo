@@ -49,4 +49,50 @@ describe('generateConfigFile', () => {
     // Cleanup
     fs.unlinkSync(configPath);
   });
+
+  it('should normalize severity case (uppercase)', () => {
+    const configPath = generateConfigFile('HIGH');
+    const content = fs.readFileSync(configPath, 'utf8');
+
+    expect(content).toContain('minimumSeverity: high');
+
+    // Cleanup
+    fs.unlinkSync(configPath);
+  });
+
+  it('should normalize severity case (mixed case)', () => {
+    const configPath = generateConfigFile('CriTicAL');
+    const content = fs.readFileSync(configPath, 'utf8');
+
+    expect(content).toContain('minimumSeverity: critical');
+
+    // Cleanup
+    fs.unlinkSync(configPath);
+  });
+
+  it('should trim whitespace from severity', () => {
+    const configPath = generateConfigFile('  medium  ');
+    const content = fs.readFileSync(configPath, 'utf8');
+
+    expect(content).toContain('minimumSeverity: medium');
+
+    // Cleanup
+    fs.unlinkSync(configPath);
+  });
+
+  it('should throw error for invalid severity level', () => {
+    expect(() => generateConfigFile('invalid')).toThrow();
+  });
+
+  it('should throw error for empty severity', () => {
+    expect(() => generateConfigFile('')).toThrow();
+  });
+
+  it('should throw error for numeric severity', () => {
+    expect(() => generateConfigFile('123')).toThrow();
+  });
+
+  it('should throw error for severity with special characters', () => {
+    expect(() => generateConfigFile('high!')).toThrow();
+  });
 });

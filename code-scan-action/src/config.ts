@@ -8,7 +8,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import type { ScanConfig, CodeScanSeverity } from '../../src/types/codeScan';
+import {
+  type ScanConfig,
+  type CodeScanSeverity,
+  validateSeverity,
+  ScanConfigSchema,
+} from '../../src/types/codeScan';
 
 /**
  * Generate a temporary YAML config file from action inputs
@@ -17,18 +22,24 @@ import type { ScanConfig, CodeScanSeverity } from '../../src/types/codeScan';
  * @returns Path to temporary config file
  */
 export function generateConfigFile(minimumSeverity: string, guidance?: string): string {
+  // Validate severity input (throws ZodError if invalid)
+  const validatedSeverity = validateSeverity(minimumSeverity);
+
   const config: ScanConfig = {
-    minimumSeverity: minimumSeverity as CodeScanSeverity,
+    minimumSeverity: validatedSeverity,
     diffsOnly: false, // Always enable full repo exploration for GitHub Actions (never diffs-only)
     guidance,
   };
+
+  // Validate the entire config object for additional safety
+  const validatedConfig = ScanConfigSchema.parse(config);
 
   // Create temp file
   const tempDir = os.tmpdir();
   const configPath = path.join(tempDir, `code-scan-config-${randomUUID()}.yaml`);
 
   // Write YAML
-  let yamlContent = `minimumSeverity: ${config.minimumSeverity}\ndiffsOnly: ${config.diffsOnly}\n`;
+  let yamlContent = `minimumSeverity: ${validatedConfig.minimumSeverity}\ndiffsOnly: ${validatedConfig.diffsOnly}\n`;
   if (guidance) {
     // Properly escape YAML string using literal block scalar
     const guidanceYaml = guidance.includes('\n')

@@ -139,6 +139,25 @@ function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+/**
+ * Validates and parses a severity string into CodeScanSeverity enum
+ * Normalizes input by trimming whitespace and converting to lowercase
+ * @param severity - String input to validate (e.g., "high", "CRITICAL", " medium ")
+ * @returns Validated CodeScanSeverity enum value
+ * @throws {z.ZodError} if severity is not a valid CodeScanSeverity value
+ * @example
+ * validateSeverity('high') // Returns CodeScanSeverity.HIGH
+ * validateSeverity('CRITICAL') // Returns CodeScanSeverity.CRITICAL
+ * validateSeverity('invalid') // Throws ZodError
+ */
+export function validateSeverity(severity: string): CodeScanSeverity {
+  // Normalize input: trim whitespace and convert to lowercase
+  const normalized = severity.trim().toLowerCase();
+
+  // Validate against enum using zod
+  return z.nativeEnum(CodeScanSeverity).parse(normalized);
+}
+
 // ============================================================================
 // Scan Request/Response Schemas (API endpoint payload)
 // ============================================================================
