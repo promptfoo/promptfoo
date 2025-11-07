@@ -278,7 +278,6 @@ export class CrescendoProvider implements ApiProvider {
 
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
       conversationObjective: this.userGoal,
-      currentRound: roundNum + 1,
       maxTurns: this.maxTurns,
       purpose: context?.test?.metadata?.purpose,
       modifierSection:
