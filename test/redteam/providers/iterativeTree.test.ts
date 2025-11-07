@@ -1246,23 +1246,18 @@ describe('Token Counting', () => {
   });
 
   describe('Rubric Storage', () => {
-    it('should store rendered rubric in storedGraderResult.assertion.value', async () => {
+    it('should store rendered rubric in storedGraderResult.assertion.value', () => {
       const mockRenderedRubric = '<rubric>Rendered policy evaluation criteria</rubric>';
-      const mockGraderResult = {
+      const mockGraderResult: {
+        pass: boolean;
+        score: number;
+        reason: string;
+        assertion?: any;
+      } = {
         pass: false,
         score: 0,
         reason: 'Policy violation detected',
       };
-
-      const mockGrader = {
-        getResult: jest.fn().mockResolvedValue({
-          grade: mockGraderResult,
-          rubric: mockRenderedRubric,
-        }),
-      };
-
-      const { getGraderById } = require('../../../src/redteam/graders');
-      (getGraderById as jest.Mock).mockReturnValue(mockGrader);
 
       const testCase: AtomicTestCase = {
         vars: {},
@@ -1278,28 +1273,14 @@ describe('Token Counting', () => {
         },
       };
 
-      const mockGradingProvider: jest.Mocked<ApiProvider> = {
-        id: jest.fn().mockReturnValue('mock-grading'),
-        callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
-          output: 'target output',
-          tokenUsage: {},
-        }),
-      } as jest.Mocked<ApiProvider>;
-
-      // Import the actual function that uses graders
-      const { runRedteamConversation } = await import(
-        '../../../src/redteam/providers/iterativeTree'
-      );
-
-      // This would normally be called, but we're just testing the grading result storage pattern
-      // The actual test is in the goat.test.ts, but we verify the pattern here
+      // Test the pattern used in iterativeTree for storing rubric
       const storedResult = {
         ...mockGraderResult,
         assertion: mockGraderResult.assertion
           ? { ...mockGraderResult.assertion, value: mockRenderedRubric }
           : testCase.assert?.[0] &&
               'type' in testCase.assert[0] &&
-              testCase.assert[0].type !== 'assert-set'
+              (testCase.assert[0] as any).type !== 'assert-set'
             ? { ...testCase.assert[0], value: mockRenderedRubric }
             : undefined,
       };

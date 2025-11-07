@@ -111,7 +111,12 @@ describe('addCrescendo', () => {
     it('should store rendered rubric in storedGraderResult.assertion.value', () => {
       // Test the pattern used in crescendo provider for storing rubric
       const mockRenderedRubric = '<rubric>Rendered grading criteria</rubric>';
-      const mockGraderResult = {
+      const mockGraderResult: {
+        pass: boolean;
+        score: number;
+        reason: string;
+        assertion?: any;
+      } = {
         pass: false,
         score: 0,
         reason: 'Jailbreak detected',
@@ -127,7 +132,7 @@ describe('addCrescendo', () => {
         ...mockGraderResult,
         assertion: mockGraderResult.assertion
           ? { ...mockGraderResult.assertion, value: mockRenderedRubric }
-          : testAssertion && 'type' in testAssertion && testAssertion.type !== 'assert-set'
+          : testAssertion && 'type' in testAssertion && (testAssertion as any).type !== 'assert-set'
             ? { ...testAssertion, value: mockRenderedRubric }
             : undefined,
       };
