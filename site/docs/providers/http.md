@@ -252,7 +252,7 @@ transformRequest: 'file://transforms/request.js'
 Example transform file (transforms/request.js):
 
 ```javascript
-module.exports = (prompt) => {
+module.exports = (prompt, vars, context) => {
   return {
     text: prompt,
     metadata: {
