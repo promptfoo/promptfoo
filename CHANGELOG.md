@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Documentation
+
+- docs(redteam): add comprehensive documentation for `gradingGuidance` plugin configuration option including usage examples, priority explanations, and integration with `graderExamples` (#6128)
+
 ## [0.119.4] - 2025-11-06
 
 ### Added
