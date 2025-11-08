@@ -17,12 +17,7 @@ import { isText } from 'istextorbinary';
 import pLimit from 'p-limit';
 import textExtensions from 'text-extensions';
 import { annotateSingleFileDiffWithLineNumbers } from './diffAnnotator';
-import {
-  DENYLIST_PATTERNS,
-  isInDenylist,
-  MAX_BLOB_SIZE_BYTES,
-  MAX_PATCH_SIZE_BYTES,
-} from '../constants/filtering';
+import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../constants/filtering';
 
 import type { FileRecord } from '../../types/codeScan';
 import { DiffProcessorError } from '../../types/codeScan';

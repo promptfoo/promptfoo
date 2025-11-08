@@ -8,13 +8,28 @@ import simpleGit, { type SimpleGit } from 'simple-git';
 import { GitError } from '../../types/codeScan';
 
 /**
- * Get the base branch name (main or master)
+ * Get the base branch name by detecting the remote's default branch
+ * Falls back to local branch detection (main or master)
  * @param git Simple git instance
  * @returns Base branch name
  */
 async function getBaseBranch(git: SimpleGit): Promise<string> {
   try {
-    // Check if main exists
+    // First, try to detect the remote's default branch
+    try {
+      const remoteHead = await git.raw(['symbolic-ref', 'refs/remotes/origin/HEAD']);
+      if (remoteHead) {
+        // Parse branch name from "refs/remotes/origin/main" -> "main"
+        const match = remoteHead.trim().match(/refs\/remotes\/origin\/(.+)/);
+        if (match && match[1]) {
+          return match[1];
+        }
+      }
+    } catch {
+      // Remote HEAD not set or no remote, fall back to local detection
+    }
+
+    // Fallback: Check local branches for main or master
     const branches = await git.branch();
     if (branches.all.includes('main')) {
       return 'main';
@@ -27,6 +42,9 @@ async function getBaseBranch(git: SimpleGit): Promise<string> {
       'Could not find a default base branch (main or master). Please specify a base branch or commit to compare against with --base',
     );
   } catch (error) {
+    if (error instanceof GitError) {
+      throw error;
+    }
     throw new GitError(
       `Failed to determine base branch: ${error instanceof Error ? error.message : String(error)}. Please specify a base branch or commit to compare against with --base`,
     );
