@@ -421,7 +421,7 @@ function SolutionSection() {
               <li>Track fixes across teams</li>
               <li>Continuous monitoring</li>
             </ul>
-            <Link to="/contact/" className={styles.solutionLink}>
+            <Link to="/docs/enterprise/remediation-reports/" className={styles.solutionLink}>
               Learn more about remediation →
             </Link>
           </div>
