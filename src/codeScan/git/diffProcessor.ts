@@ -11,19 +11,22 @@
 
 import path from 'path';
 
+import binaryExtensions from 'binary-extensions';
 import { execa } from 'execa';
 import { isText } from 'istextorbinary';
-import mime from 'mime-types';
 import pLimit from 'p-limit';
+import textExtensions from 'text-extensions';
 import { annotateSingleFileDiffWithLineNumbers } from './diffAnnotator';
 import {
   DENYLIST_PATTERNS,
   isInDenylist,
   MAX_BLOB_SIZE_BYTES,
   MAX_PATCH_SIZE_BYTES,
-} from './filteringConstants';
+} from '../constants/filtering';
 
-import type { FileRecord } from '../../../types/codeScan';
+import type { FileRecord } from '../../types/codeScan';
+import { DiffProcessorError } from '../../types/codeScan';
+import logger from 'src/logger';
 
 interface RawDiffEntry {
   path: string;
@@ -38,74 +41,13 @@ interface NumstatEntry {
   linesRemoved: number;
 }
 
-// Re-export for backwards compatibility
-export { DENYLIST_PATTERNS, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES, isInDenylist };
+type PatchResult =
+  | { success: true; patch: string }
+  | { success: false; skipReason: 'patch too large' }
+  | { success: false; skipReason: 'diff error' };
 
 const PATCH_CONCURRENCY = 8;
 const TEXT_DETECTION_CONCURRENCY = 16;
-
-/**
- * Known text file extensions for programming languages
- * These override MIME type detection for common false positives
- */
-const TEXT_FILE_EXTENSIONS = new Set([
-  '.ts',
-  '.tsx',
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.cjs',
-  '.py',
-  '.rb',
-  '.java',
-  '.c',
-  '.cpp',
-  '.h',
-  '.hpp',
-  '.go',
-  '.rs',
-  '.php',
-  '.swift',
-  '.kt',
-  '.scala',
-  '.css',
-  '.scss',
-  '.sass',
-  '.less',
-  '.html',
-  '.htm',
-  '.xml',
-  '.svg',
-  '.json',
-  '.yaml',
-  '.yml',
-  '.toml',
-  '.ini',
-  '.cfg',
-  '.md',
-  '.txt',
-  '.rst',
-  '.adoc',
-  '.sh',
-  '.bash',
-  '.zsh',
-  '.fish',
-  '.sql',
-  '.graphql',
-  '.proto',
-  '.vue',
-  '.svelte',
-  '.astro',
-  '.tf',
-  '.hcl',
-]);
-
-export class DiffProcessorError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'DiffProcessorError';
-  }
-}
 
 /**
  * Parse git diff --raw -z output
@@ -352,40 +294,52 @@ async function isBlobText(repoPath: string, sha: string): Promise<boolean> {
   }
 }
 
-function hasTextExtension(filePath: string): boolean {
-  const ext = path.extname(filePath).toLowerCase();
-  return TEXT_FILE_EXTENSIONS.has(ext);
+/**
+ * Check file extension against known text and binary extension lists
+ * @returns 'text' if known text extension, 'binary' if known binary extension, 'unknown' otherwise
+ */
+function getExtensionType(filePath: string): 'text' | 'binary' | 'unknown' {
+  const ext = path.extname(filePath).toLowerCase().slice(1); // Remove leading dot
+
+  if (textExtensions.includes(ext)) {
+    return 'text';
+  }
+
+  if (binaryExtensions.includes(ext)) {
+    return 'binary';
+  }
+
+  return 'unknown';
 }
 
 /**
  * Determine text/binary status for a single file
- * Uses hybrid approach: MIME type first, then blob content for uncertain cases
+ * Uses 2-tier approach: extension lists first, then blob content analysis for unknown extensions
  */
 async function determineTextStatusForFile(repoPath: string, file: FileRecord): Promise<FileRecord> {
   if (file.skipReason) {
     return file;
   }
 
-  // Step 1: Check if it has a known programming language extension
-  if (hasTextExtension(file.path)) {
+  // Step 1: Check against known text/binary extension lists
+  const extensionType = getExtensionType(file.path);
+
+  if (extensionType === 'text') {
     return {
       ...file,
       isText: true,
     };
   }
 
-  // Step 2: Check MIME type by extension
-  const mimeType = mime.lookup(file.path) || 'application/octet-stream';
-
-  // If MIME suggests text, trust it
-  if (mimeType.startsWith('text/') || mimeType.includes('json') || mimeType.includes('xml')) {
+  if (extensionType === 'binary') {
     return {
       ...file,
-      isText: true,
+      isText: false,
+      skipReason: 'binary',
     };
   }
 
-  // Step 3: MIME suggests binary - double-check by reading blob content
+  // Step 2: For unknown extensions, analyze blob content
   const checkSha = file.shaB || file.shaA;
   if (!checkSha) {
     return {
@@ -428,7 +382,7 @@ async function generatePatchForFile(
   base: string,
   compare: string,
   filePath: string,
-): Promise<string | null> {
+): Promise<PatchResult> {
   try {
     const result = await execa(
       'git',
@@ -444,22 +398,36 @@ async function generatePatchForFile(
       ],
       {
         cwd: repoPath,
+        maxBuffer: MAX_PATCH_SIZE_BYTES,
       },
     );
 
     const patch = result.stdout;
 
-    // Check patch size
-    if (patch.length > MAX_PATCH_SIZE_BYTES) {
-      return null;
+    // Double check patch size
+    const patchSize = Buffer.byteLength(patch, 'utf8');
+    if (patchSize > MAX_PATCH_SIZE_BYTES) {
+      return { success: false, skipReason: 'patch too large' };
     }
 
     // Annotate the patch with line numbers for easier LLM processing
     const annotatedPatch = annotateSingleFileDiffWithLineNumbers(patch);
 
-    return annotatedPatch;
-  } catch {
-    return null;
+    return { success: true, patch: annotatedPatch };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+
+    // Check if error is due to maxBuffer exceeded
+    if (errorMessage.includes('maxBuffer') || errorMessage.includes('stdout maxBuffer')) {
+      logger.debug(
+        `git diff --patch ${filePath} exceeded maxBuffer (${MAX_PATCH_SIZE_BYTES} bytes) - patch too large`,
+      );
+      return { success: false, skipReason: 'patch too large' };
+    }
+
+    // Other git diff errors
+    logger.debug(`git diff --patch ${filePath} failed: ${errorMessage} - skipping file`);
+    return { success: false, skipReason: 'diff error' };
   }
 }
 
@@ -477,18 +445,18 @@ async function generatePatches(
         return file;
       }
 
-      const patch = await generatePatchForFile(repoPath, base, compare, file.path);
+      const result = await generatePatchForFile(repoPath, base, compare, file.path);
 
-      if (patch === null) {
+      if (!result.success) {
         return {
           ...file,
-          skipReason: 'patch too large',
+          skipReason: result.skipReason,
         };
       }
 
       return {
         ...file,
-        patch,
+        patch: result.patch,
       };
     }),
   );

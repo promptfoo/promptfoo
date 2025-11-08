@@ -18,13 +18,14 @@ import telemetry from '../../telemetry';
 import { formatDuration } from '../../util/formatDuration';
 import { TERMINAL_MAX_WIDTH } from '../../constants';
 import { printBorder } from '../../util/index';
-import { resolveAuthCredentials } from './auth';
-import { type Config, loadConfigOrDefault } from './config/loader';
-import { validateOnBranch } from './git/diff';
-import { processDiff } from './git/diffProcessor';
-import { extractMetadata } from './git/metadata';
-import { startFilesystemMcpServer, stopFilesystemMcpServer } from './mcp/filesystem';
-import { SocketIoMcpBridge } from './mcp/transport';
+import { resolveAuthCredentials } from '../util/auth';
+import type { Config } from '../config/schema';
+import { loadConfigOrDefault } from '../config/loader';
+import { validateOnBranch } from '../git/diff';
+import { processDiff } from '../git/diffProcessor';
+import { extractMetadata } from '../git/metadata';
+import { startFilesystemMcpServer, stopFilesystemMcpServer } from '../mcp/filesystem';
+import { SocketIoMcpBridge } from '../mcp/transport';
 import type { Command } from 'commander';
 
 import type {

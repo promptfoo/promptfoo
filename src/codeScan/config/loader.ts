@@ -9,16 +9,7 @@ import path from 'path';
 
 import yaml from 'js-yaml';
 import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
-
-// Re-export Config type for convenience
-export type { Config };
-
-export class ConfigLoadError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ConfigLoadError';
-  }
-}
+import { ConfigLoadError } from '../../types/codeScan';
 
 /**
  * Load configuration from a YAML file

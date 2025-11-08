@@ -15,7 +15,7 @@ jest.mock('../src/logger', () => ({
 }));
 
 // Mock code scan commands to avoid ESM import issues with execa
-jest.mock('../src/commands/codeScans', () => ({
+jest.mock('../src/codeScan', () => ({
   codeScansCommand: jest.fn(),
 }));
 

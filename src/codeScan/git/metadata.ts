@@ -6,14 +6,8 @@
 
 import simpleGit, { type LogResult } from 'simple-git';
 
-import type { GitMetadata } from '../../../types/codeScan';
-
-export class GitMetadataError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'GitMetadataError';
-  }
-}
+import type { GitMetadata } from '../../types/codeScan';
+import { GitMetadataError } from '../../types/codeScan';
 
 /**
  * Extract git metadata for the comparison

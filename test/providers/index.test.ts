@@ -1,3 +1,4 @@
+import type { NonSharedBuffer } from 'buffer';
 import child_process from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -411,8 +412,8 @@ describe('call provider apis', () => {
               | null
               | ((
                   error: child_process.ExecFileException | null,
-                  stdout: string | Buffer,
-                  stderr: string | Buffer,
+                  stdout: string | NonSharedBuffer,
+                  stderr: string | NonSharedBuffer,
                 ) => void),
           ) => {
             process.nextTick(

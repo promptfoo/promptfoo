@@ -1,4 +1,4 @@
-import { runCommand } from './run';
+import { runCommand } from './commands/run';
 import type { Command } from 'commander';
 
 /**

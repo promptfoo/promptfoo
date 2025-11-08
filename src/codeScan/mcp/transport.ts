@@ -9,9 +9,10 @@
 import type { ChildProcess } from 'child_process';
 
 import { type Socket } from 'socket.io-client';
-import logger from '../../../logger';
+import logger from '../../logger';
 
-import type { JsonRpcMessage } from '../../../types/codeScan';
+import type { JsonRpcMessage } from '../../types/codeScan';
+import { SocketIoMcpBridgeError } from '../../types/codeScan';
 
 /**
  * Wire ID mapping for tracking request/response correlation
@@ -19,13 +20,6 @@ import type { JsonRpcMessage } from '../../../types/codeScan';
 interface WireIdMapping {
   batchId: number;
   originalId: string | number | null;
-}
-
-export class SocketIoMcpBridgeError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SocketIoMcpBridgeError';
-  }
 }
 
 /**

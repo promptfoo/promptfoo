@@ -5,13 +5,7 @@
  */
 
 import simpleGit, { type SimpleGit } from 'simple-git';
-
-export class GitError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'GitError';
-  }
-}
+import { GitError } from '../../types/codeScan';
 
 /**
  * Get the base branch name (main or master)

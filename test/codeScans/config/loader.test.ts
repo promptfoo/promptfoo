@@ -6,8 +6,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { ConfigLoadError, loadConfig, loadConfigOrDefault } from './loader';
-import { CodeScanSeverity } from '../../../types/codeScan';
+import { loadConfig, loadConfigOrDefault } from '../../../src/codeScan/config/loader';
+import { CodeScanSeverity, ConfigLoadError } from '../../../src/types/codeScan';
 
 describe('Configuration Loader', () => {
   let tempDir: string;

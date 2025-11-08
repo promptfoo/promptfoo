@@ -1,4 +1,4 @@
-import { annotateSingleFileDiffWithLineNumbers } from './diffAnnotator';
+import { annotateSingleFileDiffWithLineNumbers } from '../../../src/codeScan/git/diffAnnotator';
 
 describe('annotateDiffWithLineNumbers', () => {
   describe('basic functionality', () => {

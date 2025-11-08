@@ -7,14 +7,8 @@
 import { type ChildProcess, spawn } from 'child_process';
 import { isAbsolute, resolve } from 'path';
 
-import logger from '../../../logger';
-
-export class FilesystemMcpError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'FilesystemMcpError';
-  }
-}
+import logger from '../../logger';
+import { FilesystemMcpError } from '../../types/codeScan';
 
 /**
  * Start the filesystem MCP server as a child process

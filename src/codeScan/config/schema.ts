@@ -5,10 +5,7 @@
  */
 
 import { z } from 'zod';
-import { CodeScanSeverity } from '../../../types/codeScan';
-
-// Re-export for convenience
-export { CodeScanSeverity };
+import { CodeScanSeverity } from '../../types/codeScan';
 
 export const ConfigSchema = z
   .object({

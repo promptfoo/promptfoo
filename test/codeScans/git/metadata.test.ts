@@ -2,7 +2,8 @@
  * Git Metadata Tests
  */
 
-import { extractMetadata, GitMetadataError } from './metadata';
+import { extractMetadata } from '../../../src/codeScan/git/metadata';
+import { GitMetadataError } from '../../../src/types/codeScan';
 import type { SimpleGit } from 'simple-git';
 
 // Mock simple-git

@@ -2,7 +2,8 @@
  * Git Diff Tests
  */
 
-import { extractDiff, GitError, validateOnBranch } from './diff';
+import { extractDiff, validateOnBranch } from '../../../src/codeScan/git/diff';
+import { GitError } from '../../../src/types/codeScan';
 import type { SimpleGit, StatusResult } from 'simple-git';
 
 // Mock simple-git

@@ -282,3 +282,67 @@ export interface ParsedGitHubPR {
   repo: string;
   number: number;
 }
+
+// ============================================================================
+// Error Classes
+// ============================================================================
+
+/**
+ * Error thrown when git operations fail
+ */
+export class GitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GitError';
+  }
+}
+
+/**
+ * Error thrown when git metadata extraction fails
+ */
+export class GitMetadataError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GitMetadataError';
+  }
+}
+
+/**
+ * Error thrown when diff processing fails
+ */
+export class DiffProcessorError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DiffProcessorError';
+  }
+}
+
+/**
+ * Error thrown when MCP filesystem server startup fails
+ */
+export class FilesystemMcpError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FilesystemMcpError';
+  }
+}
+
+/**
+ * Error thrown when Socket.io MCP bridge connection fails
+ */
+export class SocketIoMcpBridgeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SocketIoMcpBridgeError';
+  }
+}
+
+/**
+ * Error thrown when config file loading or parsing fails
+ */
+export class ConfigLoadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConfigLoadError';
+  }
+}
