@@ -38,7 +38,7 @@ function HomepageHeader() {
             Ship agents, not vulnerabilities
           </h1>
           <p className={styles.heroSubtitle}>
-            Open-source AI security that works for developers
+            85 of the Fortune 500 use Promptfoo to test AI before deployment
           </p>
           <div className={styles.heroButtons}>
             <Link className="button button--primary button--lg" to="/contact/">
@@ -968,7 +968,7 @@ export default function Home(): JSX.Element {
       </Head>
       <HomepageHeader />
       <TrustBar />
-      <BridgeSection />
+      {/*<BridgeSection />*/}
       <HomepageWalkthrough />
       <main>
         <SolutionSection />
