@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(redteam): remove stale currentRound from crescendo system prompt that always showed '1' instead of actual round number (#6133)
 - fix(redteam): pass all gradingContext properties to rubric templates to fix categoryGuidance rendering errors in BeavertailsGrader (#6111)
 - fix(webui): custom policy name consistency (#6123)
 
