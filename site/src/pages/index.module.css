@@ -459,19 +459,18 @@ html {
 .walkthroughTabs {
   display: flex;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.25rem;
   margin-bottom: 3rem;
   flex-wrap: wrap;
   max-width: 100%;
   padding: 0.5rem;
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 16px;
-  backdrop-filter: blur(5px);
+  background: transparent;
+  border-radius: 12px;
   position: relative;
 }
 
 [data-theme='dark'] .walkthroughTabs {
-  background: rgba(16, 25, 28, 0.5);
+  background: transparent;
 }
 
 /* Scroll indicator for mobile */
@@ -494,66 +493,85 @@ html {
 }
 
 .walkthroughTab {
-  padding: 0.75rem 1.5rem;
+  padding: 0.875rem 1.75rem;
   border: none;
   background: transparent;
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 1.05rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: all var(--animation-speed-fast) var(--animation-ease-smooth);
+  transition: all 0.2s ease;
   white-space: normal;
   text-align: center;
-  border-radius: 12px;
+  border-radius: 8px;
   position: relative;
   color: var(--pf-dark-base);
-  /* Add will-change for smoother tab switching */
-  will-change: transform, background;
+  opacity: 0.6;
 }
 
 [data-theme='dark'] .walkthroughTab {
   color: #e0e0e0;
+  opacity: 0.5;
 }
 
-/* Add subtle underline animation on hover */
+/* Clean bottom indicator line */
 .walkthroughTab::after {
   content: '';
   position: absolute;
-  bottom: 8px;
+  bottom: 0;
   left: 50%;
   width: 0;
   height: 2px;
   background: var(--pf-red-base);
   transform: translateX(-50%);
-  transition: width var(--animation-speed-fast) ease;
+  transition: width 0.2s ease;
+  border-radius: 2px;
 }
 
 .walkthroughTab:hover {
-  background: rgba(229, 58, 58, 0.08);
-  transform: translateY(-2px) scale(1.02);
+  opacity: 0.85;
+  color: var(--pf-red-darker);
+}
+
+[data-theme='dark'] .walkthroughTab:hover {
+  opacity: 0.75;
+  color: var(--pf-red-light);
 }
 
 .walkthroughTab:hover::after {
-  width: 60%;
+  width: 50%;
 }
 
 .walkthroughTabActive {
-  background: linear-gradient(135deg, var(--pf-red-darker) 0%, var(--pf-red-dark) 100%);
-  color: white;
-  box-shadow:
-    0 6px 16px rgba(179, 46, 46, 0.4),
-    0 2px 8px rgba(0, 0, 0, 0.2);
-  /* Add subtle pulse animation */
-  animation: breathe 4s ease-in-out infinite;
+  background: transparent;
+  color: var(--pf-red-darker);
+  font-weight: 500;
+  opacity: 1;
 }
 
 .walkthroughTabActive::after {
-  display: none; /* Hide underline for active tab */
+  /* Clean, prominent underline for active state */
+  width: 100%;
+  background: var(--pf-red-base);
+  height: 3px;
+  bottom: 0;
 }
 
 .walkthroughTabActive:hover {
-  background: linear-gradient(135deg, #991515 0%, var(--pf-red-darker) 100%);
-  transform: translateY(-3px) scale(1.03);
-  animation: none; /* Disable breathe on hover */
+  opacity: 1;
+  color: var(--pf-red-darker);
+}
+
+[data-theme='dark'] .walkthroughTabActive {
+  color: var(--pf-red-light);
+  opacity: 1;
+}
+
+[data-theme='dark'] .walkthroughTabActive::after {
+  background: var(--pf-red-light);
+}
+
+[data-theme='dark'] .walkthroughTabActive:hover {
+  color: var(--pf-red-light);
 }
 
 .walkthroughContent {
@@ -760,10 +778,11 @@ html {
   }
 
   .walkthroughTabActive {
-    background: linear-gradient(135deg, var(--pf-red-darker) 0%, var(--pf-red-dark) 100%);
-    color: white;
-    box-shadow: 0 2px 8px rgba(179, 46, 46, 0.3);
-    font-weight: 700;
+    /* Clean modern styling on mobile */
+    background: transparent;
+    color: var(--pf-red-darker);
+    font-weight: 500;
+    opacity: 1;
   }
 
   .walkthroughButtons,
@@ -1020,15 +1039,8 @@ html {
 }
 
 .asSeenOnSection {
-  padding: var(--section-spacing-sm) 0 var(--section-spacing-lg) 0;
-  /* Removed background-color - using page-level gradient instead */
+  padding: var(--section-spacing-xl) 0;
   background: transparent;
-}
-
-.asSeenOnSection h2 {
-  text-align: center;
-  font-size: 2rem;
-  margin-bottom: 3rem;
 }
 
 .asSeenOnGrid {
@@ -1045,20 +1057,15 @@ html {
   flex-direction: column;
   align-items: center;
   padding: 2.5rem;
-  border-radius: 20px;
-  /* Use subtle white card background */
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow:
-    0 4px 20px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  border-radius: 16px;
+  background: white;
+  border: 2px solid rgba(229, 58, 58, 0.1);
   transition: all var(--animation-speed-medium) var(--animation-ease-smooth);
   text-decoration: none;
   color: inherit;
   position: relative;
   overflow: hidden;
-  /* Add entrance animation with stagger */
   animation: fadeInUpScroll 0.6s var(--animation-ease-smooth) backwards;
-  backdrop-filter: blur(10px);
 }
 
 /* Stagger the AsSeenOn card animations */
@@ -1101,11 +1108,9 @@ html {
 }
 
 .asSeenOnCard:hover {
-  transform: translateY(-12px) scale(1.02);
-  box-shadow:
-    0 20px 60px rgba(229, 58, 58, 0.2),
-    0 8px 24px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transform: translateY(-8px);
+  border-color: rgba(229, 58, 58, 0.3);
+  box-shadow: 0 12px 32px rgba(229, 58, 58, 0.15);
 }
 
 .asSeenOnCard:hover::before {
@@ -1118,17 +1123,13 @@ html {
 }
 
 [data-theme='dark'] .asSeenOnCard {
-  /* Use subtle dark card background */
   background: rgba(46, 60, 70, 0.9);
-  box-shadow:
-    0 4px 20px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border-color: rgba(229, 58, 58, 0.2);
 }
 
 [data-theme='dark'] .asSeenOnCard:hover {
-  box-shadow:
-    0 12px 40px rgba(229, 58, 58, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border-color: rgba(229, 58, 58, 0.4);
+  box-shadow: 0 12px 32px rgba(229, 58, 58, 0.2);
 }
 
 .asSeenOnGrid a:hover {
@@ -1251,7 +1252,7 @@ html {
 
 /* Hero Section Updates */
 .heroContent {
-  max-width: 900px;
+  max-width: 1024px;
   margin: 0 auto;
 }
 
@@ -1325,7 +1326,7 @@ html {
 
 /* Bridge Section - Connects Hero to Products */
 .bridgeSection {
-  padding: 1.5rem 0 1.5rem;
+  padding: var(--section-spacing-sm) 0;
   text-align: center;
   background: transparent;
   position: relative;
@@ -1334,33 +1335,30 @@ html {
 }
 
 .bridgeStatement {
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   line-height: 1.6;
-  color: var(--ifm-font-color-base);
+  color: var(--pf-dark-base);
+  opacity: 0.85;
   max-width: 900px;
   margin: 0 auto 1rem;
-  font-weight: 400;
-  letter-spacing: -0.01em;
 }
 
 [data-theme='dark'] .bridgeStatement {
   color: #e0e0e0;
+  opacity: 0.8;
 }
 
 .bridgeSubheading {
-  font-size: 1.25rem;
-  line-height: 1.5;
-  color: var(--pf-dark-base);
-  opacity: 0.85;
-  max-width: 800px;
-  margin: 0 auto 2rem;
-  font-weight: 500;
-  letter-spacing: -0.005em;
+  font-size: 1.75rem;
+  line-height: 1.6;
+  color: var(--pf-red-dark);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  display: inline;
 }
 
 [data-theme='dark'] .bridgeSubheading {
-  color: #e0e0e0;
-  opacity: 0.8;
+  color: var(--pf-red-light);
 }
 
 .fortuneHighlight {
@@ -1511,7 +1509,7 @@ html {
   }
 
   .bridgeStatement {
-    font-size: 1.375rem;
+    font-size: 1.25rem;
     padding: 0 1rem;
     margin-bottom: 0.75rem;
   }
@@ -1681,16 +1679,44 @@ html {
   font-weight: 600;
   color: var(--pf-dark-base);
   opacity: 0.85;
-  padding: 0.5rem 1rem;
+  padding: 0.75rem 1.25rem 0.75rem 3rem;
   background: rgba(229, 58, 58, 0.06);
   border-radius: 8px;
   white-space: nowrap;
   transition: all var(--animation-speed-fast) var(--animation-ease-smooth);
+  position: relative;
+  overflow: visible;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 [data-theme='dark'] .marqueeItem {
   color: #e0e0e0;
   background: rgba(229, 58, 58, 0.12);
+}
+
+.marqueeIcon {
+  position: absolute;
+  left: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.75rem;
+  opacity: 0.25;
+  color: var(--pf-red-base);
+  pointer-events: none;
+  transition: all var(--animation-speed-medium) var(--animation-ease-smooth);
+  z-index: 0;
+}
+
+[data-theme='dark'] .marqueeIcon {
+  opacity: 0.35;
+  color: var(--pf-red-light);
+}
+
+.marqueeText {
+  position: relative;
+  z-index: 1;
 }
 
 @keyframes marqueeScroll {
@@ -2026,7 +2052,7 @@ html {
 
 /* Walkthrough Section */
 .walkthroughSection {
-  padding: 1rem 0 var(--section-spacing-xl);
+  padding: var(--section-spacing-sm) 0 var(--section-spacing-xl);
   background: transparent;
   position: relative;
 }
@@ -2500,7 +2526,7 @@ html {
   padding: 1.5rem 2rem;
   background: white;
   border: 2px solid rgba(229, 58, 58, 0.1);
-  border-radius: 12px;
+  border-radius: 16px;
   cursor: pointer;
   transition: all var(--animation-speed-medium) var(--animation-ease-smooth);
   text-align: center;

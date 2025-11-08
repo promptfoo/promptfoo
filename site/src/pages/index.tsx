@@ -2,12 +2,22 @@ import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CompareIcon from '@mui/icons-material/Compare';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 import DescriptionIcon from '@mui/icons-material/Description';
+import FlightIcon from '@mui/icons-material/Flight';
+import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions';
+import PsychologyIcon from '@mui/icons-material/Psychology';
+import RouterIcon from '@mui/icons-material/Router';
 import SecurityIcon from '@mui/icons-material/Security';
+import ShieldIcon from '@mui/icons-material/Shield';
+import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
+import StorefrontIcon from '@mui/icons-material/Storefront';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import NewsletterForm from '../components/NewsletterForm';
@@ -25,12 +35,10 @@ function HomepageHeader() {
           </div>
           */}
           <h1 className={styles.heroTitle}>
-            Find & fix AI vulnerabilities
-            <br />
-            in development
+            Ship agents, not vulnerabilities
           </h1>
           <p className={styles.heroSubtitle}>
-            Security for apps & agents trusted by 85 of the Fortune 500
+            Open-source AI security that works for developers
           </p>
           <div className={styles.heroButtons}>
             <Link className="button button--primary button--lg" to="/contact/">
@@ -51,16 +59,16 @@ function HomepageHeader() {
 
 function TrustBar() {
   const marqueeItems = [
-    'Top 5 global retailer',
-    'Top 3 U.S. wireless carrier',
-    'Top 3 global strategy consultancy',
-    'Public legal & tax provider',
-    'Top 5 U.S. healthcare company',
-    'Nationwide 5G network operator',
-    'Top U.S. foundation model lab',
-    'Top 3 U.K. insurance provider',
-    'Global ERP leader',
-    'Top 3 travel site',
+    { text: 'Top 5 global retailer', icon: <StorefrontIcon /> },
+    { text: 'Top 3 U.S. wireless carrier', icon: <SignalCellularAltIcon /> },
+    { text: 'Top 3 global strategy consultancy', icon: <BusinessCenterIcon /> },
+    { text: 'Public legal & tax provider', icon: <AccountBalanceIcon /> },
+    { text: 'Top 5 U.S. healthcare company', icon: <HealthAndSafetyIcon /> },
+    { text: 'Nationwide 5G network operator', icon: <RouterIcon /> },
+    { text: 'Top U.S. foundation model lab', icon: <PsychologyIcon /> },
+    { text: 'Top 3 U.K. insurance provider', icon: <ShieldIcon /> },
+    { text: 'Global ERP leader', icon: <DashboardIcon /> },
+    { text: 'Top 3 travel site', icon: <FlightIcon /> },
   ];
 
   return (
@@ -74,7 +82,8 @@ function TrustBar() {
           <div className={styles.marqueeTrack}>
             {[...marqueeItems, ...marqueeItems].map((item, idx) => (
               <span key={idx} className={styles.marqueeItem}>
-                {item}
+                <span className={styles.marqueeIcon}>{item.icon}</span>
+                <span className={styles.marqueeText}>{item.text}</span>
               </span>
             ))}
           </div>
@@ -89,10 +98,8 @@ function BridgeSection() {
     <section className={styles.bridgeSection}>
       <div className="container">
         <div className={styles.bridgeStatement}>
-          <span className={styles.securityHighlight}>Secure AI starts in development</span>
-        </div>
-        <div className={styles.bridgeSubheading}>
-          Catch vulnerabilities where you build, not in production
+          <strong>85 of the Fortune 500</strong> use Promptfoo to build with AI securely.{' '}
+          Here's how:
         </div>
       </div>
     </section>
@@ -202,21 +209,23 @@ function HomepageWalkthrough() {
     {
       id: 3,
       caption: 'Model Security',
-      mobileCaption: 'Security',
+      mobileCaption: 'Models',
       image: '/img/model-ranking-framed.png',
       image2x: '/img/model-ranking-framed.png',
       description: (
         <>
-          <p className={styles.walkthroughHeading}>Comprehensive compliance for your AI stack</p>
-          <p>One-click scanning of your entire AI ecosystem against industry frameworks:</p>
+          <p className={styles.walkthroughHeading}>Complete lifecycle model security</p>
+          <p>Secure models from development through deployment:</p>
           <ul>
-            <li>OWASP Top 10 for LLMs compliance</li>
-            <li>NIST AI Risk Management Framework</li>
-            <li>EU AI Act requirements</li>
-            <li>Customizable scans for industry regulations</li>
-            <li>AWS plugin support for top 10 vulnerabilities</li>
+            <li>Scan model files for malicious code and backdoors</li>
+            <li>Test foundation model behavior against real attacks</li>
+            <li>Compare security across models and versions</li>
+            <li>Generate compliance reports (OWASP, NIST, EU AI Act)</li>
           </ul>
-          <p>Get detailed reports with clear remediation steps and continuous monitoring.</p>
+          <p>
+            Works with open-weight models (PyTorch, TensorFlow, ONNX) and proprietary foundation
+            models (OpenAI, Anthropic, etc.)
+          </p>
           <p>
             <strong>
               <Link to="/model-security">&raquo; Learn more about Model Security</Link>
@@ -561,7 +570,11 @@ function AsSeenOnSection() {
   return (
     <section className={styles.asSeenOnSection}>
       <div className="container">
-        <h2 className={styles.sectionTitle}>Featured In</h2>
+        <div className={styles.sectionEyebrow}>FEATURED IN</div>
+        <h2 className={styles.sectionTitle}>Trusted by AI Leaders</h2>
+        <p className={styles.sectionSubtitle}>
+          See how teams at OpenAI and Anthropic use Promptfoo to build better AI applications.
+        </p>
         <div className={styles.asSeenOnGrid}>
           <a
             href="https://vimeo.com/1023317525/be082a1029"
