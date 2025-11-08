@@ -1,8 +1,13 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
+
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
+import type {
+  RedteamStrategyObject,
+  TestCase,
+} from '../../types/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { strategyDisplayNames } from '../constants';
@@ -17,13 +22,17 @@ import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
+import { addHydra } from './hydra';
 import { addIterativeJailbreaks } from './iterative';
 import { addLayerTestCases } from './layer';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
-import { addOtherEncodings, EncodingType } from './otherEncodings';
+import {
+  addOtherEncodings,
+  EncodingType,
+} from './otherEncodings';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
@@ -32,8 +41,6 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
-
-import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
 
 export type { Strategy };
@@ -207,6 +214,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding meta-agent jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:meta', config);
       logger.debug(`Added ${newTestCases.length} meta-agent jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'jailbreak:hydra',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding hydra multi-turn jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addHydra(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} hydra jailbreak test cases`);
       return newTestCases;
     },
   },

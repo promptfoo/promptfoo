@@ -138,7 +138,9 @@ interface PromptfooChatCompletionOptions {
     | 'iterative:tree'
     | 'judge'
     | 'blocking-question-analysis'
-    | 'meta-agent-decision';
+    | 'meta-agent-decision'
+    | 'hydra-decision'
+    | 'demon-decision';
 }
 
 /**
