@@ -2103,6 +2103,9 @@ html {
   /* Add entrance animation with stagger */
   animation: fadeInUpScroll 0.6s var(--animation-ease-smooth) backwards;
   will-change: transform;
+  /* Flexbox layout to push link to bottom */
+  display: flex;
+  flex-direction: column;
 }
 
 /* Stagger the card animations */
@@ -2230,6 +2233,8 @@ html {
   position: relative;
   z-index: 1;
   display: inline-block;
+  /* Push link to bottom of card */
+  margin-top: auto;
 }
 
 .solutionLink:hover {
@@ -2364,6 +2369,9 @@ html {
   color: transparent;
   margin-bottom: 0.5rem;
   display: inline-block;
+  font-variant-numeric: tabular-nums;
+  min-width: 200px;
+  text-align: center;
 }
 
 [data-theme='dark'] .communityStatNumber {

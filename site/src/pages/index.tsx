@@ -456,6 +456,78 @@ function SolutionSection() {
   );
 }
 
+function AnimatedCounter({ target, suffix = '' }: { target: string; suffix?: string }) {
+  const [count, setCount] = React.useState(0);
+  const [hasAnimated, setHasAnimated] = React.useState(false);
+  const elementRef = React.useRef<HTMLDivElement>(null);
+
+  // Parse the target number (remove commas and convert to number)
+  const targetNumber = React.useMemo(() => {
+    return parseInt(target.replace(/,/g, ''), 10);
+  }, [target]);
+
+  // Format number with commas
+  const formatNumber = React.useCallback((num: number) => {
+    return num.toLocaleString('en-US');
+  }, []);
+
+  React.useEffect(() => {
+    const element = elementRef.current;
+    if (!element || hasAnimated) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !hasAnimated) {
+            setHasAnimated(true);
+
+            // Animation parameters
+            const duration = 2000; // 2 seconds
+            const startTime = Date.now();
+
+            // Easing function (ease-out cubic)
+            const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+            const animate = () => {
+              const now = Date.now();
+              const elapsed = now - startTime;
+              const progress = Math.min(elapsed / duration, 1);
+
+              // Apply easing
+              const easedProgress = easeOutCubic(progress);
+              const currentCount = Math.floor(easedProgress * targetNumber);
+
+              setCount(currentCount);
+
+              if (progress < 1) {
+                requestAnimationFrame(animate);
+              }
+            };
+
+            requestAnimationFrame(animate);
+          }
+        });
+      },
+      {
+        threshold: 0.5, // Trigger when 50% of the element is visible
+      },
+    );
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [targetNumber, hasAnimated]);
+
+  return (
+    <div ref={elementRef} className={styles.communityStatNumber}>
+      {formatNumber(count)}
+      {suffix}
+    </div>
+  );
+}
+
 function CommunitySection() {
   return (
     <section className={styles.communitySection}>
@@ -474,17 +546,17 @@ function CommunitySection() {
 
         <div className={styles.communityStats}>
           <div className={styles.communityStatCard}>
-            <div className={styles.communityStatNumber}>{SITE_CONSTANTS.USER_COUNT_DISPLAY}+</div>
+            <AnimatedCounter target={SITE_CONSTANTS.USER_COUNT_DISPLAY} suffix="+" />
             <div className={styles.communityStatLabel}>Open Source Users</div>
             <p>Developers securing AI applications with Promptfoo</p>
           </div>
           <div className={styles.communityStatCard}>
-            <div className={styles.communityStatNumber}>200+</div>
+            <AnimatedCounter target="210" suffix="+" />
             <div className={styles.communityStatLabel}>Contributors</div>
             <p>From major foundation labs and tech companies</p>
           </div>
           <div className={styles.communityStatCard}>
-            <div className={styles.communityStatNumber}>68,000+</div>
+            <AnimatedCounter target="68000" suffix="+" />
             <div className={styles.communityStatLabel}>Weekly Downloads</div>
             <p>Active deployments in production workflows worldwide</p>
           </div>
@@ -570,7 +642,7 @@ function AsSeenOnSection() {
   return (
     <section className={styles.asSeenOnSection}>
       <div className="container">
-        <div className={styles.sectionEyebrow}>FEATURED IN</div>
+        <div className={styles.sectionEyebrow}>Used by the best</div>
         <h2 className={styles.sectionTitle}>Trusted by AI Leaders</h2>
         <p className={styles.sectionSubtitle}>
           See how teams at OpenAI and Anthropic use Promptfoo to build better AI applications.
@@ -858,7 +930,7 @@ function FinalCTA() {
       <div className="container">
         <h2 className={styles.finalCTATitle}>Ship AI with confidence</h2>
         <p className={styles.finalCTASubtitle}>
-          Join hundreds of enterprises and {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers securing
+          Join hundreds of enterprises and thousands of developers securing
           AI applications from day one.
         </p>
         <div className={styles.finalCTAButtons}>
