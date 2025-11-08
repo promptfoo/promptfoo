@@ -96,7 +96,7 @@ const config: Config = {
         },
         gtag:
           process.env.NODE_ENV === 'development'
-            ? { trackingID: 'foobar', anonymizeIP: true }
+            ? undefined
             : {
                 trackingID: 'G-3TS8QLZQ93',
                 anonymizeIP: true,
@@ -222,11 +222,6 @@ const config: Config = {
               href: '/press/',
               label: 'Press',
               description: 'Media coverage and press releases',
-            },
-            {
-              href: '/contact/',
-              label: 'Contact',
-              description: 'Get in touch with our team',
             },
             {
               href: '/careers/',
