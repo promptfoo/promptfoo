@@ -21,7 +21,7 @@ import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../cons
 
 import type { FileRecord } from '../../types/codeScan';
 import { DiffProcessorError } from '../../types/codeScan';
-import logger from 'src/logger';
+import logger from '../../logger';
 
 interface RawDiffEntry {
   path: string;
