@@ -1039,7 +1039,7 @@ html {
 }
 
 .asSeenOnSection {
-  padding: var(--section-spacing-xl) 0;
+  padding: 4rem 0;
   background: transparent;
 }
 
@@ -1326,7 +1326,8 @@ html {
 
 /* Bridge Section - Connects Hero to Products */
 .bridgeSection {
-  padding: var(--section-spacing-sm) 0;
+  padding: 2rem 0;
+  padding-bottom: 0;
   text-align: center;
   background: transparent;
   position: relative;
@@ -1339,8 +1340,8 @@ html {
   line-height: 1.6;
   color: var(--pf-dark-base);
   opacity: 0.85;
-  max-width: 900px;
-  margin: 0 auto 1rem;
+  max-width: 1024px;
+  margin: 0 auto 0.5rem;
 }
 
 [data-theme='dark'] .bridgeStatement {
@@ -1537,7 +1538,6 @@ html {
 
 /* Trust Bar - Now flows into Bridge Section */
 .trustBar {
-  padding: 0 0 4rem;
   text-align: center;
   background: transparent;
   border-bottom: none;
@@ -1655,6 +1655,27 @@ html {
   .trustBarLogo img {
     max-height: 40px;
     max-width: 100px;
+  }
+}
+
+/* Trust Bar Heading */
+.trustBarHeading {
+  font-size: 1.125rem;
+  color: var(--pf-dark-base);
+  text-align: center;
+  margin-bottom: 2rem;
+  opacity: 0.9;
+  line-height: 1.6;
+}
+
+[data-theme='dark'] .trustBarHeading {
+  color: #e0e0e0;
+}
+
+@media screen and (max-width: 768px) {
+  .trustBarHeading {
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
   }
 }
 
@@ -2052,7 +2073,8 @@ html {
 
 /* Walkthrough Section */
 .walkthroughSection {
-  padding: var(--section-spacing-sm) 0 var(--section-spacing-xl);
+  padding: 2rem 0 4rem;
+  padding-top: 0;
   background: transparent;
   position: relative;
 }
@@ -2078,7 +2100,7 @@ html {
 
 /* Solution Section */
 .solutionSection {
-  padding: var(--section-spacing-xl) 0;
+  padding: 4rem 0;
   background: transparent;
 }
 
@@ -2311,7 +2333,7 @@ html {
 
 /* Community Section */
 .communitySection {
-  padding: var(--section-spacing-xl) 0;
+  padding: 4rem 0;
   background: transparent;
 }
 
@@ -2514,7 +2536,7 @@ html {
 
 /* Persona Section */
 .personaSection {
-  padding: var(--section-spacing-xl) 0;
+  padding: 4rem 0;
   background: transparent;
 }
 
@@ -2864,9 +2886,9 @@ html {
 
 /* Final CTA */
 .finalCTA {
-  padding: var(--section-spacing-xl) 0;
-  margin-top: -4rem;
-  margin-bottom: 4rem;
+  padding: 4rem 0;
+  margin-top: -2rem;
+  margin-bottom: 2rem;
   text-align: center;
   background: transparent;
   position: relative;

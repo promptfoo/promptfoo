@@ -20,6 +20,7 @@ import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import CountUp from 'react-countup';
 import NewsletterForm from '../components/NewsletterForm';
 import { SITE_CONSTANTS } from '../constants';
 import styles from './index.module.css';
@@ -34,11 +35,9 @@ function HomepageHeader() {
             Shift left AI security for enterprise teams
           </div>
           */}
-          <h1 className={styles.heroTitle}>
-            Ship agents, not vulnerabilities
-          </h1>
+          <h1 className={styles.heroTitle}>Ship agents, not vulnerabilities</h1>
           <p className={styles.heroSubtitle}>
-            85 of the Fortune 500 use Promptfoo to test AI before deployment
+            Automated testing that finds & fixes AI risk in development
           </p>
           <div className={styles.heroButtons}>
             <Link className="button button--primary button--lg" to="/contact/">
@@ -65,7 +64,7 @@ function TrustBar() {
     { text: 'Public legal & tax provider', icon: <AccountBalanceIcon /> },
     { text: 'Top 5 U.S. healthcare company', icon: <HealthAndSafetyIcon /> },
     { text: 'Nationwide 5G network operator', icon: <RouterIcon /> },
-    { text: 'Top U.S. foundation model lab', icon: <PsychologyIcon /> },
+    { text: 'Top foundation model lab', icon: <PsychologyIcon /> },
     { text: 'Top 3 U.K. insurance provider', icon: <ShieldIcon /> },
     { text: 'Global ERP leader', icon: <DashboardIcon /> },
     { text: 'Top 3 travel site', icon: <FlightIcon /> },
@@ -74,6 +73,9 @@ function TrustBar() {
   return (
     <section className={styles.trustBar}>
       <div className="container">
+        {/*<div className={styles.trustBarHeading}>
+          Trusted by 85 of the Fortune 500 to test AI before deployment
+        </div>*/}
         <div
           className={styles.marquee}
           role="region"
@@ -98,7 +100,7 @@ function BridgeSection() {
     <section className={styles.bridgeSection}>
       <div className="container">
         <div className={styles.bridgeStatement}>
-          <strong>85 of the Fortune 500</strong> use Promptfoo to build with AI securely.{' '}
+          <strong>85 of the Fortune 500</strong> use Promptfoo in their AI development lifecycle.{' '}
           Here's how:
         </div>
       </div>
@@ -172,6 +174,65 @@ function HomepageWalkthrough() {
       destinationUrl: '/red-teaming',
     },
     {
+      id: 3,
+      caption: 'Model Security',
+      mobileCaption: 'Models',
+      image: '/img/model-ranking-framed.png',
+      image2x: '/img/model-ranking-framed.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>Complete lifecycle model security</p>
+          <p>Secure models from development through deployment:</p>
+          <ul>
+            <li>Scan model files for malicious code and backdoors</li>
+            <li>Test foundation model behavior against real attacks</li>
+            <li>Compare security across models and versions</li>
+            <li>Generate compliance reports (OWASP, NIST, EU AI Act)</li>
+          </ul>
+          <p>
+            Works with open-weight models (PyTorch, TensorFlow, ONNX) and proprietary foundation
+            models (OpenAI, Anthropic, etc.)
+          </p>
+          <p>
+            <strong>
+              <Link to="/model-security">&raquo; Learn more about Model Security</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <DescriptionIcon />,
+      destinationUrl: '/model-security',
+    },
+    {
+      id: 5,
+      caption: 'Evaluations',
+      mobileCaption: 'Evals',
+      image: '/img/claude-vs-gpt-example.png',
+      image2x: '/img/claude-vs-gpt-example@2x.png',
+      imageDark: '/img/claude-vs-gpt-example-dark.png',
+      image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>Build reliable prompts, RAGs, and agents</p>
+          <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
+          <pre className={styles.codeBox}>
+            <code>npx promptfoo@latest init</code>
+          </pre>
+          <p>
+            Promptfoo runs locally and integrates directly with your app - no SDKs, cloud
+            dependencies, or logins.
+          </p>
+          <p>
+            <strong>
+              <Link to="/docs/intro/">&raquo; Get Started with Evaluations</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <CompareIcon />,
+      destinationUrl: '/docs/intro',
+    },
+    {
       id: 2,
       caption: 'Guardrails',
       mobileCaption: 'Guardrails',
@@ -207,36 +268,6 @@ function HomepageWalkthrough() {
       destinationUrl: '/guardrails',
     },
     {
-      id: 3,
-      caption: 'Model Security',
-      mobileCaption: 'Models',
-      image: '/img/model-ranking-framed.png',
-      image2x: '/img/model-ranking-framed.png',
-      description: (
-        <>
-          <p className={styles.walkthroughHeading}>Complete lifecycle model security</p>
-          <p>Secure models from development through deployment:</p>
-          <ul>
-            <li>Scan model files for malicious code and backdoors</li>
-            <li>Test foundation model behavior against real attacks</li>
-            <li>Compare security across models and versions</li>
-            <li>Generate compliance reports (OWASP, NIST, EU AI Act)</li>
-          </ul>
-          <p>
-            Works with open-weight models (PyTorch, TensorFlow, ONNX) and proprietary foundation
-            models (OpenAI, Anthropic, etc.)
-          </p>
-          <p>
-            <strong>
-              <Link to="/model-security">&raquo; Learn more about Model Security</Link>
-            </strong>
-          </p>
-        </>
-      ),
-      icon: <DescriptionIcon />,
-      destinationUrl: '/model-security',
-    },
-    {
       id: 4,
       caption: 'MCP',
       mobileCaption: 'MCP',
@@ -266,35 +297,6 @@ function HomepageWalkthrough() {
       ),
       icon: <DescriptionIcon />,
       destinationUrl: '/mcp',
-    },
-    {
-      id: 5,
-      caption: 'Evaluations',
-      mobileCaption: 'Evals',
-      image: '/img/claude-vs-gpt-example.png',
-      image2x: '/img/claude-vs-gpt-example@2x.png',
-      imageDark: '/img/claude-vs-gpt-example-dark.png',
-      image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
-      description: (
-        <>
-          <p className={styles.walkthroughHeading}>Build reliable prompts, RAGs, and agents</p>
-          <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
-          <pre className={styles.codeBox}>
-            <code>npx promptfoo@latest init</code>
-          </pre>
-          <p>
-            Promptfoo runs locally and integrates directly with your app - no SDKs, cloud
-            dependencies, or logins.
-          </p>
-          <p>
-            <strong>
-              <Link to="/docs/intro/">&raquo; Get Started with Evaluations</Link>
-            </strong>
-          </p>
-        </>
-      ),
-      icon: <CompareIcon />,
-      destinationUrl: '/docs/intro',
     },
   ];
 
@@ -457,59 +459,28 @@ function SolutionSection() {
 }
 
 function AnimatedCounter({ target, suffix = '' }: { target: string; suffix?: string }) {
-  const [count, setCount] = React.useState(0);
-  const [hasAnimated, setHasAnimated] = React.useState(false);
-  const elementRef = React.useRef<HTMLDivElement>(null);
+  const countUpRef = React.useRef(null);
+  const [isVisible, setIsVisible] = React.useState(false);
 
   // Parse the target number (remove commas and convert to number)
   const targetNumber = React.useMemo(() => {
     return parseInt(target.replace(/,/g, ''), 10);
   }, [target]);
 
-  // Format number with commas
-  const formatNumber = React.useCallback((num: number) => {
-    return num.toLocaleString('en-US');
-  }, []);
-
   React.useEffect(() => {
-    const element = elementRef.current;
-    if (!element || hasAnimated) return;
+    const element = countUpRef.current;
+    if (!element) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting && !hasAnimated) {
-            setHasAnimated(true);
-
-            // Animation parameters
-            const duration = 2000; // 2 seconds
-            const startTime = Date.now();
-
-            // Easing function (ease-out cubic)
-            const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-
-            const animate = () => {
-              const now = Date.now();
-              const elapsed = now - startTime;
-              const progress = Math.min(elapsed / duration, 1);
-
-              // Apply easing
-              const easedProgress = easeOutCubic(progress);
-              const currentCount = Math.floor(easedProgress * targetNumber);
-
-              setCount(currentCount);
-
-              if (progress < 1) {
-                requestAnimationFrame(animate);
-              }
-            };
-
-            requestAnimationFrame(animate);
+          if (entry.isIntersecting && !isVisible) {
+            setIsVisible(true);
           }
         });
       },
       {
-        threshold: 0.5, // Trigger when 50% of the element is visible
+        threshold: 0.5,
       },
     );
 
@@ -518,12 +489,25 @@ function AnimatedCounter({ target, suffix = '' }: { target: string; suffix?: str
     return () => {
       observer.disconnect();
     };
-  }, [targetNumber, hasAnimated]);
+  }, [isVisible]);
 
   return (
-    <div ref={elementRef} className={styles.communityStatNumber}>
-      {formatNumber(count)}
-      {suffix}
+    <div ref={countUpRef} className={styles.communityStatNumber}>
+      {isVisible ? (
+        <CountUp
+          end={targetNumber}
+          duration={3.5}
+          separator=","
+          suffix={suffix}
+          useEasing={true}
+          easingFn={(t, b, c, d) => {
+            // easeOutExpo for smoother deceleration
+            return t === d ? b + c : c * (-Math.pow(2, (-10 * t) / d) + 1) + b;
+          }}
+        />
+      ) : (
+        <>0{suffix}</>
+      )}
     </div>
   );
 }
@@ -930,8 +914,8 @@ function FinalCTA() {
       <div className="container">
         <h2 className={styles.finalCTATitle}>Ship AI with confidence</h2>
         <p className={styles.finalCTASubtitle}>
-          Join hundreds of enterprises and thousands of developers securing
-          AI applications from day one.
+          Join hundreds of enterprises and thousands of developers securing AI applications from day
+          one.
         </p>
         <div className={styles.finalCTAButtons}>
           <Link className="button button--primary button--lg" to="/contact/">
@@ -968,7 +952,7 @@ export default function Home(): JSX.Element {
       </Head>
       <HomepageHeader />
       <TrustBar />
-      {/*<BridgeSection />*/}
+      <BridgeSection />
       <HomepageWalkthrough />
       <main>
         <SolutionSection />

@@ -47,8 +47,7 @@ function RedTeamingHeader() {
         <div className={styles.heroContent}>
           <h1 className={styles.heroTitle}>Red Teaming for AI Applications</h1>
           <p className={styles.heroSubtitle}>
-            Dynamic security testing trusted by Fortune 500s and 200,000+
-            developers
+            Dynamic security testing trusted by Fortune 500s and 200,000+ developers
           </p>
           <div className={styles.heroButtons}>
             <Link
