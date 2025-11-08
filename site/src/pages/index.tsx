@@ -248,10 +248,8 @@ function HomepageWalkthrough() {
           </p>
           <ul>
             <li>Automatically adapts to new attack patterns</li>
+            <li>Enforces custom company policies</li>
             <li>Learns from real-world usage and attack attempts</li>
-            <li>Validates both our guardrails and third-party systems</li>
-            <li>Enforces company policies with increasing precision</li>
-            <li>Protects sensitive information with evolving defenses</li>
           </ul>
           <p>
             Deploy in minutes on cloud or on-premises with seamless integration into any AI
