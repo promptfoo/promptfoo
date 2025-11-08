@@ -413,7 +413,7 @@ function SolutionSection() {
               <CheckCircleIcon className={styles.solutionIcon} />
               Fix
             </h3>
-            <h4>Fix Fast</h4>
+            <h4>Close the Loop</h4>
             <p>Get remediation guidance directly in pull requests and developer workflows.</p>
             <ul className={styles.solutionList}>
               <li>Security findings in PRs</li>

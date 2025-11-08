@@ -61,7 +61,7 @@ function RedTeamingHeader() {
               className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
               to="/docs/red-team/quickstart"
             >
-              Get Started
+              Explore Open Source
             </Link>
           </div>
         </div>

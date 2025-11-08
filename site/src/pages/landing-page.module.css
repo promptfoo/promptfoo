@@ -82,6 +82,9 @@ section {
   box-shadow: 0 4px 12px rgba(229, 58, 58, 0.3);
   transition: all 0.3s ease;
   font-weight: 600;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .buttonPrimary:hover {
@@ -96,6 +99,9 @@ section {
   color: #e53a3a !important;
   transition: all 0.3s ease;
   font-weight: 600;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .buttonSecondary:hover {

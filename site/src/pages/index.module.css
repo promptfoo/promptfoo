@@ -1673,7 +1673,7 @@ html {
   align-items: center;
   gap: 2rem;
   min-width: max-content;
-  animation: marqueeScroll 30s linear infinite;
+  animation: marqueeScroll 60s linear infinite;
 }
 
 .marqueeItem {
@@ -1704,7 +1704,7 @@ html {
 
 @media (hover: none) and (pointer: coarse) {
   .marqueeTrack {
-    animation-duration: 22s;
+    animation-duration: 45s;
   }
 }
 
