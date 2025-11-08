@@ -10,7 +10,6 @@ import ShieldIcon from '@mui/icons-material/Shield';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../components/LogoContainer';
-import NewsletterForm from '../components/NewsletterForm';
 import styles from './landing-page.module.css';
 
 function HeroSection() {
@@ -26,11 +25,6 @@ function HeroSection() {
           Promptfoo is trusted by teams at...
           <LogoContainer className={styles.heroLogos} noBackground noBorder />
         </div>
-        <h2>Secure your AI model ecosystem</h2>
-        <p>
-          A unified approach that protects your entire AI pipeline - from model files to deployed
-          systems - while ensuring compliance with any framework.
-        </p>
       </div>
     </section>
   );
@@ -71,9 +65,9 @@ function ComprehensiveApproachSection() {
     <section className={styles.actionOrientedSection}>
       <div className="container">
         <div className={styles.sectionEyebrow}>COMPREHENSIVE PROTECTION</div>
-        <h2 className={styles.sectionTitle}>End-to-End AI Security</h2>
+        <h2 className={styles.sectionTitle}>Secure Models from Files to Deployment</h2>
         <p className={styles.sectionSubtitle}>
-          Our comprehensive model security platform protects your entire AI pipeline
+          Test open-weight and proprietary models for security vulnerabilities and backdoors.
         </p>
 
         <div className={styles.securityFlowContainer}>
@@ -359,7 +353,6 @@ export default function ModelSecurity(): JSX.Element {
           <ComparisonSection />
           <BenefitsSection />
           <CallToActionSection />
-          <NewsletterForm />
         </main>
       </div>
     </Layout>

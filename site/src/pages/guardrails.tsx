@@ -8,7 +8,6 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../components/LogoContainer';
-import NewsletterForm from '../components/NewsletterForm';
 import styles from './landing-page.module.css';
 
 function HeroSection() {
@@ -221,7 +220,6 @@ export default function Guardrails(): JSX.Element {
           <ContinuousMonitoringSection />
           <BenefitsSection />
           <CallToActionSection />
-          <NewsletterForm />
         </main>
       </div>
     </Layout>
