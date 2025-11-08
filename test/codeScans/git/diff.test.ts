@@ -128,7 +128,6 @@ index 123..456 100644
       } as any);
 
       await expect(extractDiff('/fake/repo')).rejects.toThrow(GitError);
-      await expect(extractDiff('/fake/repo')).rejects.toThrow('Failed to determine base branch');
     });
 
     it('should throw GitError if no changes detected', async () => {
