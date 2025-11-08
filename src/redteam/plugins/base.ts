@@ -429,11 +429,18 @@ export abstract class RedteamGraderBase {
       tools: provider?.config?.tools
         ? maybeLoadToolsFromExternalFile(provider.config.tools)
         : undefined,
-      value: renderedValue,
       testVars: test.vars ?? {},
+      // Spread all gradingContext properties to make them accessible in rubrics
+      ...(gradingContext || {}),
+      // Spread renderedValue to make properties accessible at top level (e.g., categoryGuidance)
+      // This is done after gradingContext so renderedValue properties take precedence
+      ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
+      value: renderedValue,
+      // Extract specific trace properties for convenience (these override any conflicts)
       traceSummary: gradingContext?.traceSummary,
       traceContext: gradingContext?.traceContext,
       traceInsights: gradingContext?.traceContext?.insights,
+      timestamp: new Date().toISOString(),
     };
     // Plugin-specific grading guidance takes priority over general rubric
     const gradingGuidance = test.metadata?.pluginConfig?.gradingGuidance;
@@ -458,11 +465,15 @@ export abstract class RedteamGraderBase {
         '\n\n' +
         graderExamples.map((example) => `EXAMPLE OUTPUT: ${JSON.stringify(example)}`).join('\n');
     }
+
+    const timestampString = `\n\nCurrent timestamp: ${vars.timestamp}`;
+
     const finalRubric =
       this.renderRubric(vars) +
       (additionalRubric ? '\n\n' + additionalRubric : '') +
       gradingGuidanceString +
-      graderExamplesString;
+      graderExamplesString +
+      timestampString;
 
     if (!skipRefusalCheck && (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))) {
       return {
