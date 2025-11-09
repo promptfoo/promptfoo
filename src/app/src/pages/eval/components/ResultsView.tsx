@@ -211,6 +211,9 @@ export default function ResultsView({
     'all',
   );
 
+  // Ensure filterMode is never null for components that require a value
+  const currentFilterMode: EvalResultsFilterMode = filterMode ?? 'all';
+
   const {
     setInComparisonMode,
     columnStates,
@@ -549,8 +552,9 @@ export default function ResultsView({
     let debounceTimeout: NodeJS.Timeout | null = null;
 
     const unsubscribe = useTableStore.subscribe(
-      (state) => state.filters,
-      (filters) => {
+      (state) => {
+        const filters = state.filters;
+
         // Clear previous timeout
         if (debounceTimeout) {
           clearTimeout(debounceTimeout);
@@ -717,7 +721,7 @@ export default function ResultsView({
             </Box>
             <Box>
               <FilterModeSelector
-                filterMode={filterMode}
+                filterMode={currentFilterMode}
                 onChange={handleFilterModeChange}
                 showDifferentOption={visiblePromptCount > 1}
               />
@@ -1003,7 +1007,7 @@ export default function ResultsView({
           columnVisibility={currentColumnState.columnVisibility}
           wordBreak={wordBreak}
           showStats={showInferenceDetails}
-          filterMode={filterMode}
+          filterMode={currentFilterMode}
           failureFilter={failureFilter}
           debouncedSearchText={debouncedSearchValue}
           onFailureFilterToggle={handleFailureFilterToggle}

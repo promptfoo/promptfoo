@@ -19,7 +19,7 @@ import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { resultsFiltersArraySchema, useResultsViewSettingsStore, useTableStore } from './store';
 import { MAX_FILTERS_FROM_URL } from './constants';
-import type { ResultsFilter } from './store';
+import type { ResultsFilter, ResultsFilterType, ResultsFilterOperator } from './store';
 import './Eval.css';
 
 /**
@@ -44,7 +44,13 @@ function serializeFilterForComparison(filter: Partial<ResultsFilter>): Record<st
  */
 function parseAndApplyFiltersFromUrl(
   searchParams: URLSearchParams,
-  addFilter: (filter: Partial<ResultsFilter>) => void,
+  addFilter: (filter: {
+    type: ResultsFilterType;
+    operator: ResultsFilterOperator;
+    value: string;
+    logicOperator?: 'and' | 'or';
+    field?: string;
+  }) => void,
   setFilterMode: (mode: EvalResultsFilterMode) => void,
   resetFilterMode: () => void,
 ) {
