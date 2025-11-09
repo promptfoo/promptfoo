@@ -551,62 +551,60 @@ export default function ResultsView({
   React.useEffect(() => {
     let debounceTimeout: NodeJS.Timeout | null = null;
 
-    const unsubscribe = useTableStore.subscribe(
-      (state) => {
-        const filters = state.filters;
+    const unsubscribe = useTableStore.subscribe((state) => {
+      const filters = state.filters;
 
-        // Clear previous timeout
-        if (debounceTimeout) {
-          clearTimeout(debounceTimeout);
-        }
+      // Clear previous timeout
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout);
+      }
 
-        // Debounce URL updates to prevent browser history pollution
-        debounceTimeout = setTimeout(() => {
-          // Read current URL params directly to avoid dependency on searchParams
-          const currentUrl = new URLSearchParams(window.location.search);
-          const currentFilterParam = currentUrl.get('filter');
+      // Debounce URL updates to prevent browser history pollution
+      debounceTimeout = setTimeout(() => {
+        // Read current URL params directly to avoid dependency on searchParams
+        const currentUrl = new URLSearchParams(window.location.search);
+        const currentFilterParam = currentUrl.get('filter');
 
-          if (filters.appliedCount === 0) {
-            // No filters applied - remove filter param from URL
-            if (currentFilterParam !== null) {
-              setSearchParams((prev) => {
-                prev.delete('filter');
-                return prev;
-              });
-            }
-          } else {
-            // Serialize filters to JSON with deterministic key ordering
-            const serializedFilters = JSON.stringify(
-              Object.values(filters.values)
-                .map(serializeFilterForUrl)
-                .sort((a, b) => {
-                  // Sort filters by type then value for consistent ordering
-                  const typeCompare = a.type.localeCompare(b.type);
-                  if (typeCompare !== 0) {
-                    return typeCompare;
-                  }
-                  return a.value.localeCompare(b.value);
-                }),
-            );
-
-            // Warn if URL is getting very long
-            if (serializedFilters.length > URL_LENGTH_WARNING_THRESHOLD) {
-              console.warn(
-                `Filter URL is ${serializedFilters.length} characters. URLs >2000 chars may not work in all browsers.`,
-              );
-            }
-
-            // Only update URL if filters have changed
-            if (currentFilterParam !== serializedFilters) {
-              setSearchParams((prev) => {
-                prev.set('filter', serializedFilters);
-                return prev;
-              });
-            }
+        if (filters.appliedCount === 0) {
+          // No filters applied - remove filter param from URL
+          if (currentFilterParam !== null) {
+            setSearchParams((prev) => {
+              prev.delete('filter');
+              return prev;
+            });
           }
-        }, FILTER_URL_DEBOUNCE_MS);
-      },
-    );
+        } else {
+          // Serialize filters to JSON with deterministic key ordering
+          const serializedFilters = JSON.stringify(
+            Object.values(filters.values)
+              .map(serializeFilterForUrl)
+              .sort((a, b) => {
+                // Sort filters by type then value for consistent ordering
+                const typeCompare = a.type.localeCompare(b.type);
+                if (typeCompare !== 0) {
+                  return typeCompare;
+                }
+                return a.value.localeCompare(b.value);
+              }),
+          );
+
+          // Warn if URL is getting very long
+          if (serializedFilters.length > URL_LENGTH_WARNING_THRESHOLD) {
+            console.warn(
+              `Filter URL is ${serializedFilters.length} characters. URLs >2000 chars may not work in all browsers.`,
+            );
+          }
+
+          // Only update URL if filters have changed
+          if (currentFilterParam !== serializedFilters) {
+            setSearchParams((prev) => {
+              prev.set('filter', serializedFilters);
+              return prev;
+            });
+          }
+        }
+      }, FILTER_URL_DEBOUNCE_MS);
+    });
 
     return () => {
       if (debounceTimeout) {
