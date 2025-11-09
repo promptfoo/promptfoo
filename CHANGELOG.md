@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
+
 ## [0.119.4] - 2025-11-06
 
 ### Added
