@@ -487,8 +487,16 @@ const TestSuites = ({
             onClick={() => {
               const pluginId = params.row.pluginName;
               const plugin = pluginsById[pluginId];
-              const key = plugin?.id === 'policy' ? 'policy' : 'plugin';
-              navigate(`/eval/${evalId}?${key}=${encodeURIComponent(pluginId)}&mode=failures`);
+              const url = `/eval/${evalId}?filter=${encodeURIComponent(
+                JSON.stringify([
+                  {
+                    type: plugin?.id === 'policy' ? 'policy' : 'plugin',
+                    operator: 'equals',
+                    value: pluginId,
+                  },
+                ]),
+              )}&mode=failures`;
+              navigate(url);
             }}
           >
             View logs

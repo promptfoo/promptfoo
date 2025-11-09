@@ -175,7 +175,15 @@ describe('TestSuites Component Navigation', () => {
     fireEvent.click(viewLogsButton);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/test-eval-123?plugin=harmful%3Ahate&mode=failures',
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: 'harmful:hate',
+          },
+        ]),
+      )}&mode=failures`,
     );
   });
 
@@ -201,7 +209,15 @@ describe('TestSuites Component Navigation', () => {
     fireEvent.click(viewLogsButton);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/test-eval-123?plugin=harmful%3Acybercrime&mode=failures',
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: 'harmful:cybercrime',
+          },
+        ]),
+      )}&mode=failures`,
     );
   });
 
@@ -268,7 +284,15 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
     fireEvent.click(viewLogsButton);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/test-eval-123?plugin=harmful%3Ahate&mode=failures',
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: 'harmful:hate',
+          },
+        ]),
+      )}&mode=failures`,
     );
   });
 });
