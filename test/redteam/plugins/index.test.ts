@@ -252,7 +252,10 @@ describe('Plugins', () => {
       expect(result).toHaveLength(1);
       expect(result![0].assert).toBeDefined();
       expect(result![0].assert).toEqual([
-        { metric: 'Harmful', type: 'promptfoo:redteam:harmful:misinformation-disinformation' },
+        {
+          metric: 'Misinformation & Disinformation - Harmful lies and propaganda',
+          type: 'promptfoo:redteam:harmful:misinformation-disinformation',
+        },
       ]);
     });
 
