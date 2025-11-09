@@ -131,25 +131,89 @@
   border-color: rgba(255, 255, 255, 0.12);
 }
 
+/* Open state for mobile (when clicked) */
+.navMenuCardDropdownOpen {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: all;
+}
+
+.navMenuCardDropdownOpen .navMenuCardIcon {
+  transform: rotate(180deg);
+}
+
 /* Responsive */
 @media (max-width: 996px) {
+  /* Hide only in the navbar (not in sidebar) */
+  .navbar__inner .navMenuCard {
+    display: none;
+  }
+
+  /* Style for mobile sidebar/hamburger menu */
+  .navMenuCard {
+    display: block;
+    width: 100%;
+  }
+
+  .navMenuCardButton {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .navMenuCardDropdown {
-    position: fixed;
-    left: 0;
-    right: 0;
-    padding: 0 16px;
-    padding-top: 8px;
+    position: static;
+    padding: 0;
+    width: 100%;
+  }
+
+  /* Show dropdown inline when open, hide when closed */
+  .navMenuCardDropdown {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+
+  .navMenuCardDropdownOpen {
+    max-height: 2000px;
   }
 
   .navMenuCardContainer {
     min-width: auto;
     max-width: 100%;
     flex-direction: column;
-    gap: 24px;
-    padding: 20px;
+    gap: 16px;
+    padding: 12px 0;
+    box-shadow: none;
+    background: transparent;
+    border-radius: 0;
   }
 
   .navMenuCardGrid {
     grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .navMenuCardItem {
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+
+  .navMenuCardItemTitle {
+    font-size: 14px;
+  }
+
+  .navMenuCardItemDescription {
+    font-size: 12px;
+  }
+
+  .navMenuCardSectionTitle {
+    font-size: 9px;
+    padding-left: 16px;
+  }
+
+  /* Dark mode adjustments for mobile */
+  [data-theme='dark'] .navMenuCardContainer {
+    box-shadow: none;
+    background: transparent;
   }
 }
