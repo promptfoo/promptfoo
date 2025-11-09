@@ -80,15 +80,15 @@ defaultTest:
         - role: assistant
           content: Great! How would you like to pay?
         - role: user
-          content: I want to pay via {{payment_method}}  # Variable placeholder
+          content: I want to pay via {{payment_method}} # Variable
 
 tests:
   - vars:
-      payment_method: credit card  # Replaces {{payment_method}}
+      payment_method: credit card # Replaces {{payment_method}}
       instructions: Complete payment with credit card
 
   - vars:
-      payment_method: PayPal  # Replaces {{payment_method}}
+      payment_method: PayPal # Replaces {{payment_method}}
       instructions: Complete payment with PayPal
 ```
 
@@ -107,9 +107,9 @@ tests:
 
 ```json
 [
-  {"role": "user", "content": "I need a flight from NYC to Seattle"},
-  {"role": "assistant", "content": "I found a direct flight for $325"},
-  {"role": "user", "content": "Yes, that works for me"}
+  { "role": "user", "content": "I need a flight from NYC to Seattle" },
+  { "role": "assistant", "content": "I found a direct flight for $325" },
+  { "role": "user", "content": "Yes, that works for me" }
 ]
 ```
 
