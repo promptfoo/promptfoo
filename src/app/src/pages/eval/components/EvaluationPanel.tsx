@@ -27,6 +27,7 @@ const copyButtonSx = {
 
 function getValue(result: GradingResult) {
   // For context-related assertions, read the context value from metadata, if it exists
+  // These assertions require special handling and should always use metadata.context
   if (
     result.assertion?.type &&
     ['context-faithfulness', 'context-recall', 'context-relevance'].includes(
@@ -35,6 +36,12 @@ function getValue(result: GradingResult) {
     result.metadata?.context
   ) {
     return result.metadata?.context;
+  }
+
+  // Prefer rendered assertion value with substituted variables over raw template
+  if (result.metadata?.renderedAssertionValue !== undefined) {
+    const value = result.metadata.renderedAssertionValue;
+    return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
   }
 
   // Otherwise, return the assertion value
