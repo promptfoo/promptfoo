@@ -29,11 +29,10 @@ html {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    animation-fill-mode: none !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
-    /* Ensure elements are visible and interactive when animations are disabled */
-    opacity: 1 !important;
-    transform: none !important;
   }
 
   /* Disable specific animations that might be problematic */
@@ -41,6 +40,12 @@ html {
   .personaTabActive,
   .walkthroughTabActive {
     animation: none !important;
+  }
+
+  /* Keep marquee moving, just slower */
+  .marqueeTrack {
+    animation-duration: 120s !important;
+    animation-iteration-count: infinite !important;
   }
 }
 
@@ -827,6 +832,7 @@ html {
     gap: 0.5rem;
     display: flex;
     justify-content: flex-start;
+    flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
@@ -1886,6 +1892,7 @@ html {
   animation: fadeInUpScroll 0.6s var(--animation-ease-smooth) backwards;
   /* Add subtle text shadow for depth */
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  position: relative;
 }
 
 /* Add gradient shine effect on section titles */
@@ -1901,6 +1908,7 @@ html {
   background-clip: text;
   opacity: 0;
   animation: textShine 3s ease-in-out infinite;
+  pointer-events: none;
 }
 
 @keyframes textShine {
@@ -2097,7 +2105,11 @@ html {
 
 @media screen and (max-width: 768px) {
   .walkthroughSection {
-    padding: 0.5rem 0 var(--section-spacing-lg);
+    padding: 0;
+  }
+
+  .walkthroughSection :global(.container) {
+    padding: 0;
   }
 }
 
