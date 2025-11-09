@@ -17,7 +17,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { resultsFiltersArraySchema, useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
 
 interface EvalOptions {
@@ -136,55 +136,82 @@ export default function Eval({ fetchId }: EvalOptions) {
     // is a global store.
     resetFilters();
 
-    // Check for a `plugin` param in the URL; we support filtering on plugins via the URL which
-    // enables the "View Logs" functionality in Vulnerability reports.
-    const pluginParams = searchParams.getAll('plugin');
+    // Try new filter format first (JSON array)
+    const newFiltersParam = searchParams.get('filter');
 
-    // Check for >=1 metric params in the URL.
-    const metricParams = searchParams.getAll('metric');
+    if (newFiltersParam) {
+      try {
+        const parsedFilters = JSON.parse(newFiltersParam);
+        const validationResult = resultsFiltersArraySchema.safeParse(parsedFilters);
 
-    // Check for >=1 policyId params in the URL.
-    const policyIdParams = searchParams.getAll('policy');
+        if (validationResult.success) {
+          validationResult.data.forEach((filter) => {
+            addFilter({
+              type: filter.type,
+              operator: filter.operator,
+              value: filter.value,
+              logicOperator: filter.logicOperator,
+              field: filter.field,
+            });
+          });
+        } else {
+          console.error('Invalid filters in URL:', validationResult.error);
+        }
+      } catch (error) {
+        console.error('Failed to parse filters from URL:', error);
+      }
+    } else {
+      // Fall back to legacy format for backward compatibility
+      // TODO: Remove this in v0.122.0 (3 months after v0.120.0)
+      const pluginParams = searchParams.getAll('plugin');
+      const metricParams = searchParams.getAll('metric');
+      const policyIdParams = searchParams.getAll('policy');
 
-    // Check for a `mode` param in the URL.
+      if (pluginParams.length > 0) {
+        console.warn(
+          'DEPRECATED: ?plugin= param. Use ?filter= instead. Support will be removed in v0.122.0',
+        );
+        pluginParams.forEach((pluginParam) => {
+          addFilter({
+            type: 'plugin',
+            operator: 'equals',
+            value: pluginParam,
+            logicOperator: 'or',
+          });
+        });
+      }
+
+      if (metricParams.length > 0) {
+        console.warn(
+          'DEPRECATED: ?metric= param. Use ?filter= instead. Support will be removed in v0.122.0',
+        );
+        metricParams.forEach((metricParam) => {
+          addFilter({
+            type: 'metric',
+            operator: 'equals',
+            value: metricParam,
+            logicOperator: 'or',
+          });
+        });
+      }
+
+      if (policyIdParams.length > 0) {
+        console.warn(
+          'DEPRECATED: ?policy= param. Use ?filter= instead. Support will be removed in v0.122.0',
+        );
+        policyIdParams.forEach((policyId) => {
+          addFilter({
+            type: 'policy',
+            operator: 'equals',
+            value: policyId,
+            logicOperator: 'or',
+          });
+        });
+      }
+    }
+
+    // Handle filter mode param
     const modeParam = searchParams.get('mode');
-
-    if (pluginParams.length > 0) {
-      pluginParams.forEach((pluginParam) => {
-        addFilter({
-          type: 'plugin',
-          operator: 'equals',
-          value: pluginParam,
-          logicOperator: 'or',
-        });
-      });
-    }
-
-    if (metricParams.length > 0) {
-      metricParams.forEach((metricParam) => {
-        addFilter({
-          type: 'metric',
-          operator: 'equals',
-          value: metricParam,
-          logicOperator: 'or',
-        });
-      });
-    }
-
-    if (policyIdParams.length > 0) {
-      policyIdParams.forEach((policyId) => {
-        addFilter({
-          type: 'policy',
-          operator: 'equals',
-          value: policyId,
-          logicOperator: 'or',
-        });
-      });
-    }
-
-    // If a mode param is provided, set the filter mode to the provided value.
-    // Otherwise, reset the filter mode to ensure that the filter mode from the previously viewed eval
-    // is not applied (again, because Zustand is a global store).
     if (modeParam && EvalResultsFilterMode.safeParse(modeParam).success) {
       setFilterMode(modeParam as EvalResultsFilterMode);
     } else {

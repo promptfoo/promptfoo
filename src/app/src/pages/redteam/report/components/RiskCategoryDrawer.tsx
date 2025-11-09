@@ -207,7 +207,15 @@ const RiskCategoryDrawer = ({
             const pluginId = testWithPluginId?.result?.metadata?.pluginId;
 
             const url = pluginId
-              ? `/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`
+              ? `/eval/${evalId}?filter=${encodeURIComponent(
+                  JSON.stringify([
+                    {
+                      type: 'plugin',
+                      operator: 'equals',
+                      value: pluginId,
+                    },
+                  ]),
+                )}`
               : `/eval/${evalId}`;
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');

@@ -9,6 +9,7 @@ import {
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PolicyObject, Policy } from '@promptfoo/redteam/types';
@@ -22,6 +23,44 @@ import type {
   UnifiedConfig,
 } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
+
+// Zod schemas for URL persistence and validation
+export const resultsFilterOperatorSchema = z.enum([
+  'equals',
+  'contains',
+  'not_contains',
+  'exists',
+  'is_defined',
+  'eq',
+  'neq',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+]);
+
+export const resultsFilterTypeSchema = z.enum([
+  'metric',
+  'metadata',
+  'plugin',
+  'strategy',
+  'severity',
+  'policy',
+]);
+
+export const resultsFilterSchema = z.object({
+  id: z.string().optional(), // Allow missing id when deserializing from URL
+  type: resultsFilterTypeSchema,
+  value: z.string(),
+  operator: resultsFilterOperatorSchema,
+  logicOperator: z.enum(['and', 'or']),
+  field: z.string().optional(),
+  sortIndex: z.number().optional(), // Allow missing sortIndex when deserializing
+});
+
+export const resultsFiltersArraySchema = z.array(resultsFilterSchema);
+
+export const filterModeSchema = z.enum(['all', 'failures', 'highlights']);
 
 function computeHighlightCount(table: EvaluateTable | null): number {
   if (!table) {
@@ -341,6 +380,12 @@ interface TableState {
   filterMode: EvalResultsFilterMode;
   setFilterMode: (filterMode: EvalResultsFilterMode) => void;
   resetFilterMode: () => void;
+
+  /**
+   * Resets the entire table store to its initial state.
+   * Useful when navigating between different evals.
+   */
+  reset: () => void;
 }
 
 interface SettingsState {
@@ -863,4 +908,33 @@ export const useTableStore = create<TableState>()((set, get) => ({
   setFilterMode: (filterMode: EvalResultsFilterMode) =>
     set((prevState) => ({ ...prevState, filterMode })),
   resetFilterMode: () => set((prevState) => ({ ...prevState, filterMode: 'all' })),
+
+  reset: () => {
+    set({
+      evalId: null,
+      author: null,
+      table: null,
+      config: null,
+      version: null,
+      filteredResultsCount: 0,
+      totalResultsCount: 0,
+      highlightedResultsCount: 0,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+          metadata: [],
+        },
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: false,
+      currentMetadataKeysRequest: null,
+      filterMode: 'all',
+      isFetching: false,
+      isStreaming: false,
+      shouldHighlightSearchText: false,
+    });
+  },
 }));

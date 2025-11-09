@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { useSearchParamState } from '@app/hooks/useSearchParamState';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
@@ -48,7 +49,7 @@ import FiltersButton from './ResultsFilters/FiltersButton';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { filterModeSchema, useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
@@ -183,9 +184,14 @@ export default function ResultsView({
     highlightedResultsCount,
     filters,
     removeFilter,
-    filterMode,
-    setFilterMode,
   } = useTableStore();
+
+  // filterMode is now stored in URL instead of Zustand store
+  const [filterMode, setFilterMode] = useSearchParamState<EvalResultsFilterMode>(
+    'mode',
+    filterModeSchema,
+    'all',
+  );
 
   const {
     setInComparisonMode,
@@ -518,6 +524,43 @@ export default function ResultsView({
     },
     [handleSearchTextChange],
   );
+
+  // Sync filters to URL - runs when filters change in the store
+  React.useEffect(() => {
+    const unsubscribe = useTableStore.subscribe(
+      (state) => state.filters,
+      (filters) => {
+        // Read current URL params directly to avoid dependency on searchParams
+        const currentUrl = new URLSearchParams(window.location.search);
+        const currentFilterParam = currentUrl.get('filter');
+
+        if (filters.appliedCount === 0) {
+          // No filters applied - remove filter param from URL
+          if (currentFilterParam !== null) {
+            setSearchParams((prev) => {
+              prev.delete('filter');
+              return prev;
+            });
+          }
+        } else {
+          // Serialize filters to JSON, excluding id and sortIndex (they're regenerated)
+          const serializedFilters = JSON.stringify(
+            Object.values(filters.values).map(({ id, sortIndex, ...rest }) => rest),
+          );
+
+          // Only update URL if filters have changed
+          if (currentFilterParam !== serializedFilters) {
+            setSearchParams((prev) => {
+              prev.set('filter', serializedFilters);
+              return prev;
+            });
+          }
+        }
+      },
+    );
+
+    return () => unsubscribe();
+  }, [setSearchParams]);
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const resultsChartsScores = React.useMemo(() => {
