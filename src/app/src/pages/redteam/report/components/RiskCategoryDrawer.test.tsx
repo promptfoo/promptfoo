@@ -134,7 +134,18 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test Cmd+click (Mac) - should also open new tab
     fireEvent.click(viewAllLogsButton, { metaKey: true });
 
-    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?plugin=bola', '_blank');
+    expect(window.open).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: 'bola',
+          },
+        ]),
+      )}`,
+      '_blank',
+    );
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 

@@ -32,12 +32,15 @@ vi.mock('socket.io-client', () => ({
     disconnect: vi.fn(),
   })),
 }));
+// Create a stable URLSearchParams instance for tests
+const stableSearchParams = new URLSearchParams();
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
     useNavigate: () => vi.fn(),
-    useSearchParams: () => [new URLSearchParams()],
+    useSearchParams: () => [stableSearchParams, vi.fn()],
     useParams: () => ({}),
   };
 });

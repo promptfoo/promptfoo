@@ -33,6 +33,9 @@ vi.mock('./store', async (importOriginal) => {
   const mockUseTableStore = vi.fn();
   const mockUseResultsViewSettingsStore = vi.fn();
 
+  // Add subscribe method to support Zustand subscriptions
+  mockUseTableStore.subscribe = vi.fn(() => vi.fn()); // Returns unsubscribe function
+
   return {
     ...actual,
     useResultsViewSettingsStore: mockUseResultsViewSettingsStore,

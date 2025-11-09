@@ -345,30 +345,29 @@ export default function Eval({ fetchId }: EvalOptions) {
     console.log('Eval init: Resetting comparison mode');
     setInComparisonMode(false);
     setComparisonEvalIds([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    apiBaseUrl,
+    // apiBaseUrl is only used in socket.io branch when fetchId is null, omit to prevent unnecessary reruns
     fetchId,
-    loadEvalById,
-    setTableFromResultsFile,
-    setConfig,
-    setAuthor,
-    setEvalId,
-    setDefaultEvalId,
-    setInComparisonMode,
-    setComparisonEvalIds,
-    resetFilters,
-    setIsStreaming,
+    // loadEvalById, setTableFromResultsFile, setConfig, setAuthor, setEvalId, setDefaultEvalId,
+    // setInComparisonMode, setComparisonEvalIds, setIsStreaming are stable Zustand store functions
+    // resetFilters, addFilter, setFilterMode, resetFilterMode are stable Zustand store functions
     searchParams,
-    addFilter,
-    setFilterMode,
-    resetFilterMode,
   ]);
 
   // Effect 2: Handle filter updates from URL (browser back/forward)
   // This runs when searchParams changes but only applies changes if filters actually differ from store
-  const prevFetchId = useRef<string | null>(fetchId);
+  const prevFetchId = useRef<string | null>(null);
+  const hasInitializedForFetchId = useRef<string | null>(null);
 
   useEffect(() => {
+    // Skip if we haven't initialized for this fetchId yet - Effect 1 handles initial filter setup
+    if (hasInitializedForFetchId.current !== fetchId) {
+      hasInitializedForFetchId.current = fetchId;
+      prevFetchId.current = fetchId;
+      return;
+    }
+
     // Skip if eval changed (Effect 1 handles that)
     if (prevFetchId.current !== fetchId) {
       prevFetchId.current = fetchId;
@@ -401,9 +400,12 @@ export default function Eval({ fetchId }: EvalOptions) {
       resetFilters();
       parseAndApplyFiltersFromUrl(searchParams, addFilter, setFilterMode, resetFilterMode);
     }
-
-    prevFetchId.current = fetchId;
-  }, [searchParams, fetchId, resetFilters, addFilter, setFilterMode, resetFilterMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    searchParams,
+    fetchId,
+    // resetFilters, addFilter, setFilterMode, resetFilterMode are stable Zustand store functions
+  ]);
 
   usePageMeta({
     title: config?.description || evalId || 'Eval',
