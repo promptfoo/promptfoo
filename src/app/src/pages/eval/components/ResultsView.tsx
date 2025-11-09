@@ -525,6 +525,19 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
+  // Helper: Deterministic filter serialization (sorted keys for stable comparison)
+  const serializeFilter = React.useCallback((filter: Partial<(typeof filters.values)[string]>) => {
+    // biome-ignore lint/correctness/noUnusedVariables: id and sortIndex are intentionally excluded
+    const { id, sortIndex, ...rest } = filter;
+    // Sort keys alphabetically to ensure deterministic serialization
+    const sortedKeys = Object.keys(rest).sort();
+    const sorted: Record<string, any> = {};
+    for (const key of sortedKeys) {
+      sorted[key] = rest[key as keyof typeof rest];
+    }
+    return sorted;
+  }, []);
+
   // Sync filters to URL - runs when filters change in the store
   React.useEffect(() => {
     const unsubscribe = useTableStore.subscribe(
@@ -543,10 +556,26 @@ export default function ResultsView({
             });
           }
         } else {
-          // Serialize filters to JSON, excluding id and sortIndex (they're regenerated)
+          // Serialize filters to JSON with deterministic key ordering
           const serializedFilters = JSON.stringify(
-            Object.values(filters.values).map(({ id, sortIndex, ...rest }) => rest),
+            Object.values(filters.values)
+              .map(serializeFilter)
+              .sort((a, b) => {
+                // Sort filters by type then value for consistent ordering
+                const typeCompare = a.type.localeCompare(b.type);
+                if (typeCompare !== 0) {
+                  return typeCompare;
+                }
+                return a.value.localeCompare(b.value);
+              }),
           );
+
+          // Warn if URL is getting very long
+          if (serializedFilters.length > 1500) {
+            console.warn(
+              `Filter URL is ${serializedFilters.length} characters. URLs >2000 chars may not work in all browsers.`,
+            );
+          }
 
           // Only update URL if filters have changed
           if (currentFilterParam !== serializedFilters) {
@@ -560,7 +589,7 @@ export default function ResultsView({
     );
 
     return () => unsubscribe();
-  }, [setSearchParams]);
+  }, [setSearchParams, serializeFilter]);
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const resultsChartsScores = React.useMemo(() => {

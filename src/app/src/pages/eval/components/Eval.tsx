@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
@@ -60,6 +60,9 @@ export default function Eval({ fetchId }: EvalOptions) {
   const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
 
+  // Ref to track current eval ID being loaded (prevents race conditions)
+  const currentEvalIdRef = useRef<string | null>(null);
+
   // ================================
   // Handlers
   // ================================
@@ -85,6 +88,8 @@ export default function Eval({ fetchId }: EvalOptions) {
   const loadEvalById = useCallback(
     async (id: string, isBackgroundUpdate = false) => {
       try {
+        // Track current eval ID to prevent race conditions
+        currentEvalIdRef.current = id;
         setEvalId(id);
 
         const { filters, filterMode } = useTableStore.getState();
@@ -100,6 +105,14 @@ export default function Eval({ fetchId }: EvalOptions) {
           ),
         });
 
+        // Check if we're still on the same eval (user may have navigated away)
+        if (currentEvalIdRef.current !== id) {
+          console.log(
+            `Eval ${id} loaded but user navigated to ${currentEvalIdRef.current}, ignoring`,
+          );
+          return false;
+        }
+
         if (!data) {
           setFailed(true);
           return false;
@@ -107,7 +120,10 @@ export default function Eval({ fetchId }: EvalOptions) {
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);
-        setFailed(true);
+        // Only set failed if still on same eval
+        if (currentEvalIdRef.current === id) {
+          setFailed(true);
+        }
         return false;
       }
     },
@@ -128,13 +144,11 @@ export default function Eval({ fetchId }: EvalOptions) {
   );
 
   // ================================
-  // Effects
+  // Helper: Apply filters from URL
   // ================================
 
-  useEffect(() => {
-    // Reset filters when navigating to a different eval; necessary because Zustand
-    // is a global store.
-    resetFilters();
+  const applyFiltersFromUrl = useCallback(() => {
+    const MAX_FILTERS = 50;
 
     // Try new filter format first (JSON array)
     const newFiltersParam = searchParams.get('filter');
@@ -145,7 +159,16 @@ export default function Eval({ fetchId }: EvalOptions) {
         const validationResult = resultsFiltersArraySchema.safeParse(parsedFilters);
 
         if (validationResult.success) {
-          validationResult.data.forEach((filter) => {
+          // Limit number of filters to prevent DoS
+          const filtersToApply = validationResult.data.slice(0, MAX_FILTERS);
+
+          if (validationResult.data.length > MAX_FILTERS) {
+            console.warn(
+              `URL contains ${validationResult.data.length} filters. Limited to ${MAX_FILTERS}.`,
+            );
+          }
+
+          filtersToApply.forEach((filter) => {
             addFilter({
               type: filter.type,
               operator: filter.operator,
@@ -217,6 +240,19 @@ export default function Eval({ fetchId }: EvalOptions) {
     } else {
       resetFilterMode();
     }
+  }, [searchParams, addFilter, setFilterMode, resetFilterMode]);
+
+  // ================================
+  // Effects
+  // ================================
+
+  // Effect 1: Handle eval loading when fetchId changes
+  useEffect(() => {
+    // Reset filters when navigating to a different eval
+    resetFilters();
+
+    // Apply filters from URL for the new eval
+    applyFiltersFromUrl();
 
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
@@ -322,7 +358,23 @@ export default function Eval({ fetchId }: EvalOptions) {
     setComparisonEvalIds,
     resetFilters,
     setIsStreaming,
+    applyFiltersFromUrl,
   ]);
+
+  // Effect 2: Handle filter updates from URL (browser back/forward)
+  // This runs when searchParams changes (but not when fetchId changes, as that's handled above)
+  const prevFetchId = useRef<string | null>(fetchId);
+  useEffect(() => {
+    // Only handle URL changes if we're still on the same eval
+    // (fetchId changes are handled by Effect 1 above)
+    if (prevFetchId.current === fetchId) {
+      // User navigated via browser back/forward or URL was manually changed
+      resetFilters();
+      applyFiltersFromUrl();
+    }
+
+    prevFetchId.current = fetchId;
+  }, [searchParams, fetchId, resetFilters, applyFiltersFromUrl]);
 
   usePageMeta({
     title: config?.description || evalId || 'Eval',
