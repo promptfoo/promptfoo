@@ -1,29 +1,46 @@
 ---
+title: Alibaba Cloud (Qwen) Provider
 sidebar_label: Alibaba Cloud (Qwen)
-description: "Deploy Alibaba Cloud's Qwen models and AI services for enterprise applications with regional compliance and scalability"
+description: Deploy Alibaba Cloud's Qwen models including Qwen3, QwQ reasoning, and specialized coding/math/vision models for enterprise applications
+keywords: [alibaba, qwen, qwen3, dashscope, deepseek, qwq, reasoning, vision, multimodal, llm]
 ---
 
 # Alibaba Cloud (Qwen)
 
 [Alibaba Cloud's DashScope API](https://www.alibabacloud.com/help/en/model-studio/getting-started/models) provides OpenAI-compatible access to Qwen language models. Compatible with all [OpenAI provider](/docs/providers/openai/) options in promptfoo.
 
+## Setup
+
+To use Alibaba Cloud's API, set the `DASHSCOPE_API_KEY` environment variable or specify via `apiKey` in the configuration file:
+
+```sh
+export DASHSCOPE_API_KEY=your_api_key_here
+```
+
 ## Configuration
 
-```yaml
+The provider supports all [OpenAI provider](/docs/providers/openai) configuration options. Example usage:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - alibaba:qwen-max
+  - alibaba:qwen-max # Simple usage
   - id: alibaba:qwen-plus # Aliases: alicloud:, aliyun:, dashscope:
     config:
       temperature: 0.7
-      apiKeyEnvar: 01234567890123456789012345678901 # or set `DASHSCOPE_API_KEY` to your Alibaba Cloud API key
+      apiKey: your_api_key_here # Alternative to DASHSCOPE_API_KEY environment variable
       apiBaseUrl: https://dashscope-intl.aliyuncs.com/compatible-mode/v1 # Optional: Override default API base URL
 ```
 
 :::note
+
 If you're using the Alibaba Cloud Beijing region console, switch the base URL to `https://dashscope.aliyuncs.com/compatible-mode/v1` instead of the international endpoint.
+
 :::
 
-## Models
+## Supported Models
+
+The Alibaba provider includes support for the following model formats:
 
 ### Qwen 3 Flagship
 
@@ -156,3 +173,11 @@ For the latest availability, see the [official DashScope model catalog](https://
 Standard [OpenAI parameters](/docs/providers/openai/#configuring-parameters) (temperature, max_tokens) are supported. Base URL: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` (or `https://dashscope.aliyuncs.com/compatible-mode/v1` for the Beijing region).
 
 For API usage details, see [Alibaba Cloud documentation](https://www.alibabacloud.com/help/en/model-studio/getting-started/models).
+
+## See Also
+
+- [OpenAI Provider](/docs/providers/openai)
+
+## Reference
+
+- [Alibaba Cloud DashScope documentation](https://www.alibabacloud.com/help/en/model-studio/getting-started/models)
