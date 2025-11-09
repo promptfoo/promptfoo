@@ -23,6 +23,22 @@ import type { ResultsFilter } from './store';
 import './Eval.css';
 
 /**
+ * Serializes a filter object for URL comparison with deterministic key ordering.
+ * Strips internal fields (id, sortIndex) and sorts keys alphabetically for consistent JSON output.
+ * This must match the serialization logic in ResultsView.tsx subscription.
+ */
+function serializeFilterForComparison(filter: Partial<ResultsFilter>): Record<string, any> {
+  // biome-ignore lint/correctness/noUnusedVariables: id and sortIndex are intentionally excluded from comparison
+  const { id, sortIndex, ...rest } = filter as any;
+  const sortedKeys = Object.keys(rest).sort();
+  const sorted: Record<string, any> = {};
+  for (const key of sortedKeys) {
+    sorted[key] = rest[key];
+  }
+  return sorted;
+}
+
+/**
  * Parses filters from URL search params and applies them to the store.
  * Supports both new JSON format (?filter=[...]) and legacy params (?plugin=, ?metric=, ?policy=).
  */
@@ -348,13 +364,39 @@ export default function Eval({ fetchId }: EvalOptions) {
   ]);
 
   // Effect 2: Handle filter updates from URL (browser back/forward)
-  // This runs when searchParams changes (but not when fetchId changes, as that's handled above)
+  // This runs when searchParams changes but only applies changes if filters actually differ from store
   const prevFetchId = useRef<string | null>(fetchId);
+
   useEffect(() => {
-    // Only handle URL changes if we're still on the same eval
-    // (fetchId changes are handled by Effect 1 above)
-    if (prevFetchId.current === fetchId) {
-      // User navigated via browser back/forward or URL was manually changed
+    // Skip if eval changed (Effect 1 handles that)
+    if (prevFetchId.current !== fetchId) {
+      prevFetchId.current = fetchId;
+      return;
+    }
+
+    const currentFiltersParam = searchParams.get('filter');
+
+    // Get current filters from store and serialize them the same way the subscription does
+    const { filters } = useTableStore.getState();
+    const serializedStoreFilters =
+      filters.appliedCount > 0
+        ? JSON.stringify(
+            Object.values(filters.values)
+              .map(serializeFilterForComparison)
+              .sort((a, b) => {
+                // Sort filters by type then value for consistent ordering
+                const typeCompare = a.type.localeCompare(b.type);
+                if (typeCompare !== 0) {
+                  return typeCompare;
+                }
+                return a.value.localeCompare(b.value);
+              }),
+          )
+        : null;
+
+    // Only apply URL filters if they differ from current store state
+    if (currentFiltersParam !== serializedStoreFilters) {
+      console.log('URL filters differ from store - syncing from URL (browser back/forward)');
       resetFilters();
       parseAndApplyFiltersFromUrl(searchParams, addFilter, setFilterMode, resetFilterMode);
     }
