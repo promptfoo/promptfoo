@@ -92,7 +92,17 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test normal click - should use navigate
     fireEvent.click(viewAllLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?plugin=bola');
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: 'bola',
+          },
+        ]),
+      )}`,
+    );
     expect(window.open).not.toHaveBeenCalled();
   });
 
@@ -104,7 +114,18 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test Ctrl+click - should open new tab
     fireEvent.click(viewAllLogsButton, { ctrlKey: true });
 
-    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?plugin=bola', '_blank');
+    expect(window.open).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: 'bola',
+          },
+        ]),
+      )}`,
+      '_blank',
+    );
     expect(mockNavigate).not.toHaveBeenCalled();
 
     // Reset mocks

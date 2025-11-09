@@ -345,11 +345,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     console.log('Eval init: Resetting comparison mode');
     setInComparisonMode(false);
     setComparisonEvalIds([]);
-
-    // Cleanup on unmount
-    return () => {
-      resetFilters();
-    };
   }, [
     apiBaseUrl,
     fetchId,

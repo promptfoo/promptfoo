@@ -28,11 +28,13 @@ vi.mock('@app/utils/api', () => ({
   updateEvalAuthor: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('./store', () => {
+vi.mock('./store', async (importOriginal) => {
+  const actual = await importOriginal();
   const mockUseTableStore = vi.fn();
   const mockUseResultsViewSettingsStore = vi.fn();
 
   return {
+    ...actual,
     useResultsViewSettingsStore: mockUseResultsViewSettingsStore,
     useTableStore: mockUseTableStore,
   };
