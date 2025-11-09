@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(app): implement filter URL persistence for eval results - filters automatically sync to URL for sharing and browser navigation, with backwards compatible legacy format support (#6148)
+
 ### Fixed
 
 - fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
