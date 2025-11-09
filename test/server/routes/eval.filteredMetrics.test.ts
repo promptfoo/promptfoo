@@ -380,7 +380,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
   });
 
   describe('Comparison mode', () => {
-    it('should NOT include filteredMetrics in comparison mode', async () => {
+    it('should include filteredMetrics for base eval even when comparison evals are present', async () => {
       const eval1 = await EvalFactory.create({
         numResults: 10,
         resultTypes: ['success', 'error', 'failure'],
@@ -398,9 +398,17 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
       expect(response.status).toBe(200);
 
-      // In comparison mode, filteredMetrics behavior may vary
-      // For now, we just verify the request succeeds
-      expect(response.body).toHaveProperty('table');
+      // filteredMetrics should be calculated for the base eval (eval1)
+      // even when comparison evals are included in the table
+      expect(response.body).toHaveProperty('filteredMetrics');
+      expect(response.body.filteredMetrics).not.toBeNull();
+      expect(Array.isArray(response.body.filteredMetrics)).toBe(true);
+
+      // filteredMetrics should match the base eval's prompt count (1), not the combined count (2)
+      expect(response.body.filteredMetrics).toHaveLength(1);
+
+      // Verify the table includes both base and comparison prompts
+      expect(response.body.table.head.prompts.length).toBeGreaterThan(1);
     });
   });
 });

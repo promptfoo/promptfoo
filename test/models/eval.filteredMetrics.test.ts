@@ -11,7 +11,6 @@
 
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
-import Eval from '../../src/models/eval';
 import EvalFactory from '../factories/evalFactory';
 
 describe('Filtered Metrics - WHERE Clause Consistency', () => {

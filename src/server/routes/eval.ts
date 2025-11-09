@@ -330,7 +330,8 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
       });
 
       // Validate that filteredMetrics array length matches prompts array length
-      const expectedLength = returnTable.head.prompts.length;
+      // Note: Use table.head.prompts (base eval) not returnTable.head.prompts (includes comparison evals)
+      const expectedLength = table.head.prompts.length;
       if (filteredMetrics.length !== expectedLength) {
         logger.error(
           '[GET /:id/table] Filtered metrics array length mismatch - setting to null to prevent frontend errors',

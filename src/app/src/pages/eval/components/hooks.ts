@@ -41,7 +41,7 @@ export function usePassingTestCounts(): MetricValue[] {
           filtered: filteredMetrics?.[idx]?.testPassCount ?? null,
         }))
       : [];
-  }, [table, table?.head.prompts, filteredMetrics]);
+  }, [table, filteredMetrics]);
 }
 
 /**
@@ -67,7 +67,7 @@ export function useTestCounts(): MetricValue[] {
           };
         })
       : [];
-  }, [table, table?.head.prompts, filteredMetrics]);
+  }, [table, filteredMetrics]);
 }
 
 /**
