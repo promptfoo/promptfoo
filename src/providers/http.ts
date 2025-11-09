@@ -746,6 +746,23 @@ const TlsCertificateSchema = z
     },
   );
 
+const OAuthSchema = z.object({
+  type: z.literal('oauth'),
+  grantType: z.literal('client_credentials'),
+  clientId: z.string(),
+  clientSecret: z.string(),
+  tokenUrl: z.string(),
+  scopes: z.array(z.string()).optional(),
+});
+
+const BasicAuthSchema = z.object({
+  type: z.literal('basic'),
+  username: z.string(),
+  password: z.string(),
+});
+
+const AuthSchema = z.discriminatedUnion('type', [OAuthSchema, BasicAuthSchema]);
+
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
@@ -772,6 +789,7 @@ export const HttpProviderConfigSchema = z.object({
   responseParser: z.union([z.string(), z.function()]).optional(),
   // Token estimation configuration
   tokenEstimation: TokenEstimationConfigSchema.optional(),
+  auth: AuthSchema.optional(),
   // Digital Signature Authentication with support for multiple certificate types
   signatureAuth: z
     .union([
@@ -1304,6 +1322,8 @@ export class HttpProvider implements ApiProvider {
   private validateStatus: Promise<(status: number) => boolean>;
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
+  private lastToken?: string;
+  private lastTokenExpiresAt?: number;
   private httpsAgent?: Agent;
   private httpsAgentPromise?: Promise<Agent>;
 
@@ -1386,6 +1406,89 @@ export class HttpProvider implements ApiProvider {
       logger.warn(`Failed to estimate tokens: ${String(err)}`);
       return undefined;
     }
+  }
+
+  private async refreshOAuthTokenIfNeeded(): Promise<void> {
+    if (!this.config.auth || this.config.auth.type !== 'oauth') {
+      logger.debug('[HTTP Provider Auth]: No OAuth auth configured');
+      return;
+    }
+
+    const oauthConfig = this.config.auth;
+    const now = Date.now();
+
+    // Check if token exists and is still valid (with 60 second buffer)
+    const TOKEN_BUFFER_MS = 60000;
+    if (
+      this.lastToken &&
+      this.lastTokenExpiresAt &&
+      now + TOKEN_BUFFER_MS < this.lastTokenExpiresAt
+    ) {
+      logger.debug('[HTTP Provider Auth]: Using cached OAuth token');
+      return;
+    }
+
+    logger.debug('[HTTP Provider Auth]: Refreshing OAuth token');
+
+    try {
+      // Prepare the token request body
+      const tokenRequestBody = new URLSearchParams();
+      tokenRequestBody.append('grant_type', 'client_credentials');
+      tokenRequestBody.append('client_id', oauthConfig.clientId);
+      tokenRequestBody.append('client_secret', oauthConfig.clientSecret);
+      if (oauthConfig.scopes && oauthConfig.scopes.length > 0) {
+        tokenRequestBody.append('scope', oauthConfig.scopes.join(' '));
+      }
+
+      // Make the token request
+      const httpsAgent = await this.getHttpsAgent();
+      const fetchOptions: any = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: tokenRequestBody.toString(),
+      };
+
+      if (httpsAgent) {
+        fetchOptions.dispatcher = httpsAgent;
+      }
+
+      const response = await fetchWithCache(
+        oauthConfig.tokenUrl,
+        fetchOptions,
+        REQUEST_TIMEOUT_MS,
+        'text',
+        true, // Always bust cache for token requests
+        0, // No retries for token requests
+      );
+
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(
+          `OAuth token request failed with status ${response.status} ${response.statusText}: ${response.data}`,
+        );
+      }
+
+      const tokenData = JSON.parse(response.data as string);
+
+      if (!tokenData.access_token) {
+        throw new Error('OAuth token response missing access_token');
+      }
+
+      this.lastToken = tokenData.access_token;
+
+      // Calculate expiration time
+      // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
+      const expiresInSeconds = tokenData.expires_in || 3600;
+      this.lastTokenExpiresAt = now + expiresInSeconds * 1000;
+
+      logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
+    } catch (err) {
+      logger.error(`[HTTP Provider Auth]: Failed to refresh OAuth token: ${String(err)}`);
+      throw new Error(`Failed to refresh OAuth token: ${String(err)}`);
+    }
+
+    invariant(this.lastToken, 'OAuth token should be defined at this point');
   }
 
   private async refreshSignatureIfNeeded(): Promise<void> {
@@ -1496,12 +1599,27 @@ export class HttpProvider implements ApiProvider {
 
     const nunjucks = getNunjucksEngine();
 
-    return Object.fromEntries(
+    const allHeaders = Object.fromEntries(
       Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
         key,
         nunjucks.renderString(value, vars),
       ]),
     );
+
+    // Add OAuth Bearer token if configured
+    if (this.config.auth?.type === 'oauth' && this.lastToken) {
+      allHeaders.authorization = `Bearer ${this.lastToken}`;
+    }
+
+    // Add Basic Auth credentials if configured
+    if (this.config.auth?.type === 'basic') {
+      const credentials = Buffer.from(
+        `${this.config.auth.username}:${this.config.auth.password}`,
+      ).toString('base64');
+      allHeaders.authorization = `Basic ${credentials}`;
+    }
+
+    return allHeaders;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -1509,6 +1627,11 @@ export class HttpProvider implements ApiProvider {
       ...(context?.vars || {}),
       prompt,
     } as Record<string, any>;
+
+    if (this.config.auth?.type === 'oauth') {
+      await this.refreshOAuthTokenIfNeeded();
+      invariant(this.lastToken, 'OAuth token should be defined at this point');
+    }
 
     // Add signature values to vars if signature auth is enabled
     if (this.config.signatureAuth) {
@@ -1754,6 +1877,19 @@ export class HttpProvider implements ApiProvider {
     }
     if (context?.tracestate) {
       parsedRequest.headers.tracestate = context.tracestate;
+    }
+
+    // Add OAuth Bearer token if configured
+    if (this.config.auth?.type === 'oauth' && this.lastToken) {
+      parsedRequest.headers.authorization = `Bearer ${this.lastToken}`;
+    }
+
+    // Add Basic Auth credentials if configured
+    if (this.config.auth?.type === 'basic') {
+      const credentials = Buffer.from(
+        `${this.config.auth.username}:${this.config.auth.password}`,
+      ).toString('base64');
+      parsedRequest.headers.authorization = `Basic ${credentials}`;
     }
 
     logger.debug(

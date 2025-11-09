@@ -11,6 +11,7 @@ import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import AuthorizationTab from './tabs/AuthorizationTab';
 import DigitalSignatureAuthTab from './tabs/DigitalSignatureAuthTab';
 import HttpStatusCodeTab from './tabs/HttpStatusCodeTab';
 import RequestTransformTab from './tabs/RequestTransformTab';
@@ -22,11 +23,12 @@ import type { ProviderOptions } from '@promptfoo/types';
 // Enum for tab indices to prevent bugs and improve maintainability
 enum TabIndex {
   SessionManagement = 0,
-  RequestTransform = 1,
-  TokenEstimation = 2,
-  DigitalSignatureAuth = 3,
-  TlsHttpsConfig = 4,
-  HttpStatusCode = 5,
+  Authorization = 1,
+  RequestTransform = 2,
+  TokenEstimation = 3,
+  DigitalSignatureAuth = 4,
+  TlsHttpsConfig = 5,
+  HttpStatusCode = 6,
 }
 
 interface HttpAdvancedConfigurationProps {
@@ -92,6 +94,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
             scrollButtons="auto"
           >
             <Tab label="Session Management" {...a11yProps(TabIndex.SessionManagement)} />
+            <Tab label="Authorization" {...a11yProps(TabIndex.Authorization)} />
             <Tab label="Request Transform" {...a11yProps(TabIndex.RequestTransform)} />
             <Tab label="Token Estimation" {...a11yProps(TabIndex.TokenEstimation)} />
             <Tab label="Digital Signature Auth" {...a11yProps(TabIndex.DigitalSignatureAuth)} />
@@ -106,6 +109,14 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
             selectedTarget={selectedTarget}
             updateCustomTarget={updateCustomTarget}
             onTestComplete={onSessionTested}
+          />
+        </TabPanel>
+
+        {/* Authorization Tab */}
+        <TabPanel value={activeTab} index={TabIndex.Authorization}>
+          <AuthorizationTab
+            selectedTarget={selectedTarget}
+            updateCustomTarget={updateCustomTarget}
           />
         </TabPanel>
 
