@@ -144,20 +144,29 @@
 
 /* Responsive */
 @media (max-width: 996px) {
-  /* Hide only in the navbar (not in sidebar) */
-  .navbar__inner .navMenuCard {
+  /* Hide dropdown menus in the top navbar but keep them for the hamburger menu */
+  :global(.navbar__inner) .navMenuCard {
     display: none;
   }
 
   /* Style for mobile sidebar/hamburger menu */
-  .navMenuCard {
+  :global(.navbar-sidebar__items) .navMenuCard {
     display: block;
     width: 100%;
+  }
+
+  :global(.navbar-sidebar__items) .navMenuCardButton {
+    color: var(--ifm-menu-color);
+  }
+
+  :global(.navbar-sidebar__items) .navMenuCardButton:hover {
+    color: var(--ifm-menu-color-active);
   }
 
   .navMenuCardButton {
     width: 100%;
     justify-content: space-between;
+    font-weight: 600;
   }
 
   .navMenuCardDropdown {

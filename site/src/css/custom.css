@@ -81,6 +81,11 @@ code p {
   .DocSearch {
     display: none !important;
   }
+
+  /* Keep hamburger top-level items consistent */
+  .navbar-sidebar__items .menu__list > .menu__list-item > .menu__link {
+    font-weight: 600;
+  }
 }
 
 .navbar__logo img {
