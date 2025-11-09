@@ -29,8 +29,8 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 vi.mock('./store', async (importOriginal) => {
-  const actual = await importOriginal();
-  const mockUseTableStore = vi.fn();
+  const actual = (await importOriginal()) as typeof import('./store');
+  const mockUseTableStore = vi.fn() as any;
   const mockUseResultsViewSettingsStore = vi.fn();
 
   // Add subscribe method to support Zustand subscriptions
