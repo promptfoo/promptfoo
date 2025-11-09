@@ -476,7 +476,7 @@ export async function doEval(
     }
 
     // Create or load eval record
-    const shouldWrite = cmdObj.write ?? commandLineOptions?.write ?? true;
+    const shouldWrite = cmdObj.write ?? commandLineOptions?.write;
     const evalRecord = resumeEval
       ? resumeEval
       : shouldWrite
