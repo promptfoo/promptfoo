@@ -103,9 +103,9 @@ export class SimulatedUser implements ApiProvider {
       return [];
     }
 
-    // If it's already an array, validate and return it
+    // If it's already an array, return it (validation happens after templating)
     if (Array.isArray(initialMessages)) {
-      return this.validateMessages(initialMessages);
+      return initialMessages;
     }
 
     // If it's a string, handle different cases
@@ -119,7 +119,7 @@ export class SimulatedUser implements ApiProvider {
         try {
           const resolved = maybeLoadConfigFromExternalFile(initialMessages);
           if (Array.isArray(resolved)) {
-            return this.validateMessages(resolved);
+            return resolved;
           }
           logger.warn(
             `[SimulatedUser] Expected array of messages from file, got: ${typeof resolved}. Value: ${JSON.stringify(resolved).substring(0, 200)}`,
@@ -137,7 +137,7 @@ export class SimulatedUser implements ApiProvider {
         try {
           const parsed = JSON.parse(initialMessages);
           if (Array.isArray(parsed)) {
-            return this.validateMessages(parsed);
+            return parsed;
           }
           logger.warn(
             `[SimulatedUser] Parsed JSON but got ${typeof parsed} instead of array. Value: ${initialMessages.substring(0, 200)}`,
@@ -250,13 +250,25 @@ export class SimulatedUser implements ApiProvider {
     // vars.initialMessages takes precedence over config.initialMessages
     // Both can be arrays or file:// paths
     const varsInitialMessages = context?.vars?.initialMessages as Message[] | string | undefined;
-    const initialMessages = this.resolveInitialMessages(
+    const resolvedMessages = this.resolveInitialMessages(
       varsInitialMessages || this.configInitialMessages,
     );
-    const messages: Message[] = [...initialMessages];
 
-    if (initialMessages.length > 0) {
-      logger.debug(`[SimulatedUser] Starting with ${initialMessages.length} initial messages`);
+    // Template both role and content fields with context variables, then validate
+    const templatedMessages = resolvedMessages.map((msg) => ({
+      role:
+        typeof msg.role === 'string'
+          ? getNunjucksEngine().renderString(msg.role, context?.vars)
+          : msg.role,
+      content:
+        typeof msg.content === 'string'
+          ? getNunjucksEngine().renderString(msg.content, context?.vars)
+          : msg.content,
+    }));
+    const messages: Message[] = this.validateMessages(templatedMessages);
+
+    if (messages.length > 0) {
+      logger.debug(`[SimulatedUser] Starting with ${messages.length} initial messages`);
     }
 
     const maxTurns = this.maxTurns;

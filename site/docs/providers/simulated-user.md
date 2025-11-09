@@ -157,6 +157,54 @@ tests:
 
 **Note:** `vars.initialMessages` takes precedence over `config.initialMessages`.
 
+### Variable Templating
+
+Initial messages support Nunjucks variable templating, allowing you to reuse message templates across different test cases:
+
+```yaml
+defaultTest:
+  provider:
+    id: 'promptfoo:simulated-user'
+    config:
+      maxTurns: 3
+      initialMessages:
+        - role: user
+          content: I've selected my flight and I'm ready to book
+        - role: assistant
+          content: Great! How would you like to pay?
+        - role: user
+          content: I want to pay via {{payment_method}}
+        - role: assistant
+          content: Okay, please provide your {{payment_method}} credentials
+
+tests:
+  - vars:
+      payment_method: credit card
+      instructions: Complete the payment using credit card
+
+  - vars:
+      payment_method: PayPal
+      instructions: Complete the payment using PayPal
+
+  - vars:
+      payment_method: bank transfer
+      instructions: Complete the payment using bank transfer
+```
+
+This approach lets you:
+
+- **Define message templates once** in `defaultTest` or `config.initialMessages`
+- **Customize per test** by providing different variable values in `vars`
+- **Avoid duplication** when testing the same conversation flow with different parameters
+
+Variable templating works with:
+
+- Variables in message `content` fields
+- Variables in message `role` fields
+- Multiple variables in a single message
+- All Nunjucks expressions and filters (e.g., `{{ price | float * 1.1 }}`)
+- Both inline initialMessages and file-based initialMessages
+
 ### Loading from Files
 
 For longer conversation histories, you can load initial messages from external files using `file://`. Supported formats include JSON and YAML:
