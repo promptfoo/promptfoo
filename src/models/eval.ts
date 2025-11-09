@@ -559,32 +559,33 @@ export default class Eval {
 
           // Value must be a number
           const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
-          if (!Number.isFinite(numericValue)) {
-            return;
-          }
 
           if (operator === 'is_defined' || (operator === 'equals' && !field)) {
             // 'is_defined': new operator that checks if metric exists
             // 'equals' without field: old format for backward compatibility
             condition = `json_extract(named_scores, '$."${escapedField}"') IS NOT NULL`;
-          } else if (operator === 'eq') {
-            // Numeric equality
-            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) = ${numericValue}`;
-          } else if (operator === 'neq') {
-            // Numeric inequality
-            condition = `(json_extract(named_scores, '$."${escapedField}"') IS NOT NULL AND CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) != ${numericValue})`;
-          } else if (operator === 'gt') {
-            // Greater than
-            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) > ${numericValue}`;
-          } else if (operator === 'gte') {
-            // Greater than or equal
-            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) >= ${numericValue}`;
-          } else if (operator === 'lt') {
-            // Less than
-            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) < ${numericValue}`;
-          } else if (operator === 'lte') {
-            // Less than or equal
-            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) <= ${numericValue}`;
+          }
+          // For the numeric operators, validate that the value is a number
+          else if (Number.isFinite(numericValue)) {
+            if (operator === 'eq') {
+              // Numeric equality
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) = ${numericValue}`;
+            } else if (operator === 'neq') {
+              // Numeric inequality
+              condition = `(json_extract(named_scores, '$."${escapedField}"') IS NOT NULL AND CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) != ${numericValue})`;
+            } else if (operator === 'gt') {
+              // Greater than
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) > ${numericValue}`;
+            } else if (operator === 'gte') {
+              // Greater than or equal
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) >= ${numericValue}`;
+            } else if (operator === 'lt') {
+              // Less than
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) < ${numericValue}`;
+            } else if (operator === 'lte') {
+              // Less than or equal
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) <= ${numericValue}`;
+            }
           }
         } else if (type === 'metadata' && field) {
           const sanitizedValue = sanitizeValue(value);
@@ -988,6 +989,172 @@ export default class Eval {
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+  }
+
+  /**
+   * Creates a deep copy of this eval including all results.
+   * Uses batching to avoid memory exhaustion on large evals.
+   * @param description - Optional description for the new eval
+   * @param distinctTestCount - Optional pre-computed test count to avoid duplicate query
+   */
+  async copy(description?: string, distinctTestCount?: number): Promise<Eval> {
+    const newEvalId = createEvalId(new Date());
+    const copyDescription = description || `${this.description || 'Evaluation'} (Copy)`;
+
+    // Get distinct test count for logging and progress tracking
+    const testCount = distinctTestCount ?? (await this.getResultsCount());
+
+    logger.info('Starting eval copy', {
+      sourceEvalId: this.id,
+      targetEvalId: newEvalId,
+      distinctTestCount: testCount,
+    });
+
+    // Deep clone to prevent mutation issues
+    const newConfig = structuredClone(this.config);
+    newConfig.description = copyDescription;
+
+    const newPrompts = structuredClone(this.prompts);
+    const newVars = this.vars ? structuredClone(this.vars) : [];
+    const author = getUserEmail();
+
+    const db = getDb();
+
+    // Copy eval, results, and relationships within transaction for atomicity
+    let copiedCount = 0;
+    db.transaction(() => {
+      // Create the new eval record first
+      db.insert(evalsTable)
+        .values({
+          id: newEvalId,
+          createdAt: Date.now(),
+          author,
+          description: copyDescription,
+          config: newConfig,
+          results: {},
+          prompts: newPrompts,
+          vars: newVars,
+          runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+          isRedteam: Boolean(newConfig.redteam),
+        })
+        .run();
+
+      // Copy prompts relationships
+      // Note: prompts already exist in promptsTable from when the source eval was created
+      // We just need to create new relationships pointing to those same prompts
+      const promptRels = db
+        .select()
+        .from(evalsToPromptsTable)
+        .where(eq(evalsToPromptsTable.evalId, this.id))
+        .all();
+
+      if (promptRels.length > 0) {
+        db.insert(evalsToPromptsTable)
+          .values(
+            promptRels.map((rel) => ({
+              evalId: newEvalId,
+              promptId: rel.promptId,
+            })),
+          )
+          .onConflictDoNothing()
+          .run();
+      }
+
+      // Copy tags relationships (from config.tags)
+      if (this.config.tags) {
+        for (const [tagKey, tagValue] of Object.entries(this.config.tags)) {
+          const tagId = sha256(`${tagKey}:${tagValue}`);
+
+          db.insert(tagsTable)
+            .values({
+              id: tagId,
+              name: tagKey,
+              value: tagValue,
+            })
+            .onConflictDoNothing()
+            .run();
+
+          db.insert(evalsToTagsTable)
+            .values({
+              evalId: newEvalId,
+              tagId,
+            })
+            .onConflictDoNothing()
+            .run();
+        }
+      }
+
+      // Copy dataset relationship
+      const datasetRel = db
+        .select()
+        .from(evalsToDatasetsTable)
+        .where(eq(evalsToDatasetsTable.evalId, this.id))
+        .limit(1)
+        .all();
+
+      if (datasetRel.length > 0) {
+        db.insert(evalsToDatasetsTable)
+          .values({
+            evalId: newEvalId,
+            datasetId: datasetRel[0].datasetId,
+          })
+          .onConflictDoNothing()
+          .run();
+      }
+
+      // Copy results in batches to avoid memory exhaustion
+      const BATCH_SIZE = 1000;
+      let offset = 0;
+
+      while (true) {
+        // Fetch batch from source eval
+        const batch = db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, this.id))
+          .orderBy(evalResultsTable.id)
+          .limit(BATCH_SIZE)
+          .offset(offset)
+          .all();
+
+        if (batch.length === 0) {
+          break;
+        }
+
+        // Map to new eval with new IDs and timestamps
+        const now = Date.now();
+        const copiedResults = batch.map((result) => ({
+          ...result,
+          id: randomUUID(),
+          evalId: newEvalId,
+          createdAt: now,
+          updatedAt: now,
+        }));
+
+        // Insert batch
+        db.insert(evalResultsTable).values(copiedResults).run();
+
+        copiedCount += batch.length;
+        offset += BATCH_SIZE;
+
+        logger.debug('Copied batch of eval results', {
+          sourceEvalId: this.id,
+          targetEvalId: newEvalId,
+          batchSize: batch.length,
+          rowsCopied: copiedCount,
+          distinctTestCount: testCount,
+        });
+      }
+    });
+
+    logger.info('Eval copy completed successfully', {
+      sourceEvalId: this.id,
+      targetEvalId: newEvalId,
+      rowsCopied: copiedCount,
+      distinctTestCount: testCount,
+    });
+
+    return (await Eval.findById(newEvalId)) as Eval;
   }
 
   get shared() {

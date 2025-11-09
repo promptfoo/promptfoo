@@ -28,6 +28,8 @@ import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import { type TestResultStats, type CategoryStats } from './FrameworkComplianceUtils';
 import { compareByASRDescending } from '../utils/utils';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { type RedteamPluginObject } from '@promptfoo/redteam/types';
 
 interface TestWithMetadata {
   prompt: string;
@@ -109,6 +111,7 @@ const DrawerContent = ({
   succeededAttacksByPlugin,
   failedAttacksByPlugin,
   selectedStrategyStats,
+  plugins,
 }: {
   selectedStrategy: string;
   tabValue: number;
@@ -116,8 +119,11 @@ const DrawerContent = ({
   succeededAttacksByPlugin: Record<string, TestWithMetadata[]>;
   failedAttacksByPlugin: Record<string, TestWithMetadata[]>;
   selectedStrategyStats: TestResultStats;
+  plugins: RedteamPluginObject[];
 }) => {
   const theme = useTheme();
+
+  const customPoliciesById = useCustomPoliciesMap(plugins);
 
   const pluginStats = React.useMemo(() => {
     const pluginStats: Record<string, { successfulAttacks: number; total: number }> = {};
@@ -296,17 +302,21 @@ const DrawerContent = ({
             </TableRow>
           </TableHead>
           <TableBody>
-            {pluginStats.map((stat) => (
-              <TableRow key={stat.plugin}>
-                <TableCell component="th" scope="row">
-                  {displayNameOverrides[stat.plugin as keyof typeof displayNameOverrides] ||
-                    stat.plugin}
-                </TableCell>
-                <TableCell align="right">{formatASRForDisplay(stat.asr)}%</TableCell>
-                <TableCell align="right">{stat.total - stat.successfulAttacks}</TableCell>
-                <TableCell align="right">{stat.total}</TableCell>
-              </TableRow>
-            ))}
+            {pluginStats.map((stat) => {
+              const customPolicy = customPoliciesById[stat.plugin];
+              return (
+                <TableRow key={stat.plugin}>
+                  <TableCell component="th" scope="row">
+                    {customPolicy?.name ??
+                      (displayNameOverrides[stat.plugin as keyof typeof displayNameOverrides] ||
+                        stat.plugin)}
+                  </TableCell>
+                  <TableCell align="right">{formatASRForDisplay(stat.asr)}%</TableCell>
+                  <TableCell align="right">{stat.total - stat.successfulAttacks}</TableCell>
+                  <TableCell align="right">{stat.total}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>
@@ -545,10 +555,12 @@ const StrategyStats = ({
   strategyStats,
   failuresByPlugin,
   passesByPlugin,
+  plugins,
 }: {
   strategyStats: CategoryStats;
   failuresByPlugin: Record<string, TestWithMetadata[]>;
   passesByPlugin: Record<string, TestWithMetadata[]>;
+  plugins: RedteamPluginObject[];
 }) => {
   const [selectedStrategy, setSelectedStrategy] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -681,6 +693,7 @@ const StrategyStats = ({
             succeededAttacksByPlugin={failuresByPlugin}
             failedAttacksByPlugin={passesByPlugin}
             selectedStrategyStats={strategyStats[selectedStrategy]}
+            plugins={plugins}
           />
         )}
       </Drawer>

@@ -115,6 +115,7 @@ export default function StrategyConfigDialog({
       });
     } else if (
       strategy === 'jailbreak' ||
+      strategy === 'jailbreak:meta' ||
       strategy === 'jailbreak:tree' ||
       strategy === 'best-of-n' ||
       strategy === 'goat' ||
@@ -477,6 +478,28 @@ export default function StrategyConfigDialog({
                 </Typography>
               </Box>
             }
+          />
+        </Box>
+      );
+    } else if (strategy === 'jailbreak:meta') {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Configure the Meta-Agent Jailbreak strategy parameters.
+          </Typography>
+
+          <TextField
+            fullWidth
+            label="Number of Iterations"
+            type="number"
+            value={localConfig.numIterations || 10}
+            onChange={(e) => {
+              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
+              setLocalConfig({ ...localConfig, numIterations: value });
+            }}
+            placeholder="Number of iterations (default: 10)"
+            InputProps={{ inputProps: { min: 3, max: 50 } }}
+            helperText="Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and makes strategic decisions."
           />
         </Box>
       );
