@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
 
+### Documentation
+
+- docs(providers): update Alibaba Cloud provider documentation with Qwen 3 models, reasoning models (QwQ, DeepSeek), omni-modal models, audio/speech capabilities, coding/math specialized models; fix configuration examples to use `apiBaseUrl` instead of `API_BASE_URL` and add Beijing region endpoint note (#6118)
+
 ### Dependencies
 
 - chore(deps): update 76 packages to latest minor and patch versions across all workspaces (#6139)
