@@ -16,12 +16,13 @@ describe('MetadataPanel', () => {
     onApplyFilter: mockOnApplyFilter,
   };
 
-  it("should render a table with all metadata keys except 'citations' when metadata is provided", () => {
+  it("should render a table with all metadata keys except 'citations' and '_promptfooFileMetadata' when metadata is provided", () => {
     const mockMetadata = {
       stringKey: 'stringValue',
       numberKey: 123,
       objectKey: { nested: 'value' },
       citations: [{ source: 'doc1', content: 'citation content' }],
+      _promptfooFileMetadata: { fileName: 'test.txt', size: 1024 },
     };
 
     render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
@@ -38,7 +39,9 @@ describe('MetadataPanel', () => {
     expect(screen.getByText('objectKey')).toBeInTheDocument();
     expect(screen.getByText(JSON.stringify(mockMetadata.objectKey))).toBeInTheDocument();
 
+    // Verify hidden metadata keys are not displayed
     expect(screen.queryByText('citations')).not.toBeInTheDocument();
+    expect(screen.queryByText('_promptfooFileMetadata')).not.toBeInTheDocument();
   });
 
   it('should render a metadata value as a Link when the value is a valid URL string', () => {
