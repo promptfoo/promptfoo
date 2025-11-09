@@ -864,4 +864,112 @@ describe('ProviderTypeSelector', () => {
     expect(screen.queryByText('AutoGen')).toBeNull();
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
+
+  it('should display all provider options when /api/providers/config-status returns a 401 Unauthorized response', async () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+    });
+
+    vi.stubGlobal('fetch', mockFetch);
+
+    await renderWithTheme(
+      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+      expect(screen.getByText('WebSocket Endpoint')).toBeVisible();
+      expect(screen.getByText('Python Provider')).toBeVisible();
+      expect(screen.getByText('JavaScript Provider')).toBeVisible();
+    });
+  });
+
+  it('should display all provider options when fetching /api/providers/config-status fails or returns a non-OK response', async () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ hasCustomConfig: false }),
+    });
+
+    vi.stubGlobal('fetch', mockFetch);
+
+    await renderWithTheme(
+      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+    );
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('Python Provider')).toBeVisible();
+    expect(screen.getByText('OpenAI')).toBeVisible();
+  });
+
+  it('should only display http, websocket, python, and javascript provider options when hasCustomConfig is true', async () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ hasCustomConfig: true }),
+    });
+
+    vi.stubGlobal('fetch', mockFetch);
+
+    await renderWithTheme(
+      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+    );
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('WebSocket Endpoint')).toBeVisible();
+    expect(screen.getByText('Python Provider')).toBeVisible();
+    expect(screen.getByText('JavaScript Provider')).toBeVisible();
+
+    expect(screen.queryByText('OpenAI')).toBeNull();
+    expect(screen.queryByText('Anthropic')).toBeNull();
+    expect(screen.queryByText('Google AI Studio')).toBeNull();
+  });
+
+  it('should display a loading message while fetching provider config status', async () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    const mockFetch = vi.fn().mockImplementation(() => {
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({
+            ok: true,
+            json: async () => ({ hasCustomConfig: false }),
+          });
+        }, 50);
+      });
+    });
+
+    vi.stubGlobal('fetch', mockFetch);
+
+    renderWithTheme(
+      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+    );
+
+    expect(screen.getByText('Loading provider options...')).toBeVisible();
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading provider options...')).toBeNull();
+    });
+  });
 });

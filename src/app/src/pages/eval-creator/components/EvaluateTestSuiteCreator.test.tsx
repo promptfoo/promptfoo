@@ -1,7 +1,6 @@
 import React from 'react';
 
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
-import { ToastProvider } from '@app/contexts/ToastContext';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -15,6 +14,15 @@ import type {
   Scenario,
   TestCase,
 } from '@promptfoo/types';
+import { callApi } from '@app/utils/api';
+
+// Mock useToast hook
+const showToastMock = vi.fn();
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: showToastMock,
+  }),
+}));
 
 // Mock child components
 vi.mock('./ConfigureEnvButton', () => ({
@@ -53,13 +61,18 @@ vi.mock('./YamlEditor', () => ({
   )),
 }));
 
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(() =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ hasCustomConfig: false }),
+    }),
+  ),
+}));
+
 const renderWithTheme = (component: React.ReactNode) => {
   const theme = createTheme({ palette: { mode: 'light' } });
-  return render(
-    <ToastProvider>
-      <ThemeProvider theme={theme}>{component}</ThemeProvider>
-    </ToastProvider>,
-  );
+  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
 };
 
 describe('EvaluateTestSuiteCreator', () => {
@@ -222,6 +235,49 @@ describe('EvaluateTestSuiteCreator', () => {
     const config = useStore.getState().config;
     expect(config.derivedMetrics).toEqual(configWithNewField.derivedMetrics);
     expect((config as any).someNewFieldInFuture).toBe('This will work automatically!');
+  });
+
+  it('should handle edge cases in variable extraction from prompts', () => {
+    useStore.getState().updateConfig({
+      prompts: [
+        '{{{nestedVar}}}',
+        '{{ var with spaces }}',
+        '{{incomplete',
+        '{{ complete }}',
+        '{{validVar}}',
+      ],
+    });
+
+    renderWithTheme(<EvaluateTestSuiteCreator />);
+
+    const testCasesSection = screen.getByTestId('mock-test-cases-section');
+    expect(testCasesSection).toHaveTextContent('Vars: nestedVar, complete, validVar');
+  });
+
+  it('should gracefully handle a missing hasCustomConfig property in the /providers/config-status response', async () => {
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as Response);
+
+    renderWithTheme(<EvaluateTestSuiteCreator />);
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledWith('/providers/config-status');
+    });
+
+    expect(showToastMock).not.toHaveBeenCalled();
+
+    const configureEnvButton = screen.getByTestId('mock-configure-env-button');
+    expect(configureEnvButton).toBeInTheDocument();
+  });
+
+  it('should show the ConfigureEnvButton when the server responds with { hasCustomConfig: false }', async () => {
+    renderWithTheme(<EvaluateTestSuiteCreator />);
+
+    const configureEnvButton = await screen.findByTestId('mock-configure-env-button');
+
+    expect(configureEnvButton).toBeInTheDocument();
   });
 
   // Future test scenarios will be added here
