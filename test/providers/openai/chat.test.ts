@@ -352,6 +352,68 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     });
 
+    it('should handle OpenAI reasoning field with separate content correctly', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                reasoning:
+                  'First, I need to analyze the numbers. 9.11 has 11 in the hundredths place, while 9.8 has 8 in the tenths place. Converting 9.8 to hundredths gives 9.80, so 9.11 > 9.80.',
+                content: 'The answer is 9.11 is greater than 9.8.',
+              },
+            },
+          ],
+          usage: { total_tokens: 25, prompt_tokens: 12, completion_tokens: 13 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-oss-20b');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Which is greater: 9.11 or 9.8?' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      const expectedOutput = `Thinking: First, I need to analyze the numbers. 9.11 has 11 in the hundredths place, while 9.8 has 8 in the tenths place. Converting 9.8 to hundredths gives 9.80, so 9.11 > 9.80.\n\nThe answer is 9.11 is greater than 9.8.`;
+      expect(result.output).toBe(expectedOutput);
+      expect(result.tokenUsage).toEqual({ total: 25, prompt: 12, completion: 13 });
+    });
+
+    it('should hide OpenAI reasoning field when showThinking is false', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                reasoning: 'Let me think through this problem step by step...',
+                content: 'The final answer is 42.',
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-oss-20b', {
+        config: { showThinking: false },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'What is the answer?' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('The final answer is 42.');
+      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
+    });
+
     it('should handle DeepSeek reasoning model content correctly', async () => {
       const mockResponse = {
         data: {
