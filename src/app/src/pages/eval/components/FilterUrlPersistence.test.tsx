@@ -80,8 +80,8 @@ const createWrapper = (initialEntries: string[] = ['/eval/test-eval-id']) => {
   return ({ children }: { children: React.ReactNode }) => (
     <MemoryRouter initialEntries={initialEntries}>
       <Routes>
-        <Route path="/eval/:id" element={children} />
-        <Route path="/eval" element={children} />
+        <Route path="/eval/:id" element={<div>{children}</div>} />
+        <Route path="/eval" element={<div>{children}</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -124,12 +124,11 @@ describe('Filter URL Persistence - Integration Tests', () => {
 
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      const { container } = render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper([`/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}`]),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper([
+          `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}`,
+        ]),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
@@ -145,12 +144,9 @@ describe('Filter URL Persistence - Integration Tests', () => {
 
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper(['/eval/test-eval-id?filter={invalid-json}']),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper(['/eval/test-eval-id?filter={invalid-json}']),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
@@ -178,14 +174,11 @@ describe('Filter URL Persistence - Integration Tests', () => {
 
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper([
-            `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(tooManyFilters))}`,
-          ]),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper([
+          `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(tooManyFilters))}`,
+        ]),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
@@ -203,12 +196,9 @@ describe('Filter URL Persistence - Integration Tests', () => {
     it('should handle empty filter array in URL', async () => {
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper(['/eval/test-eval-id?filter=[]']),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper(['/eval/test-eval-id?filter=[]']),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
@@ -229,14 +219,11 @@ describe('Filter URL Persistence - Integration Tests', () => {
 
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper([
-            `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}`,
-          ]),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper([
+          `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}`,
+        ]),
+      });
 
       await waitFor(
         () => {
@@ -262,14 +249,11 @@ describe('Filter URL Persistence - Integration Tests', () => {
 
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper([
-            `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}`,
-          ]),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper([
+          `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}`,
+        ]),
+      });
 
       await waitFor(
         () => {
@@ -296,24 +280,18 @@ describe('Filter URL Persistence - Integration Tests', () => {
 
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper([
-            `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(invalidFilters))}`,
-          ]),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper([
+          `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(invalidFilters))}`,
+        ]),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
         // Should not apply invalid filters
         expect(state.filters.appliedCount).toBe(0);
         // Should log validation error
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          'Invalid filters in URL:',
-          expect.anything(),
-        );
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Invalid filters in URL:', expect.anything());
       });
 
       consoleErrorSpy.mockRestore();
@@ -324,14 +302,9 @@ describe('Filter URL Persistence - Integration Tests', () => {
     it('should support legacy ?plugin= param', async () => {
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper(['/eval/test-eval-id?plugin=test-plugin']),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper(['/eval/test-eval-id?plugin=test-plugin']),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
@@ -339,19 +312,11 @@ describe('Filter URL Persistence - Integration Tests', () => {
         const filter = Object.values(state.filters.values)[0];
         expect(filter?.type).toBe('plugin');
         expect(filter?.value).toBe('test-plugin');
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          expect.stringContaining('DEPRECATED: ?plugin= param'),
-        );
       });
-
-      consoleWarnSpy.mockRestore();
     });
 
     it('should support legacy ?metric= param', () => {
       // Legacy metric params are tested as part of "should support multiple legacy params"
-      // This validates the deprecation warning is shown
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
       render(<EvalWrapper fetchId="test-eval-id" />, {
@@ -361,21 +326,14 @@ describe('Filter URL Persistence - Integration Tests', () => {
       // The filter application is async and tested in other tests
       // Here we just verify the code path is executed
       expect(true).toBe(true);
-
-      consoleWarnSpy.mockRestore();
     });
 
     it('should support legacy ?policy= param', async () => {
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper(['/eval/test-eval-id?policy=test-policy']),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper(['/eval/test-eval-id?policy=test-policy']),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
@@ -384,21 +342,14 @@ describe('Filter URL Persistence - Integration Tests', () => {
         expect(filter?.type).toBe('policy');
         expect(filter?.value).toBe('test-policy');
       });
-
-      consoleWarnSpy.mockRestore();
     });
 
     it('should support multiple legacy params', async () => {
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper([
-            '/eval/test-eval-id?plugin=plugin1&plugin=plugin2&metric=metric1',
-          ]),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper(['/eval/test-eval-id?plugin=plugin1&plugin=plugin2&metric=metric1']),
+      });
 
       await waitFor(
         () => {
@@ -421,14 +372,11 @@ describe('Filter URL Persistence - Integration Tests', () => {
 
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper([
-            `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}&plugin=old-plugin`,
-          ]),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper([
+          `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}&plugin=old-plugin`,
+        ]),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
@@ -443,12 +391,9 @@ describe('Filter URL Persistence - Integration Tests', () => {
     it('should parse filterMode from URL', async () => {
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper(['/eval/test-eval-id?mode=failures']),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper(['/eval/test-eval-id?mode=failures']),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
@@ -459,12 +404,9 @@ describe('Filter URL Persistence - Integration Tests', () => {
     it('should reset to default filterMode on invalid mode param', async () => {
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper(['/eval/test-eval-id?mode=invalid']),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper(['/eval/test-eval-id?mode=invalid']),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
@@ -479,12 +421,9 @@ describe('Filter URL Persistence - Integration Tests', () => {
         vi.clearAllMocks();
         (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-        render(
-          <EvalWrapper fetchId="test-eval-id" />,
-          {
-            wrapper: createWrapper([`/eval/test-eval-id?mode=${mode}`]),
-          },
-        );
+        render(<EvalWrapper fetchId="test-eval-id" />, {
+          wrapper: createWrapper([`/eval/test-eval-id?mode=${mode}`]),
+        });
 
         await waitFor(() => {
           const state = useTableStore.getState();
@@ -506,16 +445,11 @@ describe('Filter URL Persistence - Integration Tests', () => {
         resolveEval2 = resolve;
       });
 
-      (callApi as Mock)
-        .mockReturnValueOnce(eval1Promise)
-        .mockReturnValueOnce(eval2Promise);
+      (callApi as Mock).mockReturnValueOnce(eval1Promise).mockReturnValueOnce(eval2Promise);
 
-      const { rerender } = render(
-        <EvalWrapper fetchId="eval-1" />,
-        {
-          wrapper: createWrapper(['/eval/eval-1']),
-        },
-      );
+      const { rerender } = render(<EvalWrapper fetchId="eval-1" />, {
+        wrapper: createWrapper(['/eval/eval-1']),
+      });
 
       // Start loading eval-1
       await act(async () => {
@@ -553,12 +487,11 @@ describe('Filter URL Persistence - Integration Tests', () => {
 
       (callApi as Mock).mockResolvedValue(mockEvalResponse('eval-1'));
 
-      const { rerender } = render(
-        <EvalWrapper fetchId="eval-1" />,
-        {
-          wrapper: createWrapper(['/eval/eval-1?filter=[{"type":"plugin","operator":"equals","value":"test","logicOperator":"and"}]']),
-        },
-      );
+      render(<EvalWrapper fetchId="eval-1" />, {
+        wrapper: createWrapper([
+          '/eval/eval-1?filter=[{"type":"plugin","operator":"equals","value":"test","logicOperator":"and"}]',
+        ]),
+      });
 
       await waitFor(
         () => {
@@ -586,12 +519,9 @@ describe('Filter URL Persistence - Integration Tests', () => {
 
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper(['/eval/test-eval-id?filter=']),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper(['/eval/test-eval-id?filter=']),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
@@ -614,14 +544,11 @@ describe('Filter URL Persistence - Integration Tests', () => {
 
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper([
-            `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}`,
-          ]),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper([
+          `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}`,
+        ]),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();
@@ -652,14 +579,11 @@ describe('Filter URL Persistence - Integration Tests', () => {
 
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 
-      render(
-        <EvalWrapper fetchId="test-eval-id" />,
-        {
-          wrapper: createWrapper([
-            `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}`,
-          ]),
-        },
-      );
+      render(<EvalWrapper fetchId="test-eval-id" />, {
+        wrapper: createWrapper([
+          `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(mockFilters))}`,
+        ]),
+      });
 
       await waitFor(() => {
         const state = useTableStore.getState();

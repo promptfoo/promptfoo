@@ -9,7 +9,7 @@ const createWrapper = (initialEntries: string[] = ['/']) => {
   return ({ children }: { children: React.ReactNode }) => (
     <MemoryRouter initialEntries={initialEntries}>
       <Routes>
-        <Route path="/*" element={<>{children}</>} />
+        <Route path="/*" element={<div>{children}</div>} />
       </Routes>
     </MemoryRouter>
   );

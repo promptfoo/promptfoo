@@ -18,7 +18,84 @@ import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { resultsFiltersArraySchema, useResultsViewSettingsStore, useTableStore } from './store';
+import { MAX_FILTERS_FROM_URL } from './constants';
+import type { ResultsFilter } from './store';
 import './Eval.css';
+
+/**
+ * Parses filters from URL search params and applies them to the store.
+ * Supports both new JSON format (?filter=[...]) and legacy params (?plugin=, ?metric=, ?policy=).
+ */
+function parseAndApplyFiltersFromUrl(
+  searchParams: URLSearchParams,
+  addFilter: (filter: Partial<ResultsFilter>) => void,
+  setFilterMode: (mode: EvalResultsFilterMode) => void,
+  resetFilterMode: () => void,
+) {
+  // Try new filter format first (JSON array)
+  const newFiltersParam = searchParams.get('filter');
+
+  if (newFiltersParam) {
+    try {
+      const parsedFilters = JSON.parse(newFiltersParam);
+      const validationResult = resultsFiltersArraySchema.safeParse(parsedFilters);
+
+      if (validationResult.success) {
+        // Limit number of filters to prevent DoS
+        const filtersToApply = validationResult.data.slice(0, MAX_FILTERS_FROM_URL);
+
+        if (validationResult.data.length > MAX_FILTERS_FROM_URL) {
+          console.warn(
+            `URL contains ${validationResult.data.length} filters. Limited to ${MAX_FILTERS_FROM_URL}.`,
+          );
+        }
+
+        filtersToApply.forEach((filter) => {
+          addFilter({
+            type: filter.type,
+            operator: filter.operator,
+            value: filter.value,
+            logicOperator: filter.logicOperator,
+            field: filter.field,
+          });
+        });
+      } else {
+        console.error('Invalid filters in URL:', validationResult.error);
+      }
+    } catch (error) {
+      console.error('Failed to parse filters from URL:', error);
+    }
+  } else {
+    // Fall back to legacy format for backward compatibility
+    const legacyParamConfigs = [
+      { param: 'plugin', type: 'plugin' as const },
+      { param: 'metric', type: 'metric' as const },
+      { param: 'policy', type: 'policy' as const },
+    ];
+
+    for (const { param, type } of legacyParamConfigs) {
+      const values = searchParams.getAll(param);
+      if (values.length > 0) {
+        values.forEach((value) => {
+          addFilter({
+            type,
+            operator: 'equals',
+            value,
+            logicOperator: 'or',
+          });
+        });
+      }
+    }
+  }
+
+  // Handle filter mode param
+  const modeParam = searchParams.get('mode');
+  if (modeParam && EvalResultsFilterMode.safeParse(modeParam).success) {
+    setFilterMode(modeParam as EvalResultsFilterMode);
+  } else {
+    resetFilterMode();
+  }
+}
 
 interface EvalOptions {
   /**
@@ -144,105 +221,6 @@ export default function Eval({ fetchId }: EvalOptions) {
   );
 
   // ================================
-  // Helper: Apply filters from URL
-  // ================================
-
-  const applyFiltersFromUrl = useCallback(() => {
-    const MAX_FILTERS = 50;
-
-    // Try new filter format first (JSON array)
-    const newFiltersParam = searchParams.get('filter');
-
-    if (newFiltersParam) {
-      try {
-        const parsedFilters = JSON.parse(newFiltersParam);
-        const validationResult = resultsFiltersArraySchema.safeParse(parsedFilters);
-
-        if (validationResult.success) {
-          // Limit number of filters to prevent DoS
-          const filtersToApply = validationResult.data.slice(0, MAX_FILTERS);
-
-          if (validationResult.data.length > MAX_FILTERS) {
-            console.warn(
-              `URL contains ${validationResult.data.length} filters. Limited to ${MAX_FILTERS}.`,
-            );
-          }
-
-          filtersToApply.forEach((filter) => {
-            addFilter({
-              type: filter.type,
-              operator: filter.operator,
-              value: filter.value,
-              logicOperator: filter.logicOperator,
-              field: filter.field,
-            });
-          });
-        } else {
-          console.error('Invalid filters in URL:', validationResult.error);
-        }
-      } catch (error) {
-        console.error('Failed to parse filters from URL:', error);
-      }
-    } else {
-      // Fall back to legacy format for backward compatibility
-      // TODO: Remove this in v0.122.0 (3 months after v0.120.0)
-      const pluginParams = searchParams.getAll('plugin');
-      const metricParams = searchParams.getAll('metric');
-      const policyIdParams = searchParams.getAll('policy');
-
-      if (pluginParams.length > 0) {
-        console.warn(
-          'DEPRECATED: ?plugin= param. Use ?filter= instead. Support will be removed in v0.122.0',
-        );
-        pluginParams.forEach((pluginParam) => {
-          addFilter({
-            type: 'plugin',
-            operator: 'equals',
-            value: pluginParam,
-            logicOperator: 'or',
-          });
-        });
-      }
-
-      if (metricParams.length > 0) {
-        console.warn(
-          'DEPRECATED: ?metric= param. Use ?filter= instead. Support will be removed in v0.122.0',
-        );
-        metricParams.forEach((metricParam) => {
-          addFilter({
-            type: 'metric',
-            operator: 'equals',
-            value: metricParam,
-            logicOperator: 'or',
-          });
-        });
-      }
-
-      if (policyIdParams.length > 0) {
-        console.warn(
-          'DEPRECATED: ?policy= param. Use ?filter= instead. Support will be removed in v0.122.0',
-        );
-        policyIdParams.forEach((policyId) => {
-          addFilter({
-            type: 'policy',
-            operator: 'equals',
-            value: policyId,
-            logicOperator: 'or',
-          });
-        });
-      }
-    }
-
-    // Handle filter mode param
-    const modeParam = searchParams.get('mode');
-    if (modeParam && EvalResultsFilterMode.safeParse(modeParam).success) {
-      setFilterMode(modeParam as EvalResultsFilterMode);
-    } else {
-      resetFilterMode();
-    }
-  }, [searchParams, addFilter, setFilterMode, resetFilterMode]);
-
-  // ================================
   // Effects
   // ================================
 
@@ -252,7 +230,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     resetFilters();
 
     // Apply filters from URL for the new eval
-    applyFiltersFromUrl();
+    parseAndApplyFiltersFromUrl(searchParams, addFilter, setFilterMode, resetFilterMode);
 
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
@@ -345,6 +323,11 @@ export default function Eval({ fetchId }: EvalOptions) {
     console.log('Eval init: Resetting comparison mode');
     setInComparisonMode(false);
     setComparisonEvalIds([]);
+
+    // Cleanup on unmount
+    return () => {
+      resetFilters();
+    };
   }, [
     apiBaseUrl,
     fetchId,
@@ -358,7 +341,10 @@ export default function Eval({ fetchId }: EvalOptions) {
     setComparisonEvalIds,
     resetFilters,
     setIsStreaming,
-    applyFiltersFromUrl,
+    searchParams,
+    addFilter,
+    setFilterMode,
+    resetFilterMode,
   ]);
 
   // Effect 2: Handle filter updates from URL (browser back/forward)
@@ -370,11 +356,11 @@ export default function Eval({ fetchId }: EvalOptions) {
     if (prevFetchId.current === fetchId) {
       // User navigated via browser back/forward or URL was manually changed
       resetFilters();
-      applyFiltersFromUrl();
+      parseAndApplyFiltersFromUrl(searchParams, addFilter, setFilterMode, resetFilterMode);
     }
 
     prevFetchId.current = fetchId;
-  }, [searchParams, fetchId, resetFilters, applyFiltersFromUrl]);
+  }, [searchParams, fetchId, resetFilters, addFilter, setFilterMode, resetFilterMode]);
 
   usePageMeta({
     title: config?.description || evalId || 'Eval',

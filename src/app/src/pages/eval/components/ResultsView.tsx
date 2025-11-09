@@ -60,6 +60,24 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
+import { FILTER_URL_DEBOUNCE_MS, URL_LENGTH_WARNING_THRESHOLD } from './constants';
+import type { ResultsFilter } from './store';
+
+/**
+ * Serializes a filter object for URL persistence with deterministic key ordering.
+ * Strips internal fields (id, sortIndex) and sorts keys alphabetically for consistent JSON output.
+ */
+function serializeFilterForUrl(filter: Partial<ResultsFilter>): Record<string, any> {
+  // biome-ignore lint/correctness/noUnusedVariables: id and sortIndex are intentionally excluded from URL
+  const { id, sortIndex, ...rest } = filter;
+  // Sort keys alphabetically to ensure deterministic serialization
+  const sortedKeys = Object.keys(rest).sort();
+  const sorted: Record<string, any> = {};
+  for (const key of sortedKeys) {
+    sorted[key] = rest[key as keyof typeof rest];
+  }
+  return sorted;
+}
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -525,71 +543,74 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  // Helper: Deterministic filter serialization (sorted keys for stable comparison)
-  const serializeFilter = React.useCallback((filter: Partial<(typeof filters.values)[string]>) => {
-    // biome-ignore lint/correctness/noUnusedVariables: id and sortIndex are intentionally excluded
-    const { id, sortIndex, ...rest } = filter;
-    // Sort keys alphabetically to ensure deterministic serialization
-    const sortedKeys = Object.keys(rest).sort();
-    const sorted: Record<string, any> = {};
-    for (const key of sortedKeys) {
-      sorted[key] = rest[key as keyof typeof rest];
-    }
-    return sorted;
-  }, []);
-
   // Sync filters to URL - runs when filters change in the store
+  // Debounced to prevent excessive URL updates during rapid filter changes
   React.useEffect(() => {
+    let debounceTimeout: NodeJS.Timeout | null = null;
+
     const unsubscribe = useTableStore.subscribe(
       (state) => state.filters,
       (filters) => {
-        // Read current URL params directly to avoid dependency on searchParams
-        const currentUrl = new URLSearchParams(window.location.search);
-        const currentFilterParam = currentUrl.get('filter');
-
-        if (filters.appliedCount === 0) {
-          // No filters applied - remove filter param from URL
-          if (currentFilterParam !== null) {
-            setSearchParams((prev) => {
-              prev.delete('filter');
-              return prev;
-            });
-          }
-        } else {
-          // Serialize filters to JSON with deterministic key ordering
-          const serializedFilters = JSON.stringify(
-            Object.values(filters.values)
-              .map(serializeFilter)
-              .sort((a, b) => {
-                // Sort filters by type then value for consistent ordering
-                const typeCompare = a.type.localeCompare(b.type);
-                if (typeCompare !== 0) {
-                  return typeCompare;
-                }
-                return a.value.localeCompare(b.value);
-              }),
-          );
-
-          // Warn if URL is getting very long
-          if (serializedFilters.length > 1500) {
-            console.warn(
-              `Filter URL is ${serializedFilters.length} characters. URLs >2000 chars may not work in all browsers.`,
-            );
-          }
-
-          // Only update URL if filters have changed
-          if (currentFilterParam !== serializedFilters) {
-            setSearchParams((prev) => {
-              prev.set('filter', serializedFilters);
-              return prev;
-            });
-          }
+        // Clear previous timeout
+        if (debounceTimeout) {
+          clearTimeout(debounceTimeout);
         }
+
+        // Debounce URL updates to prevent browser history pollution
+        debounceTimeout = setTimeout(() => {
+          // Read current URL params directly to avoid dependency on searchParams
+          const currentUrl = new URLSearchParams(window.location.search);
+          const currentFilterParam = currentUrl.get('filter');
+
+          if (filters.appliedCount === 0) {
+            // No filters applied - remove filter param from URL
+            if (currentFilterParam !== null) {
+              setSearchParams((prev) => {
+                prev.delete('filter');
+                return prev;
+              });
+            }
+          } else {
+            // Serialize filters to JSON with deterministic key ordering
+            const serializedFilters = JSON.stringify(
+              Object.values(filters.values)
+                .map(serializeFilterForUrl)
+                .sort((a, b) => {
+                  // Sort filters by type then value for consistent ordering
+                  const typeCompare = a.type.localeCompare(b.type);
+                  if (typeCompare !== 0) {
+                    return typeCompare;
+                  }
+                  return a.value.localeCompare(b.value);
+                }),
+            );
+
+            // Warn if URL is getting very long
+            if (serializedFilters.length > URL_LENGTH_WARNING_THRESHOLD) {
+              console.warn(
+                `Filter URL is ${serializedFilters.length} characters. URLs >2000 chars may not work in all browsers.`,
+              );
+            }
+
+            // Only update URL if filters have changed
+            if (currentFilterParam !== serializedFilters) {
+              setSearchParams((prev) => {
+                prev.set('filter', serializedFilters);
+                return prev;
+              });
+            }
+          }
+        }, FILTER_URL_DEBOUNCE_MS);
       },
     );
 
-    return () => unsubscribe();
-  }, [setSearchParams, serializeFilter]);
+    return () => {
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout);
+      }
+      unsubscribe();
+    };
+  }, [setSearchParams]);
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const resultsChartsScores = React.useMemo(() => {

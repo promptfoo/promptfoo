@@ -28,7 +28,7 @@ const createWrapper = (initialEntries: string[] = ['/']) => {
   return ({ children }: { children: React.ReactNode }) => (
     <MemoryRouter initialEntries={initialEntries}>
       <Routes>
-        <Route path="/*" element={<>{children}</>} />
+        <Route path="/*" element={<div>{children}</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -372,9 +372,7 @@ describe('ResultsView URL Synchronization', () => {
 
     it('should produce same JSON for filters added in different orders (determinism)', () => {
       // Add filters in order A, B
-      (uuidv4 as Mock)
-        .mockReturnValueOnce('filter-a')
-        .mockReturnValueOnce('filter-b');
+      (uuidv4 as Mock).mockReturnValueOnce('filter-a').mockReturnValueOnce('filter-b');
 
       const { result: result1 } = renderHook(() => useSearchParams(), {
         wrapper: createWrapper(),
@@ -405,9 +403,7 @@ describe('ResultsView URL Synchronization', () => {
         useTableStore.getState().resetFilters();
       });
 
-      (uuidv4 as Mock)
-        .mockReturnValueOnce('filter-b')
-        .mockReturnValueOnce('filter-a');
+      (uuidv4 as Mock).mockReturnValueOnce('filter-b').mockReturnValueOnce('filter-a');
 
       const { result: result2 } = renderHook(() => useSearchParams(), {
         wrapper: createWrapper(),
