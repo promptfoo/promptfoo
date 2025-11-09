@@ -827,6 +827,7 @@ html {
     gap: 0.5rem;
     display: flex;
     justify-content: flex-start;
+    flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
@@ -2097,7 +2098,11 @@ html {
 
 @media screen and (max-width: 768px) {
   .walkthroughSection {
-    padding: 0.5rem 0 var(--section-spacing-lg);
+    padding: 0;
+  }
+
+  .walkthroughSection :global(.container) {
+    padding: 0;
   }
 }
 
