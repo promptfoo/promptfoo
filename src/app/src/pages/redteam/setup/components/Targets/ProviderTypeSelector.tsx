@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { callApi } from '@app/utils/api';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import EditIcon from '@mui/icons-material/Edit';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -426,7 +427,7 @@ export default function ProviderTypeSelector({
   useEffect(() => {
     const fetchConfigStatus = async () => {
       try {
-        const response = await fetch('/api/providers/config-status');
+        const response = await callApi('/providers/config-status');
         if (response.ok) {
           const data = await response.json();
           setFilterEnabled(data.hasCustomConfig);
