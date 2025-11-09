@@ -129,7 +129,7 @@ export async function doEval(
       ...(Boolean(config?.redteam) && { isRedteam: true }),
     });
 
-    if (cmdObj.write) {
+    if (cmdObj.write ?? commandLineOptions?.write) {
       await runDbMigrations();
     }
 
@@ -351,12 +351,16 @@ export async function doEval(
     } else {
       // Misc settings with proper CLI vs config priority
       // CLI values explicitly provided by user should override config, but defaults should not
-      const iterations = cmdObj.repeat ?? evaluateOptions.repeat ?? Number.NaN;
+      const iterations =
+        cmdObj.repeat ?? commandLineOptions?.repeat ?? evaluateOptions.repeat ?? Number.NaN;
       repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
-      cache = cmdObj.cache ?? evaluateOptions.cache ?? true;
+      cache = cmdObj.cache ?? commandLineOptions?.cache ?? evaluateOptions.cache ?? true;
       maxConcurrency =
-        cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
-      delay = cmdObj.delay ?? evaluateOptions.delay ?? 0;
+        cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency ??
+        DEFAULT_MAX_CONCURRENCY;
+      delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
     if (cache === false || repeat > 1) {
@@ -417,9 +421,11 @@ export async function doEval(
           ? false
           : cmdObj.progressBar !== undefined
             ? cmdObj.progressBar !== false
-            : evaluateOptions.showProgressBar !== undefined
-              ? evaluateOptions.showProgressBar
-              : true,
+            : commandLineOptions?.progressBar !== undefined
+              ? commandLineOptions.progressBar !== false
+              : evaluateOptions.showProgressBar !== undefined
+                ? evaluateOptions.showProgressBar
+                : true,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
@@ -441,7 +447,7 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    if (!resumeEval && cmdObj.generateSuggestions) {
+    if (!resumeEval && (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions)) {
       options.generateSuggestions = true;
     }
     // load scenarios or tests from an external file
@@ -470,9 +476,10 @@ export async function doEval(
     }
 
     // Create or load eval record
+    const shouldWrite = cmdObj.write ?? commandLineOptions?.write ?? true;
     const evalRecord = resumeEval
       ? resumeEval
-      : cmdObj.write
+      : shouldWrite
         ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
         : new Eval(config, { runtimeOptions: options });
 
@@ -542,7 +549,7 @@ export async function doEval(
 
     const wantsToShare = hasExplicitDisable
       ? false
-      : cmdObj.share || config.sharing || cloudConfig.isEnabled();
+      : cmdObj.share || commandLineOptions?.share || config.sharing || cloudConfig.isEnabled();
 
     const shareableUrl =
       wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
@@ -570,7 +577,8 @@ export async function doEval(
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
-    if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
+    const shouldShowTable = cmdObj.table ?? commandLineOptions?.table ?? true;
+    if (shouldShowTable && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
       // Output CLI table
       const outputTable = generateTable(table);
@@ -604,7 +612,7 @@ export async function doEval(
     }
 
     printBorder();
-    if (cmdObj.write) {
+    if (shouldWrite) {
       if (shareableUrl) {
         logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
       } else if (wantsToShare && !isSharingEnabled(evalRecord)) {

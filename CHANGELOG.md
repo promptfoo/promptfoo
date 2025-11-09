@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
+- fix(cli): honor `commandLineOptions` from config file for `maxConcurrency`, `repeat`, `delay`, `cache`, `progressBar`, `generateSuggestions`, `table`, `share`, and `write` - previously ignored in favor of defaults (#6131)
 
 ## [0.119.4] - 2025-11-06
 

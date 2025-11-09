@@ -89,6 +89,9 @@ describe('evalCommand', () => {
         providers: [],
       },
       basePath: path.resolve('/'),
+      commandLineOptions: {
+        table: false, // Disable table output by default in tests to avoid database mock issues
+      },
     });
     jest.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     jest.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
@@ -112,6 +115,68 @@ describe('evalCommand', () => {
     const cmdObj = { cache: false };
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
     expect(disableCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('should use commandLineOptions.maxConcurrency from config', async () => {
+    const cmdObj = {};
+    const config = {} as UnifiedConfig;
+    const mockEvalRecord = new Eval(config);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+      commandLineOptions: {
+        maxConcurrency: 5,
+        table: false,
+      },
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        maxConcurrency: 5,
+      }),
+    );
+  });
+
+  it('should prioritize CLI maxConcurrency over commandLineOptions', async () => {
+    const cmdObj = { maxConcurrency: 10 };
+    const config = {} as UnifiedConfig;
+    const mockEvalRecord = new Eval(config);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+      commandLineOptions: {
+        maxConcurrency: 5,
+        table: false,
+      },
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        maxConcurrency: 10,
+      }),
+    );
   });
 
   it('should handle --write option', async () => {
