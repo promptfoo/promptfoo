@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from '@docusaurus/Link';
 import styles from './styles.module.css';
 
@@ -23,6 +23,28 @@ export default function NavMenuCard({
   items,
   position = 'left',
 }: NavMenuCardProps): JSX.Element {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [isOpen]);
+
+  const handleToggle = () => {
+    setIsOpen(!isOpen);
+  };
   // Group items by section
   const sections: { title?: string; items: NavMenuCardItem[] }[] = [];
   let currentSection: { title?: string; items: NavMenuCardItem[] } = { items: [] };
@@ -56,8 +78,21 @@ export default function NavMenuCard({
         ];
 
   return (
-    <div className={styles.navMenuCard}>
-      <div className={`${styles.navMenuCardButton} navbar__link`}>
+    <div className={styles.navMenuCard} ref={menuRef}>
+      <div
+        className={`${styles.navMenuCardButton} navbar__link`}
+        onClick={handleToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleToggle();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isOpen}
+        aria-haspopup="true"
+      >
         {label}
         <svg
           className={styles.navMenuCardIcon}
@@ -75,7 +110,9 @@ export default function NavMenuCard({
         </svg>
       </div>
 
-      <div className={styles.navMenuCardDropdown}>
+      <div
+        className={`${styles.navMenuCardDropdown} ${isOpen ? styles.navMenuCardDropdownOpen : ''}`}
+      >
         <div className={styles.navMenuCardContainer}>
           {displaySections.map((section, sectionIndex) => (
             <div key={sectionIndex} className={styles.navMenuCardSection}>
