@@ -74,6 +74,15 @@ code p {
   font-family: var(--ifm-font-family-monospace);
 }
 
+/* Mobile navbar adjustments */
+@media (max-width: 996px) {
+  /* Hide search box on mobile to prevent overlap */
+  .navbar__search,
+  .DocSearch {
+    display: none !important;
+  }
+}
+
 .navbar__logo img {
   filter: invert(0);
 }
