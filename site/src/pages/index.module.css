@@ -41,6 +41,12 @@ html {
   .walkthroughTabActive {
     animation: none !important;
   }
+
+  /* Keep marquee moving, just slower */
+  .marqueeTrack {
+    animation-duration: 120s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 
 /* Scroll-triggered fade-in animation base */
