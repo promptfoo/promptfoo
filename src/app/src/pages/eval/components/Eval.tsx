@@ -134,7 +134,6 @@ export default function Eval({ fetchId }: EvalOptions) {
   const {
     table,
     setTable,
-    setTableFromResultsFile,
     config,
     setConfig,
     evalId,
