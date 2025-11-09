@@ -80,15 +80,15 @@ defaultTest:
         - role: assistant
           content: Great! How would you like to pay?
         - role: user
-          content: I want to pay via {{payment_method}}
+          content: I want to pay via {{payment_method}}  # Variable placeholder
 
 tests:
   - vars:
-      payment_method: credit card
+      payment_method: credit card  # Replaces {{payment_method}}
       instructions: Complete payment with credit card
 
   - vars:
-      payment_method: PayPal
+      payment_method: PayPal  # Replaces {{payment_method}}
       instructions: Complete payment with PayPal
 ```
 
