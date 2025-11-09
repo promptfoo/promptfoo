@@ -2616,6 +2616,44 @@ describe('OpenAiResponsesProvider', () => {
       );
     });
 
+    it('should use longer timeout for gpt-5-pro models', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response complete' }],
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 200 },
+      };
+
+      (cache.fetchWithCache as jest.Mock).mockResolvedValueOnce({
+        data: mockData,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-5-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      // Check that fetchWithCache was called with 10-minute timeout
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        600000, // 10 minutes
+        'json',
+        undefined,
+        undefined,
+      );
+    });
+
     it('should handle reasoning items with empty summary correctly', async () => {
       const mockData = {
         output: [
@@ -4388,7 +4426,7 @@ describe('OpenAiResponsesProvider', () => {
         config: {
           apiKey: 'test-key',
           functionToolCallbacks: {
-            greetUser: async (args: string) => {
+            greetUser: async (_args: string) => {
               return 'Hello!';
             },
           },
