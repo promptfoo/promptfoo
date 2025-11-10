@@ -78,6 +78,24 @@ export class SimulatedUser implements ApiProvider {
   }
 
   /**
+   * Safely renders a Nunjucks template string, falling back to the original value on error.
+   */
+  private renderTemplate(template: unknown, vars: Record<string, any> | undefined): unknown {
+    if (typeof template !== 'string') {
+      return template;
+    }
+
+    try {
+      return getNunjucksEngine().renderString(template, vars);
+    } catch (err) {
+      logger.warn(
+        `[SimulatedUser] Failed to render template: ${template.substring(0, 100)}. Error: ${err instanceof Error ? err.message : err}`,
+      );
+      return template;
+    }
+  }
+
+  /**
    * Validates and filters an array of messages, logging warnings for invalid entries.
    */
   private validateMessages(messages: any[]): Message[] {
@@ -256,14 +274,8 @@ export class SimulatedUser implements ApiProvider {
 
     // Template both role and content fields with context variables, then validate
     const templatedMessages = resolvedMessages.map((msg) => ({
-      role:
-        typeof msg.role === 'string'
-          ? getNunjucksEngine().renderString(msg.role, context?.vars)
-          : msg.role,
-      content:
-        typeof msg.content === 'string'
-          ? getNunjucksEngine().renderString(msg.content, context?.vars)
-          : msg.content,
+      role: this.renderTemplate(msg.role, context?.vars),
+      content: this.renderTemplate(msg.content, context?.vars),
     }));
     const messages: Message[] = this.validateMessages(templatedMessages);
 

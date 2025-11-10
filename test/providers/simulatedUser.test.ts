@@ -856,5 +856,113 @@ describe('SimulatedUser', () => {
       expect(result.output).not.toContain('{{destination}}');
       expect(result.output).not.toContain('{{date}}');
     });
+
+    it('should handle invalid Nunjucks syntax gracefully', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Invalid template {% if broken %}' },
+        { role: 'assistant' as const, content: 'Valid response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Should fall back to original template on error
+      expect(result.output).toContain('Invalid template {% if broken %}');
+      expect(result.output).toContain('Valid response');
+    });
+
+    it('should handle undefined variables in templates', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Hello {{undefined_variable}}' },
+        { role: 'assistant' as const, content: 'Response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Nunjucks renders undefined variables as empty string by default
+      expect(result.output).toContain('Hello ');
+      expect(result.output).toContain('Response');
+    });
+
+    it('should handle template rendering errors in role field', async () => {
+      const initialMessages = [
+        { role: '{% invalid syntax %}' as any, content: 'Hello' },
+        { role: 'assistant' as const, content: 'Response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Invalid role should be logged and message skipped
+      // Only the valid assistant message should remain
+      expect(result.output).toContain('Response');
+      expect(result.output).not.toContain('Hello');
+    });
+
+    it('should handle template rendering errors in content field', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: '{% unclosed tag' },
+        { role: 'assistant' as const, content: 'Valid message' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Should fall back to original template
+      expect(result.output).toContain('{% unclosed tag');
+      expect(result.output).toContain('Valid message');
+    });
+
+    it('should handle complex Nunjucks errors gracefully', async () => {
+      const initialMessages = [
+        {
+          role: 'user' as const,
+          content: '{{ 1 / 0 }}',
+        },
+        { role: 'assistant' as const, content: 'Response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Should continue with conversation even if template fails
+      expect(result.output).toContain('Response');
+    });
   });
 });
