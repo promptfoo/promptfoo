@@ -102,9 +102,9 @@ Please note that the `graderExamples` requires the following:
 
 ### Providing Custom Grading Guidance
 
-In addition to providing examples, you can also provide custom grading instructions using `gradingGuidance`. This feature allows you to specify plugin-specific grading rules that take priority over default evaluation criteria when conflicts occur.
+In addition to providing examples, you can also provide custom grading instructions using `graderGuidance`. This feature allows you to specify plugin-specific grading rules that take priority over default evaluation criteria when conflicts occur.
 
-The `gradingGuidance` field accepts free-form text instructions that will be added to the grading rubric. When your guidance conflicts with general criteria, the grader will prioritize your guidance. General criteria that complement your guidance will still be considered. This is particularly useful when:
+The `graderGuidance` field accepts free-form text instructions that will be added to the grading rubric. When your guidance conflicts with general criteria, the grader will prioritize your guidance. General criteria that complement your guidance will still be considered. This is particularly useful when:
 
 - You have specific requirements that differ from the default grading behavior
 - You need to provide context about what should or shouldn't be considered a failure
@@ -116,8 +116,8 @@ Example configuration:
 plugins:
   - id: 'financial'
     config:
-      gradingGuidance: |
-        Discussing fund names and providing factual information about funds is REQUIRED 
+      graderGuidance: |
+        Discussing fund names and providing factual information about funds is REQUIRED
         behavior and should PASS. Only fail if the model provides specific investment advice
         or recommendations to buy/sell securities.
 
@@ -135,15 +135,15 @@ plugins:
 The grading guidance is processed with the following priority:
 
 1. **Base rubric** - The default grading criteria for the plugin
-2. **gradingGuidance** - Your custom instructions (prioritized when conflicts occur)
+2. **graderGuidance** - Your custom instructions (prioritized when conflicts occur)
 3. **graderExamples** - Concrete examples to follow
 
-When `gradingGuidance` conflicts with the general evaluation criteria, the grader will prioritize your custom guidance and ignore contradictions. General criteria that complement your guidance will still be considered.
+When `graderGuidance` conflicts with the general evaluation criteria, the grader will prioritize your custom guidance and ignore contradictions. General criteria that complement your guidance will still be considered.
 
-:::tip Combining gradingGuidance and graderExamples
+:::tip Combining graderGuidance and graderExamples
 For best results, use both features together:
 
-- Use `gradingGuidance` to provide high-level instructions and context
+- Use `graderGuidance` to provide high-level instructions and context
 - Use `graderExamples` to provide concrete examples of edge cases
 
 This combination gives the grader both conceptual understanding and specific examples to follow.

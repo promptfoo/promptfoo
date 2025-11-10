@@ -54,6 +54,7 @@ export type PluginConfig = {
     reason: string;
   }[];
   gradingGuidance?: string;
+  graderGuidance?: string; // Alias for gradingGuidance (preferred)
   severity?: Severity;
   language?: string | string[];
   prompt?: string;
