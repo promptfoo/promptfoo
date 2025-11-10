@@ -60,12 +60,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       return true;
     }
 
-    // Auto-detect reasoning models by deployment name
+    // Auto-detect reasoning models by deployment name (case-insensitive)
+    // Supports both direct names (o1-preview) and prefixed names (prod-o1-mini)
+    const lowerName = this.deploymentName.toLowerCase();
     return (
-      this.deploymentName.startsWith('o1') ||
-      this.deploymentName.startsWith('o3') ||
-      this.deploymentName.startsWith('o4') ||
-      this.deploymentName.startsWith('gpt-5')
+      lowerName.startsWith('o1') ||
+      lowerName.includes('-o1') ||
+      lowerName.startsWith('o3') ||
+      lowerName.includes('-o3') ||
+      lowerName.startsWith('o4') ||
+      lowerName.includes('-o4') ||
+      lowerName.startsWith('gpt-5') ||
+      lowerName.includes('-gpt-5')
     );
   }
 

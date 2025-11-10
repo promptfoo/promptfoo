@@ -718,6 +718,34 @@ describe('Azure Provider Tests', () => {
         expect((provider as any).isReasoningModel()).toBe(false);
       });
 
+      it('should auto-detect reasoning models with mixed case', () => {
+        const provider = new AzureChatCompletionProvider('GPT-5-Mini', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect prefixed o1 deployment names', () => {
+        const provider = new AzureChatCompletionProvider('prod-o1-preview', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect prefixed gpt-5 deployment names', () => {
+        const provider = new AzureChatCompletionProvider('staging-gpt-5-mini', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should not detect non-reasoning models with similar names', () => {
+        const provider = new AzureChatCompletionProvider('gpt-4-turbo', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
       it('should use max_completion_tokens for reasoning models', () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
           config: {

@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(providers): auto-detect reasoning models by deployment name in Azure provider - now recognizes o1, o3, o4, and gpt-5 models and automatically uses `max_completion_tokens` instead of `max_tokens` (#6153)
+- fix(providers): auto-detect reasoning models by deployment name in Azure provider - now recognizes o1, o3, o4, and gpt-5 models and automatically uses `max_completion_tokens` instead of `max_tokens` (#6154)
 - fix(prompts): fix basePath resolution for executable prompts with `exec:` prefix - relative paths now resolve correctly (5308c5d)
 - fix(prompts): convert sync fs operations to async in executable prompt processor for better performance (5308c5d)
 - fix(assertions): support runtime variables in custom rubricPrompt for factuality and model-graded-closedqa assertions (#5340)
@@ -39,7 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
-- test(providers): add test coverage for auto-detection of reasoning models by deployment name in Azure provider (#6153)
+- test(providers): add test coverage for auto-detection of reasoning models by deployment name in Azure provider (#6154)
 - test(assertions): add comprehensive test coverage for rendered assertion value metadata including variable substitution, loops, static text handling, and UI display fallback priority (#6145)
 - test(cli): add unit tests verifying `commandLineOptions` precedence (config respected; CLI args still override) for eval runtime flags including `maxConcurrency` (#6142)
 
