@@ -3,7 +3,13 @@ import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
 import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { type ResultsFilter, useTableStore } from './store';
+import {
+  type ResultsFilter,
+  useTableStore,
+  resultsFilterSchema,
+  resultsFiltersArraySchema,
+  filterModeSchema,
+} from './store';
 import type { EvaluateTable, PromptMetrics, ResultsFile } from '@promptfoo/types';
 
 vi.mock('uuid', () => ({
@@ -698,7 +704,6 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.values[mockFilterId3].logicOperator).toBe('and');
     });
-
     it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has an undefined logicOperator', () => {
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
@@ -1084,7 +1089,6 @@ describe('useTableStore', () => {
       expect(isFetchingDuringFetch).toBe(true);
       expect(state.isFetching).toBe(false);
     });
-
     it('should complete successfully without showing loading indicators when skipLoadingState=true and isStreaming=false', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -1478,7 +1482,6 @@ describe('useTableStore', () => {
       expect(isStreamingDuringFetch).toBe(true);
     });
   });
-
   describe('setTableFromResultsFile', () => {
     it("should set `filters.options.strategy` to only include 'basic' when `setTableFromResultsFile` is called with a resultsFile that has no strategies defined", () => {
       const mockResultsFile: ResultsFile = {
@@ -1866,7 +1869,6 @@ describe('useTableStore', () => {
       expect(availableMetrics).toEqual([]);
     });
   });
-
   describe('computeAvailableSeverities', () => {
     beforeEach(() => {
       act(() => {
@@ -2033,6 +2035,407 @@ describe('useTableStore', () => {
       expect(metadataFilter?.type).toBe('metadata');
       expect(metadataFilter?.field).toBe('plugin');
       expect(metadataFilter?.value).toBe('my-custom-plugin');
+    });
+  });
+});
+
+describe('resultsFilterSchema', () => {
+  it('should successfully parse a valid filter object with all required and optional fields', () => {
+    const fullFilterObject = {
+      id: 'a1b2c3d4-e5f6-7890-1234-567890abcdef',
+      type: 'metadata' as const,
+      value: 'test-value',
+      operator: 'contains' as const,
+      logicOperator: 'and' as const,
+      field: 'test-field',
+      sortIndex: 1,
+    };
+
+    const parsed = resultsFilterSchema.parse(fullFilterObject);
+
+    expect(parsed).toEqual(fullFilterObject);
+  });
+
+  it('should successfully parse a filter object that omits optional fields (id, field, sortIndex) but includes all required fields', () => {
+    const partialFilterObject = {
+      type: 'metric' as const,
+      value: 'test-metric-value',
+      operator: 'equals' as const,
+      logicOperator: 'or' as const,
+    };
+
+    const parsed = resultsFilterSchema.parse(partialFilterObject);
+
+    expect(parsed).toEqual(partialFilterObject);
+  });
+
+  it('should throw an error when operator is "exists" or "is_defined" but "field" is missing', () => {
+    const invalidFilterObjectExists = {
+      type: 'metadata' as const,
+      value: '',
+      operator: 'exists' as const,
+      logicOperator: 'and' as const,
+    };
+
+    expect(() => resultsFilterSchema.parse(invalidFilterObjectExists)).toThrow();
+
+    const invalidFilterObjectIsDefined = {
+      type: 'metric' as const,
+      value: '',
+      operator: 'is_defined' as const,
+      logicOperator: 'and' as const,
+    };
+
+    expect(() => resultsFilterSchema.parse(invalidFilterObjectIsDefined)).toThrow();
+  });
+
+  it('should successfully parse a filter object even when the operator does not make logical sense for the filter type', () => {
+    const illogicalFilterObject = {
+      id: 'illogical-filter-id',
+      type: 'severity' as const,
+      value: 'high',
+      operator: 'contains' as const,
+      logicOperator: 'and' as const,
+    };
+
+    const parsed = resultsFilterSchema.parse(illogicalFilterObject);
+    expect(parsed).toEqual(illogicalFilterObject);
+  });
+});
+
+describe('resultsFiltersArraySchema', () => {
+  it('should successfully parse an array of valid filter objects', () => {
+    const validFilters = [
+      {
+        type: 'metric',
+        value: '0.5',
+        operator: 'gte',
+        logicOperator: 'and',
+        field: 'bleu-score',
+      },
+      {
+        type: 'metadata',
+        value: 'user-feedback-positive',
+        operator: 'contains',
+        logicOperator: 'and',
+        field: 'tags',
+      },
+      {
+        type: 'plugin',
+        value: 'pii',
+        operator: 'equals',
+        logicOperator: 'and',
+      },
+      {
+        type: 'strategy',
+        value: 'jailbreak',
+        operator: 'equals',
+        logicOperator: 'or',
+      },
+      {
+        type: 'severity',
+        value: 'Critical',
+        operator: 'equals',
+        logicOperator: 'or',
+      },
+      {
+        type: 'policy',
+        value: 'harmful-content',
+        operator: 'equals',
+        logicOperator: 'or',
+      },
+      {
+        type: 'metadata',
+        value: '',
+        operator: 'exists',
+        logicOperator: 'and',
+        field: 'reviewedBy',
+      },
+    ];
+
+    const result = resultsFiltersArraySchema.safeParse(validFilters);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual(validFilters);
+    }
+  });
+
+  it('should successfully parse an empty array', () => {
+    const emptyArray: [] = [];
+    const result = resultsFiltersArraySchema.safeParse(emptyArray);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual(emptyArray);
+    }
+  });
+
+  it('should reject non-array values', () => {
+    const nonArrayValues = [{}, 'not an array', 123, null, undefined, true];
+
+    nonArrayValues.forEach((value) => {
+      const result = resultsFiltersArraySchema.safeParse(value);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  it('should reject an array containing a metadata filter without a field property', () => {
+    const invalidFilters = [
+      {
+        type: 'metadata',
+        value: 'test-value',
+        operator: 'contains',
+        logicOperator: 'and',
+      },
+    ];
+
+    const result = resultsFiltersArraySchema.safeParse(invalidFilters);
+
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject an array containing a mix of valid and invalid filter objects', () => {
+    const mixedFilters = [
+      {
+        type: 'metric',
+        value: '0.5',
+        operator: 'gte',
+        logicOperator: 'and',
+        field: 'bleu-score',
+      },
+      {
+        type: 'metadata',
+        operator: 'contains',
+        logicOperator: 'and',
+        field: 'tags',
+      },
+    ];
+
+    const result = resultsFiltersArraySchema.safeParse(mixedFilters);
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('filterModeSchema', () => {
+  it('should reject invalid filter modes', () => {
+    const invalidFilterModes = ['invalid', 123, null, undefined, { mode: 'invalid' }];
+
+    invalidFilterModes.forEach((mode) => {
+      const result = filterModeSchema.safeParse(mode);
+      expect(result.success).toBe(false);
+    });
+  });
+});
+describe('useTableStore - malformed filter handling', () => {
+  beforeEach(() => {
+    act(() => {
+      useTableStore.setState({
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: { metric: [], metadata: [] },
+        },
+      });
+    });
+  });
+
+  it('should handle malformed JSON gracefully when parsing filters', () => {
+    const malformedJson = 'this is not valid JSON';
+
+    let parseError = false;
+    try {
+      JSON.parse(malformedJson);
+    } catch (_error) {
+      parseError = true;
+    }
+
+    expect(parseError).toBe(true);
+
+    const { filters } = useTableStore.getState();
+    expect(filters.appliedCount).toBe(0);
+    expect(Object.keys(filters.values).length).toBe(0);
+  });
+});
+describe('useTableStore', () => {
+  beforeEach(() => {
+    act(() => {
+      const initialState = useTableStore.getState();
+      useTableStore.setState({
+        ...initialState,
+        table: null,
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+        },
+        shouldHighlightSearchText: false,
+        isStreaming: false,
+      });
+    });
+    vi.clearAllMocks();
+  });
+
+  it('should handle adding a large number of filters with large values without crashing', () => {
+    const largeFilterValue = 'x'.repeat(1000);
+    const numberOfFilters = 100;
+
+    for (let i = 0; i < numberOfFilters; i++) {
+      (uuidv4 as Mock<() => string>).mockImplementationOnce(() => `mock-uuid-${i}`);
+      const newFilter = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: largeFilterValue,
+        field: `test-metric-${i}`,
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter);
+      });
+    }
+
+    const state = useTableStore.getState();
+    expect(Object.keys(state.filters.values)).toHaveLength(numberOfFilters);
+    expect(state.filters.appliedCount).toBe(numberOfFilters);
+
+    const lastFilter = state.filters.values[`mock-uuid-${numberOfFilters - 1}`];
+    expect(lastFilter).toBeDefined();
+    expect(lastFilter?.value).toBe(largeFilterValue);
+  });
+});
+
+describe('useTableStore', () => {
+  beforeEach(() => {
+    act(() => {
+      const initialState = useTableStore.getState();
+      useTableStore.setState({
+        ...initialState,
+        table: null,
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+        },
+        shouldHighlightSearchText: false,
+        isStreaming: false,
+      });
+    });
+  });
+
+  it('should reset all state fields to their initial values when `reset` is called', () => {
+    act(() => {
+      useTableStore.getState().setEvalId('test-eval-id');
+      useTableStore.getState().setAuthor('test-author');
+      useTableStore.getState().setTable({ head: { prompts: [] }, body: [] } as any);
+      useTableStore.getState().setConfig({ providers: [] });
+      useTableStore.getState().setVersion(1);
+      useTableStore.getState().setFilteredResultsCount(10);
+      useTableStore.getState().setTotalResultsCount(100);
+      useTableStore.getState().setIsStreaming(true);
+      useTableStore.getState().setFilterMode('failures');
+    });
+
+    act(() => {
+      useTableStore.getState().reset();
+    });
+
+    const state = useTableStore.getState();
+    expect(state.evalId).toBe(null);
+    expect(state.author).toBe(null);
+    expect(state.table).toBe(null);
+    expect(state.config).toBe(null);
+    expect(state.version).toBe(null);
+    expect(state.filteredResultsCount).toBe(0);
+    expect(state.totalResultsCount).toBe(0);
+    expect(state.highlightedResultsCount).toBe(0);
+    expect(state.filters.values).toEqual({});
+    expect(state.filters.appliedCount).toBe(0);
+    expect(state.filters.options.metric).toEqual([]);
+    expect(state.filters.options.metadata).toEqual([]);
+    expect(state.metadataKeys).toEqual([]);
+    expect(state.metadataKeysLoading).toBe(false);
+    expect(state.metadataKeysError).toBe(false);
+    expect(state.currentMetadataKeysRequest).toBe(null);
+    expect(state.filterMode).toBe('all');
+    expect(state.isFetching).toBe(false);
+    expect(state.isStreaming).toBe(false);
+    expect(state.shouldHighlightSearchText).toBe(false);
+  });
+});
+
+describe('useTableStore', () => {
+  beforeEach(() => {
+    act(() => {
+      const initialState = useTableStore.getState();
+      useTableStore.setState({
+        ...initialState,
+        table: null,
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+        },
+        shouldHighlightSearchText: false,
+        isStreaming: false,
+      });
+    });
+    vi.clearAllMocks();
+  });
+
+  describe('fetchEvalData', () => {
+    it('should correctly serialize and deserialize filters with special and unicode characters in the URL', async () => {
+      const evalId = 'test-eval-id';
+      const filterValue =
+        'test value with !@#$%^&*()_+=-`~[]{}|;\':",./<>? special characters and unicode: こんにちは';
+      const filter: ResultsFilter = {
+        id: 'test-filter-id',
+        type: 'metric',
+        operator: 'equals',
+        value: filterValue,
+        logicOperator: 'and',
+        sortIndex: 0,
+      };
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+        }),
+      });
+
+      await act(async () => {
+        useTableStore.getState().addFilter(filter);
+        await useTableStore.getState().fetchEvalData(evalId, { filters: [filter] });
+      });
+
+      expect(callApi).toHaveBeenCalledTimes(1);
+      const url = (callApi as Mock).mock.calls[0][0];
+      const urlParams = new URL(url, 'http://example.com').searchParams;
+      const rawFilterParam = urlParams.get('filter');
+      expect(rawFilterParam).toBeDefined();
+
+      const decodedFilter = JSON.parse(rawFilterParam || '{}');
+      expect(decodedFilter.value).toEqual(filterValue);
     });
   });
 });

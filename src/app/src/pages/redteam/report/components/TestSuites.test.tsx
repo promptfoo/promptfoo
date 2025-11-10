@@ -242,7 +242,6 @@ describe('TestSuites Component Navigation', () => {
     window.open = originalOpen;
   });
 });
-
 describe('TestSuites Component Navigation with Missing EvalId', () => {
   const mockNavigate = vi.fn();
 
@@ -499,5 +498,227 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
       expect(csvContent).toContain(expectedEscapedDescription);
     };
     reader.readAsText(blob);
+  });
+});
+describe('TestSuites Component - Unknown Plugin ID', () => {
+  const mockNavigate = vi.fn();
+
+  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
+  const defaultProps = {
+    evalId: 'test-eval-123',
+    categoryStats: {
+      'unknown:plugin': {
+        pass: 3,
+        total: 5,
+        passWithFilter: 4,
+        failCount: 2,
+      },
+    },
+    plugins: [],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
+  });
+
+  it('should navigate to eval page with correct search params when clicking View logs for unknown plugin ID', () => {
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const viewLogsButtons = screen.getAllByText('View logs');
+    const viewLogsButton = viewLogsButtons[0];
+
+    fireEvent.click(viewLogsButton);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: 'unknown:plugin',
+          },
+        ]),
+      )}&mode=failures`,
+    );
+  });
+});
+
+describe('TestSuites Component - Missing Plugin', () => {
+  const mockNavigate = vi.fn();
+  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
+
+  const defaultProps = {
+    evalId: 'test-eval-123',
+    categoryStats: {
+      'nonexistent-plugin': {
+        pass: 5,
+        total: 10,
+        passWithFilter: 5,
+        failCount: 5,
+      },
+    },
+    plugins: [],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
+  });
+
+  it('should navigate to eval page with pluginName when plugin is not found in pluginsById', () => {
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const viewLogsButtons = screen.getAllByText('View logs');
+    const viewLogsButton = viewLogsButtons[0];
+
+    fireEvent.click(viewLogsButton);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: 'nonexistent-plugin',
+          },
+        ]),
+      )}&mode=failures`,
+    );
+  });
+});
+
+describe('TestSuites Component Navigation with Long Plugin ID', () => {
+  const mockNavigate = vi.fn();
+  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
+
+  const longPluginId = 'a'.repeat(3000);
+  const defaultProps = {
+    evalId: 'test-eval-123',
+    categoryStats: {
+      [longPluginId]: {
+        pass: 8,
+        total: 10,
+        passWithFilter: 9,
+        failCount: 2,
+      },
+    },
+    plugins: [],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
+  });
+
+  it('should navigate to eval page with a very long pluginId without errors', () => {
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const viewLogsButtons = screen.getAllByText('View logs');
+    const viewLogsButton = viewLogsButtons[0];
+
+    fireEvent.click(viewLogsButton);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: longPluginId,
+          },
+        ]),
+      )}&mode=failures`,
+    );
+  });
+});
+
+describe('TestSuites Component Navigation - Plugin with Plugins Prop', () => {
+  const mockNavigate = vi.fn();
+
+  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
+
+  const defaultProps = {
+    evalId: 'test-eval-123',
+    categoryStats: {
+      'harmful:hate': {
+        pass: 8,
+        total: 10,
+        passWithFilter: 9,
+        failCount: 2,
+      },
+    },
+    plugins: [
+      {
+        id: 'harmful:hate',
+        config: {},
+        num_tests: 10,
+      },
+    ],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
+  });
+
+  it('should navigate to eval page with correct JSON-encoded filter URL and mode when clicking View logs for a plugin row', () => {
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const viewLogsButtons = screen.getAllByText('View logs');
+    const viewLogsButton = viewLogsButtons[0];
+    fireEvent.click(viewLogsButton);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: 'harmful:hate',
+          },
+        ]),
+      )}&mode=failures`,
+    );
   });
 });

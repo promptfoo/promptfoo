@@ -1,152 +1,159 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ThemeProvider } from '@mui/material/styles';
-import { MemoryRouter } from 'react-router-dom';
-import { createAppTheme } from '@app/components/PageShell';
 import FrameworkPluginResult from './FrameworkPluginResult';
-import type { FrameworkPluginResultProps } from './FrameworkPluginResult';
+import { createAppTheme } from '../../../../components/PageShell';
 
 const mockNavigate = vi.fn();
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => mockNavigate,
+}));
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('./FrameworkComplianceUtils', async () => {
+  const actual = await vi.importActual('./FrameworkComplianceUtils');
   return {
     ...actual,
-    useNavigate: () => mockNavigate,
+    getPluginDisplayName: vi.fn((plugin) => plugin),
   };
 });
 
-const theme = createAppTheme(false);
-
-const renderWithProviders = (component: React.ReactElement) => {
-  return render(
-    <ThemeProvider theme={theme}>
-      <MemoryRouter>{component}</MemoryRouter>
-    </ThemeProvider>,
-  );
-};
-
 describe('FrameworkPluginResult', () => {
-  const mockGetPluginASR = vi.fn();
+  const theme = createAppTheme(false);
+  const defaultProps = {
+    evalId: 'test-eval-id-123',
+    plugin: 'sql-injection',
+    getPluginASR: vi.fn(() => ({ asr: 50, total: 10, failCount: 5 })),
+    type: 'failed' as const,
+  };
+
+  const renderComponent = (props = {}) => {
+    return render(
+      <ThemeProvider theme={theme}>
+        <FrameworkPluginResult {...defaultProps} {...props} />
+      </ThemeProvider>,
+    );
+  };
 
   beforeEach(() => {
-    mockNavigate.mockClear();
-    mockGetPluginASR.mockReturnValue({ asr: 50, total: 100, failCount: 50 });
+    vi.clearAllMocks();
   });
 
-  it('should navigate with correct filter JSON for "failed" plugin click', () => {
-    const props: FrameworkPluginResultProps = {
-      evalId: 'eval-123',
-      plugin: 'harmful:child-exploitation',
-      getPluginASR: mockGetPluginASR,
+  it("should navigate to /eval/{evalId}?filter=[...]&mode=failures with the correct filter JSON when a plugin of type 'failed' is clicked", async () => {
+    const user = userEvent.setup();
+    const evalId = 'test-eval-456';
+    const pluginId = 'harmful:cybercrime';
+
+    renderComponent({
+      evalId,
+      plugin: pluginId,
       type: 'failed',
-    };
+    });
 
-    renderWithProviders(<FrameworkPluginResult {...props} />);
+    const pluginElement = screen.getByText(pluginId);
+    await user.click(pluginElement);
 
-    const pluginName = screen.getByText(/child exploitation/i);
-    fireEvent.click(pluginName);
+    const expectedFilterObject = [
+      {
+        type: 'plugin',
+        operator: 'equals',
+        value: pluginId,
+      },
+    ];
+    const expectedFilterParam = encodeURIComponent(JSON.stringify(expectedFilterObject));
+    const expectedUrl = `/eval/${evalId}?filter=${expectedFilterParam}&mode=failures`;
 
-    expect(mockNavigate).toHaveBeenCalledWith(
-      `/eval/eval-123?filter=${encodeURIComponent(
-        JSON.stringify([
-          {
-            type: 'plugin',
-            operator: 'equals',
-            value: 'harmful:child-exploitation',
-          },
-        ]),
-      )}&mode=failures`,
-    );
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
   });
 
-  it('should navigate to filter URL for "passed" plugin click', () => {
-    mockGetPluginASR.mockReturnValue({ asr: 0, total: 100, failCount: 0 });
+  it("should navigate to /eval/{evalId}?filter=[...]&mode=failures with the correct filter JSON when a plugin of type 'passed' is clicked", async () => {
+    const user = userEvent.setup();
+    const evalId = 'test-eval-789';
+    const pluginId = 'no-injection';
 
-    const props: FrameworkPluginResultProps = {
-      evalId: 'eval-456',
-      plugin: 'pii',
-      getPluginASR: mockGetPluginASR,
+    renderComponent({
+      evalId,
+      plugin: pluginId,
       type: 'passed',
-    };
+    });
 
-    renderWithProviders(<FrameworkPluginResult {...props} />);
+    const pluginElement = screen.getByText(pluginId);
+    await user.click(pluginElement);
 
-    const pluginName = screen.getByText(/pii/i);
-    fireEvent.click(pluginName);
+    const expectedFilterObject = [
+      {
+        type: 'plugin',
+        operator: 'equals',
+        value: pluginId,
+      },
+    ];
+    const expectedFilterParam = encodeURIComponent(JSON.stringify(expectedFilterObject));
+    const expectedUrl = `/eval/${evalId}?filter=${expectedFilterParam}&mode=failures`;
 
-    expect(mockNavigate).toHaveBeenCalledWith(
-      `/eval/eval-456?filter=${encodeURIComponent(
-        JSON.stringify([
-          {
-            type: 'plugin',
-            operator: 'equals',
-            value: 'pii',
-          },
-        ]),
-      )}&mode=failures`,
-    );
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
   });
 
-  it('should URL-encode pluginId with special characters', () => {
-    const props: FrameworkPluginResultProps = {
-      evalId: 'eval-789',
-      plugin: 'harmful:violent-crime',
-      getPluginASR: mockGetPluginASR,
+  it('should not trigger navigation when a plugin of type "untested" is clicked', async () => {
+    const user = userEvent.setup();
+    const pluginId = 'untested-plugin';
+
+    renderComponent({
+      plugin: pluginId,
+      type: 'untested',
+    });
+
+    const pluginElement = screen.getByText(pluginId);
+    await user.click(pluginElement);
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('should correctly encode pluginId with special characters in the URL', async () => {
+    const user = userEvent.setup();
+    const evalId = 'test-eval-789';
+    const pluginId = 'plugin with spaces/and slashes';
+
+    renderComponent({
+      evalId,
+      plugin: pluginId,
       type: 'failed',
-    };
+    });
 
-    renderWithProviders(<FrameworkPluginResult {...props} />);
+    const pluginElement = screen.getByText(pluginId);
+    await user.click(pluginElement);
 
-    const pluginName = screen.getByText(/violent crime/i);
-    fireEvent.click(pluginName);
+    const expectedFilterObject = [
+      {
+        type: 'plugin',
+        operator: 'equals',
+        value: pluginId,
+      },
+    ];
+    const expectedFilterParam = encodeURIComponent(JSON.stringify(expectedFilterObject));
+    const expectedUrl = `/eval/${evalId}?filter=${expectedFilterParam}&mode=failures`;
 
-    expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('/eval/eval-789?filter='));
-    expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('&mode=failures'));
-
-    const callArg = mockNavigate.mock.calls[0][0];
-    expect(callArg).toContain(
-      encodeURIComponent(
-        JSON.stringify([
-          {
-            type: 'plugin',
-            operator: 'equals',
-            value: 'harmful:violent-crime',
-          },
-        ]),
-      ),
-    );
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
   });
 
   it('should correctly format and display extremely high ASR percentages', () => {
-    mockGetPluginASR.mockReturnValue({ asr: 99.9, total: 1000, failCount: 999 });
+    const asrValue = 99.999;
+    const totalValue = 100;
+    const failCountValue = 99;
 
-    const props: FrameworkPluginResultProps = {
-      evalId: 'eval-999',
-      plugin: 'sql-injection',
-      getPluginASR: mockGetPluginASR,
-      type: 'failed',
-    };
+    const getPluginASRMock = vi.fn(() => ({
+      asr: asrValue,
+      total: totalValue,
+      failCount: failCountValue,
+    }));
 
-    renderWithProviders(<FrameworkPluginResult {...props} />);
+    renderComponent({
+      getPluginASR: getPluginASRMock,
+    });
 
-    // The component uses formatASRForDisplay which should handle high percentages
-    expect(screen.getByText(/99\.90%/)).toBeInTheDocument();
-  });
-
-  it('should not trigger navigation for "untested" plugin type', () => {
-    const props: FrameworkPluginResultProps = {
-      evalId: 'eval-untested',
-      plugin: 'some-plugin',
-      getPluginASR: mockGetPluginASR,
-      type: 'untested',
-    };
-
-    renderWithProviders(<FrameworkPluginResult {...props} />);
-
-    const pluginName = screen.getByText(/some-plugin/i);
-    fireEvent.click(pluginName);
-
-    expect(mockNavigate).not.toHaveBeenCalled();
+    const asrDisplay = screen.getByText('100.00%');
+    expect(asrDisplay).toBeInTheDocument();
   });
 });

@@ -225,6 +225,171 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(stringifySpy).toHaveBeenCalledWith(complexOutput);
     expect(screen.getByText(JSON.stringify(complexOutput))).toBeInTheDocument();
   });
+
+  it('should handle failures with missing result objects when generating filter URLs', () => {
+    const propsWithMissingResult = {
+      ...defaultProps,
+      failures: [
+        {
+          prompt: 'Test prompt',
+          output: 'Test output',
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'Failed test',
+          },
+          result: undefined,
+        },
+      ],
+    };
+
+    render(<RiskCategoryDrawer {...propsWithMissingResult} />);
+
+    const viewAllLogsButton = screen.getByText('View All Logs');
+    fireEvent.click(viewAllLogsButton);
+
+    expect(mockNavigate).toHaveBeenCalledWith(`/eval/test-eval-123`);
+  });
+
+  it('should handle pluginIds with special characters in URL', () => {
+    const specialCharsPluginId = '!@#$%^&*()_+';
+    const propsWithSpecialChars = {
+      ...defaultProps,
+      failures: [
+        {
+          prompt: 'Test prompt',
+          output: 'Test output',
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'Failed test',
+          },
+          result: createMockEvaluateResult({ pluginId: specialCharsPluginId }),
+        },
+      ],
+    };
+
+    render(<RiskCategoryDrawer {...propsWithSpecialChars} />);
+    const viewAllLogsButton = screen.getByText('View All Logs');
+    fireEvent.click(viewAllLogsButton);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: specialCharsPluginId,
+          },
+        ]),
+      )}`,
+    );
+  });
+});
+
+describe('RiskCategoryDrawer Component', () => {
+  const mockNavigate = vi.fn();
+
+  const mockTestCase: AtomicTestCase = {
+    vars: {},
+  };
+
+  const createMockEvaluateResult = (metadata?: Record<string, any>): EvaluateResult => ({
+    promptIdx: 0,
+    testIdx: 0,
+    testCase: mockTestCase,
+    promptId: 'test-prompt-id',
+    provider: {
+      id: 'test-provider',
+      label: 'Test Provider',
+    },
+    prompt: {
+      raw: 'Test prompt',
+      display: 'Test prompt',
+      label: 'Test label',
+    },
+    vars: {},
+    failureReason: 0 as ResultFailureReason,
+    success: false,
+    score: 0,
+    latencyMs: 100,
+    namedScores: {},
+    metadata: metadata || { pluginId: 'test-plugin' },
+  });
+
+  const defaultProps = {
+    open: true,
+    onClose: vi.fn(),
+    category: 'bola',
+    failures: [
+      {
+        prompt: 'Test prompt 1',
+        output: 'Test output 1',
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'Failed test 1',
+        },
+        result: createMockEvaluateResult({ pluginId: 'pluginA' }),
+      },
+      {
+        prompt: 'Test prompt 2',
+        output: 'Test output 2',
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'Failed test 2',
+        },
+        result: createMockEvaluateResult({ pluginId: 'pluginB' }),
+      },
+    ],
+    passes: [],
+    evalId: 'test-eval-123',
+    numPassed: 0,
+    numFailed: 2,
+    strategyStats: {},
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+
+    global.window.open = vi.fn();
+  });
+
+  it('should use the first pluginId when multiple pluginIds exist in the same category', () => {
+    render(<RiskCategoryDrawer {...defaultProps} />);
+    const viewAllLogsButton = screen.getByText('View All Logs');
+    fireEvent.click(viewAllLogsButton);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${encodeURIComponent(
+        JSON.stringify([
+          {
+            type: 'plugin',
+            operator: 'equals',
+            value: 'pluginA',
+          },
+        ]),
+      )}`,
+    );
+  });
+
+  it('should display "No tests have been run" message when both numPassed and numFailed are zero', () => {
+    const props = {
+      open: true,
+      onClose: vi.fn(),
+      category: 'bola',
+      failures: [],
+      passes: [],
+      evalId: 'test-eval-123',
+      numPassed: 0,
+      numFailed: 0,
+    };
+
+    render(<RiskCategoryDrawer {...props} />);
+    expect(screen.getByText('No tests have been run for this category.')).toBeInTheDocument();
+  });
 });
 
 describe('RiskCategoryDrawer Component Invalid Category', () => {
@@ -248,6 +413,32 @@ describe('RiskCategoryDrawer Component Invalid Category', () => {
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       '[RiskCategoryDrawer] Could not load category',
       'invalid-category',
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+});
+
+describe('RiskCategoryDrawer Component Empty Category', () => {
+  it('should return null when an empty category is provided', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const props = {
+      open: true,
+      onClose: vi.fn(),
+      category: '',
+      failures: [],
+      passes: [],
+      evalId: 'test-eval-123',
+      numPassed: 0,
+      numFailed: 0,
+    };
+
+    const { container } = render(<RiskCategoryDrawer {...props} />);
+
+    expect(container.firstChild).toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[RiskCategoryDrawer] Could not load category',
+      '',
     );
 
     consoleErrorSpy.mockRestore();

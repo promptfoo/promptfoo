@@ -206,4 +206,43 @@ describe('useSearchParamState', () => {
 
     expect(setter1).toBe(setter2);
   });
+
+  it('should handle extremely long values', () => {
+    const schema = z.string();
+    const longValue = 'A'.repeat(5000);
+    const { result } = renderHook(() => useSearchParamState('longTest', schema, null), {
+      wrapper: createWrapper(),
+    });
+
+    act(() => {
+      const [, setValue] = result.current;
+      setValue(longValue);
+    });
+
+    const [value] = result.current;
+    expect(value).toBe(longValue);
+  });
+
+  it('should handle parameter keys with special characters', () => {
+    const schema = z.string();
+    const keyWithSpecialChars = 'key with spaces!@#$';
+    const value = 'specialValue';
+    const encodedKey = encodeURIComponent(keyWithSpecialChars);
+    const { result } = renderHook(() => useSearchParamState(keyWithSpecialChars, schema, null), {
+      wrapper: createWrapper([`/?${encodedKey}=${value}`]),
+    });
+
+    const [retrievedValue] = result.current;
+    expect(retrievedValue).toBe(value);
+  });
+
+  it('should return the first value when the URL contains duplicate parameters with the same key', () => {
+    const schema = z.string();
+    const { result } = renderHook(() => useSearchParamState('test', schema, 'default'), {
+      wrapper: createWrapper(['/?test=first&test=second']),
+    });
+
+    const [value] = result.current;
+    expect(value).toBe('first');
+  });
 });
