@@ -87,7 +87,8 @@ The composite approach is often more effective than single techniques because:
 
 ## Related Concepts
 
-- [Iterative Jailbreaks](iterative.md) - Sequential approach to jailbreaking
-- [Tree-based Jailbreaks](tree.md) - Branching approach to jailbreaking
+- [Iterative Jailbreaks](iterative.md) - Sequential refinement approach
+- [Meta-Agent Jailbreaks](meta.md) - Strategic taxonomy-building approach
+- [Tree-based Jailbreaks](tree.md) - Branching exploration strategy
 - [Citation Strategy](citation.md) - Academic framing technique used within composite approach
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities

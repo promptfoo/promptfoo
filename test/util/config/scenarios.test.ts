@@ -13,7 +13,13 @@ import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { readTests } from '../../../src/util/testCaseReader';
 
 jest.mock('fs');
-jest.mock('glob');
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
+}));
 
 // Mock all the dependencies first
 jest.mock('../../../src/util/file', () => ({

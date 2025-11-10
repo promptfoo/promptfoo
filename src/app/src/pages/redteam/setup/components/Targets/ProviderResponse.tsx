@@ -88,6 +88,57 @@ export default function ProviderResponse({ providerResponse }: { providerRespons
               </Paper>
             </>
           ) : null}
+
+          {/* Display Request Body if available in metadata */}
+          {providerResponse?.metadata?.requestBody && (
+            <>
+              <Typography variant="subtitle2" gutterBottom>
+                Request Body Sent:
+              </Typography>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
+                  maxHeight: '200px',
+                  overflow: 'auto',
+                  mb: 2,
+                }}
+              >
+                <pre
+                  style={{
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {typeof providerResponse.metadata.requestBody === 'string'
+                    ? providerResponse.metadata.requestBody
+                    : JSON.stringify(providerResponse.metadata.requestBody, null, 2)}
+                </pre>
+              </Paper>
+            </>
+          )}
+
+          {/* Display Request Method if available in metadata */}
+          {providerResponse?.metadata?.requestMethod && (
+            <>
+              <Typography variant="subtitle2" gutterBottom>
+                Request Method:
+              </Typography>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
+                  mb: 2,
+                }}
+              >
+                <pre style={{ margin: 0 }}>{providerResponse.metadata.requestMethod}</pre>
+              </Paper>
+            </>
+          )}
+
           <Typography variant="subtitle2" gutterBottom>
             Raw Result:
           </Typography>

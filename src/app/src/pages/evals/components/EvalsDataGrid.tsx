@@ -12,7 +12,6 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Link from '@mui/material/Link';
-import Paper from '@mui/material/Paper';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
@@ -304,6 +303,12 @@ export default function EvalsDataGrid({
                   onEvalSelected(params.row.evalId);
                   return false;
                 }}
+                sx={{
+                  textDecoration: 'none',
+                  color: 'primary.main',
+                  fontFamily: 'monospace',
+                  '&:hover': { textDecoration: 'underline' },
+                }}
               >
                 {params.row.evalId}
               </Link>
@@ -313,7 +318,7 @@ export default function EvalsDataGrid({
           field: 'createdAt',
           headerName: 'Created',
           flex: 0.9,
-          valueGetter: (value: Eval['createdAt'], row: Eval) => {
+          valueGetter: (value: Eval['createdAt']) => {
             return new Date(value);
           },
           valueFormatter: (value: Eval['createdAt']) => formatDataGridDate(value),
@@ -330,7 +335,7 @@ export default function EvalsDataGrid({
                   { value: true, label: 'Red Team' },
                   { value: false, label: 'Eval' },
                 ],
-                valueGetter: (value: Eval['isRedteam'], row: Eval) => value === 1,
+                valueGetter: (value: Eval['isRedteam']) => value === 1,
                 renderCell: (params: GridRenderCellParams<Eval>) => {
                   const isRedteam = params.value as Eval['isRedteam'];
                   const displayType = isRedteam ? 'Red Team' : 'Eval';
@@ -416,117 +421,115 @@ export default function EvalsDataGrid({
   return (
     <>
       {/* Evals data grid */}
-      <Paper elevation={2} sx={{ height: '100%' }}>
-        <DataGrid
-          rows={rows}
-          columns={columns}
-          loading={isLoading}
-          getRowId={(row) => row.evalId}
-          checkboxSelection={deletionEnabled}
-          slots={{
-            toolbar: CustomToolbar,
-            noRowsOverlay: () => (
-              <Box
-                sx={{
-                  textAlign: 'center',
-                  color: 'text.secondary',
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  p: 3,
-                }}
-              >
-                {error ? (
-                  <>
-                    <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
-                    <Typography variant="h6" gutterBottom color="error">
-                      Error loading evals
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {error.message}
-                    </Typography>
-                  </>
-                ) : (
-                  <>
-                    <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
-                    <Typography variant="h6" gutterBottom>
-                      No evals found
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Try adjusting your search or create a new evaluation
-                    </Typography>
-                  </>
-                )}
-              </Box>
-            ),
-          }}
-          slotProps={{
-            toolbar: {
-              showUtilityButtons,
-              deletionEnabled,
-              focusQuickFilterOnMount,
-              selectedCount: rowSelectionModel.length,
-              onDeleteSelected: handleDeleteSelected,
+      <DataGrid
+        rows={rows}
+        columns={columns}
+        loading={isLoading}
+        getRowId={(row) => row.evalId}
+        checkboxSelection={deletionEnabled}
+        slots={{
+          toolbar: CustomToolbar,
+          noRowsOverlay: () => (
+            <Box
+              sx={{
+                textAlign: 'center',
+                color: 'text.secondary',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                p: 3,
+              }}
+            >
+              {error ? (
+                <>
+                  <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
+                  <Typography variant="h6" gutterBottom color="error">
+                    Error loading evals
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {error.message}
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
+                  <Typography variant="h6" gutterBottom>
+                    No evals found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Try adjusting your search or create a new evaluation
+                  </Typography>
+                </>
+              )}
+            </Box>
+          ),
+        }}
+        slotProps={{
+          toolbar: {
+            showUtilityButtons,
+            deletionEnabled,
+            focusQuickFilterOnMount,
+            selectedCount: rowSelectionModel.length,
+            onDeleteSelected: handleDeleteSelected,
+          },
+          loadingOverlay: {
+            variant: 'linear-progress',
+          },
+        }}
+        onCellClick={(params) => {
+          if (params.id !== focusedEvalId && params.field !== '__check__') {
+            handleCellClick(params);
+          }
+        }}
+        getRowClassName={(params) => (params.id === focusedEvalId ? 'focused-row' : '')}
+        sx={{
+          border: 'none',
+          '& .MuiDataGrid-row': {
+            cursor: 'pointer',
+            transition: 'background-color 0.2s ease',
+            '&:hover': {
+              backgroundColor: 'action.hover',
             },
-            loadingOverlay: {
-              variant: 'linear-progress',
-            },
-          }}
-          onCellClick={(params) => {
-            if (params.id !== focusedEvalId && params.field !== '__check__') {
-              handleCellClick(params);
-            }
-          }}
-          getRowClassName={(params) => (params.id === focusedEvalId ? 'focused-row' : '')}
-          sx={{
-            border: 'none',
-            '& .MuiDataGrid-row': {
-              cursor: 'pointer',
-              transition: 'background-color 0.2s ease',
-              '&:hover': {
-                backgroundColor: 'action.hover',
-              },
-            },
-            '& .MuiDataGrid-row--disabled': {
-              cursor: 'default',
-              opacity: 0.7,
-              pointerEvents: 'none',
-            },
-            '& .focused-row': {
-              backgroundColor: 'action.selected',
-              cursor: 'default',
-              '&:hover': {
-                backgroundColor: 'action.selected',
-              },
-            },
-            '& .MuiDataGrid-cell': {
-              borderColor: 'divider',
-            },
-            '& .MuiDataGrid-columnHeaders': {
-              backgroundColor: 'background.default',
-              borderColor: 'divider',
-            },
-            '& .MuiDataGrid-selectedRow': {
+          },
+          '& .MuiDataGrid-row--disabled': {
+            cursor: 'default',
+            opacity: 0.7,
+            pointerEvents: 'none',
+          },
+          '& .focused-row': {
+            backgroundColor: 'action.selected',
+            cursor: 'default',
+            '&:hover': {
               backgroundColor: 'action.selected',
             },
-            '--DataGrid-overlayHeight': '300px',
-          }}
-          onRowSelectionModelChange={setRowSelectionModel}
-          rowSelectionModel={rowSelectionModel}
-          initialState={{
-            sorting: {
-              sortModel: [{ field: 'createdAt', sort: 'desc' }],
-            },
-            pagination: {
-              paginationModel: { pageSize: 50 },
-            },
-          }}
-          pageSizeOptions={[10, 25, 50, 100]}
-          isRowSelectable={(params) => params.id !== focusedEvalId}
-        />
-      </Paper>
+          },
+          '& .MuiDataGrid-cell': {
+            borderColor: 'divider',
+          },
+          '& .MuiDataGrid-columnHeaders': {
+            backgroundColor: 'background.default',
+            borderColor: 'divider',
+          },
+          '& .MuiDataGrid-selectedRow': {
+            backgroundColor: 'action.selected',
+          },
+          '--DataGrid-overlayHeight': '300px',
+        }}
+        onRowSelectionModelChange={setRowSelectionModel}
+        rowSelectionModel={rowSelectionModel}
+        initialState={{
+          sorting: {
+            sortModel: [{ field: 'createdAt', sort: 'desc' }],
+          },
+          pagination: {
+            paginationModel: { pageSize: 50 },
+          },
+        }}
+        pageSizeOptions={[10, 25, 50, 100]}
+        isRowSelectable={(params) => params.id !== focusedEvalId}
+      />
 
       {/* Delete confirmation dialog */}
       <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>

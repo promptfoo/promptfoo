@@ -6,7 +6,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -33,7 +33,6 @@ const RiskCard = ({
   evalId,
   failuresByPlugin,
   passesByPlugin,
-  strategyStats,
 }: {
   title: string;
   subtitle: string;
@@ -50,7 +49,6 @@ const RiskCard = ({
     string,
     { prompt: string; output: string; gradingResult?: GradingResult }[]
   >;
-  strategyStats: Record<string, { pass: number; total: number }>;
 }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -79,12 +77,15 @@ const RiskCard = ({
           }}
         >
           <Grid
-            size={{ xs: 12, md: 6 }}
             style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               textAlign: 'center',
+            }}
+            size={{
+              xs: 12,
+              md: 6,
             }}
           >
             <Typography variant="h5" className="risk-card-title">
@@ -180,9 +181,9 @@ const RiskCard = ({
                             {`${Math.round(percentage * 100)}%`}
                           </Typography>
                         ) : percentage >= pluginPassRateThreshold ? (
-                          <CheckCircleIcon className="risk-card-icon-passed" />
+                          <CheckCircleIcon className="risk-card-icon-passed" color="success" />
                         ) : (
-                          <CancelIcon className="risk-card-icon-failed" />
+                          <CancelIcon className="risk-card-icon-failed" color="error" />
                         )}
                         <ArrowForwardIosIcon
                           className="risk-card-expand-icon print-hide"
@@ -212,7 +213,6 @@ const RiskCard = ({
               const testType = testTypes.find((t) => t.name === selectedCategory);
               return testType?.numFailed ?? 0;
             })()}
-            strategyStats={strategyStats}
           />
         )}
       </CardContent>

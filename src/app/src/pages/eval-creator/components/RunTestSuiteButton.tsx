@@ -19,9 +19,17 @@ const RunTestSuiteButton = () => {
     providers,
     scenarios,
     tests,
+    extensions,
   } = config;
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
+
+  const isDisabled =
+    isRunning ||
+    !prompts ||
+    prompts.length === 0 ||
+    !tests ||
+    (Array.isArray(tests) && tests.length === 0);
 
   const runTestSuite = async () => {
     setIsRunning(true);
@@ -36,6 +44,7 @@ const RunTestSuiteButton = () => {
       providers,
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'
+      extensions,
     };
 
     try {
@@ -96,7 +105,7 @@ const RunTestSuiteButton = () => {
   };
 
   return (
-    <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isRunning}>
+    <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isDisabled}>
       {isRunning ? (
         <>
           <CircularProgress size={24} sx={{ marginRight: 2 }} />

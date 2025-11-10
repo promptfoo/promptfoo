@@ -6,6 +6,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import {
   Box,
   Button,
+  CircularProgress,
   Divider,
   FormControl,
   IconButton,
@@ -17,8 +18,10 @@ import {
   TextField,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
+import { displayNameOverrides, severityDisplayNames } from '@promptfoo/redteam/constants/metadata';
+import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import { useDebounce } from 'use-debounce';
+import { BaseNumberInput } from '../../../../components/form/input/BaseNumberInput';
 import { type ResultsFilter, useTableStore } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
@@ -27,13 +30,29 @@ const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   plugin: 'Plugin',
   strategy: 'Strategy',
   severity: 'Severity',
+  policy: 'Policy',
 };
 
 const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
   equals: 'Equals',
   contains: 'Contains',
   not_contains: 'Not Contains',
+  exists: 'Exists',
+  is_defined: 'Is Defined',
+  eq: '==',
+  neq: '!=',
+  gt: '>',
+  gte: '≥',
+  lt: '<',
+  lte: '≤',
 };
+
+/**
+ * Convenience predicate function to determine if a filter type solely has equals operator.
+ */
+function solelyHasEqualsOperator(type: ResultsFilter['type']): boolean {
+  return ['plugin', 'strategy', 'severity', 'policy'].includes(type);
+}
 
 function Dropdown({
   id,
@@ -126,7 +145,6 @@ function DebouncedTextField({
 function Filter({
   value,
   index,
-  totalFilters,
   onClose,
 }: {
   value: ResultsFilter;
@@ -135,7 +153,17 @@ function Filter({
   onClose: () => void;
 }) {
   const theme = useTheme();
-  const { filters, updateFilter, removeFilter, updateAllFilterLogicOperators } = useTableStore();
+  const {
+    filters,
+    updateFilter,
+    removeFilter,
+    updateAllFilterLogicOperators,
+    metadataKeys,
+    metadataKeysLoading,
+    metadataKeysError,
+    fetchMetadataKeys,
+    evalId,
+  } = useTableStore();
 
   // Get list of already selected metric values (excluding current filter)
   const selectedMetricValues = Object.values(filters.values)
@@ -157,6 +185,11 @@ function Filter({
     .filter((filter) => filter.id !== value.id && filter.type === 'severity' && filter.value)
     .map((filter) => filter.value);
 
+  // Compute selected policy values (excluding current filter)
+  const selectedPolicyValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'policy' && filter.value)
+    .map((filter) => filter.value);
+
   /**
    * Updates the metadata field.
    * @param field - The new metadata field.
@@ -174,9 +207,9 @@ function Filter({
    */
   const handleTypeChange = useCallback(
     (filterType: ResultsFilter['type']) => {
-      // Clear field when switching away from metadata type
+      // Clear field when switching away from metadata or metric type
       const updatedFilter = { ...value, type: filterType };
-      if (filterType !== 'metadata') {
+      if (filterType !== 'metadata' && filterType !== 'metric') {
         updatedFilter.field = undefined;
       }
       // Clear value when switching between different filter types
@@ -185,18 +218,30 @@ function Filter({
         updatedFilter.value = '';
       }
       // Reset operator to 'equals' when changing to types that only support 'equals'
-      if (
-        (filterType === 'metric' ||
-          filterType === 'plugin' ||
-          filterType === 'strategy' ||
-          filterType === 'severity') &&
-        value.operator !== 'equals'
-      ) {
+      if (solelyHasEqualsOperator(filterType) && value.operator !== 'equals') {
         updatedFilter.operator = 'equals';
       }
+      // Reset operator to 'is_defined' when switching to metric type with an incompatible operator
+      if (
+        filterType === 'metric' &&
+        !['is_defined', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(value.operator)
+      ) {
+        updatedFilter.operator = 'is_defined';
+      }
+
+      // Fetch metadata keys when user switches to metadata filter type
+      if (
+        filterType === 'metadata' &&
+        evalId &&
+        !metadataKeysLoading &&
+        (!metadataKeys || metadataKeys.length === 0)
+      ) {
+        fetchMetadataKeys(evalId);
+      }
+
       updateFilter(updatedFilter);
     },
-    [value, updateFilter],
+    [value, updateFilter, evalId, metadataKeysLoading, metadataKeys?.length, fetchMetadataKeys],
   );
 
   /**
@@ -205,7 +250,10 @@ function Filter({
    */
   const handleOperatorChange = useCallback(
     (filterOperator: ResultsFilter['operator']) => {
-      updateFilter({ ...value, operator: filterOperator });
+      // Clear value when switching to exists or is_defined operator
+      const updatedValue =
+        filterOperator === 'exists' || filterOperator === 'is_defined' ? '' : value.value;
+      updateFilter({ ...value, operator: filterOperator, value: updatedValue });
     },
     [value, updateFilter],
   );
@@ -331,22 +379,67 @@ function Filter({
             ...((filters.options.severity?.length ?? 0) > 0
               ? [{ label: TYPE_LABELS_BY_TYPE.severity, value: 'severity' }]
               : []),
+            ...((filters.options.policy?.length ?? 0) > 0
+              ? [{ label: TYPE_LABELS_BY_TYPE.policy, value: 'policy' }]
+              : []),
           ]}
           value={value.type}
           onChange={(e) => handleTypeChange(e as ResultsFilter['type'])}
           width={150}
         />
 
-        {value.type === 'metadata' && (
-          <DebouncedTextField
-            id={`${index}-field-input`}
-            label="Key"
-            variant="outlined"
-            size="small"
+        {value.type === 'metadata' &&
+          // Show loading state initially to prevent flicker
+          (metadataKeysLoading ? (
+            <TextField
+              id={`${index}-field-loading`}
+              label="Key"
+              variant="outlined"
+              size="small"
+              value=""
+              placeholder="Loading keys..."
+              disabled
+              sx={{ width: 180 }}
+              InputProps={{
+                endAdornment: <CircularProgress size={16} />,
+              }}
+            />
+          ) : metadataKeys && metadataKeys.length > 0 ? (
+            // Show dropdown if keys are available
+            <Dropdown
+              id={`${index}-field-select`}
+              label="Key"
+              values={(metadataKeys || []).map((key) => ({ label: key, value: key }))}
+              value={value.field || ''}
+              onChange={handleFieldChange}
+              width={180}
+            />
+          ) : (
+            // Fallback to text input with error indication if needed
+            <TextField
+              id={`${index}-field-input`}
+              label="Key"
+              variant="outlined"
+              size="small"
+              value={value.field || ''}
+              onChange={(e) => handleFieldChange(e.target.value)}
+              placeholder={
+                metadataKeysError ? 'Error loading keys - type manually' : 'Enter metadata key'
+              }
+              sx={{ width: 180 }}
+              error={metadataKeysError}
+              helperText={metadataKeysError ? 'Failed to load available keys' : undefined}
+            />
+          ))}
+
+        {value.type === 'metric' && filters.options.metric.length > 0 && (
+          <Dropdown
+            id={`${index}-metric-field-select`}
+            label="Metric"
+            values={filters.options.metric.map((metric) => ({ label: metric, value: metric }))}
             value={value.field || ''}
             onChange={handleFieldChange}
-            placeholder="Enter metadata key"
-            sx={{ width: 180 }}
+            width={180}
           />
         )}
 
@@ -354,40 +447,67 @@ function Filter({
           id={`${index}-operator-select`}
           label="Operator"
           values={
-            value.type === 'metric' ||
-            value.type === 'plugin' ||
-            value.type === 'strategy' ||
-            value.type === 'severity'
-              ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
-              : [
-                  { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
-                  { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
-                  { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
+            value.type === 'metric'
+              ? [
+                  { label: OPERATOR_LABELS_BY_OPERATOR.is_defined, value: 'is_defined' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.eq, value: 'eq' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.neq, value: 'neq' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.gt, value: 'gt' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.gte, value: 'gte' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.lt, value: 'lt' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.lte, value: 'lte' },
                 ]
+              : solelyHasEqualsOperator(value.type)
+                ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
+                : [
+                    { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
+                    { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
+                    { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
+                    { label: OPERATOR_LABELS_BY_OPERATOR.exists, value: 'exists' },
+                  ]
           }
           value={value.operator}
           onChange={(e) => handleOperatorChange(e as ResultsFilter['operator'])}
           width={150}
         />
 
-        <Box sx={{ flex: 1, minWidth: 200, maxWidth: 300 }}>
-          {value.type === 'metric' ||
-          value.type === 'plugin' ||
-          value.type === 'strategy' ||
-          value.type === 'severity' ? (
-            <Dropdown
-              id={`${index}-value-select`}
-              label={TYPE_LABELS_BY_TYPE[value.type]}
-              values={(filters.options[value.type] ?? [])
-                .map((optionValue) => {
-                  let label: string | React.ReactNode = optionValue;
-                  let displayName: string | null = null;
-                  if (value.type === 'plugin' || value.type === 'strategy') {
-                    displayName = displayNameOverrides[
-                      optionValue as keyof typeof displayNameOverrides
-                    ] as string;
+        {/* Hide value input when exists or is_defined operator is selected */}
+        {value.operator !== 'exists' && value.operator !== 'is_defined' && (
+          <Box
+            sx={{
+              // NOTE: Do not set a max-width here: this container requires dynamic width which resizes according
+              // to the width of its contents i.e. the dropdown values.
+              flex: 1,
+              minWidth: 250,
+            }}
+          >
+            {solelyHasEqualsOperator(value.type) ? (
+              <Dropdown
+                id={`${index}-value-select`}
+                label={TYPE_LABELS_BY_TYPE[value.type]}
+                values={(filters.options[value.type] ?? [])
+                  .map((optionValue) => {
+                    let label: string | React.ReactNode = optionValue;
+                    let displayName: string | null = null;
+                    if (value.type === 'plugin' || value.type === 'strategy') {
+                      displayName = displayNameOverrides[
+                        optionValue as keyof typeof displayNameOverrides
+                      ] as string;
+                    }
+                    if (value.type === 'severity') {
+                      displayName = severityDisplayNames[
+                        optionValue as keyof typeof severityDisplayNames
+                      ] as string;
+                    }
+                    if (value.type === 'policy') {
+                      // For policies, use the name from the mapping if available, otherwise use the ID
+                      const policyName = filters.policyIdToNameMap?.[optionValue];
+                      displayName = policyName ?? formatPolicyIdentifierAsMetric(optionValue);
+                    }
                     if (displayName) {
-                      label = (
+                      // For policy filters, don't show the ID in the code section
+                      const showValue = value.type !== 'policy';
+                      label = showValue ? (
                         <div
                           style={{
                             display: 'flex',
@@ -408,42 +528,68 @@ function Filter({
                             {optionValue}
                           </code>
                         </div>
+                      ) : (
+                        displayName
                       );
                     }
-                  }
-                  return { label, value: optionValue, sortValue: displayName ?? optionValue };
-                })
-                .sort((a, b) => {
-                  // Sort by the option value since label might be a React element
-                  return a.sortValue.localeCompare(b.sortValue);
-                })} // Sort by value
-              value={value.value}
-              onChange={(e) => handleValueChange(e)}
-              width="100%"
-              disabledValues={
-                value.type === 'metric'
-                  ? selectedMetricValues
-                  : value.type === 'plugin'
-                    ? selectedPluginValues
-                    : value.type === 'strategy'
-                      ? selectedStrategyValues
-                      : value.type === 'severity'
-                        ? selectedSeverityValues
-                        : []
-              }
-            />
-          ) : (
-            <DebouncedTextField
-              id={`${index}-value-input`}
-              label="Value"
-              variant="outlined"
-              size="small"
-              value={value.value}
-              onChange={handleValueChange}
-              fullWidth
-            />
-          )}
-        </Box>
+                    return { label, value: optionValue, sortValue: displayName ?? optionValue };
+                  })
+                  .sort((a, b) => {
+                    // Sort by the option value since label might be a React element
+                    return a.sortValue.localeCompare(b.sortValue);
+                  })} // Sort by value
+                value={value.value}
+                onChange={(e) => handleValueChange(e)}
+                width="100%"
+                disabledValues={
+                  value.type === 'metric'
+                    ? selectedMetricValues
+                    : value.type === 'plugin'
+                      ? selectedPluginValues
+                      : value.type === 'strategy'
+                        ? selectedStrategyValues
+                        : value.type === 'severity'
+                          ? selectedSeverityValues
+                          : value.type === 'policy'
+                            ? selectedPolicyValues
+                            : []
+                }
+              />
+            ) : value.type === 'metric' &&
+              ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(value.operator) ? (
+              <BaseNumberInput
+                id={`${index}-value-input`}
+                label="Value"
+                variant="outlined"
+                size="small"
+                value={value.value === '' ? undefined : Number(value.value)}
+                onChange={(numericValue) => {
+                  handleValueChange(numericValue === undefined ? '' : String(numericValue));
+                }}
+                allowDecimals={true}
+                step={0.1}
+                fullWidth
+                slotProps={{
+                  input: {
+                    sx: {
+                      py: 1,
+                    },
+                  },
+                }}
+              />
+            ) : (
+              <DebouncedTextField
+                id={`${index}-value-input`}
+                label="Value"
+                variant="outlined"
+                size="small"
+                value={value.value}
+                onChange={handleValueChange}
+                fullWidth
+              />
+            )}
+          </Box>
+        )}
       </Box>
     </Box>
   );
@@ -458,7 +604,15 @@ export default function FiltersForm({
   onClose: () => void;
   anchorEl: HTMLElement | null;
 }) {
-  const { filters, addFilter, removeAllFilters } = useTableStore();
+  const {
+    filters,
+    addFilter,
+    removeAllFilters,
+    metadataKeys,
+    metadataKeysLoading,
+    fetchMetadataKeys,
+    evalId,
+  } = useTableStore();
 
   /**
    * Adds a new filter with default values.
@@ -474,6 +628,8 @@ export default function FiltersForm({
       defaultType = 'strategy';
     } else if ((filters.options.severity?.length ?? 0) > 0) {
       defaultType = 'severity';
+    } else if ((filters.options.policy?.length ?? 0) > 0) {
+      defaultType = 'policy';
     }
 
     addFilter({
@@ -502,6 +658,24 @@ export default function FiltersForm({
       handleAddFilter();
     }
   }, [filters.values, open, handleAddFilter]);
+
+  /**
+   * Fetch metadata keys when the filter form opens if there are existing metadata filters
+   * or if metadata keys haven't been loaded yet.
+   */
+  useEffect(() => {
+    if (open && evalId && !metadataKeysLoading) {
+      // Check if there are any existing metadata filters
+      const hasMetadataFilters = Object.values(filters.values).some(
+        (filter) => filter.type === 'metadata',
+      );
+
+      // Fetch if we have metadata filters but no keys, or if keys are empty
+      if (hasMetadataFilters && (!metadataKeys || metadataKeys.length === 0)) {
+        fetchMetadataKeys(evalId);
+      }
+    }
+  }, [open, evalId, metadataKeysLoading, filters.values, metadataKeys, fetchMetadataKeys]);
 
   const filterValuesList = useMemo(() => {
     // Sort by sortIndex to ensure consistent ordering

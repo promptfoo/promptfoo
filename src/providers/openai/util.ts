@@ -146,16 +146,6 @@ export const OPENAI_CHAT_MODELS = [
       audioOutput: 80 / 1e6,
     },
   })),
-  // gpt-audio model (text + audio token pricing)
-  ...['gpt-audio'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2.5 / 1e6,
-      output: 10 / 1e6,
-      audioInput: 40 / 1e6,
-      audioOutput: 80 / 1e6,
-    },
-  })),
   ...['gpt-4o-mini-audio-preview', 'gpt-4o-mini-audio-preview-2024-12-17'].map((model) => ({
     id: model,
     cost: {
@@ -300,6 +290,39 @@ export const OPENAI_CHAT_MODELS = [
       output: 6.0 / 1e6,
     },
   })),
+  ...['gpt-5-codex'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-5-pro', 'gpt-5-pro-2025-10-06'].map((model) => ({
+    id: model,
+    cost: {
+      input: 15 / 1e6,
+      output: 120 / 1e6,
+    },
+  })),
+  // gpt-audio models
+  ...['gpt-audio', 'gpt-audio-2025-08-28'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
+      audioInput: 40 / 1e6,
+      audioOutput: 80 / 1e6,
+    },
+  })),
+  ...['gpt-audio-mini', 'gpt-audio-mini-2025-10-06'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  })),
 ];
 
 // Deep research models for Responses API
@@ -339,6 +362,17 @@ export const OPENAI_COMPLETION_MODELS = [
 
 // Realtime models for WebSocket API
 export const OPENAI_REALTIME_MODELS = [
+  // gpt-realtime models (latest)
+  {
+    id: 'gpt-realtime',
+    type: 'chat',
+    cost: {
+      input: 32 / 1e6,
+      output: 64 / 1e6,
+      audioInput: 32 / 1e6,
+      audioOutput: 64 / 1e6,
+    },
+  },
   // gpt-4o realtime models
   {
     id: 'gpt-realtime',
@@ -393,6 +427,27 @@ export const OPENAI_REALTIME_MODELS = [
   },
   {
     id: 'gpt-4o-mini-realtime-preview-2024-12-17',
+    type: 'chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  },
+  // gpt-realtime-mini models
+  {
+    id: 'gpt-realtime-mini',
+    type: 'chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  },
+  {
+    id: 'gpt-realtime-mini-2025-10-06',
     type: 'chat',
     cost: {
       input: 0.6 / 1e6,

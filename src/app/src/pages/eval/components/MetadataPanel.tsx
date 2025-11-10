@@ -1,6 +1,7 @@
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
@@ -12,6 +13,12 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
+import {
+  determinePolicyTypeFromId,
+  makeCustomPolicyCloudUrl,
+} from '@promptfoo/redteam/plugins/policy/utils';
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import { ellipsize } from '../../../../../util/text';
 
 const isValidUrl = (str: string): boolean => {
@@ -37,6 +44,7 @@ interface MetadataPanelProps {
   onMetadataClick: (key: string) => void;
   onCopy: (key: string, text: string) => void;
   onApplyFilter: (field: string, value: string, operator?: 'equals' | 'contains') => void;
+  cloudConfig?: CloudConfigData | null;
 }
 
 export function MetadataPanel({
@@ -46,8 +54,17 @@ export function MetadataPanel({
   onMetadataClick,
   onCopy,
   onApplyFilter,
+  cloudConfig,
 }: MetadataPanelProps) {
-  if (!metadata || Object.keys(metadata).filter((key) => key !== 'citations').length === 0) {
+  if (!metadata) {
+    return null;
+  }
+
+  const metadataEntries = Object.entries(metadata)
+    .filter((d) => !HIDDEN_METADATA_KEYS.includes(d[0]))
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  if (metadataEntries.length === 0) {
     return null;
   }
 
@@ -66,36 +83,70 @@ export function MetadataPanel({
           </TableRow>
         </TableHead>
         <TableBody>
-          {Object.entries(metadata).map(([key, value]) => {
-            // Skip citations in metadata display as they're shown in their own component
-            if (key === 'citations') {
-              return null;
-            }
-
+          {metadataEntries.map(([key, value]) => {
             const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-            const truncatedValue = ellipsize(stringValue, 300);
-            const isUrl = typeof value === 'string' && isValidUrl(value);
+            let cell: React.ReactNode;
+
+            // Is reusable custom policy name?
+            if (key === 'policyName' && cloudConfig?.isEnabled && cloudConfig?.appUrl) {
+              const policyId: string | null =
+                metadataEntries.find(([key]) => key === 'policyId')?.[1] ?? null;
+
+              if (policyId) {
+                cell = (
+                  <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>{value}</span>
+                      {determinePolicyTypeFromId(policyId) === 'reusable' &&
+                        cloudConfig?.appUrl && (
+                          <Link
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policyId)}
+                            sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                            data-testId="pf-cloud-policy-detail-link"
+                          >
+                            <span>View policy in Promptfoo Cloud</span>
+                            <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
+                          </Link>
+                        )}
+                    </div>
+                  </TableCell>
+                );
+              } else {
+                cell = (
+                  <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}>
+                    {value}
+                  </TableCell>
+                );
+              }
+            }
+            // Is URL?
+            else if (typeof value === 'string' && isValidUrl(value)) {
+              cell = (
+                <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}>
+                  <Link href={value} target="_blank" rel="noopener noreferrer">
+                    {value}
+                  </Link>
+                </TableCell>
+              );
+            } else {
+              const truncatedValue = ellipsize(stringValue, 300);
+              cell = (
+                <TableCell
+                  style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}
+                  onClick={() => onMetadataClick(key)}
+                >
+                  {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                </TableCell>
+              );
+            }
 
             return (
               <TableRow key={key}>
                 <TableCell>{key}</TableCell>
-                <TableCell
-                  style={{
-                    whiteSpace: 'pre-wrap',
-                    cursor: isUrl ? 'auto' : 'pointer',
-                  }}
-                  onClick={() => !isUrl && onMetadataClick(key)}
-                >
-                  {isUrl ? (
-                    <Link href={value} target="_blank" rel="noopener noreferrer">
-                      {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
-                    </Link>
-                  ) : expandedMetadata[key]?.expanded ? (
-                    stringValue
-                  ) : (
-                    truncatedValue
-                  )}
-                </TableCell>
+                {cell}
+
                 <TableCell>
                   <Box sx={{ display: 'flex', gap: 0.5 }}>
                     <Tooltip title="Copy value">

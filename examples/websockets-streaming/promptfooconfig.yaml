@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Websocket target with streaming response'
+
+prompts:
+  - 'Rephrase this in {{language}}: {{body}}'
+  - 'Translate this to conversational {{language}}: {{body}}'
+
+targets:
+  - id: 'ws://localhost:3300/ws-stream'
+    config:
+      messageTemplate: '{"input": {{prompt | dump}}}'
+      streamResponse: |-
+        (accumulator, event, context) => {
+          const { message, type } = JSON.parse(event.data);
+          if(type === "message"){return [{output: message},true]}
+          if(type === "error"){return [{error: message},true]}
+          return [{output: message}, false];}
+
+tests:
+  - vars:
+      language: French
+      body: Hello world
+  - vars:
+      language: French
+      body: I'm hungry
+  - vars:
+      language: Pirate
+      body: Hello world
+  - vars:
+      language: Pirate
+      body: I'm hungry
