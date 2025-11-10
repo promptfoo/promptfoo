@@ -28,7 +28,7 @@ tags: [security-vulnerability, threat-intelligence, ai-security, cybersecurity]
 # When AI becomes the attacker: The rise of AI-orchestrated cyberattacks
 
 > **TL;DR**
-> Google's Threat Intelligence Group reported the first observed malware that queries LLMs during execution—PROMPTFLUX and PROMPTSTEAL. This follows Anthropic's August report documenting a cybercriminal using Claude Code to extort 17 organizations with ransom demands up to $500,000. Collins Dictionary named "vibe coding" Word of the Year 2025 the same week. AI is now acting as the operator in cyberattacks, not just an assistant.
+> Google's Threat Intelligence Group reported PROMPTFLUX and PROMPTSTEAL, the first malware families observed by Google querying LLMs during execution to adapt behavior. PROMPTFLUX uses Gemini to rewrite its VBScript hourly; PROMPTSTEAL calls Qwen2.5-Coder-32B-Instruct to generate Windows commands mid-attack. Anthropic's August report separately documented a criminal using Claude Code to orchestrate extortion across 17 organizations, with demands sometimes exceeding $500,000. Days later, Collins named "vibe coding" Word of the Year 2025.
 
 <!-- truncate -->
 
@@ -36,14 +36,12 @@ tags: [security-vulnerability, threat-intelligence, ai-security, cybersecurity]
 
 ## Google's November 2025 discovery
 
-On November 5, 2025, [Google's Threat Intelligence Group reported](https://cloud.google.com/blog/topics/threat-intelligence/ai-threat-tracker) the first observed use of "just-in-time" AI in malware families that query LLMs during execution. They identified **PROMPTFLUX** and **PROMPTSTEAL**, malware strains that embed large language models directly into their execution flow.
+On November 5, 2025, [Google's Threat Intelligence Group described](https://cloud.google.com/blog/topics/threat-intelligence/ai-threat-tracker) "just-in-time" AI in malware that queries LLMs while running. This represents the first observed operational use of LLM-querying malware by Google in live campaigns.
 
-These programs use LLMs as runtime operators rather than calling APIs for assistance:
+- **PROMPTFLUX** regenerates its VBScript via Gemini, rotating obfuscation and establishing persistence
+- **PROMPTSTEAL** queries Qwen2.5-Coder-32B-Instruct through the Hugging Face API to produce and execute one-line Windows commands for data collection and exfiltration. Google links PROMPTSTEAL to [APT28 activity against Ukraine](https://services.google.com/fh/files/misc/advances-in-threat-actor-usage-of-ai-tools-en.pdf)
 
-- **PROMPTFLUX** (assessed as experimental) uses Gemini to rewrite its entire VBScript source code hourly, creating fresh obfuscation patterns that evade signature-based detection
-- **PROMPTSTEAL** (observed in live operations by Russian APT28 in Ukraine) queries Qwen2.5-Coder-32B-Instruct via Hugging Face API mid-attack to generate Windows commands for data exfiltration
-
-GTIG's findings showed that AI-powered malware is now deployed in active campaigns.
+Coverage [characterized this](https://thehackernews.com/2025/11/google-uncovers-promptflux-malware-that.html) as the first observed operational use of LLM-querying malware in live campaigns.
 
 Just one day later, [Collins Dictionary named **"vibe coding"** its Word of the Year 2025](https://blog.collinsdictionary.com/language-lovers/get-the-latest-from-collins/word-of-the-year-2025/)—a remarkable juxtaposition that highlights how the same AI capabilities democratizing software development are simultaneously being weaponized. The term, coined by AI pioneer Andrej Karpathy, describes using AI to write code without fully understanding how it works.
 
@@ -68,7 +66,7 @@ Claude developed malware sophisticated enough to evade Windows Defender by masqu
 The AI analyzed stolen data, identifying high-value information to maximize leverage and inform extortion strategy.
 
 **Phase 5: Extortion and ransom note development**
-Claude generated customized ransom notes tailored to each victim's financial situation and operational exposure, with demands sometimes exceeding $500,000.
+Claude generated customized ransom notes tailored to each victim's financial situation and operational exposure. Direct demands sometimes exceeded $500,000.
 
 ![Simulated Claude Code analysis report showing post-attack extortion strategy](/img/blog/anthropic-threat-intelligence/anthropic_screenshot.jpg)
 
@@ -120,7 +118,7 @@ A North Korean actor produced malware targeting job seekers as part of the wider
 The third category involves AI amplifying traditional attack vectors:
 
 **Remote worker fraud at scale**
-North Korean IT workers used AI to craft believable identities, construct technical backgrounds with portfolios and CVs, pass interview stages, deliver technical work, communicate with teams, handle code reviews, and maintain the illusion of competence. The revenue funds North Korea's weapons programs.
+North Korean IT workers used AI to craft believable identities, construct technical backgrounds with portfolios and CVs, pass interview stages, deliver technical work, communicate with teams, handle code reviews, and maintain the illusion of competence. The revenue funds North Korea's weapons programs. The [DOJ sentenced an Arizona woman for facilitating a $17M IT worker fraud scheme](https://www.justice.gov/usao-dc/pr/arizona-woman-sentenced-17m-it-worker-fraud-scheme-illegally-generated-revenue-north) that illegally generated revenue for North Korea.
 
 The security risk extends beyond employment fraud. Operatives gain persistent access to sensitive systems, communications, and proprietary code. What appears to be an HR problem is a national security threat. While some argue that if the work gets done the deception is minimal, this view ignores three critical risks: persistent access to sensitive infrastructure, proprietary data flows to sanctioned regimes, and legitimate remote work faces increased scrutiny.
 
@@ -140,7 +138,7 @@ Security teams have optimized for detection: signature matching, behavioral scor
 AI-operated attacks break that assumption in three ways:
 
 **1. Adaptive evasion at machine speed**
-Traditional malware follows static patterns. AI-generated malware like PROMPTFLUX modifies itself hourly based on the defensive environment it encounters, making signature-based detection fundamentally ineffective.
+Traditional malware follows static patterns. AI-generated malware like PROMPTFLUX mutates code and behavior at runtime, making signature-based detection fundamentally ineffective.
 
 **2. The skill floor has disappeared**
 Defensive strategies assumed attackers needed years of training for sophisticated operations. AI eliminates that constraint. The UK ransomware developer and North Korean IT workers prove technical incompetence is no longer a barrier.
@@ -152,19 +150,19 @@ Organizations must automate security tooling to defend against AI-assisted attac
 
 ## What changes operationally
 
-AI-assisted attacks operate at machine speed and scale. Your exposed infrastructure will be discovered and tested within hours, not days. Here's what that means:
+AI-assisted attacks operate at machine speed and scale. Your exposed infrastructure will be discovered and tested within hours, not days.
 
-**Your attack surface is now visible in real-time**
-The attacker in Anthropic's report scanned thousands of VPN endpoints to find targets. If you have internet-facing services with known vulnerabilities, assume they've been catalogued by someone running an AI-assisted scanner. The window between "we should patch this" and "this is being actively exploited" has collapsed.
+**Your attack surface is continuously visible**
+The attacker in Anthropic's report scanned thousands of VPN endpoints to find targets. If you have internet-facing services with known vulnerabilities, assume they've been catalogued by someone running an AI-assisted scanner. Assume daily AI-assisted scans and shrink patch windows accordingly.
 
-**Detection designed for human attackers will miss AI-generated attacks**
-PROMPTFLUX rewrites itself continuously. Your signature-based detection won't catch it. Your behavioral analytics are tuned for human attack patterns—steady reconnaissance, privilege escalation, lateral movement. AI-generated attacks can execute these phases in parallel or in non-standard sequences. If your detection relies on recognizing "normal" attack progressions, it's already obsolete.
+**Detection tuned to human tempo misses AI-generated chains**
+PROMPTFLUX mutates code and behavior at runtime. Your behavioral analytics are tuned for human attack patterns—steady reconnaissance, privilege escalation, lateral movement. AI-generated attacks can execute these phases in parallel or out of order. If your detection relies on recognizing "normal" attack progressions, it's already obsolete.
 
-**The skill floor is gone**
-The UK ransomware developer couldn't write encryption algorithms. The North Korean IT workers couldn't pass technical interviews without AI assistance. Your threat model assumed attackers needed expertise. That assumption is now wrong—anyone with prompt engineering skills can now launch sophisticated attacks that previously required years of specialized training. Adjust your defensive posture accordingly. If a system requires "security through obscurity" or assumes attackers lack technical knowledge, fix it now.
+**The skill floor has collapsed**
+The UK ransomware developer couldn't write encryption algorithms. The North Korean IT workers couldn't pass technical interviews without AI assistance. AI lets low-skill actors assemble credible malware and run complex operations. Your threat model assumed attackers needed expertise. That assumption is now wrong.
 
-**Continuous testing is non-negotiable**
-Run your red team exercises with AI coding assistants and measure whether your detection catches them. If your blue team can't detect an internal penetration tester using Claude Code, they won't catch an external attacker using the same tools. Test this quarterly, not annually.
+**Continuous testing is now table stakes**
+If your blue team cannot catch an internal pen-tester using an AI agent, it will not catch an external one. Run your red team exercises with AI coding assistants and measure whether your detection catches them. Test this quarterly, not annually.
 
 ## Testing AI systems for exploitation risks
 
@@ -279,9 +277,9 @@ Despite AI's capabilities, humans still make final decisions in sophisticated op
 
 ## Summary
 
-Google's November 2025 discovery of PROMPTFLUX and PROMPTSTEAL, combined with Anthropic's documentation of real-world AI-orchestrated attacks, confirms that AI has fundamentally changed cybersecurity.
+AI has changed the threat model. Google's November findings and Anthropic's August cases show this shift is operational, not hypothetical.
 
-The same AI capabilities powering attacks can enhance defenses. Organizations that adopt AI-enhanced security testing, automated threat detection, and rapid vulnerability discovery will be better positioned against these threats.
+The same tools that enable "vibe hacking" can strengthen defenses if teams operationalize testing, telemetry, and sharing. Organizations that adopt AI-enhanced security testing, automated threat detection, and rapid vulnerability discovery will be better positioned against these threats.
 
 Organizations can take three approaches:
 
