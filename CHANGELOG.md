@@ -12,18 +12,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(assertions): support runtime variables ({{input}}, {{ideal}}, {{completion}}) in custom rubricPrompt for factuality assertions by deferring template rendering to matchesFactuality where all variables are available (#5340)
-- fix(assertions): support runtime variables ({{input}}, {{criteria}}, {{completion}}) in custom rubricPrompt for model-graded-closedqa assertions by deferring template rendering to matchesClosedQa where all variables are available (#5340)
+- fix(assertions): support runtime variables in custom rubricPrompt for factuality and model-graded-closedqa assertions (#5340)
 - fix(openai): extend automatic 10-minute timeout to gpt-5-pro models to prevent timeouts on long-running requests (#6147)
 - fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
 
 ### Documentation
 
 - docs(providers): comprehensive Alibaba Cloud documentation update with 100+ models including Qwen3 flagship variants, qwen-long (10M context), all DeepSeek/QwQ reasoning models, complete vision/multimodal lineup, audio/speech models, coding/math specializations, open-source Qwen3 series, and third-party models (Kimi); reorganized with Commercial/Open-source sections; fixes configuration to use `apiBaseUrl` and adds Beijing region endpoint (#6118)
-
-### Tests
-
-- test(assertions): add comprehensive tests for custom rubricPrompt variable substitution in factuality and model-graded-closedqa assertions, verifying that runtime variables are correctly rendered when sent to grading LLMs (#5340)
 
 ### Dependencies
 
