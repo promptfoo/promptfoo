@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- chore(server): change traces fetch log to debug level (#6152)
 - chore(redteam): rename `gradingGuidance` to `graderGuidance` for consistency with `graderExamples` - `gradingGuidance` still works as a deprecated alias for backward compatibility (#6128)
 
 ### Documentation
