@@ -27,7 +27,7 @@ export async function getCachedResultsCount(evalId: string): Promise<number> {
   const start = Date.now();
 
   // Use COUNT(*) with the composite index on (eval_id, test_idx)
-  const result = await db
+  const result = db
     .select({ count: sql<number>`COUNT(DISTINCT test_idx)` })
     .from(evalResultsTable)
     .where(sql`eval_id = ${evalId}`)
@@ -101,7 +101,7 @@ export async function queryTestIndicesOptimized(
     WHERE ${whereClause}
   `;
 
-  const countResult = await db.all<{ count: number }>(countQuery);
+  const countResult = db.all<{ count: number }>(countQuery);
   const filteredCount = Number(countResult[0]?.count ?? 0);
   logger.debug(`Optimized count query took ${Date.now() - countStart}ms`);
 
@@ -116,7 +116,7 @@ export async function queryTestIndicesOptimized(
     OFFSET ${offset}
   `;
 
-  const rows = await db.all<{ test_idx: number }>(idxQuery);
+  const rows = db.all<{ test_idx: number }>(idxQuery);
   const testIndices = rows.map((row) => row.test_idx);
   logger.debug(`Optimized index query took ${Date.now() - idxStart}ms`);
 
