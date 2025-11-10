@@ -15,11 +15,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(assertions): support runtime variables in custom rubricPrompt for factuality and model-graded-closedqa assertions (#5340)
 - fix(openai): extend automatic 10-minute timeout to gpt-5-pro models to prevent timeouts on long-running requests (#6147)
 - fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
+- fix(cli): honor `commandLineOptions` from config file for `maxConcurrency`, `repeat`, `delay`, `cache`, `progressBar`, `generateSuggestions`, `table`, `share`, and `write` — previously ignored in favor of defaults (#6142)
 
 ### Documentation
 
 - docs(guides): add comprehensive Portkey integration guide covering prompt management, multi-model testing across 1600+ providers, red-teaming workflows, and production deployment strategies by @ladyofcode (#5730)
 - docs(providers): comprehensive Alibaba Cloud documentation update with 100+ models including Qwen3 flagship variants, qwen-long (10M context), all DeepSeek/QwQ reasoning models, complete vision/multimodal lineup, audio/speech models, coding/math specializations, open-source Qwen3 series, and third-party models (Kimi); reorganized with Commercial/Open-source sections; fixes configuration to use `apiBaseUrl` and adds Beijing region endpoint (#6118)
+
+### Tests
+
+- test(cli): add unit tests verifying `commandLineOptions` precedence (config respected; CLI args still override) for eval runtime flags including `maxConcurrency` (#6142)
 
 ### Dependencies
 
