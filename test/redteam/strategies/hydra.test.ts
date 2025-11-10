@@ -127,7 +127,7 @@ describe('addHydra', () => {
     const result = addHydra(testCases, 'input', {});
 
     expect(result).toHaveLength(3);
-    
+
     // Extract scanIds from all test cases
     const scanId1 = (result[0].provider as any)?.config?.scanId;
     const scanId2 = (result[1].provider as any)?.config?.scanId;
@@ -206,4 +206,3 @@ describe('addHydra', () => {
     });
   });
 });
-

@@ -3,11 +3,7 @@ import { PromptfooChatCompletionProvider } from '../../../../src/providers/promp
 import { getGraderById } from '../../../../src/redteam/graders';
 import { HydraProvider } from '../../../../src/redteam/providers/hydra';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  GradingResult,
-} from '../../../../src/types';
+import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
   PromptfooChatCompletionProvider: jest.fn(),
@@ -120,7 +116,7 @@ describe('HydraProvider', () => {
 
     it('should warn when backtracking is enabled in stateful mode', () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
-      
+
       new HydraProvider({
         injectVar: 'input',
         stateful: true,
@@ -457,7 +453,7 @@ describe('HydraProvider', () => {
   describe('callApi() - backtracking', () => {
     it('should backtrack when target refuses in stateless mode', async () => {
       const { isBasicRefusal } = jest.requireMock('../../../../src/redteam/util');
-      
+
       let attackCallCount = 0;
       mockAgentProvider.callApi.mockImplementation(async (prompt) => {
         const request = JSON.parse(prompt as string);
@@ -482,9 +478,7 @@ describe('HydraProvider', () => {
       });
 
       // First response is a refusal, second is not
-      isBasicRefusal
-        .mockReturnValueOnce(true)
-        .mockReturnValueOnce(false);
+      isBasicRefusal.mockReturnValueOnce(true).mockReturnValueOnce(false);
 
       const provider = new HydraProvider({
         injectVar: 'input',
@@ -817,7 +811,7 @@ describe('HydraProvider', () => {
       // Check second agent call includes conversation history
       const secondAgentCall = mockAgentProvider.callApi.mock.calls[1];
       const request = JSON.parse(secondAgentCall[0] as string);
-      
+
       expect(request.conversationHistory).toEqual([
         { role: 'user', content: 'First attack' },
         { role: 'assistant', content: 'Target response' },
@@ -847,10 +841,7 @@ describe('HydraProvider', () => {
         vars: { input: 'test goal' },
         prompt: { raw: 'test prompt', label: 'test' },
         test: {
-          assert: [
-            { type: 'harmful:violent-crime' },
-            { type: 'other-assertion' },
-          ],
+          assert: [{ type: 'harmful:violent-crime' }, { type: 'other-assertion' }],
           metadata: { goal: 'test goal', pluginId: 'harmful:violent-crime' },
         } as any,
       };
@@ -921,7 +912,7 @@ describe('HydraProvider', () => {
       // Check second agent call includes last grader result
       const secondAgentCall = mockAgentProvider.callApi.mock.calls[1];
       const request = JSON.parse(secondAgentCall[0] as string);
-      
+
       expect(request.lastGraderResult).toEqual({
         pass: true,
         score: 1,
@@ -1000,9 +991,10 @@ describe('HydraProvider', () => {
       await provider.callApi('', context);
 
       // Check last call is learning update
-      const lastCall = mockAgentProvider.callApi.mock.calls[mockAgentProvider.callApi.mock.calls.length - 1];
+      const lastCall =
+        mockAgentProvider.callApi.mock.calls[mockAgentProvider.callApi.mock.calls.length - 1];
       const request = JSON.parse(lastCall[0] as string);
-      
+
       expect(request.task).toBe('hydra-decision');
       expect(request.testComplete).toBe(true);
       expect(request.scanId).toBe('eval-123'); // Should use evaluationId
@@ -1044,9 +1036,10 @@ describe('HydraProvider', () => {
 
       await provider.callApi('', context);
 
-      const lastCall = mockAgentProvider.callApi.mock.calls[mockAgentProvider.callApi.mock.calls.length - 1];
+      const lastCall =
+        mockAgentProvider.callApi.mock.calls[mockAgentProvider.callApi.mock.calls.length - 1];
       const request = JSON.parse(lastCall[0] as string);
-      
+
       expect(request.finalResult.success).toBe(true);
       expect(request.finalResult.totalTurns).toBe(1);
     });
@@ -1080,7 +1073,7 @@ describe('HydraProvider', () => {
 
       // Should not throw
       const result = await provider.callApi('', context);
-      
+
       expect(result).toBeDefined();
       expect(result.output).toBe('Target response');
     });
@@ -1172,7 +1165,7 @@ describe('HydraProvider', () => {
 
       const agentCall = mockAgentProvider.callApi.mock.calls[0];
       const request = JSON.parse(agentCall[0] as string);
-      
+
       expect(request).toMatchObject({
         task: 'hydra-decision',
         testRunId: expect.stringContaining('eval-123-tc'),
@@ -1286,4 +1279,3 @@ describe('HydraProvider', () => {
     });
   });
 });
-
