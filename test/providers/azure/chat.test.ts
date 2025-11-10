@@ -457,7 +457,7 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.output).toBe('Invalid JSON response');
     });
 
-    it('should use correct API URL based on datasources config from prompt', async () => {
+    it('should use correct API URL based on legacy dataSources config from prompt', async () => {
       const mockResponse = {
         id: 'mock-id',
         choices: [
@@ -493,6 +493,46 @@ describe('AzureChatCompletionProvider', () => {
       // Verify the URL includes extensions and uses the custom API version
       expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
         '/extensions/chat/completions?api-version=2024-custom',
+      );
+    });
+
+    it('should use correct API URL based on data_sources config from prompt', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'test response',
+            },
+          },
+        ],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt', {
+        prompt: {
+          config: {
+            data_sources: [{ type: 'test' }],
+            apiVersion: '2024-custom',
+          },
+          label: 'test prompt',
+          raw: 'test prompt',
+        },
+        vars: {},
+      });
+
+      // Verify the URL doesn't include the legacy extensions path
+      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).not.toContain('extensions');
+      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+        '/chat/completions?api-version=2024-custom',
       );
     });
   });

@@ -1,6 +1,6 @@
 import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable';
 
-import type { CompletedPrompt, EvaluateTable, ResultsFile } from '../../src/types';
+import type { CompletedPrompt, EvaluateTable, ResultsFile } from '../../src/types/index';
 
 describe('convertResultsToTable', () => {
   it('should convert results to table format', () => {
@@ -197,7 +197,7 @@ describe('convertResultsToTable', () => {
     };
 
     const result = convertResultsToTable(resultsFile);
-    expect(result.body[0].outputs[0].text).toBe('Test failed\n---\ntest output');
+    expect(result.body[0].outputs[0].text).toBe('test output');
   });
 
   it('should handle redteam final prompts', () => {

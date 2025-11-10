@@ -2,7 +2,7 @@ import { handleConversationRelevance } from '../../src/external/assertions/deepe
 import { matchesConversationRelevance } from '../../src/external/matchers/deepeval';
 import { ConversationRelevancyTemplate } from '../../src/external/matchers/conversationRelevancyTemplate';
 import { getDefaultProviders } from '../../src/providers/defaults';
-import type { AssertionParams, AtomicTestCase } from '../../src/types';
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
 jest.mock('../../src/providers/defaults', () => ({
   getDefaultProviders: jest.fn(),
@@ -147,7 +147,7 @@ describe('handleConversationRelevance with reason generation', () => {
         threshold: 0.8,
         config: { windowSize: 3 },
       },
-      context: {
+      assertionValueContext: {
         vars: {},
         test: {} as AtomicTestCase,
         prompt: 'test',
@@ -200,7 +200,7 @@ describe('handleConversationRelevance with reason generation', () => {
         type: 'conversation-relevance',
         threshold: 0.8,
       },
-      context: {
+      assertionValueContext: {
         vars: {},
         test: {} as AtomicTestCase,
         prompt: 'Hello',

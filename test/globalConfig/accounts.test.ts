@@ -1,10 +1,10 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import { getEnvString, isCI } from '../../src/envars';
-import { fetchWithTimeout } from '../../src/fetch';
 import {
   checkEmailStatus,
-  checkEmailStatusOrExit,
+  checkEmailStatusAndMaybeExit,
+  clearUserEmail,
   getAuthor,
   getUserEmail,
   getUserId,
@@ -19,9 +19,10 @@ import {
 } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
+import { fetchWithTimeout } from '../../src/util/fetch/index';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-jest.mock('../../src/fetch', () => ({
+jest.mock('../../src/util/fetch', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
@@ -40,6 +41,8 @@ jest.mock('../../src/telemetry', () => {
     Telemetry: jest.fn().mockImplementation(() => mockTelemetry),
   };
 });
+jest.mock('../../src/util/fetch/index.ts');
+jest.mock('../../src/telemetry');
 jest.mock('../../src/util');
 
 describe('accounts', () => {
@@ -155,6 +158,37 @@ describe('accounts', () => {
     });
   });
 
+  describe('clearUserEmail', () => {
+    it('should remove email from global config when email exists', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
+      clearUserEmail();
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        account: {},
+      });
+    });
+
+    it('should handle clearing when no account exists', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      clearUserEmail();
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        account: {},
+      });
+    });
+
+    it('should handle clearing when global config is empty', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({});
+      clearUserEmail();
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        account: {},
+      });
+    });
+  });
+
   describe('getAuthor', () => {
     it('should return env var if set', () => {
       jest.mocked(getEnvString).mockReturnValue('author@env.com');
@@ -190,9 +224,7 @@ describe('accounts', () => {
     it('should use CI email if in CI environment', async () => {
       jest.mocked(isCI).mockReturnValue(true);
       await promptForEmailUnverified();
-      expect(telemetry.saveConsent).toHaveBeenCalledWith('ci-placeholder@promptfoo.dev', {
-        source: 'promptForEmailUnverified',
-      });
+      expect(telemetry.saveConsent).not.toHaveBeenCalled();
     });
 
     it('should not prompt for email if already set', async () => {
@@ -204,9 +236,8 @@ describe('accounts', () => {
       await promptForEmailUnverified();
 
       expect(input).not.toHaveBeenCalled();
-      expect(telemetry.saveConsent).toHaveBeenCalledWith('existing@example.com', {
-        source: 'promptForEmailUnverified',
-      });
+      // save consent is now called after validation, not in promptForEmailUnverified
+      expect(telemetry.saveConsent).not.toHaveBeenCalled();
     });
 
     it('should prompt for email and save valid input', async () => {
@@ -217,9 +248,8 @@ describe('accounts', () => {
       expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
         account: { email: 'new@example.com' },
       });
-      expect(telemetry.saveConsent).toHaveBeenCalledWith('new@example.com', {
-        source: 'promptForEmailUnverified',
-      });
+      // save consent is now called after validation, not in promptForEmailUnverified
+      expect(telemetry.saveConsent).not.toHaveBeenCalled();
     });
 
     describe('email validation', () => {
@@ -271,19 +301,9 @@ describe('accounts', () => {
         }
       });
     });
-
-    it('should save consent after successful email input', async () => {
-      jest.mocked(input).mockResolvedValue('test@example.com');
-
-      await promptForEmailUnverified();
-
-      expect(telemetry.saveConsent).toHaveBeenCalledWith('test@example.com', {
-        source: 'promptForEmailUnverified',
-      });
-    });
   });
 
-  describe('checkEmailStatusOrExit', () => {
+  describe('checkEmailStatusAndMaybeExit', () => {
     const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
     beforeEach(() => {
@@ -299,10 +319,10 @@ describe('accounts', () => {
       });
       jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
-      await checkEmailStatusOrExit();
+      await checkEmailStatusAndMaybeExit();
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=ci-placeholder%40promptfoo.dev',
+        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
         undefined,
         500,
       );
@@ -321,10 +341,10 @@ describe('accounts', () => {
       });
       jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
-      await checkEmailStatusOrExit();
+      await checkEmailStatusAndMaybeExit();
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=test%40example.com',
+        expect.stringContaining('/api/users/status?email=test%40example.com'),
         undefined,
         500,
       );
@@ -343,7 +363,7 @@ describe('accounts', () => {
       });
       jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
-      await checkEmailStatusOrExit();
+      await checkEmailStatusAndMaybeExit();
 
       expect(mockExit).toHaveBeenCalledWith(1);
       expect(logger.error).toHaveBeenCalledWith(
@@ -368,10 +388,30 @@ describe('accounts', () => {
       );
       jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
-      await checkEmailStatusOrExit();
+      await checkEmailStatusAndMaybeExit();
 
       expect(logger.info).toHaveBeenCalledTimes(2);
       expect(logger.warn).toHaveBeenCalledWith(chalk.yellow(warningMessage));
+      expect(mockExit).not.toHaveBeenCalled();
+    });
+
+    it('should return bad_email and not exit when status is risky_email or disposable_email', async () => {
+      jest.mocked(isCI).mockReturnValue(false);
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
+
+      const mockResponse = new Response(JSON.stringify({ status: 'risky_email' }), {
+        status: 200,
+        statusText: 'OK',
+      });
+      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      const result = await checkEmailStatusAndMaybeExit();
+
+      expect(result).toBe('bad_email');
+      expect(logger.error).toHaveBeenCalledWith('Please use a valid work email.');
       expect(mockExit).not.toHaveBeenCalled();
     });
 
@@ -383,7 +423,7 @@ describe('accounts', () => {
       });
       jest.mocked(fetchWithTimeout).mockRejectedValue(new Error('Network error'));
 
-      await checkEmailStatusOrExit();
+      await checkEmailStatusAndMaybeExit();
 
       expect(logger.debug).toHaveBeenCalledWith(
         'Failed to check user status: Error: Network error',
@@ -422,7 +462,7 @@ describe('accounts', () => {
       const result = await checkEmailStatus();
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=ci-placeholder%40promptfoo.dev',
+        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
         undefined,
         500,
       );
@@ -499,6 +539,55 @@ describe('accounts', () => {
         hasEmail: true,
         email: 'test@example.com',
         message: 'Unable to verify email status, but proceeding',
+      });
+    });
+
+    describe('with validate option', () => {
+      beforeEach(() => {
+        jest.mocked(isCI).mockReturnValue(false);
+        jest.mocked(readGlobalConfig).mockReturnValue({
+          account: { email: 'test@example.com' },
+        });
+      });
+
+      it('should call saveConsent for valid email when validate is true', async () => {
+        const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
+          status: 200,
+          statusText: 'OK',
+        });
+        jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+        await checkEmailStatus({ validate: true });
+
+        expect(telemetry.saveConsent).toHaveBeenCalledWith('test@example.com', {
+          source: 'promptForEmailValidated',
+        });
+      });
+
+      it('should call saveConsent for invalid email when validate is true', async () => {
+        const mockResponse = new Response(JSON.stringify({ status: 'risky_email' }), {
+          status: 200,
+          statusText: 'OK',
+        });
+        jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+        await checkEmailStatus({ validate: true });
+
+        expect(telemetry.saveConsent).toHaveBeenCalledWith('test@example.com', {
+          source: 'filteredInvalidEmail',
+        });
+      });
+
+      it('should not call saveConsent when validate is not provided', async () => {
+        const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
+          status: 200,
+          statusText: 'OK',
+        });
+        jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+        await checkEmailStatus();
+
+        expect(telemetry.saveConsent).not.toHaveBeenCalled();
       });
     });
   });

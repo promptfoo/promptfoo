@@ -57,6 +57,55 @@ providers:
   - id: ollama:chat:llama3.3
     config:
       num_predict: 1024
+      temperature: 0.7
+      top_p: 0.9
+      think: true # Enable thinking/reasoning mode (top-level API parameter)
+```
+
+You can also pass arbitrary fields directly to the Ollama API using the `passthrough` option:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: ollama:chat:llama3.3
+    config:
+      passthrough:
+        keep_alive: '5m'
+        format: 'json'
+        # Any other Ollama API fields
+```
+
+## Function Calling
+
+Ollama chat models that support function calling (like Llama 3.1, Llama 3.3, Qwen, and others) can use tools with the `tools` config:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'What is the weather like in {{city}}?'
+
+providers:
+  - id: ollama:chat:llama3.3
+    config:
+      tools:
+        - type: function
+          function:
+            name: get_current_weather
+            description: Get the current weather in a given location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: City and state, e.g. San Francisco, CA
+                unit:
+                  type: string
+                  enum: [celsius, fahrenheit]
+              required: [location]
+
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: is-valid-openai-tools-call
 ```
 
 ## Using Ollama as a Local Grading Provider

@@ -1,7 +1,7 @@
 import logger from '../logger';
+import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
 
 import type { TokenUsage } from '../types/shared';
-import { createEmptyTokenUsage, accumulateTokenUsage } from './tokenUsageUtils';
 
 /**
  * A utility class for tracking token usage across an evaluation
@@ -27,11 +27,7 @@ export class TokenUsageTracker {
    * @param provider The provider to track usage for
    * @param usage The token usage to track
    */
-  public trackUsage(providerId: string, usage?: TokenUsage): void {
-    if (!usage) {
-      return;
-    }
-
+  public trackUsage(providerId: string, usage: TokenUsage = { numRequests: 1 }): void {
     const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
     // Create a copy and accumulate the usage
     const updated = { ...current };

@@ -71,15 +71,16 @@ providers:
       apiKey: your_api_key_here
 ```
 
-**Note:** Avoid hardcoding API keys in configuration files that might be committed to version control. Use environment variable references instead:
+**Note:** Avoid hardcoding API keys in configuration files that might be committed to version control. The API key is automatically detected from the `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable, so you typically don't need to specify it in the config.
+
+If you need to explicitly reference an environment variable in your config, use Nunjucks template syntax:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-2.5-flash # Uses GEMINI_API_KEY or GOOGLE_API_KEY env var
     config:
-      apiKey: ${GEMINI_API_KEY}
-      # or
-      # apiKey: ${GOOGLE_API_KEY}
+      # apiKey: "{{ env.GEMINI_API_KEY }}"  # optional, auto-detected
+      temperature: 0.7
 ```
 
 ### 3. Verify Authentication
@@ -162,12 +163,10 @@ tests:
 ```yaml
 # Reference environment variables in your config
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-2.5-flash # Uses GEMINI_API_KEY or GOOGLE_API_KEY env var
     config:
-      apiKey: ${GEMINI_API_KEY}
-      # or
-      # apiKey: ${GOOGLE_API_KEY}
-      temperature: ${TEMPERATURE:-0.7} # Default to 0.7 if not set
+      # apiKey: "{{ env.GEMINI_API_KEY }}"  # optional, auto-detected
+      temperature: '{{ env.TEMPERATURE | default(0.7) }}' # Default to 0.7 if not set
 ```
 
 ## Troubleshooting
@@ -284,9 +283,12 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 - `google:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
+- `google:gemini-2.5-flash-preview-09-2025` - Newest Gemini 2.5 Flash preview release featuring enhanced quality improvements
+- `google:gemini-2.5-flash-lite-preview-09-2025` - Latest Flash Lite preview release with further cost and latency optimizations
+- `google:gemini-flash-latest` - Alias for `google:gemini-2.5-flash-preview-09-2025`
+- `google:gemini-flash-lite-latest` - Alias for `google:gemini-2.5-flash-lite-preview-09-2025`
 - `google:gemini-2.5-pro-preview-06-05` - Previous Gemini 2.5 Pro preview with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-pro-preview-05-06` - Previous Gemini 2.5 Pro preview with advanced thinking capabilities
-- `google:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.0-pro` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-exp` - Experimental multimodal model with next generation features
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
@@ -456,6 +458,24 @@ providers:
 ```
 
 System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+
+### Role Mapping Configuration
+
+Gemini models require specific role names in chat messages. By default, Promptfoo uses the `model` role for compatibility with newer Gemini versions (2.5+). For older Gemini versions that expect the `assistant` role, you can disable this:
+
+```yaml
+providers:
+  # Default behavior - maps 'assistant' to 'model' (for Gemini 2.5+)
+  - id: google:gemini-2.5-flash
+    config:
+      temperature: 0.7
+
+  # For older Gemini versions - preserve 'assistant' role
+  - id: google:gemini-1.5-pro
+    config:
+      useAssistantRole: true # Preserves 'assistant' role without mapping
+      temperature: 0.7
+```
 
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 

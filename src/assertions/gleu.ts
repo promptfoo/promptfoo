@@ -1,7 +1,7 @@
 import invariant from '../util/invariant';
 import { getNGrams } from './ngrams';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * Calculates the Google-BLEU (GLEU) score for a candidate string against reference strings.
@@ -150,8 +150,6 @@ export function handleGleuScore({
   inverse,
   outputString,
   renderedValue,
-  provider,
-  test,
 }: AssertionParams): GradingResult {
   // Validate inputs
   invariant(

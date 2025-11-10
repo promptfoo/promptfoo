@@ -43,12 +43,12 @@ interface ProviderProps {
     disableNameField?: boolean;
     disableTitle?: boolean;
     actionButtonText?: string;
-    defaultRequestTransform?: string;
-    hideErrors?: boolean;
     disableModelSelection?: boolean;
   };
   setError?: (error: string | null) => void;
   validateAll?: boolean; // Flag to force validation of all fields
+  onTargetTested?: (success: boolean) => void;
+  onSessionTested?: (success: boolean) => void;
 }
 
 export default function ProviderEditor({
@@ -61,6 +61,8 @@ export default function ProviderEditor({
   opts = {},
   setError,
   validateAll = false,
+  onTargetTested,
+  onSessionTested,
 }: ProviderProps) {
   const theme = useTheme();
   const {
@@ -69,9 +71,7 @@ export default function ProviderEditor({
     disableTitle = false,
     actionButtonText,
     availableProviderIds,
-    defaultRequestTransform,
     disableModelSelection = false,
-    hideErrors = false,
   } = opts;
 
   const configEditorRef = useRef<ProviderConfigEditorRef>(null);
@@ -157,17 +157,14 @@ export default function ProviderEditor({
         setProvider={setProvider}
         extensions={extensions}
         onExtensionsChange={onExtensionsChange}
-        opts={{
-          defaultRequestTransform,
-          hideErrors,
-          disableModelSelection,
-        }}
         setError={handleError}
         validateAll={validateAll || shouldValidate}
-        onValidate={(isValid) => {
+        onValidate={() => {
           // Validation errors will be displayed through the handleError function
         }}
         providerType={providerType}
+        onTargetTested={onTargetTested}
+        onSessionTested={onSessionTested}
       />
 
       <Box

@@ -1,6 +1,9 @@
+import os from 'os';
+import path from 'path';
+
 import { type BrowserContext, type ElementHandle, type Page } from 'playwright';
-import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
+import { fetchWithTimeout } from '../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
@@ -11,7 +14,7 @@ import type {
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 
 const nunjucks = getNunjucksEngine();
 
@@ -63,7 +66,7 @@ export function createTransformResponse(
       finalHtml: string,
     ) => ProviderResponse;
   }
-  return (extracted, finalHtml) => ({ output: finalHtml });
+  return (_extracted, finalHtml) => ({ output: finalHtml });
 }
 
 export class BrowserProvider implements ApiProvider {
@@ -244,7 +247,7 @@ export class BrowserProvider implements ApiProvider {
               `Make sure Chrome is running with debugging enabled:\n` +
               `  chrome --remote-debugging-port=${port}\n` +
               `  or\n` +
-              `  chrome --remote-debugging-port=${port} --user-data-dir=/tmp/chrome-debug`,
+              `  chrome --remote-debugging-port=${port} --user-data-dir=${path.join(os.tmpdir(), 'chrome-debug')}`,
           );
         }
 
@@ -271,14 +274,30 @@ export class BrowserProvider implements ApiProvider {
 
     switch (actionType) {
       case 'navigate':
-        invariant(renderedArgs.url, `Expected headless action to have a url when using 'navigate'`);
+        invariant(
+          renderedArgs.url,
+          `Browser action 'navigate' requires a 'url' parameter. ` +
+            `Please provide the URL to navigate to.\n\n` +
+            `Example:\n` +
+            `- action: navigate\n` +
+            `  args:\n` +
+            `    url: 'https://example.com'\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
+        );
         logger.debug(`Navigating to ${renderedArgs.url}`);
         await page.goto(renderedArgs.url);
         break;
       case 'click':
         invariant(
           renderedArgs.selector,
-          `Expected headless action to have a selector when using 'click'`,
+          `Browser action 'click' requires a 'selector' parameter. ` +
+            `Please provide a CSS selector to identify the element to click.\n\n` +
+            `Example:\n` +
+            `- action: click\n` +
+            `  args:\n` +
+            `    selector: '#submit-button'\n` +
+            `    optional: true  # optional: won't fail if element doesn't exist\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
         );
         logger.debug(`Waiting for and clicking on ${renderedArgs.selector}`);
         const element = await this.waitForSelector(page, renderedArgs.selector);
@@ -291,10 +310,27 @@ export class BrowserProvider implements ApiProvider {
         }
         break;
       case 'type':
-        invariant(renderedArgs.text, `Expected headless action to have a text when using 'type'`);
+        invariant(
+          renderedArgs.text,
+          `Browser action 'type' requires a 'text' parameter. ` +
+            `Please provide the text to type into the selected element.\n\n` +
+            `Example:\n` +
+            `- action: type\n` +
+            `  args:\n` +
+            `    selector: '#input-field'\n` +
+            `    text: 'Hello world'\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
+        );
         invariant(
           renderedArgs.selector,
-          `Expected headless action to have a selector when using 'type'`,
+          `Browser action 'type' requires a 'selector' parameter. ` +
+            `Please provide a CSS selector to identify the input element.\n\n` +
+            `Example:\n` +
+            `- action: type\n` +
+            `  args:\n` +
+            `    selector: '#input-field'\n` +
+            `    text: 'Hello world'\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
         );
         logger.debug(`Waiting for and typing into ${renderedArgs.selector}: ${renderedArgs.text}`);
         await this.waitForSelector(page, renderedArgs.selector);
@@ -310,7 +346,9 @@ export class BrowserProvider implements ApiProvider {
           for (const [placeholder, key] of Object.entries(specialKeys)) {
             const lowerText = renderedArgs.text.toLowerCase();
             if (lowerText.includes(placeholder)) {
-              const parts = lowerText.split(placeholder);
+              // Use case-insensitive regex to split while preserving original case
+              const regex = new RegExp(placeholder.replace(/[<>]/g, '\\$&'), 'gi');
+              const parts = renderedArgs.text.split(regex);
               for (let i = 0; i < parts.length; i++) {
                 if (parts[i]) {
                   await page.fill(renderedArgs.selector, parts[i]);
@@ -330,7 +368,14 @@ export class BrowserProvider implements ApiProvider {
       case 'screenshot':
         invariant(
           renderedArgs.path,
-          `Expected headless action to have a path when using 'screenshot'`,
+          `Browser action 'screenshot' requires a 'path' parameter. ` +
+            `Please provide the file path where the screenshot should be saved.\n\n` +
+            `Example:\n` +
+            `- action: screenshot\n` +
+            `  args:\n` +
+            `    path: 'screenshots/page.png'\n` +
+            `    fullPage: true  # optional: capture entire page\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
         );
         logger.debug(
           `Taking screenshot of ${renderedArgs.selector} and saving to ${renderedArgs.path}`,
@@ -343,9 +388,27 @@ export class BrowserProvider implements ApiProvider {
       case 'extract':
         invariant(
           renderedArgs.selector,
-          `Expected headless action to have a selector when using 'extract'`,
+          `Browser action 'extract' requires a 'selector' parameter. ` +
+            `Please provide a CSS selector to identify the element to extract text from.\n\n` +
+            `Example:\n` +
+            `- action: extract\n` +
+            `  args:\n` +
+            `    selector: '.result-title'\n` +
+            `  name: title\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
         );
-        invariant(name, `Expected headless action to have a name when using 'extract'`);
+        invariant(
+          name,
+          `Browser action 'extract' requires a 'name' parameter. ` +
+            `Please provide a name to store the extracted content.\n\n` +
+            `Example:\n` +
+            `- action: extract\n` +
+            `  args:\n` +
+            `    selector: '.result-title'\n` +
+            `  name: title\n\n` +
+            `The extracted content will be available as extracted.title in transformResponse.\n\n` +
+            `Current action: ${safeJsonStringify(action)}`,
+        );
         logger.debug(`Waiting for and extracting content from ${renderedArgs.selector}`);
         await this.waitForSelector(page, renderedArgs.selector);
         const extractedContent = await page.$eval(
@@ -356,7 +419,16 @@ export class BrowserProvider implements ApiProvider {
         if (name) {
           extracted[name] = extractedContent;
         } else {
-          throw new Error('Expected headless action to have a name when using `extract`');
+          throw new Error(
+            `Browser action 'extract' requires a 'name' parameter. ` +
+              `Please provide a name to store the extracted content.\n\n` +
+              `Example:\n` +
+              `- action: extract\n` +
+              `  args:\n` +
+              `    selector: '.result-title'\n` +
+              `  name: title\n\n` +
+              `The extracted content will be available as extracted.title in transformResponse.`,
+          );
         }
         break;
       case 'wait':

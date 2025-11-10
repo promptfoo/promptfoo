@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import logger from '../logger';
-import { loadApiProvider } from '../providers';
+import { loadApiProvider } from '../providers/index';
 import { getDefaultProviders } from '../providers/defaults';
 import { retryWithDeduplication, sampleArray } from '../util/generation';
 import invariant from '../util/invariant';
@@ -8,7 +8,7 @@ import { extractJsonObjects } from '../util/json';
 import { extractVariablesFromTemplates } from '../util/templates';
 import type { SingleBar } from 'cli-progress';
 
-import type { ApiProvider, TestCase, TestSuite, VarMapping } from '../types';
+import type { ApiProvider, TestCase, TestSuite, VarMapping } from '../types/index';
 
 interface SynthesizeOptions {
   instructions?: string;

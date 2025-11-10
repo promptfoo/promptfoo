@@ -1,7 +1,7 @@
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleCost = ({ cost, assertion }: AssertionParams): GradingResult => {
-  if (!assertion.threshold) {
+  if (assertion.threshold === undefined) {
     throw new Error('Cost assertion must have a threshold');
   }
   if (typeof cost === 'undefined') {

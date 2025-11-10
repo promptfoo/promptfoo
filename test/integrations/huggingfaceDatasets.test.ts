@@ -1,21 +1,25 @@
+import { fetchWithCache } from '../../src/cache';
 import { getEnvString } from '../../src/envars';
-import { fetchWithProxy } from '../../src/fetch';
 import {
   fetchHuggingFaceDataset,
   parseDatasetPath,
 } from '../../src/integrations/huggingfaceDatasets';
 
-jest.mock('../../src/fetch', () => ({
+jest.mock('../../src/cache', () => ({
+  fetchWithCache: jest.fn(),
+}));
+
+jest.mock('../../src/util/fetch/index.ts', () => ({
   fetchWithProxy: jest.fn(),
 }));
 
 jest.mock('../../src/envars', () => ({
   getEnvString: jest.fn().mockReturnValue(''),
+  isCI: jest.fn().mockReturnValue(false),
 }));
 
 describe('huggingfaceDatasets', () => {
   beforeEach(() => {
-    jest.mocked(fetchWithProxy).mockClear();
     jest.mocked(getEnvString).mockReturnValue('');
   });
 
@@ -57,9 +61,8 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should fetch and parse dataset with default parameters', async () => {
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
         num_rows_total: 2,
         features: [
           { name: 'act', type: { dtype: 'string', _type: 'Value' } },
@@ -69,12 +72,15 @@ describe('huggingfaceDatasets', () => {
           { row: { act: 'Linux Terminal', prompt: 'List all files' } },
           { row: { act: 'Math Tutor', prompt: 'Solve 2+2' } },
         ],
-      }),
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
     } as any);
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
       expect.objectContaining({
         headers: {},
@@ -107,21 +113,23 @@ describe('huggingfaceDatasets', () => {
       return '';
     });
 
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
         num_rows_total: 1,
         features: [
           { name: 'question', type: { dtype: 'string', _type: 'Value' } },
           { name: 'answer', type: { dtype: 'string', _type: 'Value' } },
         ],
         rows: [{ row: { question: 'What is 2+2?', answer: '4' } }],
-      }),
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
     } as any);
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
       expect.objectContaining({
         headers: {
@@ -131,22 +139,95 @@ describe('huggingfaceDatasets', () => {
     );
   });
 
+  it('should fall back to HF_API_TOKEN when HF_TOKEN is empty', async () => {
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      if (key === 'HF_TOKEN') {
+        return '';
+      }
+      if (key === 'HF_API_TOKEN') {
+        return 'api-token';
+      }
+      return '';
+    });
+
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        num_rows_total: 1,
+        features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+        rows: [{ row: { text: 'test' } }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 1);
+
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer api-token',
+        },
+      }),
+    );
+  });
+
+  it('should fall back to HUGGING_FACE_HUB_TOKEN when other tokens are empty', async () => {
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      if (key === 'HF_TOKEN') {
+        return '';
+      }
+      if (key === 'HF_API_TOKEN') {
+        return '';
+      }
+      if (key === 'HUGGING_FACE_HUB_TOKEN') {
+        return 'hub-token';
+      }
+      return '';
+    });
+
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        num_rows_total: 1,
+        features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+        rows: [{ row: { text: 'test' } }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 1);
+
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer hub-token',
+        },
+      }),
+    );
+  });
+
   it('should handle custom query parameters', async () => {
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
         num_rows_total: 1,
         features: [
           { name: 'question', type: { dtype: 'string', _type: 'Value' } },
           { name: 'answer', type: { dtype: 'string', _type: 'Value' } },
         ],
         rows: [{ row: { question: 'What is 2+2?', answer: '4' } }],
-      }),
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
     } as any);
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?split=train&config=custom');
 
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=train&config=custom&offset=0&length=100',
       expect.objectContaining({
         headers: {},
@@ -155,37 +236,42 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should handle pagination', async () => {
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
         num_rows_total: 3,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: [{ row: { text: 'First' } }, { row: { text: 'Second' } }],
-      }),
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
     } as any);
 
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
         num_rows_total: 3,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: [{ row: { text: 'Third' } }],
-      }),
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
     } as any);
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledTimes(2);
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
+    expect(jest.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
       1,
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
       expect.objectContaining({
         headers: {},
       }),
     );
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
+    // Note: Second call might have different length due to concurrent fetching and remaining calculation
+    expect(jest.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
       2,
-      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=2&length=100',
+      expect.stringContaining('dataset=test%2Fdataset&split=test&config=default&offset=2'),
       expect.objectContaining({
         headers: {},
       }),
@@ -202,30 +288,40 @@ describe('huggingfaceDatasets', () => {
     });
   });
 
-  it('should handle API errors', async () => {
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-      ok: false,
+  it('should handle API errors by throwing', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: null,
+      cached: false,
+      status: 404,
       statusText: 'Not Found',
     } as any);
 
     await expect(
       fetchHuggingFaceDataset('huggingface://datasets/nonexistent/dataset'),
-    ).rejects.toThrow('[Huggingface Dataset] Failed to fetch dataset: Not Found');
+    ).rejects.toThrow('[HF Dataset] Failed to fetch dataset: Not Found');
   });
 
-  it('should respect user-specified limit parameter', async () => {
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+  it('should short-circuit and return [] when limit is 0', async () => {
+    const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 0);
+    expect(jest.mocked(fetchWithCache)).not.toHaveBeenCalled();
+    expect(tests).toEqual([]);
+  });
+
+  it('should respect user-specified limit parameter (single request optimization)', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
         num_rows_total: 5,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-        rows: [{ row: { text: 'First' } }, { row: { text: 'Second' } }, { row: { text: 'Third' } }],
-      }),
+        rows: [{ row: { text: 'First' } }, { row: { text: 'Second' } }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
     } as any);
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=2');
 
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=2&offset=0&length=2',
       expect.objectContaining({
         headers: {},
@@ -244,39 +340,43 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should handle limit larger than page size', async () => {
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
         num_rows_total: 150,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: Array(100)
           .fill(null)
           .map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
-      }),
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
     } as any);
 
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
         num_rows_total: 150,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: Array(20)
           .fill(null)
           .map((_, i) => ({ row: { text: `Item ${i + 101}` } })),
-      }),
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
     } as any);
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=120');
 
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledTimes(2);
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
+    expect(jest.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
       1,
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=120&offset=0&length=100',
       expect.objectContaining({
         headers: {},
       }),
     );
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
+    expect(jest.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
       2,
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=120&offset=100&length=20',
       expect.objectContaining({
@@ -292,6 +392,136 @@ describe('huggingfaceDatasets', () => {
       expect(test.options).toEqual({
         disableVarExpansion: true,
       });
+    });
+  });
+
+  describe('performance optimizations', () => {
+    it('should use single request optimization for small limits', async () => {
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          num_rows_total: 1000,
+          features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+          rows: Array(50)
+            .fill(null)
+            .map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      } as any);
+
+      const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 50);
+
+      // Should only make one request for limits <= 100
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledTimes(1);
+      expect(tests).toHaveLength(50);
+    });
+
+    it('should throw error on page fetch failure', async () => {
+      // First page succeeds
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          num_rows_total: 300,
+          features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+          rows: Array(100)
+            .fill(null)
+            .map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
+
+      // Second page fails
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: null,
+        cached: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      } as any);
+
+      // Should throw error instead of returning partial results
+      await expect(
+        fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 200),
+      ).rejects.toThrow('[HF Dataset] Failed to fetch dataset: Internal Server Error');
+    });
+
+    it('should adapt page size based on row size', async () => {
+      // Mock a dataset with large rows (>2KB each)
+      const largeRow = { text: 'x'.repeat(3000) }; // ~3KB row
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          num_rows_total: 200,
+          features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+          rows: Array(100)
+            .fill(null)
+            .map(() => ({ row: largeRow })),
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
+
+      // Mock all subsequent potential concurrent requests to avoid undefined errors
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          num_rows_total: 200,
+          features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+          rows: Array(25)
+            .fill(null)
+            .map((_, i) => ({ row: { text: `Item ${i + 101}` } })),
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
+
+      const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 125);
+
+      // Should have made at least one request
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
+
+      // First call should be normal page size
+      expect(jest.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('length=100'),
+        expect.anything(),
+      );
+
+      expect(tests.length).toBeGreaterThan(0);
+      expect(tests[0].vars?.text).toBe(largeRow.text);
+    });
+
+    it('should handle authentication tokens correctly', async () => {
+      jest.mocked(getEnvString).mockImplementation((key) => {
+        if (key === 'HF_TOKEN') {
+          return 'test-token-123';
+        }
+        return '';
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          num_rows_total: 10,
+          features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+          rows: [{ row: { text: 'Test' } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
+
+      await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 5);
+
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: {
+            Authorization: 'Bearer test-token-123',
+          },
+        }),
+      );
     });
   });
 });

@@ -20,7 +20,8 @@ promptfoo supports multiple JavaScript module formats. Complete working examples
 
 At minimum, a custom provider must implement an `id` method and a `callApi` method.
 
-```javascript title="echoProvider.js"
+```javascript title="echoProvider.mjs"
+// Save as echoProvider.mjs for ES6 syntax, or echoProvider.js for CommonJS
 export default class EchoProvider {
   id = () => 'echo';
 
@@ -275,14 +276,32 @@ const { data, cached } = await promptfoo.cache.fetchWithCache(
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: file://./myProvider.js
+  - id: file://./myProvider.mjs # ES6 modules
     label: 'My Custom API' # Display name in UI
     config:
       model: 'gpt-4.1'
       temperature: 0.7
       max_tokens: 2000
       custom_parameter: 'custom value'
+  # - id: file://./myProvider.js   # CommonJS modules
 ```
+
+### Link to Cloud Target
+
+:::info Promptfoo Cloud Feature
+Available in [Promptfoo Cloud](/docs/enterprise) deployments.
+:::
+
+Link your local provider configuration to a cloud target using `linkedTargetId`:
+
+```yaml
+providers:
+  - id: file://./myProvider.mjs
+    config:
+      linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
+```
+
+See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/linking-targets/) for setup instructions.
 
 ### Multiple Instances
 

@@ -11,9 +11,8 @@ import {
 } from '../src/share';
 import { makeRequest } from '../src/util/cloud';
 
-import type EvalResult from '../src/models/evalResult';
-
 import type Eval from '../src/models/eval';
+import type EvalResult from '../src/models/evalResult';
 
 function buildMockEval(): Partial<Eval> {
   return {
@@ -53,24 +52,29 @@ function buildMockEval(): Partial<Eval> {
 const mockFetch = jest.fn();
 
 jest.mock('../src/globalConfig/cloud');
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithProxy: jest.fn().mockImplementation((...args) => mockFetch(...args)),
+  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
 jest.mock('../src/globalConfig/accounts', () => ({
   getUserEmail: jest.fn(),
   setUserEmail: jest.fn(),
   getAuthor: jest.fn().mockReturnValue('test-author@example.com'),
+  getUserId: jest.fn(),
 }));
 
 jest.mock('../src/util/cloud', () => ({
   makeRequest: jest.fn(),
+  checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
+  getOrgContext: jest.fn().mockResolvedValue(null),
 }));
 
 jest.mock('../src/envars', () => ({
   getEnvBool: jest.fn(),
   getEnvInt: jest.fn(),
   getEnvString: jest.fn().mockReturnValue(''),
+  getEnvFloat: jest.fn(),
   isCI: jest.fn(),
 }));
 
@@ -300,6 +304,7 @@ describe('createShareableUrl', () => {
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
     jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
     jest.mocked(getUserEmail).mockReturnValue('logged-in@example.com');
 
     const mockEval = buildMockEval();
@@ -325,6 +330,7 @@ describe('createShareableUrl', () => {
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
     jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
     const originalId = randomUUID();
     const newId = randomUUID();
@@ -411,6 +417,7 @@ describe('createShareableUrl', () => {
       jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
       // Set up mock responses
       mockFetch

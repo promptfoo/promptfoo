@@ -1,8 +1,7 @@
-import * as path from 'path';
-
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
+import * as path from 'path';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
@@ -32,6 +31,9 @@ export function getDb() {
     const dbPath = isMemoryDb ? ':memory:' : getDbPath();
 
     sqliteInstance = new Database(dbPath);
+
+    // Enable foreign key constraints (required for referential integrity)
+    sqliteInstance.pragma('foreign_keys = ON');
 
     // Configure WAL mode unless explicitly disabled or using in-memory database
     if (!isMemoryDb && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {

@@ -1,12 +1,13 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
-import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
 import LogoPanda from '../../static/img/logo-panda.svg';
 import { SITE_CONSTANTS } from '../constants';
@@ -50,8 +51,8 @@ const PressContent = () => {
           <Typography variant="body1" paragraph>
             Promptfoo is a leading provider of AI security solutions, helping developers and
             enterprises build secure, reliable AI applications. Based in San Francisco, California,
-            Promptfoo is backed by Andreessen Horowitz and top leaders in the technology and
-            security industries.
+            Promptfoo is backed by Insight Partners, Andreessen Horowitz, and top leaders in the
+            technology and security industries.
           </Typography>
           <Typography variant="body1" paragraph>
             Our core product is an open-source pentesting and evaluation framework used by{' '}
@@ -77,7 +78,7 @@ const PressContent = () => {
 
           {/* DeepSeek Research Coverage */}
           <Grid container spacing={4} mb={6}>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Box className={styles.coverageItem} p={3}>
                 <Typography variant="h6" component="h4" gutterBottom>
                   DeepSeek AI Censorship Research
@@ -148,7 +149,7 @@ const PressContent = () => {
                       link: 'https://news.ycombinator.com/item?id=42858552',
                     },
                   ].map((article) => (
-                    <Grid item xs={12} md={6} key={article.link}>
+                    <Grid size={{ xs: 12, md: 6 }} key={article.link}>
                       <Link href={article.link} className={styles.articleLink}>
                         <Typography variant="subtitle2" color="text.secondary" component="span">
                           {article.publication}
@@ -167,7 +168,7 @@ const PressContent = () => {
             Featured Podcasts
           </Typography>
           <Grid container spacing={4} mb={6}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -195,7 +196,7 @@ const PressContent = () => {
                 </Link>
               </Box>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -218,7 +219,7 @@ const PressContent = () => {
                 </Link>
               </Box>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -254,7 +255,7 @@ const PressContent = () => {
           </Typography>
           <Grid container spacing={4} mb={6}>
             {/* OpenAI Build Hour */}
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -281,7 +282,7 @@ const PressContent = () => {
             </Grid>
 
             {/* Anthropic Course */}
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -311,7 +312,7 @@ const PressContent = () => {
             </Grid>
 
             {/* AWS Workshop */}
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -341,7 +342,7 @@ const PressContent = () => {
             </Grid>
 
             {/* IBM Course */}
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -375,7 +376,7 @@ const PressContent = () => {
             Technical Content & Guides
           </Typography>
           <Grid container spacing={4} mb={6}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -416,7 +417,7 @@ const PressContent = () => {
             Download official Promptfoo logos and brand assets for media use.
           </Typography>
           <Grid container spacing={4}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 sx={{
                   border: '1px solid',
@@ -468,7 +469,7 @@ const PressContent = () => {
             Quick Facts
           </Typography>
           <Grid container spacing={4}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" component="h4" gutterBottom>
                 Founded
               </Typography>
@@ -482,7 +483,7 @@ const PressContent = () => {
                 San Francisco, California
               </Typography>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" component="h4" gutterBottom>
                 Leadership
               </Typography>
@@ -509,7 +510,7 @@ const PressContent = () => {
                 Investors
               </Typography>
               <Typography variant="body1" paragraph>
-                Andreessen Horowitz and industry leaders
+                Insight Partners, Andreessen Horowitz, and industry leaders
               </Typography>
             </Grid>
           </Grid>

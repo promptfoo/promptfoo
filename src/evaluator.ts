@@ -1,26 +1,29 @@
+import { randomUUID } from 'crypto';
+
 import async from 'async';
 import chalk from 'chalk';
-import type { SingleBar } from 'cli-progress';
 import cliProgress from 'cli-progress';
-import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
-import * as path from 'path';
-import type winston from 'winston';
-
-import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
+import {
+  MODEL_GRADED_ASSERTION_TYPES,
+  runAssertions,
+  runCompareAssertion,
+} from './assertions/index';
 import { getCache } from './cache';
 import cliState from './cliState';
-import { FILE_METADATA_KEY } from './constants';
+import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { selectMaxScore } from './matchers';
-import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
+import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { isPandamoniumProvider } from './redteam/providers/pandamonium';
+import { strategyDisplayNames } from './redteam/constants';
+import { getSessionId, isSimbaTestCase } from './redteam/util';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -29,7 +32,6 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
-import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
   type AssertionType,
@@ -42,7 +44,7 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
-} from './types';
+} from './types/index';
 import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -52,12 +54,25 @@ import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
-  createEmptyTokenUsage,
-  createEmptyAssertions,
   accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
+  createEmptyAssertions,
+  createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-import { transform, type TransformContext, TransformInputType } from './util/transform';
+import { type TransformContext, TransformInputType, transform } from './util/transform';
+import type { SingleBar } from 'cli-progress';
+import type winston from 'winston';
+
+import type Eval from './models/eval';
+import type {
+  EvalConversations,
+  EvalRegisters,
+  PromptMetrics,
+  ProviderOptions,
+  ScoringFunction,
+  TokenUsage,
+  Vars,
+} from './types/index';
 
 /**
  * Manages a single progress bar for the evaluation
@@ -93,7 +108,8 @@ class ProgressBarManager {
     // Create single progress bar
     this.progressBar = new cliProgress.SingleBar(
       {
-        format: 'Evaluating [{bar}] {percentage}% | {value}/{total} | {provider} {prompt} {vars}',
+        format:
+          'Evaluating [{bar}] {percentage}% | {value}/{total} (errors: {errors}) | {provider} {prompt} {vars}',
         hideCursor: true,
         gracefulExit: true,
       },
@@ -105,6 +121,7 @@ class ProgressBarManager {
       provider: '',
       prompt: '',
       vars: '',
+      errors: 0,
     });
   }
 
@@ -112,9 +129,10 @@ class ProgressBarManager {
    * Update progress for a specific evaluation
    */
   updateProgress(
-    index: number,
+    _index: number,
     evalStep: RunEvalOptions | undefined,
-    phase: 'serial' | 'concurrent' = 'concurrent',
+    _phase: 'serial' | 'concurrent' = 'concurrent',
+    metrics?: PromptMetrics,
   ): void {
     if (this.isWebUI || !evalStep || !this.progressBar) {
       return;
@@ -129,6 +147,7 @@ class ProgressBarManager {
       provider,
       prompt: prompt || '""',
       vars: vars || '',
+      errors: metrics?.testErrorCount ?? 0,
     });
   }
 
@@ -181,8 +200,6 @@ class ProgressBarManager {
     }
   }
 }
-
-export const DEFAULT_MAX_CONCURRENCY = 4;
 
 /**
  * Update token usage metrics with assertion token usage
@@ -253,11 +270,10 @@ export async function runEval({
   evaluateOptions,
   testIdx,
   promptIdx,
+  repeatIndex,
   conversations,
   registers,
   isRedteam,
-  allTests,
-  concurrency,
   abortSignal,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
@@ -324,16 +340,6 @@ export async function runEval({
 
     if (test.providerOutput) {
       response.output = test.providerOutput;
-    } else if (
-      typeof test.provider === 'object' &&
-      typeof test.provider.id === 'function' &&
-      test.provider.id() === 'promptfoo:redteam:pandamonium'
-    ) {
-      if (!isPandamoniumProvider(test.provider)) {
-        throw new Error('Provider identified as pandamonium but does not have required methods');
-      }
-
-      return await test.provider.runPandamonium(provider, test, allTests || [], concurrency);
     } else {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       logger.debug(`Provider type: ${activeProvider.id()}`);
@@ -354,7 +360,12 @@ export async function runEval({
         // All of these are removed in python and script providers, but every Javascript provider gets them
         logger: logger as unknown as winston.Logger,
         getCache,
+        repeatIndex,
       };
+
+      if (repeatIndex > 0) {
+        callApiContext.bustCache = true;
+      }
 
       // Only add trace context properties if tracing is enabled
       if (traceContext) {
@@ -363,11 +374,35 @@ export async function runEval({
         callApiContext.testCaseId = traceContext.testCaseId;
       }
 
-      response = await activeProvider.callApi(
-        renderedPrompt,
-        callApiContext,
-        abortSignal ? { abortSignal } : undefined,
-      );
+      // Handle Simba providers specially - they use runSimba instead of callApi
+      if (activeProvider.id() === 'promptfoo:redteam:simba') {
+        const simbaProvider = activeProvider as any;
+        if (simbaProvider.runSimba) {
+          // Simba returns EvaluateResult[] directly, so we need to return early
+          const simbaResults: EvaluateResult[] = await simbaProvider.runSimba({
+            prompt: renderedPrompt,
+            context: callApiContext,
+            options: abortSignal ? { abortSignal } : undefined,
+            concurrency: evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
+          });
+
+          // Update results with proper indices for Simba
+          for (const result of simbaResults) {
+            result.promptIdx = promptIdx;
+            result.testIdx = testIdx++;
+          }
+
+          return simbaResults;
+        } else {
+          throw new Error('Simba provider does not have runSimba method');
+        }
+      } else {
+        response = await activeProvider.callApi(
+          renderedPrompt,
+          callApiContext,
+          abortSignal ? { abortSignal } : undefined,
+        );
+      }
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -416,26 +451,6 @@ export async function runEval({
         ...test.metadata,
         ...response.metadata,
         [FILE_METADATA_KEY]: fileMetadata,
-        // Add session information to metadata
-        ...(() => {
-          // If sessionIds array exists from iterative providers, use it
-          if (test.metadata?.sessionIds) {
-            return { sessionIds: test.metadata.sessionIds };
-          }
-
-          // Otherwise, use single sessionId (prioritize response over vars)
-          if (response.sessionId) {
-            return { sessionId: response.sessionId };
-          }
-
-          // Check if vars.sessionId is a valid string
-          const varsSessionId = vars.sessionId;
-          if (typeof varsSessionId === 'string' && varsSessionId.trim() !== '') {
-            return { sessionId: varsSessionId };
-          }
-
-          return {};
-        })(),
       },
       promptIdx,
       testIdx,
@@ -443,6 +458,11 @@ export async function runEval({
       promptId: prompt.id || '',
       tokenUsage: createEmptyTokenUsage(),
     };
+
+    if (!ret.metadata?.sessionIds && !ret.metadata?.sessionId) {
+      ret.metadata ??= {};
+      ret.metadata.sessionId = getSessionId(response, { vars });
+    }
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
@@ -471,17 +491,25 @@ export async function runEval({
     } else {
       // Create a copy of response so we can potentially mutate it.
       const processedResponse = { ...response };
-      const transforms: string[] = [
-        provider.transform, // Apply provider transform first
-        // NOTE: postprocess is deprecated. Use the first defined transform.
-        [test.options?.transform, test.options?.postprocess].find((s) => s),
-      ]
-        .flat()
-        .filter((s): s is string => typeof s === 'string');
-      for (const t of transforms) {
-        processedResponse.output = await transform(t, processedResponse.output, {
+
+      // Apply provider transform first (if exists)
+      if (provider.transform) {
+        processedResponse.output = await transform(provider.transform, processedResponse.output, {
           vars,
           prompt,
+        });
+      }
+
+      // Store the provider-transformed output for assertions (contextTransform)
+      const providerTransformedOutput = processedResponse.output;
+
+      // Apply test transform (if exists)
+      const testTransform = test.options?.transform || test.options?.postprocess;
+      if (testTransform) {
+        processedResponse.output = await transform(testTransform, processedResponse.output, {
+          vars,
+          prompt,
+          ...(response && response.metadata && { metadata: response.metadata }),
         });
       }
 
@@ -497,12 +525,17 @@ export async function runEval({
         }
       }
 
+      // Pass providerTransformedOutput for contextTransform to use
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
-        providerResponse: processedResponse,
+        providerResponse: {
+          ...processedResponse,
+          // Add provider-transformed output for contextTransform
+          providerTransformedOutput,
+        },
         test,
-        latencyMs: response.cached ? undefined : latencyMs,
+        latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
       });
@@ -604,14 +637,20 @@ export function generateVarCombinations(
 
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+
+      // For glob patterns, we need to resolve the base directory and use relative patterns
+      const basePath = cliState.basePath || '';
       const filePaths =
-        globSync(resolvedPath.replace(/\\/g, '/'), {
+        globSync(filePath, {
+          cwd: basePath || process.cwd(),
           windowsPathsNoEscape: true,
         }) || [];
+
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
-        throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
+        throw new Error(
+          `No files found for variable ${key} at path ${filePath} in directory ${basePath || process.cwd()}`,
+        );
       }
     } else {
       values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
@@ -678,6 +717,10 @@ class Evaluator {
     let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
+
+    // Progress reporters declared here for cleanup in finally block
+    let ciProgressReporter: CIProgressReporter | null = null;
+    let progressBarManager: ProgressBarManager | null = null;
 
     if (maxEvalTimeMs > 0) {
       globalAbortController = new AbortController();
@@ -746,6 +789,17 @@ class Evaluator {
 
     // Split prompts by provider
     // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
+
+    // Create a map of existing prompts for resume support
+    const existingPromptsMap = new Map<string, CompletedPrompt>();
+    if (cliState.resume && this.evalRecord.persisted && this.evalRecord.prompts.length > 0) {
+      logger.debug('Resuming evaluation: preserving metrics from previous run');
+      for (const existingPrompt of this.evalRecord.prompts) {
+        const key = `${existingPrompt.provider}:${existingPrompt.id}`;
+        existingPromptsMap.set(key, existingPrompt);
+      }
+    }
+
     for (const provider of testSuite.providers) {
       for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
@@ -753,12 +807,17 @@ class Evaluator {
         if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
           continue;
         }
+
+        const promptId = generateIdFromPrompt(prompt);
+        const existingPromptKey = `${providerKey}:${promptId}`;
+        const existingPrompt = existingPromptsMap.get(existingPromptKey);
+
         const completedPrompt = {
           ...prompt,
-          id: generateIdFromPrompt(prompt),
+          id: promptId,
           provider: providerKey,
           label: prompt.label,
-          metrics: {
+          metrics: existingPrompt?.metrics || {
             score: 0,
             testPassCount: 0,
             testFailCount: 0,
@@ -916,9 +975,29 @@ class Evaluator {
         ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
         ...testCase.metadata,
       };
-      testCase.provider =
-        testCase.provider ||
-        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.provider : undefined);
+      // If the test case doesn't have a provider, use the one from defaultTest
+      // Note: defaultTest.provider may be a raw config object that needs to be loaded
+      if (
+        !testCase.provider &&
+        typeof testSuite.defaultTest === 'object' &&
+        testSuite.defaultTest?.provider
+      ) {
+        const defaultProvider = testSuite.defaultTest.provider;
+        if (isApiProvider(defaultProvider)) {
+          // Already loaded
+          testCase.provider = defaultProvider;
+        } else if (typeof defaultProvider === 'object' && defaultProvider.id) {
+          // Raw config object - load it
+          const { loadApiProvider } = await import('./providers');
+          const providerId =
+            typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
+          testCase.provider = await loadApiProvider(providerId, {
+            options: defaultProvider as ProviderOptions,
+          });
+        } else {
+          testCase.provider = defaultProvider;
+        }
+      }
       testCase.assertScoringFunction =
         testCase.assertScoringFunction ||
         (typeof testSuite.defaultTest === 'object'
@@ -978,6 +1057,10 @@ class Evaluator {
                     testCase.metadata?.tracingEnabled === true ||
                     testSuite.tracing?.enabled === true;
 
+                  logger.debug(
+                    `[Evaluator] Tracing check: testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, testSuite.tracing=${JSON.stringify(testSuite.tracing)}, tracingEnabled=${tracingEnabled}`,
+                  );
+
                   if (tracingEnabled) {
                     return {
                       ...baseTest,
@@ -998,7 +1081,6 @@ class Evaluator {
                 conversations: this.conversations,
                 registers: this.registers,
                 isRedteam: testSuite.redteam != null,
-                allTests: runEvalOptions,
                 concurrency,
                 abortSignal: options.abortSignal,
               });
@@ -1009,6 +1091,40 @@ class Evaluator {
         }
       }
     }
+    // Pre-mark comparison rows before any filtering (used by resume logic)
+    for (const evalOption of runEvalOptions) {
+      if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
+        rowsWithSelectBestAssertion.add(evalOption.testIdx);
+      }
+      if (evalOption.test.assert?.some((a) => a.type === 'max-score')) {
+        rowsWithMaxScoreAssertion.add(evalOption.testIdx);
+      }
+    }
+
+    // Resume support: if CLI is in resume mode, skip already-completed (testIdx,promptIdx) pairs
+    if (cliState.resume && this.evalRecord.persisted) {
+      try {
+        const { default: EvalResult } = await import('./models/evalResult');
+        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id);
+        const originalCount = runEvalOptions.length;
+        // Filter out steps that already exist in DB
+        for (let i = runEvalOptions.length - 1; i >= 0; i--) {
+          const step = runEvalOptions[i];
+          if (completedPairs.has(`${step.testIdx}:${step.promptIdx}`)) {
+            runEvalOptions.splice(i, 1);
+          }
+        }
+        const skipped = originalCount - runEvalOptions.length;
+        if (skipped > 0) {
+          logger.info(`Resuming: skipping ${skipped} previously completed cases`);
+        }
+      } catch (err) {
+        logger.warn(
+          `Resume: failed to load completed results. Running full evaluation. ${String(err)}`,
+        );
+      }
+    }
+
     // Determine run parameters
 
     if (concurrency > 1) {
@@ -1098,6 +1214,11 @@ class Evaluator {
 
         for (const writer of this.fileWriters) {
           await writer.write(row);
+        }
+
+        if (row.metadata?.simbaSessionId) {
+          this.evalRecord.config.metadata ??= {};
+          this.evalRecord.config.metadata.simbaSessionId = row.metadata.simbaSessionId;
         }
 
         const { promptIdx } = row;
@@ -1290,12 +1411,20 @@ class Evaluator {
     // Set up progress tracking
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
-    const progressBarManager = new ProgressBarManager(isWebUI);
 
-    // Initialize progress bar manager if needed
+    // Choose appropriate progress reporter
     logger.debug(
       `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
     );
+
+    if (isCI() && !isWebUI) {
+      // Use CI-friendly progress reporter
+      ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
+      ciProgressReporter.start();
+    } else if (this.options.showProgressBar && process.stdout.isTTY) {
+      // Use visual progress bars
+      progressBarManager = new ProgressBarManager(isWebUI);
+    }
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
@@ -1306,21 +1435,27 @@ class Evaluator {
         const provider = evalStep.provider.label || evalStep.provider.id();
         const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
-      } else if (this.options.showProgressBar) {
+      } else if (progressBarManager) {
         // Progress bar update is handled by the manager
         const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
-        progressBarManager.updateProgress(index, evalStep, phase);
+        progressBarManager.updateProgress(index, evalStep, phase, metrics);
+      } else if (ciProgressReporter) {
+        // CI progress reporter update
+        ciProgressReporter.update(numComplete);
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
       }
     };
 
-    // Separate serial and concurrent eval options
+    // Separate serial, concurrent, and Simba eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
     const concurrentRunEvalOptions: RunEvalOptions[] = [];
+    const simbaRunEvalOptions: RunEvalOptions[] = [];
 
     for (const evalOption of runEvalOptions) {
-      if (evalOption.test.options?.runSerially) {
+      if (isSimbaTestCase(evalOption)) {
+        simbaRunEvalOptions.push(evalOption);
+      } else if (evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
       } else {
         concurrentRunEvalOptions.push(evalOption);
@@ -1338,7 +1473,7 @@ class Evaluator {
     }
 
     // Now start the progress bar after info messages
-    if (this.options.showProgressBar) {
+    if (this.options.showProgressBar && progressBarManager) {
       await progressBarManager.initialize(runEvalOptions, concurrency, 0);
     }
 
@@ -1350,7 +1485,7 @@ class Evaluator {
             const provider = evalStep.provider.label || evalStep.provider.id();
             const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
             logger.info(
-              `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
+              `[${numComplete}/${runEvalOptions.length}] Running ${provider} with vars: ${vars}`,
             );
           }
           const idx = runEvalOptions.indexOf(evalStep);
@@ -1358,7 +1493,7 @@ class Evaluator {
           processedIndices.add(idx);
         }
 
-        // Serial phase complete - no specific action needed with single bar
+        // Serial phase complete - progress is tracked automatically by updateProgress
       }
 
       // Then run concurrent evaluations
@@ -1369,11 +1504,41 @@ class Evaluator {
         processedIndices.add(idx);
         await this.evalRecord.addPrompts(prompts);
       });
+
+      // Finally run Simba evaluations sequentially (they have their own internal concurrency)
+      if (simbaRunEvalOptions.length > 0) {
+        if (progressBarManager) {
+          progressBarManager.complete();
+          progressBarManager.stop();
+        }
+
+        for (const evalStep of simbaRunEvalOptions) {
+          if (isWebUI) {
+            const provider = evalStep.provider.label || evalStep.provider.id();
+            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
+            logger.info(
+              `[${numComplete}/${runEvalOptions.length}] Running ${strategyDisplayNames.simba} ${provider} with vars: ${vars}`,
+            );
+          }
+          checkAbort();
+          const idx = runEvalOptions.indexOf(evalStep);
+          await processEvalStepWithTimeout(evalStep, idx);
+          processedIndices.add(idx);
+        }
+      }
     } catch (err) {
       if (options.abortSignal?.aborted) {
+        // User interruption or max duration timeout
         evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
-        logger.warn(`Evaluation aborted: ${String(err)}`);
+        if (evalTimedOut) {
+          logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
+        } else {
+          logger.info('Evaluation interrupted, saving progress...');
+        }
       } else {
+        if (ciProgressReporter) {
+          ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
+        }
         throw err;
       }
     }
@@ -1381,9 +1546,14 @@ class Evaluator {
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
 
-    // Update total count now that we know comparison count
-    if (this.options.showProgressBar && compareRowsCount > 0) {
-      progressBarManager.updateTotalCount(compareRowsCount);
+    // Update progress reporters based on comparison count
+    if (progressBarManager) {
+      if (compareRowsCount > 0) {
+        progressBarManager.updateTotalCount(compareRowsCount);
+      }
+    } else if (ciProgressReporter && compareRowsCount > 0) {
+      // Update total tests to include comparison tests for CI reporter
+      ciProgressReporter.updateTotalTests(runEvalOptions.length + compareRowsCount);
     }
 
     let compareCount = 0;
@@ -1407,10 +1577,25 @@ class Evaluator {
       ) as Assertion;
       if (compareAssertion) {
         const outputs = resultsToCompare.map((r) => r.response?.output || '');
+
+        // Provide context for grading providers that need originalProvider.
+        // For example, simulated-user requires originalProvider to access the target provider's configuration.
+        const firstResult = resultsToCompare[0];
+        const providerId = firstResult.provider.id;
+        const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
+        const callApiContext = originalProvider
+          ? {
+              originalProvider,
+              prompt: firstResult.prompt,
+              vars: firstResult.testCase.vars || {},
+            }
+          : undefined;
+
         const gradingResults = await runCompareAssertion(
           resultsToCompare[0].testCase,
           compareAssertion,
           outputs,
+          callApiContext,
         );
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];
@@ -1470,8 +1655,10 @@ class Evaluator {
             await result.save();
           }
         }
-        if (this.options.showProgressBar) {
+        if (progressBarManager) {
           progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+        } else if (ciProgressReporter) {
+          ciProgressReporter.update(runEvalOptions.length + compareCount);
         } else if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
@@ -1508,8 +1695,12 @@ class Evaluator {
           );
 
           // Update progress bar
-          if (this.options.showProgressBar) {
+          if (progressBarManager) {
             progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+          } else if (ciProgressReporter) {
+            // For max-score assertions, we're still in the comparison phase
+            // so we add to the total completed count
+            ciProgressReporter.update(runEvalOptions.length + compareCount);
           } else if (!isWebUI) {
             logger.debug(`Max-score assertion for test #${testIdx} complete`);
           }
@@ -1552,10 +1743,16 @@ class Evaluator {
 
     await this.evalRecord.addPrompts(prompts);
 
-    // Finish up
-    if (this.options.showProgressBar) {
-      progressBarManager.complete();
-      progressBarManager.stop();
+    // Clean up progress reporters and timers
+    try {
+      if (progressBarManager) {
+        progressBarManager.complete();
+        progressBarManager.stop();
+      } else if (ciProgressReporter) {
+        ciProgressReporter.finish();
+      }
+    } catch (cleanupErr) {
+      logger.warn(`Error during progress reporter cleanup: ${cleanupErr}`);
     }
 
     if (globalTimeout) {
@@ -1677,6 +1874,8 @@ class Evaluator {
       // Basic metrics
       numPrompts: prompts.length,
       numTests: this.stats.successes + this.stats.failures + this.stats.errors,
+      numRequests: this.stats.tokenUsage.numRequests || 0,
+      numResults: this.evalRecord.results.length,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
@@ -1699,6 +1898,8 @@ class Evaluator {
 
       // Token and cost metrics
       totalTokens,
+      promptTokens: this.stats.tokenUsage.prompt,
+      completionTokens: this.stats.tokenUsage.completion,
       cachedTokens,
       totalCost,
       totalRequests,
@@ -1733,9 +1934,12 @@ class Evaluator {
       if (isOtlpReceiverStarted()) {
         // Add a delay to allow providers to finish exporting spans
         logger.debug('[Evaluator] Waiting for span exports to complete...');
-        await sleep(1000);
+        await sleep(3000);
       }
       await stopOtlpReceiverIfNeeded();
+
+      // Clean up Python worker pools to prevent resource leaks
+      await providerRegistry.shutdownAll();
     }
   }
 }

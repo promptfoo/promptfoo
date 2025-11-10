@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 
+import { callApi } from '@app/utils/api';
 import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
@@ -20,15 +21,14 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-
-import { callApi } from '@app/utils/api';
-
 import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
 import ConfigurationTab from './components/ConfigurationTab';
+import HistoryTab from './components/HistoryTab';
 import ResultsTab from './components/ResultsTab';
 import ScannedFilesDialog from './components/ScannedFilesDialog';
-import type { ScanResult } from './ModelAudit.types';
 import { useModelAuditStore } from './store';
+
+import type { ScanResult } from './ModelAudit.types';
 
 export default function ModelAudit() {
   const {
@@ -55,6 +55,7 @@ export default function ModelAudit() {
     setShowFilesDialog,
     setShowOptionsDialog,
     addRecentScan,
+    fetchHistoricalScans,
   } = useModelAuditStore();
 
   useEffect(() => {
@@ -79,7 +80,7 @@ export default function ModelAudit() {
         }),
       });
 
-      const data: ScanResult = await response.json();
+      const data: ScanResult & { auditId?: string; persisted?: boolean } = await response.json();
 
       if (!response.ok) {
         const errorData = data as unknown as { error: string };
@@ -89,6 +90,11 @@ export default function ModelAudit() {
       setScanResults(data);
       setActiveTab(1); // Switch to Results tab
       addRecentScan(paths); // Add to recent scans
+
+      // Refresh history to include the new scan if it was persisted
+      if (data.persisted) {
+        fetchHistoricalScans();
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
       setError(errorMessage);
@@ -113,8 +119,8 @@ export default function ModelAudit() {
         py: 4,
       }}
     >
-      <Container maxWidth="lg">
-        <Paper elevation={0} sx={{ p: 4, mb: 4 }}>
+      <Container maxWidth="xl">
+        <Paper elevation={0} sx={{ p: { xs: 3, md: 5 }, mb: 4 }}>
           <Stack direction="row" alignItems="center" mb={4}>
             <Box>
               <Typography variant="h4" gutterBottom fontWeight="bold">
@@ -165,6 +171,7 @@ export default function ModelAudit() {
           <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
             <Tab label="Configuration" />
             <Tab label="Results" disabled={!scanResults} />
+            <Tab label="History" />
           </Tabs>
 
           {error && (
@@ -201,6 +208,12 @@ export default function ModelAudit() {
                     onShowFilesDialog={() => setShowFilesDialog(true)}
                   />
                 )}
+              </Box>
+            </Fade>
+
+            <Fade in={activeTab === 2} unmountOnExit>
+              <Box>
+                <HistoryTab />
               </Box>
             </Fade>
           </Box>

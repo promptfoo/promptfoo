@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import {
   CheckCircle as CheckCircleIcon,
@@ -7,8 +7,8 @@ import {
   Error as ErrorIcon,
   ExpandLess,
   ExpandMore,
-  Info as InfoIcon,
   InsertDriveFile as FileIcon,
+  Info as InfoIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import Alert from '@mui/material/Alert';
@@ -28,9 +28,14 @@ import Stack from '@mui/material/Stack';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { SeverityBadge } from '../ModelAudit.styles';
-import { getSeverityLabel, getIssueFilePath } from '../utils';
+import {
+  getIssueFilePath,
+  getSeverityLabel,
+  isCriticalSeverity,
+  mapSeverityForFiltering,
+} from '../utils';
 
-import type { ScanResult, ScanIssue } from '../ModelAudit.types';
+import type { ScanIssue, ScanResult } from '../ModelAudit.types';
 
 interface SecurityFindingsProps {
   scanResults: ScanResult;
@@ -38,6 +43,31 @@ interface SecurityFindingsProps {
   onSeverityChange: (severity: string | null) => void;
   showRawOutput: boolean;
   onToggleRawOutput: () => void;
+}
+
+// Helper function to generate issue summary text
+function getIssueSummaryText(issues: ScanIssue[]): string {
+  const criticalCount = issues.filter((i) => i.severity === 'critical').length;
+  const errorCount = issues.filter((i) => i.severity === 'error').length;
+  const warningCount = issues.filter((i) => i.severity === 'warning').length;
+  const totalMeaningful = criticalCount + errorCount + warningCount;
+
+  if (totalMeaningful === 0) {
+    return `${issues.length} informational messages found`;
+  }
+
+  const parts = [];
+  if (criticalCount > 0) {
+    parts.push(`${criticalCount} critical`);
+  }
+  if (errorCount > 0) {
+    parts.push(`${errorCount} error${errorCount > 1 ? 's' : ''}`);
+  }
+  if (warningCount > 0) {
+    parts.push(`${warningCount} warning${warningCount > 1 ? 's' : ''}`);
+  }
+
+  return `${totalMeaningful} security issue${totalMeaningful > 1 ? 's' : ''} found: ${parts.join(', ')}`;
 }
 
 export default function SecurityFindings({
@@ -50,6 +80,21 @@ export default function SecurityFindings({
   const theme = useTheme();
   const [groupByFile, setGroupByFile] = useState(true);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+  const [showFullRawOutput, setShowFullRawOutput] = useState(false);
+
+  // Constants for performance optimization
+  const MAX_OUTPUT_LENGTH = 10000;
+
+  // Compute stringified output for raw display (memoized for performance)
+  const stringifiedScanResults = useMemo(() => {
+    return JSON.stringify(scanResults, null, 2);
+  }, [scanResults]);
+
+  const truncatedScanResults = useMemo(() => {
+    return stringifiedScanResults.length > MAX_OUTPUT_LENGTH
+      ? stringifiedScanResults.substring(0, MAX_OUTPUT_LENGTH) + '\n... [truncated]'
+      : stringifiedScanResults;
+  }, [stringifiedScanResults, MAX_OUTPUT_LENGTH]);
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
@@ -65,13 +110,15 @@ export default function SecurityFindings({
   };
 
   const handleDownloadResults = () => {
-    const csvHeaders = ['Severity', 'Message', 'Location', 'Details'];
+    const csvHeaders = ['Severity', 'Message', 'Why', 'Location', 'Details'];
     const csvRows = scanResults.issues.map((issue) => {
       const details = issue.details ? JSON.stringify(issue.details).replace(/"/g, '""') : '';
       const location = getIssueFilePath(issue);
+      const why = issue.why ? issue.why.replace(/"/g, '""') : '';
       return [
         getSeverityLabel(issue.severity),
         `"${issue.message.replace(/"/g, '""')}"`,
+        `"${why}"`,
         `"${location.replace(/"/g, '""')}"`,
         `"${details}"`,
       ].join(',');
@@ -91,7 +138,7 @@ export default function SecurityFindings({
     if (!selectedSeverity && issue.severity === 'debug') {
       return false;
     }
-    return !selectedSeverity || issue.severity === selectedSeverity;
+    return mapSeverityForFiltering(selectedSeverity, issue.severity);
   });
 
   // Group issues by file
@@ -130,11 +177,9 @@ export default function SecurityFindings({
     <Box>
       {scanResults.issues.length > 0 && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          Total issues found: {scanResults.issues.length} (including{' '}
-          {scanResults.issues.filter((i) => i.severity === 'debug').length} debug messages)
+          {getIssueSummaryText(scanResults.issues)}
         </Alert>
       )}
-
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
         <Typography variant="h6">Security Findings</Typography>
         <Box sx={{ flexGrow: 1 }} />
@@ -186,9 +231,7 @@ export default function SecurityFindings({
           {showRawOutput ? 'Hide' : 'Show'} Raw Output
         </Button>
       </Stack>
-
       <Divider sx={{ mb: 3 }} />
-
       {filteredIssues.length === 0 ? (
         <Paper
           sx={{
@@ -210,29 +253,62 @@ export default function SecurityFindings({
       ) : groupByFile ? (
         <Stack spacing={4}>
           {Object.entries(issuesByFile).map(([file, issues]) => {
-            const criticalCount = issues.filter((i) => i.severity === 'error').length;
+            const criticalCount = issues.filter((i) => isCriticalSeverity(i.severity)).length;
             const warningCount = issues.filter((i) => i.severity === 'warning').length;
             const infoCount = issues.filter((i) => i.severity === 'info').length;
             const isExpanded = expandedFiles.has(file);
             const fileName = file.split('/').pop() || file;
 
             return (
-              <Box key={file}>
-                {/* File Header - Always Visible */}
-                <Paper
-                  elevation={0}
+              <Paper
+                key={file}
+                elevation={1}
+                sx={{
+                  overflow: 'hidden',
+                  border: 1,
+                  borderColor: criticalCount > 0 ? 'error.main' : 'divider',
+                  borderWidth: criticalCount > 0 ? 2 : 1,
+                }}
+              >
+                {/* File Header */}
+                <Box
                   sx={{
                     p: 2,
-                    mb: 2,
-                    bgcolor: alpha(theme.palette.primary.main, 0.08),
-                    border: 1,
-                    borderColor: 'primary.main',
+                    bgcolor: alpha(
+                      criticalCount > 0
+                        ? theme.palette.error.main
+                        : warningCount > 0
+                          ? theme.palette.warning.main
+                          : theme.palette.primary.main,
+                      0.08,
+                    ),
+                    borderBottom: 1,
+                    borderColor: 'divider',
                   }}
                 >
                   <Stack direction="row" alignItems="center" spacing={2}>
-                    <FileIcon color="primary" />
+                    <FileIcon
+                      sx={{
+                        color:
+                          criticalCount > 0
+                            ? 'error.main'
+                            : warningCount > 0
+                              ? 'warning.main'
+                              : 'primary.main',
+                      }}
+                    />
                     <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="h6" color="primary.main">
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          color:
+                            criticalCount > 0
+                              ? 'error.main'
+                              : warningCount > 0
+                                ? 'warning.dark'
+                                : 'text.primary',
+                        }}
+                      >
                         {fileName}
                       </Typography>
                       <Typography
@@ -264,90 +340,90 @@ export default function SecurityFindings({
                       )}
                     </Stack>
                   </Stack>
-                </Paper>
+                </Box>
 
-                {/* Collapsible Issues Section */}
-                <Paper elevation={0} sx={{ border: 1, borderColor: 'divider' }}>
-                  <Box
-                    sx={{
-                      p: 2,
-                      cursor: 'pointer',
-                      bgcolor: alpha(theme.palette.action.hover, 0.02),
-                      '&:hover': {
-                        bgcolor: alpha(theme.palette.action.hover, 0.05),
-                      },
-                    }}
-                    onClick={() => toggleFileExpansion(file)}
-                  >
-                    <Stack direction="row" alignItems="center" spacing={2}>
-                      <IconButton size="small">
-                        {isExpanded ? <ExpandLess /> : <ExpandMore />}
-                      </IconButton>
+                {/* Expandable Trigger */}
+                <Box
+                  sx={{
+                    p: 2,
+                    cursor: 'pointer',
+                    bgcolor: alpha(theme.palette.action.hover, 0.01),
+                    '&:hover': {
+                      bgcolor: alpha(theme.palette.action.hover, 0.04),
+                    },
+                    transition: 'background-color 0.2s',
+                  }}
+                  onClick={() => toggleFileExpansion(file)}
+                >
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <IconButton size="small" sx={{ p: 0.5 }}>
+                      {isExpanded ? <ExpandLess /> : <ExpandMore />}
+                    </IconButton>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {isExpanded ? 'Hide' : 'Show'} {issues.length} Issue
+                      {issues.length !== 1 ? 's' : ''}
+                    </Typography>
+                  </Stack>
+                </Box>
 
-                      <Typography variant="body1">{isExpanded ? 'Hide' : 'Show'} Issues</Typography>
-
-                      <Box sx={{ flexGrow: 1 }} />
+                {/* Collapsible Issues Content */}
+                <Collapse in={isExpanded}>
+                  <Divider />
+                  <Box sx={{ p: 2, bgcolor: alpha(theme.palette.action.hover, 0.01) }}>
+                    <Stack spacing={2}>
+                      {issues.map((issue, index) => (
+                        <Paper
+                          key={index}
+                          variant="outlined"
+                          sx={{
+                            p: 2.5,
+                            borderLeft: 4,
+                            borderLeftColor: isCriticalSeverity(issue.severity)
+                              ? 'error.main'
+                              : issue.severity === 'warning'
+                                ? 'warning.main'
+                                : 'info.main',
+                            bgcolor: alpha(
+                              isCriticalSeverity(issue.severity)
+                                ? theme.palette.error.main
+                                : issue.severity === 'warning'
+                                  ? theme.palette.warning.main
+                                  : theme.palette.info.main,
+                              0.03,
+                            ),
+                          }}
+                        >
+                          <Stack direction="row" spacing={2} alignItems="flex-start">
+                            {getSeverityIcon(issue.severity)}
+                            <Box sx={{ flexGrow: 1 }}>
+                              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
+                                <Typography variant="body1" fontWeight={600}>
+                                  {issue.message}
+                                </Typography>
+                                <SeverityBadge severity={issue.severity}>
+                                  {getSeverityLabel(issue.severity)}
+                                </SeverityBadge>
+                              </Stack>
+                              {issue.why && (
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                  {issue.why}
+                                </Typography>
+                              )}
+                              {issue.details && (
+                                <Alert severity="info" sx={{ mt: 2 }}>
+                                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                                    {JSON.stringify(issue.details, null, 2)}
+                                  </pre>
+                                </Alert>
+                              )}
+                            </Box>
+                          </Stack>
+                        </Paper>
+                      ))}
                     </Stack>
                   </Box>
-
-                  <Collapse in={isExpanded}>
-                    <Divider />
-                    <Box sx={{ p: 2 }}>
-                      <Stack spacing={2}>
-                        {issues.map((issue, index) => (
-                          <Paper
-                            key={index}
-                            sx={{
-                              p: 3,
-                              borderLeft: 4,
-                              borderColor:
-                                issue.severity === 'error'
-                                  ? 'error.main'
-                                  : issue.severity === 'warning'
-                                    ? 'warning.main'
-                                    : 'info.main',
-                              bgcolor: alpha(
-                                issue.severity === 'error'
-                                  ? theme.palette.error.main
-                                  : issue.severity === 'warning'
-                                    ? theme.palette.warning.main
-                                    : theme.palette.info.main,
-                                0.02,
-                              ),
-                            }}
-                          >
-                            <Stack direction="row" spacing={2} alignItems="flex-start">
-                              {getSeverityIcon(issue.severity)}
-                              <Box sx={{ flexGrow: 1 }}>
-                                <Stack
-                                  direction="row"
-                                  spacing={2}
-                                  alignItems="center"
-                                  sx={{ mb: 1 }}
-                                >
-                                  <Typography variant="body1" fontWeight={600}>
-                                    {issue.message}
-                                  </Typography>
-                                  <SeverityBadge severity={issue.severity}>
-                                    {getSeverityLabel(issue.severity)}
-                                  </SeverityBadge>
-                                </Stack>
-                                {issue.details && (
-                                  <Alert severity="info" sx={{ mt: 2 }}>
-                                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                                      {JSON.stringify(issue.details, null, 2)}
-                                    </pre>
-                                  </Alert>
-                                )}
-                              </Box>
-                            </Stack>
-                          </Paper>
-                        ))}
-                      </Stack>
-                    </Box>
-                  </Collapse>
-                </Paper>
-              </Box>
+                </Collapse>
+              </Paper>
             );
           })}
         </Stack>
@@ -360,14 +436,13 @@ export default function SecurityFindings({
               sx={{
                 p: 3,
                 borderLeft: 4,
-                borderColor:
-                  issue.severity === 'error'
-                    ? 'error.main'
-                    : issue.severity === 'warning'
-                      ? 'warning.main'
-                      : 'info.main',
+                borderColor: isCriticalSeverity(issue.severity)
+                  ? 'error.main'
+                  : issue.severity === 'warning'
+                    ? 'warning.main'
+                    : 'info.main',
                 bgcolor: alpha(
-                  issue.severity === 'error'
+                  isCriticalSeverity(issue.severity)
                     ? theme.palette.error.main
                     : issue.severity === 'warning'
                       ? theme.palette.warning.main
@@ -392,6 +467,11 @@ export default function SecurityFindings({
                       Location: {getIssueFilePath(issue)}
                     </Typography>
                   )}
+                  {issue.why && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                      {issue.why}
+                    </Typography>
+                  )}
                   {issue.details && (
                     <Alert severity="info" sx={{ mt: 2 }}>
                       <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
@@ -405,7 +485,6 @@ export default function SecurityFindings({
           ))}
         </Stack>
       )}
-
       {/* Raw Output Dialog */}
       <Dialog
         open={showRawOutput}
@@ -431,8 +510,22 @@ export default function SecurityFindings({
               fontSize: '0.875rem',
             }}
           >
-            {scanResults.rawOutput || 'No raw output available'}
+            {scanResults.rawOutput
+              ? scanResults.rawOutput
+              : showFullRawOutput
+                ? stringifiedScanResults
+                : truncatedScanResults}
           </pre>
+          {!scanResults.rawOutput && stringifiedScanResults.length > MAX_OUTPUT_LENGTH && (
+            <Button
+              variant="outlined"
+              size="small"
+              sx={{ mt: 2, ml: 2 }}
+              onClick={() => setShowFullRawOutput((prev) => !prev)}
+            >
+              {showFullRawOutput ? 'Show Less' : 'Show More'}
+            </Button>
+          )}
         </DialogContent>
       </Dialog>
     </Box>

@@ -5,17 +5,23 @@ import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { formatOpenAiError } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { OpenAiSharedOptions } from './types';
 
-type OpenAiImageModel = 'dall-e-2' | 'dall-e-3';
+type OpenAiImageModel = 'dall-e-2' | 'dall-e-3' | 'gpt-image-1';
 type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
 type DallE2Size = '256x256' | '512x512' | '1024x1024';
 type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
+type GptImage1Size = '1024x1024' | '1024x1536' | '1536x1024';
 
 const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
 const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
+const GPT_IMAGE1_VALID_SIZES: GptImage1Size[] = ['1024x1024', '1024x1536', '1536x1024'];
 const DEFAULT_SIZE = '1024x1024';
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
@@ -33,6 +39,18 @@ export const DALLE3_COSTS: Record<string, number> = {
   hd_1792x1024: 0.12,
 };
 
+export const GPT_IMAGE1_COSTS: Record<string, number> = {
+  low_1024x1024: 0.011,
+  low_1024x1536: 0.016,
+  low_1536x1024: 0.016,
+  medium_1024x1024: 0.042,
+  medium_1024x1536: 0.063,
+  medium_1536x1024: 0.063,
+  high_1024x1024: 0.167,
+  high_1024x1536: 0.25,
+  high_1536x1024: 0.25,
+};
+
 type CommonImageOptions = {
   n?: number;
   response_format?: 'url' | 'b64_json';
@@ -44,6 +62,11 @@ type DallE3Options = CommonImageOptions & {
   style?: 'natural' | 'vivid';
 };
 
+type GptImage1Options = CommonImageOptions & {
+  size?: GptImage1Size;
+  quality?: 'low' | 'medium' | 'high';
+};
+
 type DallE2Options = CommonImageOptions & {
   size?: DallE2Size;
   image?: string; // Base64-encoded image or image URL
@@ -53,7 +76,7 @@ type DallE2Options = CommonImageOptions & {
 
 type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
-} & (DallE2Options | DallE3Options);
+} & (DallE2Options | DallE3Options | GptImage1Options);
 
 export function validateSizeForModel(
   size: string,
@@ -70,6 +93,13 @@ export function validateSizeForModel(
     return {
       valid: false,
       message: `Invalid size "${size}" for DALL-E 2. Valid sizes are: ${DALLE2_VALID_SIZES.join(', ')}`,
+    };
+  }
+
+  if (model === 'gpt-image-1' && !GPT_IMAGE1_VALID_SIZES.includes(size as GptImage1Size)) {
+    return {
+      valid: false,
+      message: `Invalid size "${size}" for GPT Image 1. Valid sizes are: ${GPT_IMAGE1_VALID_SIZES.join(', ')}`,
     };
   }
 
@@ -129,6 +159,12 @@ export function prepareRequestBody(
     }
   }
 
+  if (model === 'gpt-image-1') {
+    if ('quality' in config && config.quality) {
+      body.quality = config.quality;
+    }
+  }
+
   return body;
 }
 
@@ -147,6 +183,11 @@ export function calculateImageCost(
   } else if (model === 'dall-e-2') {
     const costPerImage = DALLE2_COSTS[size as DallE2Size] || DALLE2_COSTS['1024x1024'];
     return costPerImage * n;
+  } else if (model === 'gpt-image-1') {
+    const q = (quality as 'low' | 'medium' | 'high') || 'low';
+    const costKey = `${q}_${size}`;
+    const costPerImage = GPT_IMAGE1_COSTS[costKey] || GPT_IMAGE1_COSTS['low_1024x1024'];
+    return costPerImage * n;
   }
 
   return 0.04 * n;
@@ -157,7 +198,7 @@ export async function callOpenAiImageApi(
   body: Record<string, any>,
   headers: Record<string, string>,
   timeout: number,
-): Promise<{ data: any; cached: boolean; status: number; statusText: string }> {
+): Promise<{ data: any; cached: boolean; status: number; statusText: string; latencyMs?: number }> {
   return await fetchWithCache(
     url,
     {
@@ -176,6 +217,7 @@ export async function processApiResponse(
   cached: boolean,
   model: string,
   size: string,
+  latencyMs?: number,
   quality?: string,
   n: number = 1,
 ): Promise<ProviderResponse> {
@@ -197,6 +239,7 @@ export async function processApiResponse(
     return {
       output: formattedOutput,
       cached,
+      latencyMs,
       cost,
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
@@ -222,7 +265,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(
@@ -255,8 +298,6 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
 
     const body = prepareRequestBody(model, prompt, size as string, responseFormat, config);
 
-    logger.debug(`Calling OpenAI Image API: ${JSON.stringify(body)}`);
-
     const headers = {
       'Content-Type': 'application/json',
       ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
@@ -266,8 +307,9 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
 
     let data, status, statusText;
     let cached = false;
+    let latencyMs: number | undefined;
     try {
-      ({ data, cached, status, statusText } = await callOpenAiImageApi(
+      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
@@ -287,8 +329,6 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       };
     }
 
-    logger.debug(`\tOpenAI image API response: ${JSON.stringify(data)}`);
-
     return processApiResponse(
       data,
       prompt,
@@ -296,6 +336,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       cached,
       model,
       size,
+      latencyMs,
       config.quality,
       config.n || 1,
     );

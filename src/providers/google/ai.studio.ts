@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
+import { renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
@@ -20,7 +20,7 @@ import type {
   CallApiContextParams,
   GuardrailResponse,
   ProviderResponse,
-} from '../../types';
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
@@ -106,7 +106,7 @@ class AIStudioGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(_prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -161,8 +161,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       maxOutputTokens: this.config.maxOutputTokens,
     };
 
-    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
-
     let data,
       cached = false;
     try {
@@ -187,8 +185,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-
-    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
 
     if (!data?.candidates || data.candidates.length === 0) {
       return {
@@ -258,6 +254,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       prompt,
       context?.vars,
       config.systemInstruction,
+      { useAssistantRole: config.useAssistantRole },
     );
 
     // Determine API version based on model
@@ -303,8 +300,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
-    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
-
     let data;
     let cached = false;
     try {
@@ -333,7 +328,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       };
     }
 
-    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
     let output, candidate;
     try {
       candidate = getCandidate(data);
@@ -416,3 +410,15 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
   }
 }
+
+export const DefaultGradingProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultGradingJsonProvider = new AIStudioGenericProvider('gemini-2.5-pro', {
+  config: {
+    generationConfig: {
+      response_mime_type: 'application/json',
+    },
+  },
+});
+export const DefaultLlmRubricProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultSuggestionsProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultSynthesizeProvider = new AIStudioGenericProvider('gemini-2.5-pro');

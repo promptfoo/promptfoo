@@ -1,12 +1,16 @@
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
 import { AzureGenericProvider } from './generic';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { CallbackContext } from '../openai/types';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
@@ -104,7 +108,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {

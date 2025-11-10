@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { loadApiProviders } from '../../../providers';
+import { loadApiProviders } from '../../../providers/index';
 import { createToolResponse } from '../lib/utils';
 import { withTimeout } from '../lib/utils';
 

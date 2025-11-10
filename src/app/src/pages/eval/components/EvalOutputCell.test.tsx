@@ -132,6 +132,36 @@ describe('EvalOutputCell', () => {
     expect(passedMetadata.testKey).toBe('testValue');
   });
 
+  it('handles enter key press to open dialog', async () => {
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+    const promptButton = screen.getByText('🔎');
+    expect(promptButton).toBeInTheDocument();
+    promptButton.focus();
+    await userEvent.keyboard('{enter}');
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    expect(dialogComponent).toBeInTheDocument();
+
+    // Check that metadata is passed correctly
+    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
+    expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('handles keyboard navigation between buttons', async () => {
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+    const promptButton = screen.getByText('🔎');
+    expect(promptButton).toBeInTheDocument();
+    promptButton.focus();
+    await userEvent.tab();
+    expect(document.activeElement).toHaveTextContent('👍');
+    await userEvent.tab();
+    expect(document.activeElement).toHaveTextContent('👎');
+    await userEvent.tab();
+    expect(document.activeElement).toHaveTextContent('🔢');
+    await userEvent.tab();
+    expect(document.activeElement).toHaveTextContent('✏️');
+  });
+
   it('preserves existing metadata citations', async () => {
     const propsWithMetadataCitations = {
       ...defaultProps,
@@ -469,6 +499,50 @@ describe('EvalOutputCell', () => {
     renderWithProviders(<EvalOutputCell {...propsWithZeroLengthSearch} />);
 
     expect(screen.getByText('Test output text')).toBeInTheDocument();
+  });
+
+  it('displays latency without "(cached)" when output.response.cached is not set or is false', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 123,
+        response: {},
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    const latencyElement = screen.getByText('123 ms');
+    expect(latencyElement).toBeInTheDocument();
+
+    const props2 = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 456,
+        response: { cached: false },
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props2} />);
+    const latencyElement2 = screen.getByText('456 ms');
+    expect(latencyElement2).toBeInTheDocument();
+  });
+
+  it('displays small cached latency values correctly', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 0.1,
+        response: {
+          cached: true,
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const latencyElement = screen.getByText('0 ms (cached)');
+    expect(latencyElement).toBeInTheDocument();
   });
 });
 

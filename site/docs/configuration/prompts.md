@@ -12,7 +12,7 @@ keywords:
     template variables,
     prompt engineering,
   ]
-pagination_prev: configuration/parameters
+pagination_prev: configuration/reference
 pagination_next: configuration/test-cases
 ---
 

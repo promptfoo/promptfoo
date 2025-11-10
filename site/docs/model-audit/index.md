@@ -1,6 +1,6 @@
 ---
 title: ModelAudit - Static Security Scanner for ML Models
-description: Scan AI/ML models for security vulnerabilities, malicious code, and backdoors. Supports PyTorch, TensorFlow, ONNX, Keras, and 15+ model formats.
+description: Scan AI/ML models for security vulnerabilities, malicious code, and backdoors. Supports PyTorch, TensorFlow, ONNX, Keras, and 30+ model formats.
 keywords:
   [
     model security,
@@ -20,9 +20,9 @@ sidebar_position: 1
 
 ## Overview
 
-ModelAudit is a lightweight static security scanner for machine learning models integrated into Promptfoo. It allows you to quickly scan your AI/ML models for potential security risks before deploying them in production environments.
+ModelAudit is a lightweight static security scanner for machine learning models accessible through Promptfoo. It scans AI/ML models for potential security risks before deployment.
 
-By invoking `promptfoo scan-model`, you can use ModelAudit's static security scanning capabilities.
+Promptfoo provides a wrapper command `promptfoo scan-model` that integrates ModelAudit scanning capabilities.
 
 ![example model scan results](/img/docs/modelaudit/modelaudit-result.png)
 
@@ -131,6 +131,9 @@ promptfoo scan-model model.pkl model2.h5 models_directory
 # Export results to JSON
 promptfoo scan-model model.pkl --format json --output results.json
 
+# Export results to SARIF for security tool integration
+promptfoo scan-model model.pkl --format sarif --output results.sarif
+
 # Add custom blacklist patterns
 promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious_net"
 
@@ -138,10 +141,16 @@ promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious
 promptfoo scan-model model.pkl --verbose
 
 # Set file size limits
-promptfoo scan-model models/ --max-file-size 1073741824 --max-total-size 5368709120
+promptfoo scan-model models/ --max-size 1GB
 
 # Generate Software Bill of Materials
 promptfoo scan-model model.pkl --sbom sbom.json
+
+# Enable strict mode for security-critical scans
+promptfoo scan-model model.pkl --strict
+
+# Preview scan without actually processing
+promptfoo scan-model model.pkl --dry-run
 ```
 
 See the [Advanced Usage](./usage.md) guide for detailed authentication setup for cloud storage, JFrog, and other remote sources.
@@ -150,30 +159,26 @@ See the [Advanced Usage](./usage.md) guide for detailed authentication setup for
 
 - **Standalone**: Install modelaudit directly using `pip install modelaudit`. `modelaudit scan` behaves the same as `promptfoo scan-model`.
 - **Web Interface**: For a GUI experience, use `promptfoo view` and navigate to `/model-audit` for visual scanning and configuration.
-  :::
+
+:::
 
 ### Options
 
-| Option                    | Description                                                         |
-| ------------------------- | ------------------------------------------------------------------- |
-| `--blacklist`, `-b`       | Additional blacklist patterns to check against model names          |
-| `--format`, `-f`          | Output format (`text` or `json`) [default: text]                    |
-| `--output`, `-o`          | Output file path (prints to stdout if not specified)                |
-| `--timeout`, `-t`         | Scan timeout in seconds [default: 3600]                             |
-| `--verbose`, `-v`         | Enable verbose output                                               |
-| `--max-file-size`         | Maximum file size to scan in bytes [default: unlimited]             |
-| `--max-total-size`        | Maximum total bytes to scan before stopping [default: unlimited]    |
-| `--sbom`                  | Generate CycloneDX Software Bill of Materials with license info     |
-| `--registry-uri`          | MLflow registry URI (only used for MLflow model URIs)               |
-| `--jfrog-api-token`       | JFrog API token for authentication                                  |
-| `--jfrog-access-token`    | JFrog access token for authentication                               |
-| `--strict-license`        | Fail scan when incompatible or deprecated licenses are detected     |
-| `--max-download-size`     | Maximum download size for cloud storage (e.g., 500MB, 2GB)          |
-| `--preview`               | Preview what would be downloaded without actually downloading       |
-| `--cache/--no-cache`      | Use cache for downloaded cloud storage files [default: cache]       |
-| `--cache-dir`             | Directory for caching downloaded files                              |
-| `--no-skip-files`         | Don't skip non-model file types during directory scans              |
-| `--selective/--all-files` | Download only scannable files from directories [default: selective] |
+| Option              | Description                                                     |
+| ------------------- | --------------------------------------------------------------- |
+| `--blacklist`, `-b` | Additional blacklist patterns to check against model names      |
+| `--format`, `-f`    | Output format (`text` \| `json` \| `sarif`) [default: text]     |
+| `--output`, `-o`    | Output file path (prints to stdout if not specified)            |
+| `--timeout`, `-t`   | Scan timeout in seconds [default: 300]                          |
+| `--verbose`, `-v`   | Enable verbose output                                           |
+| `--max-size`        | Maximum total size to scan (e.g., `500MB`, `1GB`)               |
+| `--sbom`            | Generate CycloneDX Software Bill of Materials with license info |
+| `--strict`          | Fail on warnings; enable stricter validation                    |
+| `--dry-run`         | Preview scan without processing files                           |
+| `--quiet`           | Suppress non-critical output                                    |
+| `--progress`        | Force-enable progress reporting                                 |
+| `--no-cache`        | Disable caching of downloaded files                             |
+| `--no-write`        | Skip writing results to database                                |
 
 ## Web Interface
 
@@ -190,7 +195,7 @@ Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual 
 
 ## Supported Formats
 
-ModelAudit supports scanning 15+ model formats across major ML frameworks:
+ModelAudit supports scanning 30+ specialized file format scanners across major ML frameworks:
 
 ### Model Formats
 
@@ -293,25 +298,6 @@ ModelAudit returns specific exit codes for automation:
 In CI/CD pipelines, exit code 1 indicates findings that should be reviewed but don't necessarily block deployment. Only exit code 2 represents actual scan failures.
 :::
 
-## Diagnostics
-
-ModelAudit includes a `doctor` command to diagnose scanner compatibility and system status:
-
-```bash
-# Check system diagnostics and scanner status
-promptfoo scan-model doctor
-
-# Show details about failed scanners
-promptfoo scan-model doctor --show-failed
-```
-
-The `doctor` command provides:
-
-- Python and NumPy version information
-- Scanner loading status (available, loaded, failed)
-- Recommendations for fixing compatibility issues
-- Memory and disk space availability
-
 ## Requirements
 
 ModelAudit is included with Promptfoo, but specific model formats may require additional dependencies:
@@ -351,7 +337,7 @@ ModelAudit supports both NumPy 1.x and 2.x. If you encounter NumPy compatibility
 pip install modelaudit[numpy1]
 ```
 
-## Next Steps
+## See Also
 
-- **[Advanced Usage](./usage.md)** - Cloud storage, CI/CD integration, and advanced features
-- **[Scanner Reference](./scanners.md)** - Detailed scanner capabilities and security checks
+- [Advanced Usage](./usage.md)
+- [Scanner Reference](./scanners.md)

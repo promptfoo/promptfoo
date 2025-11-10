@@ -18,6 +18,11 @@ jest.mock('google-auth-library');
 
 jest.mock('glob', () => ({
   globSync: jest.fn().mockReturnValue([]),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('fs', () => ({
@@ -252,6 +257,58 @@ describe('util', () => {
       });
     });
 
+    it('should map assistant role to model role by default', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'model', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant mapped to model
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should preserve assistant role when useAssistantRole is true', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'assistant', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant preserved
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should map assistant to model when useAssistantRole is false', () => {
+      const input = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'Hello' }] },
+          { role: 'model', parts: [{ text: 'Hi there' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
     it('should handle OpenAI chat format with array content', () => {
       const input = [
         {
@@ -270,6 +327,21 @@ describe('util', () => {
         coerced: true,
         systemInstruction: undefined,
       });
+    });
+
+    it('should respect useAssistantRole flag with array content', () => {
+      const input = [
+        { role: 'user', content: [{ type: 'text', text: 'Question' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'Answer' }] },
+      ];
+
+      // Test with useAssistantRole: true
+      const resultWithAssistant = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(resultWithAssistant.contents[1].role).toBe('assistant');
+
+      // Test with useAssistantRole: false (default)
+      const resultWithModel = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(resultWithModel.contents[1].role).toBe('model');
     });
 
     it('should handle OpenAI chat format with object content', () => {
@@ -510,6 +582,34 @@ describe('util', () => {
         systemInstruction: {
           parts: [{ text: 'You are a helpful assistant.' }],
         },
+      });
+    });
+
+    it('should convert system-only prompts to user messages', () => {
+      const input = [{ role: 'system', content: 'You are a helpful assistant.' }];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [{ role: 'user', parts: [{ text: 'You are a helpful assistant.' }] }],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should convert multiple system-only messages to single user message', () => {
+      const input = [
+        { role: 'system', content: 'First instruction.' },
+        { role: 'system', content: 'Second instruction.' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'First instruction.' }, { text: 'Second instruction.' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
       });
     });
 
@@ -929,6 +1029,111 @@ describe('util', () => {
 
       expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
       expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
+    });
+
+    it('should merge system messages from both prompt and config with string config', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        'config system instruction',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'config system instruction' }, { text: 'prompt system instruction' }],
+      });
+    });
+
+    it('should merge system messages from both prompt and config with object config', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        { parts: [{ text: 'config system instruction' }] },
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'config system instruction' }, { text: 'prompt system instruction' }],
+      });
+    });
+
+    it('should merge multiple parts from config systemInstruction', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        {
+          parts: [{ text: 'config system instruction 1' }, { text: 'config system instruction 2' }],
+        },
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'config system instruction 1' },
+          { text: 'config system instruction 2' },
+          { text: 'prompt system instruction' },
+        ],
+      });
+    });
+
+    it('should merge multiple system messages from prompt', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction 1' },
+        { role: 'system', content: 'prompt system instruction 2' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        'config system instruction',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'config system instruction' },
+          { text: 'prompt system instruction 1' },
+          { text: 'prompt system instruction 2' },
+        ],
+      });
+    });
+
+    it('should render Nunjucks templates in config systemInstruction', () => {
+      const prompt = [{ role: 'user', content: 'user message' }];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        { role: 'a helpful assistant', language: 'Japanese' },
+        'You are {{role}}. Respond in {{language}}.',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'You are a helpful assistant. Respond in Japanese.' }],
+      });
+    });
+
+    it('should skip empty string config systemInstruction', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        '',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      // Empty string is falsy, so config systemInstruction is not processed
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'prompt system instruction' }],
+      });
     });
 
     describe('support for images in contents', () => {
@@ -1440,6 +1645,120 @@ describe('util', () => {
       const tools: any[] = [];
       const normalized = normalizeTools(tools);
       expect(normalized).toEqual([]);
+    });
+  });
+
+  describe('resolveProjectId', () => {
+    const mockProjectId = 'google-auth-project';
+
+    beforeEach(async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Re-mock google-auth-library after module reset
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        getProjectId: jest.fn().mockResolvedValue(mockProjectId),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+    });
+
+    afterEach(() => {
+      jest.dontMock('google-auth-library');
+    });
+
+    it('should prioritize explicit config over environment variables', async () => {
+      // Import resolveProject after mocking in beforeEach
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = { projectId: 'explicit-project' };
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('explicit-project');
+    });
+
+    it('should use environment variables when no explicit config', async () => {
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = {};
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('env-project');
+    });
+
+    it('should fall back to Google Auth Library when no config or env vars', async () => {
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = {};
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe(mockProjectId);
+    });
+
+    it('should handle Google Auth Library getProjectId failure gracefully', async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Mock Google Auth Library where getProjectId throws an error
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        fromJSON: jest.fn().mockResolvedValue({ name: 'mockCredentialClient' }),
+        getProjectId: jest
+          .fn()
+          .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      // Test that explicit config projectId is still used even when getProjectId fails
+      const config = {
+        projectId: 'explicit-project',
+        credentials: '{"type": "service_account", "project_id": "creds-project"}',
+      };
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('explicit-project');
+
+      // Verify that getProjectId was called but failed gracefully
+      expect(mockAuth.getProjectId).toHaveBeenCalled();
+      expect(mockAuth.fromJSON).toHaveBeenCalled();
+    });
+
+    it('should return empty string when all sources fail', async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Mock Google Auth Library where getProjectId throws an error
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        getProjectId: jest
+          .fn()
+          .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      // Test that when no projectId is available anywhere, we get empty string
+      const config = {};
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('');
+
+      // Verify that getProjectId was called but failed gracefully
+      expect(mockAuth.getProjectId).toHaveBeenCalled();
     });
   });
 });

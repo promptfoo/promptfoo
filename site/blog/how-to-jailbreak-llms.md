@@ -611,7 +611,7 @@ For a full guide on how to use Promptfoo, check out the [Promptfoo quickstart](/
 
 1. Installation:
 
-Requires [Node.js](https://nodejs.org/en/download/) 18 or higher.
+Requires [Node.js](https://nodejs.org/en/download/) 20 or higher.
 
 ```bash
 npm install -g promptfoo

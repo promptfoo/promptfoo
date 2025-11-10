@@ -1,5 +1,5 @@
 ---
-sidebar_position: 999
+displayed_sidebar: promptfoo
 sidebar_label: Managing Large Configs
 title: Managing Large Promptfoo Configurations
 description: Organize complex promptfoo configurations using modular YAML structures, file imports, and environment-specific settings
@@ -133,8 +133,8 @@ env: file://configs/env-prod.yaml
 
 ```yaml title="configs/env-prod.yaml"
 # Production environment variables
-OPENAI_API_KEY: ${OPENAI_API_KEY_PROD}
-ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY_PROD}
+OPENAI_API_KEY: '{{ env.OPENAI_API_KEY_PROD }}'
+ANTHROPIC_API_KEY: '{{ env.ANTHROPIC_API_KEY_PROD }}'
 LOG_LEVEL: info
 ```
 

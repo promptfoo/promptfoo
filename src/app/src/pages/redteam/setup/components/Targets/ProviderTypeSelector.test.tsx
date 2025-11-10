@@ -268,7 +268,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByPlaceholderText('Search providers...')).toBeVisible();
     expect(screen.getByText('OpenAI')).toBeVisible();
     expect(screen.getByText('Anthropic')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'All Categories' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'All Tags' })).toBeVisible();
   });
 
   it("should call setProvider with the correct Go provider configuration when the 'Go Provider' card is selected", () => {
@@ -550,8 +550,8 @@ describe('ProviderTypeSelector', () => {
     fireEvent.click(agentsCategoryChip);
 
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
-      feature: 'redteam_provider_category_filtered',
-      category: 'agents',
+      feature: 'redteam_provider_tag_filtered',
+      tag: 'agents',
     });
 
     const langchainProviderCard = screen
@@ -565,7 +565,7 @@ describe('ProviderTypeSelector', () => {
       feature: 'redteam_provider_type_selected',
       provider_type: 'langchain',
       provider_label: 'LangChain',
-      provider_category: 'agents',
+      provider_tag: 'agents',
     });
   });
 
@@ -696,5 +696,160 @@ describe('ProviderTypeSelector', () => {
     expect(
       screen.getByText('Framework for developing applications powered by language models'),
     ).toBeVisible();
+  });
+
+  it('should filter provider options by selected tag and call recordEvent with the correct tag when a tag chip is toggled on', () => {
+    const mockSetProvider = vi.fn();
+    const mockRecordEvent = vi.fn();
+
+    (useTelemetry as any).mockReturnValue({
+      recordEvent: mockRecordEvent,
+    });
+
+    const initialProvider: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+    );
+
+    const agentsChip = screen.getByRole('button', { name: 'Agents' });
+    fireEvent.click(agentsChip);
+
+    expect(screen.getByText('LangChain')).toBeVisible();
+    expect(screen.getByText('AutoGen')).toBeVisible();
+    expect(screen.getByText('CrewAI')).toBeVisible();
+    expect(screen.getByText('LlamaIndex')).toBeVisible();
+    expect(screen.getByText('LangGraph')).toBeVisible();
+    expect(screen.getByText('OpenAI Agents SDK')).toBeVisible();
+    expect(screen.getByText('PydanticAI')).toBeVisible();
+    expect(screen.getByText('Google ADK')).toBeVisible();
+    expect(screen.getByText('Other Agent')).toBeVisible();
+
+    expect(screen.queryByText('AI/ML API')).toBeNull();
+    expect(screen.queryByText('AI21 Labs')).toBeNull();
+    expect(screen.queryByText('Amazon SageMaker')).toBeNull();
+
+    expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+      feature: 'redteam_provider_tag_filtered',
+      tag: 'agents',
+    });
+  });
+
+  it('should call recordEvent with the correct provider_tag when a provider type is selected', () => {
+    const mockSetProvider = vi.fn();
+    const mockRecordEvent = vi.fn();
+
+    (useTelemetry as any).mockReturnValue({
+      recordEvent: mockRecordEvent,
+    });
+
+    const initialProvider: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+    );
+
+    const pythonProviderCard = screen
+      .getByText('Python Provider')
+      .closest('div[class*="MuiPaper-root"]');
+    if (pythonProviderCard) {
+      fireEvent.click(pythonProviderCard);
+    }
+
+    expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+      feature: 'redteam_provider_type_selected',
+      provider_type: 'python',
+      provider_label: 'Python Provider',
+      provider_tag: 'custom',
+    });
+  });
+
+  it('should reset the tag filter and display all provider options when the "All Tags" chip is clicked', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+    );
+
+    const agentsChip = screen.getByRole('button', { name: 'Agents' });
+    fireEvent.click(agentsChip);
+
+    expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
+
+    const allTagsChip = screen.getByRole('button', { name: 'All Tags' });
+    fireEvent.click(allTagsChip);
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+  });
+
+  it('should clear the selectedTag and show all provider options when the Change button is clicked', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: 'http',
+      label: 'My Test Provider',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="http"
+      />,
+    );
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
+    const agentsChip = screen.getByRole('button', { name: 'Agents' });
+    fireEvent.click(agentsChip);
+
+    expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
+
+    const allTagsButton = screen.getByRole('button', { name: 'All Tags' });
+    fireEvent.click(allTagsButton);
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+  });
+
+  it('should filter provider options correctly when availableProviderIds, search term, and tag are all provided', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    const availableProviderIds = ['langchain', 'autogen', 'http'];
+
+    renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        availableProviderIds={availableProviderIds}
+      />,
+    );
+
+    const searchInput = screen.getByPlaceholderText('Search providers...');
+    fireEvent.change(searchInput, { target: { value: 'lang' } });
+
+    const agentsChip = screen.getByRole('button', { name: 'Agents' });
+    fireEvent.click(agentsChip);
+
+    expect(screen.getByText('LangChain')).toBeVisible();
+    expect(screen.queryByText('AutoGen')).toBeNull();
+    expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
 });

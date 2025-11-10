@@ -1,8 +1,8 @@
 import { runPythonCode } from '../python/wrapper';
-import { type GradingResult, isGradingResult } from '../types';
+import { type GradingResult, isGradingResult } from '../types/index';
 import invariant from '../util/invariant';
 
-import type { AssertionParams } from '../types';
+import type { AssertionParams } from '../types/index';
 
 // Recursively map snake_case keys to camelCase for Python dataclass compatibility
 function mapSnakeCaseToCamelCase(obj: Record<string, any>): Record<string, any> {
@@ -41,7 +41,7 @@ export const handlePython = async ({
   assertion,
   renderedValue,
   valueFromScript,
-  context,
+  assertionValueContext,
   output,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
@@ -72,7 +72,7 @@ ${
     : `    return ${renderedValue}`
 }
 `;
-      result = await runPythonCode(pythonScript, 'main', [output, context]);
+      result = await runPythonCode(pythonScript, 'main', [output, assertionValueContext]);
     } else {
       result = valueFromScript;
     }
@@ -118,7 +118,7 @@ ${
         );
       }
       const pythonGradingResult = mappedObj as Omit<GradingResult, 'assertion'>;
-      if (assertion.threshold && pythonGradingResult.score < assertion.threshold) {
+      if (assertion.threshold !== undefined && pythonGradingResult.score < assertion.threshold) {
         pythonGradingResult.pass = false;
         const scoreMessage = `Python score ${pythonGradingResult.score} is less than threshold ${assertion.threshold}`;
         pythonGradingResult.reason = pythonGradingResult.reason
@@ -131,15 +131,12 @@ ${
       };
     } else {
       score = Number.parseFloat(String(result));
-      pass = assertion.threshold ? score >= assertion.threshold : score > 0;
       if (Number.isNaN(score)) {
         throw new Error(
           `Python assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
         );
       }
-      if (typeof assertion.threshold !== 'undefined' && score < assertion.threshold) {
-        pass = false;
-      }
+      pass = assertion.threshold !== undefined ? score >= assertion.threshold : score > 0;
     }
   } catch (err) {
     return {

@@ -146,6 +146,8 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
       <Paper variant="outlined" sx={{ p: 2, overflow: 'auto' }}>
         {spans.map((span, index) => {
           const status = getSpanStatus(span.statusCode);
+
+          // Original temporal timeline approach - both position AND width based on time
           const spanDurationPercent = totalDuration > 0 ? (span.duration / totalDuration) * 100 : 0;
           const spanStartPercent =
             totalDuration > 0 ? (span.relativeStart / totalDuration) * 100 : 0;
@@ -229,7 +231,7 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                     sx={{
                       position: 'absolute',
                       left: `${spanStartPercent}%`,
-                      width: `${Math.max(spanDurationPercent, 0.5)}%`,
+                      width: `${Math.max(spanDurationPercent, 0.5)}%`, // Minimum width for visibility
                       height: '100%',
                       backgroundColor:
                         status.color === 'error'

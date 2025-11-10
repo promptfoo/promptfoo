@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as path from 'path';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
@@ -8,7 +7,7 @@ import { testCaseFromCsvRow } from '../../src/csv';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import logger from '../../src/logger';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
@@ -17,10 +16,10 @@ import {
   readTests,
 } from '../../src/util/testCaseReader';
 
-import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types/index';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-jest.mock('../../src/fetch', () => ({
+jest.mock('../../src/util/fetch', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
@@ -29,10 +28,15 @@ jest.mock('proxy-agent', () => ({
 }));
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),
 }));
+jest.mock('../../src/util/fetch/index.ts');
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -1410,54 +1414,6 @@ describe('loadTestsFromGlob', () => {
     expect(result).toEqual(resolvedContent);
   });
 
-  it.skip('should recursively resolve file:// references in JSON test files', async () => {
-    const jsonContentWithRefs = [
-      {
-        description: 'JSON test with file refs',
-        vars: {
-          systemPrompt: 'file://system.md',
-          context: 'file://context.json',
-        },
-        assert: ['file://validations.json'],
-      },
-    ];
-
-    const resolvedContent = [
-      {
-        description: 'JSON test with file refs',
-        vars: {
-          systemPrompt: 'You are a helpful assistant.',
-          context: { documents: ['doc1', 'doc2'] },
-        },
-        assert: [
-          { type: 'contains', value: 'helpful' },
-          { type: 'not-contains', value: 'error' },
-        ],
-      },
-    ];
-
-    jest.mocked(globSync).mockReturnValue(['tests.json']);
-
-    // Mock fs.readFileSync to return JSON content
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(jsonContentWithRefs));
-
-    // Mock the require function to return the parsed JSON
-    jest.doMock(path.resolve('tests.json'), () => jsonContentWithRefs, { virtual: true });
-
-    // Mock maybeLoadConfigFromExternalFile to resolve file:// references
-    const mockMaybeLoadConfig =
-      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
-    mockMaybeLoadConfig.mockReturnValue(resolvedContent);
-
-    const result = await loadTestsFromGlob('tests.json');
-
-    expect(mockMaybeLoadConfig).toHaveBeenCalledWith(jsonContentWithRefs);
-    expect(result).toEqual(resolvedContent);
-
-    // Clean up the mock
-    jest.dontMock(path.resolve('tests.json'));
-  });
-
   it('should handle nested file:// references in complex test structures', async () => {
     const complexYamlWithRefs = [
       {
@@ -1499,6 +1455,34 @@ describe('loadTestsFromGlob', () => {
     expect(result[0].description).toEqual(resolvedContent[0].description);
     expect(result[0].vars).toEqual(resolvedContent[0].vars);
     expect(result[0].assert).toEqual(resolvedContent[0].assert);
+  });
+
+  it('should preserve Python assertion file references when loading YAML tests', async () => {
+    // This test verifies the fix for issue #5519
+    const yamlContentWithPythonAssertion = [
+      {
+        vars: { name: 'Should PASS' },
+        assert: [
+          {
+            type: 'python',
+            value: 'file://good_assertion.py',
+          },
+        ],
+      },
+    ];
+
+    jest.mocked(globSync).mockReturnValue(['tests.yaml']);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlContentWithPythonAssertion));
+
+    // Mock maybeLoadConfigFromExternalFile to preserve Python files in assertion contexts
+    const mockMaybeLoadConfig =
+      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+    mockMaybeLoadConfig.mockReturnValue(yamlContentWithPythonAssertion);
+
+    const result = await loadTestsFromGlob('tests.yaml');
+
+    expect(mockMaybeLoadConfig).toHaveBeenCalledWith(yamlContentWithPythonAssertion);
+    expect((result[0].assert![0] as any).value).toBe('file://good_assertion.py'); // Should remain as file reference
   });
 });
 

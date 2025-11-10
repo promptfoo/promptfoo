@@ -1,6 +1,6 @@
 import { handleContainsHtml, handleIsHtml } from '../../src/assertions/html';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types';
+import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
 
 const mockProvider: ApiProvider = {
   id: () => 'mock',
@@ -9,7 +9,7 @@ const mockProvider: ApiProvider = {
 
 const defaultParams = {
   baseType: 'contains-html' as const,
-  context: {
+  assertionValueContext: {
     vars: {},
     test: {} as AtomicTestCase,
     prompt: 'test prompt',

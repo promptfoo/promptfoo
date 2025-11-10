@@ -129,16 +129,17 @@ If you write `"contains-any: <b> </span>"`, promptfoo treats `<b> </span>` as a 
 
 ### Special CSV Columns
 
-| Column                            | Purpose                    | Example             |
-| --------------------------------- | -------------------------- | ------------------- |
-| `__expected`                      | Single assertion           | `contains: Paris`   |
-| `__expected1`, `__expected2`, ... | Multiple assertions        | `equals: 42`        |
-| `__description`                   | Test description           | `Basic math test`   |
-| `__prefix`                        | Prepend to prompt          | `You must answer: ` |
-| `__suffix`                        | Append to prompt           | ` (be concise)`     |
-| `__metric`                        | Metric name for assertions | `accuracy`          |
-| `__threshold`                     | Pass threshold             | `0.8`               |
-| `__metadata:*`                    | Filterable metadata        | See below           |
+| Column                                                      | Purpose                                          | Example                                                           |
+| ----------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------- |
+| `__expected`                                                | Single assertion                                 | `contains: Paris`                                                 |
+| `__expected1`, `__expected2`, ...                           | Multiple assertions                              | `equals: 42`                                                      |
+| `__description`                                             | Test description                                 | `Basic math test`                                                 |
+| `__prefix`                                                  | Prepend to prompt                                | `You must answer: `                                               |
+| `__suffix`                                                  | Append to prompt                                 | ` (be concise)`                                                   |
+| `__metric`                                                  | Metric name for assertions                       | `accuracy`                                                        |
+| `__threshold`                                               | Pass threshold (applies to all asserts)          | `0.8`                                                             |
+| `__metadata:*`                                              | Filterable metadata                              | See below                                                         |
+| `__config:__expected:<key>` or `__config:__expectedN:<key>` | Set configuration for all or specific assertions | `__config:__expected:threshold`, `__config:__expected2:threshold` |
 
 Using `__metadata` without a key is not supported. Specify the metadata field like `__metadata:category`.
 If a CSV file includes a `__metadata` column without a key, Promptfoo logs a warning and ignores the column.
@@ -451,10 +452,16 @@ tests:
         threshold: 1000 # milliseconds
 ```
 
-## Loading from Google Sheets
+## External Data Sources
 
-See [Google Sheets integration](/docs/configuration/guide#loading-tests-from-csv) for details on loading test data directly from spreadsheets.
+### Google Sheets
 
-## Loading from HuggingFace datasets
+See [Google Sheets integration](/docs/integrations/google-sheets) for details on loading test data directly from spreadsheets.
+
+### SharePoint
+
+See [SharePoint integration](/docs/integrations/sharepoint) for details on loading test data from Microsoft SharePoint document libraries.
+
+### HuggingFace Datasets
 
 See [HuggingFace Datasets](/docs/configuration/huggingface-datasets) for instructions on importing test cases from existing datasets.

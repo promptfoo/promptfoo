@@ -1,7 +1,7 @@
 import { matchesFactuality } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
-import type { GradingConfig } from '../../src/types';
+import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesFactuality', () => {
   beforeEach(() => {
@@ -296,6 +296,7 @@ The submitted answer may either be a subset or superset of the expert answer, or
       expect.stringContaining(
         'The submitted answer may either be a subset or superset of the expert answer',
       ),
+      expect.any(Object),
     );
   });
 
@@ -331,15 +332,66 @@ The submitted answer may either be a subset or superset of the expert answer, or
     await matchesFactuality(input, expected, output, grading);
 
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-      expect.stringContaining('Input {{ var }}'),
-    );
-    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-      expect.stringContaining('Expected {{ var }}'),
-    );
-    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-      expect.stringContaining('Output {{ var }}'),
+      expect.any(String),
+      expect.objectContaining({
+        vars: expect.objectContaining({
+          input: 'Input {{ var }}',
+          ideal: 'Expected {{ var }}',
+          completion: 'Output {{ var }}',
+        }),
+      }),
     );
 
     process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
+  });
+
+  it('should correctly substitute variables in custom rubricPrompt', async () => {
+    const input = 'What is the capital of France?';
+    const expected = 'Paris';
+    const output = 'The capital of France is Paris.';
+
+    const customPrompt = `Compare these answers:
+Question: {{input}}
+Reference: {{ideal}}
+Submitted: {{completion}}
+
+Determine if submitted answer is factually correct.
+Choose: (A) subset, (B) superset, (C) same, (D) disagree, (E) differ but factual`;
+
+    const mockCallApi = jest.fn().mockResolvedValue({
+      output: '(A) The submitted answer is correct.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const grading = {
+      rubricPrompt: customPrompt,
+      provider: {
+        id: () => 'test-provider',
+        callApi: mockCallApi,
+      },
+    };
+
+    const result = await matchesFactuality(input, expected, output, grading);
+
+    expect(result).toEqual({
+      pass: true,
+      reason: 'The submitted answer is correct.',
+      score: 1,
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+    });
+
+    // Verify all variables were substituted in the prompt
+    expect(mockCallApi).toHaveBeenCalledTimes(1);
+    const actualPrompt = mockCallApi.mock.calls[0][0];
+    expect(actualPrompt).toContain('Question: What is the capital of France?');
+    expect(actualPrompt).toContain('Reference: Paris');
+    expect(actualPrompt).toContain('Submitted: The capital of France is Paris.');
+    expect(actualPrompt).not.toContain('{{input}}');
+    expect(actualPrompt).not.toContain('{{ideal}}');
+    expect(actualPrompt).not.toContain('{{completion}}');
   });
 });

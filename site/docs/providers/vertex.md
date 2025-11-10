@@ -15,6 +15,10 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 - `vertex:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding (2M context)
 - `vertex:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - `vertex:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
+- `vertex:gemini-2.5-flash-preview-09-2025` - Newest Gemini 2.5 Flash preview release featuring enhanced quality improvements
+- `vertex:gemini-2.5-flash-lite-preview-09-2025` - Latest Flash Lite preview release with further cost and latency optimizations
+- `vertex:gemini-flash-latest` - Alias for `vertex:gemini-2.5-flash-preview-09-2025`
+- `vertex:gemini-flash-lite-latest` - Alias for `vertex:gemini-2.5-flash-lite-preview-09-2025`
 - `vertex:gemini-2.0-pro` - Strongest model quality, especially for code & world knowledge with 2M context window
 - `vertex:gemini-2.0-flash-thinking-exp` - Enhanced reasoning capabilities with thinking process in responses
 - `vertex:gemini-2.0-flash-001` - Workhorse model for all daily tasks with strong overall performance and real-time streaming
@@ -31,6 +35,7 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-opus-4-1@20250805` - Latest Claude 4.1 Opus model
 - `vertex:claude-opus-4@20250514` - Claude 4 Opus model
 - `vertex:claude-sonnet-4@20250514` - Claude 4 Sonnet model
+- `vertex:claude-haiku-4-5@20251001` - Claude 4.5 Haiku model
 - `vertex:claude-3-7-sonnet@20250219` - Claude 3.7 Sonnet model
 - `vertex:claude-3-haiku@20240307` - Fast Claude 3 Haiku
 - `vertex:claude-3-opus@20240229` - Claude 3 Opus (Public Preview)
@@ -193,7 +198,37 @@ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/credentials.json"
 export VERTEX_PROJECT_ID="your-project-id"
 ```
 
-#### Option 3: Direct API Key (Quick Testing)
+#### Option 3: Service Account via Config (Alternative)
+
+You can also provide service account credentials directly in your configuration:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-pro
+    config:
+      # Load credentials from file
+      credentials: 'file://service-account.json'
+      projectId: 'your-project-id'
+```
+
+Or with inline credentials (not recommended for production):
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-pro
+    config:
+      credentials: '{"type":"service_account","project_id":"..."}'
+      projectId: 'your-project-id'
+```
+
+This approach:
+
+- Allows per-provider authentication
+- Enables using different service accounts for different models
+- Simplifies credential management in complex setups
+- Avoids the need for environment variables
+
+#### Option 4: Direct API Key (Quick Testing)
 
 For quick testing, you can use a temporary access token:
 
@@ -207,7 +242,7 @@ export VERTEX_PROJECT_ID="your-project-id"
 
 **Note:** Access tokens expire after 1 hour. For long-running evaluations, use Application Default Credentials or Service Account authentication.
 
-#### 4. Environment Variables
+#### 5. Environment Variables
 
 Promptfoo automatically loads environment variables from your shell or a `.env` file. Create a `.env` file in your project root:
 
@@ -361,8 +396,11 @@ jobs:
 providers:
   - id: vertex:gemini-2.5-pro
     config:
+      # Authentication options
+      credentials: 'file://service-account.json' # Optional: Use specific service account
       projectId: ${VERTEX_PROJECT_ID}
       region: ${VERTEX_REGION:-us-central1}
+
       generationConfig:
         temperature: 0.2
         maxOutputTokens: 2048
@@ -476,24 +514,26 @@ defaultTest:
 
 ### Configuration Reference
 
-| Option                             | Description                                      | Default                              |
-| ---------------------------------- | ------------------------------------------------ | ------------------------------------ |
-| `apiKey`                           | GCloud API token                                 | None                                 |
-| `apiHost`                          | API host override                                | `{region}-aiplatform.googleapis.com` |
-| `apiVersion`                       | API version                                      | `v1`                                 |
-| `projectId`                        | GCloud project ID                                | None                                 |
-| `region`                           | GCloud region                                    | `us-central1`                        |
-| `publisher`                        | Model publisher                                  | `google`                             |
-| `context`                          | Model context                                    | None                                 |
-| `examples`                         | Few-shot examples                                | None                                 |
-| `safetySettings`                   | Content filtering                                | None                                 |
-| `generationConfig.temperature`     | Randomness control                               | None                                 |
-| `generationConfig.maxOutputTokens` | Max tokens to generate                           | None                                 |
-| `generationConfig.topP`            | Nucleus sampling                                 | None                                 |
-| `generationConfig.topK`            | Sampling diversity                               | None                                 |
-| `generationConfig.stopSequences`   | Generation stop triggers                         | `[]`                                 |
-| `toolConfig`                       | Tool/function calling config                     | None                                 |
-| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`) | None                                 |
+| Option                             | Description                                            | Default                              |
+| ---------------------------------- | ------------------------------------------------------ | ------------------------------------ |
+| `apiKey`                           | GCloud API token                                       | None                                 |
+| `apiHost`                          | API host override                                      | `{region}-aiplatform.googleapis.com` |
+| `apiVersion`                       | API version                                            | `v1`                                 |
+| `credentials`                      | Service account credentials (JSON or file path)        | None                                 |
+| `projectId`                        | GCloud project ID                                      | `VERTEX_PROJECT_ID` env var          |
+| `region`                           | GCloud region                                          | `us-central1`                        |
+| `publisher`                        | Model publisher                                        | `google`                             |
+| `context`                          | Model context                                          | None                                 |
+| `examples`                         | Few-shot examples                                      | None                                 |
+| `safetySettings`                   | Content filtering                                      | None                                 |
+| `generationConfig.temperature`     | Randomness control                                     | None                                 |
+| `generationConfig.maxOutputTokens` | Max tokens to generate                                 | None                                 |
+| `generationConfig.topP`            | Nucleus sampling                                       | None                                 |
+| `generationConfig.topK`            | Sampling diversity                                     | None                                 |
+| `generationConfig.stopSequences`   | Generation stop triggers                               | `[]`                                 |
+| `responseSchema`                   | JSON schema for structured output (supports `file://`) | None                                 |
+| `toolConfig`                       | Tool/function calling config                           | None                                 |
+| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -620,6 +660,71 @@ providers:
         topP: 0.8 # Nucleus sampling
         topK: 40 # Top-k sampling
         stopSequences: ["\n"] # Stop generation at specific sequences
+```
+
+### Structured Output (JSON Schema)
+
+Control output format using JSON schemas for consistent, parseable responses:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash
+    config:
+      # Inline JSON schema
+      responseSchema: |
+        {
+          "type": "object",
+          "properties": {
+            "summary": {"type": "string", "description": "Brief summary"},
+            "rating": {"type": "integer", "minimum": 1, "maximum": 5}
+          },
+          "required": ["summary", "rating"]
+        }
+
+  # Or load from external file
+  - id: vertex:gemini-2.5-pro
+    config:
+      responseSchema: file://schemas/analysis-schema.json
+
+tests:
+  - assert:
+      - type: is-json # Validates JSON format
+      - type: javascript
+        value: JSON.parse(output).rating >= 1 && JSON.parse(output).rating <= 5
+```
+
+The `responseSchema` option automatically:
+
+- Sets `response_mime_type` to `application/json`
+- Validates the schema format
+- Supports variable substitution with `{{var}}` syntax
+- Loads schemas from external files with `file://` protocol
+
+Example `schemas/analysis-schema.json`:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sentiment": {
+      "type": "string",
+      "enum": ["positive", "negative", "neutral"],
+      "description": "Overall sentiment of the text"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score from 0 to 1"
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key topics identified"
+    }
+  },
+  "required": ["sentiment", "confidence"]
+}
 ```
 
 ### Context and Examples
