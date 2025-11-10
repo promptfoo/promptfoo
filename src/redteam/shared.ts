@@ -70,9 +70,12 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
   // Generate new test cases
   logger.info('Generating test cases...');
+  const { maxConcurrency, ...passThroughOptions } = options;
+
   const redteamConfig = await doGenerateRedteam({
-    ...options,
+    ...passThroughOptions,
     ...(options.liveRedteamConfig?.commandLineOptions || {}),
+    ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
     config: configPath,
     output: redteamPath,
     force: options.force,

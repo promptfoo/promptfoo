@@ -26,6 +26,7 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types/index';
+import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -135,6 +136,11 @@ export async function readStandaloneTestsFile(
       feature: 'csv tests file - google sheet',
     });
     rows = await fetchCsvFromGoogleSheet(varsPath);
+  } else if (/https:\/\/[^/]+\.sharepoint\.com\//i.test(varsPath)) {
+    telemetry.record('feature_used', {
+      feature: 'csv tests file - sharepoint',
+    });
+    rows = await fetchCsvFromSharepoint(varsPath);
   } else if (fileExtension === 'csv') {
     telemetry.record('feature_used', {
       feature: 'csv tests file - local',

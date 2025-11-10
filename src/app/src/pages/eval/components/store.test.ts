@@ -329,7 +329,6 @@ describe('useTableStore', () => {
       expect(state.filters.appliedCount).toBe(0);
       expect(state.filters.values[mockFilterId].value).toBe('');
     });
-
     it('should decrement `filters.appliedCount` when `updateFilter` is called with a severity filter that changes from having a value to having an empty value', () => {
       const mockFilterId = 'mock-uuid-1';
       (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
@@ -584,6 +583,285 @@ describe('useTableStore', () => {
       expect(state.filters.options.strategy).toEqual(['multilingual', 'retry', 'basic']);
       expect(state.filters.options.plugin).toEqual(['pii', 'bias']);
     });
+
+    it("should fall back to the first filter's logicOperator when the filter with sortIndex 1 has a null logicOperator", () => {
+      const mockFilterId1 = 'mock-uuid-1';
+      const mockFilterId2 = 'mock-uuid-2';
+      const mockFilterId3 = 'mock-uuid-3';
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId1)
+        .mockImplementationOnce(() => mockFilterId2)
+        .mockImplementationOnce(() => mockFilterId3);
+
+      const newFilter1 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-1',
+        logicOperator: 'or' as const,
+        field: 'test-metric',
+      };
+
+      const newFilter2 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-2',
+        logicOperator: null as any,
+        field: 'test-metric',
+      };
+
+      const newFilter3 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-3',
+        field: 'test-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter1);
+        useTableStore.getState().addFilter(newFilter2);
+        useTableStore.getState().addFilter(newFilter3);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.values[mockFilterId3].logicOperator).toBe('or');
+    });
+
+    it("should fall back to the first filter's logicOperator when the filter with sortIndex 1 has an undefined logicOperator", () => {
+      const mockFilterId1 = 'mock-uuid-1';
+      const mockFilterId2 = 'mock-uuid-2';
+      const mockFilterId3 = 'mock-uuid-3';
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId1)
+        .mockImplementationOnce(() => mockFilterId2)
+        .mockImplementationOnce(() => mockFilterId3);
+
+      const newFilter1 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-1',
+        logicOperator: 'or' as const,
+        field: 'test-metric',
+      };
+
+      const newFilter2 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-2',
+        logicOperator: undefined,
+        field: 'test-metric',
+      };
+
+      const newFilter3 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-3',
+        field: 'test-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter1);
+        useTableStore.getState().addFilter(newFilter2);
+        useTableStore.getState().addFilter(newFilter3);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.values[mockFilterId3].logicOperator).toBe('or');
+    });
+
+    it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has a null logicOperator', () => {
+      const mockFilterId2 = 'mock-uuid-2';
+      const mockFilterId3 = 'mock-uuid-3';
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId2)
+        .mockImplementationOnce(() => mockFilterId3);
+
+      const newFilter2 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-2',
+        logicOperator: null as any,
+        field: 'test-metric',
+      };
+
+      const newFilter3 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-3',
+        field: 'test-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter2);
+        useTableStore.getState().addFilter(newFilter3);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.values[mockFilterId3].logicOperator).toBe('and');
+    });
+
+    it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has an undefined logicOperator', () => {
+      const mockFilterId2 = 'mock-uuid-2';
+      const mockFilterId3 = 'mock-uuid-3';
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId2)
+        .mockImplementationOnce(() => mockFilterId3);
+
+      const newFilter2 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-2',
+        logicOperator: undefined,
+        field: 'test-metric',
+      };
+
+      const newFilter3 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-3',
+        field: 'test-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter2);
+        useTableStore.getState().addFilter(newFilter3);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.values[mockFilterId3].logicOperator).toBe('and');
+    });
+    it('should inherit logicOperator from the filter with sortIndex 1 when adding a new filter and multiple filters with different logicOperators exist', () => {
+      const mockFilterId0 = 'mock-uuid-0';
+      const mockFilterId1 = 'mock-uuid-1';
+      const mockFilterId2 = 'mock-uuid-2';
+      const mockFilterIdNew = 'mock-uuid-new';
+
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId0)
+        .mockImplementationOnce(() => mockFilterId1)
+        .mockImplementationOnce(() => mockFilterId2)
+        .mockImplementationOnce(() => mockFilterIdNew);
+
+      act(() => {
+        useTableStore.getState().addFilter({
+          type: 'metric',
+          operator: 'equals',
+          value: 'test-metric-value-0',
+          logicOperator: 'or',
+        });
+        useTableStore.getState().addFilter({
+          type: 'metric',
+          operator: 'equals',
+          value: 'test-metric-value-1',
+          logicOperator: 'and',
+        });
+        useTableStore.getState().addFilter({
+          type: 'metric',
+          operator: 'equals',
+          value: 'test-metric-value-2',
+          logicOperator: 'or',
+        });
+      });
+
+      const newFilter = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-new',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter);
+      });
+
+      const state = useTableStore.getState();
+      const addedFilter = state.filters.values[mockFilterIdNew];
+      expect(addedFilter).toBeDefined();
+      expect(addedFilter.logicOperator).toBe('and');
+    });
+
+    it('should inherit the updated logicOperator when a new filter is added after updating an existing filter', () => {
+      const mockFilterId1 = 'mock-uuid-1';
+      const mockFilterId2 = 'mock-uuid-2';
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId1)
+        .mockImplementationOnce(() => mockFilterId2);
+
+      const initialFilter = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value',
+        field: 'test-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(initialFilter);
+      });
+
+      const updatedFilter: ResultsFilter = {
+        id: mockFilterId1,
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value',
+        field: 'test-metric',
+        logicOperator: 'or',
+        sortIndex: 0,
+      };
+
+      act(() => {
+        useTableStore.getState().updateFilter(updatedFilter);
+      });
+
+      const newFilter = {
+        type: 'metadata' as const,
+        operator: 'contains' as const,
+        value: 'test-metadata-value',
+        field: 'test-metadata',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter);
+      });
+
+      const state = useTableStore.getState();
+      const addedFilter = Object.values(state.filters.values).find(
+        (filter) => filter.id === mockFilterId2,
+      );
+
+      expect(addedFilter).toBeDefined();
+      expect(addedFilter?.logicOperator).toBe('or');
+    });
+
+    it('should use the provided logicOperator for a new filter when logicOperator is explicitly set in the filter argument, regardless of existing filters', () => {
+      const mockFilterId = 'mock-uuid-1';
+      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+
+      const existingFilter = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'existing-metric-value',
+        field: 'existing-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(existingFilter);
+      });
+
+      const newFilter = {
+        type: 'metadata' as const,
+        operator: 'contains' as const,
+        value: 'test-metadata-value',
+        field: 'test-metadata',
+        logicOperator: 'or' as const,
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter);
+      });
+
+      const state = useTableStore.getState();
+      const addedFilter = state.filters.values[mockFilterId];
+      expect(addedFilter).toBeDefined();
+      expect(addedFilter.logicOperator).toBe('or');
+    });
   });
 
   describe('fetchEvalData', () => {
@@ -836,7 +1114,6 @@ describe('useTableStore', () => {
       expect(state.isFetching).toBe(false);
       expect(result).not.toBe(null);
     });
-
     it('should keep isFetching unchanged when fetchEvalData is called with skipLoadingState=true and the API call fails', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({

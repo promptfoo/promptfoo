@@ -9,7 +9,7 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
-export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
+export const DEFAULT_STRATEGIES = ['basic', 'jailbreak:meta', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
 export const MULTI_TURN_STRATEGIES = [
@@ -72,6 +72,7 @@ export const ADDITIONAL_STRATEGIES = [
   'homoglyph',
   'image',
   'jailbreak:hydra',
+  'jailbreak',
   'jailbreak:likert',
   'jailbreak:meta',
   'jailbreak:tree',
