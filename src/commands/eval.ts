@@ -9,8 +9,9 @@ import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
-import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
-import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { evaluate } from '../evaluator';
+import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -21,19 +22,19 @@ import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
-import { promptfooCommand } from '../util/promptfooCommand';
 import { checkCloudPermissions } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
+import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
+import { promptfooCommand } from '../util/promptfooCommand';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
-import { getErrorResultIds, deleteErrorResults, recalculatePromptMetrics } from './retry';
+import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
 
@@ -45,6 +46,7 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types/index';
+import { EMAIL_OK_STATUS } from '../types/email';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -127,7 +129,7 @@ export async function doEval(
       ...(Boolean(config?.redteam) && { isRedteam: true }),
     });
 
-    if (cmdObj.write) {
+    if (cmdObj.write ?? commandLineOptions?.write ?? true) {
       await runDbMigrations();
     }
 
@@ -349,12 +351,16 @@ export async function doEval(
     } else {
       // Misc settings with proper CLI vs config priority
       // CLI values explicitly provided by user should override config, but defaults should not
-      const iterations = cmdObj.repeat ?? evaluateOptions.repeat ?? Number.NaN;
+      const iterations =
+        cmdObj.repeat ?? commandLineOptions?.repeat ?? evaluateOptions.repeat ?? Number.NaN;
       repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
-      cache = cmdObj.cache ?? evaluateOptions.cache ?? true;
+      cache = cmdObj.cache ?? commandLineOptions?.cache ?? evaluateOptions.cache ?? true;
       maxConcurrency =
-        cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
-      delay = cmdObj.delay ?? evaluateOptions.delay ?? 0;
+        cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency ??
+        DEFAULT_MAX_CONCURRENCY;
+      delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
     if (cache === false || repeat > 1) {
@@ -389,8 +395,14 @@ export async function doEval(
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
-      await promptForEmailUnverified();
-      await checkEmailStatusOrExit();
+      // Prompt for email until we get a valid one
+      // Other status problems apart from bad emails (like 'exceeded_limit') just log and exit
+      let hasValidEmail = false;
+      while (!hasValidEmail) {
+        const { emailNeedsValidation } = await promptForEmailUnverified();
+        const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
+        hasValidEmail = res === EMAIL_OK_STATUS;
+      }
     }
 
     if (!resumeEval) {
@@ -409,9 +421,11 @@ export async function doEval(
           ? false
           : cmdObj.progressBar !== undefined
             ? cmdObj.progressBar !== false
-            : evaluateOptions.showProgressBar !== undefined
-              ? evaluateOptions.showProgressBar
-              : true,
+            : commandLineOptions?.progressBar !== undefined
+              ? commandLineOptions.progressBar !== false
+              : evaluateOptions.showProgressBar !== undefined
+                ? evaluateOptions.showProgressBar
+                : true,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
@@ -433,7 +447,7 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    if (!resumeEval && cmdObj.generateSuggestions) {
+    if (!resumeEval && (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions)) {
       options.generateSuggestions = true;
     }
     // load scenarios or tests from an external file
@@ -462,9 +476,10 @@ export async function doEval(
     }
 
     // Create or load eval record
+    const shouldWrite = cmdObj.write ?? commandLineOptions?.write ?? true;
     const evalRecord = resumeEval
       ? resumeEval
-      : cmdObj.write
+      : shouldWrite
         ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
         : new Eval(config, { runtimeOptions: options });
 
@@ -534,11 +549,13 @@ export async function doEval(
 
     const wantsToShare = hasExplicitDisable
       ? false
-      : cmdObj.share || config.sharing || cloudConfig.isEnabled();
+      : (cmdObj.share ?? commandLineOptions?.share ?? config.sharing ?? cloudConfig.isEnabled());
 
     const shareableUrl =
       wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
-
+    if (shareableUrl) {
+      evalRecord.shared = true;
+    }
     let successes = 0;
     let failures = 0;
     let errors = 0;
@@ -560,7 +577,8 @@ export async function doEval(
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
-    if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
+    const shouldShowTable = cmdObj.table ?? commandLineOptions?.table ?? true;
+    if (shouldShowTable && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
       // Output CLI table
       const outputTable = generateTable(table);
@@ -594,7 +612,7 @@ export async function doEval(
     }
 
     printBorder();
-    if (cmdObj.write) {
+    if (shouldWrite) {
       if (shareableUrl) {
         logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
       } else if (wantsToShare && !isSharingEnabled(evalRecord)) {

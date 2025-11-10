@@ -75,8 +75,8 @@ export class PromptfooModelProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _context?: CallApiContextParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     logger.debug(`[PromptfooModel] Calling API with model: ${this.model}`);
 

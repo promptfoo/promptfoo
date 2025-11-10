@@ -68,7 +68,7 @@ describe('METEOR assertion', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0);
     expect(result.reason).toBe(
-      'METEOR assertion requires the natural package. Please install it using: npm install natural',
+      'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
     );
     expect(result.assertion).toEqual({
       type: 'meteor',

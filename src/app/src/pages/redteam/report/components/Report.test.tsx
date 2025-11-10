@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Report from './Report';
+import { callApi } from '@app/utils/api';
 
 // Mock dependencies
 vi.mock('react-router-dom', () => ({
@@ -50,11 +51,11 @@ vi.mock('./EnterpriseBanner', () => ({
 }));
 
 vi.mock('./Overview', () => ({
-  default: vi.fn(({ vulnerabilitiesDataGridRef }: any) => null),
+  default: vi.fn(() => null),
 }));
 
 vi.mock('./StrategyStats', () => ({
-  default: () => null,
+  default: vi.fn(() => null),
 }));
 
 vi.mock('./RiskCategories', () => ({
@@ -62,7 +63,7 @@ vi.mock('./RiskCategories', () => ({
 }));
 
 vi.mock('./TestSuites', () => ({
-  default: vi.fn(({ vulnerabilitiesDataGridRef }: any) => null),
+  default: vi.fn(() => null),
 }));
 
 vi.mock('./FrameworkCompliance', () => ({
@@ -87,6 +88,7 @@ vi.mock('@app/components/EnterpriseBanner', () => ({
 
 import Overview from './Overview';
 import TestSuites from './TestSuites';
+import StrategyStats from './StrategyStats';
 
 describe('Report Component Navigation', () => {
   const mockNavigate = vi.fn();
@@ -219,13 +221,93 @@ describe('Report Component Edge Cases', () => {
   });
 
   it('should render without error when vulnerabilitiesDataGridRef.current is null', async () => {
-    const { findByText } = render(<Report />);
+    const { findAllByText } = render(<Report />);
 
     await waitFor(() => {
       expect(Overview).toHaveBeenCalled();
       expect(TestSuites).toHaveBeenCalled();
     });
 
-    await findByText('LLM Risk Assessment');
+    // Should find the text in both the mobile and desktop headers
+    const elements = await findAllByText('Test eval');
+    expect(elements.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should render StrategyStats with an empty plugins array when evalData.config.redteam.plugins is undefined', async () => {
+    vi.mocked(callApi).mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          data: {
+            config: {
+              redteam: {},
+              description: 'Test eval without plugins',
+              providers: [],
+            },
+            results: {
+              results: [],
+            },
+            prompts: [],
+            createdAt: new Date().toISOString(),
+            version: 4,
+          },
+        }),
+    } as Response);
+
+    render(<Report />);
+
+    await waitFor(() => {
+      expect(StrategyStats).toHaveBeenCalled();
+    });
+
+    const strategyStatsProps = vi.mocked(StrategyStats).mock.calls[0][0];
+    expect(strategyStatsProps.plugins).toEqual([]);
+  });
+});
+
+describe('Report Component Prop Passing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useNavigate).mockReturnValue(vi.fn());
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-123' },
+    });
+  });
+
+  it('should pass the plugins array from evalData as a prop to the StrategyStats component', async () => {
+    const mockPlugins = [
+      { id: 'policy:1234-5678', name: 'My Custom Policy' },
+      { id: 'policy:abcd-efgh', name: 'Another Custom Policy' },
+    ];
+
+    vi.mocked(callApi).mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          data: {
+            config: {
+              redteam: {
+                plugins: mockPlugins,
+              },
+              description: 'Test eval with plugins',
+              providers: [],
+            },
+            results: {
+              results: [],
+            },
+            prompts: [],
+            createdAt: new Date().toISOString(),
+            version: 4,
+          },
+        }),
+    } as Response);
+
+    render(<Report />);
+
+    await waitFor(() => {
+      expect(StrategyStats).toHaveBeenCalled();
+    });
+
+    const strategyStatsProps = vi.mocked(StrategyStats).mock.calls[0][0];
+    expect(strategyStatsProps.plugins).toEqual(mockPlugins);
   });
 });

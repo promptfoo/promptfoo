@@ -1,5 +1,4 @@
-import { AssertionsResult } from '../../src/assertions/assertionsResult';
-
+import { AssertionsResult, GUARDRAIL_BLOCKED_REASON } from '../../src/assertions/assertionsResult';
 import type { AssertionSet, GradingResult } from '../../src/types/index';
 
 describe('AssertionsResult', () => {
@@ -231,7 +230,7 @@ describe('AssertionsResult', () => {
 
     const result = await assertionsResult.testResult();
     expect(result.pass).toBe(true);
-    expect(result.reason).toBe('Content failed guardrail safety checks');
+    expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
   });
 
   it('handles multiple named scores from different sources', async () => {

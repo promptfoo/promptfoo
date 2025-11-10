@@ -28,6 +28,7 @@ import {
   type Assertion,
   type AssertionType,
   type AtomicTestCase,
+  type CallApiContextParams,
   type GradingResult,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -70,6 +71,7 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
+import { handleRuby } from './ruby';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
@@ -149,12 +151,16 @@ const ASSERTION_HANDLERS: Record<
       const { handleMeteorAssertion } = await import('./meteor');
       return handleMeteorAssertion(params);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Cannot find module')) {
+      if (
+        error instanceof Error &&
+        (error.message.includes('Cannot find module') ||
+          error.message.includes('natural" package is required'))
+      ) {
         return {
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural',
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
           assertion: params.assertion,
         };
       }
@@ -169,6 +175,7 @@ const ASSERTION_HANDLERS: Record<
   pi: handlePiScorer,
   python: handlePython,
   regex: handleRegex,
+  ruby: handleRuby,
   'rouge-n': handleRougeScore,
   similar: handleSimilar,
   'starts-with': handleStartsWith,
@@ -208,7 +215,6 @@ export async function runAssertion({
   test,
   latencyMs,
   providerResponse,
-  assertIndex,
   traceId,
 }: {
   prompt?: string;
@@ -297,6 +303,23 @@ export async function runAssertion({
             assertion,
           };
         }
+      } else if (filePath.endsWith('.rb')) {
+        try {
+          const { runRuby } = await import('../ruby/rubyUtils');
+          const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
+            output,
+            context,
+          ]);
+          valueFromScript = rubyScriptOutput;
+          logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
+        } catch (error) {
+          return {
+            pass: false,
+            score: 0,
+            reason: (error as Error).message,
+            assertion,
+          };
+        }
       } else {
         renderedValue = processFileReference(renderedValue);
       }
@@ -327,10 +350,20 @@ export async function runAssertion({
     });
   }
 
+  // Construct CallApiContextParams for model-graded assertions that need originalProvider
+  const providerCallContext: CallApiContextParams | undefined = provider
+    ? {
+        originalProvider: provider,
+        prompt: { raw: prompt || '', label: '' },
+        vars: test.vars || {},
+      }
+    : undefined;
+
   const assertionParams: AssertionParams = {
     assertion,
     baseType: getAssertionBaseType(assertion),
-    context,
+    providerCallContext,
+    assertionValueContext: context,
     cost,
     inverse: isAssertionInverse(assertion),
     latencyMs,
@@ -353,6 +386,17 @@ export async function runAssertion({
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
     const result = await handler(assertionParams);
+
+    // Store rendered assertion value in metadata if it differs from the original template
+    // This allows the UI to display substituted variable values instead of raw templates
+    if (
+      renderedValue !== undefined &&
+      renderedValue !== assertion.value &&
+      typeof renderedValue === 'string'
+    ) {
+      result.metadata = result.metadata || {};
+      result.metadata.renderedAssertionValue = renderedValue;
+    }
 
     // If weight is 0, treat this as a metric-only assertion that can't fail
     if (assertion.weight === 0) {
@@ -474,6 +518,7 @@ export async function runCompareAssertion(
   test: AtomicTestCase,
   assertion: Assertion,
   outputs: string[],
+  context?: CallApiContextParams,
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
   test = getFinalTest(test, assertion);
@@ -482,6 +527,7 @@ export async function runCompareAssertion(
     outputs,
     test.options,
     test.vars,
+    context,
   );
   return comparisonResults.map((result) => ({
     ...result,

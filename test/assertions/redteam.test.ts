@@ -49,7 +49,7 @@ describe('handleRedteam', () => {
     const grade = await handleRedteam({
       assertion,
       baseType: getAssertionBaseType(assertion),
-      context: {
+      assertionValueContext: {
         prompt,
         vars: {},
         test,

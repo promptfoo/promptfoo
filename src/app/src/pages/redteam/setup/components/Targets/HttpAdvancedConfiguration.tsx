@@ -33,7 +33,6 @@ interface HttpAdvancedConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: any) => void;
   defaultRequestTransform?: string;
-  onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
 }
 
@@ -67,11 +66,10 @@ function a11yProps(index: number) {
   };
 }
 
-const HttpAdvancedConfiguration = ({
+const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
   selectedTarget,
   defaultRequestTransform,
   updateCustomTarget,
-  onTargetTested,
   onSessionTested,
 }: HttpAdvancedConfigurationProps) => {
   // Tab state management

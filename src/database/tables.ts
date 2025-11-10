@@ -364,12 +364,27 @@ export const modelAuditsTable = sqliteTable(
 
     // Optional metadata
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, any>>(),
+
+    // Model revision tracking (dual-field approach for deduplication + security)
+    modelId: text('model_id'), // Normalized model identifier (e.g., "meta-llama/Llama-2-7b")
+    revisionSha: text('revision_sha'), // Native revision (HF Git SHA, S3 version ID, etc.) - nullable
+    contentHash: text('content_hash'), // SHA-256 of actual downloaded content - always present
+    modelSource: text('model_source'), // 'huggingface', 's3', 'gcs', 'local', etc.
+    sourceLastModified: integer('source_last_modified'), // Unix timestamp in milliseconds
+    scannerVersion: text('scanner_version'), // ModelAudit version used (e.g., "0.2.14")
   },
   (table) => ({
     createdAtIdx: index('model_audits_created_at_idx').on(table.createdAt),
     modelPathIdx: index('model_audits_model_path_idx').on(table.modelPath),
     hasErrorsIdx: index('model_audits_has_errors_idx').on(table.hasErrors),
     modelTypeIdx: index('model_audits_model_type_idx').on(table.modelType),
+
+    // Revision tracking indexes for deduplication queries
+    modelIdIdx: index('model_audits_model_id_idx').on(table.modelId),
+    revisionShaIdx: index('model_audits_revision_sha_idx').on(table.revisionSha),
+    contentHashIdx: index('model_audits_content_hash_idx').on(table.contentHash),
+    modelRevisionIdx: index('model_audits_model_revision_idx').on(table.modelId, table.revisionSha),
+    modelContentIdx: index('model_audits_model_content_idx').on(table.modelId, table.contentHash),
   }),
 );
 

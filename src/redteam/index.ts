@@ -1,22 +1,29 @@
-import * as fs from 'fs';
-
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
+import * as fs from 'fs';
 import yaml from 'js-yaml';
+
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
-import { type TestCase, type TestCaseWithPlugin } from '../types/index';
+import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
+  FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
+  getDefaultNFanout,
   HARM_PLUGINS,
+  INSURANCE_PLUGINS,
+  isFanoutStrategy,
+  isLanguageDisallowedStrategy,
+  MEDICAL_PLUGINS,
+  PHARMACY_PLUGINS,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
@@ -25,16 +32,35 @@ import {
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import { Plugins } from './plugins/index';
 import { CustomPlugin } from './plugins/custom';
+import { Plugins } from './plugins/index';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
-import { DEFAULT_LANGUAGES } from './strategies/multilingual';
+import { pluginMatchesStrategyTargets } from './strategies/util';
+import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
 import { extractGoalFromPrompt, getShortPluginId } from './util';
 
-import { pluginMatchesStrategyTargets } from './strategies/util';
-import type { RedteamStrategyObject, SynthesizeOptions } from './types';
+function getPolicyText(metadata: TestCase['metadata'] | undefined): string | undefined {
+  if (!metadata || metadata.policy === undefined || metadata.policy === null) {
+    return undefined;
+  }
+
+  const policyValue = metadata.policy as unknown;
+
+  if (typeof policyValue === 'string') {
+    return policyValue;
+  }
+
+  if (typeof policyValue === 'object') {
+    const policyObject = policyValue as { text?: string };
+    return typeof policyObject.text === 'string' && policyObject.text.length > 0
+      ? policyObject.text
+      : undefined;
+  }
+
+  return undefined;
+}
 
 const MAX_MAX_CONCURRENCY = 20;
 
@@ -151,6 +177,10 @@ const categories = {
   harmful: Object.keys(HARM_PLUGINS),
   bias: BIAS_PLUGINS,
   pii: PII_PLUGINS,
+  medical: MEDICAL_PLUGINS,
+  pharmacy: PHARMACY_PLUGINS,
+  insurance: INSURANCE_PLUGINS,
+  financial: FINANCIAL_PLUGINS,
 } as const;
 
 /**
@@ -161,8 +191,55 @@ const categories = {
  */
 const formatTestCount = (numTests: number, strategy: boolean): string =>
   numTests === 1
-    ? `1 ${strategy ? 'additional' : ''} test`
-    : `${numTests} ${strategy ? 'additional' : ''} tests`;
+    ? `1 ${strategy ? 'additional ' : ''}test`
+    : `${numTests} ${strategy ? 'additional ' : ''}tests`;
+
+/**
+ * Gets the language from a test case's metadata.
+ * Checks both metadata.language and metadata.modifiers.language.
+ * @param test - The test case to get language from.
+ * @returns The language string or undefined if not found.
+ */
+function getLanguageForTestCase(test: TestCase): string | undefined {
+  return test.metadata?.language || test.metadata?.modifiers?.language;
+}
+
+/**
+ * Adds comprehensive metadata to plugin test cases including language, plugin info, and severity.
+ * @param test - The test case to add metadata to.
+ * @param lang - The language for this test.
+ * @param plugin - The plugin configuration.
+ * @param testGenerationInstructions - Optional test generation instructions.
+ * @returns Test case with complete metadata.
+ */
+function addLanguageToPluginMetadata(
+  test: TestCase,
+  lang: string | undefined,
+  plugin: RedteamPluginObject,
+  testGenerationInstructions?: string,
+): TestCase {
+  const existingLanguage = getLanguageForTestCase(test);
+  const languageToAdd = lang && !existingLanguage ? { language: lang } : {};
+
+  return {
+    ...test,
+    metadata: {
+      pluginId: plugin.id,
+      pluginConfig: resolvePluginConfig(plugin.config),
+      severity: plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+      modifiers: {
+        ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
+        ...(plugin.config?.modifiers || {}),
+        ...test.metadata?.modifiers,
+        // Add language to modifiers if not already present (respect existing)
+        ...languageToAdd,
+      },
+      ...test.metadata,
+      // Hoist language to top-level metadata for backward compatibility and easier access
+      ...languageToAdd,
+    },
+  };
+}
 
 /**
  * Determines whether a strategy should be applied to a test case based on plugin targeting rules.
@@ -180,24 +257,6 @@ const formatTestCount = (numTests: number, strategy: boolean): string =>
  *                       Supports both exact matches and category prefixes (e.g., 'harmful' matches 'harmful:hate')
  * @returns True if the strategy should be applied to this test case, false otherwise
  */
-
-/**
- * Helper function to calculate the number of expected test cases for the multilingual strategy.
- */
-export function getMultilingualRequestedCount(
-  testCases: TestCaseWithPlugin[],
-  strategy: RedteamStrategyObject,
-): number {
-  // If languages is an empty array, return 0
-  if (Array.isArray(strategy.config?.languages) && strategy.config.languages.length === 0) {
-    return 0;
-  }
-
-  const numLanguages = Array.isArray(strategy.config?.languages)
-    ? strategy.config.languages.length
-    : DEFAULT_LANGUAGES.length;
-  return testCases.length * numLanguages;
-}
 
 /**
  * Applies strategies to the test cases.
@@ -266,9 +325,14 @@ async function applyStrategies(
             ...(t?.metadata || {}),
             strategyId: t?.metadata?.strategyId || strategy.id,
             ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
-            ...(t?.metadata?.pluginConfig && { pluginConfig: t.metadata.pluginConfig }),
+            ...(t?.metadata?.pluginConfig && {
+              pluginConfig: t.metadata.pluginConfig,
+            }),
             ...(strategy.config && {
-              strategyConfig: { ...strategy.config, ...(t?.metadata?.strategyConfig || {}) },
+              strategyConfig: {
+                ...strategy.config,
+                ...(t?.metadata?.strategyConfig || {}),
+              },
             }),
           },
         })),
@@ -282,38 +346,60 @@ async function applyStrategies(
             .join('→')})`
         : strategy.id;
 
-    // Special case for multilingual strategy to account for languages multiplier
-    if (strategy.id === 'multilingual') {
-      const requestedCount = getMultilingualRequestedCount(applicableTestCases, strategy);
-      strategyResults[displayId] = {
-        requested: requestedCount,
-        generated: strategyTestCases.length,
-      };
-    } else if (strategy.id === 'layer') {
-      // Estimate requested count for layer: multiply by language factors of any multilingual steps
-      let multiplier = 1;
-      const steps: any[] = Array.isArray(strategy.config?.steps)
-        ? (strategy.config!.steps as any[])
-        : [];
-      for (const st of steps) {
-        const stepId = typeof st === 'string' ? st : st.id;
-        if (stepId === 'multilingual') {
-          const stepCfg = (typeof st === 'string' ? {} : st.config) || {};
-          const numLangs =
-            Array.isArray(stepCfg.languages) && stepCfg.languages.length > 0
-              ? stepCfg.languages.length
-              : DEFAULT_LANGUAGES.length;
-          multiplier *= numLangs;
+    // Check if strategy generated tests across multiple languages
+    // Language can be in metadata.language or metadata.modifiers.language
+    // Note: Language is passed to strategies via test metadata.modifiers.language from plugin generation
+    const languagesInResults = new Set(
+      strategyTestCases
+        .map((t) => getLanguageForTestCase(t))
+        .filter((lang): lang is string => lang !== undefined),
+    );
+
+    if (languagesInResults.size > 1) {
+      // Strategy was applied to multilingual tests - break down by language
+      // Don't show language suffix for English (en) - it's the default
+      const resultsByLanguage: Record<string, { requested: number; generated: number }> = {};
+
+      for (const lang of languagesInResults) {
+        const testsForLang = strategyTestCases.filter((t) => getLanguageForTestCase(t) === lang);
+        const applicableForLang = applicableTestCases.filter(
+          (t) => getLanguageForTestCase(t) === lang,
+        );
+
+        let n = 1;
+        if (typeof strategy.config?.n === 'number') {
+          n = strategy.config.n;
+        } else if (isFanoutStrategy(strategy.id)) {
+          n = getDefaultNFanout(strategy.id);
         }
+
+        resultsByLanguage[lang] = {
+          requested: applicableForLang.length * n,
+          generated: testsForLang.length,
+        };
       }
-      const requestedCount = applicableTestCases.length * multiplier;
+
+      for (const [lang, result] of Object.entries(resultsByLanguage)) {
+        const strategyDisplayId = lang === 'en' ? displayId : `${displayId} (${lang})`;
+        strategyResults[strategyDisplayId] = result;
+      }
+    } else if (strategy.id === 'layer') {
+      // Layer strategy: requested count is same as applicable test cases
       strategyResults[displayId] = {
-        requested: requestedCount,
+        requested: applicableTestCases.length,
         generated: strategyTestCases.length,
       };
     } else {
+      // get an accurate 'Requested' count for strategies that add additional tests during generation
+      let n = 1;
+      if (typeof strategy.config?.n === 'number') {
+        n = strategy.config.n;
+      } else if (isFanoutStrategy(strategy.id)) {
+        n = getDefaultNFanout(strategy.id);
+      }
+
       strategyResults[displayId] = {
-        requested: applicableTestCases.length,
+        requested: applicableTestCases.length * n,
         generated: strategyTestCases.length,
       };
     }
@@ -332,45 +418,17 @@ async function applyStrategies(
 export function getTestCount(
   strategy: RedteamStrategyObject,
   totalPluginTests: number,
-  strategies: RedteamStrategyObject[],
+  _strategies: RedteamStrategyObject[],
 ): number {
   // Basic strategy either keeps original count or removes all tests
   if (strategy.id === 'basic') {
     return strategy.config?.enabled === false ? 0 : totalPluginTests;
   }
 
-  // Multilingual strategy doubles the total count
-  if (strategy.id === 'multilingual') {
-    // If languages is an empty array, return 0
-    if (Array.isArray(strategy.config?.languages) && strategy.config.languages.length === 0) {
-      return 0;
-    }
-    const numLanguages =
-      Object.keys(strategy.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length;
-    return totalPluginTests * numLanguages;
-  }
-
-  // Sequence strategy: approximate by multiplying plugin tests by language multipliers of any multilingual steps
+  // Layer strategy: returns the same count as plugin tests
+  // (plugins already account for language multipliers)
   if (strategy.id === 'layer') {
-    const steps: any[] = Array.isArray(strategy.config?.steps)
-      ? (strategy.config!.steps as any[])
-      : [];
-    let multiplier = 1;
-    for (const st of steps) {
-      const stepId = typeof st === 'string' ? st : st.id;
-      if (stepId === 'multilingual') {
-        const stepCfg = (typeof st === 'string' ? {} : st.config) || {};
-        if (Array.isArray(stepCfg.languages) && stepCfg.languages.length === 0) {
-          continue; // no additional tests
-        }
-        const numLangs =
-          Array.isArray(stepCfg.languages) && stepCfg.languages.length > 0
-            ? stepCfg.languages.length
-            : DEFAULT_LANGUAGES.length;
-        multiplier *= numLangs;
-      }
-    }
-    return totalPluginTests * multiplier;
+    return totalPluginTests;
   }
 
   // Retry strategy doubles the plugin tests
@@ -380,8 +438,14 @@ export function getTestCount(
     return totalPluginTests + additionalTests;
   }
 
-  // Return the number of additional tests (equal to totalPluginTests) for these strategies
-  return totalPluginTests;
+  // Apply fan-out multiplier if this is a fan-out strategy
+  let n = 1;
+  if (typeof strategy.config?.n === 'number') {
+    n = strategy.config.n;
+  } else if (isFanoutStrategy(strategy.id)) {
+    n = getDefaultNFanout(strategy.id);
+  }
+  return totalPluginTests * n;
 }
 
 /**
@@ -393,14 +457,13 @@ export function getTestCount(
 export function calculateTotalTests(
   plugins: SynthesizeOptions['plugins'],
   strategies: RedteamStrategyObject[],
+  language?: string | string[],
 ): {
   effectiveStrategyCount: number;
   includeBasicTests: boolean;
-  multilingualStrategy: RedteamStrategyObject | undefined;
   totalPluginTests: number;
   totalTests: number;
 } {
-  const multilingualStrategy = strategies.find((s) => s.id === 'multilingual');
   const retryStrategy = strategies.find((s) => s.id === 'retry');
   const basicStrategy = strategies.find((s) => s.id === 'basic');
 
@@ -410,7 +473,15 @@ export function calculateTotalTests(
   const effectiveStrategyCount =
     basicStrategyExists && !includeBasicTests ? strategies.length - 1 : strategies.length;
 
-  const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
+  // Calculate total plugin tests accounting for multiple languages
+  // Each plugin's tests are multiplied by the number of languages when multiple languages are configured
+  const totalPluginTests = plugins.reduce((sum, p) => {
+    const pluginLanguageConfig = p.config?.language ?? language;
+    const pluginLanguageCount = Array.isArray(pluginLanguageConfig)
+      ? pluginLanguageConfig.length
+      : 1;
+    return sum + (p.numTests || 0) * pluginLanguageCount;
+  }, 0);
 
   // When there are no strategies, or only a disabled basic strategy
   if (
@@ -420,7 +491,6 @@ export function calculateTotalTests(
     return {
       effectiveStrategyCount: 0,
       includeBasicTests: strategies.length === 0 ? true : includeBasicTests,
-      multilingualStrategy: undefined,
       totalPluginTests,
       totalTests: includeBasicTests ? totalPluginTests : 0,
     };
@@ -434,24 +504,18 @@ export function calculateTotalTests(
     totalTests = getTestCount(retryStrategy, totalTests, strategies);
   }
 
-  // Apply other non-basic, non-multilingual, non-retry strategies
+  // Apply other non-basic, non-retry strategies
   for (const strategy of strategies) {
-    if (['basic', 'multilingual', 'retry'].includes(strategy.id)) {
+    if (['basic', 'retry'].includes(strategy.id)) {
       continue;
     }
     // Add the tests from this strategy to the total, not replace the total
     totalTests += getTestCount(strategy, totalPluginTests, strategies);
   }
 
-  // Apply multilingual strategy last if present
-  if (multilingualStrategy) {
-    totalTests = getTestCount(multilingualStrategy, totalTests, strategies);
-  }
-
   return {
     effectiveStrategyCount,
     includeBasicTests,
-    multilingualStrategy,
     totalPluginTests,
     totalTests,
   };
@@ -556,25 +620,37 @@ export async function synthesize({
 
   validateStrategies(strategies);
 
-  const redteamProvider = await redteamProviderManager.getProvider({ provider });
+  // If any language-disallowed strategies are present, force language to English only
+  const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
+  if (hasLanguageDisallowedStrategy && language) {
+    const originalLanguage = Array.isArray(language) ? language.join(', ') : language;
+    language = 'en';
+    logger.info(
+      `[Language Override] Detected language-disallowed strategy (audio/video/image/layer/math-prompt). Forcing language to 'en' (was: ${originalLanguage})`,
+    );
+  }
 
-  const {
-    effectiveStrategyCount,
-    includeBasicTests,
-    multilingualStrategy,
-    totalPluginTests,
-    totalTests,
-  } = calculateTotalTests(plugins, strategies);
+  const redteamProvider = await redteamProviderManager.getProvider({
+    provider,
+  });
+
+  const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
+    calculateTotalTests(plugins, strategies, language);
 
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
     }...\nUsing plugins:\n\n${chalk.yellow(
       plugins
-        .map(
-          (p) =>
-            `${p.id} (${formatTestCount(p.numTests, false)})${p.config ? ` (${JSON.stringify(p.config)})` : ''}`,
-        )
+        .map((p) => {
+          // Calculate actual test count accounting for multiple languages
+          const pluginLanguageConfig = p.config?.language ?? language;
+          const pluginLanguageCount = Array.isArray(pluginLanguageConfig)
+            ? pluginLanguageConfig.length
+            : 1;
+          const actualTestCount = (p.numTests || 0) * pluginLanguageCount;
+          return `${p.id} (${formatTestCount(actualTestCount, false)})${p.config ? ` (${JSON.stringify(p.config)})` : ''}`;
+        })
         .sort()
         .join('\n'),
     )}\n`,
@@ -585,11 +661,16 @@ export async function synthesize({
         strategies
           .filter((s) => !['basic', 'retry'].includes(s.id))
           .map((s) => {
-            // For non-basic, non-multilingual strategies, we want to show the additional tests they generate
-            const testCount =
-              s.id === 'multilingual'
-                ? getTestCount(s, totalPluginTests, strategies)
-                : totalPluginTests;
+            // For non-basic strategies, we want to show the additional tests they generate
+            let testCount = totalPluginTests;
+            // Apply fan-out multiplier if this is a fan-out strategy
+            let n = 1;
+            if (typeof s.config?.n === 'number') {
+              n = s.config.n;
+            } else if (isFanoutStrategy(s.id)) {
+              n = getDefaultNFanout(s.id);
+            }
+            testCount = totalPluginTests * n;
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
@@ -658,7 +739,7 @@ export async function synthesize({
     if (mappingKey) {
       const mapping =
         ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
-        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((m) =>
+        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((_m) =>
           plugin.id.startsWith(`${mappingKey}:`),
         );
       if (mapping) {
@@ -772,41 +853,94 @@ export async function synthesize({
 
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
-      let pluginTests = await action({
-        provider: redteamProvider,
-        purpose,
-        injectVar,
-        n: plugin.numTests,
-        delayMs: delay || 0,
-        config: {
-          language,
-          modifiers: {
-            ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
-            ...(plugin.config?.modifiers || {}),
-          },
-          ...resolvePluginConfig(plugin.config),
-        },
-      });
 
-      if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
-        logger.warn(`Failed to generate tests for ${plugin.id}`);
-        pluginTests = [];
-      } else {
-        // Add metadata to each test case
-        const testCasesWithMetadata = pluginTests.map((t) => ({
-          ...t,
-          metadata: {
-            pluginId: plugin.id,
-            pluginConfig: resolvePluginConfig(plugin.config),
-            severity:
-              plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+      // If plugin has its own language, use that; otherwise use global language
+      const languageConfig = plugin.config?.language ?? language;
+      const languages = Array.isArray(languageConfig)
+        ? languageConfig
+        : languageConfig
+          ? [languageConfig]
+          : ['en'];
+
+      logger.debug(
+        `[Language Processing] Plugin: ${plugin.id}, Languages: ${JSON.stringify(languages)}, NumTests per language: ${plugin.numTests}${plugin.config?.language ? ' (plugin override)' : ''}`,
+      );
+
+      // Generate tests for each language in parallel using Promise.allSettled
+      const allPluginTests: TestCase[] = [];
+      const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
+
+      const languagePromises = languages.map(async (lang) => {
+        const pluginTests = await action({
+          provider: redteamProvider,
+          purpose,
+          injectVar,
+          n: plugin.numTests,
+          delayMs: delay || 0,
+          config: {
+            ...resolvePluginConfig(plugin.config),
+            language: lang,
             modifiers: {
               ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
               ...(plugin.config?.modifiers || {}),
             },
-            ...(t?.metadata || {}),
           },
-        }));
+        });
+        {
+          const langKey = lang;
+
+          if (Array.isArray(pluginTests) && pluginTests.length > 0) {
+            // Add all metadata (language + plugin info) so strategies can access it
+            const testsWithMetadata = pluginTests.map((test) =>
+              addLanguageToPluginMetadata(test, lang, plugin, testGenerationInstructions),
+            );
+
+            return {
+              lang: langKey,
+              tests: testsWithMetadata,
+              requested: plugin.numTests,
+              generated: pluginTests.length,
+            };
+          }
+
+          logger.warn(
+            `[Language Processing] No tests generated for ${plugin.id} in language: ${lang || 'default'}`,
+          );
+
+          return {
+            lang: langKey,
+            tests: [],
+            requested: plugin.numTests,
+            generated: 0,
+          };
+        }
+      });
+
+      const languageResults = await Promise.allSettled(languagePromises);
+
+      for (const result of languageResults) {
+        if (result.status === 'fulfilled') {
+          const { lang, tests, requested, generated } = result.value;
+
+          allPluginTests.push(...tests);
+          resultsPerLanguage[lang] = { requested, generated };
+        } else {
+          // Handle rejected promise
+          logger.warn(
+            `[Language Processing] Error generating tests for ${plugin.id}: ${result.reason}`,
+          );
+        }
+      }
+
+      logger.debug(
+        `[Language Processing] Total tests generated for ${plugin.id}: ${allPluginTests.length} (across ${languages.length} language(s))`,
+      );
+
+      if (!Array.isArray(allPluginTests) || allPluginTests.length === 0) {
+        logger.warn(`Failed to generate tests for ${plugin.id}`);
+      } else {
+        // Metadata already added in promise resolution above (including pluginId)
+        const testCasesWithMetadata = allPluginTests as TestCaseWithPlugin[];
 
         // Extract goal for this plugin's tests
         logger.debug(
@@ -817,7 +951,9 @@ export async function synthesize({
           const promptVar = testCase.vars?.[injectVar];
           const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
+          // For policy plugin, pass the policy text to improve intent extraction
+          const policy = getPolicyText(testCase.metadata);
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
           (testCase.metadata as any).goal = extractedGoal;
         }
@@ -826,17 +962,31 @@ export async function synthesize({
         testCases.push(...testCasesWithMetadata);
       }
 
-      pluginTests = Array.isArray(pluginTests) ? pluginTests : [];
       if (showProgressBar) {
-        progressBar?.increment(plugin.numTests);
+        progressBar?.increment(plugin.numTests * languages.length);
       } else {
-        logger.info(`Generated ${pluginTests.length} tests for ${plugin.id}`);
+        logger.info(`Generated ${allPluginTests.length} tests for ${plugin.id}`);
       }
-      logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
-      pluginResults[plugin.id] = {
-        requested: plugin.id === 'intent' ? pluginTests.length : plugin.numTests,
-        generated: pluginTests.length,
-      };
+      logger.debug(`Added ${allPluginTests.length} ${plugin.id} test cases`);
+
+      // If multiple defined languages were used, create separate report entries for each language
+      // Otherwise, use the aggregated result for the plugin
+      const definedLanguages = languages.filter((lang) => lang !== undefined);
+      if (definedLanguages.length > 1) {
+        // Multiple languages - create separate entries for each
+        // Don't show language suffix for English (en) - it's the default
+        for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
+          const displayId = langKey === 'en' ? plugin.id : `${plugin.id} (${langKey})`;
+          pluginResults[displayId] = result;
+        }
+      } else {
+        // Single language or no language - use aggregated result
+        pluginResults[plugin.id] = {
+          requested:
+            plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length,
+          generated: allPluginTests.length,
+        };
+      }
     } else if (plugin.id.startsWith('file://')) {
       try {
         const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
@@ -867,7 +1017,9 @@ export async function synthesize({
           const promptVar = testCase.vars?.[injectVar];
           const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
+          // For policy plugin, pass the policy text to improve intent extraction
+          const policy = getPolicyText(testCase.metadata);
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
           (testCase.metadata as any).goal = extractedGoal;
         }
@@ -876,7 +1028,10 @@ export async function synthesize({
         testCases.push(...testCasesWithMetadata);
 
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
+        pluginResults[plugin.id] = {
+          requested: plugin.numTests,
+          generated: customTests.length,
+        };
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
         pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
@@ -911,12 +1066,12 @@ export async function synthesize({
     Object.assign(strategyResults, retryResults);
   }
 
-  // Check for abort signal or apply non-basic, non-multilingual strategies
+  // Check for abort signal or apply non-basic strategies
   checkAbort();
   const { testCases: strategyTestCases, strategyResults: otherStrategyResults } =
     await applyStrategies(
       pluginTestCases,
-      strategies.filter((s) => !['basic', 'multilingual', 'retry'].includes(s.id)),
+      strategies.filter((s) => !['basic', 'retry'].includes(s.id)),
       injectVar,
       excludeTargetOutputFromAgenticAttackGeneration,
     );
@@ -926,14 +1081,8 @@ export async function synthesize({
   // Combine test cases based on basic strategy setting
   const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
 
-  // Check for abort signal or apply multilingual strategy to all test cases
+  // Check for abort signal
   checkAbort();
-  if (multilingualStrategy) {
-    const { testCases: multiLingualTestCases, strategyResults: multiLingualResults } =
-      await applyStrategies(finalTestCases, [multilingualStrategy], injectVar);
-    finalTestCases.push(...multiLingualTestCases);
-    Object.assign(strategyResults, multiLingualResults);
-  }
 
   progressBar?.update({ task: 'Done.' });
   progressBar?.stop();

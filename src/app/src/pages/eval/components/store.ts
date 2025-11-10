@@ -4,13 +4,14 @@ import {
   isPolicyMetric,
   isValidPolicyObject,
   makeInlinePolicyId,
+  makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PolicyObject } from '@promptfoo/redteam/types';
+import type { PolicyObject, Policy } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
   EvalTableDTO,
@@ -82,18 +83,20 @@ type PolicyIdToNameMap = Record<PolicyObject['id'], PolicyObject['name']>;
  * Used by the filter form to show policy names in the dropdown.
  */
 function extractPolicyIdToNameMap(plugins: RedteamPluginObject[]): PolicyIdToNameMap {
-  const policyMap: PolicyIdToNameMap = {};
-
-  plugins.forEach((plugin) => {
-    if (typeof plugin !== 'string' && plugin.id === 'policy') {
-      const policy = plugin?.config?.policy;
-      if (policy && isValidPolicyObject(policy)) {
-        policyMap[policy.id] = policy.name;
+  return plugins
+    .filter((plugin) => typeof plugin !== 'string' && plugin.id === 'policy')
+    .reduce((map: PolicyIdToNameMap, plugin, index) => {
+      const policy = plugin?.config?.policy as Policy;
+      if (isValidPolicyObject(policy)) {
+        map[policy.id] = policy.name;
       }
-    }
-  });
-
-  return policyMap;
+      // Backwards compatibility w/ text-only inline policies.
+      else {
+        const id = makeInlinePolicyId(policy);
+        map[id] = makeDefaultPolicyName(index);
+      }
+      return map;
+    }, {});
 }
 
 function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
@@ -113,7 +116,7 @@ function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | 
  */
 function buildRedteamFilterOptions(
   config?: Partial<UnifiedConfig> | null,
-  table?: EvaluateTable | null,
+  _table?: EvaluateTable | null,
 ): { plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {} {
   const isRedteam = Boolean(config?.redteam);
 
@@ -193,7 +196,18 @@ export type ResultsFilterType =
   | 'severity'
   | 'policy';
 
-export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains' | 'exists';
+export type ResultsFilterOperator =
+  | 'equals'
+  | 'contains'
+  | 'not_contains'
+  | 'exists'
+  | 'is_defined'
+  | 'eq'
+  | 'neq'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte';
 
 export type ResultsFilter = {
   /**
@@ -205,7 +219,8 @@ export type ResultsFilter = {
   operator: ResultsFilterOperator;
   logicOperator: 'and' | 'or';
   /**
-   * For metadata filters, this is the field name in the metadata object
+   * For metadata filters, this is the field name in the metadata object.
+   * For metric filters, this is the metric key name.
    */
   field?: string;
   /**
@@ -362,7 +377,7 @@ interface SettingsState {
 
 export const useResultsViewSettingsStore = create<SettingsState>()(
   persist(
-    (set, get) => ({
+    (set, _get) => ({
       maxTextLength: 250,
       setMaxTextLength: (maxTextLength: number) => set(() => ({ maxTextLength })),
       wordBreak: 'break-word',
@@ -415,7 +430,15 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
     // For other metadata operators, both field and value are required
     return Boolean(filter.value && filter.field);
   }
-  // For non-metadata filters, value is required
+  if (filter.type === 'metric') {
+    // For metric filters with is_defined operator, only field is required
+    if (filter.operator === 'is_defined') {
+      return Boolean(filter.field);
+    }
+    // For metric filters with comparison operators, both field and value are required
+    return Boolean(filter.value && filter.field);
+  }
+  // For non-metadata/non-metric filters, value is required
   return Boolean(filter.value);
 };
 
@@ -634,6 +657,15 @@ export const useTableStore = create<TableState>()((set, get) => ({
         existingFilters.length > 0 ? Math.max(...existingFilters.map((f) => f.sortIndex)) : -1;
       const nextSortIndex = maxSortIndex + 1;
 
+      // Inherit logic operator from existing filters (use the one from the filter with sortIndex 1)
+      // If no existing filters, default to 'and'
+      const inheritedLogicOperator =
+        existingFilters.length > 0
+          ? (existingFilters.find((f) => f.sortIndex === 1)?.logicOperator ??
+            existingFilters[0].logicOperator ??
+            'and')
+          : 'and';
+
       return {
         filters: {
           ...prevState.filters,
@@ -642,8 +674,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
             [filterId]: {
               ...filter,
               id: filterId,
-              // Default to 'and' logic operator if not provided.
-              logicOperator: filter.logicOperator ?? 'and',
+              // Use provided logicOperator, or inherit from existing filters, or default to 'and'
+              logicOperator: filter.logicOperator ?? inheritedLogicOperator,
               // Include field for metadata filters
               field: filter.field,
               sortIndex: nextSortIndex,

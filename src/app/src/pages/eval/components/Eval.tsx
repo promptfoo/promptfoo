@@ -211,7 +211,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       /**
        * Populates the table store with the most recent eval result.
        */
-      const handleResultsFile = async (data: ResultsFile | null, isInit: boolean = false) => {
+      const handleResultsFile = async (data: ResultsFile | null) => {
         // If no data provided (e.g., no evals exist yet), clear stale state and mark as loaded
         if (!data) {
           console.log('No eval data available');
@@ -241,7 +241,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       socket
         .on('init', async (data) => {
           console.log('Initialized socket connection', data);
-          await handleResultsFile(data, true);
+          await handleResultsFile(data);
         })
         /**
          * The user has run `promptfoo eval` and a new latest eval
@@ -249,7 +249,7 @@ export default function Eval({ fetchId }: EvalOptions) {
          */
         .on('update', async (data) => {
           console.log('Received data update', data);
-          await handleResultsFile(data, false);
+          await handleResultsFile(data);
         });
 
       return () => {

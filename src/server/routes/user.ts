@@ -4,6 +4,7 @@ import { fromError } from 'zod-validation-error';
 import { getEnvBool } from '../../envars';
 import {
   checkEmailStatus,
+  clearUserEmail,
   getUserEmail,
   getUserId,
   setUserEmail,
@@ -16,7 +17,7 @@ import type { Request, Response } from 'express';
 
 export const userRouter = Router();
 
-userRouter.get('/email', async (req: Request, res: Response): Promise<void> => {
+userRouter.get('/email', async (_req: Request, res: Response): Promise<void> => {
   try {
     const email = getUserEmail();
     // Return 200 with null email instead of 404 to avoid console errors when no email is configured
@@ -31,7 +32,7 @@ userRouter.get('/email', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-userRouter.get('/id', async (req: Request, res: Response): Promise<void> => {
+userRouter.get('/id', async (_req: Request, res: Response): Promise<void> => {
   try {
     const id = getUserId();
     res.json(ApiSchemas.User.GetId.Response.parse({ id }));
@@ -73,9 +74,21 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
+userRouter.put('/email/clear', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    clearUserEmail();
+    res.json({ success: true, message: 'Email cleared' });
+  } catch (error) {
+    logger.error(`Error clearing email: ${error}`);
+    res.status(500).json({ error: 'Failed to clear email' });
+  }
+});
+
 userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = await checkEmailStatus();
+    // Extract validate query parameter
+    const validate = req.query.validate === 'true';
+    const result = await checkEmailStatus({ validate });
 
     res.json(
       ApiSchemas.User.EmailStatus.Response.parse({
@@ -156,7 +169,7 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
 });
 
 // Logout endpoint - clears local authentication data
-userRouter.post('/logout', async (req: Request, res: Response): Promise<void> => {
+userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> => {
   try {
     // Clear stored email and cloud config (same as CLI logout)
     setUserEmail('');
@@ -179,7 +192,7 @@ userRouter.post('/logout', async (req: Request, res: Response): Promise<void> =>
 /**
  * Returns information about the Promptfoo Cloud config for the current user.
  */
-userRouter.get('/cloud-config', async (req: Request, res: Response): Promise<void> => {
+userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<void> => {
   try {
     const cloudConfigData = {
       appUrl: cloudConfig.getAppUrl(),
