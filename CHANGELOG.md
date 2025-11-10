@@ -8,11 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(providers): add variable templating support for initialMessages in simulated-user provider, enabling template reuse across test cases with Nunjucks variables (#6119)
+- feat(providers): add variable templating support for initialMessages in simulated-user provider, enabling template reuse across test cases with Nunjucks variables (#6143)
+- feat(providers): add missing Alibaba Cloud models - qwen3-vl-flash, qwen3-asr-flash-realtime, qwen3-vl-32b/8b (thinking/instruct), text-embedding-v4 (7d658dc)
 
 ### Fixed
 
+- fix(assertions): support runtime variables in custom rubricPrompt for factuality and model-graded-closedqa assertions (#5340)
+- fix(openai): extend automatic 10-minute timeout to gpt-5-pro models to prevent timeouts on long-running requests (#6147)
 - fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
+- fix(cli): honor `commandLineOptions` from config file for `maxConcurrency`, `repeat`, `delay`, `cache`, `progressBar`, `generateSuggestions`, `table`, `share`, and `write` — previously ignored in favor of defaults (#6142)
+
+### Documentation
+
+- docs(guides): add comprehensive Portkey integration guide covering prompt management, multi-model testing across 1600+ providers, red-teaming workflows, and production deployment strategies by @ladyofcode (#5730)
+- docs(providers): comprehensive Alibaba Cloud documentation update with 100+ models including Qwen3 flagship variants, qwen-long (10M context), all DeepSeek/QwQ reasoning models, complete vision/multimodal lineup, audio/speech models, coding/math specializations, open-source Qwen3 series, and third-party models (Kimi); reorganized with Commercial/Open-source sections; fixes configuration to use `apiBaseUrl` and adds Beijing region endpoint (#6118)
+
+### Tests
+
+- test(cli): add unit tests verifying `commandLineOptions` precedence (config respected; CLI args still override) for eval runtime flags including `maxConcurrency` (#6142)
 
 ### Dependencies
 
@@ -55,6 +68,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- feat(redteam): display specific subcategory metrics for harmful plugins (e.g., "Copyright Violations", "Child Exploitation") instead of generic "Harmful" label, enabling granular vulnerability tracking and analysis (#6134)
 - chore(examples): update openai-agents-basic example from weather to D&D dungeon master with gpt-5-mini, comprehensive D&D 5e tools (dice rolling, character stats, inventory), and maxTurns increased to 20 (#6114)
 - fix(python): use REQUEST_TIMEOUT_MS for consistent timeout behavior across providers (300s default, previously 120s) (#6098)
 - refactor(redteam): Prevent early (evaluator-based) exits in Jailbreak, Crescendo, and Custom Strategies (#6047)
