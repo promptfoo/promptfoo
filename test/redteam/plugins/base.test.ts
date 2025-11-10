@@ -1879,5 +1879,67 @@ describe('RedteamGraderBase', () => {
       expect(result.rubric).not.toContain('IMPORTANT PLUGIN-SPECIFIC GRADING GUIDANCE:');
       expect(result.rubric).toContain('EXAMPLE OUTPUT:');
     });
+
+    it('should support gradingGuidance as deprecated alias for graderGuidance', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithDeprecatedAlias = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            gradingGuidance: 'This uses the deprecated gradingGuidance field',
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithDeprecatedAlias,
+        undefined,
+        undefined,
+      );
+
+      expect(result.rubric).toContain('IMPORTANT PLUGIN-SPECIFIC GRADING GUIDANCE:');
+      expect(result.rubric).toContain('This uses the deprecated gradingGuidance field');
+    });
+
+    it('should prioritize graderGuidance over gradingGuidance when both are present', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithBothFields = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderGuidance: 'This is the preferred graderGuidance field',
+            gradingGuidance: 'This is the deprecated gradingGuidance field',
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithBothFields,
+        undefined,
+        undefined,
+      );
+
+      expect(result.rubric).toContain('IMPORTANT PLUGIN-SPECIFIC GRADING GUIDANCE:');
+      expect(result.rubric).toContain('This is the preferred graderGuidance field');
+      expect(result.rubric).not.toContain('This is the deprecated gradingGuidance field');
+    });
   });
 });

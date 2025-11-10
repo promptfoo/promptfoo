@@ -443,10 +443,10 @@ export abstract class RedteamGraderBase {
       timestamp: new Date().toISOString(),
     };
     // Plugin-specific grading guidance takes priority over general rubric
-    // Support both graderGuidance (preferred) and gradingGuidance (deprecated alias)
+    // Support both graderGuidance and gradingGuidance (deprecated, kept for backward compatibility)
     const gradingGuidance =
       test.metadata?.pluginConfig?.graderGuidance ||
-      test.metadata?.pluginConfig?.gradingGuidance;
+      (test.metadata?.pluginConfig as any)?.gradingGuidance;
     let gradingGuidanceString = '';
     if (gradingGuidance) {
       gradingGuidanceString =

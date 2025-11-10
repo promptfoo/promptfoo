@@ -1,0 +1,76 @@
+description: Test custom rubricPrompt with variables for factuality assertion
+
+providers:
+  - openai:gpt-4o-mini
+
+prompts:
+  - 'Answer this question concisely: {{question}}'
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: factuality
+        value: Paris
+        options:
+          rubricPrompt: |
+            You are an expert factuality evaluator. Compare these two answers:
+
+            Question: {{input}}
+            Reference answer: {{ideal}}
+            Submitted answer: {{completion}}
+
+            Determine if the submitted answer is factually consistent with the reference answer.
+            Choose one option:
+            A: Submitted answer is a subset of reference (fully consistent)
+            B: Submitted answer is a superset of reference (fully consistent)
+            C: Submitted answer contains same details as reference
+            D: Submitted answer disagrees with reference
+            E: Answers differ but differences don't affect factuality
+
+            Respond with JSON: {"category": "LETTER", "reason": "explanation"}
+  - vars:
+      question: What is the largest planet in our solar system?
+    assert:
+      - type: factuality
+        value: Jupiter
+        options:
+          rubricPrompt: |
+            You are an expert factuality evaluator. Compare these two answers:
+
+            Question: {{input}}
+            Reference answer: {{ideal}}
+            Submitted answer: {{completion}}
+
+            Determine if the submitted answer is factually consistent with the reference answer.
+            Choose one option:
+            A: Submitted answer is a subset of reference (fully consistent)
+            B: Submitted answer is a superset of reference (fully consistent)
+            C: Submitted answer contains same details as reference
+            D: Submitted answer disagrees with reference
+            E: Answers differ but differences don't affect factuality
+
+            Respond with JSON: {"category": "LETTER", "reason": "explanation"}
+
+  - vars:
+      question: Who wrote Romeo and Juliet?
+    assert:
+      - type: factuality
+        value: William Shakespeare
+        options:
+          rubricPrompt: |
+            You are an expert factuality evaluator. Compare these two answers:
+
+            Question: {{input}}
+            Reference answer: {{ideal}}
+            Submitted answer: {{completion}}
+
+            Determine if the submitted answer is factually consistent with the reference answer.
+            Choose one option:
+            A: Submitted answer is a subset of reference (fully consistent)
+            B: Submitted answer is a superset of reference (fully consistent)
+            C: Submitted answer contains same details as reference
+            D: Submitted answer disagrees with reference
+            E: Answers differ but differences don't affect factuality
+
+            Respond with JSON: {"category": "LETTER", "reason": "explanation"}

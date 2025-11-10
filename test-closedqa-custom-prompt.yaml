@@ -1,0 +1,53 @@
+description: Test custom rubricPrompt with variables for model-graded-closedqa assertion
+
+providers:
+  - openai:gpt-4o-mini
+
+prompts:
+  - 'Answer this question: {{question}}'
+
+tests:
+  - vars:
+      question: What is the capital of California?
+    assert:
+      - type: model-graded-closedqa
+        value: Sacramento
+        options:
+          rubricPrompt: |
+            You are an expert answer evaluator. Compare these:
+
+            Question: {{input}}
+            Expected criteria: {{criteria}}
+            Student answer: {{completion}}
+
+            Does the student answer meet the criteria? Answer Y or N, then explain.
+
+  - vars:
+      question: What color is the sky on a clear day?
+    assert:
+      - type: model-graded-closedqa
+        value: Blue
+        options:
+          rubricPrompt: |
+            You are an expert answer evaluator. Compare these:
+
+            Question: {{input}}
+            Expected criteria: {{criteria}}
+            Student answer: {{completion}}
+
+            Does the student answer meet the criteria? Answer Y or N, then explain.
+
+  - vars:
+      question: Who painted the Mona Lisa?
+    assert:
+      - type: model-graded-closedqa
+        value: Leonardo da Vinci
+        options:
+          rubricPrompt: |
+            You are an expert answer evaluator. Compare these:
+
+            Question: {{input}}
+            Expected criteria: {{criteria}}
+            Student answer: {{completion}}
+
+            Does the student answer meet the criteria? Answer Y or N, then explain.
