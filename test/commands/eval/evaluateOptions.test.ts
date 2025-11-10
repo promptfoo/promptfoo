@@ -91,6 +91,7 @@ describe('evaluateOptions behavior', () => {
     it('should read evaluateOptions.maxConcurrency', async () => {
       const cmdObj: Partial<CommandLineOptions & Command> = {
         table: false,
+        write: false,
         config: [noDelayConfigPath],
       };
 
@@ -102,7 +103,11 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should read evaluateOptions.repeat', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = { table: false, config: [configPath] };
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        write: false,
+        config: [configPath],
+      };
 
       await doEval(cmdObj, {}, undefined, {});
 
@@ -112,7 +117,11 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should read evaluateOptions.delay', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = { table: false, config: [configPath] };
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        write: false,
+        config: [configPath],
+      };
 
       await doEval(cmdObj, {}, undefined, {});
 
@@ -122,7 +131,11 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should read evaluateOptions.showProgressBar', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = { table: false, config: [configPath] };
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        write: false,
+        config: [configPath],
+      };
 
       await doEval(cmdObj, {}, undefined, {});
 
@@ -132,7 +145,11 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should read evaluateOptions.cache', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = { table: false, config: [configPath] };
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        write: false,
+        config: [configPath],
+      };
 
       await doEval(cmdObj, {}, undefined, {});
 
@@ -142,7 +159,11 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should read evaluateOptions.timeoutMs', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = { table: false, config: [configPath] };
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        write: false,
+        config: [configPath],
+      };
 
       await doEval(cmdObj, {}, undefined, {});
 
@@ -152,7 +173,11 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should read evaluateOptions.maxEvalTimeMs', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = { table: false, config: [configPath] };
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        write: false,
+        config: [configPath],
+      };
 
       await doEval(cmdObj, {}, undefined, {});
 
@@ -166,6 +191,7 @@ describe('evaluateOptions behavior', () => {
     it('should prioritize maxConcurrency from command line options over config file options', async () => {
       const cmdObj: Partial<CommandLineOptions & Command> = {
         table: false,
+        write: false,
         config: [noDelayConfigPath],
         maxConcurrency: 5,
       };
@@ -185,6 +211,7 @@ describe('evaluateOptions behavior', () => {
     it('should prioritize repeat from command line options over config file options', async () => {
       const cmdObj: Partial<CommandLineOptions & Command> = {
         table: false,
+        write: false,
         config: [configPath],
         repeat: 5,
       };
@@ -204,6 +231,7 @@ describe('evaluateOptions behavior', () => {
     it('should prioritize delay from command line options over config file options', async () => {
       const cmdObj: Partial<CommandLineOptions & Command> = {
         table: false,
+        write: false,
         config: [configPath],
         delay: 5,
       };
@@ -223,6 +251,7 @@ describe('evaluateOptions behavior', () => {
     it('should prioritize showProgressBar from command line options over config file options', async () => {
       const cmdObj: Partial<CommandLineOptions & Command> = {
         table: false,
+        write: false,
         config: [configPath],
         progressBar: true,
       };
@@ -242,6 +271,7 @@ describe('evaluateOptions behavior', () => {
     it('should prioritize cache from command line options over config file options', async () => {
       const cmdObj: Partial<CommandLineOptions & Command> = {
         table: false,
+        write: false,
         config: [noRepeatConfigPath],
         cache: true,
       };
@@ -279,6 +309,7 @@ describe('evaluateOptions behavior', () => {
     it('should handle delay >0 forcing concurrency to 1 even with CLI override', async () => {
       const cmdObj: Partial<CommandLineOptions & Command> = {
         table: false,
+        write: false,
         config: [configPath],
         maxConcurrency: 10, // This should be overridden to 1 due to delay
       };
@@ -292,6 +323,7 @@ describe('evaluateOptions behavior', () => {
     it('should handle repeat >1 with cache value passed correctly', async () => {
       const cmdObj: Partial<CommandLineOptions & Command> = {
         table: false,
+        write: false,
         config: [configPath],
         cache: true,
         repeat: 3,
@@ -317,7 +349,11 @@ describe('evaluateOptions behavior', () => {
         }),
       );
 
-      const cmdObj: Partial<CommandLineOptions & Command> = { table: false, config: [tempConfig] };
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        write: false,
+        config: [tempConfig],
+      };
 
       await doEval(cmdObj, {}, undefined, {});
 
@@ -328,6 +364,7 @@ describe('evaluateOptions behavior', () => {
     it('should handle mixed CLI and config values correctly', async () => {
       const cmdObj: Partial<CommandLineOptions & Command> = {
         table: false,
+        write: false,
         config: [configPath], // Has delay: 999, maxConcurrency: 9, etc.
         delay: 0, // CLI override
         repeat: 1, // CLI override
