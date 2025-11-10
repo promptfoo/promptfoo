@@ -99,7 +99,12 @@ export class HydraProvider implements ApiProvider {
       preferSmallModel: false,
     });
 
-    logger.debug('[Hydra] Provider initialized', { config });
+    logger.debug('[Hydra] Provider initialized', {
+      maxTurns: this.maxTurns,
+      maxBacktracks: this.maxBacktracks,
+      stateful: this.stateful,
+      injectVar: this.injectVar,
+    });
   }
 
   id() {
