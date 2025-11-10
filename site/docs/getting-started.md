@@ -11,18 +11,7 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
-## Verify installation
-
-Install promptfoo using the [installation guide](/docs/installation) first.
-
-```bash
-promptfoo --version
-promptfoo eval --help
-```
-
-If this fails, see [Troubleshooting](/docs/usage/troubleshooting/).
-
-Once installation is complete, you can set up your first config file in two ways:
+After [installing](./installation.md) promptfoo, you can set up your first config file in two ways:
 
 ## Running the example
 
@@ -427,6 +416,16 @@ A similar approach can be used to run other model comparisons. For example, you 
 - Compare same models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-temperature-comparison))
 - Compare Llama vs. GPT (see [Llama vs GPT benchmark](/docs/guides/compare-llama2-vs-gpt))
 - Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](/docs/configuration/testing-llm-chains))
+
+## Verify installation
+
+After [installing](./installation.md) promptfoo, verify it works:
+
+```bash
+promptfoo --version
+```
+
+If this fails, see [Troubleshooting](./usage/troubleshooting.md).
 
 ## Additional Resources
 
