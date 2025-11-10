@@ -159,8 +159,16 @@ describe('readStandaloneTestsFile', () => {
     jest.mocked(getEnvString).mockImplementation((key, defaultValue) => defaultValue || '');
     // Restore maybeLoadConfigFromExternalFile mock
     jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
+      // Handle arrays first to preserve their type
+      if (Array.isArray(config)) {
+        return config.map((item) => {
+          const mockFn = jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+          return mockFn(item);
+        });
+      }
+
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object') {
+      if (config && typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -518,6 +526,9 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should throw error when Excel file has no sheets', async () => {
+    // Mock fs.existsSync to return true so we can test the xlsx parsing logic
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+
     const mockXlsx = {
       readFile: jest.fn().mockReturnValue({
         SheetNames: [],
@@ -629,7 +640,15 @@ describe('readStandaloneTestsFile', () => {
 
     // Mock maybeLoadConfigFromExternalFile to transform file:// references
     jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
-      if (config && typeof config === 'object') {
+      // Handle arrays first to preserve their type
+      if (Array.isArray(config)) {
+        return config.map((item) => {
+          const mockFn = jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+          return mockFn(item);
+        });
+      }
+
+      if (config && typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -695,6 +714,40 @@ describe('readStandaloneTestsFile', () => {
 describe('readTest', () => {
   beforeEach(() => {
     clearAllMocks();
+    // Restore maybeLoadConfigFromExternalFile mock
+    jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
+      // Handle arrays first to preserve their type
+      if (Array.isArray(config)) {
+        return config.map((item) => {
+          const mockFn = jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+          return mockFn(item);
+        });
+      }
+
+      // Mock implementation that handles file:// references
+      if (config && typeof config === 'object' && config !== null) {
+        const result = { ...config };
+        for (const [key, value] of Object.entries(config)) {
+          if (typeof value === 'string' && value.startsWith('file://')) {
+            // Extract the file path from the file:// URL
+            const filePath = value.slice('file://'.length);
+            // Get the mocked file content using the extracted path
+            const fs = jest.requireMock('fs');
+            const fileContent = fs.readFileSync(filePath, 'utf-8');
+            if (typeof fileContent === 'string') {
+              try {
+                result[key] = JSON.parse(fileContent);
+              } catch {
+                result[key] = fileContent;
+              }
+            }
+          }
+        }
+        return result;
+      }
+
+      return config;
+    });
   });
 
   afterEach(() => {
@@ -920,8 +973,16 @@ describe('readTests', () => {
     jest.mocked(globSync).mockReturnValue([]);
     // Restore maybeLoadConfigFromExternalFile mock for readTests tests
     jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
+      // Handle arrays first to preserve their type
+      if (Array.isArray(config)) {
+        return config.map((item) => {
+          const mockFn = jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+          return mockFn(item);
+        });
+      }
+
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object') {
+      if (config && typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -1470,6 +1531,40 @@ describe('testCaseFromCsvRow', () => {
 describe('readVarsFiles', () => {
   beforeEach(() => {
     clearAllMocks();
+    // Restore maybeLoadConfigFromExternalFile mock
+    jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
+      // Handle arrays first to preserve their type
+      if (Array.isArray(config)) {
+        return config.map((item) => {
+          const mockFn = jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+          return mockFn(item);
+        });
+      }
+
+      // Handle objects (but not arrays)
+      if (config && typeof config === 'object' && config !== null) {
+        const result = { ...config };
+        for (const [key, value] of Object.entries(config)) {
+          if (typeof value === 'string' && value.startsWith('file://')) {
+            // Extract the file path from the file:// URL
+            const filePath = value.slice('file://'.length);
+            // Get the mocked file content using the extracted path
+            const fs = jest.requireMock('fs');
+            const fileContent = fs.readFileSync(filePath, 'utf-8');
+            if (typeof fileContent === 'string') {
+              try {
+                result[key] = JSON.parse(fileContent);
+              } catch {
+                result[key] = fileContent;
+              }
+            }
+          }
+        }
+        return result;
+      }
+
+      return config;
+    });
   });
 
   afterEach(() => {
@@ -1519,6 +1614,40 @@ describe('readVarsFiles', () => {
 describe('loadTestsFromGlob', () => {
   beforeEach(() => {
     clearAllMocks();
+    // Restore maybeLoadConfigFromExternalFile mock
+    jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
+      // Handle arrays first to preserve their type
+      if (Array.isArray(config)) {
+        return config.map((item) => {
+          const mockFn = jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+          return mockFn(item);
+        });
+      }
+
+      // Mock implementation that handles file:// references
+      if (config && typeof config === 'object' && config !== null) {
+        const result = { ...config };
+        for (const [key, value] of Object.entries(config)) {
+          if (typeof value === 'string' && value.startsWith('file://')) {
+            // Extract the file path from the file:// URL
+            const filePath = value.slice('file://'.length);
+            // Get the mocked file content using the extracted path
+            const fs = jest.requireMock('fs');
+            const fileContent = fs.readFileSync(filePath, 'utf-8');
+            if (typeof fileContent === 'string') {
+              try {
+                result[key] = JSON.parse(fileContent);
+              } catch {
+                result[key] = fileContent;
+              }
+            }
+          }
+        }
+        return result;
+      }
+
+      return config;
+    });
   });
 
   afterEach(() => {
