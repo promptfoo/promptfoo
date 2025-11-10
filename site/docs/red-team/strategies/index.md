@@ -32,7 +32,7 @@ Transform inputs using predefined patterns to bypass security controls. These ar
 
 ### Dynamic Strategies
 
-Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive. By default, promptfoo recommends two dynamic strategies: [`jailbreak`](/docs/red-team/strategies/iterative/) and [`jailbreak:composite`](/docs/red-team/strategies/composite-jailbreaks/) to run on your red-teams.
+Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive. By default, promptfoo recommends three dynamic strategies: [`jailbreak`](/docs/red-team/strategies/iterative/), [`jailbreak:meta`](/docs/red-team/strategies/meta/), and [`jailbreak:composite`](/docs/red-team/strategies/composite-jailbreaks/) to run on your red-teams.
 
 By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 
@@ -75,6 +75,7 @@ Single-turn applications process each request independently, creating distinct s
 redteam:
   strategies:
     - jailbreak
+    - jailbreak:meta
     - jailbreak:composite
 ```
 

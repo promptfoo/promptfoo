@@ -29,6 +29,22 @@ import { ProviderSchema } from '../validators/providers';
 
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 
+const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
+  z.object({
+    enabled: z.boolean().optional(),
+    includeInAttack: z.boolean().optional(),
+    includeInGrading: z.boolean().optional(),
+    includeInternalSpans: z.boolean().optional(),
+    maxSpans: z.number().int().positive().optional(),
+    maxDepth: z.number().int().positive().optional(),
+    maxRetries: z.number().int().nonnegative().optional(),
+    retryDelayMs: z.number().int().nonnegative().optional(),
+    spanFilter: z.array(z.string()).optional(),
+    sanitizeAttributes: z.boolean().optional(),
+    strategies: z.record(z.lazy(() => TracingConfigSchema)).optional(),
+  }),
+);
+
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
 ].sort();
@@ -253,6 +269,9 @@ export const RedteamConfigSchema = z
       .boolean()
       .optional()
       .describe('Whether to exclude target output from the agentific attack generation process'),
+    tracing: TracingConfigSchema.optional().describe(
+      'Tracing defaults applied to all strategies unless overridden',
+    ),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
@@ -271,7 +290,7 @@ export const RedteamConfigSchema = z
         // Lazy require to avoid mock interference in tests during module initialization
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const logger = require('../logger').default;
-        logger.warn(
+        logger.debug(
           '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
         );
 
@@ -461,6 +480,7 @@ export const RedteamConfigSchema = z
               data.excludeTargetOutputFromAgenticAttackGeneration,
           }
         : {}),
+      ...(data.tracing ? { tracing: data.tracing } : {}),
     };
   });
 

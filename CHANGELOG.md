@@ -8,22 +8,130 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(redteam): add pharmacy plugins for controlled substance compliance, dosage calculation, and drug interaction detection (#6064)
-- feat(redteam): add insurance plugins for coverage discrimination, network misinformation, and PHI disclosure (#6064)
-- feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
-- feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#XXXX)
-- docs(redteam): add dedicated documentation page for meta-agent jailbreaks strategy (#XXXX)
-
-### Changed
-
-- refactor(redteam): Prevent early (evaluator-based) exits in Jailbreak, Crescendo, and Custom Strategies (#6047)
-- chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings
+- feat(webui): display rendered assertion values with substituted variables in Evaluation tab instead of raw templates, improving readability for assertions with Nunjucks variables and loops (#5988)
+- feat(prompts): add executable prompt scripts - use any script/binary to dynamically generate prompts via `exec:` prefix or auto-detection for common extensions (.sh, .bash, .rb, .pl); scripts receive context as JSON and output to stdout (#5329)
+- feat(providers): add variable templating support for initialMessages in simulated-user provider, enabling template reuse across test cases with Nunjucks variables (#6143)
+- feat(redteam): add `jailbreak:hydra` strategy - multi-turn conversational adversarial agent that learns from target responses and shares learnings across tests in the same scan for improved attack success rates (#6151)
+- feat(providers): add missing Alibaba Cloud models - qwen3-vl-flash, qwen3-asr-flash-realtime, qwen3-vl-32b/8b (thinking/instruct), text-embedding-v4 (7d658dc)
 
 ### Fixed
 
+- fix(prompts): fix basePath resolution for executable prompts with `exec:` prefix - relative paths now resolve correctly (5308c5d)
+- fix(prompts): convert sync fs operations to async in executable prompt processor for better performance (5308c5d)
+- fix(assertions): support runtime variables in custom rubricPrompt for factuality and model-graded-closedqa assertions (#5340)
+- fix(openai): extend automatic 10-minute timeout to gpt-5-pro models to prevent timeouts on long-running requests (#6147)
+- fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
+- fix(cli): honor `commandLineOptions` from config file for `maxConcurrency`, `repeat`, `delay`, `cache`, `progressBar`, `generateSuggestions`, `table`, `share`, and `write` — previously ignored in favor of defaults (#6142)
+
+### Changed
+
+- chore(server): change traces fetch log to debug level (#6152)
+- chore(redteam): rename `gradingGuidance` to `graderGuidance` for consistency with `graderExamples` - `gradingGuidance` still works as a deprecated alias for backward compatibility (#6128)
+
+### Documentation
+
+- docs: document `promptfoo view --no` flag in command-line docs (#6067)
+- docs(site): add blog post on Anthropic threat intelligence covering PROMPTFLUX and PROMPTSTEAL (first observed LLM-querying malware by Google), AI-orchestrated extortion campaigns, three categories of AI-assisted attacks (operator/builder/enabler), operational security implications, and practical Promptfoo testing examples for AI system exploitation risks (#5583)
+- docs(prompts): add executable prompt scripts documentation with usage examples, security warnings, and timeout configuration (5308c5d)
+- docs(redteam): add comprehensive documentation for `graderGuidance` plugin configuration option including usage examples, priority explanations, and integration with `graderExamples` (#6128)
+- docs(site): re-add adaptive guardrails documentation covering enterprise feature for generating target-specific security policies from red team findings, including architecture, API integration, use cases, troubleshooting, and comparison to AWS Bedrock/Azure AI Content Safety (#5955)
+- docs(guides): add comprehensive Portkey integration guide covering prompt management, multi-model testing across 1600+ providers, red-teaming workflows, and production deployment strategies by @ladyofcode (#5730)
+- docs(providers): comprehensive Alibaba Cloud documentation update with 100+ models including Qwen3 flagship variants, qwen-long (10M context), all DeepSeek/QwQ reasoning models, complete vision/multimodal lineup, audio/speech models, coding/math specializations, open-source Qwen3 series, and third-party models (Kimi); reorganized with Commercial/Open-source sections; fixes configuration to use `apiBaseUrl` and adds Beijing region endpoint (#6118)
+
+### Tests
+
+- test(assertions): add comprehensive test coverage for rendered assertion value metadata including variable substitution, loops, static text handling, and UI display fallback priority (#6145)
+- test(cli): add unit tests verifying `commandLineOptions` precedence (config respected; CLI args still override) for eval runtime flags including `maxConcurrency` (#6142)
+
+### Dependencies
+
+- chore(deps): update 76 packages to latest minor and patch versions across all workspaces (#6139)
+
+## [0.119.4] - 2025-11-06
+
+### Added
+
+- feat(webui): add confirmation dialog and smart navigation for delete eval with improved UX (Material-UI dialog, next→previous→home navigation, loading states, toast notifications) (#6113)
+- feat(redteam): pass policy text to intent extraction for custom policy tests, enabling more accurate and self-contained testing objectives that include specific policy requirements (#6116)
+- feat(redteam): add timestamp context to all grading rubrics for time-aware evaluation and temporal context in security assessments (#6110)
+- feat(model-audit): add revision tracking, content hash generation, and deduplication for model scans to prevent re-scanning unchanged models (saving ~99% time and bandwidth); add `--stream` flag to delete downloaded files immediately after scan ([#6058](https://github.com/promptfoo/promptfoo/pull/6058))
+- feat(redteam): add FERPA compliance plugin
+
+### Fixed
+
+- fix(examples): change Zod schema from `.optional()` to `.default('')` for OpenAI Agents SDK compatibility (#6114)
+- fix(redteam): pass all gradingContext properties to rubric templates to fix categoryGuidance rendering errors in BeavertailsGrader (#6111)
+- fix(webui): custom policy name consistency (#6123)
+- fix(docker): resolve @swc/core SIGSEGV on Alpine Linux by upgrading to 1.15.0 and aligning base image with Node 24 (#6127)
+
+## [0.119.2] - 2025-11-03
+
+### Added
+
+- feat(integrations): add Microsoft SharePoint dataset support with certificate-based authentication for importing CSV files (#6080)
+- feat(providers): add `initialMessages` support to simulated-user provider for starting conversations from specific states, with support for loading from JSON/YAML files via `file://` syntax (#6090)
+- feat(providers): add local config override support for cloud providers - merge local configuration with cloud provider settings for per-eval customization while keeping API keys centralized (#6100)
+- feat(providers): add linkedTargetId validation with comprehensive error messages (#6053)
+- feat(redteam): add `gradingGuidance` config option for plugin-specific grading rules to reduce false positives by allowing per-plugin evaluation context (#6108)
+- feat(webui): add Grading Guidance field to plugin configuration dialogs in open-source UI (#6108)
+- feat(webui): add eval copy functionality to duplicate evaluations with all results, configuration, and relationships via UI menu (#6079)
+- feat(redteam): add pharmacy plugins (controlled substance compliance, dosage calculation, drug interaction) and insurance plugins (coverage discrimination, network misinformation, PHI disclosure) (#6064)
+- feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
+- feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#6086)
+- feat(redteam): OpenTelemetry traces feed back into red team strategies
+- feat(redteam): expand OWASP Agentic preset to cover 8/10 threats with 20 plugins; add 'owasp:agentic:redteam' alias for easy selection (#6099)
+- fix: max concurrency run options override scan template settings
+
+### Changed
+
+- feat(redteam): display specific subcategory metrics for harmful plugins (e.g., "Copyright Violations", "Child Exploitation") instead of generic "Harmful" label, enabling granular vulnerability tracking and analysis (#6134)
+- chore(examples): update openai-agents-basic example from weather to D&D dungeon master with gpt-5-mini, comprehensive D&D 5e tools (dice rolling, character stats, inventory), and maxTurns increased to 20 (#6114)
+- fix(python): use REQUEST_TIMEOUT_MS for consistent timeout behavior across providers (300s default, previously 120s) (#6098)
+- refactor(redteam): Prevent early (evaluator-based) exits in Jailbreak, Crescendo, and Custom Strategies (#6047)
+- chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings (#6069)
+- chore(app): larger eval selector dialog (#6063)
+- refactor(app): Adds useApplyFilterFromMetric hook (#6095)
+- refactor(cli): extract duplicated organization context display logic into shared utility function to fix dynamic import issue and improve code maintainability (#6070)
+- chore: make meta-agent a default strategy
+
+### Fixed
+
+- fix(providers): selective env var rendering in provider config with full Nunjucks filter support (preserves runtime variables for per-test customization) (#6091)
+- fix(core): handle Nunjucks template variables in URL sanitization to prevent parsing errors when sharing evals; add unit tests covering sanitizer behavior for Nunjucks template URLs (#6089)
+- fix(app): Fixes the metric is defined filter (#6082)
 - fix(webui): handle plugin generation when target URL is not set (#6055)
 - fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
 - fix(evaluator): force uncached provider calls for repeat iterations (#6043)
+- fix(providers): fix Python worker ENOENT errors by ensuring error responses are written before completion signal, improving error messages with function suggestions and fuzzy matching, and removing premature function validation to support embeddings-only and classification-only providers (#6073)
+
+### Tests
+
+- test(examples): add 9 D&D test scenarios for openai-agents-basic (combat, stats, inventory, scenes, saves, crits, edge cases, short rest, magic item) (#6114)
+- test(providers): add coverage for simulated-user initialMessages (vars/config precedence, file:// loading from JSON/YAML, validation, conversation flow when ending with user role) (#6090)
+- test(redteam): add comprehensive tests for `gradingGuidance` feature and `graderExamples` flow-through, including full integration regression tests (#6108)
+- test(webui): add tests for gradingGuidance UI in PluginConfigDialog and CustomIntentPluginSection (#6108)
+- test(providers): add Python worker regression tests for ENOENT prevention, helpful error messages with function name suggestions, and embeddings-only provider support without call_api function (#6073)
+
+### Documentation
+
+- docs(examples): update openai-agents-basic README for D&D theme with tracing setup and example interactions; shorten openai-agents.md provider documentation (#6114)
+- docs(python): update timeout documentation with REQUEST_TIMEOUT_MS environment variable and add retry logic example for handling rate limits (#6098)
+- docs(redteam): add comprehensive documentation for `jailbreak:meta` strategy including usage guide, comparison with other jailbreak strategies, and integration into strategy tables (#6088)
+- docs(site): add remediation reports documentation (#6083)
+- docs(site): add custom strategy to the strategies reference table (#6081)
+- docs(site): pricing page updates (#6068)
+- docs(site): clarify remote inference in Community edition (#6065)
+
+### Dependencies
+
+- chore(deps): bump the github-actions group with 4 updates (#6092)
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.920.0 to 3.921.0 (#6075)
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.919.0 to 3.920.0 (#6060)
+
+### Fixed
+
+- fix(redteam): enable layer strategy with multilingual language support; plugins now generate tests in multiple languages even when layer strategy is present (#6084)
+- fix(redteam): reduce multilingual deprecation logging noise by moving from warn to debug level (#6084)
 
 ## [0.119.1] - 2025-10-29
 
@@ -100,6 +208,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(providers): revert eager template rendering that broke runtime variable substitution (5423f80)
+- fix(providers): support environment variables in provider config while preserving runtime variable templates
 - fix(providers): improve Python provider reliability with automatic python3/python detection, worker cleanup, request count tracking, and reduced logging noise (#6034)
 - fix(providers): simulated-user and mischievous-user now respect assistant system prompts in multi-turn conversations (#6020)
 - fix(providers): improve MCP tool schema transformation for OpenAI compatibility (#5965)

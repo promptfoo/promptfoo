@@ -95,6 +95,7 @@ const redTeamSidebar = [
           'red-team/plugins/coppa',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
+          'red-team/plugins/ferpa',
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
           'red-team/plugins/harmful',
@@ -244,6 +245,10 @@ const redTeamSidebar = [
       {
         type: 'doc',
         id: 'red-team/discovery',
+      },
+      {
+        type: 'doc',
+        id: 'red-team/guardrails',
       },
       {
         type: 'category',

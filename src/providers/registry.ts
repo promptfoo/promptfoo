@@ -1,20 +1,23 @@
+import dedent from 'dedent';
 import path from 'path';
 
-import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
-import SimbaProvider from '../redteam/providers/simba';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
 import RedteamCustomProvider from '../redteam/providers/custom';
 import RedteamGoatProvider from '../redteam/providers/goat';
+import { HydraProvider as RedteamHydraProvider } from '../redteam/providers/hydra';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
+import SimbaProvider from '../redteam/providers/simba';
+import type { LoadApiProviderContext } from '../types/index';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -101,9 +104,6 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
-
-import type { LoadApiProviderContext } from '../types/index';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -1274,6 +1274,16 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new RedteamIterativeMetaProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:hydra',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new RedteamHydraProvider(providerOptions.config);
     },
   },
   {

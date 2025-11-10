@@ -46,12 +46,24 @@ import EvalResult from './evalResult';
 import type { EvalResultsFilterMode } from '../types/index';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 
+/**
+ * Database query result type interfaces
+ * These types ensure type safety for raw SQL queries that don't use Drizzle's query builder
+ */
+
+/** Result from COUNT queries using db.get() - count may be null if query fails */
 interface FilteredCountRow {
   count: number | null;
 }
 
+/** Result from queries selecting test_idx column */
 interface TestIndexRow {
   test_idx: number;
+}
+
+/** Result from queries selecting distinct metadata or variable keys */
+interface MetadataKeyResult {
+  key: string;
 }
 
 /**
@@ -86,6 +98,17 @@ export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
+/** Result from queries extracting variable keys with eval IDs */
+export interface VarKeyWithEvalIdResult {
+  key: string;
+  eval_id: string;
+}
+
+/** Result from queries extracting variable keys */
+export interface VarKeyResult {
+  key: string;
+}
+
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
@@ -93,8 +116,7 @@ export class EvalQueries {
       `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
 FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string; eval_id: string }[] = await db.all(query);
+    const results = await db.all<VarKeyWithEvalIdResult>(query);
     const vars = results.reduce((acc: Record<string, string[]>, r) => {
       acc[r.eval_id] = acc[r.eval_id] || [];
       acc[r.eval_id].push(r.key);
@@ -109,8 +131,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
       `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
     FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string }[] = await db.all(query);
+    const results = await db.all<VarKeyResult>(query);
     const vars = results.map((r) => r.key);
 
     return vars;
@@ -119,7 +140,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
   static async setVars(evalId: string, vars: string[]) {
     const db = getDb();
     try {
-      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+      db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
     } catch (e) {
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
     }
@@ -129,10 +150,6 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
     evalId: string,
     comparisonEvalIds: string[] = [],
   ): Promise<string[]> {
-    interface MetadataKeyResult {
-      key: string;
-    }
-
     const db = getDb();
     try {
       // Combine primary eval ID with comparison eval IDs
@@ -151,7 +168,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
         ORDER BY j.key
         LIMIT 1000
       `;
-      const results: MetadataKeyResult[] = await db.all(query);
+      const results = await db.all<MetadataKeyResult>(query);
       return results.map((r) => r.key);
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
@@ -446,7 +463,7 @@ export default class Eval {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
   }
 
@@ -830,7 +847,7 @@ export default class Eval {
     this.prompts = prompts;
     if (this.persisted) {
       const db = getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
     }
   }
 
@@ -939,6 +956,172 @@ export default class Eval {
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+  }
+
+  /**
+   * Creates a deep copy of this eval including all results.
+   * Uses batching to avoid memory exhaustion on large evals.
+   * @param description - Optional description for the new eval
+   * @param distinctTestCount - Optional pre-computed test count to avoid duplicate query
+   */
+  async copy(description?: string, distinctTestCount?: number): Promise<Eval> {
+    const newEvalId = createEvalId(new Date());
+    const copyDescription = description || `${this.description || 'Evaluation'} (Copy)`;
+
+    // Get distinct test count for logging and progress tracking
+    const testCount = distinctTestCount ?? (await this.getResultsCount());
+
+    logger.info('Starting eval copy', {
+      sourceEvalId: this.id,
+      targetEvalId: newEvalId,
+      distinctTestCount: testCount,
+    });
+
+    // Deep clone to prevent mutation issues
+    const newConfig = structuredClone(this.config);
+    newConfig.description = copyDescription;
+
+    const newPrompts = structuredClone(this.prompts);
+    const newVars = this.vars ? structuredClone(this.vars) : [];
+    const author = getUserEmail();
+
+    const db = getDb();
+
+    // Copy eval, results, and relationships within transaction for atomicity
+    let copiedCount = 0;
+    db.transaction(() => {
+      // Create the new eval record first
+      db.insert(evalsTable)
+        .values({
+          id: newEvalId,
+          createdAt: Date.now(),
+          author,
+          description: copyDescription,
+          config: newConfig,
+          results: {},
+          prompts: newPrompts,
+          vars: newVars,
+          runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+          isRedteam: Boolean(newConfig.redteam),
+        })
+        .run();
+
+      // Copy prompts relationships
+      // Note: prompts already exist in promptsTable from when the source eval was created
+      // We just need to create new relationships pointing to those same prompts
+      const promptRels = db
+        .select()
+        .from(evalsToPromptsTable)
+        .where(eq(evalsToPromptsTable.evalId, this.id))
+        .all();
+
+      if (promptRels.length > 0) {
+        db.insert(evalsToPromptsTable)
+          .values(
+            promptRels.map((rel) => ({
+              evalId: newEvalId,
+              promptId: rel.promptId,
+            })),
+          )
+          .onConflictDoNothing()
+          .run();
+      }
+
+      // Copy tags relationships (from config.tags)
+      if (this.config.tags) {
+        for (const [tagKey, tagValue] of Object.entries(this.config.tags)) {
+          const tagId = sha256(`${tagKey}:${tagValue}`);
+
+          db.insert(tagsTable)
+            .values({
+              id: tagId,
+              name: tagKey,
+              value: tagValue,
+            })
+            .onConflictDoNothing()
+            .run();
+
+          db.insert(evalsToTagsTable)
+            .values({
+              evalId: newEvalId,
+              tagId,
+            })
+            .onConflictDoNothing()
+            .run();
+        }
+      }
+
+      // Copy dataset relationship
+      const datasetRel = db
+        .select()
+        .from(evalsToDatasetsTable)
+        .where(eq(evalsToDatasetsTable.evalId, this.id))
+        .limit(1)
+        .all();
+
+      if (datasetRel.length > 0) {
+        db.insert(evalsToDatasetsTable)
+          .values({
+            evalId: newEvalId,
+            datasetId: datasetRel[0].datasetId,
+          })
+          .onConflictDoNothing()
+          .run();
+      }
+
+      // Copy results in batches to avoid memory exhaustion
+      const BATCH_SIZE = 1000;
+      let offset = 0;
+
+      while (true) {
+        // Fetch batch from source eval
+        const batch = db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, this.id))
+          .orderBy(evalResultsTable.id)
+          .limit(BATCH_SIZE)
+          .offset(offset)
+          .all();
+
+        if (batch.length === 0) {
+          break;
+        }
+
+        // Map to new eval with new IDs and timestamps
+        const now = Date.now();
+        const copiedResults = batch.map((result) => ({
+          ...result,
+          id: randomUUID(),
+          evalId: newEvalId,
+          createdAt: now,
+          updatedAt: now,
+        }));
+
+        // Insert batch
+        db.insert(evalResultsTable).values(copiedResults).run();
+
+        copiedCount += batch.length;
+        offset += BATCH_SIZE;
+
+        logger.debug('Copied batch of eval results', {
+          sourceEvalId: this.id,
+          targetEvalId: newEvalId,
+          batchSize: batch.length,
+          rowsCopied: copiedCount,
+          distinctTestCount: testCount,
+        });
+      }
+    });
+
+    logger.info('Eval copy completed successfully', {
+      sourceEvalId: this.id,
+      targetEvalId: newEvalId,
+      rowsCopied: copiedCount,
+      distinctTestCount: testCount,
+    });
+
+    return (await Eval.findById(newEvalId)) as Eval;
   }
 
   get shared() {
