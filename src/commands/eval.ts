@@ -129,7 +129,7 @@ export async function doEval(
       ...(Boolean(config?.redteam) && { isRedteam: true }),
     });
 
-    if (cmdObj.write ?? commandLineOptions?.write) {
+    if (cmdObj.write ?? commandLineOptions?.write ?? true) {
       await runDbMigrations();
     }
 
@@ -476,7 +476,7 @@ export async function doEval(
     }
 
     // Create or load eval record
-    const shouldWrite = cmdObj.write ?? commandLineOptions?.write;
+    const shouldWrite = cmdObj.write ?? commandLineOptions?.write ?? true;
     const evalRecord = resumeEval
       ? resumeEval
       : shouldWrite
@@ -549,7 +549,7 @@ export async function doEval(
 
     const wantsToShare = hasExplicitDisable
       ? false
-      : cmdObj.share || commandLineOptions?.share || config.sharing || cloudConfig.isEnabled();
+      : (cmdObj.share ?? commandLineOptions?.share ?? config.sharing ?? cloudConfig.isEnabled());
 
     const shareableUrl =
       wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
