@@ -279,18 +279,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     }
 
-    // Calculate timeout for deep research models
+    // Calculate timeout for long-running models (deep research and gpt-5-pro)
     let timeout = REQUEST_TIMEOUT_MS;
-    if (isDeepResearchModel) {
-      // For deep research models, use PROMPTFOO_EVAL_TIMEOUT_MS if set,
+    const isLongRunningModel = isDeepResearchModel || this.modelName.includes('gpt-5-pro');
+    if (isLongRunningModel) {
+      // For long-running models, use PROMPTFOO_EVAL_TIMEOUT_MS if set,
       // otherwise default to 10 minutes (600,000ms)
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
       if (evalTimeout > 0) {
         timeout = evalTimeout;
       } else {
-        timeout = 600_000; // 10 minutes default for deep research
+        timeout = 600_000; // 10 minutes default for long-running models
       }
-      logger.debug(`Using timeout of ${timeout}ms for deep research model ${this.modelName}`);
+      logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
     }
 
     let data, status, statusText;

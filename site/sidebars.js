@@ -95,6 +95,7 @@ const redTeamSidebar = [
           'red-team/plugins/coppa',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
+          'red-team/plugins/ferpa',
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
           'red-team/plugins/harmful',
@@ -128,7 +129,12 @@ const redTeamSidebar = [
         type: 'category',
         label: 'Domain-Specific',
         collapsed: true,
-        items: ['red-team/plugins/medical', 'red-team/plugins/financial'],
+        items: [
+          'red-team/plugins/medical',
+          'red-team/plugins/financial',
+          'red-team/plugins/pharmacy',
+          'red-team/plugins/insurance',
+        ],
       },
       {
         type: 'category',
@@ -184,6 +190,7 @@ const redTeamSidebar = [
         collapsed: true,
         items: [
           'red-team/strategies/iterative',
+          'red-team/strategies/meta',
           'red-team/strategies/tree',
           'red-team/strategies/composite-jailbreaks',
         ],
@@ -238,6 +245,10 @@ const redTeamSidebar = [
       {
         type: 'doc',
         id: 'red-team/discovery',
+      },
+      {
+        type: 'doc',
+        id: 'red-team/guardrails',
       },
       {
         type: 'category',
@@ -426,6 +437,7 @@ const sidebars = {
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },
         { type: 'doc', id: 'enterprise/findings' },
+        { type: 'doc', id: 'enterprise/remediation-reports' },
         { type: 'doc', id: 'enterprise/webhooks' },
         { type: 'doc', id: 'enterprise/audit-logging' },
         {
@@ -463,6 +475,7 @@ const sidebars = {
     { type: 'doc', id: 'enterprise/teams' },
     { type: 'doc', id: 'enterprise/red-teams' },
     { type: 'doc', id: 'enterprise/findings' },
+    { type: 'doc', id: 'enterprise/remediation-reports' },
     { type: 'doc', id: 'enterprise/webhooks' },
     { type: 'doc', id: 'enterprise/audit-logging' },
     {
