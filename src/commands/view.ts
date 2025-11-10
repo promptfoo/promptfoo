@@ -44,22 +44,15 @@ export function viewCommand(program: Command) {
         if (directory) {
           setConfigDirectoryPath(directory);
         }
-        // If --print-url is set, suppress auto-open and emit the URL for scripts/CI
-        if (cmdObj.printUrl) {
-          cmdObj.yes = false;
-          cmdObj.no = true;
-          const portNum = Number(cmdObj.port) || getDefaultPort();
-          // Print only the URL so it can be captured easily
-          // eslint-disable-next-line no-console
-          console.log(`http://localhost:${portNum}`);
-        }
-        // Block indefinitely on server
-        const browserBehavior = cmdObj.yes
-          ? BrowserBehavior.OPEN
-          : cmdObj.no
+        // Determine browser behavior
+        const browserBehavior =
+          cmdObj.printUrl || cmdObj.no
             ? BrowserBehavior.SKIP
-            : BrowserBehavior.ASK;
-        await startServer(cmdObj.port, browserBehavior);
+            : cmdObj.yes
+              ? BrowserBehavior.OPEN
+              : BrowserBehavior.ASK;
+
+        await startServer(cmdObj.port, browserBehavior, cmdObj.printUrl);
       },
     );
 }
