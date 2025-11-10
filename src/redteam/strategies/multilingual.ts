@@ -528,7 +528,7 @@ export async function addMultilingual(
   config: Record<string, any>,
 ): Promise<TestCase[]> {
   // Deprecation warning - this strategy will be removed in a future version
-  logger.warn(
+  logger.debug(
     '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
   );
 

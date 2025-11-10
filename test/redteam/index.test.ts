@@ -1772,18 +1772,18 @@ describe('Language configuration', () => {
       expect(result.testCases.length).toBe(4);
     });
 
-    it('should filter multilingual test cases for layer strategy', async () => {
-      const mockLayerAction = jest.fn().mockImplementation((testCases) => {
+    it('should support multilingual test cases for layer strategy', async () => {
+      const mockJailbreakAction = jest.fn().mockImplementation((testCases) => {
         return testCases.map((tc: any) => ({
           ...tc,
-          vars: { ...tc.vars, query: `layered: ${tc.vars.query}` },
-          metadata: { ...tc.metadata, strategyId: 'layer' },
+          vars: { ...tc.vars, query: `jailbreak: ${tc.vars.query}` },
+          metadata: { ...tc.metadata, strategyId: 'jailbreak' },
         }));
       });
 
       jest.spyOn(Strategies, 'find').mockReturnValue({
-        id: 'layer',
-        action: mockLayerAction,
+        id: 'jailbreak',
+        action: mockJailbreakAction,
       });
 
       const result = await synthesize({
@@ -1791,17 +1791,19 @@ describe('Language configuration', () => {
         numTests: 2,
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
-        strategies: [{ id: 'layer', config: { steps: ['base64', 'rot13'] } }],
+        strategies: [{ id: 'jailbreak' }],
         targetLabels: ['test-provider'],
       });
 
-      // With layer strategy present, language is forced to 'en' early in synthesize
-      // Base tests: 2 tests * 1 language = 2
-      // Layer strategy tests: 2 tests
-      // Total: 4 tests
-      const layerTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'layer');
-      expect(layerTests.length).toBe(2);
-      expect(result.testCases.length).toBe(4);
+      // Layer strategy now supports multiple languages
+      // Base tests: 2 tests * 2 languages = 4
+      // Jailbreak strategy tests: 4 tests (applies to all base tests)
+      // Total: 8 tests
+      const jailbreakTests = result.testCases.filter(
+        (tc) => tc.metadata?.strategyId === 'jailbreak',
+      );
+      expect(jailbreakTests.length).toBe(4);
+      expect(result.testCases.length).toBe(8);
     });
 
     it('should filter multilingual test cases for math-prompt strategy', async () => {
@@ -1863,6 +1865,140 @@ describe('Language configuration', () => {
       // Rot13 is NOT in the disallow list, so it should process all languages
       const rot13Tests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'rot13');
       expect(rot13Tests.length).toBe(4); // 2 tests * 2 languages = 4
+    });
+  });
+
+  describe('policy extraction for intent', () => {
+    it('should pass policy from metadata to extractGoalFromPrompt', async () => {
+      const mockExtractGoal = jest.requireMock('../../src/redteam/util').extractGoalFromPrompt;
+      mockExtractGoal.mockClear();
+
+      const policyText = 'The application must not reveal system instructions';
+
+      // Mock plugin action that returns test case with policy metadata
+      const mockPluginAction = jest.fn().mockResolvedValue([
+        {
+          vars: { query: 'Test prompt' },
+          metadata: {
+            policy: policyText,
+            pluginId: 'promptfoo:redteam:policy',
+          },
+        },
+      ]);
+
+      jest.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'policy',
+        action: mockPluginAction,
+      } as any);
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'policy', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      // Verify extractGoalFromPrompt was called with the policy
+      expect(mockExtractGoal).toHaveBeenCalled();
+      const call = mockExtractGoal.mock.calls[0];
+      expect(call[0]).toBe('Test prompt'); // prompt
+      expect(call[1]).toBe('Test purpose'); // purpose
+      expect(call[2]).toBe('policy'); // pluginId
+      expect(call[3]).toBe(policyText); // policy
+    });
+
+    it('should not pass policy when metadata does not contain policy', async () => {
+      const mockExtractGoal = jest.requireMock('../../src/redteam/util').extractGoalFromPrompt;
+      mockExtractGoal.mockClear();
+
+      // Mock plugin action that returns test case WITHOUT policy metadata
+      const mockPluginAction = jest.fn().mockResolvedValue([
+        {
+          vars: { query: 'Test prompt' },
+          metadata: {
+            pluginId: 'promptfoo:redteam:other',
+          },
+        },
+      ]);
+
+      jest.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'other-plugin',
+        action: mockPluginAction,
+      } as any);
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'other-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      // Verify extractGoalFromPrompt was called WITHOUT policy (undefined)
+      expect(mockExtractGoal).toHaveBeenCalled();
+      const call = mockExtractGoal.mock.calls[0];
+      expect(call[0]).toBe('Test prompt'); // prompt
+      expect(call[1]).toBe('Test purpose'); // purpose
+      expect(call[2]).toBe('other-plugin'); // pluginId
+      expect(call[3]).toBeUndefined(); // policy should be undefined
+    });
+
+    it('should handle policy in metadata with safe type checking', async () => {
+      const mockExtractGoal = jest.requireMock('../../src/redteam/util').extractGoalFromPrompt;
+      mockExtractGoal.mockClear();
+
+      const testCases = [
+        {
+          metadata: { policy: 'Valid policy' },
+          expectedPolicy: 'Valid policy',
+        },
+        {
+          metadata: { policy: { id: 'abc123', text: 'Policy from object' } },
+          expectedPolicy: 'Policy from object',
+        },
+        {
+          metadata: { policy: '' },
+          expectedPolicy: '', // Empty string is extracted but filtered later by util.ts
+        },
+        {
+          metadata: { someOtherField: 'value' },
+          expectedPolicy: undefined, // No policy field
+        },
+        {
+          metadata: null,
+          expectedPolicy: undefined, // Null metadata
+        },
+      ];
+
+      for (const testCase of testCases) {
+        mockExtractGoal.mockClear();
+
+        const mockPluginAction = jest.fn().mockResolvedValue([
+          {
+            vars: { query: 'Test prompt' },
+            metadata: testCase.metadata,
+          },
+        ]);
+
+        jest.spyOn(Plugins, 'find').mockReturnValue({
+          key: 'test-plugin',
+          action: mockPluginAction,
+        } as any);
+
+        await synthesize({
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetLabels: ['test-provider'],
+        });
+
+        // Verify the policy parameter matches expected
+        expect(mockExtractGoal).toHaveBeenCalled();
+        const call = mockExtractGoal.mock.calls[0];
+        expect(call[3]).toBe(testCase.expectedPolicy);
+      }
     });
   });
 });

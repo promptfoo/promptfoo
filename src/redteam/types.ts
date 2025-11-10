@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { isValidPolicyId } from './plugins/policy/validators';
 
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { Plugin, Severity } from './constants';
+import { isValidPolicyId } from './plugins/policy/validators';
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
@@ -53,7 +53,7 @@ export type PluginConfig = {
     score: number;
     reason: string;
   }[];
-  gradingGuidance?: string;
+  graderGuidance?: string;
   severity?: Severity;
   language?: string | string[];
   prompt?: string;

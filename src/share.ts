@@ -568,6 +568,13 @@ export async function createShareableModelAuditUrl(
       passedChecks: auditRecord.passedChecks,
       failedChecks: auditRecord.failedChecks,
       metadata: auditRecord.metadata,
+      // Revision tracking fields for deduplication
+      modelId: auditRecord.modelId,
+      revisionSha: auditRecord.revisionSha,
+      contentHash: auditRecord.contentHash,
+      modelSource: auditRecord.modelSource,
+      sourceLastModified: auditRecord.sourceLastModified,
+      scannerVersion: auditRecord.scannerVersion,
     };
 
     // Log payload size for debugging large model audits
