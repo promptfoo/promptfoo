@@ -133,8 +133,8 @@ env: file://configs/env-prod.yaml
 
 ```yaml title="configs/env-prod.yaml"
 # Production environment variables
-OPENAI_API_KEY: ${OPENAI_API_KEY_PROD}
-ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY_PROD}
+OPENAI_API_KEY: '{{ env.OPENAI_API_KEY_PROD }}'
+ANTHROPIC_API_KEY: '{{ env.ANTHROPIC_API_KEY_PROD }}'
 LOG_LEVEL: info
 ```
 

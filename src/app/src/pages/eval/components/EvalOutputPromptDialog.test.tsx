@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
 import * as ReactDOM from 'react-dom';
+import { v4 as uuidv4 } from 'uuid';
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({
@@ -440,15 +441,25 @@ describe('EvalOutputPromptDialog', () => {
     expect(screen.getByText('Original Output')).toBeInTheDocument();
   });
 
-  it('should transition PromptEditor from read-only to editable when evaluationId is updated', async () => {
-    const { rerender } = render(
-      <EvalOutputPromptDialog {...defaultProps} evaluationId={undefined} />,
-    );
+  it('should show Edit & Replay button when readOnly is false (default)', () => {
+    render(<EvalOutputPromptDialog {...defaultProps} />);
+
+    expect(screen.getByLabelText('Edit & Replay')).toBeInTheDocument();
+  });
+
+  it('should hide Edit & Replay button when readOnly is true', () => {
+    render(<EvalOutputPromptDialog {...defaultProps} readOnly={true} />);
+
+    expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
+  });
+
+  it('should transition PromptEditor from read-only to editable when readOnly prop changes', async () => {
+    const { rerender } = render(<EvalOutputPromptDialog {...defaultProps} readOnly={true} />);
 
     expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
 
     await act(async () => {
-      rerender(<EvalOutputPromptDialog {...defaultProps} evaluationId="test-eval-id" />);
+      rerender(<EvalOutputPromptDialog {...defaultProps} readOnly={false} />);
     });
 
     expect(screen.getByLabelText('Edit & Replay')).toBeInTheDocument();
@@ -829,7 +840,7 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
 });
 
 describe('EvalOutputPromptDialog cloud config', () => {
-  it('should pass cloudConfig to MetadataPanel', async () => {
+  it('Should not render policy link if policy is not reusable', async () => {
     const customCloudConfig = {
       appUrl: 'https://custom.cloud.com',
       isEnabled: true,
@@ -849,7 +860,30 @@ describe('EvalOutputPromptDialog cloud config', () => {
     });
 
     // Check that policy link is rendered (MetadataPanel uses cloudConfig)
-    expect(screen.getByText('View policy in Promptfoo Cloud')).toBeInTheDocument();
+    expect(screen.queryByTestId('pf-cloud-policy-detail-link')).not.toBeInTheDocument();
+  });
+
+  it('Should not render policy link if policy is not reusable', async () => {
+    const customCloudConfig = {
+      appUrl: 'https://custom.cloud.com',
+      isEnabled: true,
+    };
+    const propsWithCustomConfig = {
+      ...defaultProps,
+      cloudConfig: customCloudConfig,
+      metadata: {
+        policyName: 'Test Policy',
+        policyId: uuidv4(),
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCustomConfig} />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    // Check that policy link is rendered (MetadataPanel uses cloudConfig)
+    expect(screen.getByTestId('pf-cloud-policy-detail-link')).toBeInTheDocument();
   });
 
   it('should work without cloudConfig', async () => {

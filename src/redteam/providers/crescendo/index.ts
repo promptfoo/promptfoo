@@ -1,9 +1,28 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject, isValidJson } from '../../../util/json';
+import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
+import { TokenUsageTracker } from '../../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../../remoteGeneration';
+import { getSessionId, isBasicRefusal } from '../../util';
+import { getGoalRubric } from '../prompts';
+import {
+  getLastMessageContent,
+  getTargetResponse,
+  isValidChatMessageArray,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  type TargetResponse,
+  tryUnblocking,
+} from '../shared';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -16,30 +35,24 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types/index';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, isValidJson } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
-import { isBasicRefusal } from '../../util';
-import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
 import {
-  getLastMessageContent,
-  getTargetResponse,
-  isValidChatMessageArray,
-  messagesToRedteamHistory,
-  redteamProviderManager,
-  type TargetResponse,
-  tryUnblocking,
-} from '../shared';
-import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+  extractTraceIdFromTraceparent,
+  fetchTraceContext,
+  type TraceContextData,
+} from '../../../tracing/traceContext';
+import { formatTraceForMetadata, formatTraceSummary } from '../traceFormatting';
+import {
+  resolveTracingOptions,
+  type RawTracingConfig,
+  type RedteamTracingOptions,
+} from '../tracingOptions';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
+
+type StopReason = 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached';
 
 /**
  * Represents metadata for the Crescendo conversation process.
@@ -49,11 +62,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
   crescendoConfidence: number | null;
-  stopReason:
-    | 'Grader failed'
-    | 'Internal evaluator success'
-    | 'Max rounds reached'
-    | 'Max backtracks reached';
+  stopReason: StopReason;
   successfulAttacks?: Array<{
     turn: number;
     prompt: string;
@@ -61,6 +70,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
+  traceSnapshots?: Record<string, unknown>[];
 }
 
 /**
@@ -80,6 +90,8 @@ interface CrescendoConfig {
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   stateful?: boolean;
   continueAfterSuccess?: boolean;
+  tracing?: RawTracingConfig;
+  [key: string]: unknown;
 }
 
 export class MemorySystem {
@@ -251,13 +263,18 @@ export class CrescendoProvider implements ApiProvider {
     let objectiveScore: { value: number; rationale: string } | undefined;
     let storedGraderResult: any = undefined;
 
-    let exitReason:
-      | 'Grader failed'
-      | 'Internal evaluator success'
-      | 'Max rounds reached'
-      | 'Max backtracks reached' = 'Max rounds reached';
+    let exitReason: StopReason = 'Max rounds reached';
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
+
+    const tracingOptions = resolveTracingOptions({
+      strategyId: 'crescendo',
+      test,
+      config: this.config,
+    });
+    const shouldFetchTrace =
+      tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
+    const traceSnapshots: TraceContextData[] = [];
 
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
       conversationObjective: this.userGoal,
@@ -301,6 +318,7 @@ export class CrescendoProvider implements ApiProvider {
           lastResponse,
           lastFeedback,
           objectiveScore,
+          tracingOptions,
         );
 
         if (!attackPrompt) {
@@ -319,6 +337,9 @@ export class CrescendoProvider implements ApiProvider {
           roundNum,
           context,
           options,
+          tracingOptions,
+          shouldFetchTrace,
+          traceSnapshots,
         );
         lastResponse = response;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
@@ -357,6 +378,9 @@ export class CrescendoProvider implements ApiProvider {
             roundNum,
             context,
             options,
+            tracingOptions,
+            shouldFetchTrace,
+            traceSnapshots,
           );
 
           accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
@@ -414,6 +438,10 @@ export class CrescendoProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
+            const gradingTraceSummary = tracingOptions.includeInGrading
+              ? (response.traceSummary ??
+                (response.traceContext ? formatTraceSummary(response.traceContext) : undefined))
+              : undefined;
             const { grade } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
@@ -421,6 +449,13 @@ export class CrescendoProvider implements ApiProvider {
               provider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
+              undefined,
+              tracingOptions.includeInGrading
+                ? {
+                    traceContext: response.traceContext,
+                    traceSummary: gradingTraceSummary,
+                  }
+                : undefined,
             );
 
             graderPassed = grade.pass;
@@ -458,30 +493,11 @@ export class CrescendoProvider implements ApiProvider {
 
         if (evalPercentage === 100) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
-
-          storedGraderResult = {
-            pass: false,
-            score: 0,
-            reason: objectiveScore?.rationale || 'Jailbreak goal achieved',
-          };
-
-          // Only break early if continueAfterSuccess is false
-          if (this.config.continueAfterSuccess) {
-            logger.debug(
-              `[Crescendo] Jailbreak Successful via Internal Evaluator at ROUND ${roundNum}, continuing due to continueAfterSuccess`,
-            );
-          } else {
-            exitReason = 'Internal evaluator success';
-            logger.debug(
-              `[Crescendo] Jailbreak Successful via Internal Evaluator, EXITING at ROUND ${roundNum}`,
-            );
-            break;
-          }
+          logger.debug(`[Crescendo] Jailbreak recorded during round ${roundNum}`);
         }
-
-        logger.debug('[Crescendo] Jailbreak Unsuccessful, continuing to next round');
+        logger.debug(`[Crescendo] Continuing to round ${roundNum + 1}`);
       } catch (error) {
-        logger.error(`[Crescendo] Error Running crescendo step: ${error}`);
+        logger.error(`[Crescendo] Error Running crescendo step`, { error });
       }
     }
 
@@ -513,6 +529,7 @@ export class CrescendoProvider implements ApiProvider {
       output: lastResponse.output,
       ...(lastResponse.error ? { error: lastResponse.error } : {}),
       metadata: {
+        sessionId: getSessionId(lastResponse, context),
         redteamFinalPrompt: getLastMessageContent(messages, 'user'),
         messages: messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
@@ -524,6 +541,10 @@ export class CrescendoProvider implements ApiProvider {
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
+            : undefined,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse.guardrails,
@@ -535,7 +556,8 @@ export class CrescendoProvider implements ApiProvider {
     evalFlag: boolean,
     lastResponse: TargetResponse,
     lastFeedback: string,
-    objectiveScore?: { value: number; rationale: string },
+    objectiveScore: { value: number; rationale: string } | undefined,
+    tracingOptions: RedteamTracingOptions,
   ): Promise<{ generatedQuestion: string | undefined }> {
     logger.debug(
       `[Crescendo] getAttackPrompt called: round=${roundNum}, evalFlag=${evalFlag}, objectiveScore=${JSON.stringify(
@@ -562,6 +584,14 @@ export class CrescendoProvider implements ApiProvider {
         `This response received a score of: ${objectiveScore.value} ` +
         'on a scale of 0 to 100 of meeting the objective.\n' +
         `This is the rationale behind the score: ${objectiveScore.rationale}\n\n`;
+    }
+
+    if (tracingOptions.includeInAttack && lastResponse.traceContext) {
+      const traceSummary =
+        lastResponse.traceSummary ?? formatTraceSummary(lastResponse.traceContext);
+      if (traceSummary.trim().length > 0) {
+        promptText += 'TRACE SUMMARY OF TARGET INTERNAL OPERATIONS:\n' + `${traceSummary}\n\n`;
+      }
     }
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
@@ -653,6 +683,9 @@ export class CrescendoProvider implements ApiProvider {
     _roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
+    tracingOptions?: RedteamTracingOptions,
+    shouldFetchTrace?: boolean,
+    traceSnapshots?: TraceContextData[],
   ): Promise<TargetResponse> {
     const renderedPrompt = await renderPrompt(
       originalPrompt,
@@ -712,6 +745,7 @@ export class CrescendoProvider implements ApiProvider {
     );
     logger.debug(targetPrompt);
 
+    const iterationStart = Date.now();
     const targetResponse = await getTargetResponse(provider, targetPrompt, context, options);
     logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
 
@@ -725,6 +759,36 @@ export class CrescendoProvider implements ApiProvider {
       role: 'assistant',
       content: targetResponse.output,
     });
+
+    if (shouldFetchTrace && tracingOptions) {
+      const traceparent = context?.traceparent ?? undefined;
+      const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
+
+      if (traceId) {
+        const traceContext = await fetchTraceContext(traceId, {
+          earliestStartTime: iterationStart,
+          includeInternalSpans: tracingOptions.includeInternalSpans,
+          maxSpans: tracingOptions.maxSpans,
+          maxDepth: tracingOptions.maxDepth,
+          maxRetries: tracingOptions.maxRetries,
+          retryDelayMs: tracingOptions.retryDelayMs,
+          spanFilter: tracingOptions.spanFilter,
+          sanitizeAttributes: tracingOptions.sanitizeAttributes,
+        });
+
+        if (traceContext) {
+          targetResponse.traceContext = traceContext;
+          const computedTraceSummary =
+            tracingOptions.includeInAttack || tracingOptions.includeInGrading
+              ? formatTraceSummary(traceContext)
+              : undefined;
+          if (computedTraceSummary) {
+            targetResponse.traceSummary = computedTraceSummary;
+          }
+          traceSnapshots?.push(traceContext);
+        }
+      }
+    }
 
     return targetResponse;
   }

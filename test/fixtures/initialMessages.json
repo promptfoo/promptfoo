@@ -1,0 +1,10 @@
+[
+  {
+    "role": "user",
+    "content": "I need a flight from New York to Seattle"
+  },
+  {
+    "role": "assistant",
+    "content": "I can help with that! What date?"
+  }
+]

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import StrategyConfigDialog from './StrategyConfigDialog';
 
@@ -228,34 +228,6 @@ describe('StrategyConfigDialog', () => {
     });
   });
 
-  it('should remove a language when handleRemoveLanguage is called', () => {
-    const initialLanguages = ['en', 'bn', 'sw'];
-    const initialConfig = { languages: initialLanguages };
-
-    render(
-      <StrategyConfigDialog
-        open={true}
-        strategy="multilingual"
-        config={initialConfig}
-        onClose={mockOnClose}
-        onSave={mockOnSave}
-        strategyData={{
-          id: 'multilingual',
-          name: 'Multilingual',
-          description: 'A multilingual strategy',
-        }}
-      />,
-    );
-
-    const bengaliChip = screen.getByText('Bengali').closest('.MuiChip-root') as HTMLElement;
-    const deleteIcon = within(bengaliChip).getByTestId('CancelIcon');
-    fireEvent.click(deleteIcon);
-
-    expect(screen.queryByText('Bengali')).not.toBeInTheDocument();
-    expect(screen.getByText('en')).toBeInTheDocument();
-    expect(screen.getByText('Swahili')).toBeInTheDocument();
-  });
-
   it('should render and handle best-of-n strategy configuration correctly', () => {
     const initialConfig = {
       maxConcurrency: 3,
@@ -373,5 +345,356 @@ describe('StrategyConfigDialog', () => {
     });
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('should reset local state when switching between strategies', () => {
+    const { rerender } = render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="custom"
+        config={{ strategyText: 'Initial strategy', maxTurns: 4 }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'custom', name: 'Custom', description: 'A custom strategy' }}
+      />,
+    );
+
+    const customMaxTurnsInput = screen.getByLabelText('Max Turns');
+    expect(customMaxTurnsInput).toHaveValue(4);
+    fireEvent.change(customMaxTurnsInput, { target: { value: '12' } });
+    expect(customMaxTurnsInput).toHaveValue(12);
+
+    const customStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    expect(customStatefulSwitch).toBeChecked();
+
+    rerender(
+      <StrategyConfigDialog
+        open={true}
+        strategy="goat"
+        config={{ maxTurns: 3, stateful: false }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'goat', name: 'GOAT', description: 'A multi-turn strategy' }}
+      />,
+    );
+
+    const goatMaxTurnsInput = screen.getByLabelText('Max Turns');
+    expect(goatMaxTurnsInput).toHaveValue(3);
+
+    const goatStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    expect(goatStatefulSwitch).not.toBeChecked();
+  });
+
+  it('should not persist localConfig changes when closing the dialog without saving for the jailbreak:meta strategy', () => {
+    const initialConfig = { numIterations: 10 };
+
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:meta"
+        config={initialConfig}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:meta',
+          name: 'Meta-Agent Jailbreak',
+          description: 'Meta-Agent Jailbreak strategy',
+        }}
+      />,
+    );
+
+    const numIterationsInput = screen.getByLabelText('Number of Iterations');
+    fireEvent.change(numIterationsInput, { target: { value: '20' } });
+
+    const cancelButton = screen.getByRole('button', { name: 'Cancel' });
+    fireEvent.click(cancelButton);
+
+    expect(mockOnSave).not.toHaveBeenCalled();
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("should render the 'jailbreak:meta' strategy config without falling through to multi-turn or default", () => {
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:meta"
+        config={{}}
+        onClose={() => {}}
+        onSave={() => {}}
+        strategyData={{
+          id: 'jailbreak:meta',
+          name: 'Meta-Agent Jailbreak',
+          description: 'Meta-Agent Jailbreak strategy',
+        }}
+      />,
+    );
+
+    const iterationsInput = screen.getByLabelText('Number of Iterations');
+    expect(iterationsInput).toBeInTheDocument();
+
+    const iterationsDescription = screen.getByText(
+      /Number of iterations for the meta-agent to attempt/,
+    );
+    expect(iterationsDescription).toBeInTheDocument();
+
+    const maxTurnsInput = screen.queryByLabelText('Max Turns');
+    expect(maxTurnsInput).toBeNull();
+
+    const statefulSwitch = screen.queryByRole('switch', { name: /Stateful/ });
+    expect(statefulSwitch).toBeNull();
+
+    const noConfigMessage = screen.queryByText(
+      /No configuration options available for this strategy/,
+    );
+    expect(noConfigMessage).toBeNull();
+  });
+
+  it("should render the number of iterations input with the correct initial value and reset local state when switching to 'jailbreak:meta'", () => {
+    const initialConfig = { numIterations: 25 };
+    const newConfig = { numIterations: 35 };
+
+    const { rerender } = render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="custom"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'custom', name: 'Custom', description: 'A custom strategy' }}
+      />,
+    );
+
+    rerender(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:meta"
+        config={initialConfig}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:meta',
+          name: 'Meta-Agent Jailbreak',
+          description: 'Meta-Agent Jailbreak strategy',
+        }}
+      />,
+    );
+
+    const numIterationsInput = screen.getByLabelText('Number of Iterations');
+    expect(numIterationsInput).toHaveValue(25);
+
+    rerender(
+      <StrategyConfigDialog
+        open={true}
+        strategy="basic"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'basic', name: 'Basic', description: 'Basic strategy' }}
+      />,
+    );
+
+    rerender(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:meta"
+        config={newConfig}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:meta',
+          name: 'Meta-Agent Jailbreak',
+          description: 'Meta-Agent Jailbreak strategy',
+        }}
+      />,
+    );
+
+    const numIterationsInputUpdated = screen.getByLabelText('Number of Iterations');
+    expect(numIterationsInputUpdated).toHaveValue(35);
+  });
+
+  it("should call onSave with localConfig and the strategy string when Save is clicked for the 'jailbreak:meta' strategy", () => {
+    const initialConfig = {};
+    const numIterations = 25;
+
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:meta"
+        config={initialConfig}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:meta',
+          name: 'Meta Jailbreak',
+          description: 'Meta Jailbreak strategy',
+        }}
+      />,
+    );
+
+    const numIterationsInput = screen.getByLabelText('Number of Iterations');
+    fireEvent.change(numIterationsInput, { target: { value: numIterations.toString() } });
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(saveButton);
+
+    expect(mockOnSave).toHaveBeenCalledTimes(1);
+    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: numIterations });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("should save 'jailbreak:meta' strategy with default numIterations when input is empty", () => {
+    const initialConfig = {};
+
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:meta"
+        config={initialConfig}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:meta',
+          name: 'Meta-Agent Jailbreak',
+          description: 'Meta-Agent Jailbreak strategy',
+        }}
+      />,
+    );
+
+    const numIterationsInput = screen.getByLabelText('Number of Iterations');
+    fireEvent.change(numIterationsInput, { target: { value: '' } });
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(saveButton);
+
+    expect(mockOnSave).toHaveBeenCalledTimes(1);
+    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: 10 });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('should reset localConfig when the jailbreak:meta strategy dialog is opened multiple times with different config values', () => {
+    const { rerender } = render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:meta"
+        config={{ numIterations: 20 }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:meta',
+          name: 'Meta-Agent Jailbreak',
+          description: 'Meta-Agent Jailbreak strategy',
+        }}
+      />,
+    );
+
+    const numIterationsInput1 = screen.getByLabelText('Number of Iterations');
+    expect(numIterationsInput1).toHaveValue(20);
+
+    rerender(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:meta"
+        config={{ numIterations: 5 }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:meta',
+          name: 'Meta-Agent Jailbreak',
+          description: 'Meta-Agent Jailbreak strategy',
+        }}
+      />,
+    );
+
+    const numIterationsInput2 = screen.getByLabelText('Number of Iterations');
+    expect(numIterationsInput2).toHaveValue(5);
+  });
+
+  it('should preserve other config properties when saving numIterations for jailbreak:meta', () => {
+    const initialConfig = {
+      numIterations: 10,
+      someOtherField: 'someValue',
+      anotherField: 123,
+    };
+    const newNumIterations = 20;
+
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:meta"
+        config={initialConfig}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:meta',
+          name: 'Meta-Agent Jailbreak',
+          description: 'Meta-Agent Jailbreak strategy',
+        }}
+      />,
+    );
+
+    const numIterationsInput = screen.getByLabelText('Number of Iterations');
+    fireEvent.change(numIterationsInput, { target: { value: newNumIterations.toString() } });
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(saveButton);
+
+    expect(mockOnSave).toHaveBeenCalledTimes(1);
+    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', {
+      numIterations: newNumIterations,
+      someOtherField: 'someValue',
+      anotherField: 123,
+    });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("should call onSave with the updated numIterations and then onClose when Save is clicked for the 'jailbreak:meta' strategy", () => {
+    const initialConfig = { numIterations: 10 };
+    const newNumIterations = 20;
+
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:meta"
+        config={initialConfig}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:meta',
+          name: 'Meta-Agent Jailbreak',
+          description: 'Meta-Agent Jailbreak strategy',
+        }}
+      />,
+    );
+
+    const numIterationsInput = screen.getByLabelText('Number of Iterations');
+    fireEvent.change(numIterationsInput, { target: { value: newNumIterations.toString() } });
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(saveButton);
+
+    expect(mockOnSave).toHaveBeenCalledTimes(1);
+    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: newNumIterations });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("should render the number of iterations input and relevant instructions when open is true and strategy is 'jailbreak:meta'", () => {
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:meta"
+        config={{}}
+        onClose={() => {}}
+        onSave={() => {}}
+        strategyData={{
+          id: 'jailbreak:meta',
+          name: 'Meta-Agent Jailbreak',
+          description: 'Meta-Agent Jailbreak strategy',
+        }}
+      />,
+    );
+
+    const numIterationsInput = screen.getByLabelText('Number of Iterations');
+    expect(numIterationsInput).toBeInTheDocument();
+    expect(numIterationsInput).toHaveValue(10);
   });
 });

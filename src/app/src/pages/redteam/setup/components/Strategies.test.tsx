@@ -1,20 +1,26 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Strategies from './Strategies';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');
 vi.mock('@app/hooks/useTelemetry');
+vi.mock('@app/hooks/useToast');
 vi.mock('./StrategyConfigDialog', () => ({
   default: () => <div data-testid="strategy-config-dialog">Strategy Config Dialog</div>,
 }));
 
+const queryClient = new QueryClient();
+
 const mockUpdateConfig = vi.fn();
 const mockRecordEvent = vi.fn();
+const mockShowToast = vi.fn();
 
 describe('Strategies', () => {
   const mockOnNext = vi.fn();
@@ -40,13 +46,19 @@ describe('Strategies', () => {
     (useTelemetry as any).mockReturnValue({
       recordEvent: mockRecordEvent,
     });
+
+    (useToast as any).mockReturnValue({
+      showToast: mockShowToast,
+    });
   });
 
   describe('Basic rendering', () => {
     it('renders the page with title and help elements', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -57,7 +69,9 @@ describe('Strategies', () => {
     it('renders the documentation link with correct attributes', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -73,7 +87,9 @@ describe('Strategies', () => {
     it('renders navigation buttons', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -90,7 +106,9 @@ describe('Strategies', () => {
     it('renders multiple strategy sections', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -102,7 +120,9 @@ describe('Strategies', () => {
     it('renders strategy items with checkboxes', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -129,7 +149,9 @@ describe('Strategies', () => {
     it('renders preset selector cards', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -144,7 +166,9 @@ describe('Strategies', () => {
     it('records page view on mount', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -172,7 +196,9 @@ describe('Strategies', () => {
 
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -186,7 +212,9 @@ describe('Strategies', () => {
     it('renders strategy items for basic strategy', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -214,7 +242,9 @@ describe('Strategies', () => {
 
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -239,7 +269,9 @@ describe('Strategies', () => {
 
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -250,7 +282,9 @@ describe('Strategies', () => {
   it('renders multiple StrategySection components inside PageWrapper', () => {
     render(
       <MemoryRouter>
-        <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        <QueryClientProvider client={queryClient}>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </QueryClientProvider>
       </MemoryRouter>,
     );
 
@@ -261,7 +295,9 @@ describe('Strategies', () => {
   it('calls onNext and onBack when the respective buttons are clicked', () => {
     render(
       <MemoryRouter>
-        <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        <QueryClientProvider client={queryClient}>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </QueryClientProvider>
       </MemoryRouter>,
     );
 
@@ -279,7 +315,9 @@ describe('Strategies', () => {
     it('renders AgenticStrategiesGroup with parent header when agentic strategies are available', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -295,7 +333,9 @@ describe('Strategies', () => {
     it('renders subsection labels for single-turn and multi-turn agentic strategies', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -315,7 +355,9 @@ describe('Strategies', () => {
     it('renders Reset All button for agentic strategies section', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 
@@ -329,7 +371,9 @@ describe('Strategies', () => {
     it('updates config when agentic strategies are selected', () => {
       render(
         <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
         </MemoryRouter>,
       );
 

@@ -13,6 +13,7 @@ import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import type { GradingResult } from '@promptfoo/types';
 
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
@@ -22,8 +23,6 @@ import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
 import type { ResultsFilterType, ResultsFilterOperator } from './store';
 import type { Trace } from '../../../components/traces/TraceView';
-
-const HIDDEN_METADATA_KEYS = ['citations', '_promptfooFileMetadata'];
 
 const copyButtonSx = {
   position: 'absolute',
@@ -191,6 +190,7 @@ interface EvalOutputPromptDialogProps {
   onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
   fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
   cloudConfig?: CloudConfigData | null;
+  readOnly?: boolean;
 }
 
 export default function EvalOutputPromptDialog({
@@ -211,6 +211,7 @@ export default function EvalOutputPromptDialog({
   onReplay,
   fetchTraces,
   cloudConfig,
+  readOnly = false,
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -492,7 +493,7 @@ export default function EvalOutputPromptDialog({
                 onMouseLeave={() => setHoveredElement(null)}
                 CodeDisplay={CodeDisplay}
                 subtitleTypographySx={subtitleTypographySx}
-                readOnly={!evaluationId}
+                readOnly={readOnly}
               />
               {hasOutputContent && (
                 <OutputsPanel

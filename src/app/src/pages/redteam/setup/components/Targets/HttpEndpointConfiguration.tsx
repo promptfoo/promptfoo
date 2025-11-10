@@ -152,11 +152,28 @@ Content-Type: application/json
     setIsTestRunning(true);
     setTestResult(null);
 
+    // Validate URL before testing (skip validation for raw request mode)
+    if (!selectedTarget.config?.request) {
+      const targetUrl = selectedTarget.config?.url;
+      if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
+        setTestResult({
+          success: false,
+          message:
+            'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
+        });
+        setIsTestRunning(false);
+        if (onTargetTested) {
+          onTargetTested(false);
+        }
+        return;
+      }
+    }
+
     try {
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(selectedTarget),
+        body: JSON.stringify({ providerOptions: selectedTarget }),
       });
 
       if (response.ok) {
@@ -200,9 +217,22 @@ Content-Type: application/json
       }
     } catch (error) {
       console.error('Error testing target:', error);
+      let errorMessage = 'Failed to test target configuration';
+      if (error instanceof Error) {
+        // Improve URL-related error messages
+        if (
+          error.message.includes('Failed to parse URL') ||
+          error.message.includes('Invalid URL')
+        ) {
+          errorMessage =
+            'Invalid URL configuration. Please enter a complete URL (e.g., https://api.example.com/endpoint).';
+        } else {
+          errorMessage = error.message;
+        }
+      }
       setTestResult({
         success: false,
-        message: error instanceof Error ? error.message : 'Failed to test target configuration',
+        message: errorMessage,
       });
 
       if (onTargetTested) {
