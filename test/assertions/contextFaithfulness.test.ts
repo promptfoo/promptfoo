@@ -30,7 +30,7 @@ describe('handleContextFaithfulness', () => {
       output: 'The capital of France is Paris.',
       prompt: 'test prompt',
       baseType: 'context-faithfulness',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {
           query: 'What is the capital of France?',
@@ -65,6 +65,8 @@ describe('handleContextFaithfulness', () => {
       'test context',
       0.7,
       {},
+      expect.any(Object),
+      undefined,
     );
   });
 
@@ -88,7 +90,7 @@ describe('handleContextFaithfulness', () => {
       output: 'The capital of France is Paris and it has a population of 50 million.',
       prompt: 'test prompt',
       baseType: 'context-faithfulness',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {
           query: 'What is the capital of France?',
@@ -123,6 +125,8 @@ describe('handleContextFaithfulness', () => {
       'test context',
       0.7,
       {},
+      expect.any(Object),
+      undefined,
     );
   });
 
@@ -137,7 +141,7 @@ describe('handleContextFaithfulness', () => {
         output: 'test output',
         prompt: 'test prompt',
         baseType: 'context-faithfulness',
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: {},
           test: { vars: undefined, options: {} },
@@ -167,7 +171,7 @@ describe('handleContextFaithfulness', () => {
         output: 'test output',
         prompt: 'test prompt',
         baseType: 'context-faithfulness',
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: { query: 123 },
           test: { vars: { query: 123 }, options: {} },
@@ -199,7 +203,7 @@ describe('handleContextFaithfulness', () => {
         output: 123,
         prompt: 'test prompt',
         baseType: 'context-faithfulness',
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: { query: 'test query' },
           test: { vars: { query: 'test query' }, options: {} },
@@ -235,7 +239,7 @@ describe('handleContextFaithfulness', () => {
       output: 'raw',
       prompt: 'prompt text',
       baseType: 'context-faithfulness' as const,
-      context: {
+      assertionValueContext: {
         prompt: 'prompt text',
         vars: {},
         test: {},
@@ -266,6 +270,8 @@ describe('handleContextFaithfulness', () => {
       'from-transform',
       0,
       {},
+      expect.any(Object),
+      undefined,
     );
     expect(result.metadata).toBeDefined();
     expect(result.metadata!.context).toBe('from-transform');

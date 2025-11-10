@@ -21,9 +21,9 @@ import {
   checkCloudPermissions,
   getCloudDatabaseId,
   getConfigFromCloud,
-  getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
+  resolveTeamId,
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
@@ -238,6 +238,14 @@ export async function doGenerateRedteam(
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
+  telemetry.record('redteam generate', {
+    phase: 'started',
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+    plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
+    strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
+    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+  });
 
   let plugins: RedteamPluginObject[] = [];
 
@@ -320,7 +328,7 @@ export async function doGenerateRedteam(
     const teamId =
       resolvedConfigMetadata?.teamId ??
       (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
-      (await getDefaultTeam()).id;
+      (await resolveTeamId()).id;
 
     const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
 
@@ -381,9 +389,8 @@ export async function doGenerateRedteam(
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
-    logger.error('Invalid redteam configuration:');
-    logger.error(fromError(parsedConfig.error).toString());
-    throw new Error('Invalid redteam configuration');
+    const errorMessage = fromError(parsedConfig.error).toString();
+    throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
   }
 
   const targetLabels = testSuite.providers
@@ -416,7 +423,6 @@ export async function doGenerateRedteam(
   } = await synthesize({
     ...parsedConfig.data,
     purpose: enhancedPurpose,
-    language: config.language,
     numTests: config.numTests,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
     maxConcurrency: config.maxConcurrency,
@@ -607,6 +613,16 @@ export async function doGenerateRedteam(
     strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
+  telemetry.record('redteam generate', {
+    phase: 'completed',
+    duration: Math.round((Date.now() - startTime) / 1000),
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+    numTestsGenerated: redteamTests.length,
+    plugins: plugins.map((p) => p.id),
+    strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
+    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+  });
 
   return ret;
 }
@@ -759,10 +775,11 @@ export function redteamGenerateCommand(
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
+          // Log the stack trace, which already includes the error message
           logger.error(
-            `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}\n${
-              error instanceof Error ? error.stack : ''
-            }`,
+            error instanceof Error && error.stack
+              ? error.stack
+              : `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
         process.exit(1);

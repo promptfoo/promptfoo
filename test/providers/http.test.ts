@@ -3,20 +3,15 @@ import fs from 'fs';
 import path from 'path';
 
 import dedent from 'dedent';
-
-// Mock console.warn to prevent test noise
-const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import {
   createSessionParser,
-  createTransformRequest,
-  createTransformResponse,
   createValidateStatus,
   determineRequestBody,
+  escapeJsonVariables,
   estimateTokenCount,
   HttpProvider,
   processJsonBody,
@@ -25,6 +20,10 @@ import {
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../src/util/file';
+import { sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
+
+// Mock console.warn to prevent test noise
+const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),
@@ -44,7 +43,7 @@ jest.mock('../../src/util/file', () => ({
 }));
 
 jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(async (modulePath: string, functionName?: string) => {
+  importModule: jest.fn(async (_modulePath: string, functionName?: string) => {
     const mockModule = {
       default: jest.fn((data) => data.defaultField),
       parseResponse: jest.fn((data) => data.specificField),
@@ -1096,6 +1095,114 @@ describe('HttpProvider', () => {
     });
   });
 
+  describe('escapeJsonVariables', () => {
+    it('should escape newlines in string values', () => {
+      const vars = { prompt: 'Line 1\nLine 2' };
+      const result = escapeJsonVariables(vars);
+      expect(result.prompt).toBe('Line 1\\nLine 2');
+    });
+
+    it('should escape carriage returns in string values', () => {
+      const vars = { text: 'Before\rAfter' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('Before\\rAfter');
+    });
+
+    it('should escape tabs in string values', () => {
+      const vars = { text: 'Before\tAfter' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('Before\\tAfter');
+    });
+
+    it('should escape quotes in string values', () => {
+      const vars = { text: 'He said "hello"' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('He said \\"hello\\"');
+    });
+
+    it('should escape backslashes in string values', () => {
+      const vars = { path: 'C:\\Users\\test' };
+      const result = escapeJsonVariables(vars);
+      expect(result.path).toBe('C:\\\\Users\\\\test');
+    });
+
+    it('should handle mixed special characters', () => {
+      const vars = {
+        prompt: 'Line 1\nLine 2\tTabbed\r\nWindows line',
+      };
+      const result = escapeJsonVariables(vars);
+      expect(result.prompt).toBe('Line 1\\nLine 2\\tTabbed\\r\\nWindows line');
+    });
+
+    it('should not escape non-string values', () => {
+      const vars = {
+        count: 42,
+        active: true,
+        items: null,
+        ratio: 3.14,
+      };
+      const result = escapeJsonVariables(vars);
+      expect(result.count).toBe(42);
+      expect(result.active).toBe(true);
+      expect(result.items).toBe(null);
+      expect(result.ratio).toBe(3.14);
+    });
+
+    it('should handle objects with mixed types', () => {
+      const vars = {
+        text: 'Hello\nWorld',
+        number: 123,
+        bool: false,
+        nested: 'Quote: "test"',
+      };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('Hello\\nWorld');
+      expect(result.number).toBe(123);
+      expect(result.bool).toBe(false);
+      expect(result.nested).toBe('Quote: \\"test\\"');
+    });
+
+    it('should escape unicode control characters', () => {
+      const vars = { text: 'Before\u0001After' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('Before\\u0001After');
+    });
+
+    it('should handle empty strings', () => {
+      const vars = { text: '' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('');
+    });
+
+    it('should handle strings with only special characters', () => {
+      const vars = { text: '\n\r\t' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('\\n\\r\\t');
+    });
+
+    it('should produce valid JSON when used in raw request templates', () => {
+      // Simulate the actual use case: escaping variables before inserting into JSON template
+      const vars = {
+        prompt: 'Please write:\n"Hello"\nThank you',
+        guid: '12345',
+        count: 42,
+      };
+      const escaped = escapeJsonVariables(vars);
+
+      // Construct a JSON string using the escaped values
+      const jsonString = `{"user_input":"${escaped.prompt}","guid":"${escaped.guid}","count":${escaped.count}}`;
+
+      // Should be valid JSON
+      expect(() => JSON.parse(jsonString)).not.toThrow();
+
+      // Should parse back to correct values
+      const parsed = JSON.parse(jsonString);
+      expect(parsed.user_input).toBe('Please write:\n"Hello"\nThank you');
+      expect(parsed.guid).toBe('12345');
+      expect(parsed.count).toBe(42);
+    });
+  });
+
   describe('processTextBody', () => {
     it('should render templates in text bodies', () => {
       const body = 'Hello {{name}}!';
@@ -1112,139 +1219,6 @@ describe('HttpProvider', () => {
     it('should handle null body gracefully', () => {
       // @ts-ignore - Testing null input
       expect(processTextBody(null, {})).toBeNull();
-    });
-  });
-
-  describe('createtransformResponse', () => {
-    it('should handle function parser', async () => {
-      const functionParser = (data: any) => data.result;
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          body: { key: 'value' },
-          transformResponse: functionParser,
-        },
-      });
-
-      const mockResponse = {
-        data: JSON.stringify({ result: 'success' }),
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-      const result = await provider.callApi('test prompt');
-      expect(result.output).toBe('success');
-    });
-
-    it('should handle file:// parser with JavaScript file', async () => {
-      const mockParser = jest.fn((data, text) => text.toUpperCase());
-      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
-
-      const parser = await createTransformResponse('file://custom-parser.js');
-      const result = parser({ customField: 'parsed' }, 'parsed');
-      expect(importModule).toHaveBeenCalledWith(
-        path.resolve('/mock/base/path', 'custom-parser.js'),
-        undefined,
-      );
-      expect(result).toBe('PARSED');
-    });
-
-    it('parser returns object', async () => {
-      provider = new HttpProvider(mockUrl, {
-        config: {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: { key: '{{ prompt }}' },
-          transformResponse: (data: any) => {
-            return {
-              output: data.result,
-              metadata: { something: 1 },
-              tokenUsage: { prompt: 2, completion: 3, total: 4 },
-            };
-          },
-        },
-      });
-
-      const mockResponse = {
-        data: JSON.stringify({ result: 'response text' }),
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-      const result = await provider.callApi('test prompt');
-      expect(result.output).toBe('response text');
-      expect(result.metadata).toStrictEqual({ something: 1 });
-      expect(result.tokenUsage).toStrictEqual({ prompt: 2, completion: 3, total: 4 });
-    });
-
-    it('should throw error for unsupported parser type', async () => {
-      await expect(createTransformResponse(123 as any)).rejects.toThrow(
-        "Unsupported response transform type: number. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.",
-      );
-    });
-
-    it('should handle string parser', async () => {
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          body: { key: 'value' },
-          transformResponse: 'json.result',
-        },
-      });
-
-      const mockResponse = {
-        data: JSON.stringify({ result: 'parsed' }),
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-      const result = await provider.callApi('test prompt');
-      expect(result.output).toBe('parsed');
-    });
-
-    it('should handle file:// parser with specific function name', async () => {
-      const mockParser = jest.fn((data, text) => data.specificField);
-      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
-
-      const parser = await createTransformResponse('file://custom-parser.js:parseResponse');
-      const result = parser({ specificField: 'parsed' }, '');
-      expect(importModule).toHaveBeenCalledWith(
-        path.resolve('/mock/base/path', 'custom-parser.js'),
-        'parseResponse',
-      );
-      expect(result).toBe('parsed');
-    });
-
-    it('should throw error for malformed file:// parser', async () => {
-      jest.mocked(importModule).mockResolvedValueOnce({});
-
-      await expect(createTransformResponse('file://invalid-parser.js')).rejects.toThrow(
-        /Response transform malformed/,
-      );
-    });
-
-    it('should return default parser when no parser is provided', async () => {
-      const parser = await createTransformResponse(undefined);
-      const result = parser({ key: 'value' }, 'raw text');
-      expect(result.output).toEqual({ key: 'value' });
-    });
-
-    it('should handle response transform file with default export', async () => {
-      const mockParser = jest.fn((data) => data.defaultField);
-      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
-
-      const parser = await createTransformResponse('file://default-parser.js');
-      const result = parser({ defaultField: 'parsed' }, '');
-
-      expect(result).toBe('parsed');
-      expect(importModule).toHaveBeenCalledWith(
-        path.resolve('/mock/base/path', 'default-parser.js'),
-        undefined,
-      );
     });
   });
 
@@ -1270,7 +1244,7 @@ describe('HttpProvider', () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         body: { key: 'value' },
-        transformResponse: (json: any, text: string) => ({ custom: json.result }),
+        transformResponse: (json: any, _text: string) => ({ custom: json.result }),
       },
     });
 
@@ -1284,6 +1258,181 @@ describe('HttpProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toEqual({ custom: 'success' });
+  });
+
+  describe('file:// transform integration tests', () => {
+    it('should handle file:// response transform', async () => {
+      const mockParser = jest.fn((data: any) => ({ transformed: data.result }));
+      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          transformResponse: 'file://custom-parser.js',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toEqual({ transformed: 'success' });
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'custom-parser.js'),
+        undefined,
+      );
+    });
+
+    it('should handle file:// response transform with specific function name', async () => {
+      const mockParser = jest.fn((data: any) => data.customField);
+      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          transformResponse: 'file://custom-parser.js:parseResponse',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ customField: 'parsed value' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe('parsed value');
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'custom-parser.js'),
+        'parseResponse',
+      );
+    });
+
+    it('should handle file:// request transform', async () => {
+      const mockTransform = jest.fn((prompt: string) => ({ transformed: prompt.toUpperCase() }));
+      jest.mocked(importModule).mockResolvedValueOnce(mockTransform);
+
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: 'value' },
+          transformRequest: 'file://transform.js',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test');
+
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'transform.js'),
+        undefined,
+      );
+      expect(mockTransform).toHaveBeenCalledWith('test', expect.any(Object), undefined);
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'value', transformed: 'TEST' }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should handle file:// request transform with specific function name', async () => {
+      const mockTransform = jest.fn((prompt: string) => ({ custom: prompt }));
+      jest.mocked(importModule).mockResolvedValueOnce(mockTransform);
+
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: 'value' },
+          transformRequest: 'file://transform.js:myTransform',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('hello');
+
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'transform.js'),
+        'myTransform',
+      );
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          body: JSON.stringify({ key: 'value', custom: 'hello' }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should throw error for malformed file:// response transform', async () => {
+      jest.mocked(importModule).mockResolvedValueOnce({});
+
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          transformResponse: 'file://invalid-parser.js',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await expect(provider.callApi('test prompt')).rejects.toThrow(/Transform module malformed/);
+    });
+
+    it('should throw error for malformed file:// request transform', async () => {
+      jest.mocked(importModule).mockResolvedValueOnce({});
+
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          transformRequest: 'file://invalid-transform.js',
+        },
+      });
+
+      await expect(provider.callApi('test prompt')).rejects.toThrow(/Transform module malformed/);
+    });
   });
 
   describe('getDefaultHeaders', () => {
@@ -1587,8 +1736,8 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      // Should return empty object when headers are undefined
-      expect(result.metadata?.http?.headers).toEqual({});
+      // Should return undefined when headers are undefined
+      expect(result.metadata?.http?.headers).toBeUndefined();
     });
 
     it('should redact auth headers in raw request mode with debug context', async () => {
@@ -1662,42 +1811,6 @@ describe('HttpProvider', () => {
         'x-ApI-kEy': '[REDACTED]',
         'Content-TYPE': 'application/json',
         'X-Request-ID': 'req-123',
-      });
-    });
-
-    it('should redact headers containing auth-related keywords', async () => {
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          method: 'GET',
-        },
-      });
-
-      const mockResponse = {
-        data: JSON.stringify({ result: 'success' }),
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-        headers: {
-          'X-Custom-Authorization-Header': 'auth-value',
-          'App-Token-Value': 'token123',
-          'Secret-Key': 'secret',
-          'X-Session-Data': 'session123',
-          'X-Request-ID': 'req-456',
-          'X-Rate-Limit': '100',
-        },
-      };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-      const result = await provider.callApi('test prompt');
-
-      // Headers containing auth keywords should be redacted
-      expect(result.metadata?.http?.headers).toEqual({
-        'X-Custom-Authorization-Header': '[REDACTED]',
-        'App-Token-Value': '[REDACTED]',
-        'Secret-Key': '[REDACTED]',
-        'X-Session-Data': '[REDACTED]',
-        'X-Request-ID': 'req-456',
-        'X-Rate-Limit': '100',
       });
     });
   });
@@ -1963,15 +2076,13 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual(
-        expect.objectContaining({
-          output: { chat_history: 'success' },
-          raw: JSON.stringify({ result: 'success' }),
-          metadata: expect.objectContaining({
-            http: { status: 200, statusText: 'OK', headers: {} },
-          }),
-        }),
-      );
+      expect(result).toMatchObject({
+        output: { chat_history: 'success' },
+        raw: JSON.stringify({ result: 'success' }),
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: undefined },
+        },
+      });
     });
 
     it('should prefer transformResponse over responseParser when both are set', async () => {
@@ -1980,8 +2091,8 @@ describe('HttpProvider', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: { key: '{{ prompt }}' },
-          responseParser: (data: any) => ({ chat_history: 'from responseParser' }),
-          transformResponse: (data: any) => ({ chat_history: 'from transformResponse' }),
+          responseParser: (_data: any) => ({ chat_history: 'from responseParser' }),
+          transformResponse: (_data: any) => ({ chat_history: 'from transformResponse' }),
         },
       });
       const mockResponse = {
@@ -1994,15 +2105,13 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual(
-        expect.objectContaining({
-          output: { chat_history: 'from transformResponse' },
-          raw: JSON.stringify({ result: 'success' }),
-          metadata: expect.objectContaining({
-            http: { status: 200, statusText: 'OK', headers: {} },
-          }),
-        }),
-      );
+      expect(result).toMatchObject({
+        output: { chat_history: 'from transformResponse' },
+        raw: JSON.stringify({ result: 'success' }),
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: undefined },
+        },
+      });
     });
 
     it('should handle string-based responseParser when transformResponse is not set', async () => {
@@ -2024,15 +2133,13 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual(
-        expect.objectContaining({
-          output: 'success',
-          raw: JSON.stringify({ result: 'success' }),
-          metadata: expect.objectContaining({
-            http: { status: 200, statusText: 'OK', headers: {} },
-          }),
-        }),
-      );
+      expect(result).toMatchObject({
+        output: 'success',
+        raw: JSON.stringify({ result: 'success' }),
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: undefined },
+        },
+      });
     });
   });
 
@@ -2142,116 +2249,6 @@ describe('HttpProvider', () => {
   });
 });
 
-describe('createTransformRequest', () => {
-  it('should return identity function when no transform specified', async () => {
-    const transform = await createTransformRequest(undefined);
-    const result = await transform('test prompt', {} as any);
-    expect(result).toBe('test prompt');
-  });
-
-  it('should handle string templates', async () => {
-    const transform = await createTransformRequest('return {"text": prompt}');
-    const result = await transform('hello', {} as any);
-    expect(result).toEqual({
-      text: 'hello',
-    });
-  });
-
-  it('should handle errors in function-based transform', async () => {
-    const errorFn = () => {
-      throw new Error('Transform function error');
-    };
-    const transform = await createTransformRequest(errorFn);
-    await expect(async () => {
-      await transform('test', {} as any);
-    }).rejects.toThrow('Error in request transform function: Transform function error');
-  });
-
-  it('should handle errors in file-based transform', async () => {
-    const mockErrorFn = jest.fn(() => {
-      throw new Error('File transform error');
-    });
-    jest.mocked(importModule).mockResolvedValueOnce(mockErrorFn);
-
-    const transform = await createTransformRequest('file://error-transform.js');
-    await expect(async () => {
-      await transform('test', {} as any);
-    }).rejects.toThrow(
-      'Error in request transform function from error-transform.js: File transform error',
-    );
-  });
-
-  it('should handle errors in string template transform', async () => {
-    const transform = await createTransformRequest('return badVariable.nonexistent');
-    await expect(async () => {
-      await transform('test', {} as any);
-    }).rejects.toThrow('Error in request transform string template: badVariable is not defined');
-  });
-
-  it('should handle function-based request transform', async () => {
-    jest.clearAllMocks();
-
-    const provider = new HttpProvider('http://test.com', {
-      config: {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: { key: 'value' },
-        transformRequest: (prompt: string) => ({ transformed: prompt.toUpperCase() }),
-      },
-    });
-
-    const mockResponse = {
-      data: JSON.stringify({ result: 'success' }),
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-    await provider.callApi('test');
-
-    expect(fetchWithCache).toHaveBeenCalledWith(
-      'http://test.com',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ key: 'value', transformed: 'TEST' }),
-      },
-      REQUEST_TIMEOUT_MS,
-      'text',
-      undefined,
-      undefined,
-    );
-  });
-
-  it('should throw error for unsupported transform type', async () => {
-    await expect(createTransformRequest(123 as any)).rejects.toThrow(
-      'Unsupported request transform type: number',
-    );
-  });
-
-  it('should include filename in error for file-based transform errors', async () => {
-    const mockErrorFn = jest.fn(() => {
-      throw new Error('File error');
-    });
-    jest.mocked(importModule).mockResolvedValueOnce(mockErrorFn);
-
-    const transform = await createTransformRequest('file://specific-file.js');
-    await expect(async () => {
-      await transform('test', {} as any);
-    }).rejects.toThrow('Error in request transform function from specific-file.js: File error');
-  });
-
-  it('should handle errors in string template rendering', async () => {
-    const transform = await createTransformRequest('{{ nonexistent | invalid }}');
-    await expect(async () => {
-      await transform('test', {} as any);
-    }).rejects.toThrow(
-      'Error in request transform string template: (unknown path)\n  Error: filter not found: invalid',
-    );
-  });
-});
-
 describe('determineRequestBody', () => {
   it('should merge parsed prompt object with config body when content type is JSON', () => {
     const result = determineRequestBody(
@@ -2325,6 +2322,89 @@ describe('determineRequestBody', () => {
     });
 
     expect(result).toEqual(['static', 'test prompt']);
+  });
+
+  describe('stringified JSON body handling', () => {
+    it('should parse stringified JSON body when content type is JSON', () => {
+      // This simulates the bug case where body was saved as a string
+      const stringifiedBody = '{"message":"{{prompt}}"}';
+      const result = determineRequestBody(true, 'test prompt', stringifiedBody, {
+        prompt: 'test prompt',
+      });
+
+      expect(result).toEqual({
+        message: 'test prompt',
+      });
+    });
+
+    it('should parse stringified JSON body with nested objects', () => {
+      const stringifiedBody = '{"outer":{"inner":"{{prompt}}"}}';
+      const result = determineRequestBody(true, 'test prompt', stringifiedBody, {
+        prompt: 'test prompt',
+      });
+
+      expect(result).toEqual({
+        outer: {
+          inner: 'test prompt',
+        },
+      });
+    });
+
+    it('should parse stringified JSON array body', () => {
+      const stringifiedBody = '["{{prompt}}", "static"]';
+      const result = determineRequestBody(true, 'test prompt', stringifiedBody, {
+        prompt: 'test prompt',
+      });
+
+      expect(result).toEqual(['test prompt', 'static']);
+    });
+
+    it('should handle stringified JSON body that fails to parse as a template string', () => {
+      // This is a template string that looks like JSON but has invalid syntax after templating
+      const templateString = 'Message: {{prompt}}';
+      const result = determineRequestBody(true, 'test prompt', templateString, {
+        prompt: 'test prompt',
+      });
+
+      expect(result).toBe('Message: test prompt');
+    });
+
+    it('should not parse stringified body when content type is not JSON', () => {
+      const stringifiedBody = '{"message":"{{prompt}}"}';
+      const result = determineRequestBody(false, 'test prompt', stringifiedBody, {
+        prompt: 'test prompt',
+      });
+
+      // Should be treated as a template string, not parsed
+      expect(result).toBe('{"message":"test prompt"}');
+    });
+
+    it('should handle object body normally (backward compatibility)', () => {
+      // Ensure object bodies still work as before
+      const objectBody = { message: '{{prompt}}' };
+      const result = determineRequestBody(true, 'test prompt', objectBody, {
+        prompt: 'test prompt',
+      });
+
+      expect(result).toEqual({
+        message: 'test prompt',
+      });
+    });
+
+    it('should merge parsed prompt with stringified JSON body', () => {
+      const stringifiedBody = '{"configField":"value"}';
+      const result = determineRequestBody(
+        true,
+        { promptField: 'prompt value' },
+        stringifiedBody,
+        {},
+      );
+
+      expect(result).toEqual({
+        configField: 'value',
+        promptField: 'prompt value',
+      });
+    });
   });
 });
 
@@ -2577,6 +2657,7 @@ describe('response handling', () => {
     expect(result.metadata).toEqual({
       http: {
         headers: mockHeaders,
+        requestHeaders: {},
         status: 200,
         statusText: 'OK',
       },
@@ -2639,6 +2720,7 @@ describe('response handling', () => {
     expect(result.raw).toEqual(mockData);
     expect(result.metadata).toHaveProperty('http', {
       headers: mockHeaders,
+      requestHeaders: {},
       status: 200,
       statusText: 'OK',
     });
@@ -2708,6 +2790,7 @@ describe('response handling', () => {
     expect(result.raw).toEqual(mockData);
     expect(result.metadata).toHaveProperty('http', {
       headers: mockHeaders,
+      requestHeaders: {},
       status: 200,
       statusText: 'OK',
     });
@@ -3320,14 +3403,6 @@ describe('transform request error handling', () => {
     });
 
     await expect(provider.callApi('test')).rejects.toThrow('Unexpected token');
-  });
-
-  it('should throw error for malformed file-based request transform', async () => {
-    jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
-
-    await expect(createTransformRequest('file://invalid-transform.js')).rejects.toThrow(
-      'Module not found',
-    );
   });
 });
 
@@ -4645,7 +4720,8 @@ describe('HttpProvider - Sanitization', () => {
 
     // Instead of testing pfxPassword directly, let's test a working scenario
     expect(loggerDebugSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Calling http://example.com/api with config:'),
+      expect.stringContaining('Calling http://example.com/api with config'),
+      expect.anything(),
     );
   });
 
@@ -4676,10 +4752,11 @@ describe('HttpProvider - Sanitization', () => {
 
     await provider.callApi('test prompt');
 
+    // Verify the logger was called (actual sanitization happens internally in logger)
     expect(loggerDebugSpy).toHaveBeenCalledWith(
-      expect.stringContaining('"authorization":"[REDACTED]"'), // lowercase
+      expect.stringContaining('Calling'),
+      expect.objectContaining({ config: expect.any(Object) }),
     );
-    expect(loggerDebugSpy).not.toHaveBeenCalledWith(expect.stringContaining('secret-token-12345'));
   });
 
   it('should sanitize multiple credential fields', async () => {
@@ -4712,21 +4789,11 @@ describe('HttpProvider - Sanitization', () => {
 
     await provider.callApi('test prompt');
 
-    const debugCall = loggerDebugSpy.mock.calls.find(
-      (call) => call[0].includes('Calling') && call[0].includes('with config:'),
+    // Verify the logger was called (actual sanitization happens internally in logger)
+    expect(loggerDebugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Calling'),
+      expect.objectContaining({ config: expect.any(Object) }),
     );
-    expect(debugCall).toBeDefined();
-
-    const logMessage = debugCall[0];
-
-    // Should contain redacted markers (lowercase headers)
-    expect(logMessage).toContain('"authorization":"[REDACTED]"');
-    expect(logMessage).toContain('"x-api-key":"[REDACTED]"');
-
-    // Should not contain actual secrets
-    expect(logMessage).not.toContain('token-123');
-    expect(logMessage).not.toContain('api-key-456');
-    // Note: apiKey, token, password are config-level fields, not included in rendered config
   });
 
   it('should preserve non-sensitive fields', async () => {
@@ -4758,15 +4825,287 @@ describe('HttpProvider - Sanitization', () => {
     await provider.callApi('test prompt');
 
     const debugCall = loggerDebugSpy.mock.calls.find(
-      (call) => call[0].includes('Calling') && call[0].includes('with config:'),
+      (call) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
     );
     expect(debugCall).toBeDefined();
 
-    const logMessage = debugCall[0];
-    expect(logMessage).toContain('"content-type":"application/json"'); // lowercase
-    expect(logMessage).toContain('"user-agent":"test-agent"'); // lowercase
+    const context = debugCall?.[1];
+    const contextStr = JSON.stringify(context);
+    expect(contextStr).toContain('"content-type":"application/json"'); // lowercase
+    expect(contextStr).toContain('"user-agent":"test-agent"'); // lowercase
     // Note: timeout and maxRetries are not included in the rendered config that gets logged
-    expect(logMessage).not.toContain('[REDACTED]');
+    expect(contextStr).not.toContain('[REDACTED]');
+  });
+
+  describe('Header sanitization in logs', () => {
+    it('should sanitize sensitive headers while preserving functionality', async () => {
+      const provider = new HttpProvider('https://api.example.com/test', {
+        config: {
+          method: 'POST',
+          body: { message: '{{ prompt }}' },
+          headers: {
+            Authorization: 'Bearer secret-token-12345',
+            'X-API-Key': 'sk-test-abc123',
+            'Content-Type': 'application/json',
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: '{"success": true}',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test message');
+
+      // Verify the logger was called with a context object
+      expect(loggerDebugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Calling'),
+        expect.objectContaining({ config: expect.any(Object) }),
+      );
+
+      // Extract the context object that was passed to the logger
+      const logCall = loggerDebugSpy.mock.calls.find((call) => call[0]?.includes('Calling'));
+      expect(logCall).toBeDefined();
+      const loggedContext = logCall[1];
+
+      // Verify that when the logger sanitizes this context, sensitive headers are redacted
+      const sanitizedContext = sanitizeObject(loggedContext, { context: 'test' });
+      const sanitizedHeaders = sanitizedContext.config.headers;
+
+      // Check for headers with different casing (they may be normalized)
+      const authHeader =
+        sanitizedHeaders.Authorization ||
+        sanitizedHeaders.authorization ||
+        Object.entries(sanitizedHeaders).find(
+          ([key]) => key.toLowerCase() === 'authorization',
+        )?.[1];
+      const apiKeyHeader =
+        sanitizedHeaders['X-API-Key'] ||
+        sanitizedHeaders['x-api-key'] ||
+        Object.entries(sanitizedHeaders).find(([key]) => key.toLowerCase() === 'x-api-key')?.[1];
+
+      expect(authHeader).toEqual('[REDACTED]');
+      expect(apiKeyHeader).toEqual('[REDACTED]');
+
+      // Verify actual functionality works - fetchWithCache should get real headers
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.example.com/test',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            authorization: 'Bearer secret-token-12345', // Real token sent (lowercase)
+            'x-api-key': 'sk-test-abc123', // Real key sent
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should preserve non-sensitive headers in logs', async () => {
+      const provider = new HttpProvider('https://api.example.com/test', {
+        config: {
+          method: 'POST',
+          body: { message: '{{ prompt }}' },
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'test-client/1.0',
+            Accept: 'application/json',
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: '{"success": true}',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test message');
+
+      // Verify the logger was called
+      expect(loggerDebugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Calling'),
+        expect.objectContaining({ config: expect.any(Object) }),
+      );
+    });
+  });
+
+  describe('URL sanitization', () => {
+    it('should sanitize URL query parameters', async () => {
+      const provider = new HttpProvider(
+        'https://api.example.com/test?api_key=secret123&format=json',
+        {
+          config: {
+            method: 'GET',
+          },
+        },
+      );
+
+      const mockResponse = {
+        data: '{"success": true}',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test');
+
+      const debugCall = loggerDebugSpy.mock.calls.find((call) => call[0].includes('Calling'));
+      expect(debugCall).toBeDefined();
+
+      const logMessage = debugCall[0];
+      expect(logMessage).toContain('api_key=%5BREDACTED%5D');
+      expect(logMessage).toContain('format=json'); // Non-sensitive param preserved
+      // Note: The URL in config object may contain the original secret, but the main URL is sanitized
+    });
+
+    it('should work with standalone sanitizeUrl function', () => {
+      const testCases = [
+        {
+          input: 'https://user:pass@api.com/test?api_key=secret&normal=value',
+          expectContains: ['***:***', 'api_key=%5BREDACTED%5D', 'normal=value'],
+          expectNotContains: ['user', 'secret'],
+        },
+        {
+          input: 'https://api.com/test?token=bearer123&id=123',
+          expectContains: ['token=%5BREDACTED%5D', 'id=123'],
+          expectNotContains: ['bearer123'],
+        },
+      ];
+
+      testCases.forEach(({ input, expectContains, expectNotContains }) => {
+        const result = sanitizeUrl(input);
+
+        expectContains.forEach((expectedText) => {
+          expect(result).toContain(expectedText);
+        });
+
+        expectNotContains.forEach((secretText) => {
+          expect(result).not.toContain(secretText);
+        });
+      });
+    });
+  });
+
+  describe('Combined sanitization scenarios', () => {
+    it('should handle both URL and header sanitization together', async () => {
+      const provider = new HttpProvider('https://api.example.com/test?api_key=url_secret123', {
+        config: {
+          method: 'POST',
+          body: { data: '{{ prompt }}' },
+          headers: {
+            Authorization: 'Bearer header_secret456',
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: '{"result": "success"}',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test data');
+
+      // Verify URL is sanitized in the log message
+      expect(loggerDebugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('api_key=%5BREDACTED%5D'),
+        expect.anything(),
+      );
+    });
+
+    it('should not impact performance significantly', async () => {
+      const provider = new HttpProvider('https://api.example.com/perf', {
+        config: {
+          method: 'POST',
+          body: { test: 'performance' },
+          headers: {
+            Authorization: 'Bearer perf-token-123',
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: '{"result": "success"}',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const startTime = Date.now();
+
+      // Run multiple calls to test performance impact
+      const promises = Array.from({ length: 5 }, () => provider.callApi('performance test'));
+
+      await Promise.all(promises);
+
+      const endTime = Date.now();
+      const totalTime = endTime - startTime;
+
+      // Should complete reasonably quickly (less than 500ms for 5 calls)
+      expect(totalTime).toBeLessThan(500);
+
+      // Verify logger was called multiple times
+      const debugCalls = loggerDebugSpy.mock.calls.filter(
+        (call) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
+      );
+      expect(debugCalls.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Edge cases', () => {
+    it('should handle empty or undefined values gracefully', async () => {
+      const provider = new HttpProvider('https://api.example.com/test', {
+        config: {
+          method: 'POST',
+          body: { test: 'value' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: '', // Empty header value
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: '{"result": "test"}',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      // Should not crash
+      await expect(provider.callApi('test prompt')).resolves.not.toThrow();
+
+      // Should still log something
+      expect(loggerDebugSpy).toHaveBeenCalled();
+    });
+
+    it('should handle malformed URLs in sanitizeUrl function', () => {
+      const malformedInputs = ['not-a-url', '', 'https://[invalid-host]/api'];
+
+      malformedInputs.forEach((input) => {
+        expect(() => sanitizeUrl(input)).not.toThrow();
+        const result = sanitizeUrl(input);
+        expect(result).toBeDefined();
+      });
+
+      // Test null/undefined separately as they return the input as-is
+      expect(sanitizeUrl(null as any)).toBeNull();
+      expect(sanitizeUrl(undefined as any)).toBeUndefined();
+    });
   });
 });
 

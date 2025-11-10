@@ -3,9 +3,11 @@ import path from 'path';
 
 import chalk from 'chalk';
 import winston from 'winston';
-import { getEnvString } from './envars';
+import cliState from './cliState';
+import { getEnvBool, getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
-import { sanitizeBody, sanitizeUrl } from './util/sanitizer';
+import { safeJsonStringify } from './util/json';
+import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
 
@@ -31,6 +33,18 @@ export const LOG_LEVELS = {
 } as const;
 
 type LogLevel = keyof typeof LOG_LEVELS;
+
+/**
+ * Context object for sanitized logging
+ * Allows passing structured data that will be automatically sanitized
+ */
+export interface SanitizedLogContext {
+  url?: string;
+  headers?: Record<string, string>;
+  body?: any;
+  queryParams?: Record<string, string>;
+  [key: string]: any;
+}
 
 // Lazy source map support - only loaded when debug is enabled
 export let sourceMapSupportInitialized = false;
@@ -144,26 +158,6 @@ export const winstonLogger = winston.createLogger({
   ],
 });
 
-if (!getEnvString('PROMPTFOO_DISABLE_ERROR_LOG', '')) {
-  winstonLogger.on('data', (chunk) => {
-    if (
-      chunk.level === 'error' &&
-      !winstonLogger.transports.some((t) => t instanceof winston.transports.File)
-    ) {
-      // Only create the errors file if there are any errors
-      const fileTransport = new winston.transports.File({
-        filename: path.join(getEnvString('PROMPTFOO_LOG_DIR', '.'), 'promptfoo-errors.log'),
-        level: 'error',
-        format: winston.format.combine(winston.format.simple(), fileFormatter),
-      });
-      winstonLogger.add(fileTransport);
-
-      // Re-log the error that triggered this so it's written to the file
-      fileTransport.write(chunk);
-    }
-  });
-}
-
 export function getLogLevel(): LogLevel {
   return winstonLogger.transports[0].level as LogLevel;
 }
@@ -227,37 +221,43 @@ function setupLogDirectory(): string {
 /**
  * Creates a new log file for the current CLI run
  */
-function createRunLogFile(): string {
+function createRunLogFile(
+  level: 'debug' | 'error',
+  { date = new Date() }: { date?: Date } = {},
+): string {
   const logDir = setupLogDirectory();
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').split('.')[0];
-  const logFile = path.join(logDir, `promptfoo-${timestamp}.log`);
+  const timestamp = date.toISOString().replace(/[:.]/g, '-').replace('T', '_').split('.')[0];
+  const logFile = path.join(logDir, `promptfoo-${level}-${timestamp}.log`);
   return logFile;
 }
-
-// Create a file transport for the current run
-let runLogTransport: winston.transports.FileTransportInstance | null = null;
 
 /**
  * Initialize per-run logging
  */
 export function initializeRunLogging(): void {
-  if (runLogTransport) {
-    return;
-  }
-
   try {
-    const logFile = createRunLogFile();
-    runLogTransport = new winston.transports.File({
-      filename: logFile,
-      level: 'debug', // Capture all levels in the file
-      format: winston.format.combine(winston.format.simple(), fileFormatter),
-    });
+    const date = new Date();
+    if (!getEnvBool('PROMPTFOO_DISABLE_DEBUG_LOG', false)) {
+      cliState.debugLogFile = createRunLogFile('debug', { date });
+      const runLogTransport = new winston.transports.File({
+        filename: cliState.debugLogFile,
+        level: 'debug', // Capture all levels in the file
+        format: winston.format.combine(winston.format.simple(), fileFormatter),
+      });
+      winstonLogger.add(runLogTransport);
+    }
 
-    winstonLogger.add(runLogTransport);
+    if (!getEnvBool('PROMPTFOO_DISABLE_ERROR_LOG', false)) {
+      cliState.errorLogFile = createRunLogFile('error', { date });
+      const errorLogTransport = new winston.transports.File({
+        filename: cliState.errorLogFile,
+        level: 'error',
+        format: winston.format.combine(winston.format.simple(), fileFormatter),
+      });
+      winstonLogger.add(errorLogTransport);
+    }
   } catch (error) {
     logger.warn(`Error creating run log file: ${error}`);
-
-    runLogTransport = null;
   }
 }
 
@@ -321,12 +321,50 @@ export function setLogger(customLogger: Pick<StrictLogger, 'debug' | 'info' | 'w
   internalLogger = customLogger as StrictLogger;
 }
 
+/**
+ * Sanitizes context object for logging using generic sanitization
+ */
+function sanitizeContext(context: SanitizedLogContext): Record<string, any> {
+  // Special handling for URLs to preserve the URL-specific sanitization logic
+  const contextWithSanitizedUrls: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(context)) {
+    if (key === 'url' && typeof value === 'string') {
+      contextWithSanitizedUrls[key] = sanitizeUrl(value);
+    } else {
+      contextWithSanitizedUrls[key] = value;
+    }
+  }
+
+  // Apply generic object sanitization to handle all sensitive fields
+  return sanitizeObject(contextWithSanitizedUrls, { context: 'log context' });
+}
+
+/**
+ * Creates a log method that accepts an optional context parameter
+ * If context is provided, it will be sanitized and formatted
+ */
+function createLogMethodWithContext(
+  level: keyof typeof LOG_LEVELS,
+): (message: string, context?: SanitizedLogContext) => void {
+  return (message: string, context?: SanitizedLogContext) => {
+    if (!context) {
+      internalLogger[level](message);
+      return;
+    }
+
+    const sanitized = sanitizeContext(context);
+    const contextStr = safeJsonStringify(sanitized, true);
+    internalLogger[level](`${message}\n${contextStr}`);
+  };
+}
+
 // Wrapper that delegates to the current logger instance
 const logger = {
-  error: (message: string) => internalLogger.error(message),
-  warn: (message: string) => internalLogger.warn(message),
-  info: (message: string) => internalLogger.info(message),
-  debug: (message: string) => internalLogger.debug(message),
+  error: createLogMethodWithContext('error'),
+  warn: createLogMethodWithContext('warn'),
+  info: createLogMethodWithContext('info'),
+  debug: createLogMethodWithContext('debug'),
   add: (transport: winston.transport) =>
     internalLogger.add ? internalLogger.add(transport) : undefined,
   remove: (transport: winston.transport) =>
@@ -370,35 +408,22 @@ export async function logRequestResponse(options: {
       responseText = 'Unable to read response';
     }
   }
+  const logObject = {
+    message: 'API request',
+    url: sanitizeUrl(url),
+    method: requestMethod,
+    requestBody: sanitizeObject(requestBody, { context: 'request body' }),
+    ...(response && {
+      status: response.status,
+      statusText: response.statusText,
+    }),
+    ...(responseText && { response: responseText }),
+  };
 
   if (useStructuredLogging) {
-    const logObject = {
-      message: 'API request',
-      url: sanitizeUrl(url),
-      method: requestMethod,
-      requestBody: sanitizeBody(requestBody),
-      ...(response && {
-        status: response.status,
-        statusText: response.statusText,
-      }),
-      ...(responseText && { response: responseText }),
-    };
-
-    // @ts-expect-error - the native logger expects a string but we're using a structured logger
-    logMethod(logObject);
+    logMethod(sanitizeObject(logObject, { context: 'log object for structured logging' }));
   } else {
-    const details = [
-      `URL: ${sanitizeUrl(url)}`,
-      `Method: ${requestMethod}`,
-      `Request Body: ${JSON.stringify(sanitizeBody(requestBody), null, 2)}`,
-      response ? `Status: ${response.status} ${response.statusText}` : '',
-      responseText ? `Response: ${responseText}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    const message = `API request:\n${details}`;
-    logMethod(message);
+    logMethod(`Api Request`, logObject);
   }
 }
 

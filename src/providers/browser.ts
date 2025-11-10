@@ -1,3 +1,6 @@
+import os from 'os';
+import path from 'path';
+
 import { type BrowserContext, type ElementHandle, type Page } from 'playwright';
 import logger from '../logger';
 import { fetchWithTimeout } from '../util/fetch/index';
@@ -63,7 +66,7 @@ export function createTransformResponse(
       finalHtml: string,
     ) => ProviderResponse;
   }
-  return (extracted, finalHtml) => ({ output: finalHtml });
+  return (_extracted, finalHtml) => ({ output: finalHtml });
 }
 
 export class BrowserProvider implements ApiProvider {
@@ -244,7 +247,7 @@ export class BrowserProvider implements ApiProvider {
               `Make sure Chrome is running with debugging enabled:\n` +
               `  chrome --remote-debugging-port=${port}\n` +
               `  or\n` +
-              `  chrome --remote-debugging-port=${port} --user-data-dir=/tmp/chrome-debug`,
+              `  chrome --remote-debugging-port=${port} --user-data-dir=${path.join(os.tmpdir(), 'chrome-debug')}`,
           );
         }
 

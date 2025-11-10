@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { stringify } from 'csv-stringify/sync';
@@ -8,7 +9,6 @@ import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
 import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
-import * as os from 'os';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
@@ -27,8 +27,8 @@ import {
   type TestCase,
 } from '../types/index';
 import invariant from '../util/invariant';
-import { convertTestResultsToTableRow } from './exportToFile/index';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
+import { convertTestResultsToTableRow } from './exportToFile/index';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { safeResolve } from './pathUtils';
@@ -213,7 +213,7 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
-    const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
+    const template = fs.readFileSync(path.join(getDirectory(), 'tableOutput.html'), 'utf-8');
     const htmlTable = [
       [
         ...table.head.vars,
@@ -400,6 +400,18 @@ export function providerToIdentifier(
   return undefined;
 }
 
+/**
+ * Filters out runtime-only variables that are added during evaluation
+ * but aren't part of the original test definition
+ */
+function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
+  if (!vars) {
+    return vars;
+  }
+  const { _conversation, ...userVars } = vars;
+  return userVars;
+}
+
 export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
   return deepEqual(vars1, vars2);
 }
@@ -409,7 +421,101 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
     ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
     : true;
 
-  return varsMatch(testCase.vars, result.vars) && providersMatch;
+  // Filter out runtime variables like _conversation when matching
+  // These are added during evaluation but shouldn't affect test matching
+  // Use result.vars (not result.testCase.vars) as it contains the actual vars used during evaluation
+  const resultVars = filterRuntimeVars(result.vars);
+  const testVars = filterRuntimeVars(testCase.vars);
+  return varsMatch(testVars, resultVars) && providersMatch;
+}
+
+/**
+ * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
+ * This allows env vars to be resolved at provider load time while preserving runtime var templates.
+ *
+ * Supports full Nunjucks syntax for env vars including filters and expressions:
+ * - {{ env.VAR_NAME }}
+ * - {{ env['VAR-NAME'] }}
+ * - {{ env["VAR-NAME"] }}
+ * - {{ env.VAR | default('fallback') }}
+ * - {{ env.VAR | upper }}
+ *
+ * Preserves non-env templates for runtime rendering:
+ * - {{ vars.x }} - preserved as literal
+ * - {{ prompt }} - preserved as literal
+ *
+ * Implementation: Uses regex to find env templates, delegates to Nunjucks for rendering.
+ * This ensures full Nunjucks feature support while preserving non-env templates.
+ *
+ * @param obj - The object to process
+ * @returns The object with only env templates rendered
+ */
+export function renderEnvOnlyInObject<T>(obj: T): T {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return obj;
+  }
+
+  if (typeof obj === 'string') {
+    // Prevent ReDoS: Skip regex matching on extremely long strings
+    // The regex pattern has nested quantifiers that can cause exponential backtracking
+    const MAX_STRING_LENGTH = 50000; // Reasonable limit for config strings
+    if (obj.length > MAX_STRING_LENGTH) {
+      logger.warn(
+        `String too long (${obj.length} chars) for template matching. Skipping env var rendering.`,
+      );
+      return obj as unknown as T;
+    }
+
+    const nunjucks = getNunjucksEngine();
+    const envGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
+
+    // Match ALL Nunjucks templates {{ ... }}
+    // The pattern (?:[^}]|\}(?!\}))* matches content that may contain } but not }}
+    return obj.replace(/\{\{(?:[^}]|\}(?!\}))*\}\}/g, (match) => {
+      // Only process templates that reference env
+      if (!match.match(/\benv\.|env\[/)) {
+        return match; // Not an env template, preserve as-is
+      }
+
+      // Extract the variable name to check if it exists
+      const varMatch = match.match(/env\.(\w+)|env\[['"]([^'"]+)['"]\]/);
+      const varName = varMatch?.[1] || varMatch?.[2];
+
+      // Check if template contains a filter (indicated by |)
+      // Filters often handle undefined values (e.g., default filter)
+      const hasFilter = match.includes('|');
+
+      // Render if:
+      // 1. Template has a filter (let Nunjucks handle undefined with filter logic)
+      // 2. Variable exists (even if it's an empty string)
+      if (hasFilter || (varName && varName in envGlobals)) {
+        try {
+          // Use Nunjucks to render the template (supports filters, expressions, etc.)
+          return nunjucks.renderString(match, { env: envGlobals });
+        } catch (_error) {
+          // On render error, preserve the template
+          return match;
+        }
+      }
+
+      // Variable doesn't exist and no filter - preserve template for potential runtime resolution
+      return match;
+    }) as unknown as T;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => renderEnvOnlyInObject(item)) as unknown as T;
+  }
+
+  if (typeof obj === 'object' && obj !== null) {
+    const result: Record<string, unknown> = {};
+    for (const key in obj) {
+      result[key] = renderEnvOnlyInObject((obj as Record<string, unknown>)[key]);
+    }
+    return result as T;
+  }
+
+  return obj;
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
@@ -463,12 +569,19 @@ export function parsePathOrGlob(
   let functionName: string | undefined;
 
   if (filename.includes(':')) {
-    const splits = filename.split(':');
-    if (
-      splits[0] &&
-      (isJavascriptFile(splits[0]) || splits[0].endsWith('.py') || splits[0].endsWith('.go'))
-    ) {
-      [filename, functionName] = splits;
+    // Windows-aware path parsing: check if colon is part of drive letter
+    const lastColonIndex = filename.lastIndexOf(':');
+    if (lastColonIndex > 1) {
+      const pathWithoutFunction = filename.slice(0, lastColonIndex);
+      if (
+        isJavascriptFile(pathWithoutFunction) ||
+        pathWithoutFunction.endsWith('.py') ||
+        pathWithoutFunction.endsWith('.go') ||
+        pathWithoutFunction.endsWith('.rb')
+      ) {
+        functionName = filename.slice(lastColonIndex + 1);
+        filename = pathWithoutFunction;
+      }
     }
   }
 

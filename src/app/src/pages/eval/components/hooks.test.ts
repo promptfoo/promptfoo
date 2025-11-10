@@ -1,15 +1,31 @@
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import type { EvaluateTable } from '@promptfoo/types';
 import { describe, expect, it, vi } from 'vitest';
 
-import { usePassingTestCounts, useTestCounts, usePassRates } from './hooks';
+import {
+  usePassingTestCounts,
+  useTestCounts,
+  usePassRates,
+  useApplyFilterFromMetric,
+} from './hooks';
 import { useTableStore } from './store';
+import {
+  isPolicyMetric,
+  deserializePolicyIdFromMetric,
+} from '@promptfoo/redteam/plugins/policy/utils';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(),
 }));
 
+vi.mock('@promptfoo/redteam/plugins/policy/utils', () => ({
+  isPolicyMetric: vi.fn(),
+  deserializePolicyIdFromMetric: vi.fn(),
+}));
+
 const mockedUseTableStore = vi.mocked(useTableStore);
+const mockedIsPolicyMetric = vi.mocked(isPolicyMetric);
+const mockedDeserializePolicyIdFromMetric = vi.mocked(deserializePolicyIdFromMetric);
 
 describe('usePassingTestCounts', () => {
   it('should return an array of passing test counts for each prompt when the table is defined and each prompt has a metrics.testPassCount value', () => {
@@ -563,5 +579,214 @@ describe('usePassRates', () => {
     const { result } = renderHook(() => usePassRates());
 
     expect(result.current).toEqual([(120 / 140) * 100, 50]);
+  });
+});
+
+describe('useApplyFilterFromMetric', () => {
+  it('should not call addFilter if an identical filter is already present in filters.values', () => {
+    const mockAddFilter = vi.fn();
+    const metricName = 'latency';
+    const existingFilter = {
+      type: 'metric' as const,
+      operator: 'is_defined' as const,
+      value: '',
+      field: metricName,
+      logicOperator: 'or' as const,
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: {
+          existingFilterId: existingFilter,
+        },
+      },
+      addFilter: mockAddFilter,
+    } as any);
+
+    const { result } = renderHook(() => useApplyFilterFromMetric());
+    const applyFilterCallback = result.current;
+
+    act(() => {
+      applyFilterCallback(metricName);
+    });
+
+    expect(mockAddFilter).not.toHaveBeenCalled();
+  });
+
+  it('should add a metric filter when called with a non-policy metric string', () => {
+    const mockAddFilter = vi.fn();
+    mockedIsPolicyMetric.mockReturnValue(false);
+    mockedUseTableStore.mockReturnValue({
+      filters: { values: {} },
+      addFilter: mockAddFilter,
+    } as any);
+
+    const { result } = renderHook(() => useApplyFilterFromMetric());
+    const applyFilterCallback = result.current;
+
+    const metricName = 'latency';
+    act(() => {
+      applyFilterCallback(metricName);
+    });
+
+    expect(mockAddFilter).toHaveBeenCalledTimes(1);
+    expect(mockAddFilter).toHaveBeenCalledWith({
+      type: 'metric',
+      operator: 'is_defined',
+      value: '',
+      field: metricName,
+      logicOperator: 'or',
+    });
+  });
+
+  it('should add a policy filter with type policy, operator equals, value set to the deserialized policy ID, field undefined, and logicOperator or when called with a policy metric string', () => {
+    const mockAddFilter = vi.fn();
+    mockedIsPolicyMetric.mockReturnValue(true);
+    mockedDeserializePolicyIdFromMetric.mockReturnValue('policy-id');
+    mockedUseTableStore.mockReturnValue({
+      filters: { values: {} },
+      addFilter: mockAddFilter,
+    } as any);
+
+    const { result } = renderHook(() => useApplyFilterFromMetric());
+    const applyFilterCallback = result.current;
+
+    const policyMetric = 'PolicyViolation:policy-id';
+    act(() => {
+      applyFilterCallback(policyMetric);
+    });
+
+    expect(mockAddFilter).toHaveBeenCalledTimes(1);
+    expect(mockAddFilter).toHaveBeenCalledWith({
+      type: 'policy',
+      operator: 'equals',
+      value: 'policy-id',
+      field: undefined,
+      logicOperator: 'or',
+    });
+  });
+
+  it('should add a filter when a similar filter exists but with different properties', () => {
+    const mockAddFilter = vi.fn();
+    mockedIsPolicyMetric.mockReturnValue(false);
+    const existingFilter = {
+      type: 'metric' as const,
+      operator: 'is_defined' as const,
+      value: '',
+      field: 'cost',
+      logicOperator: 'or' as const,
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: { values: { existingFilterId: existingFilter } },
+      addFilter: mockAddFilter,
+    } as any);
+
+    const { result } = renderHook(() => useApplyFilterFromMetric());
+    const applyFilterCallback = result.current;
+
+    const metricName = 'latency';
+    act(() => {
+      applyFilterCallback(metricName);
+    });
+
+    expect(mockAddFilter).toHaveBeenCalledTimes(1);
+    expect(mockAddFilter).toHaveBeenCalledWith({
+      type: 'metric',
+      operator: 'is_defined',
+      value: '',
+      field: metricName,
+      logicOperator: 'or',
+    });
+  });
+
+  it("should construct a metric filter with value: '' for non-policy metrics", () => {
+    const mockAddFilter = vi.fn();
+    mockedIsPolicyMetric.mockReturnValue(false);
+    mockedUseTableStore.mockReturnValue({
+      filters: { values: {} },
+      addFilter: mockAddFilter,
+    } as any);
+
+    const { result } = renderHook(() => useApplyFilterFromMetric());
+    const applyFilterCallback = result.current;
+
+    const metricName = 'custom_metric';
+    act(() => {
+      applyFilterCallback(metricName);
+    });
+
+    expect(mockAddFilter).toHaveBeenCalledTimes(1);
+    expect(mockAddFilter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'metric',
+        operator: 'is_defined',
+        value: '',
+        field: metricName,
+        logicOperator: 'or',
+      }),
+    );
+  });
+
+  it('should correctly set field property for policy and metric filters', () => {
+    const mockAddFilter = vi.fn();
+    mockedUseTableStore.mockReturnValue({
+      filters: { values: {} },
+      addFilter: mockAddFilter,
+    } as any);
+
+    mockedIsPolicyMetric.mockImplementation((value: string) => value === 'policy:test-policy');
+    mockedDeserializePolicyIdFromMetric.mockReturnValue('test-policy-id');
+
+    const { result } = renderHook(() => useApplyFilterFromMetric());
+    const applyFilterCallback = result.current;
+
+    act(() => {
+      applyFilterCallback('policy:test-policy');
+    });
+
+    expect(mockAddFilter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'policy',
+        field: undefined,
+      }),
+    );
+
+    act(() => {
+      applyFilterCallback('latency');
+    });
+
+    expect(mockAddFilter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'metric',
+        field: 'latency',
+      }),
+    );
+  });
+
+  it('should add a filter when filters?.values is an empty object', () => {
+    const mockAddFilter = vi.fn();
+    mockedIsPolicyMetric.mockReturnValue(false);
+    mockedUseTableStore.mockReturnValue({
+      filters: { values: {} },
+      addFilter: mockAddFilter,
+    } as any);
+
+    const { result } = renderHook(() => useApplyFilterFromMetric());
+    const applyFilterCallback = result.current;
+
+    const metricName = 'latency';
+    act(() => {
+      applyFilterCallback(metricName);
+    });
+
+    expect(mockAddFilter).toHaveBeenCalledTimes(1);
+    expect(mockAddFilter).toHaveBeenCalledWith({
+      type: 'metric',
+      operator: 'is_defined',
+      value: '',
+      field: metricName,
+      logicOperator: 'or',
+    });
   });
 });

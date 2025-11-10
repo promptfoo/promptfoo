@@ -5,7 +5,7 @@ import semverGt from 'semver/functions/gt';
 import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
 import { getEnvBool } from './envars';
 import logger from './logger';
-import { fetchWithTimeout } from './util/fetch';
+import { fetchWithTimeout } from './util/fetch/index';
 
 const execAsync = promisify(exec);
 
@@ -74,8 +74,9 @@ export async function getModelAuditLatestVersion(): Promise<string | null> {
 
 export async function getModelAuditCurrentVersion(): Promise<string | null> {
   try {
-    const { stdout } = await execAsync('pip show modelaudit');
-    const versionMatch = stdout.match(/Version:\s*(\S+)/);
+    // Check the actual binary version (works with pip, pipx, or any installation method)
+    const { stdout } = await execAsync('modelaudit --version');
+    const versionMatch = stdout.match(/modelaudit,?\s+version\s+(\S+)/i);
     return versionMatch ? versionMatch[1] : null;
   } catch {
     return null;

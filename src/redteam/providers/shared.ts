@@ -16,11 +16,12 @@ import {
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types';
+import type { TraceContextData } from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { transform, type TransformContext, TransformInputType } from '../../util/transform';
+import { type TransformContext, TransformInputType, transform } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 async function loadRedteamProvider({
@@ -38,7 +39,7 @@ async function loadRedteamProvider({
     logger.debug(`Using redteam provider: ${redteamProvider}`);
     ret = redteamProvider;
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
-    logger.debug(`Loading redteam provider: ${JSON.stringify(redteamProvider)}`);
+    logger.debug('Loading redteam provider', { provider: redteamProvider });
     const loadApiProvidersModule = await import('../../providers');
     // Async import to avoid circular dependency
     ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
@@ -99,13 +100,11 @@ class RedteamProviderManager {
       return jsonOnly ? this.jsonOnlyProvider : this.provider;
     }
 
-    logger.debug(
-      `[RedteamProviderManager] Loading redteam provider: ${JSON.stringify({
-        providedConfig: typeof provider == 'string' ? provider : (provider?.id ?? 'none'),
-        jsonOnly,
-        preferSmallModel,
-      })}`,
-    );
+    logger.debug('[RedteamProviderManager] Loading redteam provider', {
+      providedConfig: typeof provider == 'string' ? provider : (provider?.id ?? 'none'),
+      jsonOnly,
+      preferSmallModel,
+    });
     const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
     logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
     return redteamProvider;
@@ -173,6 +172,8 @@ export type TargetResponse = {
   sessionId?: string;
   tokenUsage?: TokenUsage;
   guardrails?: GuardrailResponse;
+  traceContext?: TraceContextData | null;
+  traceSummary?: string;
 };
 
 /**
@@ -199,7 +200,25 @@ export async function getTargetResponse(
     await sleep(targetProvider.delay);
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
-  if (targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output')) {
+  const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');
+  const hasError = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error');
+
+  if (hasError) {
+    const output = hasOutput
+      ? ((typeof targetRespRaw.output === 'string'
+          ? targetRespRaw.output
+          : safeJsonStringify(targetRespRaw.output)) as string)
+      : '';
+    return {
+      output,
+      error: targetRespRaw.error,
+      sessionId: targetRespRaw.sessionId,
+      tokenUsage,
+      guardrails: targetRespRaw.guardrails,
+    };
+  }
+
+  if (hasOutput) {
     const output = (
       typeof targetRespRaw.output === 'string'
         ? targetRespRaw.output
@@ -228,7 +247,7 @@ export async function getTargetResponse(
     Target returned malformed response: expected either \`output\` or \`error\` property to be set.
 
     Instead got: ${safeJsonStringify(targetRespRaw)}
-    
+
     Note: Empty strings are valid output values.
     `,
   );
@@ -326,10 +345,7 @@ export async function createIterationContext({
   context?: CallApiContextParams;
   iterationNumber: number;
   loggerTag?: string;
-}): Promise<{
-  iterationVars: Record<string, string | object>;
-  iterationContext?: CallApiContextParams;
-}> {
+}): Promise<CallApiContextParams | undefined> {
   let iterationVars = { ...originalVars };
 
   if (transformVarsConfig) {
@@ -352,11 +368,11 @@ export async function createIterationContext({
         'Transform function did not return a valid object',
       );
       iterationVars = { ...originalVars, ...transformedVars };
-      logger.debug(
-        `${loggerTag} Transformed vars for iteration ${iterationNumber}: ${safeJsonStringify(transformedVars)}`,
-      );
+      logger.debug(`${loggerTag} Transformed vars for iteration ${iterationNumber}`, {
+        transformedVars,
+      });
     } catch (error) {
-      logger.error(`${loggerTag} Error transforming vars: ${error}`);
+      logger.error(`${loggerTag} Error transforming vars`, { error });
       // Continue with original vars if transform fails
     }
   }
@@ -369,7 +385,7 @@ export async function createIterationContext({
       }
     : undefined;
 
-  return { iterationVars, iterationContext };
+  return iterationContext;
 }
 
 /**
@@ -418,9 +434,11 @@ export async function tryUnblocking({
       '2025-06-16T14:49:11-07:00',
     );
 
-    // Allow disabling unblocking via environment variable
-    if (getEnvBool('PROMPTFOO_DISABLE_UNBLOCKING')) {
-      logger.debug('[Unblocking] Disabled via PROMPTFOO_DISABLE_UNBLOCKING');
+    // Unblocking is disabled by default, enable via environment variable
+    if (!getEnvBool('PROMPTFOO_ENABLE_UNBLOCKING')) {
+      logger.debug(
+        '[Unblocking] Disabled by default (set PROMPTFOO_ENABLE_UNBLOCKING=true to enable)',
+      );
       // Return a response that will not increment numRequests
       return {
         success: false,
@@ -469,7 +487,7 @@ export async function tryUnblocking({
     }
 
     const parsed = response.output as any;
-    logger.debug(`[Unblocking] Unblocking analysis: ${JSON.stringify(parsed)}`);
+    logger.debug('[Unblocking] Unblocking analysis', { analysis: parsed });
 
     if (parsed.isBlocking && parsed.unblockingAnswer) {
       logger.debug(

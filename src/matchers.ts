@@ -18,7 +18,7 @@ import {
   OPENAI_CLOSED_QA_PROMPT,
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
-} from './prompts';
+} from './prompts/index';
 import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
@@ -40,9 +40,11 @@ import type {
   ApiProvider,
   ApiSimilarityProvider,
   Assertion,
+  CallApiContextParams,
   GradingConfig,
   GradingResult,
   ProviderOptions,
+  ProviderResponse,
   ProviderType,
   ProviderTypeMap,
   TokenUsage,
@@ -65,6 +67,31 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
   const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
   const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
   return dotProduct / (vecAMagnitude * vecBMagnitude);
+}
+
+/**
+ * Helper to call provider with consistent context propagation pattern.
+ * Spreads the optional context and merges with prompt label and vars.
+ *
+ * IMPORTANT: Spread order matters - context is spread first, then prompt/vars
+ * override. This ensures originalProvider from context is preserved while
+ * allowing this call to specify its own prompt metadata.
+ */
+function callProviderWithContext(
+  provider: ApiProvider,
+  prompt: string,
+  label: string,
+  vars: Record<string, any>,
+  context?: CallApiContextParams,
+): Promise<ProviderResponse> {
+  return provider.callApi(prompt, {
+    ...context,
+    prompt: {
+      raw: prompt,
+      label,
+    },
+    vars,
+  });
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {
@@ -119,7 +146,25 @@ export async function getGradingProvider(
       );
     }
   } else {
-    finalProvider = defaultProvider;
+    // No provider specified - check defaultTest.options.provider as fallback
+    const defaultTestIsObject = typeof cliState.config?.defaultTest === 'object';
+    const cfg =
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.provider) ||
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider) ||
+      undefined;
+
+    if (cfg) {
+      // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
+      finalProvider = await getGradingProvider(type, cfg, defaultProvider);
+      if (finalProvider) {
+        logger.debug(
+          `[Grading] Using provider from defaultTest.options.provider: ${finalProvider.id()}`,
+        );
+      }
+    } else {
+      finalProvider = defaultProvider;
+    }
   }
   return finalProvider;
 }
@@ -444,7 +489,7 @@ export async function renderLlmRubricPrompt(
   try {
     // Render every string scalar within the JSON
     // Does not render object keys (only values)
-    const parsed = JSON.parse(rubricPrompt, (k, v) =>
+    const parsed = JSON.parse(rubricPrompt, (_k, v) =>
       typeof v === 'string' ? nunjucks.renderString(v, processedContext) : v,
     );
     return JSON.stringify(parsed);
@@ -462,10 +507,11 @@ export async function matchesLlmRubric(
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-  assertion?: Assertion | null,
+  assertion?: Assertion,
   options?: {
     throwOnError?: boolean;
   },
+  providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -501,17 +547,17 @@ export async function matchesLlmRubric(
     defaultProvider,
     'llm-rubric check',
   );
-  const resp = await finalProvider.callApi(prompt, {
-    prompt: {
-      raw: prompt,
-      label: 'llm-rubric',
-    },
-    vars: {
+  const resp = await callProviderWithContext(
+    finalProvider,
+    prompt,
+    'llm-rubric',
+    {
       output: tryParse(llmOutput),
       rubric,
       ...(vars || {}),
     },
-  });
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     if (options?.throwOnError) {
       throw new LlmRubricProviderError(resp.error || 'No output');
@@ -601,7 +647,7 @@ export async function matchesPiScore(
   renderedValue: string,
   llmInput: string,
   llmOutput: string,
-  assertion?: Assertion | null,
+  assertion?: Assertion,
 ): Promise<GradingResult> {
   return {
     ...(await doRemoteScoringWithPi(
@@ -626,6 +672,7 @@ export async function matchesFactuality(
   output: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -649,7 +696,18 @@ export async function matchesFactuality(
     'factuality check',
   );
 
-  const resp = await finalProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    finalProvider,
+    prompt,
+    'factuality',
+    {
+      input,
+      ideal: expected,
+      completion: tryParse(output),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -780,6 +838,7 @@ export async function matchesClosedQa(
   output: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -801,7 +860,18 @@ export async function matchesClosedQa(
     (await getDefaultProviders()).gradingProvider,
     'model-graded-closedqa check',
   );
-  const resp = await finalProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    finalProvider,
+    prompt,
+    'model-graded-closedqa',
+    {
+      input,
+      criteria: expected,
+      completion: tryParse(output),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -845,6 +915,7 @@ export async function matchesGEval(
   output: string,
   threshold: number,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!input) {
     throw Error('No source text to estimate reply');
@@ -879,7 +950,15 @@ export async function matchesGEval(
   const stepsPrompt = await loadRubricPrompt(stepsRubricPrompt, GEVAL_PROMPT_STEPS);
   const promptSteps = await renderLlmRubricPrompt(stepsPrompt, { criteria });
 
-  const respSteps = await textProvider.callApi(promptSteps);
+  const respSteps = await callProviderWithContext(
+    textProvider,
+    promptSteps,
+    'g-eval-steps',
+    {
+      criteria,
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, respSteps.tokenUsage);
   let steps;
 
@@ -911,7 +990,19 @@ export async function matchesGEval(
     output: tryParse(output),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'g-eval',
+    {
+      criteria,
+      steps: steps.join('\n- '),
+      maxScore: maxScore.toString(),
+      input: tryParse(input),
+      output: tryParse(output),
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   let result;
 
@@ -934,6 +1025,7 @@ export async function matchesAnswerRelevance(
   output: string,
   threshold: number,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const embeddingProvider = await getAndCheckProvider(
     'embedding',
@@ -966,7 +1058,15 @@ export async function matchesAnswerRelevance(
     // TODO(ian): Parallelize
     const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
     const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: tryParse(output) });
-    const resp = await textProvider.callApi(promptText);
+    const resp = await callProviderWithContext(
+      textProvider,
+      promptText,
+      'answer-relevance',
+      {
+        answer: tryParse(output),
+      },
+      providerCallContext,
+    );
     accumulateTokens(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
       return fail(resp.error || 'No output', tokensUsed);
@@ -1042,6 +1142,7 @@ export async function matchesContextRecall(
   threshold: number,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1060,7 +1161,17 @@ export async function matchesContextRecall(
     ...(vars || {}),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-recall',
+    {
+      context: contextString,
+      groundTruth,
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -1121,6 +1232,7 @@ export async function matchesContextRelevance(
   context: string | string[],
   threshold: number,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1138,7 +1250,16 @@ export async function matchesContextRelevance(
     query: question,
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-relevance',
+    {
+      context: contextString,
+      query: question,
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -1209,6 +1330,7 @@ export async function matchesContextFaithfulness(
   threshold: number,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1248,7 +1370,17 @@ export async function matchesContextFaithfulness(
     ...(vars || {}),
   });
 
-  let resp = await textProvider.callApi(promptText);
+  let resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-faithfulness-longform',
+    {
+      question: query,
+      answer: tryParse(output),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
@@ -1266,7 +1398,17 @@ export async function matchesContextFaithfulness(
     ...(vars || {}),
   });
 
-  resp = await textProvider.callApi(promptText);
+  resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-faithfulness-nli',
+    {
+      context: contextString,
+      statements,
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
@@ -1303,6 +1445,7 @@ export async function matchesSelectBest(
   outputs: string[],
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(
     outputs.length >= 2,
@@ -1322,7 +1465,17 @@ export async function matchesSelectBest(
     ...(vars || {}),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'select-best',
+    {
+      criteria,
+      outputs: outputs.map((o) => tryParse(o)),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return new Array(outputs.length).fill(fail(resp.error || 'No output', resp.tokenUsage));
   }
@@ -1348,7 +1501,7 @@ export async function matchesSelectBest(
       rejectedPrediction: 0,
     },
   };
-  return outputs.map((output, index) => {
+  return outputs.map((_output, index) => {
     if (index === verdict) {
       return {
         pass: true,

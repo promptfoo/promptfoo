@@ -1,5 +1,4 @@
-import { AssertionsResult } from '../../src/assertions/assertionsResult';
-
+import { AssertionsResult, GUARDRAIL_BLOCKED_REASON } from '../../src/assertions/assertionsResult';
 import type { AssertionSet, GradingResult } from '../../src/types/index';
 
 describe('AssertionsResult', () => {
@@ -12,14 +11,12 @@ describe('AssertionsResult', () => {
     score: 1,
     reason: 'The succeeding reason',
     tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
-    assertion: null,
   };
   const failingResult = {
     pass: false,
     score: 0,
     reason: 'The failing reason',
     tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
-    assertion: null,
   };
   const testResult = {
     pass: true,
@@ -27,7 +24,6 @@ describe('AssertionsResult', () => {
     reason: 'All assertions passed',
     componentResults: [succeedingResult],
     namedScores: {},
-    assertion: null,
     tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
   };
   let assertionsResult: AssertionsResult;
@@ -209,7 +205,6 @@ describe('AssertionsResult', () => {
         score: 1,
         reason: 'No assertions',
         tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
-        assertion: null,
       });
     });
   });
@@ -235,7 +230,7 @@ describe('AssertionsResult', () => {
 
     const result = await assertionsResult.testResult();
     expect(result.pass).toBe(true);
-    expect(result.reason).toBe('Content failed guardrail safety checks');
+    expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
   });
 
   it('handles multiple named scores from different sources', async () => {
