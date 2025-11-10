@@ -671,4 +671,298 @@ describe('SimulatedUser', () => {
       expect(result.tokenUsage?.numRequests).toBe(2); // Standard 2 turns
     });
   });
+
+  describe('variable templating in initialMessages', () => {
+    it('should template variables in message content', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'I want to pay via {{payment_method}}' },
+        {
+          role: 'assistant' as const,
+          content: 'Okay, please provide your {{payment_method}} credentials',
+        },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          payment_method: 'credit card',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('I want to pay via credit card');
+      expect(result.output).toContain('Okay, please provide your credit card credentials');
+      expect(result.output).not.toContain('{{payment_method}}');
+    });
+
+    it('should template multiple variables in single message', async () => {
+      const initialMessages = [
+        {
+          role: 'user' as const,
+          content: 'I need a flight from {{origin}} to {{destination}} on {{date}}',
+        },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          origin: 'New York',
+          destination: 'Seattle',
+          date: 'March 15th',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('I need a flight from New York to Seattle on March 15th');
+      expect(result.output).not.toContain('{{origin}}');
+      expect(result.output).not.toContain('{{destination}}');
+      expect(result.output).not.toContain('{{date}}');
+    });
+
+    it('should template variables in role field', async () => {
+      const initialMessages = [
+        { role: '{{role_type}}', content: 'Hello there' },
+        { role: 'assistant' as const, content: 'Hi! How can I help?' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          role_type: 'user',
+          initialMessages: initialMessages as any,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Hello there');
+      expect(result.output).toContain('Hi! How can I help?');
+    });
+
+    it('should work with variables in config.initialMessages', async () => {
+      const configInitialMessages = [
+        { role: 'user' as const, content: 'My user ID is {{user_id}}' },
+        { role: 'assistant' as const, content: 'Thanks, {{user_id}} is registered' },
+      ];
+
+      const userWithTemplatedConfig = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          initialMessages: configInitialMessages,
+        },
+      });
+
+      const result = await userWithTemplatedConfig.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          user_id: 'user_12345',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('My user ID is user_12345');
+      expect(result.output).toContain('Thanks, user_12345 is registered');
+      expect(result.output).not.toContain('{{user_id}}');
+    });
+
+    it('should template variables from file-based initialMessages', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          city_origin: 'Boston',
+          city_destination: 'Miami',
+          initialMessages: 'file://./test/fixtures/initialMessagesWithVars.json',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('I want to fly from Boston to Miami');
+      expect(result.output).not.toContain('{{city_origin}}');
+      expect(result.output).not.toContain('{{city_destination}}');
+    });
+
+    it('should handle empty variable values', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Hello {{name}}' },
+        { role: 'assistant' as const, content: 'Hi there!' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          name: '', // Empty value
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Hello '); // Variable replaced with empty string
+    });
+
+    it('should work with Nunjucks expressions', async () => {
+      const initialMessages = [
+        {
+          role: 'user' as const,
+          content: 'Total cost: ${{ price | float * 1.1 | round(2) }}',
+        },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          price: '100',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Total cost: $110');
+    });
+
+    it('should template variables in file-based initialMessages with JSON', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          origin: 'NYC',
+          destination: 'LAX',
+          date: 'Dec 25',
+          initialMessages: 'file://./test/fixtures/vars-messages.json',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Origin: NYC');
+      expect(result.output).toContain('Destination: LAX');
+      expect(result.output).toContain('Date: Dec 25');
+      expect(result.output).not.toContain('{{origin}}');
+      expect(result.output).not.toContain('{{destination}}');
+      expect(result.output).not.toContain('{{date}}');
+    });
+
+    it('should handle invalid Nunjucks syntax gracefully', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Invalid template {% if broken %}' },
+        { role: 'assistant' as const, content: 'Valid response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Should fall back to original template on error
+      expect(result.output).toContain('Invalid template {% if broken %}');
+      expect(result.output).toContain('Valid response');
+    });
+
+    it('should handle undefined variables in templates', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Hello {{undefined_variable}}' },
+        { role: 'assistant' as const, content: 'Response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Nunjucks renders undefined variables as empty string by default
+      expect(result.output).toContain('Hello ');
+      expect(result.output).toContain('Response');
+    });
+
+    it('should handle template rendering errors in role field', async () => {
+      const initialMessages = [
+        { role: '{% invalid syntax %}' as any, content: 'Hello' },
+        { role: 'assistant' as const, content: 'Response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Invalid role should be logged and message skipped
+      // Only the valid assistant message should remain
+      expect(result.output).toContain('Response');
+      expect(result.output).not.toContain('Hello');
+    });
+
+    it('should handle template rendering errors in content field', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: '{% unclosed tag' },
+        { role: 'assistant' as const, content: 'Valid message' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Should fall back to original template
+      expect(result.output).toContain('{% unclosed tag');
+      expect(result.output).toContain('Valid message');
+    });
+
+    it('should handle complex Nunjucks errors gracefully', async () => {
+      const initialMessages = [
+        {
+          role: 'user' as const,
+          content: '{{ 1 / 0 }}',
+        },
+        { role: 'assistant' as const, content: 'Response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Should continue with conversation even if template fails
+      expect(result.output).toContain('Response');
+    });
+  });
 });

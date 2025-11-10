@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(providers): add variable templating support for initialMessages in simulated-user provider, enabling template reuse across test cases with Nunjucks variables (#6143)
 - feat(redteam): add `jailbreak:hydra` strategy - multi-turn conversational adversarial agent that learns from target responses and shares learnings across tests in the same scan for improved attack success rates (#6151)
 - feat(providers): add missing Alibaba Cloud models - qwen3-vl-flash, qwen3-asr-flash-realtime, qwen3-vl-32b/8b (thinking/instruct), text-embedding-v4 (7d658dc)
 
@@ -25,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Documentation
 
 - docs(redteam): add comprehensive documentation for `graderGuidance` plugin configuration option including usage examples, priority explanations, and integration with `graderExamples` (#6128)
+- docs(site): re-add adaptive guardrails documentation covering enterprise feature for generating target-specific security policies from red team findings, including architecture, API integration, use cases, troubleshooting, and comparison to AWS Bedrock/Azure AI Content Safety (#5955)
 - docs(guides): add comprehensive Portkey integration guide covering prompt management, multi-model testing across 1600+ providers, red-teaming workflows, and production deployment strategies by @ladyofcode (#5730)
 - docs(providers): comprehensive Alibaba Cloud documentation update with 100+ models including Qwen3 flagship variants, qwen-long (10M context), all DeepSeek/QwQ reasoning models, complete vision/multimodal lineup, audio/speech models, coding/math specializations, open-source Qwen3 series, and third-party models (Kimi); reorganized with Commercial/Open-source sections; fixes configuration to use `apiBaseUrl` and adds Beijing region endpoint (#6118)
 
