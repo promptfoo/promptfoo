@@ -233,6 +233,13 @@ const config: Config = {
         { to: '/docs/intro/', label: 'Docs', position: 'left' },
         { to: '/pricing/', label: 'Pricing', position: 'left' },
         {
+          to: '/contact/',
+          position: 'right',
+          'aria-label': 'Book a Demo',
+          label: 'Book a Demo',
+          className: 'header-book-demo-link',
+        },
+        {
           to: 'https://promptfoo.app',
           position: 'right',
           'aria-label': 'Promptfoo App',
