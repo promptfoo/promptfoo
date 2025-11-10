@@ -41,8 +41,7 @@ function getValue(result: GradingResult): string {
 
   // Prefer rendered assertion value with substituted variables over raw template
   if (result.metadata?.renderedAssertionValue !== undefined) {
-    const value = result.metadata.renderedAssertionValue;
-    return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+    return result.metadata.renderedAssertionValue;
   }
 
   // Otherwise, return the assertion value
