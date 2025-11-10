@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
+- docs(site): add blog post on Anthropic threat intelligence covering PROMPTFLUX and PROMPTSTEAL (first observed LLM-querying malware by Google), AI-orchestrated extortion campaigns, three categories of AI-assisted attacks (operator/builder/enabler), operational security implications, and practical Promptfoo testing examples for AI system exploitation risks (#5583)
 - docs(prompts): add executable prompt scripts documentation with usage examples, security warnings, and timeout configuration (5308c5d)
 - docs(redteam): add comprehensive documentation for `graderGuidance` plugin configuration option including usage examples, priority explanations, and integration with `graderExamples` (#6128)
 - docs(site): re-add adaptive guardrails documentation covering enterprise feature for generating target-specific security policies from red team findings, including architecture, API integration, use cases, troubleshooting, and comparison to AWS Bedrock/Azure AI Content Safety (#5955)
