@@ -86,7 +86,7 @@ export class SimulatedUser implements ApiProvider {
     }
 
     try {
-      return getNunjucksEngine().renderString(template, vars);
+      return getNunjucksEngine().renderString(template, vars || {});
     } catch (err) {
       logger.warn(
         `[SimulatedUser] Failed to render template: ${template.substring(0, 100)}. Error: ${err instanceof Error ? err.message : err}`,
