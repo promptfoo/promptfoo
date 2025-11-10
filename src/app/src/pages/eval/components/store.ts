@@ -198,6 +198,7 @@ export type ResultsFilterType =
 
 export type ResultsFilterOperator =
   | 'equals'
+  | 'not_equals'
   | 'contains'
   | 'not_contains'
   | 'exists'
