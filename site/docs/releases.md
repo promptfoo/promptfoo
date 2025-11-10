@@ -22,7 +22,7 @@ This month we shipped **jailbreak:meta and Simba red team strategies**, **remedi
 
 - **[OpenAI Agents SDK](/docs/providers/openai/)** - Agents, tools, handoffs, and OTLP tracing
 - **[Claude Agent SDK](/docs/providers/anthropic/)** - Anthropic agent framework
-- **[Azure AI Foundry Agents](/docs/providers/azure-ai-foundry/)** - Azure AI agent framework
+- **[Azure AI Foundry Agents](/docs/providers/azure/#azure-ai-foundry-agents)** - Azure AI agent framework
 - **[Ruby](/docs/providers/ruby/)** - Execute Ruby scripts as providers
 - **[Snowflake Cortex](/docs/providers/snowflake/)** - Snowflake LLM provider
 - **[Slack](/docs/providers/slack/)** - Test Slack bots
@@ -109,11 +109,11 @@ Plugin-specific grading rules:
 
 - **[Wordplay](/docs/red-team/plugins/wordplay/)** - Tests if systems can be tricked into generating profanity through wordplay like riddles and rhyming games
 - **[COPPA](/docs/red-team/plugins/coppa/)** - Tests if AI systems collect personal information from children without parental consent or age verification
-- **[GDPR preset](/docs/red-team/plugins/gdpr/)** - GDPR and data privacy compliance testing
+- **[GDPR preset](/docs/red-team/gdpr/)** - GDPR and data privacy compliance testing
 
 #### Other Strategies
 
-- **[Authoritative Markup Injection](/docs/red-team/strategies/authoritative-markup/)** - Tests vulnerability to malicious instructions embedded in markup
+- **[Authoritative Markup Injection](/docs/red-team/strategies/authoritative-markup-injection/)** - Tests vulnerability to malicious instructions embedded in markup
 
 ---
 
