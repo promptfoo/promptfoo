@@ -584,7 +584,17 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
   try {
     await deleteEval(id);
     res.json({ message: 'Eval deleted successfully' });
-  } catch {
+  } catch (error) {
+    logger.error('[DELETE /eval/:id] Failed to delete eval', {
+      evalId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    if (error instanceof Error && error.message === `Eval with ID ${id} not found`) {
+      res.status(404).json({ error: 'Evaluation not found' });
+      return;
+    }
+
     res.status(500).json({ error: 'Failed to delete eval' });
   }
 });
