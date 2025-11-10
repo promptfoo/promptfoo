@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(assertions): support runtime variables in custom rubricPrompt for factuality and model-graded-closedqa assertions (#5340)
 - fix(openai): extend automatic 10-minute timeout to gpt-5-pro models to prevent timeouts on long-running requests (#6147)
 - fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
 
