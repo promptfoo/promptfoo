@@ -389,9 +389,8 @@ export async function doGenerateRedteam(
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
-    logger.error('Invalid redteam configuration:');
-    logger.error(fromError(parsedConfig.error).toString());
-    throw new Error('Invalid redteam configuration');
+    const errorMessage = fromError(parsedConfig.error).toString();
+    throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
   }
 
   const targetLabels = testSuite.providers
@@ -424,7 +423,6 @@ export async function doGenerateRedteam(
   } = await synthesize({
     ...parsedConfig.data,
     purpose: enhancedPurpose,
-    language: config.language,
     numTests: config.numTests,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
     maxConcurrency: config.maxConcurrency,
@@ -777,10 +775,11 @@ export function redteamGenerateCommand(
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
+          // Log the stack trace, which already includes the error message
           logger.error(
-            `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}\n${
-              error instanceof Error ? error.stack : ''
-            }`,
+            error instanceof Error && error.stack
+              ? error.stack
+              : `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
         process.exit(1);
