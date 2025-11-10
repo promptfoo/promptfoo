@@ -616,17 +616,24 @@ export default class Eval {
             // Use a single json_extract call with LENGTH(TRIM()) for better performance
             condition = `LENGTH(TRIM(COALESCE(json_extract(metadata, '$."${escapedField}"'), ''))) > 0`;
           }
-        } else if (type === 'plugin' && operator === 'equals') {
+        } else if (type === 'plugin') {
           const sanitizedValue = sanitizeValue(value);
-          // Is the value a category? e.g. `harmful` or `bias`
-          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
           const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
 
-          // Plugin ID is stored in metadata.pluginId
-          if (isCategory) {
-            condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
-          } else {
-            condition = `${pluginIdPath} = '${sanitizedValue}'`;
+          if (operator === 'equals') {
+            // Plugin ID is stored in metadata.pluginId
+            if (isCategory) {
+              condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
+            } else {
+              condition = `${pluginIdPath} = '${sanitizedValue}'`;
+            }
+          } else if (operator === 'not_equals') {
+            if (isCategory) {
+              condition = `(${pluginIdPath} IS NULL OR (${pluginIdPath} != '${sanitizedValue}' AND ${pluginIdPath} NOT LIKE '${sanitizedValue}:%'))`;
+            } else {
+              condition = `(${pluginIdPath} IS NULL OR ${pluginIdPath} != '${sanitizedValue}')`;
+            }
           }
         } else if (type === 'strategy' && operator === 'equals') {
           const sanitizedValue = sanitizeValue(value);

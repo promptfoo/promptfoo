@@ -381,10 +381,7 @@ export default function RedTeaming(): JSX.Element {
       description="The most widely adopted platform for AI red teaming. Generate adaptive attacks for your specific application, not just static jailbreak tests. Detect prompt injections, PII leaks, jailbreaks, and more."
     >
       <Head>
-        <meta
-          property="og:image"
-          content="https://www.promptfoo.dev/img/meta/vulnerability-scanner.png"
-        />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
       <div className={styles.pageContainer}>
