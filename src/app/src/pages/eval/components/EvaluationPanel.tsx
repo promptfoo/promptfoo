@@ -25,7 +25,7 @@ const copyButtonSx = {
   },
 };
 
-function getValue(result: GradingResult) {
+function getValue(result: GradingResult): string {
   // For context-related assertions, read the context value from metadata, if it exists
   // These assertions require special handling and should always use metadata.context
   if (
@@ -35,7 +35,8 @@ function getValue(result: GradingResult) {
     ) &&
     result.metadata?.context
   ) {
-    return result.metadata?.context;
+    const context = result.metadata.context;
+    return Array.isArray(context) ? context.join('\n') : context;
   }
 
   // Prefer rendered assertion value with substituted variables over raw template

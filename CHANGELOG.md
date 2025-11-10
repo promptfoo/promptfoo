@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - docs(providers): comprehensive Alibaba Cloud documentation update with 100+ models including Qwen3 flagship variants, qwen-long (10M context), all DeepSeek/QwQ reasoning models, complete vision/multimodal lineup, audio/speech models, coding/math specializations, open-source Qwen3 series, and third-party models (Kimi); reorganized with Commercial/Open-source sections; fixes configuration to use `apiBaseUrl` and adds Beijing region endpoint (#6118)
 
+### Tests
+
+- test(assertions): add comprehensive test coverage for rendered assertion value metadata including variable substitution, loops, static text handling, and UI display fallback priority (#6145)
+
 ### Dependencies
 
 - chore(deps): update 76 packages to latest minor and patch versions across all workspaces (#6139)

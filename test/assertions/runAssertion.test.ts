@@ -3358,5 +3358,61 @@ describe('runAssertion', () => {
 
       expect(result.metadata?.renderedAssertionValue).toBe("output.includes('hello')");
     });
+
+    it('should store rendered value even when assertion fails', async () => {
+      const assertion: Assertion = {
+        type: 'contains',
+        value: 'Expected: {{ value }}',
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          value: 'foo',
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'Different output - no match' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      // Assertion should fail (output doesn't contain "Expected: foo")
+      expect(result.pass).toBe(false);
+      // But rendered value should still be captured in metadata
+      expect(result.metadata?.renderedAssertionValue).toBe('Expected: foo');
+      // Original template should remain in assertion
+      expect(result.assertion?.value).toBe('Expected: {{ value }}');
+    });
+
+    it('should preserve existing metadata when adding renderedAssertionValue', async () => {
+      const assertion: Assertion = {
+        type: 'contains',
+        value: 'User: {{ name }}',
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          name: 'Alice',
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'User: Alice' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      // Should have rendered value
+      expect(result.metadata?.renderedAssertionValue).toBe('User: Alice');
+      // Original template in assertion
+      expect(result.assertion?.value).toBe('User: {{ name }}');
+      // Metadata object should exist and be extensible
+      expect(result.metadata).toBeTruthy();
+    });
   });
 });
