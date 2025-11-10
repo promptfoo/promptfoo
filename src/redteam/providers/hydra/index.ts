@@ -17,16 +17,10 @@ import type {
 import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
-import {
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
-import {
-  getSessionId,
-  isBasicRefusal,
-} from '../../util';
+import { getSessionId, isBasicRefusal } from '../../util';
 import {
   getTargetResponse,
   isValidChatMessageArray,
@@ -41,7 +35,7 @@ interface HydraMetadata extends BaseRedteamMetadata {
   hydraRoundsCompleted: number;
   hydraBacktrackCount: number;
   hydraResult: boolean;
-  stopReason: 'Grader failed' | 'Agent abandoned' | 'Max turns reached' | 'Max backtracks reached';
+  stopReason: 'Grader failed' | 'Max turns reached' | 'Max backtracks reached';
   successfulAttacks?: Array<{
     turn: number;
     message: string;
@@ -63,6 +57,7 @@ interface HydraResponse extends ProviderResponse {
 
 interface HydraConfig {
   injectVar: string;
+  scanId?: string;
   maxTurns?: number;
   maxBacktracks?: number;
   stateful?: boolean;
@@ -70,6 +65,7 @@ interface HydraConfig {
 
 export class HydraProvider implements ApiProvider {
   readonly config: HydraConfig;
+  private scanId?: string;
   private readonly agentProvider: ApiProvider;
   private readonly injectVar: string;
   private readonly maxTurns: number;
@@ -80,6 +76,7 @@ export class HydraProvider implements ApiProvider {
 
   constructor(config: HydraConfig) {
     this.config = config;
+    this.scanId = config.scanId; // Use scanId from config if provided
     this.injectVar = config.injectVar;
     this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
     this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
@@ -151,8 +148,15 @@ export class HydraProvider implements ApiProvider {
     options?: CallApiOptionsParams;
     test?: AtomicTestCase;
   }): Promise<HydraResponse> {
+    // Initialize scanId: use evaluationId if available, otherwise use instance scanId or generate new one
+    if (!this.scanId) {
+      this.scanId = context?.evaluationId || uuidv4();
+    }
+    const scanId = context?.evaluationId || this.scanId;
+
     logger.debug('[Hydra] Starting attack', {
       goal,
+      scanId,
       maxTurns: this.maxTurns,
       stateful: this.stateful,
     });
@@ -167,7 +171,7 @@ export class HydraProvider implements ApiProvider {
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || uuidv4().slice(0, 8)}`;
 
     let vulnerabilityAchieved = false;
-    let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max turns reached' | 'Max backtracks reached' =
+    let stopReason: 'Grader failed' | 'Max turns reached' | 'Max backtracks reached' =
       'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
@@ -195,6 +199,7 @@ export class HydraProvider implements ApiProvider {
       const cloudRequest = {
         task: 'hydra-decision',
         testRunId,
+        scanId,
         turn,
         goal,
         purpose: test?.metadata?.purpose,
@@ -205,7 +210,6 @@ export class HydraProvider implements ApiProvider {
             ? {
                 pass: storedGraderResult.pass,
                 score: storedGraderResult.score,
-                reason: storedGraderResult.reason,
               }
             : undefined,
         stateful: this.stateful,
@@ -228,13 +232,16 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (agentResp.error) {
+        console.log(
+          `[HYDRA-CLI-ERROR] Turn ${turn}, testRunId: ${testRunId}, error:`,
+          agentResp.error,
+        );
         logger.info('[Hydra] Agent provider error', { turn, error: agentResp.error });
         continue;
       }
 
       // Extract message from cloud response
       let nextMessage: string;
-      let shouldAbandon = false;
 
       if (typeof agentResp.output === 'string') {
         // PromptfooChatCompletionProvider extracts data.result as string
@@ -242,19 +249,11 @@ export class HydraProvider implements ApiProvider {
       } else {
         const cloudResponse = agentResp.output as any;
         nextMessage = cloudResponse.result || cloudResponse.message;
-        shouldAbandon = cloudResponse.shouldAbandon || false;
       }
 
       if (!nextMessage) {
         logger.info('[Hydra] Missing message from agent', { turn });
         continue;
-      }
-
-      // Check if agent decided to abandon
-      if (shouldAbandon) {
-        logger.info('[Hydra] Agent decided to abandon conversation', { turn });
-        stopReason = 'Agent abandoned';
-        break;
       }
 
       // Add message to conversation history
@@ -425,9 +424,7 @@ export class HydraProvider implements ApiProvider {
             backtrackCount,
             maxBacktracks: this.maxBacktracks,
           });
-          logger.debug(
-            `[Hydra] Max backtracks (${this.maxBacktracks}) reached. Exiting loop.`,
-          );
+          logger.debug(`[Hydra] Max backtracks (${this.maxBacktracks}) reached. Exiting loop.`);
           stopReason = 'Max backtracks reached';
           break;
         }
@@ -490,6 +487,36 @@ export class HydraProvider implements ApiProvider {
       }
     }
 
+    // Update scan learnings
+    if (scanId) {
+      try {
+        const turnsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
+        const learningRequest = {
+          task: 'hydra-decision',
+          testRunId,
+          scanId,
+          testComplete: true,
+          finalResult: {
+            success: vulnerabilityAchieved,
+            totalTurns: turnsCompleted,
+          },
+        };
+
+        await this.agentProvider.callApi(JSON.stringify(learningRequest), {
+          prompt: {
+            raw: JSON.stringify(learningRequest),
+            label: 'hydra-learning-update',
+          },
+          vars: {},
+        });
+
+        logger.debug('[Hydra] Scan learnings updated', { scanId, testRunId });
+      } catch (error) {
+        logger.warn('[Hydra] Failed to update scan learnings', { error });
+        // Don't fail test if learning update fails
+      }
+    }
+
     const messages = this.conversationHistory.map((msg) => ({
       role: msg.role,
       content: msg.content,
@@ -518,4 +545,3 @@ export class HydraProvider implements ApiProvider {
 }
 
 export default HydraProvider;
-

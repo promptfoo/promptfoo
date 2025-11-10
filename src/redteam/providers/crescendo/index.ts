@@ -17,23 +17,14 @@ import type {
   TokenUsage,
 } from '../../../types/index';
 import invariant from '../../../util/invariant';
-import {
-  extractFirstJsonObject,
-  isValidJson,
-} from '../../../util/json';
+import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
-import {
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
-import {
-  getSessionId,
-  isBasicRefusal,
-} from '../../util';
+import { getSessionId, isBasicRefusal } from '../../util';
 import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
 import {
@@ -45,11 +36,7 @@ import {
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
-import {
-  CRESCENDO_SYSTEM_PROMPT,
-  EVAL_SYSTEM_PROMPT,
-  REFUSAL_SYSTEM_PROMPT,
-} from './prompts';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
