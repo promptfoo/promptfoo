@@ -387,6 +387,17 @@ export async function runAssertion({
   if (handler) {
     const result = await handler(assertionParams);
 
+    // Store rendered assertion value in metadata if it differs from the original template
+    // This allows the UI to display substituted variable values instead of raw templates
+    if (
+      renderedValue !== undefined &&
+      renderedValue !== assertion.value &&
+      typeof renderedValue === 'string'
+    ) {
+      result.metadata = result.metadata || {};
+      result.metadata.renderedAssertionValue = renderedValue;
+    }
+
     // If weight is 0, treat this as a metric-only assertion that can't fail
     if (assertion.weight === 0) {
       return {
