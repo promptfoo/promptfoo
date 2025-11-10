@@ -122,7 +122,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
               updateAuthField('scopes', scopes);
             }}
             margin="normal"
-            placeholder="read, write"
+            placeholder="read, write, admin"
             helperText="Enter scopes separated by commas"
           />
         </Box>
