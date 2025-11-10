@@ -221,7 +221,7 @@ Content generation systems:
 
 After running red team tests against a target, generate a guardrail from the discovered vulnerabilities:
 
-1. Navigate to your red team evaluation results
+1. Navigate to your red team eval results
 2. Select the target you tested (identified by its label, e.g., "customer-chatbot" or "code-assistant")
 3. Click "Generate Guardrail" to create policies from that target's issues
 
