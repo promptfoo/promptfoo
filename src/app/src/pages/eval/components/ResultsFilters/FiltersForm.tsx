@@ -466,14 +466,14 @@ function Filter({
                     { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
                     { label: OPERATOR_LABELS_BY_OPERATOR.not_equals, value: 'not_equals' },
                   ]
-              : solelyHasEqualsOperator(value.type)
-                ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
-                : [
-                    { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
-                    { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
-                    { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
-                    { label: OPERATOR_LABELS_BY_OPERATOR.exists, value: 'exists' },
-                  ]
+                : solelyHasEqualsOperator(value.type)
+                  ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
+                  : [
+                      { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.exists, value: 'exists' },
+                    ]
           }
           value={value.operator}
           onChange={(e) => handleOperatorChange(e as ResultsFilter['operator'])}
