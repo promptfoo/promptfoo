@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(assertions): support runtime variables ({{input}}, {{ideal}}, {{completion}}) in custom rubricPrompt for factuality assertions by deferring template rendering to matchesFactuality where all variables are available (#5340)
 - fix(assertions): support runtime variables ({{input}}, {{criteria}}, {{completion}}) in custom rubricPrompt for model-graded-closedqa assertions by deferring template rendering to matchesClosedQa where all variables are available (#5340)
+- fix(openai): extend automatic 10-minute timeout to gpt-5-pro models to prevent timeouts on long-running requests (#6147)
 - fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
 
 ### Documentation
