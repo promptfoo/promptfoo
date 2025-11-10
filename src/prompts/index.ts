@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import { stat } from 'fs/promises';
 import { globSync } from 'glob';
 import logger from '../logger';
 import { parsePathOrGlob } from '../util/index';
@@ -109,8 +109,9 @@ async function processPrompt(
 
   // Handle exec: prefix for executable prompts
   if (prompt.raw.startsWith('exec:')) {
-    const execPath = prompt.raw.substring(5); // Remove 'exec:' prefix
-    return processExecutableFile(execPath, prompt);
+    const execSpec = prompt.raw.substring(5); // Remove 'exec:' prefix
+    const { filePath, functionName } = parsePathOrGlob(basePath, execSpec);
+    return await processExecutableFile(filePath, prompt, functionName);
   }
 
   if (!maybeFilePath(prompt.raw)) {
@@ -188,14 +189,14 @@ async function processPrompt(
     extension &&
     ['.sh', '.bash', '.exe', '.bat', '.cmd', '.ps1', '.rb', '.pl'].includes(extension)
   ) {
-    return processExecutableFile(filePath, prompt, functionName);
+    return await processExecutableFile(filePath, prompt, functionName);
   }
   // If no extension matched but file exists and is executable, treat it as an executable
   try {
-    const stats = fs.statSync(filePath);
+    const stats = await stat(filePath);
     if (stats.isFile() && (stats.mode & 0o111) !== 0) {
       // File is executable
-      return processExecutableFile(filePath, prompt, functionName);
+      return await processExecutableFile(filePath, prompt, functionName);
     }
   } catch (_e) {
     // File doesn't exist or can't be accessed, fall through

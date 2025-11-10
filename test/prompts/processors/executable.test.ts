@@ -30,10 +30,10 @@ describe('processExecutableFile', () => {
   const describeUnix = process.platform === 'win32' ? describe.skip : describe;
 
   // Cross-platform tests
-  it('should process a script with exec: prefix', () => {
+  it('should process a script with exec: prefix', async () => {
     const scriptPath =
       process.platform === 'win32' ? 'cmd.exe /c echo "test"' : '/usr/bin/echo "test"';
-    const prompts = processExecutableFile(scriptPath, {});
+    const prompts = await processExecutableFile(scriptPath, {});
 
     expect(prompts).toHaveLength(1);
     expect(prompts[0].label).toBe(scriptPath);
@@ -41,17 +41,17 @@ describe('processExecutableFile', () => {
     expect(typeof prompts[0].function).toBe('function');
   });
 
-  it('should use custom label when provided', () => {
+  it('should use custom label when provided', async () => {
     const scriptPath = process.platform === 'win32' ? 'cmd.exe' : '/bin/echo';
-    const prompts = processExecutableFile(scriptPath, { label: 'Custom Label' });
+    const prompts = await processExecutableFile(scriptPath, { label: 'Custom Label' });
 
     expect(prompts[0].label).toBe('Custom Label');
   });
 
-  it('should handle binary executables', () => {
+  it('should handle binary executables', async () => {
     const scriptPath =
       process.platform === 'win32' ? 'C:\\Windows\\System32\\cmd.exe' : '/usr/bin/ls';
-    const prompts = processExecutableFile(scriptPath, {});
+    const prompts = await processExecutableFile(scriptPath, {});
 
     expect(prompts).toHaveLength(1);
     expect(prompts[0].label).toBe(scriptPath);
@@ -59,9 +59,9 @@ describe('processExecutableFile', () => {
     expect(prompts[0].raw).toBe(scriptPath);
   });
 
-  it('should handle non-existent files gracefully', () => {
+  it('should handle non-existent files gracefully', async () => {
     const scriptPath = '/non/existent/script.sh';
-    const prompts = processExecutableFile(scriptPath, {});
+    const prompts = await processExecutableFile(scriptPath, {});
 
     expect(prompts).toHaveLength(1);
     expect(prompts[0].label).toBe(scriptPath);
@@ -80,7 +80,7 @@ echo "Hello from shell script"`;
       fs.chmodSync(scriptPath, 0o755);
 
       try {
-        const prompts = processExecutableFile(scriptPath, {});
+        const prompts = await processExecutableFile(scriptPath, {});
 
         expect(prompts).toHaveLength(1);
         expect(prompts[0].label).toBe(scriptPath);
@@ -110,7 +110,7 @@ echo "Context received: $CONTEXT"`;
       fs.chmodSync(scriptPath, 0o755);
 
       try {
-        const prompts = processExecutableFile(scriptPath, {});
+        const prompts = await processExecutableFile(scriptPath, {});
         const result = await prompts[0].function!({
           vars: { name: 'test' },
           provider: mockProvider,
@@ -135,7 +135,7 @@ echo "Test output"`;
 
       try {
         const config = { temperature: 0.5 };
-        const prompts = processExecutableFile(scriptPath, { config });
+        const prompts = await processExecutableFile(scriptPath, { config });
 
         expect(prompts[0].config).toEqual(config);
 
@@ -161,7 +161,7 @@ echo "Normal output"`;
       fs.chmodSync(scriptPath, 0o755);
 
       try {
-        const prompts = processExecutableFile(scriptPath, {});
+        const prompts = await processExecutableFile(scriptPath, {});
         const result = await prompts[0].function!({
           vars: {},
           provider: mockProvider,
@@ -184,7 +184,7 @@ exit 1`;
       fs.chmodSync(scriptPath, 0o755);
 
       try {
-        const prompts = processExecutableFile(scriptPath, {});
+        const prompts = await processExecutableFile(scriptPath, {});
 
         await expect(
           prompts[0].function!({
@@ -192,6 +192,34 @@ exit 1`;
             provider: mockProvider,
           }),
         ).rejects.toThrow();
+      } finally {
+        fs.unlinkSync(scriptPath);
+      }
+    });
+  });
+
+  describeUnix('Relative path tests', () => {
+    it('should work with exec: prefix and relative paths', async () => {
+      const scriptPath = path.join(__dirname, 'test-relative.sh');
+      const scriptContent = `#!/bin/bash
+echo "Relative path works"`;
+
+      fs.writeFileSync(scriptPath, scriptContent);
+      fs.chmodSync(scriptPath, 0o755);
+
+      try {
+        // This simulates how the system would call it from processPrompt with basePath
+        const prompts = await processExecutableFile(scriptPath, {});
+
+        expect(prompts).toHaveLength(1);
+        expect(typeof prompts[0].function).toBe('function');
+
+        const result = await prompts[0].function!({
+          vars: {},
+          provider: mockProvider,
+        });
+
+        expect(result).toBe('Relative path works');
       } finally {
         fs.unlinkSync(scriptPath);
       }

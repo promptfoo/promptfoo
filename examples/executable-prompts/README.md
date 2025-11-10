@@ -1,16 +1,25 @@
-# Executable Prompts Example
+# executable-prompts
 
 This example demonstrates how to use executable scripts and binaries as prompt generators in promptfoo.
 
-To run it:
+To initialize and run it:
 
-```
+```bash
+npx promptfoo@latest init --example executable-prompts
+cd executable-prompts
 promptfoo eval
 ```
 
+## Prerequisites
+
+- bash/zsh (macOS/Linux) or PowerShell (Windows)
+- jq (for the shell example): https://stedolan.github.io/jq/
+- Ruby 3.x (for the Ruby example)
+- Make scripts executable: `chmod +x prompt-generator.sh template-prompt.rb`
+
 ## Overview
 
-Promptfoo now supports using any executable (shell scripts, Python scripts, binaries, etc.) to dynamically generate prompts. This is useful when you need to:
+Promptfoo supports using any executable (shell scripts, Python scripts, binaries, etc.) to dynamically generate prompts. This is useful when you need to:
 
 - Generate prompts based on external data sources
 - Create context-aware prompts dynamically
@@ -45,7 +54,9 @@ prompts:
 ```yaml
 prompts:
   - ./my-script.sh # Detected by .sh extension
-  - ./generator.py # Detected by .py extension
+  # Note: Python files (.py) are processed as Python prompt templates by default.
+  # To run a Python script as an executable prompt, use the exec: prefix:
+  # - exec:./generator.py
 ```
 
 ### Method 3: With configuration
@@ -57,4 +68,5 @@ prompts:
     config:
       temperature: 0.7
       style: technical
+      timeout: 30000 # 30 second timeout (default: 60s)
 ```

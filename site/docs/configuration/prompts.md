@@ -251,13 +251,17 @@ prompts:
   - exec:/usr/bin/my-prompt-tool
 ```
 
-Or just reference the script directly (auto-detected for `.sh`, `.py`, `.rb`, and other common extensions):
+Or just reference the script directly (auto-detected for `.sh`, `.bash`, `.rb`, `.pl`, and other common script extensions):
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - ./generate-prompt.sh
-  - ./prompt_builder.py
+  - ./prompt_builder.rb
 ```
+
+:::note
+Python files (`.py`) are processed as Python prompt templates, not executables. To run a Python script as an executable prompt, use the `exec:` prefix: `exec:./generator.py`
+:::
 
 Pass configuration if needed:
 
@@ -301,6 +305,17 @@ user_id = context['vars']['user_id']
 # Call LLM API here...
 puts "\nUser query: #{context['vars']['query']}"
 ```
+
+### Security Considerations
+
+:::warning
+Executable scripts run with full permissions of the promptfoo process. Be mindful of:
+
+- **User Input**: Scripts receive user-controlled `vars` as JSON. Always validate and sanitize inputs before using them in commands.
+- **Untrusted Scripts**: Only run scripts from trusted sources. Scripts can access files, make network calls, and execute commands.
+- **Environment Access**: Scripts can access environment variables, including API keys.
+- **Timeout**: Configure a timeout via `config.timeout` (default: 60 seconds) to prevent hanging scripts.
+  :::
 
 ### When to Use
 

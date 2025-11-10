@@ -1,5 +1,5 @@
 import { execFile } from 'child_process';
-import * as fs from 'fs';
+import { readFile, stat as fsStat } from 'fs/promises';
 
 import logger from '../../logger';
 import { parseScriptParts, getFileHashes } from '../../providers/scriptCompletion';
@@ -65,7 +65,10 @@ export const executablePromptFunction = async (
     // Pass context as JSON argument to the script
     const scriptArgs = scriptParts.concat([safeJsonStringify(transformedContext) as string]);
 
-    const options = context.config?.basePath ? { cwd: context.config.basePath } : {};
+    const options = {
+      cwd: context.config?.basePath,
+      timeout: context.config?.timeout || 60000, // Default 60 second timeout
+    };
 
     logger.debug(`Executing prompt script: ${command} ${scriptArgs.join(' ')}`);
 
@@ -109,22 +112,22 @@ export const executablePromptFunction = async (
  * @param functionName - Not used for executables, but kept for interface consistency.
  * @returns Array of prompts generated from the executable.
  */
-export function processExecutableFile(
+export async function processExecutableFile(
   filePath: string,
   prompt: Partial<Prompt>,
   _functionName?: string,
-): Prompt[] {
+): Promise<Prompt[]> {
   // For display purposes, try to read the file if it exists and is a text file
   let rawContent = filePath;
   const scriptParts = parseScriptParts(filePath);
   const firstPart = scriptParts[0];
 
-  if (firstPart && fs.existsSync(firstPart)) {
+  if (firstPart) {
     try {
-      const stats = fs.statSync(firstPart);
+      const stats = await fsStat(firstPart);
       if (stats.isFile() && stats.size < 1024 * 100) {
         // Only read files < 100KB
-        const content = fs.readFileSync(firstPart, 'utf-8');
+        const content = await readFile(firstPart, 'utf-8');
         // Check if it's likely a text file
         if (!/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(content.substring(0, 1000))) {
           rawContent = content;
