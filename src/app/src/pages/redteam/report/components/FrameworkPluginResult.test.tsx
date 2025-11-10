@@ -101,9 +101,7 @@ describe('FrameworkPluginResult', () => {
     const pluginName = screen.getByText(/violent crime/i);
     fireEvent.click(pluginName);
 
-    expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringContaining('/eval/eval-789?filter='),
-    );
+    expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('/eval/eval-789?filter='));
     expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('&mode=failures'));
 
     const callArg = mockNavigate.mock.calls[0][0];
