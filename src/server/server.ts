@@ -277,7 +277,6 @@ export function createApp() {
 export async function startServer(
   port = getDefaultPort(),
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
-  printUrl = false,
 ) {
   const app = createApp();
 
@@ -310,13 +309,7 @@ export async function startServer(
   httpServer
     .listen(port, () => {
       const url = `http://localhost:${port}`;
-      if (printUrl) {
-        // For scripts/CI: print only the URL to stdout for easy capture
-        // eslint-disable-next-line no-console
-        console.log(url);
-      } else {
-        logger.info(`Server running at ${url} and monitoring for new evals.`);
-      }
+      logger.info(`Server running at ${url} and monitoring for new evals.`);
       openBrowser(browserBehavior, port).catch((error) => {
         logger.error(
           `Failed to handle browser behavior (${BrowserBehavior[browserBehavior]}): ${error instanceof Error ? error.message : error}`,

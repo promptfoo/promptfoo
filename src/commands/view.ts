@@ -11,12 +11,16 @@ export function viewCommand(program: Command) {
   program
     .command('view [directory]')
     .description('Start browser UI')
-    .option('-p, --port <number>', 'Port number', getDefaultPort().toString())
+    .option(
+      '-p, --port <number>',
+      'Port number',
+      (val) => Number.parseInt(val, 10),
+      getDefaultPort(),
+    )
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file, --env-path <path>', 'Path to .env file')
-    .option('--print-url', 'Print the viewer URL to stdout (implies no auto-open)')
     .action(
       async (
         directory: string | undefined,
@@ -24,7 +28,6 @@ export function viewCommand(program: Command) {
           port: number;
           yes: boolean;
           no: boolean;
-          printUrl?: boolean;
           apiBaseUrl?: string;
           envPath?: string;
           filterDescription?: string;
@@ -45,14 +48,13 @@ export function viewCommand(program: Command) {
           setConfigDirectoryPath(directory);
         }
         // Determine browser behavior
-        const browserBehavior =
-          cmdObj.printUrl || cmdObj.no
+        const browserBehavior = cmdObj.yes
+          ? BrowserBehavior.OPEN
+          : cmdObj.no
             ? BrowserBehavior.SKIP
-            : cmdObj.yes
-              ? BrowserBehavior.OPEN
-              : BrowserBehavior.ASK;
+            : BrowserBehavior.ASK;
 
-        await startServer(cmdObj.port, browserBehavior, cmdObj.printUrl);
+        await startServer(cmdObj.port, browserBehavior);
       },
     );
 }
