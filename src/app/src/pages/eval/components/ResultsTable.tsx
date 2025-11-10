@@ -443,7 +443,15 @@ function ResultsTable({
         if (filter.type === 'metadata') {
           return Boolean(filter.value && filter.field);
         }
-        // For non-metadata filters, value is required
+        // For metric filters with is_defined operator, only field is required
+        if (filter.type === 'metric' && filter.operator === 'is_defined') {
+          return Boolean(filter.field);
+        }
+        // For metric filters with comparison operators, both field and value are required
+        if (filter.type === 'metric') {
+          return Boolean(filter.value && filter.field);
+        }
+        // For non-metadata/non-metric filters, value is required
         return Boolean(filter.value);
       })
       .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
@@ -499,12 +507,20 @@ function ResultsTable({
       // Only pass the filters that have been applied.
       // For metadata filters with exists operator, only field is required.
       // For other metadata operators, both field and value are required.
-      // For non-metadata filters, value is required.
+      // For metric filters with is_defined operator, only field is required.
+      // For metric filters with comparison operators, both field and value are required.
+      // For non-metadata/non-metric filters, value is required.
       filters: Object.values(filters.values).filter((filter) => {
         if (filter.type === 'metadata' && filter.operator === 'exists') {
           return Boolean(filter.field);
         }
         if (filter.type === 'metadata') {
+          return Boolean(filter.value && filter.field);
+        }
+        if (filter.type === 'metric' && filter.operator === 'is_defined') {
+          return Boolean(filter.field);
+        }
+        if (filter.type === 'metric') {
           return Boolean(filter.value && filter.field);
         }
         return Boolean(filter.value);
@@ -1127,15 +1143,9 @@ function ResultsTable({
     }
   }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
 
-  const tableWidth = React.useMemo(() => {
-    let width = 0;
-    if (descriptionColumn) {
-      width += DESCRIPTION_COLUMN_SIZE_PX;
-    }
-    width += head.vars.length * VARIABLE_COLUMN_SIZE_PX;
-    width += head.prompts.length * PROMPT_COLUMN_SIZE_PX;
-    return width;
-  }, [descriptionColumn, head.vars.length, head.prompts.length]);
+  // Use TanStack Table's built-in method to calculate total width of visible columns.
+  // This automatically handles both column visibility changes and user-initiated column resizing.
+  const tableWidth = reactTable.getTotalSize();
 
   // Listen for scroll events on the table container and sync the header horizontally
   const tableRef = useRef<HTMLDivElement>(null);

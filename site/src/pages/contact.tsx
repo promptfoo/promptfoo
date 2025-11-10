@@ -89,7 +89,7 @@ function Contact(): JSX.Element {
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', py: 4, mb: 4 }}>
           <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
-            Contact Sales
+            Book a Demo
           </Typography>
           <Typography variant="h6" color="text.secondary">
             Let's discuss how Promptfoo can secure your AI infrastructure

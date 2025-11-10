@@ -1381,6 +1381,45 @@ Deep research models require high `max_output_tokens` values (50,000+) and long 
 The `web_search_preview` tool is **required** for deep research models. The provider will return an error if this tool is not configured.
 :::
 
+### GPT-5-pro Timeout Configuration
+
+GPT-5-pro is a long-running model that often requires extended timeouts due to its advanced reasoning capabilities. Like deep research models, GPT-5-pro **automatically** receives a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
+
+**Automatic timeout behavior:**
+
+- GPT-5-pro automatically gets a 10-minute timeout (600,000ms) - **no configuration needed**
+- If you need longer, set `PROMPTFOO_EVAL_TIMEOUT_MS` (e.g., 900000 for 15 minutes)
+- `REQUEST_TIMEOUT_MS` is **ignored** for GPT-5-pro (the automatic timeout takes precedence)
+
+**Most users won't need any timeout configuration** - the automatic 10-minute timeout is sufficient for most GPT-5-pro requests.
+
+**If you experience timeouts, configure this:**
+
+```bash
+# Only if you need more than the automatic 10 minutes
+export PROMPTFOO_EVAL_TIMEOUT_MS=1200000   # 20 minutes
+
+# For infrastructure reliability (recommended)
+export PROMPTFOO_RETRY_5XX=true            # Retry 502 Bad Gateway errors
+export PROMPTFOO_REQUEST_BACKOFF_MS=10000  # Longer retry backoff
+
+# Reduce concurrency to avoid rate limits
+promptfoo eval --max-concurrency 2
+```
+
+**Common GPT-5-pro errors and solutions:**
+
+If you encounter errors with GPT-5-pro:
+
+1. **Request timed out** - If GPT-5-pro needs more than the automatic 10 minutes, set `PROMPTFOO_EVAL_TIMEOUT_MS=1200000` (20 minutes)
+2. **502 Bad Gateway** - Enable `PROMPTFOO_RETRY_5XX=true` to retry Cloudflare/OpenAI infrastructure timeouts
+3. **getaddrinfo ENOTFOUND** - Transient DNS errors; reduce concurrency with `--max-concurrency 2`
+4. **Upstream connection errors** - OpenAI load balancer issues; increase backoff with `PROMPTFOO_REQUEST_BACKOFF_MS=10000`
+
+:::tip
+GPT-5-pro automatically gets a 10-minute timeout - you likely don't need any timeout configuration. If you see infrastructure errors (502, DNS failures), enable `PROMPTFOO_RETRY_5XX=true` and reduce concurrency.
+:::
+
 ### Sending Images in Prompts
 
 The Responses API supports structured prompts with text and image inputs. Example:
@@ -1438,7 +1477,7 @@ providers:
   - id: openai:responses:gpt-4.1
     config:
       apiHost: 'your-resource.openai.azure.com'
-      apiKey: '${AZURE_API_KEY}'
+      apiKey: '{{ env.AZURE_API_KEY }}' # or set OPENAI_API_KEY env var
       temperature: 0.7
       instructions: 'You are a helpful assistant.'
       response_format: file://./response-schema.json
@@ -1472,15 +1511,15 @@ To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY
 
 ## Agents SDK Integration
 
-Promptfoo supports evaluation of OpenAI's Agents SDK, which enables building multi-agent systems with specialized agents, handoffs, and persistent context. You can integrate the Agents SDK as a [Python provider](./python.md).
+Test multi-turn agentic workflows with the [OpenAI Agents provider](/docs/providers/openai-agents). This provider supports the [@openai/agents](https://github.com/openai/openai-agents-js) SDK with tools, handoffs, and tracing.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - file://agent_provider.py:call_api
+  - openai:agents:my-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      tools: file://./tools/support-tools.ts
+      maxTurns: 10
 ```
 
-For a complete working example of an airline customer service system with multiple agents, see the [OpenAI Agents SDK example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) or initialize it with:
-
-```bash
-npx promptfoo@latest init --example openai-agents
-```
+See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full configuration options and examples.

@@ -75,7 +75,7 @@ const DescriptionTypography = styled(Typography, {
   fontSize: '1rem',
   color: theme.palette.text.secondary,
   opacity: isVisible ? 1 : 0,
-  maxHeight: isVisible ? '100px' : 0,
+  maxHeight: isVisible ? 'unset' : 0,
   overflow: 'hidden',
   transition: theme.transitions.create(['opacity', 'max-height'], {
     duration: theme.transitions.duration.short,

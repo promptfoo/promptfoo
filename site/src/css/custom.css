@@ -74,6 +74,26 @@ code p {
   font-family: var(--ifm-font-family-monospace);
 }
 
+/* Hide search bar on non-docs pages */
+html:not(.docs-wrapper) .navbar__search,
+html:not(.docs-wrapper) .DocSearch {
+  display: none !important;
+}
+
+/* Mobile navbar adjustments */
+@media (max-width: 996px) {
+  /* Hide search box on mobile to prevent overlap */
+  .navbar__search,
+  .DocSearch {
+    display: none !important;
+  }
+
+  /* Keep hamburger top-level items consistent */
+  .navbar-sidebar__items .menu__list > .menu__list-item > .menu__link {
+    font-weight: 600;
+  }
+}
+
 .navbar__logo img {
   filter: invert(0);
 }
@@ -132,6 +152,44 @@ code p {
   transform: none;
   opacity: 0.4;
   background-size: 16px;
+}
+
+/* Book a Demo button styling */
+.header-book-demo-link {
+  background-color: var(--pf-red-base);
+  color: white !important;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.2s ease-in-out;
+  margin-right: 0.75rem;
+}
+
+.header-book-demo-link:hover {
+  background-color: var(--pf-red-dark);
+  color: white !important;
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(229, 58, 58, 0.3);
+}
+
+[data-theme='dark'] .header-book-demo-link {
+  background-color: var(--pf-red-light);
+  color: var(--pf-dark-darkest) !important;
+}
+
+[data-theme='dark'] .header-book-demo-link:hover {
+  background-color: var(--pf-red-lighter);
+  color: var(--pf-dark-darkest) !important;
+  box-shadow: 0 4px 12px rgba(255, 122, 122, 0.3);
+}
+
+/* Mobile adjustments for book demo button */
+@media (max-width: 996px) {
+  .header-book-demo-link {
+    margin-right: 0;
+    margin-bottom: 0.5rem;
+  }
 }
 
 /* Import custom pagination styles */

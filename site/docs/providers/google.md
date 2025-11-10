@@ -71,15 +71,16 @@ providers:
       apiKey: your_api_key_here
 ```
 
-**Note:** Avoid hardcoding API keys in configuration files that might be committed to version control. Use environment variable references instead:
+**Note:** Avoid hardcoding API keys in configuration files that might be committed to version control. The API key is automatically detected from the `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable, so you typically don't need to specify it in the config.
+
+If you need to explicitly reference an environment variable in your config, use Nunjucks template syntax:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-2.5-flash # Uses GEMINI_API_KEY or GOOGLE_API_KEY env var
     config:
-      apiKey: ${GEMINI_API_KEY}
-      # or
-      # apiKey: ${GOOGLE_API_KEY}
+      # apiKey: "{{ env.GEMINI_API_KEY }}"  # optional, auto-detected
+      temperature: 0.7
 ```
 
 ### 3. Verify Authentication
@@ -162,12 +163,10 @@ tests:
 ```yaml
 # Reference environment variables in your config
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-2.5-flash # Uses GEMINI_API_KEY or GOOGLE_API_KEY env var
     config:
-      apiKey: ${GEMINI_API_KEY}
-      # or
-      # apiKey: ${GOOGLE_API_KEY}
-      temperature: ${TEMPERATURE:-0.7} # Default to 0.7 if not set
+      # apiKey: "{{ env.GEMINI_API_KEY }}"  # optional, auto-detected
+      temperature: '{{ env.TEMPERATURE | default(0.7) }}' # Default to 0.7 if not set
 ```
 
 ## Troubleshooting

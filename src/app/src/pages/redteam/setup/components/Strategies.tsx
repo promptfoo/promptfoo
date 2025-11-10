@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
   AGENTIC_STRATEGIES,
@@ -12,6 +14,7 @@ import {
   DEFAULT_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
+  STRATEGIES_REQUIRING_REMOTE,
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
@@ -55,18 +58,22 @@ const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
     'Standard testing without additional attack strategies. Tests prompts as-is to establish baseline behavior.',
 };
 
-const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter((id) => id !== 'default').map(
-  (id) => ({
-    id,
-    name: strategyDisplayNames[id] || id,
-    description: UI_STRATEGY_DESCRIPTIONS[id] || strategyDescriptions[id],
-  }),
-);
+const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter(
+  (id) => id !== 'default' && id !== 'multilingual', // multilingual is deprecated
+).map((id) => ({
+  id,
+  name: strategyDisplayNames[id] || id,
+  description: UI_STRATEGY_DESCRIPTIONS[id] || strategyDescriptions[id],
+}));
 
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const theme = useTheme();
+  const toast = useToast();
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
   const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
@@ -79,6 +86,15 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
   }, [recordEvent]);
+
+  const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
+
+  const isStrategyDisabled = useCallback(
+    (strategyId: string) => {
+      return isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE.includes(strategyId as any);
+    },
+    [isRemoteGenerationDisabled],
+  );
 
   // Categorize strategies by type
   const categorizedStrategies = useMemo(() => {
@@ -192,24 +208,50 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
       // At this point we know it's a StrategyPreset
       const strategyPreset = STRATEGY_PRESETS[presetId];
+      let allStrategyIds: string[];
+
       if (strategyPreset.options?.multiTurn && isMultiTurnEnabled) {
-        const nextStrats = [
+        allStrategyIds = [
           ...strategyPreset.strategies,
           ...strategyPreset.options.multiTurn.strategies,
-        ].map((id: string) => ({ id }));
-        updateConfig('strategies', nextStrats);
+        ];
       } else {
-        updateConfig(
-          'strategies',
-          strategyPreset.strategies.map((id: string) => ({ id })),
+        allStrategyIds = [...strategyPreset.strategies];
+      }
+
+      // Filter out disabled strategies
+      const enabledStrategyIds = allStrategyIds.filter((id) => !isStrategyDisabled(id));
+      const skippedStrategyIds = allStrategyIds.filter((id) => isStrategyDisabled(id));
+
+      // Show toast if any strategies were skipped
+      if (skippedStrategyIds.length > 0) {
+        const skippedNames = skippedStrategyIds
+          .map((id) => (strategyDisplayNames as Record<string, string>)[id] || id)
+          .join(', ');
+        toast.showToast(
+          `Skipped ${skippedStrategyIds.length} disabled ${skippedStrategyIds.length === 1 ? 'strategy' : 'strategies'}: ${skippedNames}`,
+          'warning',
         );
       }
+
+      updateConfig(
+        'strategies',
+        enabledStrategyIds.map((id: string) => ({ id })),
+      );
     },
-    [recordEvent, isMultiTurnEnabled, updateConfig],
+    [recordEvent, isMultiTurnEnabled, updateConfig, isStrategyDisabled, toast],
   );
 
   const handleStrategyToggle = useCallback(
     (strategyId: string) => {
+      if (isStrategyDisabled(strategyId)) {
+        toast.showToast(
+          'This strategy requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
+          'error',
+        );
+        return;
+      }
+
       const isSelected = config.strategies.some((s) => getStrategyId(s) === strategyId);
 
       if (!isSelected) {
@@ -242,7 +284,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         updateConfig('strategies', [...config.strategies, newStrategy]);
       }
     },
-    [config.strategies, recordEvent, updateConfig, isStatefulValue],
+    [config.strategies, recordEvent, updateConfig, isStatefulValue, isStrategyDisabled, toast],
   );
 
   const handleSelectNoneInSection = useCallback(
@@ -270,13 +312,28 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         return;
       }
 
-      const multiTurnStrats = multiTurnStrategies.map((id: string) => ({
-        id,
-        config: { stateful: isStatefulValue },
-      }));
-
       if (checked) {
-        // Add multi-turn strategies
+        // Filter out disabled strategies
+        const enabledMultiTurnIds = multiTurnStrategies.filter((id) => !isStrategyDisabled(id));
+        const skippedMultiTurnIds = multiTurnStrategies.filter((id) => isStrategyDisabled(id));
+
+        // Show toast if any strategies were skipped
+        if (skippedMultiTurnIds.length > 0) {
+          const skippedNames = skippedMultiTurnIds
+            .map((id) => (strategyDisplayNames as Record<string, string>)[id] || id)
+            .join(', ');
+          toast.showToast(
+            `Skipped ${skippedMultiTurnIds.length} disabled ${skippedMultiTurnIds.length === 1 ? 'strategy' : 'strategies'}: ${skippedNames}`,
+            'warning',
+          );
+        }
+
+        // Add enabled multi-turn strategies
+        const multiTurnStrats = enabledMultiTurnIds.map((id: string) => ({
+          id,
+          config: { stateful: isStatefulValue },
+        }));
+
         const newStrats = [
           ...config.strategies,
           ...multiTurnStrats.filter(
@@ -292,7 +349,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         updateConfig('strategies', filtered);
       }
     },
-    [config.strategies, updateConfig, isStatefulValue, selectedPreset],
+    [config.strategies, updateConfig, isStatefulValue, selectedPreset, isStrategyDisabled, toast],
   );
 
   const handleStatefulChange = useCallback(
@@ -405,6 +462,39 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       onNext={onNext}
       onBack={onBack}
     >
+      {/* Warning banner when remote generation is disabled - full width sticky */}
+      {isRemoteGenerationDisabled && (
+        <Alert
+          severity="warning"
+          icon={<WarningAmberIcon />}
+          sx={(theme) => ({
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            margin: -3,
+            marginBottom: 3,
+            padding: theme.spacing(2, 3),
+            borderRadius: 0,
+            boxShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.1)}`,
+            '& .MuiAlert-message': {
+              width: '100%',
+            },
+          })}
+        >
+          <Box>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              Remote Generation Disabled
+            </Typography>
+            <Typography variant="body2">
+              Some strategies require remote generation and are currently unavailable. These
+              strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
+              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+            </Typography>
+          </Box>
+        </Alert>
+      )}
+
       {/* Warning banner when all/most strategies are selected - full width sticky */}
       {hasSelectedMostStrategies && (
         <Alert
@@ -469,6 +559,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
           />
         )}
 
@@ -482,6 +574,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
           />
         )}
 
@@ -495,6 +589,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
           />
         )}
 
@@ -508,6 +604,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
           />
         )}
 

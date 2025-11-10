@@ -28,6 +28,7 @@ import {
   type Assertion,
   type AssertionType,
   type AtomicTestCase,
+  type CallApiContextParams,
   type GradingResult,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -349,10 +350,20 @@ export async function runAssertion({
     });
   }
 
+  // Construct CallApiContextParams for model-graded assertions that need originalProvider
+  const providerCallContext: CallApiContextParams | undefined = provider
+    ? {
+        originalProvider: provider,
+        prompt: { raw: prompt || '', label: '' },
+        vars: test.vars || {},
+      }
+    : undefined;
+
   const assertionParams: AssertionParams = {
     assertion,
     baseType: getAssertionBaseType(assertion),
-    context,
+    providerCallContext,
+    assertionValueContext: context,
     cost,
     inverse: isAssertionInverse(assertion),
     latencyMs,
@@ -375,6 +386,17 @@ export async function runAssertion({
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
     const result = await handler(assertionParams);
+
+    // Store rendered assertion value in metadata if it differs from the original template
+    // This allows the UI to display substituted variable values instead of raw templates
+    if (
+      renderedValue !== undefined &&
+      renderedValue !== assertion.value &&
+      typeof renderedValue === 'string'
+    ) {
+      result.metadata = result.metadata || {};
+      result.metadata.renderedAssertionValue = renderedValue;
+    }
 
     // If weight is 0, treat this as a metric-only assertion that can't fail
     if (assertion.weight === 0) {
@@ -496,6 +518,7 @@ export async function runCompareAssertion(
   test: AtomicTestCase,
   assertion: Assertion,
   outputs: string[],
+  context?: CallApiContextParams,
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
   test = getFinalTest(test, assertion);
@@ -504,6 +527,7 @@ export async function runCompareAssertion(
     outputs,
     test.options,
     test.vars,
+    context,
   );
   return comparisonResults.map((result) => ({
     ...result,

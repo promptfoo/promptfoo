@@ -339,11 +339,8 @@ Remember that promptfoo runs your Python script in a separate process, so some s
 
 ## Finding log files
 
-promptfoo logs errors to `${PROMPTFOO_LOG_DIR}/promptfoo-errors.log` by default.
-`PROMPTFOO_LOG_DIR` defaults to the current working directory, so the log file
-is created next to where you run your command.
+Promptfoo logs errors and verbose logs to `~/.promptfoo/logs` by default.
 
-Set `PROMPTFOO_DISABLE_ERROR_LOG=true` to turn off file logging, or change the
-location by setting `PROMPTFOO_LOG_DIR` to a different directory.
+Change the location by setting `PROMPTFOO_LOG_DIR` to a different directory.
 
-Increase verbosity by running commands with `LOG_LEVEL=debug`.
+For each run an error log and a debug log will be created.
