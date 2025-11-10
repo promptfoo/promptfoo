@@ -55,7 +55,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * Check if the current deployment is configured as a reasoning model
    */
   protected isReasoningModel(): boolean {
-    return !!this.config.isReasoningModel || !!this.config.o1;
+    // Check explicit config flags first
+    if (this.config.isReasoningModel || this.config.o1) {
+      return true;
+    }
+
+    // Auto-detect reasoning models by deployment name
+    return (
+      this.deploymentName.startsWith('o1') ||
+      this.deploymentName.startsWith('o3') ||
+      this.deploymentName.startsWith('o4') ||
+      this.deploymentName.startsWith('gpt-5')
+    );
   }
 
   getOpenAiBody(
