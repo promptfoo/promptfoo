@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Interactive text adventure with AI Dungeon Master
+description: D&D Adventure with AI Dungeon Master
 
 prompts:
   - '{{query}}'
@@ -7,59 +7,99 @@ prompts:
 providers:
   - id: openai:agents:dungeon-master
     config:
-      agent: file://./agents/weather-agent.ts
-      tools: file://./tools/weather-tools.ts
-      maxTurns: 10
+      agent: file://./agents/dungeon-master-agent.ts
+      tools: file://./tools/game-tools.ts
+      maxTurns: 20
       tracing: true
 
 tests:
-  - description: Dragon combat encounter
+  - description: Dragon combat with attack roll
     vars:
-      query: 'I draw my sword and charge at the dragon!'
+      query: 'I draw my longsword and attack the red dragon!'
     assert:
       - type: llm-rubric
-        value: Response includes dice roll for attack and describes combat outcome
+        value: Response includes dice rolls for attack and damage, describes combat outcome dramatically
       - type: javascript
         value: |
-          // Should use roll_dice tool
-          return output.toLowerCase().includes('roll') ||
-                 output.toLowerCase().includes('d20') ||
-                 output.toLowerCase().includes('dice');
+          // Should use roll_dice tool and mention dice
+          return (output.toLowerCase().includes('roll') || output.toLowerCase().includes('d20')) &&
+                 (output.toLowerCase().includes('attack') || output.toLowerCase().includes('hit'));
 
-  - description: Search for hidden treasure
+  - description: Check character stats before battle
     vars:
-      query: 'I search the dusty chest in the corner'
+      query: 'What are my character stats and current HP?'
     assert:
-      - type: llm-rubric
-        value: Response describes what is found with creative detail
+      - type: contains-any
+        value: ['Thorin', 'Fighter', 'level 5']
+      - type: javascript
+        value: |
+          // Should mention HP or hit points
+          return output.toLowerCase().includes('hp') || output.toLowerCase().includes('hit points');
 
-  - description: Check inventory mid-adventure
+  - description: Check inventory and equipment
     vars:
-      query: 'What items do I have?'
+      query: 'What weapons and items do I have with me?'
     assert:
       - type: contains
-        value: Rusty Sword
+        value: Longsword
       - type: contains
-        value: Health Potion
+        value: Potion
       - type: javascript
         value: |
-          // Should use check_inventory tool
-          return output.includes('gold');
+          // Should mention gold
+          return output.includes('gold') || output.includes('gp');
 
-  - description: Enter mysterious dungeon
+  - description: Enter ominous dungeon with scene description
     vars:
-      query: 'I cautiously enter the dark dungeon'
+      query: 'I cautiously enter the ancient crypt, torch held high'
     assert:
       - type: llm-rubric
-        value: Response paints atmospheric scene and presents choices
+        value: Response paints vivid atmospheric scene with sensory details and presents clear choices
       - type: javascript
         value: |
-          // Should use describe_scene tool
-          return output.length > 80;
+          // Should be descriptive (>100 chars) and mention darkness/light
+          return output.length > 100 &&
+                 (output.toLowerCase().includes('dark') ||
+                  output.toLowerCase().includes('torch') ||
+                  output.toLowerCase().includes('shadows'));
 
-  - description: Attempt ridiculous action
+  - description: Saving throw during trap
     vars:
-      query: 'I try to befriend the treasure chest by singing to it'
+      query: 'I step on a pressure plate and hear a click. What happens?'
     assert:
       - type: llm-rubric
-        value: DM responds with humor while keeping adventure engaging
+        value: Response triggers trap, asks for saving throw, rolls dice, and describes outcome
+      - type: javascript
+        value: |
+          // Should mention saving throw or roll
+          return output.toLowerCase().includes('save') || output.toLowerCase().includes('saving throw');
+
+  - description: Critical hit celebration
+    vars:
+      query: 'I attack the goblin with my longsword!'
+    assert:
+      - type: llm-rubric
+        value: Response includes attack roll mechanics and outcome description
+
+  - description: Ridiculous player action
+    vars:
+      query: 'I attempt to seduce the ancient dragon using interpretive dance'
+    assert:
+      - type: llm-rubric
+        value: DM responds with humor and wit while keeping the game engaging and asking for appropriate roll
+
+  - description: Request for short rest
+    vars:
+      query: 'I want to take a short rest to recover'
+    assert:
+      - type: llm-rubric
+        value: Response explains short rest mechanics and asks what the character does during rest
+
+  - description: Mysterious magic item examination
+    vars:
+      query: 'I examine the Mysterious Amulet in my inventory more closely'
+    assert:
+      - type: contains-any
+        value: ['undead', 'glow', 'amulet']
+      - type: llm-rubric
+        value: Response provides intriguing details about the magic item

@@ -868,6 +868,7 @@ const App = () => {
             strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
             failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
             passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
+            plugins={evalData.config.redteam.plugins || []}
           />
           <RiskCategories
             categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}

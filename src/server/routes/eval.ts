@@ -584,7 +584,17 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
   try {
     await deleteEval(id);
     res.json({ message: 'Eval deleted successfully' });
-  } catch {
+  } catch (error) {
+    logger.error('[DELETE /eval/:id] Failed to delete eval', {
+      evalId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    if (error instanceof Error && error.message === `Eval with ID ${id} not found`) {
+      res.status(404).json({ error: 'Evaluation not found' });
+      return;
+    }
+
     res.status(500).json({ error: 'Failed to delete eval' });
   }
 });
@@ -604,5 +614,52 @@ evalRouter.delete('/', (req: Request, res: Response) => {
     res.status(204).send();
   } catch {
     res.status(500).json({ error: 'Failed to delete evals' });
+  }
+});
+
+/**
+ * Copy an eval with all its results and relationships.
+ */
+evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = ApiSchemas.Eval.Copy.Params.parse(req.params);
+    const { description } = ApiSchemas.Eval.Copy.Request.parse(req.body);
+
+    const sourceEval = await Eval.findById(id);
+    if (!sourceEval) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    // Get distinct test count for response and pass to copy to avoid duplicate query
+    const distinctTestCount = await sourceEval.getResultsCount();
+
+    // Create copy
+    const newEval = await sourceEval.copy(description, distinctTestCount);
+
+    logger.info('Eval copied via API', {
+      sourceEvalId: id,
+      targetEvalId: newEval.id,
+      distinctTestCount,
+    });
+
+    const response = ApiSchemas.Eval.Copy.Response.parse({
+      id: newEval.id,
+      distinctTestCount,
+    });
+
+    res.status(201).json(response);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const validationError = fromZodError(error);
+      res.status(400).json({ error: validationError.message });
+      return;
+    }
+
+    logger.error('Failed to copy eval', {
+      error,
+      evalId: req.params.id,
+    });
+    res.status(500).json({ error: 'Failed to copy evaluation' });
   }
 });
