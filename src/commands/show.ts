@@ -1,18 +1,17 @@
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
 import telemetry from '../telemetry';
-import { printBorder, setupEnv } from '../util';
-import { getEvalFromId, getPromptFromHash, getDatasetFromHash } from '../util/database';
+import { printBorder, setupEnv } from '../util/index';
+import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../util/database';
 import invariant from '../util/invariant';
+import type { Command } from 'commander';
 
 export async function handlePrompt(id: string) {
   telemetry.record('command_used', {
     name: 'show prompt',
   });
-  await telemetry.send();
 
   const prompt = await getPromptFromHash(id);
   if (!prompt) {
@@ -42,7 +41,7 @@ export async function handlePrompt(id: string) {
                 (evl.metrics.testPassCount +
                   evl.metrics.testFailCount +
                   evl.metrics.testErrorCount)) *
-              100
+                100
             ).toFixed(2)}%`
           : '-',
       'Pass count': evl.metrics?.testPassCount || '-',
@@ -68,7 +67,7 @@ export async function handleEval(id: string) {
   telemetry.record('command_used', {
     name: 'show eval',
   });
-  await telemetry.send();
+
   const eval_ = await Eval.findById(id);
   if (!eval_) {
     logger.error(`No evaluation found with ID ${id}`);
@@ -101,7 +100,6 @@ export async function handleDataset(id: string) {
   telemetry.record('command_used', {
     name: 'show dataset',
   });
-  await telemetry.send();
 
   const dataset = await getDatasetFromHash(id);
   if (!dataset) {
@@ -134,7 +132,7 @@ export async function handleDataset(id: string) {
                 (prompt.prompt.metrics.testPassCount +
                   prompt.prompt.metrics.testFailCount +
                   prompt.prompt.metrics.testErrorCount)) *
-              100
+                100
             ).toFixed(2)}%`
           : '-',
       'Pass count': prompt.prompt.metrics?.testPassCount || '-',
@@ -166,8 +164,6 @@ export async function showCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'show',
       });
-
-      await telemetry.send();
 
       if (!id) {
         const latestEval = await Eval.latest();

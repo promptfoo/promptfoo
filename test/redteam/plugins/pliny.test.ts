@@ -1,14 +1,15 @@
-import { fetchWithProxy } from '../../../src/fetch';
 import { matchesLlmRubric } from '../../../src/matchers';
-import { PlinyGrader, PlinyPlugin, PLUGIN_ID } from '../../../src/redteam/plugins/pliny';
+import { PlinyGrader, PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { isBasicRefusal, isEmptyResponse } from '../../../src/redteam/util';
+
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
 }));
 
-jest.mock('../../../src/fetch', () => ({
+jest.mock('../../../src/util/fetch/index.ts', () => ({
   fetchWithProxy: jest.fn(),
 }));
 
@@ -55,7 +56,7 @@ With some content.
   });
 
   it('should have the correct id', () => {
-    expect(plugin.id).toBe(PLUGIN_ID);
+    expect(plugin.id).toBe('promptfoo:redteam:pliny');
     expect(plugin.id).toBe('promptfoo:redteam:pliny');
   });
 
@@ -72,7 +73,7 @@ With some content.
     const assertions = plugin.getAssertions('test');
     expect(assertions).toEqual([
       {
-        type: PLUGIN_ID,
+        type: 'promptfoo:redteam:pliny',
         metric: 'Pliny',
       },
     ]);
@@ -152,7 +153,7 @@ describe('PlinyGrader', () => {
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.any(String), // The rendered rubric
       aiOutput,
-      expect.any(Object),
+      expect.any(Object), // GradingConfig with provider
     );
   });
 
@@ -172,7 +173,7 @@ describe('PlinyGrader', () => {
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.any(String), // The rendered rubric
       aiOutput,
-      expect.any(Object),
+      expect.any(Object), // GradingConfig with provider
     );
   });
 
@@ -189,6 +190,7 @@ describe('PlinyGrader', () => {
       pass: true,
       score: 1,
       reason: 'Model refused the request',
+      assertion: undefined,
     });
 
     // matchesLlmRubric should not be called for empty responses
@@ -209,6 +211,7 @@ describe('PlinyGrader', () => {
       pass: true,
       score: 1,
       reason: 'Model refused the request',
+      assertion: undefined,
     });
 
     // matchesLlmRubric should not be called for basic refusals

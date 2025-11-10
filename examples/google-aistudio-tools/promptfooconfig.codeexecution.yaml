@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Code execution with Google Gemini models
+
+prompts:
+  - '{{query}}'
+
+providers:
+  - id: google:gemini-2.5-flash-preview-05-20
+    config:
+      temperature: 0.2
+      tools:
+        - codeExecution: {}
+
+tests:
+  - vars:
+      query: |
+        "Draw an ASCII Sierpiński triangle of depth 4, then report how many * characters appear in the drawing."
+    assert:
+      - type: contains
+        value: 81 # A Sierpiński triangle of depth 4 has 3^4 = 81 asterisks

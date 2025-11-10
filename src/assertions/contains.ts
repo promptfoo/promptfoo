@@ -1,5 +1,6 @@
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
+
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleContains = ({
   assertion,

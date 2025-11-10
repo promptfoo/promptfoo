@@ -5,6 +5,7 @@ image: /img/blog/100k-users-milestone.jpg
 keywords: [promptfoo, AI security, red teaming, LLM evaluation, prompt engineering, AI agents]
 date: 2025-06-10
 authors: [michael]
+tags: [company-update]
 ---
 
 # Celebrating 100,000 Users: Promptfoo's Journey and the Shift to Red Teaming

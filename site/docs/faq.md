@@ -1,5 +1,6 @@
 ---
 sidebar_label: FAQ
+description: Evaluate LLM outputs, run red team tests, and automate AI security checks with Promptfoo's open-source framework. Configure assertions and metrics for 50+ providers.
 ---
 
 # Frequently asked questions
@@ -107,6 +108,20 @@ Remember that like all environment variables, these settings are specific to you
 ### How does Promptfoo integrate with existing development workflows?
 
 Promptfoo can be integrated into CI/CD pipelines via [GitHub Action](https://github.com/promptfoo/promptfoo-action), used with testing frameworks like Jest and Vitest, and incorporated into various stages of the development process.
+
+### How can I use Promptfoo in a completely offline environment?
+
+Set the following environment variables before running the CLI to disable all outbound network requests:
+
+```bash
+export PROMPTFOO_DISABLE_TELEMETRY=1
+export PROMPTFOO_DISABLE_UPDATE=1
+export PROMPTFOO_DISABLE_REMOTE_GENERATION=true
+export PROMPTFOO_DISABLE_SHARING=1
+export PROMPTFOO_SELF_HOSTED=1
+```
+
+Only configure local or self-hosted LLM providers (e.g., Ollama) so the CLI does not attempt to reach external APIs.
 
 ### Do you publish an LLMs.txt?
 

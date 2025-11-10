@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test Databricks Foundation Model APIs
+
+prompts:
+  - 'You are a helpful AI assistant. Answer the following: {{question}}'
+
+providers:
+  # Databricks pay-per-token endpoint for Llama 3.3
+  - id: databricks:databricks-meta-llama-3-3-70b-instruct
+    config:
+      isPayPerToken: true
+      temperature: 0.7
+      max_tokens: 500
+      # Replace with your workspace URL
+      workspaceUrl: https://your-workspace.cloud.databricks.com
+      # Track usage for cost attribution
+      usageContext:
+        project: 'promptfoo-example'
+        team: 'engineering'
+
+tests:
+  - description: 'Test with a programming joke'
+    vars:
+      question: 'Why do programmers prefer dark mode?'
+    assert:
+      - type: contains-any
+        value: ['light', 'eyes', 'bright', 'see', 'bugs']
+      - type: llm-rubric
+        value: 'Is this a funny response to a programming joke?'
+
+  - description: 'Test creative writing'
+    vars:
+      question: 'Write a haiku about debugging code'
+    assert:
+      - type: javascript
+        value: |
+          // Check if it's roughly haiku format (3 lines)
+          const lines = output.split('\n').filter(l => l.trim());
+          return lines.length >= 3 ? 'pass' : 'fail';
+      - type: llm-rubric
+        value: 'Is this a valid haiku about debugging?'
+
+  - description: 'Test knowledge about Databricks'
+    vars:
+      question: 'What is a Databricks Lakehouse in one sentence?'
+    assert:
+      - type: contains-any
+        value: ['unified', 'data', 'analytics', 'warehouse', 'lake']
+      - type: max-length
+        value: 200

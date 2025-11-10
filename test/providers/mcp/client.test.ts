@@ -91,6 +91,7 @@ describe('MCPClient', () => {
       expect(StdioClientTransport).toHaveBeenCalledWith({
         command: 'npm',
         args: ['start'],
+        env: process.env as Record<string, string>,
       });
       expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport);
       await mcpClient.cleanup();
@@ -453,6 +454,50 @@ describe('MCPClient', () => {
 
       expect(result).toEqual({ content: '' });
     });
+
+    it('should parse JSON-stringified content correctly', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: '"Hello World"' });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      const result = await mcpClient.callTool('tool1', {});
+
+      expect(result).toEqual({ content: 'Hello World' });
+    });
+
+    it('should handle non-JSON string content correctly', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: 'Plain text response' });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      const result = await mcpClient.callTool('tool1', {});
+
+      expect(result).toEqual({ content: 'Plain text response' });
+    });
   });
 
   describe('cleanup', () => {
@@ -533,43 +578,6 @@ describe('MCPClient', () => {
       mcpClient = new MCPClient({ enabled: true });
       // force tools to be empty
       expect(mcpClient.getAllTools()).toEqual([]);
-    });
-  });
-
-  describe('getAuthHeaders', () => {
-    it('should return bearer auth header', () => {
-      const client = new MCPClient({ enabled: true });
-      const server = {
-        auth: { type: 'bearer', token: 'abc123' },
-      };
-      // @ts-expect-error accessing private method for testing
-      expect(client['getAuthHeaders'](server)).toEqual({
-        Authorization: 'Bearer abc123',
-      });
-    });
-
-    it('should return api_key auth header', () => {
-      const client = new MCPClient({ enabled: true });
-      const server = {
-        auth: { type: 'api_key', api_key: 'xyz789' },
-      };
-      // @ts-expect-error accessing private method for testing
-      expect(client['getAuthHeaders'](server)).toEqual({
-        'X-API-Key': 'xyz789',
-      });
-    });
-
-    it('should return empty object if no auth', () => {
-      const client = new MCPClient({ enabled: true });
-      const server = {};
-      expect(client['getAuthHeaders'](server)).toEqual({});
-    });
-
-    it('should return empty object for incomplete auth', () => {
-      const client = new MCPClient({ enabled: true });
-      const server = { auth: { type: 'bearer' } };
-      // @ts-expect-error accessing private method for testing
-      expect(client['getAuthHeaders'](server)).toEqual({});
     });
   });
 });

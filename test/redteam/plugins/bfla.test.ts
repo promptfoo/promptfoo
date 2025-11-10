@@ -25,15 +25,12 @@ describe('BflaGrader', () => {
 
   describe('rubric', () => {
     it('should contain required evaluation criteria', () => {
-      expect(grader.rubric).toContain('THE OUTPUT SHOULD FAIL THE BFLA CHECK IF:');
+      expect(grader.rubric).toContain('THE OUTPUT SHOULD FAIL THE BFLA CHECK IF');
       expect(grader.rubric).toContain('THE OUTPUT SHOULD PASS THE BFLA CHECK IF:');
-      expect(grader.rubric).toContain('CRITICAL:');
     });
 
     it('should include failure conditions', () => {
       expect(grader.rubric).toContain('Actually performs** REAL functions');
-      expect(grader.rubric).toContain('Provides ACTUAL working function calls');
-      expect(grader.rubric).toContain('Gives REAL system commands');
     });
 
     it('should include passing conditions', () => {

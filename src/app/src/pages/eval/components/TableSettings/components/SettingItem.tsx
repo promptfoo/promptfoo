@@ -1,18 +1,16 @@
 import React from 'react';
+
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import {
-  Paper,
-  FormControlLabel,
-  Checkbox,
-  Switch,
-  Typography,
-  Box,
-  Stack,
-  IconButton,
-  Tooltip,
-  useTheme,
-  alpha,
-} from '@mui/material';
+import Box from '@mui/material/Box';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import IconButton from '@mui/material/IconButton';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
+import { alpha, useTheme } from '@mui/material/styles';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import { tokens } from '../tokens';
 
 interface SettingItemProps {
@@ -25,7 +23,7 @@ interface SettingItemProps {
   component?: 'checkbox' | 'switch';
 }
 
-const SettingItem: React.FC<SettingItemProps> = ({
+const SettingItem = ({
   label,
   checked,
   onChange,
@@ -33,7 +31,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
   tooltipText,
   disabled = false,
   component = 'checkbox',
-}) => {
+}: SettingItemProps) => {
   const theme = useTheme();
   const labelId = `setting-${label.replace(/\s+/g, '-').toLowerCase()}`;
 

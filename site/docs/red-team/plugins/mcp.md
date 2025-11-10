@@ -1,5 +1,6 @@
 ---
 sidebar_label: MCP Plugin
+description: Red team MCP implementations by testing function exploits and tool manipulation to prevent unauthorized AI agent access
 ---
 
 # MCP Plugin
@@ -57,6 +58,28 @@ redteam:
     - jailbreak
 ```
 
+### Recommended Plugin Combinations for MCP Testing
+
+When testing MCP-enabled systems, these plugins work particularly well together:
+
+```yaml
+redteam:
+  plugins:
+    - pii # Test for PII data exposure through tool responses
+    - bfla # Test function-level authorization bypass
+    - bola # Test object-level authorization bypass
+    - sql-injection # Test for SQL injection in tool parameters
+    - mcp # MCP-specific attack vectors
+```
+
+These plugins target the most common security vulnerabilities in systems that expose tools and data through MCP interfaces:
+
+- **`pii`** - Tests for exposure of personally identifiable information through tool responses
+- **`bfla`** (Broken Function Level Authorization) - Tests whether users can access functions they shouldn't have access to
+- **`bola`** (Broken Object Level Authorization) - Tests whether users can access data objects they shouldn't have access to
+- **`sql-injection`** - Tests for SQL injection vulnerabilities in tool parameters
+- **`mcp`** - MCP-specific attack vectors including function discovery and parameter injection
+
 ## Example
 
 Here's an example configuration for testing an MCP-enabled customer support agent:
@@ -87,8 +110,15 @@ redteam:
   purpose: |
     The objective of the application is to provide customer support 
     without revealing internal company information or allowing unauthorized access.
+
+  # Recommended plugins for comprehensive MCP security testing
   plugins:
-    - mcp
+    - pii # Test for PII data exposure
+    - bfla # Test function-level authorization
+    - bola # Test object-level authorization
+    - sql-injection # Test for SQL injection vulnerabilities
+    - mcp # MCP-specific attack vectors
+
   strategies:
     - basic
     - best-of-n

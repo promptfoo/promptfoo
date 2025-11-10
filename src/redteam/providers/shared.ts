@@ -1,6 +1,10 @@
+import { randomUUID } from 'crypto';
+
 import cliState from '../../cliState';
+import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
   type ApiProvider,
   type CallApiContextParams,
@@ -12,8 +16,12 @@ import {
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types';
+import type { TraceContextData } from '../../tracing/traceContext';
+import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { type TransformContext, TransformInputType, transform } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 async function loadRedteamProvider({
@@ -31,7 +39,7 @@ async function loadRedteamProvider({
     logger.debug(`Using redteam provider: ${redteamProvider}`);
     ret = redteamProvider;
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
-    logger.debug(`Loading redteam provider: ${JSON.stringify(redteamProvider)}`);
+    logger.debug('Loading redteam provider', { provider: redteamProvider });
     const loadApiProvidersModule = await import('../../providers');
     // Async import to avoid circular dependency
     ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
@@ -51,15 +59,31 @@ async function loadRedteamProvider({
 class RedteamProviderManager {
   private provider: ApiProvider | undefined;
   private jsonOnlyProvider: ApiProvider | undefined;
+  private multilingualProvider: ApiProvider | undefined;
+  private gradingProvider: ApiProvider | undefined;
+  private gradingJsonOnlyProvider: ApiProvider | undefined;
 
   clearProvider() {
     this.provider = undefined;
     this.jsonOnlyProvider = undefined;
+    this.multilingualProvider = undefined;
+    this.gradingProvider = undefined;
+    this.gradingJsonOnlyProvider = undefined;
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {
     this.provider = await loadRedteamProvider({ provider });
     this.jsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+  }
+
+  async setMultilingualProvider(provider: RedteamFileConfig['provider']) {
+    // For multilingual, prefer a provider configured for structured JSON output
+    this.multilingualProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+  }
+
+  async setGradingProvider(provider: RedteamFileConfig['provider']) {
+    this.gradingProvider = await loadRedteamProvider({ provider });
+    this.gradingJsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
   }
 
   async getProvider({
@@ -76,16 +100,67 @@ class RedteamProviderManager {
       return jsonOnly ? this.jsonOnlyProvider : this.provider;
     }
 
-    logger.debug(
-      `[RedteamProviderManager] Loading redteam provider: ${JSON.stringify({
-        providedConfig: typeof provider == 'string' ? provider : (provider?.id ?? 'none'),
-        jsonOnly,
-        preferSmallModel,
-      })}`,
-    );
+    logger.debug('[RedteamProviderManager] Loading redteam provider', {
+      providedConfig: typeof provider == 'string' ? provider : (provider?.id ?? 'none'),
+      jsonOnly,
+      preferSmallModel,
+    });
     const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
     logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
     return redteamProvider;
+  }
+
+  async getGradingProvider({
+    provider,
+    jsonOnly = false,
+  }: {
+    provider?: RedteamFileConfig['provider'];
+    jsonOnly?: boolean;
+  } = {}): Promise<ApiProvider> {
+    // 1) Explicit provider argument
+    if (provider) {
+      return loadRedteamProvider({ provider, jsonOnly });
+    }
+
+    // 2) Cached grading provider
+    if (this.gradingProvider && this.gradingJsonOnlyProvider) {
+      logger.debug(
+        `[RedteamProviderManager] Using cached grading provider: ${this.gradingProvider.id()}`,
+      );
+      return jsonOnly ? this.gradingJsonOnlyProvider : this.gradingProvider;
+    }
+
+    // 3) Try defaultTest config chain (grading-first)
+    const cfg =
+      (typeof cliState.config?.defaultTest === 'object' &&
+        (cliState.config?.defaultTest as any)?.provider) ||
+      (typeof cliState.config?.defaultTest === 'object' &&
+        (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
+      (typeof cliState.config?.defaultTest === 'object' &&
+        (cliState.config?.defaultTest as any)?.options?.provider) ||
+      undefined;
+
+    if (cfg) {
+      const loaded = await loadRedteamProvider({ provider: cfg, jsonOnly });
+      logger.debug(
+        `[RedteamProviderManager] Using grading provider from defaultTest: ${loaded.id()}`,
+      );
+      return loaded;
+    }
+
+    // 4) Fallback to redteam provider
+    return this.getProvider({ jsonOnly });
+  }
+
+  async getMultilingualProvider(): Promise<ApiProvider | undefined> {
+    if (this.multilingualProvider) {
+      logger.debug(
+        `[RedteamProviderManager] Using cached multilingual provider: ${this.multilingualProvider.id()}`,
+      );
+      return this.multilingualProvider;
+    }
+    logger.debug('[RedteamProviderManager] No multilingual provider configured');
+    return undefined;
   }
 }
 
@@ -97,6 +172,8 @@ export type TargetResponse = {
   sessionId?: string;
   tokenUsage?: TokenUsage;
   guardrails?: GuardrailResponse;
+  traceContext?: TraceContextData | null;
+  traceSummary?: string;
 };
 
 /**
@@ -122,7 +199,26 @@ export async function getTargetResponse(
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);
     await sleep(targetProvider.delay);
   }
-  if (targetRespRaw?.output) {
+  const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
+  const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');
+  const hasError = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error');
+
+  if (hasError) {
+    const output = hasOutput
+      ? ((typeof targetRespRaw.output === 'string'
+          ? targetRespRaw.output
+          : safeJsonStringify(targetRespRaw.output)) as string)
+      : '';
+    return {
+      output,
+      error: targetRespRaw.error,
+      sessionId: targetRespRaw.sessionId,
+      tokenUsage,
+      guardrails: targetRespRaw.guardrails,
+    };
+  }
+
+  if (hasOutput) {
     const output = (
       typeof targetRespRaw.output === 'string'
         ? targetRespRaw.output
@@ -131,7 +227,7 @@ export async function getTargetResponse(
     return {
       output,
       sessionId: targetRespRaw.sessionId,
-      tokenUsage: targetRespRaw.tokenUsage || { numRequests: 1 },
+      tokenUsage,
       guardrails: targetRespRaw.guardrails,
     };
   }
@@ -141,23 +237,44 @@ export async function getTargetResponse(
       output: '',
       error: targetRespRaw.error,
       sessionId: targetRespRaw.sessionId,
-      tokenUsage: { numRequests: 1 },
+      tokenUsage,
       guardrails: targetRespRaw.guardrails,
     };
   }
 
   throw new Error(
     `
-    Target returned malformed response: expected either \`output\` or \`error\` to be set.
-    
+    Target returned malformed response: expected either \`output\` or \`error\` property to be set.
+
     Instead got: ${safeJsonStringify(targetRespRaw)}
+
+    Note: Empty strings are valid output values.
     `,
   );
 }
 
 export interface Message {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'developer';
   content: string;
+}
+
+/**
+ * Validates if a parsed JSON object is a valid chat message array
+ */
+export function isValidChatMessageArray(parsed: unknown): parsed is Message[] {
+  return (
+    Array.isArray(parsed) &&
+    parsed.every(
+      (msg) =>
+        msg &&
+        typeof msg === 'object' &&
+        'role' in msg &&
+        'content' in msg &&
+        typeof msg.role === 'string' &&
+        typeof msg.content === 'string' &&
+        ['user', 'assistant', 'system', 'developer'].includes(msg.role),
+    )
+  );
 }
 
 export const getLastMessageContent = (
@@ -205,6 +322,73 @@ export function checkPenalizedPhrases(output: string): boolean {
 }
 
 /**
+ * Creates an iteration-specific context with transformed variables for redteam iterations.
+ * This utility function handles the common pattern of re-running transformVars for each
+ * iteration to generate fresh values (e.g., new sessionId).
+ *
+ * @param originalVars - The original variables before transformation
+ * @param transformVarsConfig - The transform configuration from the test
+ * @param context - The original context that may be updated
+ * @param iterationNumber - The current iteration number (for logging)
+ * @param loggerTag - The logger tag to use for debug messages (e.g., '[Iterative]', '[IterativeTree]')
+ * @returns An object containing the transformed vars and iteration-specific context
+ */
+export async function createIterationContext({
+  originalVars,
+  transformVarsConfig,
+  context,
+  iterationNumber,
+  loggerTag = '[Redteam]',
+}: {
+  originalVars: Record<string, string | object>;
+  transformVarsConfig?: string;
+  context?: CallApiContextParams;
+  iterationNumber: number;
+  loggerTag?: string;
+}): Promise<CallApiContextParams | undefined> {
+  let iterationVars = { ...originalVars };
+
+  if (transformVarsConfig) {
+    logger.debug(`${loggerTag} Re-running transformVars for iteration ${iterationNumber}`);
+    const transformContext: TransformContext = {
+      prompt: context?.prompt || {},
+      uuid: randomUUID(), // Fresh UUID for each iteration
+    };
+
+    try {
+      const transformedVars = await transform(
+        transformVarsConfig,
+        originalVars,
+        transformContext,
+        true,
+        TransformInputType.VARS,
+      );
+      invariant(
+        typeof transformedVars === 'object',
+        'Transform function did not return a valid object',
+      );
+      iterationVars = { ...originalVars, ...transformedVars };
+      logger.debug(`${loggerTag} Transformed vars for iteration ${iterationNumber}`, {
+        transformedVars,
+      });
+    } catch (error) {
+      logger.error(`${loggerTag} Error transforming vars`, { error });
+      // Continue with original vars if transform fails
+    }
+  }
+
+  // Create iteration-specific context with updated vars
+  const iterationContext = context
+    ? {
+        ...context,
+        vars: iterationVars,
+      }
+    : undefined;
+
+  return iterationContext;
+}
+
+/**
  * Base metadata interface shared by all redteam providers
  */
 export interface BaseRedteamMetadata {
@@ -223,4 +407,104 @@ export interface BaseRedteamResponse {
   tokenUsage: TokenUsage;
   guardrails?: GuardrailResponse;
   additionalResults?: EvaluateResult[];
+}
+
+/**
+ * Shared unblocking functionality used by redteam providers to handle blocking questions
+ */
+export async function tryUnblocking({
+  messages,
+  lastResponse,
+  goal,
+  purpose,
+}: {
+  messages: Message[];
+  lastResponse: string;
+  goal: string | undefined;
+  purpose?: string;
+}): Promise<{
+  success: boolean;
+  unblockingPrompt?: string;
+}> {
+  try {
+    // Check if the server supports unblocking feature
+    const { checkServerFeatureSupport } = await import('../../util/server');
+    const supportsUnblocking = await checkServerFeatureSupport(
+      'blocking-question-analysis',
+      '2025-06-16T14:49:11-07:00',
+    );
+
+    // Unblocking is disabled by default, enable via environment variable
+    if (!getEnvBool('PROMPTFOO_ENABLE_UNBLOCKING')) {
+      logger.debug(
+        '[Unblocking] Disabled by default (set PROMPTFOO_ENABLE_UNBLOCKING=true to enable)',
+      );
+      // Return a response that will not increment numRequests
+      return {
+        success: false,
+      };
+    }
+
+    if (!supportsUnblocking) {
+      logger.debug('[Unblocking] Server does not support unblocking, skipping gracefully');
+      return {
+        success: false,
+      };
+    }
+
+    logger.debug('[Unblocking] Attempting to unblock with blocking-question-analysis task');
+
+    // Create unblocking provider
+    const unblockingProvider = new PromptfooChatCompletionProvider({
+      task: 'blocking-question-analysis',
+      jsonOnly: true,
+      preferSmallModel: false,
+    });
+
+    const unblockingRequest = {
+      conversationObjective: goal || '',
+      recentHistory: messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+      targetResponse: lastResponse,
+      purpose: purpose || '',
+    };
+
+    const response = await unblockingProvider.callApi(JSON.stringify(unblockingRequest), {
+      prompt: {
+        raw: JSON.stringify(unblockingRequest),
+        label: 'unblocking',
+      },
+      vars: {},
+    });
+
+    TokenUsageTracker.getInstance().trackUsage(unblockingProvider.id(), response.tokenUsage);
+
+    if (response.error) {
+      logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);
+      return { success: false };
+    }
+
+    const parsed = response.output as any;
+    logger.debug('[Unblocking] Unblocking analysis', { analysis: parsed });
+
+    if (parsed.isBlocking && parsed.unblockingAnswer) {
+      logger.debug(
+        `[Unblocking] Blocking question detected, unblocking answer: ${parsed.unblockingAnswer}`,
+      );
+      return {
+        success: true,
+        unblockingPrompt: parsed.unblockingAnswer,
+      };
+    } else {
+      logger.debug('[Unblocking] No blocking question detected');
+      return {
+        success: false,
+      };
+    }
+  } catch (error) {
+    logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
+    return { success: false };
+  }
 }

@@ -1,4 +1,4 @@
-import type { UnifiedConfig } from './types';
+import type { UnifiedConfig } from './types/index';
 
 interface CliState {
   basePath?: string;
@@ -9,6 +9,15 @@ interface CliState {
 
   // Indicates we're running in web UI mode
   webUI?: boolean;
+
+  // Indicates an evaluation is running in resume mode
+  resume?: boolean;
+
+  // debug log file
+  debugLogFile?: string;
+
+  // error log file
+  errorLogFile?: string;
 }
 
 const state: CliState = {};

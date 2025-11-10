@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: LiteLLM provider example - unified interface for multiple LLMs
+
+# This example demonstrates the LiteLLM provider, which provides a unified
+# interface to 400+ LLMs through a proxy server.
+#
+# REQUIREMENTS:
+# 1. LiteLLM proxy server must be running (use ./start-proxy.sh)
+# 2. Set API keys: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_AI_API_KEY
+
+prompts:
+  - 'Translate this to {{language}}: {{text}}'
+  - 'Write a haiku about {{topic}}'
+
+providers:
+  # All providers use the litellm: prefix and connect through the proxy
+  - litellm:gpt-4.1
+  - litellm:claude-sonnet-4-20250514
+  - litellm:gemini-2.5-pro
+
+# Configure embedding provider for similarity assertions
+# This also goes through the LiteLLM proxy
+defaultTest:
+  options:
+    provider:
+      embedding: litellm:embedding:text-embedding-3-large
+
+tests:
+  - vars:
+      language: French
+      text: 'Hello, world!'
+    assert:
+      - type: contains
+        value: 'Bonjour'
+      - type: similar
+        value: 'Bonjour, le monde!'
+        threshold: 0.8
+
+  - vars:
+      topic: 'artificial intelligence'
+    assert:
+      - type: javascript
+        value: |
+          // Check if output is a haiku (3 lines)
+          const lines = output.trim().split('\n').filter(line => line.trim());
+          return lines.length === 3;

@@ -1,7 +1,7 @@
-import { render, fireEvent, waitFor } from '@testing-library/react';
 import { screen } from '@testing-library/dom';
+import { render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DownloadMenu from './DownloadMenu';
 import { useTableStore as useResultsViewStore } from './store';
 
@@ -26,14 +26,41 @@ vi.mock('../../../hooks/useToast', () => ({
   }),
 }));
 
-vi.mock('js-yaml', () => ({
-  default: {
-    dump: vi.fn().mockReturnValue('mocked yaml'),
-  },
+// Mock the new download hooks
+const mockDownloadCsvFn = vi.fn();
+const mockDownloadJsonFn = vi.fn();
+let csvHookOptions:
+  | { onSuccess?: (fileName: string) => void; onError?: (error: Error) => void }
+  | undefined;
+let jsonHookOptions:
+  | { onSuccess?: (fileName: string) => void; onError?: (error: Error) => void }
+  | undefined;
+let csvIsLoading = false;
+let jsonIsLoading = false;
+
+const { downloadBlobMock, useDownloadEvalMock } = vi.hoisted(() => ({
+  downloadBlobMock: vi.fn(),
+  useDownloadEvalMock: vi.fn(),
 }));
 
-vi.mock('csv-stringify/browser/esm/sync', () => ({
-  stringify: vi.fn().mockReturnValue('mocked csv'),
+vi.mock('../../../hooks/useDownloadEval', () => ({
+  downloadBlob: downloadBlobMock,
+  DownloadFormat: {
+    CSV: 'csv',
+    JSON: 'json',
+  },
+  useDownloadEval: useDownloadEvalMock,
+}));
+
+const { yamlDumpMock } = vi.hoisted(() => ({
+  yamlDumpMock: vi.fn().mockReturnValue('mocked yaml'),
+}));
+
+vi.mock('js-yaml', () => ({
+  default: {
+    dump: yamlDumpMock,
+  },
+  dump: yamlDumpMock,
 }));
 
 global.URL.createObjectURL = vi.fn(() => 'mocked-blob-url');
@@ -52,7 +79,7 @@ describe('DownloadMenu', () => {
     },
     body: [
       {
-        test: { vars: { testVar: 'value' } },
+        test: { vars: { testVar: 'value' }, description: 'Test case with description' },
         vars: ['value1', 'value2'],
         outputs: [{ pass: false, text: 'failed output' }],
       },
@@ -74,6 +101,53 @@ describe('DownloadMenu', () => {
   const mockEvalId = 'test-eval-id';
 
   beforeEach(() => {
+    csvIsLoading = false;
+    jsonIsLoading = false;
+    csvHookOptions = undefined;
+    jsonHookOptions = undefined;
+
+    yamlDumpMock.mockClear();
+    yamlDumpMock.mockReturnValue('mocked yaml');
+
+    downloadBlobMock.mockReset();
+    downloadBlobMock.mockImplementation((blob: Blob, fileName: string) => {
+      const url = global.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      global.URL.revokeObjectURL(url);
+    });
+
+    mockDownloadCsvFn.mockReset();
+    mockDownloadCsvFn.mockImplementation(async () => {
+      csvHookOptions?.onSuccess?.(`${mockEvalId}.csv`);
+      return `${mockEvalId}.csv`;
+    });
+
+    mockDownloadJsonFn.mockReset();
+    mockDownloadJsonFn.mockImplementation(async () => {
+      jsonHookOptions?.onSuccess?.(`${mockEvalId}.json`);
+      return `${mockEvalId}.json`;
+    });
+
+    useDownloadEvalMock.mockReset();
+    useDownloadEvalMock.mockImplementation(
+      (
+        format: string,
+        options?: { onSuccess?: (fileName: string) => void; onError?: (error: Error) => void },
+      ) => {
+        if (format === 'csv') {
+          csvHookOptions = options;
+          return { download: mockDownloadCsvFn, isLoading: csvIsLoading };
+        }
+        jsonHookOptions = options;
+        return { download: mockDownloadJsonFn, isLoading: jsonIsLoading };
+      },
+    );
+
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       table: mockTable,
       config: mockConfig,
@@ -98,18 +172,6 @@ describe('DownloadMenu', () => {
     expect(screen.getByText('Download YAML Config')).toBeInTheDocument();
   });
 
-  it('closes the dialog when clicking outside', async () => {
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    expect(screen.getByText('Download YAML Config')).toBeInTheDocument();
-
-    fireEvent.keyDown(document.body, { key: 'Escape', code: 'Escape' });
-
-    await waitFor(() => {
-      expect(screen.queryByText('Download YAML Config')).not.toBeInTheDocument();
-    });
-  });
-
   it('downloads YAML config when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
@@ -123,30 +185,50 @@ describe('DownloadMenu', () => {
 
   it('downloads CSV when clicking the button', async () => {
     render(<DownloadMenu />);
+    expect(csvHookOptions?.onSuccess).toBeInstanceOf(Function);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Table CSV'));
+    await userEvent.click(screen.getByText('Download Results CSV'));
 
     await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+      expect(mockDownloadCsvFn).toHaveBeenCalledWith(mockEvalId);
     });
   });
 
   it('downloads Table JSON when clicking the button', async () => {
     render(<DownloadMenu />);
+    expect(jsonHookOptions?.onSuccess).toBeInstanceOf(Function);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Table JSON'));
+    await userEvent.click(screen.getByText('Download Results JSON'));
 
     await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+      expect(mockDownloadJsonFn).toHaveBeenCalledWith(mockEvalId);
     });
+  });
+
+  it('shows loading state while CSV download is in progress', async () => {
+    csvIsLoading = true;
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+
+    const csvButton = screen.getByRole('button', { name: 'Downloading...' });
+    expect(csvButton).toBeDisabled();
+  });
+
+  it('shows loading state while JSON download is in progress', async () => {
+    jsonIsLoading = true;
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+
+    const jsonButton = screen.getByRole('button', { name: 'Downloading...' });
+    expect(jsonButton).toBeDisabled();
   });
 
   it('downloads DPO JSON when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download DPO JSON'));
+    await userEvent.click(screen.getByText('DPO JSON'));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
@@ -157,7 +239,7 @@ describe('DownloadMenu', () => {
   it('downloads Human Eval Test YAML when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Human Eval Test YAML'));
+    await userEvent.click(screen.getByText('Human Eval YAML'));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
@@ -165,99 +247,7 @@ describe('DownloadMenu', () => {
     });
   });
 
-  it('does not handle keyboard shortcuts when dialog is closed', () => {
-    render(<DownloadMenu />);
-
-    fireEvent.keyDown(document, { key: '1' });
-    expect(window.URL.createObjectURL).not.toHaveBeenCalled();
-  });
-
-  it('shows a toast when table data is not available', async () => {
-    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      table: null,
-      config: mockConfig,
-      evalId: mockEvalId,
-    });
-
-    // Clear any previous calls to the mock
-    showToastMock.mockClear();
-
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Table CSV'));
-
-    expect(showToastMock).toHaveBeenCalledWith('No table data', 'error');
-  });
-
-  // New tests for additional functionality
-
-  it('downloads failed tests config when clicking the button', async () => {
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Failed Tests Config'));
-
-    await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
-      expect(showToastMock).toHaveBeenCalledWith(
-        expect.stringContaining('Downloaded config with'),
-        'success',
-      );
-    });
-  });
-
-  it('shows command blocks with the correct commands', async () => {
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-
-    // Check the commands are displayed correctly
-    expect(screen.getByText(`promptfoo eval -c ${mockEvalId}-config.yaml`)).toBeInTheDocument();
-    expect(
-      screen.getByText(`promptfoo eval -c ${mockEvalId}-failed-tests.yaml`),
-    ).toBeInTheDocument();
-  });
-
-  it('copies command text to clipboard when clicking the copy button', async () => {
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-
-    // Find the copy button next to the config command
-    const copyButtons = screen.getAllByLabelText('Copy command');
-    await userEvent.click(copyButtons[0]);
-
-    // Check that the clipboard API was called with the correct text
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      `promptfoo eval -c ${mockEvalId}-config.yaml`,
-    );
-    expect(showToastMock).toHaveBeenCalledWith('Command copied to clipboard', 'success');
-  });
-
-  it('shows the Downloaded indicator after downloading a file', async () => {
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download YAML Config'));
-
-    // After download, check that the "Downloaded" text appears
-    expect(screen.getByText('Downloaded')).toBeInTheDocument();
-  });
-
-  it('closes the dialog when clicking the Close button', async () => {
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-
-    // Verify dialog is open
-    expect(screen.getByText('Download Options')).toBeInTheDocument();
-
-    // Click the Close button and verify dialog closes
-    await userEvent.click(screen.getByText('Close'));
-
-    await waitFor(() => {
-      expect(screen.queryByText('Download Options')).not.toBeInTheDocument();
-    });
-  });
-
-  it('disables the Failed Tests Config button when there are no failed tests', async () => {
-    // Mock a table with no failed tests
+  it('handles malformed output structures in DPO JSON export without crashing', async () => {
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       table: {
         ...mockTable,
@@ -265,7 +255,12 @@ describe('DownloadMenu', () => {
           {
             test: { vars: { testVar: 'value' } },
             vars: ['value1', 'value2'],
-            outputs: [{ pass: true, text: 'all passed' }],
+            outputs: [{ pass: true }],
+          },
+          {
+            test: { vars: { testVar: 'value2' } },
+            vars: ['value3', 'value4'],
+            outputs: [{ pass: false, text: 'passed output' }],
           },
         ],
       },
@@ -275,16 +270,90 @@ describe('DownloadMenu', () => {
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('DPO JSON'));
 
-    // Get the Failed Tests Config button and check if it's disabled
-    const failedTestsButton = screen.getByText('Download Failed Tests Config');
-    expect(failedTestsButton.closest('button')).toBeDisabled();
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    });
+  });
+
+  it('shows a toast when evalId is not available', async () => {
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: mockTable,
+      config: mockConfig,
+      evalId: null,
+    });
+
+    // Clear any previous calls to the mock
+    showToastMock.mockClear();
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('Download Results CSV'));
+
+    expect(showToastMock).toHaveBeenCalledWith('No evaluation ID', 'error');
+  });
+
+  it('handles null gradingResult in downloadHumanEvalTestCases without crashing', async () => {
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          {
+            test: { vars: { testVar: 'value' } },
+            vars: ['value1', 'value2'],
+            outputs: [{ pass: false, text: 'failed output', gradingResult: null }],
+          },
+          {
+            test: { vars: { testVar: 'value2' } },
+            vars: ['value3', 'value4'],
+            outputs: [{ pass: true, text: 'passed output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('Human Eval YAML'));
+
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    });
+  });
+
+  it('handles deeply nested null properties in outputs without crashing', () => {
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          {
+            test: { vars: { testVar: 'value' } },
+            vars: ['value1', 'value2'],
+            outputs: [{ pass: false, text: 'failed output', gradingResult: { scores: null } }],
+          },
+          {
+            test: { vars: { testVar: 'value2' } },
+            vars: ['value3', 'value4'],
+            outputs: [{ pass: true, text: 'passed output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    expect(() => {
+      render(<DownloadMenu />);
+    }).not.toThrow();
   });
 
   it('downloads Burp Suite Payloads when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Burp Suite Payloads'));
+    await userEvent.click(screen.getByText('Burp Payloads'));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
@@ -297,8 +366,150 @@ describe('DownloadMenu', () => {
     await userEvent.click(screen.getByText('Download'));
 
     // Check the category headings
-    expect(screen.getByText('Promptfoo Configs')).toBeInTheDocument();
-    expect(screen.getByText('Table Data')).toBeInTheDocument();
-    expect(screen.getByText('Advanced Options')).toBeInTheDocument();
+    expect(screen.getByText('Configuration Files')).toBeInTheDocument();
+    expect(screen.getByText('Export Results')).toBeInTheDocument();
+    expect(screen.getByText('Advanced Exports')).toBeInTheDocument();
+  });
+
+  it('displays the "Downloaded" indicator in CommandBlock after downloading YAML config', async () => {
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('Download YAML Config'));
+
+    await waitFor(() => {
+      const commandBlock = screen
+        .getByText('Run this command to execute the eval again:')
+        .closest('.MuiPaper-root');
+      expect(commandBlock).toBeInTheDocument();
+      expect(screen.getByText('Downloaded')).toBeVisible();
+      expect(commandBlock?.querySelector('svg[data-testid="CheckCircleIcon"]')).toBeInTheDocument();
+    });
+  });
+
+  it('shows an error toast when clipboard API fails', async () => {
+    (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockImplementationOnce(() =>
+      Promise.reject(new Error('Clipboard write failed')),
+    );
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+
+    const copyButton = screen.getAllByLabelText('Copy command')[0];
+    await userEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Failed to copy command', 'error');
+    });
+  });
+
+  describe('Failed Tests Config Button disabled state', () => {
+    it('disables the button when table is null', async () => {
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: null,
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
+      expect(button).toBeDisabled();
+    });
+
+    it('disables the button when table.body is null', async () => {
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: {
+          head: mockTable.head,
+          body: null as any,
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
+      expect(button).toBeDisabled();
+    });
+
+    it('disables the button when table.body is undefined', async () => {
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: {
+          head: mockTable.head,
+          body: undefined as any,
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
+      expect(button).toBeDisabled();
+    });
+
+    it('disables the button when all tests pass', async () => {
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: {
+          ...mockTable,
+          body: [
+            {
+              test: { vars: { testVar: 'value' } },
+              vars: ['value1', 'value2'],
+              outputs: [{ pass: true, text: 'passed output' }],
+            },
+            {
+              test: { vars: { testVar: 'value2' } },
+              vars: ['value3', 'value4'],
+              outputs: [{ pass: true, text: 'another passed output' }],
+            },
+          ],
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
+      expect(button).toBeDisabled();
+    });
+
+    it('enables the button when there are failed tests', async () => {
+      // Using the default mockTable which has failed tests
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: mockTable,
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
+      expect(button).not.toBeDisabled();
+    });
+
+    it('handles edge case with empty body array', async () => {
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: {
+          ...mockTable,
+          body: [],
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
+      // Empty body means no tests, so should be disabled
+      expect(button).toBeDisabled();
+    });
   });
 });

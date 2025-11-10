@@ -1,102 +1,111 @@
 ---
-sidebar_label: Context Relevance
+sidebar_position: 50
+description: 'Assess RAG retrieval quality by evaluating context relevance, precision, and usefulness for answering queries.'
 ---
 
-# Context Relevance
+# Context relevance
 
-The `context-relevance` assertion evaluates whether the retrieved context is relevant to the original query. This is crucial for RAG (Retrieval-Augmented Generation) applications to ensure that the retrieved information is actually useful for answering the question.
+Measures what fraction of retrieved context is minimally needed to answer the query.
 
-### How to use it
+**Use when**: You want to check if your retrieval is returning too much irrelevant content.
 
-To use the `context-relevance` assertion type, add it to your test configuration like this:
+**How it works**: Extracts only the sentences absolutely required to answer the query. Score = required sentences / total sentences.
+
+:::warning
+This metric finds the MINIMUM needed, not all relevant content. A low score might mean good retrieval (found answer plus supporting context) or bad retrieval (lots of irrelevant content).
+:::
+
+**Example**:
+
+```text
+Query: "What is the capital of France?"
+Context: "Paris is the capital. France has great wine. The Eiffel Tower is in Paris."
+Score: 0.33 (only first sentence required)
+```
+
+## Configuration
 
 ```yaml
 assert:
   - type: context-relevance
-    threshold: 0.8 # Score between 0 and 1
+    threshold: 0.3 # At least 30% should be essential
 ```
 
-Note: This assertion requires both `query` and `context` variables to be set in your test.
+### Required fields
 
-### How it works
+- `query` - User's question (in test vars)
+- `context` - Retrieved text (in vars or via `contextTransform`)
+- `threshold` - Minimum score 0-1 (default: 0)
 
-The context relevance checker:
-
-1. Analyzes the query and context
-2. Breaks down the context into individual statements
-3. Evaluates each statement's relevance to the query
-4. Calculates a relevance score based on the proportion of relevant statements
-
-A higher threshold requires the context to be more closely related to the query.
-
-### Example Configuration
-
-Here's a complete example showing how to use context relevance in a RAG system:
+### Full example
 
 ```yaml
-prompts:
-  - |
-    Answer this question: {{query}}
-    Using this context: {{context}}
-providers:
-  - openai:gpt-4
 tests:
   - vars:
-      query: 'What are our company holidays?'
-      context: file://docs/policies/holidays.md
+      query: 'What is the capital of France?'
+      context: 'Paris is the capital of France.'
     assert:
       - type: context-relevance
-        threshold: 0.8
-  - vars:
-      query: 'What is the dress code?'
-      context: file://docs/policies/attire.md
-    assert:
-      - type: context-relevance
-        threshold: 0.9
+        threshold: 0.8 # Most content should be essential
 ```
 
-### Overriding the Grader
+### Array context
 
-Like other model-graded assertions, you can override the default grader:
-
-1. Using the CLI:
-
-   ```sh
-   promptfoo eval --grader openai:gpt-4.1-mini
-   ```
-
-2. Using test options:
-
-   ```yaml
-   defaultTest:
-     options:
-       provider: openai:gpt-4.1-mini
-   ```
-
-3. Using assertion-level override:
-   ```yaml
-   assert:
-     - type: context-relevance
-       threshold: 0.8
-       provider: openai:gpt-4.1-mini
-   ```
-
-### Customizing the Prompt
-
-You can customize the evaluation prompt using the `rubricPrompt` property:
+Context can be provided as an array of chunks:
 
 ```yaml
-defaultTest:
-  options:
-    rubricPrompt: |
-      Context: {{context}}
-      Query: {{query}}
-
-      Break down the context into individual statements.
-      For each statement, mark it as [RELEVANT] if it helps answer the query,
-      or [NOT RELEVANT] if it does not.
+tests:
+  - vars:
+      query: 'What are the benefits of RAG systems?'
+      context:
+        - 'RAG systems improve factual accuracy by incorporating external knowledge sources.'
+        - 'They reduce hallucinations in large language models through grounded responses.'
+        - 'RAG enables up-to-date information retrieval beyond training data cutoffs.'
+        - 'The weather forecast shows rain this weekend.' # irrelevant chunk
+    assert:
+      - type: context-relevance
+        threshold: 0.5 # Score: 3/4 = 0.75
 ```
 
-# Further reading
+### Dynamic context extraction
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+For RAG systems that return context with their response:
+
+```yaml
+# Provider returns { answer: "...", context: "..." }
+assert:
+  - type: context-relevance
+    contextTransform: 'output.context' # Extract context field
+    threshold: 0.3
+```
+
+`contextTransform` can also return an array:
+
+```yaml
+assert:
+  - type: context-relevance
+    contextTransform: 'output.chunks' # Extract chunks array
+    threshold: 0.5
+```
+
+## Score interpretation
+
+- **0.8-1.0**: Almost all content is essential (very focused or minimal retrieval)
+- **0.3-0.7**: Mixed essential and supporting content (often ideal)
+- **0.0-0.3**: Mostly non-essential content (may indicate poor retrieval)
+
+## Limitations
+
+- Only identifies minimum sufficient content
+- Single context strings split by lines (use arrays for better accuracy)
+- Score interpretation varies by use case
+
+## Related metrics
+
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - Does output stay faithful to context?
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - Does context support expected answer?
+
+## Further reading
+
+- [Defining context in test cases](/docs/configuration/expected-outputs/model-graded#defining-context-for-context-based-assertions)
+- [RAG Evaluation Guide](/docs/guides/evaluate-rag)

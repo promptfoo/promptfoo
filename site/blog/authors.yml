@@ -1,3 +1,9 @@
+promptfoo_team:
+  name: Promptfoo Team
+  title: Development Team
+  url: https://github.com/promptfoo
+  image_url: /img/logo-panda.svg
+
 adel:
   name: Adel Müürsepp
   title: Contributor
@@ -24,7 +30,7 @@ faizan:
 
 ian:
   name: Ian Webster
-  title: CEO & Co-founder
+  title: Engineer & OWASP Gen AI Red Teaming Contributor
   url: https://github.com/typpo
   image_url: /img/team/ian.jpeg
 
@@ -65,7 +71,7 @@ vanessa:
   image_url: /img/team/vanessa.jpeg
 
 vedantr:
-  name: Vedant Rautela
+  name: Vedant R
   title: Contributor
   url: https://github.com/vedantr
   image_url: https://github.com/vedantr.png
@@ -74,4 +80,10 @@ will:
   name: Will Holley
   title: Senior Engineer
   url: https://github.com/willholley
-  image_url: /img/team/will.jpg
+  image_url: /img/team/will.jpeg
+
+drishti-portkey:
+  name: Drishti Shah
+  title: Guest Author (Portkey)
+  url: https://portkey.ai
+  image_url: /img/logo-panda.svg

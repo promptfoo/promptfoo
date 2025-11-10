@@ -1,8 +1,10 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import logger from '../../logger';
+import { getAuthHeaders } from './util';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import logger from '../../logger';
+
 import type { MCPConfig, MCPServerConfig, MCPTool, MCPToolResult } from './types';
 
 export class MCPClient {
@@ -34,6 +36,7 @@ export class MCPClient {
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
     for (const server of servers) {
+      logger.info(`connecting to server ${server.name || server.url || server.path || 'default'}`);
       await this.connectToServer(server);
     }
   }
@@ -50,6 +53,7 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command: server.command,
           args: server.args,
+          env: process.env as Record<string, string>,
         });
         await client.connect(transport);
       } else if (server.path) {
@@ -70,11 +74,12 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command,
           args: [server.path],
+          env: process.env as Record<string, string>,
         });
         await client.connect(transport);
       } else if (server.url) {
         // Get auth headers and combine with custom headers
-        const authHeaders = this.getAuthHeaders(server);
+        const authHeaders = getAuthHeaders(server);
         const headers = {
           ...(server.headers || {}),
           ...authHeaders,
@@ -91,7 +96,9 @@ export class MCPClient {
           await client.connect(transport);
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
-          logger.error(`Failed to connect to MCP server ${serverKey}: ${error}`);
+          logger.debug(
+            `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
+          );
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
           transport = new SSEClientTransport(new URL(server.url), options);
           await client.connect(transport);
@@ -140,21 +147,6 @@ export class MCPClient {
     }
   }
 
-  private getAuthHeaders(server: MCPServerConfig): Record<string, string> {
-    if (!server.auth) {
-      return {};
-    }
-
-    if (server.auth.type === 'bearer' && server.auth.token) {
-      return { Authorization: `Bearer ${server.auth.token}` };
-    }
-    if (server.auth.type === 'api_key' && server.auth.api_key) {
-      return { 'X-API-Key': server.auth.api_key };
-    }
-
-    return {};
-  }
-
   getAllTools(): MCPTool[] {
     return Array.from(this.tools.values()).flat();
   }
@@ -166,8 +158,27 @@ export class MCPClient {
       if (serverTools.some((tool) => tool.name === name)) {
         try {
           const result = await client.callTool({ name, arguments: args });
+
+          // Handle different content types appropriately
+          let content = '';
+          if (result?.content) {
+            if (typeof result.content === 'string') {
+              // Try to parse JSON first, fall back to raw string
+              try {
+                const parsed = JSON.parse(result.content);
+                content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+              } catch {
+                content = result.content;
+              }
+            } else if (Buffer.isBuffer(result.content)) {
+              content = result.content.toString();
+            } else {
+              content = JSON.stringify(result.content);
+            }
+          }
+
           return {
-            content: result?.content?.toString() || '',
+            content,
           };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);

@@ -1,14 +1,16 @@
-import type { AnySchema } from 'ajv';
-import type { GoogleAuth } from 'google-auth-library';
 import Clone from 'rfdc';
 import { z } from 'zod';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
 import { VALID_SCHEMA_TYPES } from './types';
+import type { AnySchema } from 'ajv';
+import type { GoogleAuth } from 'google-auth-library';
+
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = getAjv();
@@ -53,6 +55,7 @@ interface GeminiUsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount?: number;
   totalTokenCount: number;
+  thoughtsTokenCount?: number;
 }
 
 export interface GeminiErrorResponse {
@@ -79,6 +82,7 @@ interface GeminiPromptFeedback {
 interface GeminiUsageMetadata {
   promptTokenCount: number;
   totalTokenCount: number;
+  thoughtsTokenCount?: number;
 }
 
 interface GeminiBlockedResponse {
@@ -126,9 +130,11 @@ const ContentSchema = z.object({
 const GeminiFormatSchema = z.array(ContentSchema);
 
 export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
-export type GeminiPart = z.infer<typeof PartSchema>;
 
-export function maybeCoerceToGeminiFormat(contents: any): {
+export function maybeCoerceToGeminiFormat(
+  contents: any,
+  options?: { useAssistantRole?: boolean },
+): {
   contents: GeminiFormat;
   coerced: boolean;
   systemInstruction: { parts: [Part, ...Part[]] } | undefined;
@@ -192,14 +198,20 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     contents.every((item) => typeof item.content === 'string')
   ) {
     // This looks like an OpenAI chat format
+    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
     coercedContents = contents.map((item) => ({
-      role: item.role as 'user' | 'model' | undefined,
+      role: (item.role === 'assistant' ? targetRole : item.role) as 'user' | 'model' | undefined,
       parts: [{ text: item.content }],
     }));
     coerced = true;
   } else if (Array.isArray(contents) && contents.every((item) => item.role && item.content)) {
     // This looks like an OpenAI chat format with content that might be an array or object
+    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
     coercedContents = contents.map((item) => {
+      const mappedRole = (item.role === 'assistant' ? targetRole : item.role) as
+        | 'user'
+        | 'model'
+        | undefined;
       if (Array.isArray(item.content)) {
         // Handle array content
         const parts = item.content.map((contentItem: any) => {
@@ -213,19 +225,19 @@ export function maybeCoerceToGeminiFormat(contents: any): {
           }
         });
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts,
         };
       } else if (typeof item.content === 'object') {
         // Handle object content
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts: [item.content],
         };
       } else {
         // Handle string content
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts: [{ text: item.content }],
         };
       }
@@ -240,7 +252,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     return { contents: contents as GeminiFormat, coerced: false, systemInstruction: undefined };
   }
 
-  const systemPromptParts: { text: string }[] = [];
+  let systemPromptParts: { text: string }[] = [];
   coercedContents = coercedContents.filter((message) => {
     if (message.role === ('system' as any) && message.parts.length > 0) {
       systemPromptParts.push(
@@ -253,6 +265,19 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     return true;
   });
 
+  // Convert system-only prompts to user messages
+  // Gemini does not support execution with systemInstruction only
+  if (coercedContents.length === 0 && systemPromptParts.length > 0) {
+    coercedContents = [
+      {
+        role: 'user',
+        parts: systemPromptParts,
+      },
+    ];
+    coerced = true;
+    systemPromptParts = [];
+  }
+
   return {
     contents: coercedContents,
     coerced,
@@ -262,24 +287,94 @@ export function maybeCoerceToGeminiFormat(contents: any): {
 }
 
 let cachedAuth: GoogleAuth | undefined;
-export async function getGoogleClient() {
+
+/**
+ * Loads and processes Google credentials from various sources
+ */
+export function loadCredentials(credentials?: string): string | undefined {
+  if (!credentials) {
+    return undefined;
+  }
+
+  if (credentials.startsWith('file://')) {
+    try {
+      return maybeLoadFromExternalFile(credentials) as string;
+    } catch (error) {
+      throw new Error(`Failed to load credentials from file: ${error}`);
+    }
+  }
+
+  return credentials;
+}
+
+/**
+ * Creates a Google client with optional custom credentials
+ */
+export async function getGoogleClient({ credentials }: { credentials?: string } = {}) {
   if (!cachedAuth) {
     let GoogleAuth;
     try {
       const importedModule = await import('google-auth-library');
       GoogleAuth = importedModule.GoogleAuth;
+      cachedAuth = new GoogleAuth({
+        scopes: 'https://www.googleapis.com/auth/cloud-platform',
+      });
     } catch {
       throw new Error(
         'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
       );
     }
-    cachedAuth = new GoogleAuth({
-      scopes: 'https://www.googleapis.com/auth/cloud-platform',
-    });
   }
-  const client = await cachedAuth.getClient();
-  const projectId = await cachedAuth.getProjectId();
+
+  const processedCredentials = loadCredentials(credentials);
+
+  let client;
+  if (processedCredentials) {
+    try {
+      client = await cachedAuth.fromJSON(JSON.parse(processedCredentials));
+    } catch (error) {
+      logger.error(`[Vertex] Could not load credentials: ${error}`);
+      throw new Error(`[Vertex] Could not load credentials: ${error}`);
+    }
+  } else {
+    client = await cachedAuth.getClient();
+  }
+
+  // Try to get project ID from Google Auth Library, but don't fail if it can't detect it
+  // This allows the fallback logic in resolveProjectId to work properly
+  let projectId;
+  try {
+    projectId = await cachedAuth.getProjectId();
+  } catch {
+    // If Google Auth Library can't detect project ID from environment,
+    // let resolveProjectId handle the fallback logic
+    projectId = undefined;
+  }
+
   return { client, projectId };
+}
+
+/**
+ * Gets project ID from config, environment, or Google client
+ */
+export async function resolveProjectId(
+  config: { projectId?: string; credentials?: string },
+  env?: Record<string, string>,
+): Promise<string> {
+  const processedCredentials = loadCredentials(config.credentials);
+  const { projectId: googleProjectId } = await getGoogleClient({
+    credentials: processedCredentials,
+  });
+
+  return (
+    config.projectId ||
+    env?.VERTEX_PROJECT_ID ||
+    env?.GOOGLE_PROJECT_ID ||
+    getEnvString('VERTEX_PROJECT_ID') ||
+    getEnvString('GOOGLE_PROJECT_ID') ||
+    googleProjectId ||
+    ''
+  );
 }
 
 export async function hasGoogleDefaultCredentials() {
@@ -292,14 +387,75 @@ export async function hasGoogleDefaultCredentials() {
 }
 
 export function getCandidate(data: GeminiResponseData) {
-  if (!(data && data.candidates && data.candidates.length === 1)) {
-    throw new Error('Expected one candidate in API response.');
+  if (!data || !data.candidates || data.candidates.length < 1) {
+    // Check if the prompt was blocked
+    let errorDetails = 'No candidates returned in API response.';
+
+    if (data?.promptFeedback?.blockReason) {
+      errorDetails = `Response blocked: ${data.promptFeedback.blockReason}`;
+      if (data.promptFeedback.safetyRatings) {
+        const flaggedCategories = data.promptFeedback.safetyRatings
+          .filter((rating) => rating.probability !== 'NEGLIGIBLE')
+          .map((rating) => `${rating.category}: ${rating.probability}`);
+        if (flaggedCategories.length > 0) {
+          errorDetails += ` (Safety ratings: ${flaggedCategories.join(', ')})`;
+        }
+      }
+    } else if (data?.promptFeedback?.safetyRatings) {
+      const flaggedCategories = data.promptFeedback.safetyRatings
+        .filter((rating) => rating.probability !== 'NEGLIGIBLE')
+        .map((rating) => `${rating.category}: ${rating.probability}`);
+      if (flaggedCategories.length > 0) {
+        errorDetails = `Response may have been blocked due to safety filters: ${flaggedCategories.join(', ')}`;
+      }
+    }
+
+    errorDetails += `\n\nGot response: ${JSON.stringify(data)}`;
+
+    throw new Error(errorDetails);
+  }
+  if (data.candidates.length > 1) {
+    logger.debug(
+      `Expected one candidate in AI Studio API response, but got ${data.candidates.length}: ${JSON.stringify(data)}`,
+    );
   }
   const candidate = data.candidates[0];
   return candidate;
 }
 
 export function formatCandidateContents(candidate: Candidate) {
+  // Check if the candidate was blocked or stopped for safety reasons
+  if (
+    candidate.finishReason &&
+    ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'].includes(
+      candidate.finishReason,
+    )
+  ) {
+    let errorMessage = `Response was blocked with finish reason: ${candidate.finishReason}`;
+
+    if (candidate.safetyRatings) {
+      const flaggedCategories = candidate.safetyRatings
+        .filter((rating) => rating.probability !== 'NEGLIGIBLE' || rating.blocked)
+        .map(
+          (rating) =>
+            `${rating.category}: ${rating.probability}${rating.blocked ? ' (BLOCKED)' : ''}`,
+        );
+      if (flaggedCategories.length > 0) {
+        errorMessage += `\nSafety ratings: ${flaggedCategories.join(', ')}`;
+      }
+    }
+
+    if (candidate.finishReason === 'RECITATION') {
+      errorMessage +=
+        "\n\nThis typically occurs when the response is too similar to content from the model's training data.";
+    } else if (candidate.finishReason === 'SAFETY') {
+      errorMessage +=
+        '\n\nThe response was blocked due to safety filters. Consider adjusting safety settings or modifying your prompt.';
+    }
+
+    throw new Error(errorMessage);
+  }
+
   if (candidate.content?.parts) {
     let output = '';
     let is_text = true;
@@ -396,10 +552,180 @@ export function loadFile(
   return fileContents;
 }
 
+function isValidBase64Image(data: string): boolean {
+  if (!data || data.length < 100) {
+    return false;
+  }
+
+  try {
+    // Verify it's valid base64
+    Buffer.from(data, 'base64');
+
+    // Check for known image format headers
+    return (
+      data.startsWith('/9j/') || // JPEG
+      data.startsWith('iVBORw0KGgo') || // PNG
+      data.startsWith('R0lGODlh') || // GIF
+      data.startsWith('UklGR') // WebP
+    );
+  } catch {
+    return false;
+  }
+}
+
+function getMimeTypeFromBase64(base64Data: string): string {
+  if (base64Data.startsWith('/9j/')) {
+    return 'image/jpeg';
+  } else if (base64Data.startsWith('iVBORw0KGgo')) {
+    return 'image/png';
+  } else if (base64Data.startsWith('R0lGODlh')) {
+    return 'image/gif';
+  } else if (base64Data.startsWith('UklGR')) {
+    return 'image/webp';
+  }
+  // Default to jpeg for unknown formats
+  return 'image/jpeg';
+}
+
+function processImagesInContents(
+  contents: GeminiFormat,
+  contextVars?: Record<string, string | object>,
+): GeminiFormat {
+  if (!contextVars) {
+    return contents;
+  }
+
+  const base64ToVarName = new Map<string, string>();
+
+  for (const [varName, value] of Object.entries(contextVars)) {
+    if (typeof value === 'string' && isValidBase64Image(value)) {
+      base64ToVarName.set(value, varName);
+    }
+  }
+
+  return contents.map((content) => {
+    if (content.parts) {
+      const newParts: Part[] = [];
+
+      for (const part of content.parts) {
+        if (part.text) {
+          const lines = part.text.split('\n');
+          let foundValidImage = false;
+          let currentTextBlock = '';
+          const processedParts: Part[] = [];
+
+          // First pass: check if any line is a valid base64 image from context variables
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+
+            // Check if this line is a base64 image that was loaded from a variable
+            if (base64ToVarName.has(trimmedLine) && isValidBase64Image(trimmedLine)) {
+              foundValidImage = true;
+
+              // Add any accumulated text as a text part
+              if (currentTextBlock.length > 0) {
+                processedParts.push({
+                  text: currentTextBlock,
+                });
+                currentTextBlock = '';
+              }
+
+              // Add the image part
+              const mimeType = getMimeTypeFromBase64(trimmedLine);
+              processedParts.push({
+                inlineData: {
+                  mimeType,
+                  data: trimmedLine,
+                },
+              });
+            } else {
+              // Accumulate text, preserving original formatting including newlines
+              if (currentTextBlock.length > 0) {
+                currentTextBlock += '\n';
+              }
+              currentTextBlock += line;
+            }
+          }
+
+          // Add any remaining text block
+          if (currentTextBlock.length > 0) {
+            processedParts.push({
+              text: currentTextBlock,
+            });
+          }
+
+          // If we found valid images, use the processed parts; otherwise, keep the original part
+          if (foundValidImage) {
+            newParts.push(...processedParts);
+          } else {
+            newParts.push(part);
+          }
+        } else {
+          // Keep non-text parts as is
+          newParts.push(part);
+        }
+      }
+
+      return {
+        ...content,
+        parts: newParts,
+      };
+    }
+    return content;
+  });
+}
+
+/**
+ * Parses and processes config-level systemInstruction.
+ * Handles file loading, string-to-Content conversion, and Nunjucks template rendering.
+ *
+ * @param configSystemInstruction - The systemInstruction from config (can be string, Content, or undefined)
+ * @param contextVars - Variables for Nunjucks template rendering
+ * @returns Processed Content object or undefined
+ */
+function parseConfigSystemInstruction(
+  configSystemInstruction: Content | string | undefined,
+  contextVars?: Record<string, string | object>,
+): Content | undefined {
+  if (!configSystemInstruction) {
+    return undefined;
+  }
+
+  // Make a copy to avoid mutating the original
+  let configInstruction = clone(configSystemInstruction);
+
+  // Load systemInstruction from file if it's a file path
+  if (typeof configSystemInstruction === 'string') {
+    configInstruction = loadFile(configSystemInstruction, contextVars);
+  }
+
+  // Convert string to Content structure
+  if (typeof configInstruction === 'string') {
+    configInstruction = { parts: [{ text: configInstruction }] };
+  }
+
+  // Render Nunjucks templates in all text parts
+  if (contextVars && configInstruction) {
+    const nunjucks = getNunjucksEngine();
+    for (const part of configInstruction.parts) {
+      if (part.text) {
+        try {
+          part.text = nunjucks.renderString(part.text, contextVars);
+        } catch (err) {
+          throw new Error(`Unable to render nunjucks in systemInstruction: ${err}`);
+        }
+      }
+    }
+  }
+
+  return configInstruction;
+}
+
 export function geminiFormatAndSystemInstructions(
   prompt: string,
   contextVars?: Record<string, string | object>,
   configSystemInstruction?: Content | string,
+  options?: { useAssistantRole?: boolean },
 ): {
   contents: GeminiFormat;
   systemInstruction: Content | { parts: [Part, ...Part[]] } | undefined;
@@ -418,42 +744,26 @@ export function geminiFormatAndSystemInstructions(
     contents: updatedContents,
     coerced,
     systemInstruction: parsedSystemInstruction,
-  } = maybeCoerceToGeminiFormat(contents);
+  } = maybeCoerceToGeminiFormat(contents, options);
   if (coerced) {
     logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
     contents = updatedContents;
   }
 
-  let systemInstruction: Content | string | undefined = parsedSystemInstruction;
-  if (configSystemInstruction && !systemInstruction) {
-    // Make a copy
-    systemInstruction = clone(configSystemInstruction);
+  let systemInstruction: Content | undefined = parsedSystemInstruction;
 
-    // Load SI from file
-    if (typeof configSystemInstruction === 'string') {
-      systemInstruction = loadFile(configSystemInstruction, contextVars);
-    }
-
-    // Format SI if string was not a filepath above
-    if (typeof systemInstruction === 'string') {
-      systemInstruction = { parts: [{ text: systemInstruction }] };
-    }
-
-    if (contextVars && systemInstruction) {
-      const nunjucks = getNunjucksEngine();
-      for (const part of systemInstruction.parts) {
-        if (part.text) {
-          try {
-            part.text = nunjucks.renderString(part.text, contextVars);
-          } catch (err) {
-            throw new Error(`Unable to render nunjunks in systemInstruction: ${err}`);
-          }
-        }
-      }
-    }
-  } else if (configSystemInstruction && systemInstruction) {
-    throw new Error(`Template error: system instruction defined in prompt and config.`);
+  const parsedConfigInstruction = parseConfigSystemInstruction(
+    configSystemInstruction,
+    contextVars,
+  );
+  if (parsedConfigInstruction) {
+    systemInstruction = systemInstruction
+      ? { parts: [...parsedConfigInstruction.parts, ...systemInstruction.parts] }
+      : parsedConfigInstruction;
   }
+
+  // Process images in contents
+  contents = processImagesInContents(contents, contextVars);
 
   return { contents, systemInstruction };
 }

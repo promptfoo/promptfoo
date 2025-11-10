@@ -1,8 +1,9 @@
 import { filterTestsByResults } from '../../../src/commands/eval/filterTestsUtil';
 import Eval from '../../../src/models/eval';
-import type { TestSuite, EvaluateResult, Prompt, ProviderResponse } from '../../../src/types';
 import { ResultFailureReason } from '../../../src/types';
 import * as util from '../../../src/util';
+
+import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types';
 
 jest.mock('../../../src/models/eval', () => ({
   findById: jest.fn(),

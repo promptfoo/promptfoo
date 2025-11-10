@@ -1,8 +1,13 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiEmbeddingProvider, ProviderResponse, ProviderEmbeddingResponse } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+import type {
+  ApiEmbeddingProvider,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
 
 export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   modelName: string;
@@ -53,9 +58,15 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
       model: this.modelName,
     };
 
-    let data;
+    let data,
+      _cached = false,
+      latencyMs: number | undefined;
     try {
-      ({ data } = (await fetchWithCache(
+      ({
+        data,
+        cached: _cached,
+        latencyMs,
+      } = (await fetchWithCache(
         `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
@@ -72,7 +83,6 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
       logger.error(`API call error: ${err}`);
       throw err;
     }
-    logger.debug(`\tVoyage embeddings API response: ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;
@@ -81,6 +91,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
       }
       return {
         embedding,
+        latencyMs,
         tokenUsage: {
           total: data.usage.total_tokens,
         },

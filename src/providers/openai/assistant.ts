@@ -1,20 +1,26 @@
-import OpenAI from 'openai';
-import type { Metadata } from 'openai/resources/shared';
 import path from 'path';
-import { OpenAiGenericProvider } from '.';
+
+import OpenAI from 'openai';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
-import { maybeLoadToolsFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { sleep } from '../../util/time';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from '../shared';
-import type { OpenAiSharedOptions } from './types';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
+import { OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
+import type { Metadata } from 'openai/resources/shared';
 
-export type OpenAiAssistantOptions = OpenAiSharedOptions & {
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
+import type { EnvOverrides } from '../../types/env';
+import type { AssistantFunctionCallback, CallbackContext, OpenAiSharedOptions } from './types';
+
+type OpenAiAssistantOptions = OpenAiSharedOptions & {
   modelName?: string;
   instructions?: string;
   tools?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tools'];
@@ -24,7 +30,7 @@ export type OpenAiAssistantOptions = OpenAiSharedOptions & {
    */
   functionToolCallbacks?: Record<
     OpenAI.FunctionDefinition['name'],
-    string | ((arg: string) => Promise<string>)
+    string | AssistantFunctionCallback
   >;
   metadata?: Metadata;
   temperature?: number;
@@ -143,7 +149,11 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    context?: CallbackContext,
+  ): Promise<string> {
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
@@ -172,9 +182,22 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         throw new Error(`No callback found for function '${functionName}'`);
       }
 
-      // Execute the callback
-      logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(JSON.parse(args));
+      // Execute the callback with explicit context
+      // Note: OpenAI assistant provider maintains backward compatibility by parsing args
+      logger.debug(
+        `Executing function '${functionName}' with args: ${args}${
+          context ? ` and context: ${JSON.stringify(context)}` : ''
+        }`,
+      );
+      let parsedArgs;
+      try {
+        parsedArgs = JSON.parse(args);
+      } catch (error) {
+        logger.warn(`Error parsing function arguments for '${functionName}': ${error}`);
+        parsedArgs = {};
+      }
+
+      const result = await callback(parsedArgs, context);
 
       // Format the result
       if (result === undefined || result === null) {
@@ -200,7 +223,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
@@ -240,15 +263,12 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       },
     };
 
-    logger.debug(`Calling OpenAI API, creating thread run: ${JSON.stringify(body)}`);
     let run: OpenAI.Beta.Threads.Run;
     try {
       run = await openai.beta.threads.createAndRun(body);
     } catch (err) {
       return failApiCall(err);
     }
-
-    logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
 
     while (true) {
       const currentRun = await openai.beta.threads.runs.retrieve(run.id, {
@@ -277,6 +297,15 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           run = currentRun;
           break;
         }
+
+        // Build context for function callbacks
+        const callbackContext: CallbackContext = {
+          threadId: currentRun.thread_id,
+          runId: currentRun.id,
+          assistantId: this.assistantId,
+          provider: 'openai',
+        };
+
         logger.debug(
           `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
             ({ function: { name } }) => name,
@@ -290,6 +319,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             const functionResult = await this.executeFunctionCallback(
               toolCall.function.name,
               toolCall.function.arguments,
+              callbackContext,
             );
             return {
               tool_call_id: toolCall.id,

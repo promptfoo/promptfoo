@@ -1,5 +1,6 @@
 ---
 sidebar_label: Attack Generation
+description: Red team attack generation workflows by validating purpose definitions and access boundaries to prevent unauthorized data exposure in AI customer service systems
 ---
 
 # Attack Generation

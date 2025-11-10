@@ -1,4 +1,6 @@
-# watsonx (Watsonx)
+# watsonx (IBM WatsonX Model Comparison)
+
+This example compares IBM Granite, Meta Llama, and Mistral models available through IBM watsonx.ai.
 
 You can run this example with:
 
@@ -6,44 +8,46 @@ You can run this example with:
 npx promptfoo@latest init --example watsonx
 ```
 
-To get started, you need to set up authentication and project ID. You can choose between two authentication methods:
+## Setup
 
-**Option 1: IAM Authentication**
+Set up authentication and project ID:
+
+**IAM Authentication (Recommended)**
 
 ```sh
-export WATSONX_AI_AUTH_TYPE=iam
 export WATSONX_AI_APIKEY=your-ibm-cloud-api-key
+export WATSONX_AI_PROJECT_ID=your-project-id
 ```
 
-**Option 2: Bearer Token Authentication**
+**Bearer Token Authentication**
 
 ```sh
-export WATSONX_AI_AUTH_TYPE=bearertoken
-export WATSONX_AI_BEARER_TOKEN=your-ibm-cloud-bearer-token
+export WATSONX_AI_BEARER_TOKEN=your-bearer-token
+export WATSONX_AI_PROJECT_ID=your-project-id
 ```
 
-Then set your project ID:
+Follow the instructions in [watsonx.md](../../site/docs/providers/watsonx.md) to retrieve your credentials and project ID.
 
-```sh
-export WATSONX_AI_PROJECT_ID=your-ibm-project-id
-```
-
-Note: If `WATSONX_AI_AUTH_TYPE` is not set, the provider will automatically choose the authentication method based on which credentials are available, preferring IAM authentication if both are present.
-
-Follow the instructions in [watsonx.md](../../site/docs/providers/watsonx.md) to retrieve your API keys, bearer token, and project ID.
-
-Next, edit promptfooconfig.yaml.
-
-Then run:
-
-```sh
-npm run local -- eval --config examples/watsonx/promptfooconfig.yaml
-```
-
-or
+## Running the Example
 
 ```sh
 promptfoo eval
 ```
 
-Afterwards, you can view the results by running `promptfoo view`
+Or with the local build:
+
+```sh
+npm run local -- eval --config examples/watsonx/promptfooconfig.yaml
+```
+
+Afterwards, view the results:
+
+```sh
+promptfoo view
+```
+
+## Models Tested
+
+- **IBM Granite 3.3 8B** - Latest recommended Granite model
+- **Meta Llama 3.3 70B** - Latest Llama model
+- **Mistral Large** - Flagship Mistral model

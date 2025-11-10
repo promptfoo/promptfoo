@@ -14,6 +14,7 @@ keywords:
   ]
 date: 2024-10-14
 authors: [vanessa]
+tags: [technical-guide, best-practices, rag]
 ---
 
 # How Do You Secure RAG Applications?

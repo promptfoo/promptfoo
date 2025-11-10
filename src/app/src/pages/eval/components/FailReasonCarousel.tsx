@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import IconButton from '@mui/material/IconButton';
@@ -8,7 +9,7 @@ interface FailReasonCarouselProps {
   failReasons: string[];
 }
 
-const FailReasonCarousel: React.FC<FailReasonCarouselProps> = ({ failReasons }) => {
+const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const handlePrev = () => {

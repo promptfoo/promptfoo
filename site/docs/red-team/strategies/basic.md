@@ -1,7 +1,7 @@
 ---
 sidebar_label: Basic
 title: Basic Strategy
-description: Controls whether original plugin-generated test cases are included in the final output
+description: Configure inclusion of original plugin-generated test cases in evaluation outputs for baseline comparison and analysis
 ---
 
 # Basic Strategy
@@ -20,14 +20,13 @@ Example usage:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
+  language: ['es', 'fr'] # Test in Spanish and French
   strategies:
     - id: basic
       config:
         enabled: false # Only run tests with strategies applied
     - id: jailbreak
-    - id: multilingual
-      config:
-        languages: ['es', 'fr']
+    - id: base64
 ```
 
 ## How It Works

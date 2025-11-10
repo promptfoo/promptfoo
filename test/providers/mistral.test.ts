@@ -1,5 +1,4 @@
-import { getCache, isCacheEnabled } from '../../src/cache';
-import { fetchWithCache } from '../../src/cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
 import {
   MistralChatCompletionProvider,
   MistralEmbeddingProvider,

@@ -1,7 +1,8 @@
 import * as path from 'path';
+
 import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
-import { transform, TransformInputType } from '../../src/util/transform';
+import { TransformInputType, transform } from '../../src/util/transform';
 
 jest.mock('../../src/esm');
 jest.mock('../../src/logger', () => ({

@@ -1,16 +1,19 @@
 import React, { useMemo } from 'react';
-import ReactMarkdown from 'react-markdown';
+
 import { useShiftKey } from '@app/hooks/useShiftKey';
-import Tooltip from '@mui/material/Tooltip';
+import { useEvalOperations } from '@app/hooks/useEvalOperations';
+import useCloudConfig from '@app/hooks/useCloudConfig';
+import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
+import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { useResultsViewSettingsStore } from './store';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -24,6 +27,10 @@ function scoreToString(score: number | null) {
   return `(${score.toFixed(2)})`;
 }
 
+const tooltipSlotProps: TooltipProps['slotProps'] = {
+  popper: { disablePortal: true },
+};
+
 export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
@@ -31,8 +38,30 @@ export interface EvalOutputCellProps {
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
+  evaluationId?: string;
+  testCaseId?: string;
+  isRedteam?: boolean;
 }
 
+/**
+ * Renders a single evaluation output cell including content, pass/fail badges, metrics, actions, and dialogs.
+ *
+ * This component displays an evaluation output (text, image, or audio), optional diffs against a reference
+ * output, human grading UI (pass/fail/score/comment), token/latency/cost stats, and utility actions
+ * (copy, share, highlight). It also manages internal dialogs for viewing the prompt/test details and editing comments.
+ *
+ * @param output - The evaluation output record to render (text/audio/metadata, grading results, scores, etc.).
+ * @param maxTextLength - Maximum characters shown before truncation.
+ * @param firstOutput - Reference output used when `showDiffs` is true to compute and render diffs.
+ * @param showDiffs - When true, attempt to show a diff between `firstOutput` and `output`.
+ * @param searchText - Optional search string; when present and table highlighting is enabled, matches are highlighted in the output text.
+ * @param showStats - When true, renders token usage, latency, tokens/sec, cost, and other detail stats.
+ * @param onRating - Callback invoked to report human grading changes. Called as `onRating(pass?: boolean, score?: number, comment?: string)`.
+ * @param evaluationId - Evaluation identifier passed to the prompt/details dialog.
+ * @param testCaseId - Test case identifier passed to the prompt/details dialog (falls back to `output.id` when not provided).
+ * @param onMetricFilter - Optional callback to filter by a custom metric (passed through to the CustomMetrics child).
+ * @param isRedteam - When true, shows probe-specific stats (e.g., numRequests) in the stats panel.
+ */
 function EvalOutputCell({
   output,
   maxTextLength,
@@ -43,13 +72,20 @@ function EvalOutputCell({
   showDiffs,
   searchText,
   showStats,
+  evaluationId,
+  testCaseId,
+  isRedteam,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
-  searchText: string;
+  searchText?: string;
 }) {
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
     useResultsViewSettingsStore();
+
+  const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
+  const { data: cloudConfig } = useCloudConfig();
+  const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -107,25 +143,21 @@ function EvalOutputCell({
     setCommentText(newCommentText);
   };
 
-  let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
-  // Handle failure messages by splitting the text at '---'
-  if (!output.pass && text && text.includes('---')) {
-    failReasons = (output.gradingResult?.componentResults || [])
+  // Extract failure reasons from component results
+  if (output.gradingResult?.componentResults) {
+    failReasons = output.gradingResult.componentResults
       .filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason);
-    text = text.split('---').slice(1).join('---');
+      .map((result) => result.reason)
+      .filter((reason) => reason); // Filter out empty/undefined reasons
   }
 
   if (showDiffs && firstOutput) {
-    let firstOutputText =
+    const firstOutputText =
       typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
-
-    if (firstOutputText.includes('---')) {
-      firstOutputText = firstOutputText.split('---').slice(1).join('---');
-    }
 
     let diffResult;
     try {
@@ -144,23 +176,19 @@ function EvalOutputCell({
         diffResult = diffWords(firstOutputText, text);
       }
     }
-    node = (
-      <>
-        {diffResult.map(
-          (part: { added?: boolean; removed?: boolean; value: string }, index: number) =>
-            part.added ? (
-              <ins key={index}>{part.value}</ins>
-            ) : part.removed ? (
-              <del key={index}>{part.value}</del>
-            ) : (
-              <span key={index}>{part.value}</span>
-            ),
-        )}
-      </>
+    node = diffResult.map(
+      (part: { added?: boolean; removed?: boolean; value: string }, index: number) =>
+        part.added ? (
+          <ins key={index}>{part.value}</ins>
+        ) : part.removed ? (
+          <del key={index}>{part.value}</del>
+        ) : (
+          <span key={index}>{part.value}</span>
+        ),
     );
   }
 
-  if (searchText) {
+  if (searchText && shouldHighlightSearchText) {
     // Highlight search matches
     try {
       const regex = new RegExp(searchText, 'gi');
@@ -172,30 +200,29 @@ function EvalOutputCell({
           end: regex.lastIndex,
         });
       }
-      node = (
-        <>
-          {matches.length > 0 ? (
-            <>
-              <span key="text-before">{text?.substring(0, matches[0].start)}</span>
-              {matches.map((range, index) => (
-                <>
-                  <span className="search-highlight" key={'match-' + index}>
-                    {text?.substring(range.start, range.end)}
+      node =
+        matches.length > 0 ? (
+          <>
+            <span key="text-before">{text?.substring(0, matches[0].start)}</span>
+            {matches.map((range, index) => {
+              const matchText = text?.substring(range.start, range.end);
+              const afterText = text?.substring(
+                range.end,
+                matches[index + 1] ? matches[index + 1].start : text?.length,
+              );
+              return (
+                <React.Fragment key={`fragment-${index}`}>
+                  <span className="search-highlight" key={`match-${index}`}>
+                    {matchText}
                   </span>
-                  <span key={'text-after-' + index}>
-                    {text?.substring(
-                      range.end,
-                      matches[index + 1] ? matches[index + 1].start : text?.length,
-                    )}
-                  </span>
-                </>
-              ))}
-            </>
-          ) : (
-            <span key="no-match">{text}</span>
-          )}
-        </>
-      );
+                  <span key={`text-after-${index}`}>{afterText}</span>
+                </React.Fragment>
+              );
+            })}
+          </>
+        ) : (
+          <span key="no-match">{text}</span>
+        );
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
@@ -227,30 +254,40 @@ function EvalOutputCell({
         )}
       </div>
     );
-  } else if (renderMarkdown && !showDiffs) {
-    node = (
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          img: ({ src, alt }) => (
-            <img
-              loading="lazy"
-              src={src}
-              alt={alt}
-              onClick={() => toggleLightbox(src)}
-              style={{ cursor: 'pointer' }}
-            />
-          ),
-        }}
-      >
-        {text}
-      </ReactMarkdown>
-    );
-  } else if (prettifyJson) {
-    try {
-      node = <pre>{JSON.stringify(JSON.parse(text), null, 2)}</pre>;
-    } catch {
-      // Ignore because it's probably not JSON.
+  } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
+    // When both prettifyJson and renderMarkdown are enabled,
+    // display as JSON if it's a valid object/array, otherwise render as Markdown
+    let isJsonHandled = false;
+    if (prettifyJson) {
+      try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed === 'object' && parsed !== null) {
+          node = <pre>{JSON.stringify(parsed, null, 2)}</pre>;
+          isJsonHandled = true;
+        }
+      } catch {
+        // Not valid JSON, continue to Markdown if enabled
+      }
+    }
+    if (!isJsonHandled && renderMarkdown) {
+      node = (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            img: ({ src, alt }) => (
+              <img
+                loading="lazy"
+                src={src}
+                alt={alt}
+                onClick={() => toggleLightbox(src)}
+                style={{ cursor: 'pointer' }}
+              />
+            ),
+          }}
+        >
+          {text}
+        </ReactMarkdown>
+      );
     }
   }
 
@@ -302,15 +339,20 @@ function EvalOutputCell({
   let costDisplay;
 
   if (output.latencyMs) {
+    const isCached = output.response?.cached;
     latencyDisplay = (
       <span>
         {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms
+        {isCached ? ' (cached)' : ''}
       </span>
     );
   }
 
-  if (output.tokenUsage?.completion) {
-    const tokPerSec = output.tokenUsage.completion / (output.latencyMs / 1000);
+  // Check for token usage in both output.tokenUsage and output.response?.tokenUsage
+  const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
+
+  if (tokenUsage?.completion && output.latencyMs && output.latencyMs > 0) {
+    const tokPerSec = tokenUsage.completion / (output.latencyMs / 1000);
     tokPerSecDisplay = (
       <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokPerSec)}</span>
     );
@@ -320,34 +362,32 @@ function EvalOutputCell({
     costDisplay = <span>${output.cost.toPrecision(2)}</span>;
   }
 
-  if (output.response?.tokenUsage?.cached) {
+  if (tokenUsage?.cached) {
     tokenUsageDisplay = (
       <span>
-        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-          output.response?.tokenUsage?.cached ?? 0,
-        )}{' '}
+        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.cached ?? 0)}{' '}
         (cached)
       </span>
     );
-  } else if (output.response?.tokenUsage?.total) {
+  } else if (tokenUsage?.total) {
     const promptTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.response?.tokenUsage?.prompt ?? 0,
+      tokenUsage.prompt ?? 0,
     );
     const completionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.response?.tokenUsage?.completion ?? 0,
+      tokenUsage.completion ?? 0,
     );
     const totalTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.response?.tokenUsage?.total ?? 0,
+      tokenUsage.total ?? 0,
     );
 
-    if (output.response?.tokenUsage?.completionDetails?.reasoning) {
+    if (tokenUsage.completionDetails?.reasoning) {
       const reasoningTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-        output.response.tokenUsage.completionDetails.reasoning ?? 0,
+        tokenUsage.completionDetails.reasoning ?? 0,
       );
 
       tokenUsageDisplay = (
         <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total & ${reasoningTokens} reasoning tokens`}
+          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`}
         >
           <span>
             {totalTokens}
@@ -511,6 +551,11 @@ function EvalOutputCell({
 
   const detail = showStats ? (
     <div className="cell-detail">
+      {tokenUsage?.numRequests !== undefined && isRedteam && (
+        <div className="stat-item">
+          <strong>Probes:</strong> {tokenUsage.numRequests}
+        </div>
+      )}
       {tokenUsageDisplay && (
         <div className="stat-item">
           <strong>Tokens:</strong> {tokenUsageDisplay}
@@ -539,38 +584,38 @@ function EvalOutputCell({
     <div className="cell-actions">
       {shiftKeyPressed && (
         <>
-          <span className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
-            <Tooltip title="Copy output to clipboard">
-              <span>{copied ? '✅' : '📋'}</span>
-            </Tooltip>
-          </span>
-          <span
-            className="action"
-            onClick={handleToggleHighlight}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            <Tooltip title="Toggle test highlight">
-              <span>🌟</span>
-            </Tooltip>
-          </span>
-          <span
-            className="action"
-            onClick={handleRowShareLink}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            <Tooltip title="Share output">
-              <span>{linked ? '✅' : '🔗'}</span>
-            </Tooltip>
-          </span>
+          <Tooltip title={'Copy output to clipboard'} slotProps={tooltipSlotProps}>
+            <button className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
+              {copied ? '✅' : '📋'}
+            </button>
+          </Tooltip>
+          <Tooltip title={'Toggle test highlight'} slotProps={tooltipSlotProps}>
+            <button
+              className="action"
+              onClick={handleToggleHighlight}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              🌟
+            </button>
+          </Tooltip>
+          <Tooltip title={'Share output'} slotProps={tooltipSlotProps}>
+            <button
+              className="action"
+              onClick={handleRowShareLink}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {linked ? '✅' : '🔗'}
+            </button>
+          </Tooltip>
         </>
       )}
       {output.prompt && (
         <>
-          <span className="action" onClick={handlePromptOpen}>
-            <Tooltip title="View output and test details">
-              <span>🔎</span>
-            </Tooltip>
-          </span>
+          <Tooltip title={'View output and test details'} slotProps={tooltipSlotProps}>
+            <button className="action" onClick={handlePromptOpen}>
+              🔎
+            </button>
+          </Tooltip>
           {openPrompt && (
             <EvalOutputPromptDialog
               open={openPrompt}
@@ -580,41 +625,51 @@ function EvalOutputCell({
               gradingResults={output.gradingResult?.componentResults}
               output={text}
               metadata={output.metadata}
+              evaluationId={evaluationId}
+              testCaseId={testCaseId || output.id}
+              testIndex={rowIndex}
+              promptIndex={promptIndex}
+              variables={output.testCase?.vars}
+              onAddFilter={addFilter}
+              onResetFilters={resetFilters}
+              onReplay={replayEvaluation}
+              fetchTraces={fetchTraces}
+              cloudConfig={cloudConfig}
             />
           )}
         </>
       )}
-      <span
-        className={`action ${activeRating === true ? 'active' : ''}`}
-        onClick={() => handleRating(true)}
-      >
-        <Tooltip title="Mark test passed (score 1.0)">
-          <span>👍</span>
-        </Tooltip>
-      </span>
-      <span
-        className={`action ${activeRating === false ? 'active' : ''}`}
-        onClick={() => handleRating(false)}
-      >
-        <Tooltip title="Mark test failed (score 0.0)">
-          <span>👎</span>
-        </Tooltip>
-      </span>
-      <span className="action" onClick={handleSetScore}>
-        <Tooltip title="Set test score">
-          <span>🔢</span>
-        </Tooltip>
-      </span>
-      <span className="action" onClick={handleCommentOpen}>
-        <Tooltip title="Edit comment">
-          <span>✏️</span>
-        </Tooltip>
-      </span>
+      <Tooltip title={'Mark test passed (score 1.0)'} slotProps={tooltipSlotProps}>
+        <button
+          className={`action ${activeRating === true ? 'active' : ''}`}
+          onClick={() => handleRating(true)}
+        >
+          👍
+        </button>
+      </Tooltip>
+      <Tooltip title={'Mark test failed (score 0.0)'} slotProps={tooltipSlotProps}>
+        <button
+          className={`action ${activeRating === false ? 'active' : ''}`}
+          onClick={() => handleRating(false)}
+        >
+          👎
+        </button>
+      </Tooltip>
+      <Tooltip title={'Set test score'} slotProps={tooltipSlotProps}>
+        <button className="action" onClick={handleSetScore}>
+          🔢
+        </button>
+      </Tooltip>
+      <Tooltip title={'Edit comment'} slotProps={tooltipSlotProps}>
+        <button className="action" onClick={handleCommentOpen}>
+          ✏️
+        </button>
+      </Tooltip>
     </div>
   );
 
   return (
-    <div className="cell" style={cellStyle}>
+    <div id="eval-output-cell" className="cell" style={cellStyle}>
       {showPassFail && (
         <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
           <div className="status-row">
@@ -625,7 +680,7 @@ function EvalOutputCell({
             {providerOverride}
           </div>
           <CustomMetrics lookup={output.namedScores} />
-          {!output.pass && (
+          {failReasons.length > 0 && (
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />
             </span>

@@ -1,6 +1,10 @@
-import { Box, Paper, alpha, styled } from '@mui/material';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import { alpha, styled } from '@mui/material/styles';
 
-export const SeverityBadge = styled(Box)<{ severity: string }>(({ theme, severity }) => ({
+export const SeverityBadge = styled(Box)<{
+  severity: 'error' | 'critical' | 'warning' | 'info' | 'debug';
+}>(({ theme, severity }) => ({
   display: 'inline-flex',
   alignItems: 'center',
   padding: '4px 12px',
@@ -9,7 +13,7 @@ export const SeverityBadge = styled(Box)<{ severity: string }>(({ theme, severit
   fontWeight: 600,
   letterSpacing: 0.5,
   textTransform: 'uppercase',
-  ...(severity === 'error' && {
+  ...((severity === 'error' || severity === 'critical') && {
     background: alpha(theme.palette.error.main, 0.1),
     color: theme.palette.error.main,
   }),
@@ -20,6 +24,10 @@ export const SeverityBadge = styled(Box)<{ severity: string }>(({ theme, severit
   ...(severity === 'info' && {
     background: alpha(theme.palette.info.main, 0.1),
     color: theme.palette.info.main,
+  }),
+  ...(severity === 'debug' && {
+    background: alpha(theme.palette.grey[500], 0.1),
+    color: theme.palette.grey[700],
   }),
 }));
 

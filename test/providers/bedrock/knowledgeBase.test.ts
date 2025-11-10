@@ -1,4 +1,5 @@
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
+import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
 
 const mockSend = jest.fn();
 const mockBedrockClient = {
@@ -16,7 +17,9 @@ const { BedrockAgentRuntimeClient, RetrieveAndGenerateCommand } = jest.requireMo
 
 jest.mock('@smithy/node-http-handler', () => {
   return {
-    NodeHttpHandler: jest.fn(),
+    NodeHttpHandler: jest.fn().mockImplementation(() => ({
+      handle: jest.fn(),
+    })),
   };
 });
 
@@ -38,6 +41,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.AWS_BEDROCK_MAX_RETRIES;
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -50,6 +54,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -204,8 +209,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         type: 'KNOWLEDGE_BASE',
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
-          modelArn:
-            'arn:aws:bedrock:us-east-1:aws:foundation-model/us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+          modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
         },
       },
     };
@@ -215,7 +219,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     expect(result).toEqual({
       output: 'This is the response from the knowledge base',
       metadata: { citations: mockResponse.citations },
-      tokenUsage: {},
+      tokenUsage: createEmptyTokenUsage(),
     });
   });
 
@@ -298,7 +302,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         type: 'KNOWLEDGE_BASE',
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
-          modelArn: 'arn:aws:bedrock:us-east-1:aws:foundation-model/amazon.nova-lite-v1:0',
+          modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0',
         },
       },
     };
@@ -355,7 +359,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
           },
         ],
       },
-      tokenUsage: {},
+      tokenUsage: createEmptyTokenUsage(),
       cached: true,
     });
 
@@ -395,5 +399,82 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     );
 
     mockIsCacheEnabled.mockReturnValue(false);
+  });
+
+  it('should create knowledge base client with API key authentication from config', async () => {
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+          apiKey: 'test-api-key',
+        },
+      },
+    );
+
+    await provider.getKnowledgeBaseClient();
+
+    expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
+      requestHandler: expect.any(Object),
+    });
+  });
+
+  it('should create knowledge base client with API key authentication from environment', async () => {
+    process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+        },
+      },
+    );
+
+    await provider.getKnowledgeBaseClient();
+
+    expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
+      requestHandler: expect.any(Object),
+    });
+
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+  });
+
+  it('should prioritize explicit credentials over API key for knowledge base', async () => {
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+          apiKey: 'test-api-key',
+          accessKeyId: 'test-access-key',
+          secretAccessKey: 'test-secret-key',
+        },
+      },
+    );
+
+    await provider.getKnowledgeBaseClient();
+
+    // Should use explicit credentials (highest priority) instead of API key
+    expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
+      credentials: {
+        accessKeyId: 'test-access-key',
+        secretAccessKey: 'test-secret-key',
+        sessionToken: undefined,
+      },
+      requestHandler: expect.any(Object), // Still has handler for API key scenario
+    });
   });
 });

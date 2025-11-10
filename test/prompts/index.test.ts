@@ -1,10 +1,12 @@
-import dedent from 'dedent';
 import * as fs from 'fs';
+
+import dedent from 'dedent';
 import { globSync } from 'glob';
 import { importModule } from '../../src/esm';
-import { readPrompts, readProviderPromptMap, processPrompts } from '../../src/prompts';
+import { processPrompts, readPrompts, readProviderPromptMap } from '../../src/prompts/index';
 import { maybeFilePath } from '../../src/prompts/utils';
-import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
+
+import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types/index';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

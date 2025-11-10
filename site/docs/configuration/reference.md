@@ -1,5 +1,19 @@
 ---
 sidebar_position: 2
+sidebar_label: Reference
+title: Configuration Reference - Complete API Documentation
+description: Comprehensive reference for all promptfoo configuration options, properties, and settings. Complete API documentation for evaluation setup.
+keywords:
+  [
+    promptfoo reference,
+    configuration API,
+    evaluation options,
+    provider settings,
+    test configuration,
+    assertion types,
+  ]
+pagination_prev: configuration/guide
+pagination_next: configuration/prompts
 ---
 
 # Reference
@@ -15,14 +29,18 @@ Here is the main structure of the promptfoo configuration file:
 | providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](#provideroptions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use                                                                                                                                                              |
 | prompts                         | string \| string[]                                                                               | Yes      | One or more prompts to load                                                                                                                                                                                 |
 | tests                           | string \| [Test Case](#test-case)[]                                                              | Yes      | Path to a test file, OR list of LLM prompt variations (aka "test case")                                                                                                                                     |
-| defaultTest                     | Partial [Test Case](#test-case)                                                                  | No       | Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.                                                                                            |
+| defaultTest                     | string \| Partial [Test Case](#test-case)                                                        | No       | Sets the default properties for each test case. Can be an inline object or a `file://` path to an external YAML/JSON file.                                                                                  |
 | outputPath                      | string                                                                                           | No       | Where to write output. Writes to console/web viewer if not set.                                                                                                                                             |
 | evaluateOptions.maxConcurrency  | number                                                                                           | No       | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                        |
 | evaluateOptions.repeat          | number                                                                                           | No       | Number of times to run each test case . Defaults to 1                                                                                                                                                       |
 | evaluateOptions.delay           | number                                                                                           | No       | Force the test runner to wait after each API call (milliseconds)                                                                                                                                            |
 | evaluateOptions.showProgressBar | boolean                                                                                          | No       | Whether to display the progress bar                                                                                                                                                                         |
+| evaluateOptions.cache           | boolean                                                                                          | No       | Whether to use disk cache for results (default: true)                                                                                                                                                       |
+| evaluateOptions.timeoutMs       | number                                                                                           | No       | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error. Default is 0 (no timeout).                                                 |
+| evaluateOptions.maxEvalTimeMs   | number                                                                                           | No       | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the evaluation ends. Default is 0 (no limit).                           |
 | extensions                      | string[]                                                                                         | No       | List of extension files to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
 | env                             | Record\<string, string \| number \| boolean\>                                                    | No       | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                   |
+| commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                        | No       | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                      |
 
 ### Test Case
 
@@ -50,13 +68,113 @@ A test case represents a single example input that is fed into all prompts and p
 
 More details on using assertions, including examples [here](/docs/configuration/expected-outputs).
 
-| Property  | Type   | Required | Description                                                                                              |
-| --------- | ------ | -------- | -------------------------------------------------------------------------------------------------------- |
-| type      | string | Yes      | Type of assertion                                                                                        |
-| value     | string | No       | The expected value, if applicable                                                                        |
-| threshold | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`  |
-| provider  | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers) |
-| metric    | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                 |
+| Property         | Type   | Required | Description                                                                                                                                                                                                                                                                            |
+| ---------------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type             | string | Yes      | Type of assertion                                                                                                                                                                                                                                                                      |
+| value            | string | No       | The expected value, if applicable                                                                                                                                                                                                                                                      |
+| threshold        | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                                                                |
+| provider         | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                               |
+| metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                                                                                                                                                                                               |
+| contextTransform | string | No       | Javascript expression to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
+
+### CommandLineOptions
+
+Set default values for command-line options. These defaults will be used unless overridden by command-line arguments.
+
+| Property                 | Type     | Description                                                                     |
+| ------------------------ | -------- | ------------------------------------------------------------------------------- |
+| **Basic Configuration**  |          |                                                                                 |
+| description              | string   | Description of what your LLM is trying to do                                    |
+| config                   | string[] | Path(s) to configuration files                                                  |
+| envPath                  | string   | Path to .env file to load environment variables from                            |
+| **Input Files**          |          |                                                                                 |
+| prompts                  | string[] | One or more paths to prompt files                                               |
+| providers                | string[] | One or more LLM provider identifiers                                            |
+| tests                    | string   | Path to CSV file with test cases                                                |
+| vars                     | string   | Path to CSV file with test variables                                            |
+| assertions               | string   | Path to assertions file                                                         |
+| modelOutputs             | string   | Path to JSON file containing model outputs                                      |
+| **Prompt Modifications** |          |                                                                                 |
+| promptPrefix             | string   | Text to prepend to every prompt                                                 |
+| promptSuffix             | string   | Text to append to every prompt                                                  |
+| generateSuggestions      | boolean  | Generate new prompts and append them to the prompt list                         |
+| **Test Execution**       |          |                                                                                 |
+| maxConcurrency           | number   | Maximum number of concurrent requests                                           |
+| repeat                   | number   | Number of times to run each test case                                           |
+| delay                    | number   | Delay between API calls in milliseconds                                         |
+| grader                   | string   | Model that will grade outputs                                                   |
+| var                      | object   | Set test variables as key-value pairs (e.g. `{key1: 'value1', key2: 'value2'}`) |
+| **Filtering**            |          |                                                                                 |
+| filterPattern            | string   | Only run tests whose description matches the regular expression pattern         |
+| filterProviders          | string   | Only run tests with providers matching this regex                               |
+| filterTargets            | string   | Only run tests with targets matching this regex (alias for filterProviders)     |
+| filterFirstN             | number   | Only run the first N test cases                                                 |
+| filterSample             | number   | Run a random sample of N test cases                                             |
+| filterMetadata           | string   | Only run tests matching metadata filter (JSON format)                           |
+| filterErrorsOnly         | string   | Only run tests that resulted in errors (expects previous output path)           |
+| filterFailing            | string   | Only run tests that failed assertions (expects previous output path)            |
+| **Output & Display**     |          |                                                                                 |
+| output                   | string[] | Output file paths (csv, txt, json, yaml, yml, html)                             |
+| table                    | boolean  | Show output table (default: true, disable with --no-table)                      |
+| tableCellMaxLength       | number   | Maximum length of table cells in console output                                 |
+| progressBar              | boolean  | Whether to display progress bar during evaluation                               |
+| verbose                  | boolean  | Enable verbose output                                                           |
+| share                    | boolean  | Whether to create a shareable URL                                               |
+| **Caching & Storage**    |          |                                                                                 |
+| cache                    | boolean  | Whether to use disk cache for results (default: true)                           |
+| write                    | boolean  | Whether to write results to promptfoo directory (default: true)                 |
+| **Other Options**        |          |                                                                                 |
+| watch                    | boolean  | Whether to watch for config changes and re-run automatically                    |
+
+#### Example
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - prompt1.txt
+  - prompt2.txt
+
+providers:
+  - openai:gpt-4
+
+tests: tests.csv
+
+# Set default command-line options
+commandLineOptions:
+  envPath: .env.local # Load environment variables from custom .env file
+  maxConcurrency: 10
+  repeat: 3
+  delay: 1000
+  verbose: true
+  grader: openai:gpt-4o-mini
+  table: true
+  cache: false
+  tableCellMaxLength: 100
+
+  # Filtering options
+  filterPattern: 'auth.*' # Only run tests with 'auth' in description
+  filterProviders: 'openai.*' # Only test OpenAI providers
+  filterSample: 50 # Random sample of 50 tests
+
+  # Prompt modifications
+  promptPrefix: 'You are a helpful assistant. '
+  promptSuffix: "\n\nPlease be concise."
+
+  # Variables
+  var:
+    temperature: '0.7'
+    max_tokens: '1000'
+```
+
+With this configuration, running `npx promptfoo eval` will use these defaults. You can still override them:
+
+```bash
+# Uses maxConcurrency: 10 from config
+npx promptfoo eval
+
+# Overrides maxConcurrency to 5
+npx promptfoo eval --max-concurrency 5
+```
 
 ### AssertionValueFunctionContext
 
@@ -107,6 +225,104 @@ Promptfoo supports extension hooks that allow you to run custom code that modifi
 | afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` |
 | beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
 | afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
+
+### Session Management in Hooks
+
+For multi-turn conversations or stateful interactions, hooks can be used to manage per-test sessions (i.e. "conversation threads").
+
+#### Pre-Test Session Definition
+
+A common pattern is to create session on your server in the `beforeEach` hook and clean them up in the `afterEach` hook:
+
+```javascript
+export async function extensionHook(hookName, context) {
+  if (hookName === 'beforeEach') {
+    const res = await fetch('http://localhost:8080/session');
+    const sessionId = await res.text();
+    return { test: { ...context.test, vars: { ...context.test.vars, sessionId } } }; // Scope the session id to the current test case
+  }
+
+  if (hookName === 'afterEach') {
+    const id = context.test.vars.sessionId; // Read the session id from the test case scope
+    await fetch(`http://localhost:8080/session/${id}`, { method: 'DELETE' });
+  }
+}
+```
+
+See the working [stateful-session-management example](https://github.com/promptfoo/promptfoo/tree/main/examples/stateful-session-management) for a complete implementation.
+
+#### Test-Time Session Definition
+
+Session ids returned by your provider in `response.sessionId` will be used as the session id for the test case. If the provider does not return a session id, the test variables (`vars.sessionId`) will be used as fallback.
+
+**For HTTP providers**, you extract session IDs from server responses using a `sessionParser` configuration. The session parser tells promptfoo how to extract the session ID from response headers or body, which then becomes `response.sessionId`. For example:
+
+```yaml
+providers:
+  - id: http
+    config:
+      url: 'https://example.com/api'
+      # Session parser extracts ID from response → becomes response.sessionId
+      sessionParser: 'data.headers["x-session-id"]'
+      headers:
+        # Use the extracted session ID in subsequent requests
+        'x-session-id': '{{sessionId}}'
+```
+
+See the [HTTP provider session management documentation](/docs/providers/http#session-management) for complete details on configuring session parsers.
+
+It is made available in the `afterEach` hook context at:
+
+```javascript
+context.result.metadata.sessionId;
+```
+
+**Note:** For regular providers, the sessionId comes from either `response.sessionId` (provider-generated via session parser or direct provider support) or `vars.sessionId` (set in beforeEach hook or test config). The priority is: `response.sessionId` > `vars.sessionId`.
+
+For example:
+
+```javascript
+async function extensionHook(hookName, context) {
+  if (hookName === 'afterEach') {
+    const sessionId = context.result.metadata.sessionId;
+    if (sessionId) {
+      console.log(`Test completed with session: ${sessionId}`);
+      // You can use this sessionId for tracking, logging, or cleanup
+    }
+  }
+}
+```
+
+For iterative red team strategies (e.g., jailbreak, tree search), the `sessionIds` array is made available in the `afterEach` hook context at:
+
+```javascript
+context.result.metadata.sessionIds;
+```
+
+This is an array containing all session IDs from the iterative exploration process. Each iteration may have its own session ID, allowing you to track the full conversation history across multiple attempts.
+
+Example usage for iterative providers:
+
+```javascript
+async function extensionHook(hookName, context) {
+  if (hookName === 'afterEach') {
+    // For regular providers - single session ID
+    const sessionId = context.result.metadata.sessionId;
+
+    // For iterative providers (jailbreak, tree search) - array of session IDs
+    const sessionIds = context.result.metadata.sessionIds;
+    if (sessionIds && Array.isArray(sessionIds)) {
+      console.log(`Jailbreak completed with ${sessionIds.length} iterations`);
+      sessionIds.forEach((id, index) => {
+        console.log(`  Iteration ${index + 1}: session ${id}`);
+      });
+      // You can use these sessionIds for detailed tracking of the attack path
+    }
+  }
+}
+```
+
+Note: The `sessionIds` array only contains defined session IDs - any iterations without a session ID are filtered out.
 
 ### Implementing Hooks
 
@@ -228,16 +444,16 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 
 #### beforeAll
 
-| Property                          | Type                       | Description                            |
-| --------------------------------- | -------------------------- | -------------------------------------- |
-| `context.suite.prompts`           | `Prompt[]`                 | The prompts to be evaluated.           |
-| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to prompts.      |
-| `context.suite.tests`             | `TestCase[]`               | The test cases to be evaluated.        |
-| `context.suite.scenarios`         | `Scenario[]`               | The scenarios to be evaluated.         |
-| `context.suite.defaultTest`       | `TestCase`                 | The default test case to be evaluated. |
-| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of Nunjucks filters.             |
-| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of derived metrics.              |
-| `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.          |
+| Property                          | Type                       | Description                                                                                |
+| --------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
+| `context.suite.prompts`           | `Prompt[]`                 | The prompts to be evaluated.                                                               |
+| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to prompts.                                                          |
+| `context.suite.tests`             | `TestCase[]`               | The test cases to be evaluated.                                                            |
+| `context.suite.scenarios`         | `Scenario[]`               | The scenarios to be evaluated.                                                             |
+| `context.suite.defaultTest`       | `TestCase`                 | The default test case to be evaluated.                                                     |
+| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of Nunjucks filters.                                                                 |
+| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
+| `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.                                                              |
 
 #### beforeEach
 
@@ -256,8 +472,89 @@ interface GuardrailResponse {
   flagged?: boolean;
   flaggedInput?: boolean;
   flaggedOutput?: boolean;
+  reason?: string;
 }
 ```
+
+## Transformation Pipeline
+
+Understanding the transformation pipeline is crucial for complex evaluations, especially for RAG systems which require [context-based assertions](/docs/configuration/expected-outputs/model-graded). Here's how transforms are applied:
+
+### Execution Flow
+
+```mermaid
+graph LR
+    subgraph Provider
+      A
+      B
+    end
+
+    subgraph Test Cases
+      D
+      E
+      F
+      G
+    end
+
+    A[API Response] --> B[Provider transformResponse]
+    B --> D[options.transform]
+    B --> E[Assert contextTransform]
+    D --> F[Test Assertions]
+    E --> G[Context Assertions]
+```
+
+### Complete Example: RAG System Evaluation
+
+This example demonstrates how different transforms work together in a RAG evaluation :
+
+```yaml
+providers:
+  - id: 'http://localhost:3000/api/rag'
+    config:
+      # Step 1: Provider transform - normalize API response structure
+      transformResponse: |
+        // API returns: { status: "success", data: { answer: "...", sources: [...] } }
+        // Transform to: { answer: "...", sources: [...] }
+        json.data
+
+tests:
+  - vars:
+      query: 'What is the refund policy?'
+
+    options:
+      # Step 2a: Test transform - extract answer for general assertions
+      # Receives output from transformResponse: { answer: "...", sources: [...] }
+      transform: 'output.answer'
+
+    assert:
+      # Regular assertion uses test-transformed output (just the answer string)
+      - type: contains
+        value: '30 days'
+
+      # Context assertions use contextTransform
+      - type: context-faithfulness
+        # Step 2b: Context transform - extract sources
+        # Also receives output from transformResponse: { answer: "...", sources: [...] }
+        contextTransform: 'output.sources.map(s => s.content).join("\n")'
+        threshold: 0.9
+
+      # Another assertion can have its own transform
+      - type: equals
+        value: 'confident'
+        # Step 3: Assertion-level transform (applied after test transform)
+        # Receives: "30-day refund policy" (the test-transformed output)
+        transform: |
+          output.includes("30") ? "confident" : "uncertain"
+```
+
+### Key Points
+
+1. **Provider Transform** (`transformResponse`): Applied first to normalize provider responses
+2. **Test Case Transforms**:
+   - `options.transform`: Modifies output for regular assertions
+   - `contextTransform`: Extracts context for context-based assertions
+   - Both receive the provider-transformed output directly
+3. **Assertion Transform**: Applied to already-transformed output for specific assertions
 
 ### ProviderFunction
 
@@ -302,6 +599,7 @@ ProviderResponse is an object that represents the response from a provider. It i
 interface ProviderResponse {
   error?: string;
   output?: string | object;
+  metadata?: object;
   tokenUsage?: Partial<{
     total: number;
     prompt: number;
@@ -530,6 +828,7 @@ interface EvaluateResult {
   score: number;
   latencyMs: number;
   gradingResult?: GradingResult;
+  metadata?: Record<string, any>;
 }
 ```
 

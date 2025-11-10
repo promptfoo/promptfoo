@@ -6,13 +6,28 @@
 
 /* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #004a99;
-  --ifm-color-primary-dark: #004389;
-  --ifm-color-primary-darker: #003c7a;
-  --ifm-color-primary-darkest: #00356b;
-  --ifm-color-primary-light: #0051a9;
-  --ifm-color-primary-lighter: #0058b8;
-  --ifm-color-primary-lightest: #005fc7;
+  /* Primary red color palette */
+  --ifm-color-primary: #e53a3a;
+  --ifm-color-primary-dark: #cb3434;
+  --ifm-color-primary-darker: #b32e2e;
+  --ifm-color-primary-darkest: #991515;
+  --ifm-color-primary-light: #ff7a7a;
+  --ifm-color-primary-lighter: #ffa0a0;
+  --ifm-color-primary-lightest: #ffc6c6;
+
+  /* Custom palette */
+  --pf-red-base: #e53a3a;
+  --pf-red-dark: #cb3434;
+  --pf-red-darker: #b32e2e;
+  --pf-red-light: #ff7a7a;
+  --pf-red-lighter: #ffa0a0;
+  --pf-red-lightest: #ffc6c6;
+  --pf-red-ultra-light: #ffd9d9;
+
+  --pf-dark-base: #2e3c46;
+  --pf-dark-darker: #17252b;
+  --pf-dark-darkest: #10191c;
+
   --ifm-code-font-size: 95%;
   --ifm-font-family-base:
     'Inter', system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif,
@@ -23,15 +38,19 @@
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #4d9fff;
-  --ifm-color-primary-dark: #2f8fff;
-  --ifm-color-primary-darker: #1f85ff;
-  --ifm-color-primary-darkest: #006be0;
-  --ifm-color-primary-light: #6bafff;
-  --ifm-color-primary-lighter: #7bb9ff;
-  --ifm-color-primary-lightest: #a8d1ff;
+  --ifm-color-primary: #ff7a7a;
+  --ifm-color-primary-dark: #e53a3a;
+  --ifm-color-primary-darker: #cb3434;
+  --ifm-color-primary-darkest: #b32e2e;
+  --ifm-color-primary-light: #ffa0a0;
+  --ifm-color-primary-lighter: #ffc6c6;
+  --ifm-color-primary-lightest: #ffd9d9;
   --ifm-button-color: #fff;
   --docusaurus-highlighted-code-line-bg: #353531;
+
+  /* Update background colors */
+  --ifm-background-color: #10191c;
+  --ifm-background-surface-color: #17252b;
 }
 
 code p {
@@ -51,12 +70,28 @@ code p {
   font-weight: 600;
 }
 
-.theme-doc-sidebar-container > div > div {
-  padding-top: 1rem !important;
-}
-
 .navbar__brand {
   font-family: var(--ifm-font-family-monospace);
+}
+
+/* Hide search bar on non-docs pages */
+html:not(.docs-wrapper) .navbar__search,
+html:not(.docs-wrapper) .DocSearch {
+  display: none !important;
+}
+
+/* Mobile navbar adjustments */
+@media (max-width: 996px) {
+  /* Hide search box on mobile to prevent overlap */
+  .navbar__search,
+  .DocSearch {
+    display: none !important;
+  }
+
+  /* Keep hamburger top-level items consistent */
+  .navbar-sidebar__items .menu__list > .menu__list-item > .menu__link {
+    font-weight: 600;
+  }
 }
 
 .navbar__logo img {
@@ -117,6 +152,44 @@ code p {
   transform: none;
   opacity: 0.4;
   background-size: 16px;
+}
+
+/* Book a Demo button styling */
+.header-book-demo-link {
+  background-color: var(--pf-red-base);
+  color: white !important;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.2s ease-in-out;
+  margin-right: 0.75rem;
+}
+
+.header-book-demo-link:hover {
+  background-color: var(--pf-red-dark);
+  color: white !important;
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(229, 58, 58, 0.3);
+}
+
+[data-theme='dark'] .header-book-demo-link {
+  background-color: var(--pf-red-light);
+  color: var(--pf-dark-darkest) !important;
+}
+
+[data-theme='dark'] .header-book-demo-link:hover {
+  background-color: var(--pf-red-lighter);
+  color: var(--pf-dark-darkest) !important;
+  box-shadow: 0 4px 12px rgba(255, 122, 122, 0.3);
+}
+
+/* Mobile adjustments for book demo button */
+@media (max-width: 996px) {
+  .header-book-demo-link {
+    margin-right: 0;
+    margin-bottom: 0.5rem;
+  }
 }
 
 /* Import custom pagination styles */

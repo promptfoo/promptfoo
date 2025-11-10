@@ -1,8 +1,9 @@
-import { fetchWithTimeout } from '../../../src/fetch';
-import { CyberSecEvalPlugin, PLUGIN_ID } from '../../../src/redteam/plugins/cyberseceval';
+import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
+import { fetchWithTimeout } from '../../../src/util/fetch/index';
+
 import type { ApiProvider } from '../../../src/types';
 
-jest.mock('../../../src/fetch', () => ({
+jest.mock('../../../src/util/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 
@@ -31,7 +32,7 @@ describe('CyberSecEvalPlugin', () => {
   });
 
   it('should have the correct plugin ID', () => {
-    expect(plugin.id).toBe(PLUGIN_ID);
+    expect(plugin.id).toBe('promptfoo:redteam:cyberseceval');
   });
 
   it('should set canGenerateRemote to false', () => {

@@ -2,9 +2,6 @@ trailingComma: 'all'
 singleQuote: true
 printWidth: 100
 bracketSpacing: true
-plugins:
-  - '@trivago/prettier-plugin-sort-imports'
-importOrder: ['react', '<THIRD_PARTY_MODULES>', '^(?!.*\.css$)[./].*$', '.css$']
 overrides:
   - files: '*.mdc'
     options:

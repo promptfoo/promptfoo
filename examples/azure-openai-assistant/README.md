@@ -131,6 +131,38 @@ functionToolCallbacks:
     }
 ```
 
+## Function Callback Context
+
+Function callbacks can optionally receive context information about the current conversation:
+
+```javascript
+// Enhanced callback with context for audit logging
+functionToolCallbacks: {
+  get_employee_data: async (args, context) => {
+    const { employeeId } = JSON.parse(args);
+
+    // Log access with thread context for audit trail
+    console.log(`Access to employee ${employeeId} requested`, {
+      threadId: context?.threadId,
+      timestamp: new Date().toISOString(),
+      provider: context?.provider,
+    });
+
+    // Your function logic here
+    return JSON.stringify({ name: 'John Doe', department: 'Engineering' });
+  };
+}
+```
+
+The context object includes:
+
+- `threadId`: Unique identifier for the conversation thread
+- `runId`: Identifier for the current assistant run
+- `assistantId`: The assistant being used
+- `provider`: The provider type ('azure' or 'openai')
+
+This is particularly useful for session management, audit logging, and tracking stateful interactions across function calls.
+
 ## Documentation
 
 For more information about using Azure OpenAI with promptfoo, including authentication methods, provider types, and configuration options, see the [official Azure provider documentation](https://www.promptfoo.dev/docs/providers/azure/).

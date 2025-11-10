@@ -1,24 +1,41 @@
 import fs from 'fs';
 import path from 'path';
+
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
-import { getEnvBool, getEnvInt, getEnvString } from '../src/envars';
+import { getEnvBool, getEnvString } from '../src/envars';
+import logger from '../src/logger';
+import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import {
   fetchWithProxy,
   fetchWithRetries,
   fetchWithTimeout,
   handleRateLimit,
   isRateLimited,
-  sanitizeUrl,
-} from '../src/fetch';
-import logger from '../src/logger';
-import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
+} from '../src/util/fetch/index';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 
 jest.mock('../src/util/time', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+  logRequestResponse: jest.fn(),
+}));
+
+jest.mock('../src/globalConfig/cloud', () => ({
+  CLOUD_API_HOST: 'https://api.promptfoo.dev',
+  cloudConfig: {
+    getApiKey: jest.fn(),
+  },
 }));
 
 jest.mock('undici', () => {
@@ -81,6 +98,9 @@ jest.mock('../src/envars', () => {
       return defaultValue;
     }),
     getEnvBool: jest.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
+      if (key === 'PROMPTFOO_RETRY_5XX_ENABLED') {
+        return process.env.PROMPTFOO_RETRY_5XX_ENABLED === 'true' || false;
+      }
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return process.env.PROMPTFOO_INSECURE_SSL === 'true' || false;
       }
@@ -89,9 +109,12 @@ jest.mock('../src/envars', () => {
       }
       return defaultValue;
     }),
-    getEnvInt: jest
-      .fn()
-      .mockImplementation((key: string, defaultValue: number = 0) => defaultValue),
+    getEnvInt: jest.fn().mockImplementation((key: string, defaultValue: number = 0) => {
+      if (key === 'REQUEST_TIMEOUT_MS') {
+        return Number.parseInt(process.env.REQUEST_TIMEOUT_MS || '300000', 10);
+      }
+      return defaultValue;
+    }),
   };
 });
 
@@ -903,22 +926,30 @@ describe('fetchWithRetries', () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
     expect(sleep).toHaveBeenCalledTimes(1);
   });
-});
 
-describe('sanitizeUrl', () => {
-  it('should mask credentials in URLs', () => {
-    const url = 'https://username:password@example.com/api';
-    expect(sanitizeUrl(url)).toBe('https://***:***@example.com/api');
+  it('should log attempt count with total attempts on rate limit', async () => {
+    const rateLimitedResponse = createMockResponse({
+      status: 429,
+      headers: new Headers({ 'Retry-After': '0' }),
+    });
+    jest.mocked(global.fetch).mockResolvedValue(rateLimitedResponse);
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow();
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('attempt 1/3'));
   });
 
-  it('should handle URLs without credentials', () => {
-    const url = 'https://example.com/api';
-    expect(sanitizeUrl(url)).toBe(url);
-  });
+  it('should include error details in final error message for rate limits', async () => {
+    const rateLimitResponse = createMockResponse({
+      status: 429,
+      statusText: 'Too Many Requests',
+    });
 
-  it('should return original string for invalid URLs', () => {
-    const invalidUrl = 'not-a-url';
-    expect(sanitizeUrl(invalidUrl)).toBe(invalidUrl);
+    jest.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
+      'Rate limited: 429 Too Many Requests',
+    );
   });
 });
 

@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import React from 'react';
 import userEvent from '@testing-library/user-event';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EvalIdChip } from './EvalIdChip';
 
 describe('EvalIdChip', () => {

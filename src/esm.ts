@@ -1,6 +1,13 @@
 import { pathToFileURL } from 'node:url';
+
 import logger from './logger';
-import { safeResolve } from './util/file.node';
+import { safeResolve } from './util/pathUtils';
+
+type DynamicImportFn = (specifier: string) => Promise<any>;
+
+const { dynamicImport } = require('./dynamic-import.cjs') as {
+  dynamicImport: DynamicImportFn;
+};
 
 // esm-specific crap that needs to get mocked out in tests
 
@@ -29,8 +36,24 @@ export async function importModule(modulePath: string, functionName?: string) {
     }
 
     const resolvedPath = pathToFileURL(safeResolve(modulePath));
-    logger.debug(`Attempting ESM import from: ${resolvedPath.toString()}`);
-    const importedModule = await import(resolvedPath.toString());
+    const resolvedPathStr = resolvedPath.toString();
+    logger.debug(`Attempting ESM import from: ${resolvedPathStr}`);
+
+    // IMPORTANT: Use a CJS helper to trigger native dynamic import at runtime
+    //
+    // Problem: Dynamic imports get converted to require() calls by:
+    // 1. ts-node during development (@cspotcode/source-map-support)
+    // 2. TypeScript compiler during production build (when module: "commonjs")
+    //
+    // This breaks ES module loading because:
+    // 1. require() can't load ES modules (throws ERR_REQUIRE_ESM)
+    // 2. require() doesn't understand file:// URLs (throws MODULE_NOT_FOUND)
+    //
+    // Solution: call into a CommonJS helper that performs the import. Because the
+    // helper is plain JavaScript, neither ts-node nor the TypeScript compiler can
+    // rewrite the `import()` expression, so Node.js handles it natively.
+    const importedModule = await dynamicImport(resolvedPathStr);
+
     const mod = importedModule?.default?.default || importedModule?.default || importedModule;
     logger.debug(
       `Successfully imported module: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
@@ -43,9 +66,14 @@ export async function importModule(modulePath: string, functionName?: string) {
   } catch (err) {
     // If ESM import fails, try CommonJS require as fallback
     logger.debug(`ESM import failed: ${err}`);
+
+    // If error has a callstack, log it:
+    if ((err as any).stack) {
+      logger.debug((err as any).stack);
+    }
+
     logger.debug('Attempting CommonJS require fallback...');
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const importedModule = require(safeResolve(modulePath));
       const mod = importedModule?.default?.default || importedModule?.default || importedModule;
       logger.debug(

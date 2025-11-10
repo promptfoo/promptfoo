@@ -1,4 +1,5 @@
 import { processString } from '../../../src/prompts/processors/string';
+
 import type { Prompt } from '../../../src/types';
 
 describe('processString', () => {

@@ -1,21 +1,26 @@
 import path from 'path';
-import { OpenAiGenericProvider } from '.';
+
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from './';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
-import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
@@ -168,7 +173,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4')
+      this.modelName.startsWith('o4') ||
+      this.modelName.startsWith('gpt-5')
     );
   }
 
@@ -192,12 +198,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const isReasoningModel = this.isReasoningModel();
+    const isGPT5Model = this.modelName.startsWith('gpt-5');
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
-    const maxTokens = isReasoningModel
-      ? undefined
-      : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+    const maxTokens =
+      isReasoningModel || isGPT5Model
+        ? undefined
+        : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
 
     const temperature = this.supportsTemperature()
       ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
@@ -263,14 +271,19 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             audio: config.audio || { voice: 'alloy', format: 'wav' },
           }
         : {}),
+      // GPT-5 only: attach verbosity if provided
+      ...(this.modelName.startsWith('gpt-5') && config.verbosity
+        ? { verbosity: config.verbosity }
+        : {}),
     };
 
-    // Handle reasoning_effort and reasoning parameters for o-series models
+    // Handle reasoning_effort and reasoning parameters for reasoning models
     if (
       config.reasoning_effort &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.startsWith('gpt-5'))
     ) {
       body.reasoning_effort = config.reasoning_effort;
     }
@@ -316,12 +329,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
-    logger.debug(`Calling ${this.getApiUrl()} API: ${JSON.stringify(body)}`);
 
     let data, status, statusText;
     let cached = false;
+    let latencyMs: number | undefined;
     try {
-      ({ data, cached, status, statusText } = await fetchWithCache(
+      ({ data, cached, status, statusText, latencyMs } = await fetchWithCache(
         `${this.getApiUrl()}/chat/completions`,
         {
           method: 'POST',
@@ -336,11 +349,28 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         REQUEST_TIMEOUT_MS,
         'json',
         context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
       ));
 
       if (status < 200 || status >= 300) {
+        const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
+
+        // Check if this is an invalid_prompt error code (indicates refusal)
+        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+          return {
+            output: errorMessage,
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            latencyMs,
+            isRefusal: true,
+            guardrails: {
+              flagged: true,
+              flaggedInput: true, // This error specifically indicates input was rejected
+            },
+          };
+        }
+
         return {
-          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+          error: errorMessage,
         };
       }
     } catch (err) {
@@ -351,23 +381,40 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    logger.debug(`\tcompletions API response: ${JSON.stringify(data)}`);
-    if (data.error) {
-      await data.deleteFromCache?.();
-      return {
-        error: formatOpenAiError(data),
-      };
-    }
-
     try {
       const message = data.choices[0].message;
+      const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
+
+      // Track content filtering for guardrails
+      const contentFiltered = finishReason === FINISH_REASON_MAP.content_filter;
+
       if (message.refusal) {
         return {
           output: message.refusal,
           tokenUsage: getTokenUsage(data, cached),
+          cached,
+          latencyMs,
           isRefusal: true,
+          ...(finishReason && { finishReason }),
+          guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
         };
       }
+
+      // Check if content was filtered
+      if (contentFiltered) {
+        return {
+          output: message.content || 'Content filtered by provider',
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          latencyMs,
+          isRefusal: true,
+          finishReason: FINISH_REASON_MAP.content_filter,
+          guardrails: {
+            flagged: true,
+          },
+        };
+      }
+
       let output = '';
       if (message.reasoning) {
         output = message.reasoning;
@@ -401,12 +448,74 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Handle function tool callbacks
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
-      if (functionCalls && config.functionToolCallbacks) {
+      if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
         let hasSuccessfulCallback = false;
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
-          if (config.functionToolCallbacks[functionName]) {
+
+          // Try MCP first if available
+          if (this.mcpClient) {
+            const mcpTools = this.mcpClient.getAllTools();
+            const mcpTool = mcpTools.find((tool) => tool.name === functionName);
+            if (mcpTool) {
+              try {
+                const args = functionCall.arguments || functionCall.function?.arguments || '{}';
+                const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+                const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
+
+                if (mcpResult?.error) {
+                  results.push(`MCP Tool Error (${functionName}): ${mcpResult.error}`);
+                } else {
+                  // Normalize MCP content to a readable string
+                  const normalizeContent = (content: any): string => {
+                    if (content == null) {
+                      return '';
+                    }
+                    if (typeof content === 'string') {
+                      return content;
+                    }
+                    if (Array.isArray(content)) {
+                      return content
+                        .map((part) => {
+                          if (typeof part === 'string') {
+                            return part;
+                          }
+                          if (part && typeof part === 'object') {
+                            if ('text' in part && (part as any).text != null) {
+                              return String((part as any).text);
+                            }
+                            if ('json' in part) {
+                              return JSON.stringify((part as any).json);
+                            }
+                            if ('data' in part) {
+                              return JSON.stringify((part as any).data);
+                            }
+                            return JSON.stringify(part);
+                          }
+                          return String(part);
+                        })
+                        .join('\n');
+                    }
+                    return JSON.stringify(content);
+                  };
+
+                  const content = normalizeContent(mcpResult?.content);
+                  results.push(`MCP Tool Result (${functionName}): ${content}`);
+                }
+                hasSuccessfulCallback = true;
+                continue; // Skip to next function call
+              } catch (error) {
+                logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
+                results.push(`MCP Tool Error (${functionName}): ${error}`);
+                hasSuccessfulCallback = true;
+                continue; // Skip to next function call
+              }
+            }
+          }
+
+          // Fall back to regular function callbacks
+          if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
             try {
               const functionResult = await this.executeFunctionCallback(
                 functionName,
@@ -430,7 +539,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             output: results.join('\n'),
             tokenUsage: getTokenUsage(data, cached),
             cached,
+            latencyMs,
             logProbs,
+            ...(finishReason && { finishReason }),
             cost: calculateOpenAICost(
               this.modelName,
               config,
@@ -439,6 +550,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               data.usage?.audio_prompt_tokens,
               data.usage?.audio_completion_tokens,
             ),
+            guardrails: { flagged: contentFiltered },
           };
         }
       }
@@ -464,7 +576,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           },
           tokenUsage: getTokenUsage(data, cached),
           cached,
+          latencyMs,
           logProbs,
+          ...(finishReason && { finishReason }),
           cost: calculateOpenAICost(
             this.modelName,
             config,
@@ -473,6 +587,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             data.usage?.audio_prompt_tokens,
             data.usage?.audio_completion_tokens,
           ),
+          guardrails: { flagged: contentFiltered },
         };
       }
 
@@ -480,7 +595,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output,
         tokenUsage: getTokenUsage(data, cached),
         cached,
+        latencyMs,
         logProbs,
+        ...(finishReason && { finishReason }),
         cost: calculateOpenAICost(
           this.modelName,
           config,
@@ -489,6 +606,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           data.usage?.audio_prompt_tokens,
           data.usage?.audio_completion_tokens,
         ),
+        guardrails: { flagged: contentFiltered },
       };
     } catch (err) {
       await data?.deleteFromCache?.();

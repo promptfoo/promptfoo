@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { calculateCost } from '../shared';
 import { AZURE_MODELS } from './defaults';
+
 import type { AzureCompletionOptions } from './types';
 
 /**
@@ -19,7 +20,7 @@ export function throwConfigurationError(message: string): never {
  */
 export function calculateAzureCost(
   modelName: string,
-  config: AzureCompletionOptions,
+  _config: AzureCompletionOptions,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {

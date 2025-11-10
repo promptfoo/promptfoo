@@ -1,5 +1,6 @@
 ---
 sidebar_label: Simulated User
+description: 'Simulate realistic user interactions and behaviors for comprehensive testing of conversational AI systems and chatbots'
 ---
 
 # Simulated User
@@ -51,14 +52,82 @@ For each turn:
 3. The simulated user generates the next message based on their instructions
 4. This continues until either:
    - The maximum number of turns is reached
-   - The agent includes "###STOP###" in its response
+   - The agent determines that the conversation has reached a natural conclusion
 
 ## Configuration Options
 
-| Option         | Type   | Description                                                                                 |
-| -------------- | ------ | ------------------------------------------------------------------------------------------- |
-| `instructions` | string | Template for user instructions. Supports Nunjucks templating with access to test variables. |
-| `maxTurns`     | number | Maximum number of conversation turns. Defaults to 10.                                       |
+| Option            | Type                | Description                                                                                                                    |
+| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                    |
+| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                          |
+| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats). |
+
+## Initial Messages
+
+Start conversations from a specific state by providing initial conversation history. Useful for testing mid-conversation scenarios, reproducing bugs, or avoiding unnecessary simulated turns.
+
+Use variables to template messages and avoid duplication:
+
+```yaml
+defaultTest:
+  provider:
+    id: 'promptfoo:simulated-user'
+    config:
+      maxTurns: 3
+      initialMessages:
+        - role: user
+          content: I've selected my flight and I'm ready to book
+        - role: assistant
+          content: Great! How would you like to pay?
+        - role: user
+          content: I want to pay via {{payment_method}} # Variable
+
+tests:
+  - vars:
+      payment_method: credit card # Replaces {{payment_method}}
+      instructions: Complete payment with credit card
+
+  - vars:
+      payment_method: PayPal # Replaces {{payment_method}}
+      instructions: Complete payment with PayPal
+```
+
+Initial messages support Nunjucks templating in both `role` and `content` fields. Define them in `config.initialMessages` (shared) or `vars.initialMessages` (per-test, takes precedence).
+
+### Loading from Files
+
+Load longer conversation histories from JSON or YAML files:
+
+```yaml
+tests:
+  - vars:
+      initialMessages: file://./conversation-history.json
+      instructions: You've selected a flight and want to pay with travel certificates
+```
+
+```json
+[
+  { "role": "user", "content": "I need a flight from NYC to Seattle" },
+  { "role": "assistant", "content": "I found a direct flight for $325" },
+  { "role": "user", "content": "Yes, that works for me" }
+]
+```
+
+File-based messages also support variable templating.
+
+:::info How maxTurns Works with Initial Messages
+
+`maxTurns` controls the number of **new** conversation turns to simulate AFTER the initial messages. Initial messages don't count toward `maxTurns`.
+
+For example:
+
+- `initialMessages`: 4 messages (2 user + 2 assistant = 2 exchanges)
+- `maxTurns`: 3
+- **Result**: 4 initial messages + up to 3 new turns = up to 10 total messages
+
+This allows you to control how much new interaction happens while testing from a specific conversation state.
+
+:::
 
 ## Example
 
@@ -135,6 +204,50 @@ This enables automatic evaluation of whether your agent successfully handles dif
 
 For a complete working example with 31 customer personas and comprehensive assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/tau-simulated-user).
 
+### Using with Custom Providers
+
+The Simulated User Provider works seamlessly with custom providers (Python, JavaScript, etc.). All test-level `vars` are automatically passed to your custom provider's context, allowing you to access dynamic values like user IDs, session data, or routing information during conversations.
+
+```yaml
+providers:
+  - id: file://my_custom_agent.py
+    config:
+      base_url: https://api.example.com
+
+defaultTest:
+  provider:
+    id: 'promptfoo:simulated-user'
+    config:
+      maxTurns: 5
+
+tests:
+  - vars:
+      workflow_id: 'wf-123'
+      session_id: 'sess-456'
+      instructions: |
+        You are booking a flight. Ask for the workflow ID to track your request.
+```
+
+In your custom provider, you can access these vars:
+
+```python
+def call_api(prompt, options, context):
+    # Access vars from the simulated conversation
+    workflow_id = context['vars']['workflow_id']  # "wf-123"
+    session_id = context['vars']['session_id']    # "sess-456"
+
+    # Use them in your logic
+    response = f"I'll track this as workflow {workflow_id}..."
+    return {"output": response}
+```
+
+This enables sophisticated testing scenarios where your custom provider can:
+
+- Route requests based on context variables
+- Maintain conversation state using session IDs
+- Access user-specific data for personalized responses
+- Implement complex business logic while testing multi-turn conversations
+
 ## Using as a Library
 
 When using promptfoo as a Node library, provide the equivalent configuration:
@@ -162,6 +275,12 @@ The conversation will automatically stop when:
 - An error occurs during the conversation
 
 The `###STOP###` marker is useful for agents that can determine when a conversation has reached a natural conclusion (e.g., task completed, user satisfied).
+
+## Remote Generation
+
+By default, SimulatedUser uses Promptfoo's hosted conversation models. Your target model always runs locally - only simulated user responses are generated remotely.
+
+To disable remote generation, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`. See the [Privacy Policy](/privacy#remote-generation) for details on what data is sent.
 
 ## Limitations
 

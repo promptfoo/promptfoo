@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure OpenAI vision model evaluation
+
+prompts:
+  # Vision models require a specific message format with content arrays
+  - file://prompt.vision.json
+
+providers:
+  # Update with your Azure OpenAI deployment details
+  - id: azure:chat:gpt-4o
+    config:
+      apiHost: your-deployment.openai.azure.com
+      apiVersion: 2024-02-15-preview
+      temperature: 0.1
+      max_tokens: 500
+
+tests:
+  # Test 1: Load image from URL
+  - vars:
+      question: What celestial body is shown in this image?
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/The_Earth_seen_from_Apollo_17.jpg/320px-The_Earth_seen_from_Apollo_17.jpg
+    assert:
+      - type: contains
+        value: Earth
+
+  # Test 2: Load image from local file (automatically converted to base64)
+  - vars:
+      question: What color is the planet in this image?
+      image_url: file://assets/earth.jpg
+    assert:
+      - type: contains-any
+        value: [blue, green]
+
+  # Test 3: Load image as base64 data URI
+  - vars:
+      question: Is this an image of a planet?
+      image_url: data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wgARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGgP//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAQUCf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQMBAT8Bf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQIBAT8Bf//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEABj8Cf//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAT8hf//aAAwDAQACAAMAAAAQ/wD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/EH//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/EH//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/EH//2Q==
+    assert:
+      - type: equals
+        value: 'Yes'
+# Note: If you see 401 errors, ensure:
+# 1. Your AZURE_API_KEY environment variable is set correctly
+# 2. The apiHost matches your Azure OpenAI resource name
+# 3. Your deployment supports vision (GPT-4V, GPT-4 Turbo with Vision, GPT-4.1)

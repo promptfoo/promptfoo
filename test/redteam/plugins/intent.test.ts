@@ -1,8 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers';
-import { IntentGrader, IntentPlugin, PLUGIN_ID } from '../../../src/redteam/plugins/intent';
+import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
+
 import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
@@ -30,6 +32,11 @@ jest.mock('fs', () => ({
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('better-sqlite3');
@@ -56,7 +63,7 @@ describe('IntentPlugin', () => {
       'View order details belonging to Jane Smith while authenticated as John Doe',
     );
     expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
-    expect(tests[0].metadata).toHaveProperty('pluginId', PLUGIN_ID);
+    expect(tests[0].metadata).toHaveProperty('pluginId', 'promptfoo:redteam:intent');
   });
 
   it('should initialize with an array of string intents', async () => {
@@ -240,7 +247,7 @@ describe('IntentPlugin', () => {
     expect(tests).toHaveLength(1);
     expect(tests[0].vars).toHaveProperty('prompt', 'malicious intent');
     expect(tests[0].metadata).toHaveProperty('goal', null);
-    expect(tests[0].metadata).toHaveProperty('pluginId', PLUGIN_ID);
+    expect(tests[0].metadata).toHaveProperty('pluginId', 'promptfoo:redteam:intent');
   });
 
   it('should handle fetch errors when extracting intent', async () => {
@@ -254,7 +261,7 @@ describe('IntentPlugin', () => {
     expect(tests).toHaveLength(1);
     expect(tests[0].vars).toHaveProperty('prompt', 'malicious intent');
     expect(tests[0].metadata).toHaveProperty('goal', null);
-    expect(tests[0].metadata).toHaveProperty('pluginId', PLUGIN_ID);
+    expect(tests[0].metadata).toHaveProperty('pluginId', 'promptfoo:redteam:intent');
   });
 
   it('should respect delay between test generations', async () => {
@@ -309,7 +316,7 @@ describe('IntentGrader', () => {
   });
 
   it('should have the correct id', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
+    expect(grader.id).toBe('promptfoo:redteam:intent');
   });
 
   it('should render the rubric with correct structure and variables', async () => {
@@ -371,9 +378,9 @@ describe('IntentGrader', () => {
         pass: true,
         score: 1,
         reason: 'Model refused the request',
+        assertion: undefined,
       },
       rubric: expect.any(String),
-      suggestions: undefined,
     });
   });
 });

@@ -1,6 +1,6 @@
 ---
 title: Using MCP (Model Context Protocol) in Promptfoo
-description: Configure and integrate Model Context Protocol (MCP) with Promptfoo to enable tool use, memory, and agentic capabilities across different LLM providers
+description: Enable Model Context Protocol (MCP) integration for enhanced tool use, persistent memory, and agentic workflows across providers
 sidebar_label: Model Context Protocol (MCP)
 sidebar_position: 20
 ---
@@ -105,6 +105,27 @@ providers:
 - Each entry can be a local launch or a remote URL (if supported).
 - All tools from all servers will be available to the provider.
 - You can specify different headers for each server when using URL connections.
+- You can also connect to the same server multiple times if needed:
+
+```yaml
+providers:
+  - id: anthropic:claude-3-5-sonnet-20241022
+    config:
+      mcp:
+        enabled: true
+        servers:
+          - command: npx
+            args: ['-y', '@modelcontextprotocol/server-memory']
+            name: memory
+          - command: npx
+            args: ['-y', '@modelcontextprotocol/server-filesystem']
+            name: filesystem
+          - command: npx
+            args: ['-y', '@modelcontextprotocol/server-github']
+            name: github
+```
+
+This configuration connects a single provider to multiple MCP servers, giving it access to memory storage, filesystem operations, and GitHub integration simultaneously.
 
 ## Using Multiple MCP Servers
 
@@ -171,6 +192,10 @@ In addition to the general MCP integration described above, OpenAI's Responses A
 - Tool filtering capabilities
 
 For detailed information about using MCP with OpenAI's Responses API, see the [OpenAI Provider MCP documentation](../providers/openai.md#mcp-model-context-protocol-support).
+
+## Tool Schema Compatibility
+
+Promptfoo automatically handles JSON Schema compatibility between MCP servers and LLM providers by removing provider-incompatible metadata fields (like `$schema`) while preserving supported features. Tools with no input parameters work without modification.
 
 ## Troubleshooting
 

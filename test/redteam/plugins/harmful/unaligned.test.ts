@@ -1,10 +1,13 @@
 import { getEnvBool, getEnvString } from '../../../../src/envars';
 import { PromptfooHarmfulCompletionProvider } from '../../../../src/providers/promptfoo';
-import { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../../../src/redteam/constants';
-import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../../../../src/redteam/constants';
-import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
+import {
+  LLAMA_GUARD_REPLICATE_PROVIDER,
+  UNALIGNED_PROVIDER_HARM_PLUGINS,
+} from '../../../../src/redteam/constants';
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
 import { getHarmfulTests } from '../../../../src/redteam/plugins/harmful/unaligned';
+
+import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
 import type { ApiProvider } from '../../../../src/types';
 
 jest.mock('../../../../src/envars');

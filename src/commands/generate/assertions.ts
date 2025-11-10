@@ -1,15 +1,17 @@
-import chalk from 'chalk';
-import type { Command } from 'commander';
-import { InvalidArgumentError } from 'commander';
 import * as fs from 'fs';
+
+import chalk from 'chalk';
+import { InvalidArgumentError } from 'commander';
 import yaml from 'js-yaml';
 import { synthesizeFromTestSuite } from '../../assertions/synthesis';
 import { disableCache } from '../../cache';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { type TestSuite, type UnifiedConfig } from '../../types';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
+import { type TestSuite, type UnifiedConfig } from '../../types/index';
+import { printBorder, setupEnv } from '../../util/index';
+import { promptfooCommand } from '../../util/promptfooCommand';
 import { resolveConfigs } from '../../util/config/load';
+import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {
   cache: boolean;
@@ -53,7 +55,6 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
   });
-  await telemetry.send();
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
@@ -86,13 +87,15 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   if (options.write && configPath) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
     // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
+    const existingDefaultTest =
+      typeof existingConfig.defaultTest === 'object' ? existingConfig.defaultTest : {};
     existingConfig.defaultTest = {
-      ...existingConfig.defaultTest,
-      assert: [...(existingConfig.defaultTest?.assert || []), ...configAddition.assert],
+      ...existingDefaultTest,
+      assert: [...(existingDefaultTest?.assert || []), ...configAddition.assert],
     };
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
-    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+    const runCommand = promptfooCommand('eval');
     logger.info(chalk.green(`Run ${chalk.bold(runCommand)} to run the generated assertions`));
   } else {
     logger.info(
@@ -110,10 +113,9 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
     numAssertionsGenerated: results.length,
     provider: options.provider || 'default',
   });
-  await telemetry.send();
 }
 
-function validateAssertionType(value: string, previous: string) {
+function validateAssertionType(value: string, _previous: string) {
   const allowedStrings = ['pi', 'g-eval', 'llm-rubric'];
   if (!allowedStrings.includes(value)) {
     throw new InvalidArgumentError(`Option --type must be one of: ${allowedStrings.join(', ')}.`);

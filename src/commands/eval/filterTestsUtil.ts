@@ -1,6 +1,7 @@
 import Eval from '../../models/eval';
-import type { TestSuite, EvaluateResult } from '../../types';
-import { readOutput, resultIsForTestCase } from '../../util';
+import { readOutput, resultIsForTestCase } from '../../util/index';
+
+import type { EvaluateResult, TestSuite } from '../../types/index';
 
 type Tests = NonNullable<TestSuite['tests']>;
 

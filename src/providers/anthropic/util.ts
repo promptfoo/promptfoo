@@ -1,22 +1,42 @@
-import type Anthropic from '@anthropic-ai/sdk';
-import type { TokenUsage } from '../../types';
 import { calculateCost as calculateCostBase } from '../shared';
+import type Anthropic from '@anthropic-ai/sdk';
+
+import type { TokenUsage } from '../../types/index';
+import type { AnthropicToolConfig, WebFetchToolConfig, WebSearchToolConfig } from './types';
 
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 4 models - Latest generation
-  ...['claude-opus-4-20250514', 'claude-opus-4-0', 'claude-opus-4-latest'].map((model) => ({
+  ...[
+    'claude-opus-4-1-20250805',
+    'claude-opus-4-20250514',
+    'claude-opus-4-0',
+    'claude-opus-4-latest',
+  ].map((model) => ({
     id: model,
     cost: {
       input: 15 / 1e6, // $15 / MTok
       output: 75 / 1e6, // $75 / MTok
     },
   })),
-  ...['claude-sonnet-4-20250514', 'claude-sonnet-4-0', 'claude-sonnet-4-latest'].map((model) => ({
+  ...[
+    'claude-sonnet-4-5-20250929',
+    'claude-sonnet-4-5-latest',
+    'claude-sonnet-4-20250514',
+    'claude-sonnet-4-0',
+    'claude-sonnet-4-latest',
+  ].map((model) => ({
     id: model,
     cost: {
       input: 3 / 1e6, // $3 / MTok
       output: 15 / 1e6, // $15 / MTok
+    },
+  })),
+  ...['claude-haiku-4-5-20251001', 'claude-haiku-4-5-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1 / 1e6, // $1 / MTok
+      output: 5 / 1e6, // $5 / MTok
     },
   })),
 
@@ -52,14 +72,11 @@ export const ANTHROPIC_MODELS = [
   ...['claude-3-5-haiku-20241022', 'claude-3-5-haiku-latest'].map((model) => ({
     id: model,
     cost: {
-      input: 1 / 1e6,
-      output: 5 / 1e6,
+      input: 0.8 / 1e6,
+      output: 4 / 1e6,
     },
   })),
   ...[
-    // NOTE: claude-3-sonnet-20240229 is deprecated and will be retired on July 21, 2025
-    'claude-3-sonnet-20240229',
-    'claude-3-sonnet-latest',
     'claude-3-5-sonnet-20240620',
     'claude-3-5-sonnet-20241022',
     'claude-3-5-sonnet-latest',
@@ -194,6 +211,25 @@ export function calculateAnthropicCost(
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
+  // Claude Sonnet 4.5 models have tiered pricing based on prompt size
+  const isSonnet45 = ['claude-sonnet-4-5-20250929'].includes(modelName);
+
+  if (
+    isSonnet45 &&
+    Number.isFinite(promptTokens) &&
+    Number.isFinite(completionTokens) &&
+    typeof promptTokens !== 'undefined' &&
+    typeof completionTokens !== 'undefined'
+  ) {
+    // Tiered pricing for Claude Sonnet 4.5:
+    // - If prompt > 200k tokens: $6/MTok input, $22.50/MTok output
+    // - Otherwise: $3/MTok input, $15/MTok output
+    const inputCost = config.cost ?? (promptTokens > 200_000 ? 6 / 1e6 : 3 / 1e6);
+    const outputCost = config.cost ?? (promptTokens > 200_000 ? 22.5 / 1e6 : 15 / 1e6);
+
+    return inputCost * promptTokens + outputCost * completionTokens || undefined;
+  }
+
   return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
 }
 
@@ -211,4 +247,100 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
     }
   }
   return {};
+}
+
+/**
+ * Processes tools configuration to handle web fetch and web search tools
+ */
+export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConfig)[] = []): {
+  processedTools: (
+    | Anthropic.Tool
+    | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Beta.Messages.BetaWebSearchTool20250305
+  )[];
+  requiredBetaFeatures: string[];
+} {
+  const processedTools: (
+    | Anthropic.Tool
+    | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Beta.Messages.BetaWebSearchTool20250305
+  )[] = [];
+  const requiredBetaFeatures: string[] = [];
+
+  for (const tool of tools) {
+    if ('type' in tool) {
+      // Handle our custom tool configs
+      if (tool.type === 'web_fetch_20250910') {
+        processedTools.push(transformWebFetchTool(tool as WebFetchToolConfig));
+        if (!requiredBetaFeatures.includes('web-fetch-2025-09-10')) {
+          requiredBetaFeatures.push('web-fetch-2025-09-10');
+        }
+      } else if (tool.type === 'web_search_20250305') {
+        processedTools.push(transformWebSearchTool(tool as WebSearchToolConfig));
+        // Web search doesn't need beta header in latest SDK
+      } else {
+        // Pass through other tool types (standard Anthropic tools)
+        processedTools.push(tool as Anthropic.Tool);
+      }
+    } else {
+      // Standard Anthropic tool
+      processedTools.push(tool as Anthropic.Tool);
+    }
+  }
+
+  return { processedTools, requiredBetaFeatures };
+}
+
+/**
+ * Transform web fetch tool config to Anthropic beta tool format
+ */
+function transformWebFetchTool(
+  config: WebFetchToolConfig,
+): Anthropic.Beta.Messages.BetaWebFetchTool20250910 {
+  const tool: Anthropic.Beta.Messages.BetaWebFetchTool20250910 = {
+    type: 'web_fetch_20250910',
+    name: 'web_fetch',
+  };
+
+  if (config.max_uses !== undefined) {
+    tool.max_uses = config.max_uses;
+  }
+  if (config.allowed_domains) {
+    tool.allowed_domains = config.allowed_domains;
+  }
+  if (config.blocked_domains) {
+    tool.blocked_domains = config.blocked_domains;
+  }
+  if (config.citations) {
+    tool.citations = config.citations;
+  }
+  if (config.max_content_tokens !== undefined) {
+    tool.max_content_tokens = config.max_content_tokens;
+  }
+  if (config.cache_control) {
+    tool.cache_control = config.cache_control;
+  }
+
+  return tool;
+}
+
+/**
+ * Transform web search tool config to Anthropic beta tool format
+ */
+function transformWebSearchTool(
+  config: WebSearchToolConfig,
+): Anthropic.Beta.Messages.BetaWebSearchTool20250305 {
+  const tool: Anthropic.Beta.Messages.BetaWebSearchTool20250305 = {
+    type: 'web_search_20250305',
+    name: 'web_search',
+  };
+
+  if (config.max_uses !== undefined) {
+    tool.max_uses = config.max_uses;
+  }
+  if (config.cache_control) {
+    tool.cache_control = config.cache_control;
+  }
+
+  return tool;
 }

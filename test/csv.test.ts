@@ -1,6 +1,7 @@
 import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
-import type { Assertion, CsvRow, TestCase } from '../src/types';
+
+import type { Assertion, CsvRow, TestCase } from '../src/types/index';
 
 describe('testCaseFromCsvRow', () => {
   afterEach(() => {
@@ -163,6 +164,30 @@ describe('testCaseFromCsvRow', () => {
     expect(result).toEqual(expectedTestCase);
   });
 
+  it('should warn when __metadata has no key', () => {
+    const row: CsvRow = {
+      __metadata: 'foo',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+
+    testCaseFromCsvRow(row);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'The "__metadata" column requires a key, e.g. "__metadata:category". This column will be ignored.',
+    );
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
   it('should properly trim whitespace from keys', () => {
     const row: CsvRow = {
       '  var1  ': 'value1',
@@ -187,6 +212,103 @@ describe('testCaseFromCsvRow', () => {
 
     const result = testCaseFromCsvRow(row);
     expect(result).toEqual(expectedTestCase);
+  });
+
+  describe('__config columns', () => {
+    it('applies threshold to single assertion using __config:__expected:threshold', () => {
+      const row: CsvRow = {
+        __expected1: 'similar:foo',
+        '__config:__expected:threshold': '0.9',
+      };
+
+      const result = testCaseFromCsvRow(row);
+      expect(result).toEqual({
+        vars: {},
+        assert: [{ type: 'similar', value: 'foo', threshold: 0.9 }],
+        options: {},
+        metadata: { threshold: 0.9 },
+      });
+    });
+
+    it('applies threshold to the second assertion using __config:__expected2:threshold', () => {
+      const row: CsvRow = {
+        __expected1: 'similar:foo',
+        __expected2: 'similar:bar',
+        '__config:__expected2:threshold': '0.6',
+      };
+
+      const result = testCaseFromCsvRow(row);
+      expect(result).toEqual({
+        vars: {},
+        assert: [
+          { type: 'similar', value: 'foo', threshold: 0.8 },
+          { type: 'similar', value: 'bar', threshold: 0.6 },
+        ],
+        options: {},
+        metadata: { threshold: 0.6 },
+      });
+    });
+
+    it('warns and ignores invalid __config column formats', () => {
+      const row: CsvRow = {
+        __expected1: 'similar:foo',
+        // Missing config key after last colon
+        '__config:__expected1': '0.7',
+      };
+
+      const result = testCaseFromCsvRow(row);
+      expect(result).toEqual({
+        vars: {},
+        assert: [{ type: 'similar', value: 'foo', threshold: 0.8 }],
+        options: {},
+      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Invalid __config column format: "__config:__expected1". Expected format: __config:__expected:threshold or __config:__expected<N>:threshold',
+      );
+    });
+
+    it('throws on invalid expected key in __config column', () => {
+      const key = '__config:__expectedX:threshold';
+      const row: CsvRow = {
+        __expected1: 'equals:foo',
+        [key]: '0.5',
+      } as any;
+
+      expect(() => testCaseFromCsvRow(row)).toThrow(
+        'Invalid expected key "__expectedX" in __config column',
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        'Invalid expected key "__expectedX" in __config column "__config:__expectedX:threshold". Must be __expected or __expected<N> where N is a positive integer.',
+      );
+    });
+
+    it('throws on invalid config key in __config column', () => {
+      const key = '__config:__expected1:bogus';
+      const row: CsvRow = {
+        __expected1: 'equals:foo',
+        [key]: 'anything',
+      } as any;
+
+      expect(() => testCaseFromCsvRow(row)).toThrow(
+        'Invalid config key "bogus" in __config column',
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        'Invalid config key "bogus" in __config column "__config:__expected1:bogus". Valid config keys include: threshold',
+      );
+    });
+
+    it('throws on non-numeric threshold values', () => {
+      const key = '__config:__expected1:threshold';
+      const row: CsvRow = {
+        __expected1: 'similar:foo',
+        [key]: 'not-a-number',
+      } as any;
+
+      expect(() => testCaseFromCsvRow(row)).toThrow('Invalid numeric value for threshold');
+      expect(logger.error).toHaveBeenCalledWith(
+        'Invalid numeric value "not-a-number" for config key "threshold" in column "__config:__expected1:threshold"',
+      );
+    });
   });
 });
 

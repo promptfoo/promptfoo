@@ -1,4 +1,5 @@
 import path from 'path';
+
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
@@ -7,7 +8,7 @@ import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
 
-export interface LoadFunctionOptions {
+interface LoadFunctionOptions {
   filePath: string;
   functionName?: string;
   defaultFunctionName?: string;

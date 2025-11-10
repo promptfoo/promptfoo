@@ -1,6 +1,6 @@
 ---
 sidebar_label: 'gpt-4.1 vs o1'
-description: 'Learn how to benchmark OpenAI o1 and o1-mini. Discover which model performs best for your specific use case.'
+description: 'Benchmark OpenAI o1 reasoning models against GPT-4 for cost, latency, and accuracy to optimize model selection decisions'
 ---
 
 # gpt-4.1 vs o1: Benchmark on Your Own Data
@@ -71,7 +71,6 @@ Edit the `promptfooconfig.yaml` file to define your comparison.
 
 1. **Test Cases**:
    Now, define your test cases. In this specific example, each test case includes:
-
    - The riddle text (assigned to the `riddle` variable)
    - Specific assertions for that test case (optional)
 

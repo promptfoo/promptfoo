@@ -1,18 +1,22 @@
+import type { Agent } from 'http';
+
+import { getCache, isCacheEnabled } from '../../cache';
+import { getEnvInt, getEnvString } from '../../envars';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { AwsBedrockGenericProvider } from './index';
 import type {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommandInput,
 } from '@aws-sdk/client-bedrock-agent-runtime';
-import type { Agent } from 'http';
-import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString, getEnvInt } from '../../envars';
-import logger from '../../logger';
-import telemetry from '../../telemetry';
+
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, ProviderResponse } from '../../types/providers';
-import { AwsBedrockGenericProvider } from './index';
 
-export interface BedrockKnowledgeBaseOptions {
+interface BedrockKnowledgeBaseOptions {
   accessKeyId?: string;
+  apiKey?: string;
   profile?: string;
   region?: string;
   secretAccessKey?: string;
@@ -27,7 +31,7 @@ export interface BedrockKnowledgeBaseOptions {
 }
 
 // Define citation types for metadata
-export interface CitationReference {
+interface CitationReference {
   content?: {
     text?: string;
     [key: string]: any;
@@ -43,7 +47,7 @@ export interface CitationReference {
   [key: string]: any;
 }
 
-export interface Citation {
+interface Citation {
   retrievedReferences?: CitationReference[];
   generatedResponsePart?: {
     textResponsePart?: {
@@ -85,7 +89,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
     this.kbConfig = options.config || { knowledgeBaseId: '' };
 
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'knowledge_base',
       provider: 'bedrock',
     });
@@ -102,18 +106,42 @@ export class AwsBedrockKnowledgeBaseProvider
   async getKnowledgeBaseClient() {
     if (!this.knowledgeBaseClient) {
       let handler;
-      // set from https://www.npmjs.com/package/proxy-agent
-      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')) {
+      const apiKey = this.getApiKey();
+
+      // Create request handler for proxy or API key scenarios
+      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY') || apiKey) {
         try {
           const { NodeHttpHandler } = await import('@smithy/node-http-handler');
           const { ProxyAgent } = await import('proxy-agent');
+
+          // Create handler with proxy support if needed
+          const proxyAgent =
+            getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')
+              ? new ProxyAgent()
+              : undefined;
+
           handler = new NodeHttpHandler({
-            httpsAgent: new ProxyAgent() as unknown as Agent,
+            ...(proxyAgent ? { httpsAgent: proxyAgent as unknown as Agent } : {}),
+            requestTimeout: 300000, // 5 minutes
           });
+
+          // Add Bearer token middleware for API key authentication
+          if (apiKey) {
+            const originalHandle = handler.handle.bind(handler);
+            handler.handle = async (request: any, options?: any) => {
+              // Add Authorization header with Bearer token
+              request.headers = {
+                ...request.headers,
+                Authorization: `Bearer ${apiKey}`,
+              };
+              return originalHandle(request, options);
+            };
+          }
         } catch {
-          throw new Error(
-            `The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.`,
-          );
+          const reason = apiKey
+            ? 'API key authentication requires the @smithy/node-http-handler package'
+            : 'Proxy configuration requires the @smithy/node-http-handler package';
+          throw new Error(`${reason}. Please install it in your project or globally.`);
         }
       }
 
@@ -142,26 +170,44 @@ export class AwsBedrockKnowledgeBaseProvider
     const client = await this.getKnowledgeBaseClient();
 
     // Prepare the request parameters
-    const modelArn =
-      this.kbConfig.modelArn ||
-      (this.modelName.includes(':')
-        ? this.modelName.includes('arn:aws:bedrock')
-          ? this.modelName // Already has full ARN format
-          : `arn:aws:bedrock:${this.getRegion()}:aws:foundation-model/${this.modelName}`
-        : `arn:aws:bedrock:${this.getRegion()}:aws:foundation-model/${this.modelName}`);
+    let modelArn = this.kbConfig.modelArn;
+
+    if (!modelArn) {
+      if (this.modelName.includes('arn:aws:bedrock')) {
+        modelArn = this.modelName; // Already has full ARN format
+      } else if (
+        this.modelName.startsWith('us.') ||
+        this.modelName.startsWith('eu.') ||
+        this.modelName.startsWith('apac.')
+      ) {
+        // This is a cross-region inference profile - use inference-profile ARN format
+        // Note: We'll use the modelName directly as the inference profile ID since Knowledge Bases
+        // expect the inference profile ID, not a full ARN for these
+        modelArn = this.modelName;
+      } else {
+        // Regular foundation model
+        modelArn = `arn:aws:bedrock:${this.getRegion()}::foundation-model/${this.modelName}`;
+      }
+    }
+
+    const knowledgeBaseConfiguration: any = {
+      knowledgeBaseId: this.kbConfig.knowledgeBaseId,
+    };
+
+    // Only include modelArn if explicitly configured or if it's a valid model
+    if (this.kbConfig.modelArn || this.modelName !== 'default') {
+      knowledgeBaseConfiguration.modelArn = modelArn;
+    }
 
     const params: RetrieveAndGenerateCommandInput = {
       input: { text: prompt },
       retrieveAndGenerateConfiguration: {
         type: 'KNOWLEDGE_BASE',
-        knowledgeBaseConfiguration: {
-          knowledgeBaseId: this.kbConfig.knowledgeBaseId,
-          modelArn,
-        },
+        knowledgeBaseConfiguration,
       },
     };
 
-    logger.debug(`Calling Amazon Bedrock Knowledge Base API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Amazon Bedrock Knowledge Base API', { params });
 
     const cache = await getCache();
 
@@ -185,7 +231,7 @@ export class AwsBedrockKnowledgeBaseProvider
         return {
           output: parsedResponse.output,
           metadata: { citations: parsedResponse.citations },
-          tokenUsage: {},
+          tokenUsage: createEmptyTokenUsage(), // TODO: Add token usage once Bedrock Knowledge Base API supports it
           cached: true,
         };
       }
@@ -197,7 +243,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
       const response = await client.send(command);
 
-      logger.debug(`Amazon Bedrock Knowledge Base API response: ${JSON.stringify(response)}`);
+      logger.debug('Amazon Bedrock Knowledge Base API response', { response });
 
       let output = '';
       if (response && response.output && response.output.text) {
@@ -226,7 +272,7 @@ export class AwsBedrockKnowledgeBaseProvider
       return {
         output,
         metadata: { citations },
-        tokenUsage: {},
+        tokenUsage: createEmptyTokenUsage(), // TODO: Add token usage once Bedrock Knowledge Base API supports it
       };
     } catch (err) {
       return {

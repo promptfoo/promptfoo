@@ -1,7 +1,7 @@
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as path from 'path';
-import { z } from 'zod';
+
+import yaml from 'js-yaml';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -9,28 +9,27 @@ import { getPrompt as getHeliconePrompt } from './integrations/helicone';
 import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
 import { getPrompt as getPortkeyPrompt } from './integrations/portkey';
 import logger from './logger';
-import type EvalResult from './models/evalResult';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
 import {
   type ApiProvider,
-  type NunjucksFilterMap,
-  type Prompt,
-  TestCaseSchema,
-  type TestSuite,
   type CompletedPrompt,
   type EvaluateResult,
-  TestSuiteSchema,
+  type NunjucksFilterMap,
+  type Prompt,
   type TestCase,
-} from './types';
-import { renderVarsInObject } from './util';
-import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/fileExtensions';
+  type TestSuite,
+} from './types/index';
+import { renderVarsInObject } from './util/index';
+import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
-export type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
+import type EvalResult from './models/evalResult';
+
+type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
@@ -187,7 +186,7 @@ export async function renderPrompt(
           yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
         );
       } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
-        telemetry.recordOnce('feature_used', {
+        telemetry.record('feature_used', {
           feature: 'extract_text_from_pdf',
         });
         vars[varName] = await extractTextFromPDF(filePath);
@@ -201,7 +200,7 @@ export async function renderPrompt(
             ? 'video'
             : 'audio';
 
-        telemetry.recordOnce('feature_used', {
+        telemetry.record('feature_used', {
           feature: `load_${fileType}_as_base64`,
         });
 
@@ -279,17 +278,59 @@ export async function renderPrompt(
   } else if (prompt.raw.startsWith('langfuse://')) {
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
-    // we default to "text" type.
-    const [helper, version, promptType = 'text'] = langfusePrompt.split(':');
+    let helper: string;
+    let version: string | undefined;
+    let label: string | undefined;
+    let promptType: 'text' | 'chat' | undefined = 'text';
+
+    // More robust parsing that handles @ in prompt IDs
+    // Look for the last @ that's followed by a label pattern
+    const labelMatch = langfusePrompt.match(/^(.+)@([^:@]+)(?::(.+))?$/);
+    const versionMatch = langfusePrompt.match(/^([^:]+):([^:]+)(?::(.+))?$/);
+
+    if (labelMatch) {
+      // Label-based syntax: prompt-id@label or prompt-id@label:type
+      helper = labelMatch[1];
+      label = labelMatch[2];
+      if (labelMatch[3]) {
+        promptType = labelMatch[3] as 'text' | 'chat';
+      }
+    } else if (versionMatch) {
+      // Version/label syntax: prompt-id:version-or-label or prompt-id:version-or-label:type
+      helper = versionMatch[1];
+      const versionOrLabel = versionMatch[2];
+
+      // Auto-detect if it's a version (numeric) or label (string)
+      if (/^\d+$/.test(versionOrLabel)) {
+        // It's a numeric version
+        version = versionOrLabel;
+      } else {
+        // It's a string, treat as label
+        label = versionOrLabel;
+        if (label === 'latest') {
+          // 'latest' is always treated as a label, even though it could be ambiguous
+          version = undefined;
+        }
+      }
+
+      if (versionMatch[3]) {
+        promptType = versionMatch[3] as 'text' | 'chat';
+      }
+    } else {
+      // Simple prompt-id only
+      helper = langfusePrompt;
+    }
+
     if (promptType !== 'text' && promptType !== 'chat') {
-      throw new Error('Unknown promptfoo prompt type');
+      throw new Error(`Invalid Langfuse prompt type: ${promptType}. Must be 'text' or 'chat'.`);
     }
 
     const langfuseResult = await getLangfusePrompt(
       helper,
       vars,
       promptType,
-      version === 'latest' ? undefined : Number(version),
+      version === undefined || version === 'latest' ? undefined : Number(version),
+      label,
     );
     return langfuseResult;
   } else if (prompt.raw.startsWith('helicone://')) {
@@ -340,40 +381,13 @@ export async function renderPrompt(
 // Extension Hooks
 // ================================
 
-// TODO(chore): Move the extension hooks logic into a separate file.
+type BeforeAllExtensionHookContext = {
+  suite: TestSuite;
+};
 
-const BeforeAllExtensionHookContextSchema = z.object({
-  suite: TestSuiteSchema,
-});
-
-const BeforeEachExtensionHookContextSchema = z.object({
-  test: TestCaseSchema,
-});
-
-/**
- * Defines the set of fields on BeforeAllExtensionHookContextSchema that may be mutated by the extension hook.
- */
-const MutableBeforeAllExtensionHookContextSchema = z.object({
-  suite: z.object({
-    prompts: TestSuiteSchema.shape.prompts,
-    providerPromptMap: TestSuiteSchema.shape.providerPromptMap,
-    tests: TestSuiteSchema.shape.tests,
-    scenarios: TestSuiteSchema.shape.scenarios,
-    defaultTest: TestSuiteSchema.shape.defaultTest,
-    nunjucksFilters: TestSuiteSchema.shape.nunjucksFilters,
-    derivedMetrics: TestSuiteSchema.shape.derivedMetrics,
-    redteam: TestSuiteSchema.shape.redteam,
-  }),
-});
-
-const MutableBeforeEachExtensionHookContextSchema = z
-  .object({
-    test: TestCaseSchema,
-  })
-  .strict();
-
-type BeforeAllExtensionHookContext = z.infer<typeof BeforeAllExtensionHookContextSchema>;
-type BeforeEachExtensionHookContext = z.infer<typeof BeforeEachExtensionHookContextSchema>;
+type BeforeEachExtensionHookContext = {
+  test: TestCase;
+};
 
 type AfterEachExtensionHookContext = {
   test: TestCase;
@@ -393,12 +407,6 @@ type HookContextMap = {
   afterEach: AfterEachExtensionHookContext;
   afterAll: AfterAllExtensionHookContext;
 };
-
-export type ExtensionHookContext =
-  | BeforeAllExtensionHookContext
-  | BeforeEachExtensionHookContext
-  | AfterEachExtensionHookContext
-  | AfterAllExtensionHookContext;
 
 /**
  * Runs extension hooks for the given hook name and context. The hook will be called with the context object,
@@ -420,30 +428,7 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
     return context;
   }
 
-  // Guard against runtime type drift by validating the context object matches the expected schema.
-  // This ensures that the context object is valid prior to passing it to the extension hook, upstreaming
-  // type errors.
-  switch (hookName) {
-    case 'beforeAll': {
-      const parsed = BeforeAllExtensionHookContextSchema.safeParse(context);
-      invariant(
-        parsed.success,
-        `Invalid context passed to beforeAll hook: ${parsed.error?.message}`,
-      );
-      break;
-    }
-    case 'beforeEach': {
-      const parsed = BeforeEachExtensionHookContextSchema.safeParse(context);
-      invariant(
-        parsed.success,
-        `Invalid context passed to beforeEach hook: ${parsed.error?.message}`,
-      );
-      break;
-    }
-  }
-
-  // TODO(Will): It would be nice if this logged the hooks used.
-  telemetry.recordOnce('feature_used', {
+  telemetry.record('feature_used', {
     feature: 'extension_hook',
   });
 
@@ -460,33 +445,26 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
     if (extensionReturnValue) {
       switch (hookName) {
         case 'beforeAll': {
-          const parsed = MutableBeforeAllExtensionHookContextSchema.safeParse(extensionReturnValue);
-          if (parsed.success) {
-            (updatedContext as BeforeAllExtensionHookContext) = {
-              suite: {
-                ...(context as BeforeAllExtensionHookContext).suite,
-                ...parsed.data.suite,
-              },
-            };
-          } else {
-            logger.error(parsed.error.message);
-            throw new Error(
-              `[${extension}] Invalid context returned by beforeAll hook: ${parsed.error.message}`,
-            );
-          }
+          (updatedContext as BeforeAllExtensionHookContext) = {
+            suite: {
+              ...(context as BeforeAllExtensionHookContext).suite,
+              // Mutable properties:
+              prompts: extensionReturnValue.suite.prompts,
+              providerPromptMap: extensionReturnValue.suite.providerPromptMap,
+              tests: extensionReturnValue.suite.tests,
+              scenarios: extensionReturnValue.suite.scenarios,
+              defaultTest: extensionReturnValue.suite.defaultTest,
+              nunjucksFilters: extensionReturnValue.suite.nunjucksFilters,
+              derivedMetrics: extensionReturnValue.suite.derivedMetrics,
+              redteam: extensionReturnValue.suite.redteam,
+            },
+          };
           break;
         }
         case 'beforeEach': {
-          const parsed =
-            MutableBeforeEachExtensionHookContextSchema.safeParse(extensionReturnValue);
-          if (parsed.success) {
-            (updatedContext as BeforeEachExtensionHookContext) = { test: parsed.data.test };
-          } else {
-            logger.error(parsed.error.message);
-            throw new Error(
-              `[${extension}] Invalid context returned by beforeEach hook: ${parsed.error.message}`,
-            );
-          }
+          (updatedContext as BeforeEachExtensionHookContext) = {
+            test: extensionReturnValue.test,
+          };
           break;
         }
       }

@@ -1,5 +1,6 @@
 import { handleGuardrails } from '../../src/assertions/guardrails';
-import type { AssertionParams, AtomicTestCase } from '../../src/types';
+
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
 describe('handleGuardrail', () => {
   const baseAssertion = {
@@ -18,7 +19,7 @@ describe('handleGuardrail', () => {
   const defaultParams: AssertionParams = {
     assertion: baseAssertion,
     baseType: 'guardrails',
-    context: defaultContext,
+    assertionValueContext: defaultContext,
     inverse: false,
     output: '',
     outputString: '',
@@ -149,6 +150,27 @@ describe('handleGuardrail', () => {
       pass: true,
       score: 0,
       reason: 'Guardrail was not applied',
+      assertion: baseAssertion,
+    });
+  });
+
+  it('should use custom reason when provided in guardrails', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      providerResponse: {
+        guardrails: {
+          flagged: true,
+          reason: 'Custom safety violation reason',
+        },
+        output: 'test output',
+      },
+    };
+
+    const result = await handleGuardrails(params);
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Custom safety violation reason',
       assertion: baseAssertion,
     });
   });

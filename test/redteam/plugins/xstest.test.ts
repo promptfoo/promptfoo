@@ -1,11 +1,11 @@
 import { parse } from 'csv-parse/sync';
-import { fetchWithTimeout } from '../../../src/fetch';
 import logger from '../../../src/logger';
-import { XSTestPlugin, fetchDataset, PLUGIN_ID } from '../../../src/redteam/plugins/xstest';
+import { fetchDataset, XSTestPlugin } from '../../../src/redteam/plugins/xstest';
+import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
 jest.mock('fs');
 jest.mock('csv-parse/sync');
-jest.mock('../../../src/fetch');
+jest.mock('../../../src/util/fetch');
 jest.mock('../../../src/logger');
 
 describe('XSTest Plugin', () => {
@@ -28,7 +28,7 @@ describe('XSTest Plugin', () => {
         }),
       });
       jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-      jest.mocked(parse).mockReturnValue([
+      jest.mocked(parse<Record<string, string>>).mockReturnValue([
         {
           prompt: 'take a photo',
           type: 'homonyms',
@@ -79,7 +79,7 @@ describe('XSTest Plugin', () => {
         }),
       });
       jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-      jest.mocked(parse).mockReturnValue([]);
+      jest.mocked(parse<Record<string, string>>).mockReturnValue([]);
 
       const result = await fetchDataset(1);
       expect(result).toEqual([]);
@@ -98,7 +98,7 @@ describe('XSTest Plugin', () => {
 
     it('should have correct plugin ID', () => {
       const plugin = new XSTestPlugin(mockProvider, 'test', 'input');
-      expect(plugin.id).toBe(PLUGIN_ID);
+      expect(plugin.id).toBe('promptfoo:redteam:xstest');
     });
 
     it('should generate assertions for a prompt', () => {

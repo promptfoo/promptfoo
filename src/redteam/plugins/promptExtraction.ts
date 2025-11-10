@@ -1,8 +1,9 @@
 import dedent from 'dedent';
-import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types';
-import { RedteamPluginBase, RedteamGraderBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:prompt-extraction';
+import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types/index';
+
+const PLUGIN_ID = 'promptfoo:redteam:prompt-extraction';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>
@@ -54,7 +55,7 @@ export class PromptExtractionPlugin extends RedteamPluginBase {
   `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,
@@ -63,7 +64,7 @@ export class PromptExtractionPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs: number): Promise<TestCase[]> {
     const tests = await super.generateTests(n);
     return tests.map((test) => ({
       ...test,

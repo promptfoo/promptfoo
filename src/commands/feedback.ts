@@ -1,5 +1,5 @@
-import type { Command } from 'commander';
 import { gatherFeedback } from '../feedback';
+import type { Command } from 'commander';
 
 export function feedbackCommand(program: Command) {
   program

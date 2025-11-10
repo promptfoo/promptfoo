@@ -3,6 +3,7 @@ import {
   homoglyphMap,
   toHomoglyphs,
 } from '../../../src/redteam/strategies/homoglyph';
+
 import type { TestCase } from '../../../src/types';
 
 describe('homoglyph strategy', () => {

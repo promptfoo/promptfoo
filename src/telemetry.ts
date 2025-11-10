@@ -1,9 +1,11 @@
+import { PostHog } from 'posthog-node';
 import { z } from 'zod';
-import cliState from './cliState';
-import { VERSION } from './constants';
-import { getEnvBool, isCI } from './envars';
-import { fetchWithTimeout } from './fetch';
+import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
+import { POSTHOG_KEY } from './constants/build';
+import { getEnvBool, getEnvString, isCI } from './envars';
+import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
+import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
 
 export const TelemetryEventSchema = z.object({
   event: z.enum([
@@ -12,24 +14,83 @@ export const TelemetryEventSchema = z.object({
     'eval_ran',
     'feature_used',
     'funnel',
+    'redteam discover',
+    'redteam generate',
+    'redteam init',
+    'redteam poison',
+    'redteam report',
+    'redteam run',
+    'redteam setup',
+    'webui_action',
     'webui_api',
     'webui_page_view',
   ]),
   packageVersion: z.string().optional().default(VERSION),
   properties: z.record(z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])),
 });
-export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
+type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
-const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';
-const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
+let posthogClient: PostHog | null = null;
+
+function getPostHogClient(): PostHog | null {
+  if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('IS_TESTING')) {
+    return null;
+  }
+
+  if (posthogClient === null && POSTHOG_KEY) {
+    try {
+      posthogClient = new PostHog(POSTHOG_KEY, {
+        host: EVENTS_ENDPOINT,
+        fetch: fetchWithProxy,
+      });
+    } catch {
+      posthogClient = null;
+    }
+  }
+  return posthogClient;
+}
 
 const TELEMETRY_TIMEOUT_MS = 1000;
 
 export class Telemetry {
-  private events: TelemetryEvent[] = [];
   private telemetryDisabledRecorded = false;
+  private id: string;
+  private email: string | null;
+
+  constructor() {
+    this.id = getUserId();
+    this.email = getUserEmail();
+    this.identify().then(() => {
+      // pass
+    });
+  }
+
+  async identify() {
+    if (this.disabled || getEnvBool('IS_TESTING')) {
+      return;
+    }
+
+    const client = getPostHogClient();
+    if (client) {
+      try {
+        client.identify({
+          distinctId: this.id,
+          properties: {
+            email: this.email,
+            isLoggedIntoCloud: isLoggedIntoCloud(),
+            isRunningInCi: isCI(),
+          },
+        });
+        client.flush().catch(() => {
+          // Silently ignore flush errors
+        });
+      } catch (error) {
+        logger.debug(`PostHog identify error: ${error}`);
+      }
+    }
+  }
 
   get disabled() {
     return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
@@ -37,11 +98,7 @@ export class Telemetry {
 
   private recordTelemetryDisabled() {
     if (!this.telemetryDisabledRecorded) {
-      this.events.push({
-        event: 'feature_used',
-        packageVersion: VERSION,
-        properties: { feature: 'telemetry disabled' },
-      });
+      this.sendEvent('feature_used', { feature: 'telemetry disabled' });
       this.telemetryDisabledRecorded = true;
     }
   }
@@ -50,89 +107,59 @@ export class Telemetry {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
-      const event: TelemetryEvent = {
-        event: eventName,
-        packageVersion: VERSION,
-        properties: {
-          ...properties,
-          isRedteam: Boolean(cliState.config?.redteam),
-          isRunningInCi: isCI(),
-        },
-      };
-
-      const result = TelemetryEventSchema.safeParse(event);
-      if (result.success) {
-        this.events.push(result.data);
-      } else {
-        logger.debug(
-          `Invalid telemetry event: got ${JSON.stringify(event)}, error: ${result.error}`,
-        );
-      }
+      this.sendEvent(eventName, properties);
     }
   }
 
-  private recordedEvents: Set<string> = new Set();
+  private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    const propertiesWithMetadata = {
+      ...properties,
+      packageVersion: VERSION,
+      isRunningInCi: isCI(),
+    };
 
-  /**
-   * Record an event once, unique by event name and properties.
-   *
-   * @param eventName - The name of the event to record.
-   * @param properties - The properties of the event to record.
-   */
-  recordOnce(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (this.disabled) {
-      this.recordTelemetryDisabled();
-    } else {
-      const eventKey = JSON.stringify({ eventName, properties });
-      if (!this.recordedEvents.has(eventKey)) {
-        this.record(eventName, properties);
-        this.recordedEvents.add(eventKey);
-      }
-    }
-  }
-
-  async recordAndSend(eventName: TelemetryEventTypes, properties: EventProperties): Promise<void> {
-    this.record(eventName, properties);
-    await this.send();
-  }
-
-  async recordAndSendOnce(
-    eventName: TelemetryEventTypes,
-    properties: EventProperties,
-  ): Promise<void> {
-    if (this.disabled) {
-      this.recordTelemetryDisabled();
-    } else {
-      this.recordOnce(eventName, properties);
-    }
-    await this.send();
-  }
-
-  async send(): Promise<void> {
-    if (this.events.length > 0) {
-      if (getEnvBool('PROMPTFOO_TELEMETRY_DEBUG')) {
-        logger.debug(
-          `Sending ${this.events.length} telemetry events to ${TELEMETRY_ENDPOINT}: ${JSON.stringify(this.events)}`,
-        );
-      }
+    const client = getPostHogClient();
+    if (client && !getEnvBool('IS_TESTING')) {
       try {
-        const response = await fetchWithTimeout(
-          TELEMETRY_ENDPOINT,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(this.events),
-          },
-          TELEMETRY_TIMEOUT_MS,
-        );
+        client.capture({
+          distinctId: this.id,
+          event: eventName,
+          properties: propertiesWithMetadata,
+        });
+        client.flush().catch(() => {
+          // Silently ignore flush errors
+        });
+      } catch (error) {
+        logger.debug(`PostHog capture error: ${error}`);
+      }
+    }
 
-        if (response.ok) {
-          this.events = [];
-        }
-      } catch {
-        // ignore
+    fetchWithProxy(R_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        event: eventName,
+        environment: getEnvString('NODE_ENV', 'development'),
+        email: this.email,
+        meta: {
+          user_id: this.id,
+          ...propertiesWithMetadata,
+        },
+      }),
+    }).catch(() => {
+      // pass
+    });
+  }
+
+  async shutdown(): Promise<void> {
+    const client = getPostHogClient();
+    if (client) {
+      try {
+        await client.shutdown();
+      } catch (error) {
+        logger.debug(`PostHog shutdown error: ${error}`);
       }
     }
   }

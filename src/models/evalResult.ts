@@ -1,22 +1,24 @@
 import { randomUUID } from 'crypto';
-import { and, eq, gte, lt, inArray } from 'drizzle-orm';
-import { getDb } from '../database';
+
+import { and, eq, gte, inArray, lt } from 'drizzle-orm';
+import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { hashPrompt } from '../prompts/utils';
+import { type EvaluateResult } from '../types/index';
+import { isApiProvider, isProviderOptions } from '../types/providers';
+import { safeJsonStringify } from '../util/json';
+import { getCurrentTimestamp } from '../util/time';
+
 import type {
+  ApiProvider,
   AtomicTestCase,
   GradingResult,
   Prompt,
   ProviderOptions,
   ProviderResponse,
   ResultFailureReason,
-  ApiProvider,
-} from '../types';
-import { type EvaluateResult } from '../types';
-import { isApiProvider, isProviderOptions } from '../types/providers';
-import { safeJsonStringify } from '../util/json';
-import { getCurrentTimestamp } from '../util/time';
+} from '../types/index';
 
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
@@ -114,13 +116,14 @@ export default class EvalResult {
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
-    await db.transaction(async (tx) => {
+    db.transaction(() => {
       for (const result of results) {
-        const dbResult = await tx
+        const dbResult = db
           .insert(evalResultsTable)
           .values({ ...result, evalId, id: randomUUID() })
-          .returning();
-        returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
+          .returning()
+          .get();
+        returnResults.push(new EvalResult({ ...dbResult, persisted: true }));
       }
     });
     return returnResults;
@@ -165,6 +168,23 @@ export default class EvalResult {
       );
 
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
+  }
+
+  /**
+   * Returns a set of completed (testIdx,promptIdx) pairs for a given eval.
+   * Key format: `${testIdx}:${promptIdx}`
+   */
+  static async getCompletedIndexPairs(evalId: string): Promise<Set<string>> {
+    const db = getDb();
+    const rows = await db
+      .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, evalId));
+    const ret = new Set<string>();
+    for (const r of rows) {
+      ret.add(`${r.testIdx}:${r.promptIdx}`);
+    }
+    return ret;
   }
 
   // This is a generator that yields batches of results from the database
@@ -221,6 +241,7 @@ export default class EvalResult {
   metadata: Record<string, any>;
   failureReason: ResultFailureReason;
   persisted: boolean;
+  pluginId?: string;
 
   constructor(opts: {
     id: string;
@@ -263,6 +284,7 @@ export default class EvalResult {
     this.metadata = opts.metadata || {};
     this.failureReason = opts.failureReason;
     this.persisted = opts.persisted || false;
+    this.pluginId = opts.testCase.metadata?.pluginId;
   }
 
   async save() {

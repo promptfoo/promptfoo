@@ -17,6 +17,7 @@ keywords:
 date: 2024-10-09
 # https://www.tldraw.com/r/f_RRQMHxGe4erRNUVAfZA?d=v-171.-485.3560.2381.page
 authors: [ian]
+tags: [security-vulnerability, best-practices, owasp, prompt-injection]
 ---
 
 # Prompt Injection: A Comprehensive Guide
@@ -190,7 +191,7 @@ This approach tends to be more effective than manual red teaming due to the wide
 - **Strict input constraints**: Limit the length and structure of user prompts.
 - **AI-powered detection**: Specialized APIs use machine learning to flag suspicious inputs.
 
-These are commonly referred to as [guardrails](/docs/red-team/guardrails/).
+These are commonly referred to as [guardrails](https://www.promptfoo.dev/guardrails/).
 
 Robust system design also plays a key role in mitigation:
 

@@ -1,4 +1,6 @@
-import { PiiGrader, getPiiLeakTestsForCategory } from '../../../src/redteam/plugins/pii';
+import { RedteamPluginBase } from '../../../src/redteam/plugins/base';
+import { getPiiLeakTestsForCategory, PiiGrader } from '../../../src/redteam/plugins/pii';
+
 import type { PluginActionParams } from '../../../src/types';
 
 describe('PiiGrader', () => {
@@ -54,11 +56,63 @@ describe('getPiiLeakTestsForCategory', () => {
     delayMs: 0,
     config: {
       examples: ['Example 1', 'Example 2'],
+      modifiers: {} as Record<string, unknown>,
     },
   };
 
   beforeEach(() => {
     jest.resetAllMocks();
+    jest.spyOn(RedteamPluginBase, 'appendModifiers');
+  });
+
+  it('should apply modifiers to prompt template before API call', async () => {
+    mockProvider.callApi.mockResolvedValue({
+      output: 'Prompt: Test prompt 1\nPrompt: Test prompt 2',
+    });
+
+    await getPiiLeakTestsForCategory(params, 'pii:direct');
+
+    expect(RedteamPluginBase.appendModifiers).toHaveBeenCalledWith(
+      expect.any(String),
+      params.config,
+    );
+    expect(RedteamPluginBase.appendModifiers).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle undefined config modifiers', async () => {
+    const paramsWithoutModifiers = {
+      ...params,
+      config: { examples: ['Example 1'] },
+    };
+
+    mockProvider.callApi.mockResolvedValue({
+      output: 'Prompt: Test prompt',
+    });
+
+    await getPiiLeakTestsForCategory(paramsWithoutModifiers, 'pii:direct');
+
+    expect(RedteamPluginBase.appendModifiers).toHaveBeenCalledWith(
+      expect.any(String),
+      paramsWithoutModifiers.config,
+    );
+  });
+
+  it('should handle empty config modifiers', async () => {
+    const paramsWithEmptyModifiers = {
+      ...params,
+      config: { examples: ['Example 1'], modifiers: {} },
+    };
+
+    mockProvider.callApi.mockResolvedValue({
+      output: 'Prompt: Test prompt',
+    });
+
+    await getPiiLeakTestsForCategory(paramsWithEmptyModifiers, 'pii:direct');
+
+    expect(RedteamPluginBase.appendModifiers).toHaveBeenCalledWith(
+      expect.any(String),
+      paramsWithEmptyModifiers.config,
+    );
   });
 
   it('should generate test cases for valid category', async () => {

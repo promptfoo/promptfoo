@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -14,7 +15,7 @@ interface PromptDialogProps {
   onCancel: () => void;
 }
 
-const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd, onCancel }) => {
+const PromptDialog = ({ open, prompt, index, onAdd, onCancel }: PromptDialogProps) => {
   const [editingPrompt, setEditingPrompt] = React.useState(prompt);
   const textFieldRef = React.useRef<HTMLInputElement>(null);
 

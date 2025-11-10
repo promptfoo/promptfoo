@@ -1,5 +1,6 @@
 ---
 sidebar_label: HTTP API
+description: Configure HTTP/HTTPS endpoints for custom LLM integrations with dynamic request transforms, variable substitution, and multi-provider API compatibility
 ---
 
 # HTTP/HTTPS API
@@ -525,6 +526,33 @@ providers:
         }
 ```
 
+### Interaction with Test Transforms
+
+The `transformResponse` output becomes the input for test-level transforms. Understanding this pipeline is important for complex evaluations:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      # Step 1: Provider transform normalizes API response
+      transformResponse: 'json.data' # Extract data field
+
+tests:
+  - vars:
+      query: 'What is the weather?'
+    options:
+      # Step 2a: Test transform for assertions (receives provider transform output)
+      transform: 'output.answer'
+    assert:
+      - type: contains
+        value: 'sunny'
+
+      # Step 2b: Context transform for RAG assertions (also receives provider transform output)
+      - type: context-faithfulness
+        contextTransform: 'output.sources.join(" ")'
+```
+
 ## Token Estimation
 
 By default, the HTTP provider does not provide token usage statistics since it's designed for general HTTP APIs that may not return token information. However, you can enable optional token estimation to get approximate token counts for cost tracking and analysis. Token estimation is automatically enabled when running redteam scans so you can track approximate costs without additional configuration.
@@ -705,6 +733,263 @@ providers:
         }
 ```
 
+## TLS/HTTPS Configuration
+
+The HTTP provider supports custom TLS certificate configuration for secure HTTPS connections. This enables:
+
+- Custom CA certificates for verifying server certificates
+- Client certificates for mutual TLS authentication
+- PFX/PKCS12 certificate bundles
+- Fine-grained control over TLS security settings
+
+### Basic TLS Configuration
+
+Configure custom CA certificates to verify server certificates:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/secure'
+      tls:
+        caPath: '/path/to/ca-cert.pem' # Custom CA certificate
+        rejectUnauthorized: true # Verify server certificate (default: true)
+```
+
+### Mutual TLS (mTLS)
+
+For APIs requiring client certificate authentication:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://secure-api.example.com/v1'
+      tls:
+        # Client certificate and private key
+        certPath: '/path/to/client-cert.pem'
+        keyPath: '/path/to/client-key.pem'
+
+        # Optional: Custom CA for server verification
+        caPath: '/path/to/ca-cert.pem'
+```
+
+### Using PFX/PKCS12 Certificates
+
+For PFX or PKCS12 certificate bundles, you can either provide a file path or inline base64-encoded content:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://secure-api.example.com/v1'
+      tls:
+        # Option 1: Using a file path
+        pfxPath: '/path/to/certificate.pfx'
+        passphrase: '{{env.PFX_PASSPHRASE}}' # Optional: passphrase for PFX
+```
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://secure-api.example.com/v1'
+      tls:
+        # Option 2: Using inline base64-encoded content
+        pfx: 'MIIJKQIBAzCCCO8GCSqGSIb3DQEHAaCCCOAEggjcMIII2DCCBYcGCSqGSIb3DQEHBqCCBXgwggV0AgEAMIIFbQYJKoZIhvcNAQcBMBwGCiqGSIb3DQEMAQYwDgQI...' # Base64-encoded PFX content
+        passphrase: '{{env.PFX_PASSPHRASE}}' # Optional: passphrase for PFX
+```
+
+### Using JKS (Java KeyStore) Certificates
+
+For Java applications using JKS certificates, the provider can automatically extract the certificate and key for TLS:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://secure-api.example.com/v1'
+      tls:
+        # Option 1: Using a file path
+        jksPath: '/path/to/keystore.jks'
+        passphrase: '{{env.JKS_PASSWORD}}' # Required for JKS
+        keyAlias: 'mykey' # Optional: specific alias to use
+```
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://secure-api.example.com/v1'
+      tls:
+        # Option 2: Using inline base64-encoded JKS content
+        jksContent: 'MIIJKQIBAzCCCO8GCSqGSIb3DQEHA...' # Base64-encoded JKS content
+        passphrase: '{{env.JKS_PASSWORD}}'
+        keyAlias: 'client-cert' # Optional: defaults to first available key
+```
+
+The JKS file is processed using the `jks-js` library, which automatically:
+
+- Extracts the certificate and private key from the keystore
+- Converts them to PEM format for use with TLS
+- Selects the appropriate key based on the alias (or uses the first available)
+
+:::info
+JKS support requires the `jks-js` package. Install it with:
+
+```bash
+npm install jks-js
+```
+
+:::
+
+### Advanced TLS Options
+
+Fine-tune TLS connection parameters:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      tls:
+        # Certificate configuration
+        certPath: '/path/to/client-cert.pem'
+        keyPath: '/path/to/client-key.pem'
+        caPath: '/path/to/ca-cert.pem'
+
+        # Security options
+        rejectUnauthorized: true # Verify server certificate
+        servername: 'api.example.com' # Override SNI hostname
+
+        # Cipher and protocol configuration
+        ciphers: 'TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256'
+        secureProtocol: 'TLSv1_3_method' # Force TLS 1.3
+        minVersion: 'TLSv1.2' # Minimum TLS version
+        maxVersion: 'TLSv1.3' # Maximum TLS version
+```
+
+### Inline Certificates
+
+You can provide certificates directly in the configuration instead of file paths:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://secure-api.example.com/v1'
+      tls:
+        # Provide PEM certificates as strings
+        cert: |
+          -----BEGIN CERTIFICATE-----
+          MIIDXTCCAkWgAwIBAgIJAKl...
+          -----END CERTIFICATE-----
+        key: |
+          -----BEGIN PRIVATE KEY-----
+          MIIEvQIBADANBgkqhkiG9w0...
+          -----END PRIVATE KEY-----
+        ca: |
+          -----BEGIN CERTIFICATE-----
+          MIIDQTCCAimgAwIBAgITBmyf...
+          -----END CERTIFICATE-----
+```
+
+For PFX certificates, provide them as base64-encoded strings:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://secure-api.example.com/v1'
+      tls:
+        # PFX certificate as base64-encoded string
+        pfx: 'MIIJKQIBAzCCCO8GCSqGSIb3DQEHAaCCCOAEggjcMIII2DCCBYcGCSqGSIb3DQEHBqCCBXgwggV0AgEAMIIFbQYJKoZIhvcNAQcBMBwGCiqGSIb3DQEMAQYwDgQI...'
+        passphrase: 'your-pfx-passphrase'
+```
+
+### Multiple CA Certificates
+
+Support for multiple CA certificates in the trust chain:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      tls:
+        ca:
+          - |
+            -----BEGIN CERTIFICATE-----
+            [Root CA certificate content]
+            -----END CERTIFICATE-----
+          - |
+            -----BEGIN CERTIFICATE-----
+            [Intermediate CA certificate content]
+            -----END CERTIFICATE-----
+```
+
+### Self-Signed Certificates
+
+For development/testing with self-signed certificates:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://localhost:8443/api'
+      tls:
+        rejectUnauthorized: false # Accept self-signed certificates (NOT for production!)
+```
+
+:::warning
+Setting `rejectUnauthorized: false` disables certificate verification and should **never** be used in production environments as it makes connections vulnerable to man-in-the-middle attacks.
+:::
+
+### Environment Variables
+
+Use environment variables for sensitive certificate data:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      tls:
+        certPath: '{{env.CLIENT_CERT_PATH}}'
+        keyPath: '{{env.CLIENT_KEY_PATH}}'
+        passphrase: '{{env.CERT_PASSPHRASE}}'
+```
+
+### TLS Configuration Options
+
+| Option             | Type               | Default | Description                                                                        |
+| ------------------ | ------------------ | ------- | ---------------------------------------------------------------------------------- |
+| ca                 | string \| string[] | -       | CA certificate(s) for verifying server certificates                                |
+| caPath             | string             | -       | Path to CA certificate file                                                        |
+| cert               | string \| string[] | -       | Client certificate(s) for mutual TLS                                               |
+| certPath           | string             | -       | Path to client certificate file                                                    |
+| key                | string \| string[] | -       | Private key(s) for client certificate                                              |
+| keyPath            | string             | -       | Path to private key file                                                           |
+| pfx                | string \| Buffer   | -       | PFX/PKCS12 certificate bundle (base64-encoded string or Buffer for inline content) |
+| pfxPath            | string             | -       | Path to PFX/PKCS12 file                                                            |
+| jksPath            | string             | -       | Path to JKS keystore file                                                          |
+| jksContent         | string             | -       | Base64-encoded JKS keystore content                                                |
+| keyAlias           | string             | -       | Alias of the key to use from JKS (defaults to first available)                     |
+| passphrase         | string             | -       | Passphrase for encrypted private key, PFX, or JKS                                  |
+| rejectUnauthorized | boolean            | true    | If true, verify server certificate against CA                                      |
+| servername         | string             | -       | Server name for SNI (Server Name Indication) TLS extension                         |
+| ciphers            | string             | -       | Cipher suite specification (OpenSSL format)                                        |
+| secureProtocol     | string             | -       | SSL method to use (e.g., 'TLSv1_2_method', 'TLSv1_3_method')                       |
+| minVersion         | string             | -       | Minimum TLS version to allow (e.g., 'TLSv1.2', 'TLSv1.3')                          |
+| maxVersion         | string             | -       | Maximum TLS version to allow (e.g., 'TLSv1.2', 'TLSv1.3')                          |
+
+:::info
+
+- When using client certificates, you must provide both certificate and key (unless using PFX or JKS)
+- PFX and JKS bundles contain both certificate and key, so only the bundle and passphrase are needed
+- The TLS configuration is applied to all HTTPS requests made by this provider
+  :::
+
 ## Session management
 
 ### Server-side session management
@@ -806,16 +1091,17 @@ providers:
 
 ## Digital Signature Authentication
 
-The HTTP provider supports digital signature authentication. This feature allows you to:
+The HTTP provider supports digital signature authentication with multiple certificate formats. This feature allows you to:
 
 - Automatically generate cryptographic signatures for requests
 - Manage signature expiration and refresh
 - Customize header names and signature formats
 - Configure different signature algorithms
+- Support for PEM, JKS (Java KeyStore), and PFX (Personal Information Exchange) certificate formats
 
 The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic. In either case, the private key is **never sent to Promptfoo** and will always be stored locally on your system either in your `promptfooconfig.yaml` file or on a local path that the configuration file references.
 
-### Basic Usage
+### Basic Usage (PEM)
 
 ```yaml
 providers:
@@ -827,8 +1113,45 @@ providers:
         'x-signature': '{{signature}}'
         'x-timestamp': '{{signatureTimestamp}}'
       signatureAuth:
+        type: 'pem'
         privateKeyPath: '/path/to/private.key'
         clientId: 'your-client-id'
+```
+
+### Certificate Format Support
+
+The HTTP provider supports three certificate formats:
+
+#### PEM Certificates
+
+```yaml
+signatureAuth:
+  type: 'pem'
+  privateKeyPath: '/path/to/private.key' # Path to PEM private key file
+  # OR
+  privateKey: '-----BEGIN PRIVATE KEY-----\n...' # Direct key string
+```
+
+#### JKS (Java KeyStore) Certificates
+
+```yaml
+signatureAuth:
+  type: 'jks'
+  keystorePath: '/path/to/keystore.jks'
+  keystorePassword: 'your-keystore-password' # Optional: can use PROMPTFOO_JKS_PASSWORD env var
+  keyAlias: 'your-key-alias' # Optional: uses first available alias if not specified
+```
+
+#### PFX (Personal Information Exchange) Certificates
+
+```yaml
+signatureAuth:
+  type: 'pfx'
+  pfxPath: '/path/to/certificate.pfx'
+  pfxPassword: 'your-pfx-password' # Optional: can use PROMPTFOO_PFX_PASSWORD env var
+  # OR use separate certificate and key files
+  certPath: '/path/to/certificate.crt'
+  keyPath: '/path/to/private.key'
 ```
 
 ### Full Configuration
@@ -843,9 +1166,24 @@ providers:
         'x-timestamp': '{{signatureTimestamp}}'
         'x-client-id': 'your-client-id'
       signatureAuth:
-        # Required fields - provide either privateKeyPath or privateKey
+        # Certificate type (pem, jks, or pfx)
+        type: 'pem'
+
+        # PEM options
         privateKeyPath: '/path/to/private.key' # Path to key file
         # privateKey: '-----BEGIN PRIVATE KEY-----\n...'  # Or direct key string
+
+        # JKS options
+        # keystorePath: '/path/to/keystore.jks'
+        # keystorePassword: 'password'  # Optional: can use PROMPTFOO_JKS_PASSWORD
+        # keyAlias: 'alias'  # Optional: uses first available if not specified
+
+        # PFX options
+        # pfxPath: '/path/to/certificate.pfx'
+        # pfxPassword: 'password'  # Optional: can use PROMPTFOO_PFX_PASSWORD
+        # certPath: '/path/to/certificate.crt'  # Alternative to pfxPath
+        # keyPath: '/path/to/private.key'       # Alternative to pfxPath
+
         clientId: 'your-client-id'
 
         # Optional fields with defaults shown
@@ -859,6 +1197,12 @@ providers:
 You can use environment variables throughout your HTTP provider configuration using the `{{env.VARIABLE_NAME}}` syntax.
 :::
 
+:::info Dependencies
+
+- **JKS support** requires the `jks-js` package: `npm install jks-js`
+- **PFX support** requires the `pem` package: `npm install pem`
+  :::
+
 When signature authentication is enabled, the following variables are available for use in headers or other templated fields:
 
 - `signature`: The generated signature string (base64 encoded)
@@ -868,15 +1212,27 @@ When signature authentication is enabled, the following variables are available 
 
 | Option                   | Type   | Required | Default                             | Description                                                                                                           |
 | ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| privateKeyPath           | string | No\*     | -                                   | Path to the private key file used for signing                                                                         |
-| privateKey               | string | No\*     | -                                   | Private key string (if not using privateKeyPath)                                                                      |
+| type                     | string | No       | 'pem'                               | Certificate type: 'pem', 'jks', or 'pfx'                                                                              |
+| privateKeyPath           | string | No\*     | -                                   | Path to the PEM private key file used for signing (PEM type only)                                                     |
+| privateKey               | string | No\*     | -                                   | PEM private key string (if not using privateKeyPath, PEM type only)                                                   |
+| keystorePath             | string | No\*     | -                                   | Path to the JKS keystore file (JKS type only)                                                                         |
+| keystorePassword         | string | No       | -                                   | JKS keystore password (JKS type only, can use PROMPTFOO_JKS_PASSWORD env var)                                         |
+| keyAlias                 | string | No       | First available alias               | JKS key alias to use (JKS type only)                                                                                  |
+| pfxPath                  | string | No\*     | -                                   | Path to the PFX certificate file (PFX type only)                                                                      |
+| pfxPassword              | string | No       | -                                   | PFX certificate password (PFX type only, can use PROMPTFOO_PFX_PASSWORD env var)                                      |
+| certPath                 | string | No\*     | -                                   | Path to the certificate file (PFX type only, alternative to pfxPath)                                                  |
+| keyPath                  | string | No\*     | -                                   | Path to the private key file (PFX type only, alternative to pfxPath)                                                  |
 | clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
 | signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
 | signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
 | signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
 | signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
 
-\* Either `privateKeyPath` or `privateKey` must be provided
+\* Requirements depend on certificate type:
+
+- **PEM**: Either `privateKeyPath` or `privateKey` must be provided
+- **JKS**: `keystorePath` must be provided
+- **PFX**: Either `pfxPath` or both `certPath` and `keyPath` must be provided
 
 ## Request Retries
 
@@ -894,6 +1250,44 @@ providers:
     config:
       url: https://api.example.com/v1/chat
       maxRetries: 2 # Override default of 4 retries
+```
+
+## Streaming Responses
+
+Promptfoo can call HTTP targets that stream responses (for example, Server-Sent Events or chunked JSON). However, streaming is usually not recommended:
+
+- Evals wait for the full response before scoring, so progressive tokens are not surfaced
+- Streaming formats vary widely and often require custom parsing logic in `transformResponse`
+- Overall test duration is typically similar to non-streaming requests
+
+If you still need to evaluate a streaming endpoint, parse and reconstruct the final text inside `transformResponse`. For SSE-style responses, you can accumulate `delta` chunks from each `data:` line:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/responses'
+      body:
+        model: 'custom-model'
+        stream: true
+      transformResponse: |
+        (json, text) => {
+          if (json && (json.output_text || json.response)) {
+            return json.output_text || json.response;
+          }
+          let out = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            try {
+              const evt = JSON.parse(trimmed.slice(6));
+              if (evt.type === 'response.output_text.delta' && typeof evt.delta === 'string') {
+                out += evt.delta;
+              }
+            } catch {}
+          }
+          return out.trim();
+        }
 ```
 
 ## Reference
@@ -914,20 +1308,33 @@ Supported config options:
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 | validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
 | signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
+| tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
 
 ### Signature Auth Options
 
 | Option                   | Type   | Required | Default                             | Description                                                                                                           |
 | ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| privateKeyPath           | string | No\*     | -                                   | Path to the private key file used for signing                                                                         |
-| privateKey               | string | No\*     | -                                   | Private key string (if not using privateKeyPath)                                                                      |
+| type                     | string | No       | 'pem'                               | Certificate type: 'pem', 'jks', or 'pfx'                                                                              |
+| privateKeyPath           | string | No\*     | -                                   | Path to the PEM private key file used for signing (PEM type only)                                                     |
+| privateKey               | string | No\*     | -                                   | PEM private key string (if not using privateKeyPath, PEM type only)                                                   |
+| keystorePath             | string | No\*     | -                                   | Path to the JKS keystore file (JKS type only)                                                                         |
+| keystorePassword         | string | No       | -                                   | JKS keystore password (JKS type only, can use PROMPTFOO_JKS_PASSWORD env var)                                         |
+| keyAlias                 | string | No       | First available alias               | JKS key alias to use (JKS type only)                                                                                  |
+| pfxPath                  | string | No\*     | -                                   | Path to the PFX certificate file (PFX type only)                                                                      |
+| pfxPassword              | string | No       | -                                   | PFX certificate password (PFX type only, can use PROMPTFOO_PFX_PASSWORD env var)                                      |
+| certPath                 | string | No\*     | -                                   | Path to the certificate file (PFX type only, alternative to pfxPath)                                                  |
+| keyPath                  | string | No\*     | -                                   | Path to the private key file (PFX type only, alternative to pfxPath)                                                  |
 | clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
 | signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
 | signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
 | signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
 | signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
 
-\* Either `privateKeyPath` or `privateKey` must be provided
+\* Requirements depend on certificate type:
+
+- **PEM**: Either `privateKeyPath` or `privateKey` must be provided
+- **JKS**: `keystorePath` must be provided
+- **PFX**: Either `pfxPath` or both `certPath` and `keyPath` must be provided
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 

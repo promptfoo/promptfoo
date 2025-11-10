@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import React from 'react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { FilterModeSelector } from './FilterModeSelector';
 
 const noop = () => {};
@@ -29,5 +28,15 @@ describe('FilterModeSelector', () => {
 
     // Check that "Show different outputs" option is present
     expect(screen.getByText('Show different outputs')).toBeInTheDocument();
+  });
+
+  it('includes passes option', async () => {
+    const user = userEvent.setup();
+    render(<FilterModeSelector filterMode="all" onChange={noop} showDifferentOption />);
+
+    const select = screen.getByRole('combobox');
+    await user.click(select);
+
+    expect(screen.getByText('Show passes only')).toBeInTheDocument();
   });
 });

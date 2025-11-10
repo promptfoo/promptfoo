@@ -1,5 +1,20 @@
 ---
-sidebar_position: 200
+sidebar_position: 42
+sidebar_label: Telemetry
+title: Telemetry Configuration - Usage Analytics and Monitoring
+description: Configure telemetry and analytics for promptfoo usage monitoring. Learn data collection settings, privacy controls, and usage tracking options.
+keywords:
+  [
+    telemetry configuration,
+    usage analytics,
+    monitoring,
+    data collection,
+    privacy settings,
+    usage tracking,
+    analytics setup,
+  ]
+pagination_prev: configuration/caching
+pagination_next: null
 ---
 
 # Telemetry

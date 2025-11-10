@@ -3,9 +3,18 @@ import type Eval from '../../models/eval';
 export function getHeaderForTable(eval_: Eval) {
   const varsForHeader = new Set<string>();
 
-  if (eval_.config.defaultTest?.vars) {
+  if (typeof eval_.config.defaultTest === 'object' && eval_.config.defaultTest?.vars) {
     for (const varName of Object.keys(eval_.config.defaultTest.vars || {})) {
       varsForHeader.add(varName);
+    }
+  }
+
+  // Collect vars from actual evaluation results
+  for (const result of eval_.results) {
+    if (result.testCase?.vars) {
+      for (const varName of Object.keys(result.testCase.vars)) {
+        varsForHeader.add(varName);
+      }
     }
   }
 

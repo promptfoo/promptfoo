@@ -89,7 +89,7 @@ function Contact(): JSX.Element {
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', py: 4, mb: 4 }}>
           <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
-            Contact Sales
+            Book a Demo
           </Typography>
           <Typography variant="h6" color="text.secondary">
             Let's discuss how Promptfoo can secure your AI infrastructure
@@ -119,11 +119,6 @@ function Contact(): JSX.Element {
             </Box>
 
             <TabPanel value={tabValue} index={0}>
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="body1" color="text.secondary" align="center">
-                  Book a 30-minute demo to see Promptfoo in action
-                </Typography>
-              </Box>
               <Calendar />
             </TabPanel>
 
@@ -391,7 +386,7 @@ function Contact(): JSX.Element {
                   🐙 View on GitHub
                 </Link>
                 <Link
-                  href="mailto:enterprise@promptfoo.dev"
+                  href="mailto:inquiries@promptfoo.dev"
                   className={styles.quickLink}
                   sx={{
                     fontSize: '0.75rem',
@@ -400,7 +395,7 @@ function Contact(): JSX.Element {
                     textDecoration: 'none',
                   }}
                 >
-                  📧 enterprise@promptfoo.dev
+                  📧 inquiries@promptfoo.dev
                 </Link>
               </Box>
             </Box>

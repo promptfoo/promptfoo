@@ -1,8 +1,12 @@
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
+
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { Typography, TextField, IconButton, Button } from '@mui/material';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import { Box } from '@mui/system';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 

@@ -1,13 +1,13 @@
 import { fetchWithCache } from '../../../src/cache';
 import {
-  validateSizeForModel,
-  formatOutput,
-  prepareRequestBody,
   calculateImageCost,
   callOpenAiImageApi,
-  processApiResponse,
   DALLE2_COSTS,
   DALLE3_COSTS,
+  formatOutput,
+  prepareRequestBody,
+  processApiResponse,
+  validateSizeForModel,
 } from '../../../src/providers/openai/image';
 
 jest.mock('../../../src/cache', () => ({
@@ -237,7 +237,15 @@ describe('OpenAI Image Provider Functions', () => {
         deleteFromCache: mockDeleteFromCache,
       };
 
-      const result = await processApiResponse(data, 'prompt', 'url', false, 'dall-e-2', '512x512');
+      const result = await processApiResponse(
+        data,
+        'prompt',
+        'url',
+        false,
+        'dall-e-2',
+        '512x512',
+        undefined,
+      );
 
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
       expect(result).toHaveProperty('error');
@@ -256,6 +264,7 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
+        undefined,
       );
 
       expect(result).toHaveProperty('output');
@@ -275,6 +284,7 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-3',
         '1024x1024',
+        undefined,
         'standard',
       );
 
@@ -294,6 +304,7 @@ describe('OpenAI Image Provider Functions', () => {
         true,
         'dall-e-2',
         '512x512',
+        undefined,
       );
 
       expect(result.cost).toBe(0);
@@ -313,6 +324,7 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
+        undefined,
       );
 
       expect(result).toHaveProperty('error');
@@ -335,6 +347,7 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
+        undefined,
       );
 
       expect(result).toHaveProperty('error');

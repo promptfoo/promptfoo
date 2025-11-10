@@ -1,5 +1,3 @@
-/* eslint-disable */
-
 !(function (t) {
   if (window.ko) return;
   (window.ko = []),
@@ -118,4 +116,19 @@ posthog.init('phc_gOS5ctlYqd64vmJtYVpAU0W5iew7OopcETkyYNpkyYP', {
     (n.defer = !0),
     (n.onload = t),
     document.head.appendChild(n);
+})();
+
+/* Google */
+(function () {
+  var script = document.createElement('script');
+  script.src = 'https://www.googletagmanager.com/gtag/js?id=AW-17347444171';
+  script.async = true;
+  document.head.appendChild(script);
+
+  window.dataLayer = window.dataLayer || [];
+  function gtag() {
+    dataLayer.push(arguments);
+  }
+  gtag('js', new Date());
+  gtag('config', 'AW-17347444171');
 })();

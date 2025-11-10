@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import ProviderSelector from './ProviderSelector';
 
@@ -114,7 +114,7 @@ describe('ProviderSelector', () => {
 
     // Verify error message
     expect(
-      screen.getByText('Only javascript, python, and go files are supported'),
+      screen.getByText('Only javascript, python, go and ruby files are supported'),
     ).toBeInTheDocument();
   });
 

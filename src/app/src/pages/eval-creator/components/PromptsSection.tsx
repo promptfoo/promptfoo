@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
 import { useStore } from '@app/stores/evalConfig';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
@@ -22,13 +23,15 @@ import Typography from '@mui/material/Typography';
 import PromptDialog from './PromptDialog';
 import './PromptsSection.css';
 
-const PromptsSection: React.FC = () => {
+const PromptsSection = () => {
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [promptToDelete, setPromptToDelete] = useState<number | null>(null);
 
-  const { prompts, setPrompts } = useStore();
+  const { config, updateConfig } = useStore();
+  const prompts = (config.prompts || []) as string[];
+  const setPrompts = (p: string[]) => updateConfig({ prompts: p });
   const newPromptInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -207,7 +210,6 @@ const PromptsSection: React.FC = () => {
           setPromptDialogOpen(false);
         }}
       />
-
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}

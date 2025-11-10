@@ -4,6 +4,7 @@ import { getUserEmail } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addLikertTestCases } from '../../../src/redteam/strategies/likert';
+
 import type { TestCase } from '../../../src/types';
 
 jest.mock('cli-progress');

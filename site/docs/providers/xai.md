@@ -1,6 +1,6 @@
 ---
 title: xAI (Grok) Provider
-description: Configure and use xAI's Grok models with promptfoo, including Grok-3 with reasoning capabilities
+description: Deploy xAI Grok models including Grok-3 with advanced reasoning for complex analysis and conversational AI applications
 keywords: [xai, grok, grok-3, grok-2, reasoning, vision, llm]
 ---
 
@@ -16,16 +16,36 @@ To use xAI's API, set the `XAI_API_KEY` environment variable or specify via `api
 export XAI_API_KEY=your_api_key_here
 ```
 
-## Provider Format
+## Supported Models
 
 The xAI provider includes support for the following model formats:
+
+### Grok Code Fast Models
+
+- `xai:grok-code-fast-1` - Speedy and economical reasoning model optimized for agentic coding (256K context)
+- `xai:grok-code-fast` - Alias for grok-code-fast-1
+- `xai:grok-code-fast-1-0825` - Specific version of the code-fast model (256K context)
+
+### Grok-4 Models
+
+- `xai:grok-4-0709` - Latest flagship reasoning model (256K context)
+- `xai:grok-4` - Alias for latest Grok-4 model
+- `xai:grok-4-latest` - Alias for latest Grok-4 model
 
 ### Grok-3 Models
 
 - `xai:grok-3-beta` - Latest flagship model for enterprise tasks (131K context)
-- `xai:grok-3-fast-beta` - Faster variant of grok-3-beta (131K context)
-- `xai:grok-3-mini-beta` - Lightweight reasoning model (131K context)
-- `xai:grok-3-mini-fast-beta` - Faster variant of grok-3-mini with reasoning (131K context)
+- `xai:grok-3-fast-beta` - Fastest flagship model (131K context)
+- `xai:grok-3-mini-beta` - Smaller model for basic tasks, supports reasoning effort (32K context)
+- `xai:grok-3-mini-fast-beta` - Faster mini model, supports reasoning effort (32K context)
+- `xai:grok-3` - Alias for grok-3-beta
+- `xai:grok-3-latest` - Alias for grok-3-beta
+- `xai:grok-3-fast` - Alias for grok-3-fast-beta
+- `xai:grok-3-fast-latest` - Alias for grok-3-fast-beta
+- `xai:grok-3-mini` - Alias for grok-3-mini-beta
+- `xai:grok-3-mini-latest` - Alias for grok-3-mini-beta
+- `xai:grok-3-mini-fast` - Alias for grok-3-mini-fast-beta
+- `xai:grok-3-mini-fast-latest` - Alias for grok-3-mini-fast-beta
 
 ### Grok-2 and previous Models
 
@@ -57,16 +77,69 @@ providers:
 
 ### Reasoning Support
 
-Grok-3 introduces reasoning capabilities for specific models. The `grok-3-mini-beta` and `grok-3-mini-fast-beta` models support reasoning through the `reasoning_effort` parameter:
+Multiple Grok models support reasoning capabilities:
+
+**Grok Code Fast Models**: The `grok-code-fast-1` family are reasoning models optimized for agentic coding workflows. They support:
+
+- Function calling and tool usage
+- Web search via `search_parameters`
+- Fast inference with built-in reasoning
+
+**Grok-3 Models**: The `grok-3-mini-beta` and `grok-3-mini-fast-beta` models support reasoning through the `reasoning_effort` parameter:
 
 - `reasoning_effort: "low"` - Minimal thinking time, using fewer tokens for quick responses
 - `reasoning_effort: "high"` - Maximum thinking time, leveraging more tokens for complex problems
 
 :::info
 
-Reasoning is only available for the mini variants. The standard `grok-3-beta` and `grok-3-fast-beta` models do not support reasoning.
+For Grok-3, reasoning is only available for the mini variants. The standard `grok-3-beta` and `grok-3-fast-beta` models do not support reasoning.
 
 :::
+
+### Grok-4 Specific Behavior
+
+Grok-4 introduces significant changes compared to previous Grok models:
+
+- **Always uses reasoning**: Grok-4 is a reasoning model that always operates at maximum reasoning capacity
+- **No `reasoning_effort` parameter**: Unlike Grok-3 mini models, Grok-4 does not support the `reasoning_effort` parameter
+- **Unsupported parameters**: The following parameters are not supported and will be automatically filtered out:
+  - `presencePenalty` / `presence_penalty`
+  - `frequencyPenalty` / `frequency_penalty`
+  - `stop`
+- **Larger context window**: 256,000 tokens compared to 131,072 for Grok-3 models
+- **Uses `max_completion_tokens`**: As a reasoning model, Grok-4 uses `max_completion_tokens` instead of `max_tokens`
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: xai:grok-4
+    config:
+      temperature: 0.7
+      max_completion_tokens: 4096
+```
+
+### Grok Code Fast Specific Behavior
+
+The Grok Code Fast models are optimized for agentic coding workflows and offer several key features:
+
+- **Built for Speed**: Designed to be highly responsive for agentic coding tools where multiple tool calls are common
+- **Economical Pricing**: At $0.20/1M input tokens and $1.50/1M output tokens, significantly more affordable than flagship models
+- **Reasoning Capabilities**: Built-in reasoning for code analysis, debugging, and problem-solving
+- **Tool Integration**: Excellent support for function calling, tool usage, and web search
+- **Coding Expertise**: Particularly adept at TypeScript, Python, Java, Rust, C++, and Go
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: xai:grok-code-fast-1
+    # or use the alias:
+    # - id: xai:grok-code-fast
+    config:
+      temperature: 0.1 # Lower temperature often preferred for coding tasks
+      max_completion_tokens: 4096
+      search_parameters:
+        mode: auto # Enable web search for coding assistance
+```
 
 ### Region Support
 
@@ -178,3 +251,27 @@ npx promptfoo@latest init --example xai
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai)
+
+## Troubleshooting
+
+### 502 Bad Gateway Errors
+
+If you encounter 502 Bad Gateway errors when using the xAI provider, this typically indicates:
+
+- An invalid or missing API key
+- Server issues on x.ai's side
+
+The xAI provider will provide helpful error messages to guide you in resolving these issues.
+
+**Solution**: Verify your `XAI_API_KEY` environment variable is set correctly. You can obtain an API key from [https://x.ai/](https://x.ai/).
+
+### Controlling Retries
+
+If you're experiencing timeouts or want to control retry behavior:
+
+- To disable retries for 5XX errors: `PROMPTFOO_RETRY_5XX=false`
+- To reduce retry delays: `PROMPTFOO_REQUEST_BACKOFF_MS=1000` (in milliseconds)
+
+## Reference
+
+- [x.ai documentation](https://docs.x.ai/)

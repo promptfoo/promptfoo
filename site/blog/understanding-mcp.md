@@ -5,6 +5,7 @@ description: 'A hands-on exploration of Model Context Protocol - the standard th
 image: /img/blog/mcp/mcp.png
 date: 2025-05-06
 authors: [asmi]
+tags: [technical-guide, integration, mcp]
 ---
 
 import MCPConnectionSimulator from './mcp/components/MCPConnectionSimulator';
@@ -144,7 +145,6 @@ MCP defines three key message types that enable these integrations:
 But the real power of MCP comes from how these pieces work together. For example, when you're adding user authentication:
 
 1. The AI assistant can:
-
    - Create a new branch in GitHub
    - Add auth tables in Supabase
    - Generate API endpoints

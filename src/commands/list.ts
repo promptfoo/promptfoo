@@ -1,12 +1,12 @@
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import logger from '../logger';
 import Eval, { EvalQueries } from '../models/eval';
 import { wrapTable } from '../table';
 import telemetry from '../telemetry';
-import { printBorder, setupEnv } from '../util';
+import { printBorder, setupEnv } from '../util/index';
 import { sha256 } from '../util/createHash';
 import { getPrompts, getTestCases } from '../util/database';
+import type { Command } from 'commander';
 
 export function listCommand(program: Command) {
   const listCommand = program.command('list').description('List various resources');
@@ -22,7 +22,6 @@ export function listCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'list evals',
       });
-      await telemetry.send();
 
       const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
 
@@ -75,7 +74,6 @@ export function listCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'list prompts',
       });
-      await telemetry.send();
 
       const prompts = (await getPrompts(Number(cmdObj.n) || undefined)).sort((a, b) =>
         a.recentEvalId.localeCompare(b.recentEvalId),
@@ -121,7 +119,6 @@ export function listCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'list datasets',
       });
-      await telemetry.send();
 
       const datasets = (await getTestCases(Number(cmdObj.n) || undefined)).sort((a, b) =>
         b.recentEvalId.localeCompare(a.recentEvalId),

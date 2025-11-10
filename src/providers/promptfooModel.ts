@@ -1,12 +1,14 @@
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { fetchWithProxy } from '../util/fetch/index';
+
 import type {
+  ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-import type { ApiProvider } from '../types/providers';
 
 // Define types for the expected model API response structure
 interface ModelMessage {
@@ -73,8 +75,8 @@ export class PromptfooModelProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _context?: CallApiContextParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     logger.debug(`[PromptfooModel] Calling API with model: ${this.model}`);
 
@@ -110,8 +112,8 @@ export class PromptfooModelProvider implements ApiProvider {
       }
 
       const body = JSON.stringify(payload);
-      logger.debug(`[PromptfooModel] Sending request to ${url}: ${body}`);
-      const response = await fetch(url, {
+      logger.debug('[PromptfooModel] Sending request', { url, payload });
+      const response = await fetchWithProxy(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -131,7 +133,7 @@ export class PromptfooModelProvider implements ApiProvider {
       }
 
       const modelResponse = data.result as ModelApiResponse;
-      logger.debug(`[PromptfooModel] Received response: ${JSON.stringify(modelResponse)}`);
+      logger.debug('[PromptfooModel] Received response', { modelResponse });
 
       // Extract the completion from the choices
       const completionContent = modelResponse.choices?.[0]?.message?.content || '';

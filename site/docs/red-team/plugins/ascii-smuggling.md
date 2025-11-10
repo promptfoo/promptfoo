@@ -1,5 +1,6 @@
 ---
 sidebar_label: ASCII Smuggling
+description: Red team LLM systems against ASCII smuggling attacks by detecting hidden Unicode instructions to prevent unauthorized prompt injections and data exfiltration risks
 ---
 
 # ASCII Smuggling for LLMs
@@ -15,7 +16,6 @@ This method can be used for prompt injections, exfiltration, and other potential
 ## How it works
 
 1. The plugin generates prompts that contain two parts:
-
    - A visible, innocent-looking text
    - A hidden instruction using Unicode tag characters
 

@@ -1,11 +1,13 @@
 import fs from 'fs';
+
 import yaml from 'js-yaml';
 import { disableCache } from '../../../src/cache';
 import { doGenerateDataset } from '../../../src/commands/generate/dataset';
 import telemetry from '../../../src/telemetry';
 import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
-import type { TestSuite, VarMapping } from '../../../src/types';
 import { resolveConfigs } from '../../../src/util/config/load';
+
+import type { TestSuite, VarMapping } from '../../../src/types';
 
 jest.mock('fs');
 jest.mock('js-yaml');
@@ -18,9 +20,14 @@ jest.mock('../../../src/telemetry', () => ({
   send: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../../src/util', () => ({
-  isRunningUnderNpx: jest.fn().mockReturnValue(false),
   printBorder: jest.fn(),
   setupEnv: jest.fn(),
+}));
+
+jest.mock('../../../src/util/promptfooCommand', () => ({
+  promptfooCommand: jest.fn().mockReturnValue('promptfoo eval'),
+  detectInstaller: jest.fn().mockReturnValue('unknown'),
+  isRunningUnderNpx: jest.fn().mockReturnValue(false),
 }));
 
 describe('dataset generation', () => {
@@ -58,7 +65,7 @@ describe('dataset generation', () => {
       jest.mocked(fs.existsSync).mockReturnValue(true);
       jest.mocked(fs.writeFileSync).mockImplementation(() => undefined);
       jest.mocked(disableCache).mockImplementation(() => undefined);
-      jest.mocked(telemetry.send).mockResolvedValue(undefined);
+      jest.mocked(telemetry.record).mockResolvedValue(undefined as never);
 
       jest.mocked(resolveConfigs).mockResolvedValue({
         testSuite: mockTestSuite,

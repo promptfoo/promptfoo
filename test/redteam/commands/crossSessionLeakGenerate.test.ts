@@ -1,7 +1,8 @@
 import { synthesize } from '../../../src/redteam';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
-import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
 import * as configModule from '../../../src/util/config/load';
+
+import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
 
 jest.mock('../../../src/redteam', () => ({
   synthesize: jest.fn(),
@@ -9,7 +10,7 @@ jest.mock('../../../src/redteam', () => ({
 jest.mock('../../../src/util/config/load', () => ({
   resolveConfigs: jest.fn(),
 }));
-jest.mock('../../../src/util/config/manage', () => ({
+jest.mock('../../../src/util/config/writer', () => ({
   writePromptfooConfig: jest.fn(),
 }));
 jest.mock('../../../src/providers', () => ({

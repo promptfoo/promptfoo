@@ -1,45 +1,39 @@
 import {
-  Severity,
-  severityDisplayNames,
-  riskCategorySeverityMap,
-  riskCategories,
-  categoryDescriptions,
-  categoryMapReverse,
-  categoryLabels,
   categoryAliases,
   categoryAliasesReverse,
-  pluginDescriptions,
-  strategyDescriptions,
-  strategyDisplayNames,
-  PLUGIN_PRESET_DESCRIPTIONS,
+  categoryDescriptions,
+  categoryLabels,
+  categoryMapReverse,
   DEFAULT_OUTPUT_PATH,
   displayNameOverrides,
+  PLUGIN_PRESET_DESCRIPTIONS,
+  pluginDescriptions,
+  riskCategories,
+  riskCategorySeverityMap,
+  Severity,
+  strategyDescriptions,
+  strategyDisplayNames,
   subCategoryDescriptions,
 } from '../../../src/redteam/constants/metadata';
+
+import {
+  ADDITIONAL_PLUGINS,
+  BASE_PLUGINS,
+  BIAS_PLUGINS,
+  FINANCIAL_PLUGINS,
+  HARM_PLUGINS,
+  MEDICAL_PLUGINS,
+  PII_PLUGINS,
+} from '../../../src/redteam/constants/plugins';
 import type { Plugin } from '../../../src/redteam/constants/plugins';
 import type { Strategy } from '../../../src/redteam/constants/strategies';
-import { MEMORY_POISONING_PLUGIN_ID } from '../../../src/redteam/plugins/agentic/constants';
 
 describe('metadata constants', () => {
-  describe('Severity enum and display names', () => {
-    it('should have matching severity levels and display names', () => {
-      expect(Object.keys(severityDisplayNames)).toEqual(Object.values(Severity));
-      expect(severityDisplayNames[Severity.Critical]).toBe('Critical');
-      expect(severityDisplayNames[Severity.High]).toBe('High');
-      expect(severityDisplayNames[Severity.Medium]).toBe('Medium');
-      expect(severityDisplayNames[Severity.Low]).toBe('Low');
-    });
-  });
-
   describe('Risk category severity map', () => {
     it('should have valid severity levels', () => {
       Object.values(riskCategorySeverityMap).forEach((severity) => {
         expect(Object.values(Severity)).toContain(severity);
       });
-    });
-
-    it('should include memory poisoning plugin with high severity', () => {
-      expect(riskCategorySeverityMap[MEMORY_POISONING_PLUGIN_ID]).toBe(Severity.High);
     });
   });
 
@@ -71,6 +65,60 @@ describe('metadata constants', () => {
         const uniquePlugins = new Set(plugins);
         expect(uniquePlugins.size).toBe(plugins.length);
       });
+    });
+
+    it('should include all defined plugins in risk categories', () => {
+      // Get all plugins from risk categories
+      const riskCategoryPlugins = new Set<Plugin>();
+      Object.values(riskCategories).forEach((plugins) => {
+        plugins.forEach((plugin) => {
+          riskCategoryPlugins.add(plugin);
+        });
+      });
+
+      // Get all defined plugins from constants
+      const allDefinedPlugins = new Set<Plugin>();
+
+      // Add plugins from various constant arrays
+      [...BASE_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+      [...ADDITIONAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+      [...BIAS_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+      [...PII_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+      [...MEDICAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+      [...FINANCIAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+
+      // Add plugins from HARM_PLUGINS object
+      Object.keys(HARM_PLUGINS).forEach((plugin) => {
+        allDefinedPlugins.add(plugin as Plugin);
+      });
+
+      // Special plugins that shouldn't be in risk categories (collections and custom plugins)
+      const excludedPlugins = new Set([
+        'intent', // Custom intent plugin handled separately in UI
+        'policy', // Custom policy plugin handled separately in UI
+        'default', // Collection
+        'foundation', // Collection
+        'harmful', // Collection
+        'bias', // Collection
+        'pii', // Collection
+        'medical', // Collection
+        'guardrails-eval', // Collection
+      ]);
+
+      // Find plugins that are defined but missing from risk categories
+      const missingPlugins = Array.from(allDefinedPlugins).filter(
+        (plugin) => !riskCategoryPlugins.has(plugin) && !excludedPlugins.has(plugin),
+      );
+
+      if (missingPlugins.length > 0) {
+        throw new Error(
+          `The following plugins are defined but missing from risk categories: ${missingPlugins.join(
+            ', ',
+          )}. Please add them to the appropriate category in riskCategories object in metadata.ts`,
+        );
+      }
+
+      expect(missingPlugins).toEqual([]);
     });
   });
 
@@ -122,7 +170,7 @@ describe('metadata constants', () => {
 
   describe('Display name overrides', () => {
     it('should have display names for memory poisoning plugin', () => {
-      expect(displayNameOverrides[MEMORY_POISONING_PLUGIN_ID]).toBe('Agentic Memory Poisoning');
+      expect(displayNameOverrides['agentic:memory-poisoning']).toBe('Agentic Memory Poisoning');
     });
 
     it('should have matching subcategory descriptions', () => {

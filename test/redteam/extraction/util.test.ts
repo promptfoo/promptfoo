@@ -3,12 +3,13 @@ import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
 import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
 import {
-  fetchRemoteGeneration,
   callExtraction,
+  fetchRemoteGeneration,
   formatPrompts,
   RedTeamGenerationResponse,
 } from '../../../src/redteam/extraction/util';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/cache', () => ({

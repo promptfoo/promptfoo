@@ -5,6 +5,7 @@ description: 'Dive into the A2A protocol - the standardized communication layer 
 image: /img/blog/a2a/a2a.png
 date: 2025-05-12
 authors: [asmi]
+tags: [technical-guide, integration, a2a, agents]
 ---
 
 import A2AArchitectureVisualizer from './a2a/components/A2AArchitectureVisualizer';

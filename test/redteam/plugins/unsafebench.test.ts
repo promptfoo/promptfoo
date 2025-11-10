@@ -48,13 +48,13 @@ jest.mock('../../../src/redteam/plugins/unsafebench', () => {
       }
 
       return {
-        id: originalModule.PLUGIN_ID,
+        id: 'promptfoo:redteam:unsafebench',
         pluginConfig: config,
         canGenerateRemote: false,
         getTemplate: jest.fn().mockResolvedValue(injectVar),
         getAssertions: jest.fn().mockImplementation((category) => [
           {
-            type: originalModule.PLUGIN_ID,
+            type: 'promptfoo:redteam:unsafebench',
             metric: 'UnsafeBench',
             value: { category },
           },
@@ -118,7 +118,7 @@ jest.mock('../../../src/redteam/plugins/unsafebench', () => {
             vars: { [injectVar]: record.image },
             assert: [
               {
-                type: originalModule.PLUGIN_ID,
+                type: 'promptfoo:redteam:unsafebench',
                 metric: 'UnsafeBench',
                 value: { category: record.category },
               },

@@ -1,31 +1,38 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import { Box, Typography, Button, Tooltip } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
+import { useToast } from '@app/hooks/useToast';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import { alpha, useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import {
+  AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
+  DEFAULT_STRATEGIES,
+  MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
+  STRATEGIES_REQUIRING_REMOTE,
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
-import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+import { Link as RouterLink } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import PageWrapper from './PageWrapper';
 import StrategyConfigDialog from './StrategyConfigDialog';
 import { PresetSelector } from './strategies/PresetSelector';
+import { AgenticStrategiesGroup } from './strategies/AgenticStrategiesGroup';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import {
-  STRATEGY_PRESETS,
-  PRESET_IDS,
-  type PresetId,
-  type StrategyPreset,
-} from './strategies/types';
+import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
+import { getStrategyId } from './strategies/utils';
+import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+import EstimationsDisplay from './EstimationsDisplay';
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
-import { getEstimatedProbes, getStrategyId } from './strategies/utils';
+import Divider from '@mui/material/Divider';
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -42,18 +49,31 @@ interface CustomPreset {
 
 type PresetWithName = StrategyPreset | CustomPreset;
 
-const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter((id) => id !== 'default').map(
-  (id) => ({
-    id,
-    name: strategyDisplayNames[id] || id,
-    description: strategyDescriptions[id],
-  }),
-);
+// Define recommended strategies based on DEFAULT_STRATEGIES for consistency
+const RECOMMENDED_STRATEGIES = DEFAULT_STRATEGIES;
+
+// UI-friendly description overrides
+const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
+  basic:
+    'Standard testing without additional attack strategies. Tests prompts as-is to establish baseline behavior.',
+};
+
+const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter(
+  (id) => id !== 'default' && id !== 'multilingual', // multilingual is deprecated
+).map((id) => ({
+  id,
+  name: strategyDisplayNames[id] || id,
+  description: UI_STRATEGY_DESCRIPTIONS[id] || strategyDescriptions[id],
+}));
 
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const theme = useTheme();
+  const toast = useToast();
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
   const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
@@ -67,15 +87,53 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
   }, [recordEvent]);
 
-  // Separate single vs. multi-turn
-  const { singleTurnStrategies, multiTurnStrategies } = useMemo(() => {
+  const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
+
+  const isStrategyDisabled = useCallback(
+    (strategyId: string) => {
+      return isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE.includes(strategyId as any);
+    },
+    [isRemoteGenerationDisabled],
+  );
+
+  // Categorize strategies by type
+  const categorizedStrategies = useMemo(() => {
+    const recommended = availableStrategies.filter((s) =>
+      RECOMMENDED_STRATEGIES.includes(s.id as any),
+    );
+
+    const allAgentic = availableStrategies.filter((s) => AGENTIC_STRATEGIES.includes(s.id as any));
+
+    // Split agentic into single-turn and multi-turn
+    const agenticSingleTurn = allAgentic.filter(
+      (s) => !MULTI_TURN_STRATEGIES.includes(s.id as any),
+    );
+
+    // Preserve the order from MULTI_TURN_STRATEGIES for agentic multi-turn strategies
+    const agenticMultiTurn = MULTI_TURN_STRATEGIES.map((strategyId) =>
+      availableStrategies.find(
+        (s) => s.id === strategyId && AGENTIC_STRATEGIES.includes(s.id as any),
+      ),
+    ).filter(Boolean) as StrategyCardData[];
+
+    const multiModal = availableStrategies.filter((s) =>
+      MULTI_MODAL_STRATEGIES.includes(s.id as any),
+    );
+
+    // Get other strategies that aren't in the above categories
+    const other = availableStrategies.filter(
+      (s) =>
+        !RECOMMENDED_STRATEGIES.includes(s.id as any) &&
+        !AGENTIC_STRATEGIES.includes(s.id as any) &&
+        !MULTI_MODAL_STRATEGIES.includes(s.id as any),
+    );
+
     return {
-      singleTurnStrategies: availableStrategies.filter(
-        (s) => !MULTI_TURN_STRATEGIES.includes(s.id as any),
-      ),
-      multiTurnStrategies: availableStrategies.filter((s) =>
-        MULTI_TURN_STRATEGIES.includes(s.id as any),
-      ),
+      recommended,
+      agenticSingleTurn,
+      agenticMultiTurn,
+      multiModal,
+      other,
     };
   }, []);
 
@@ -93,7 +151,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       setIsMultiTurnEnabled(true);
     }
 
-    const matchedPresetId = Object.entries(STRATEGY_PRESETS).find(([presetId, preset]) => {
+    const matchedPresetId = Object.entries(STRATEGY_PRESETS).find(([_presetId, preset]) => {
       if (!preset) {
         return false;
       }
@@ -150,24 +208,50 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
       // At this point we know it's a StrategyPreset
       const strategyPreset = STRATEGY_PRESETS[presetId];
+      let allStrategyIds: string[];
+
       if (strategyPreset.options?.multiTurn && isMultiTurnEnabled) {
-        const nextStrats = [
+        allStrategyIds = [
           ...strategyPreset.strategies,
           ...strategyPreset.options.multiTurn.strategies,
-        ].map((id: string) => ({ id }));
-        updateConfig('strategies', nextStrats);
+        ];
       } else {
-        updateConfig(
-          'strategies',
-          strategyPreset.strategies.map((id: string) => ({ id })),
+        allStrategyIds = [...strategyPreset.strategies];
+      }
+
+      // Filter out disabled strategies
+      const enabledStrategyIds = allStrategyIds.filter((id) => !isStrategyDisabled(id));
+      const skippedStrategyIds = allStrategyIds.filter((id) => isStrategyDisabled(id));
+
+      // Show toast if any strategies were skipped
+      if (skippedStrategyIds.length > 0) {
+        const skippedNames = skippedStrategyIds
+          .map((id) => (strategyDisplayNames as Record<string, string>)[id] || id)
+          .join(', ');
+        toast.showToast(
+          `Skipped ${skippedStrategyIds.length} disabled ${skippedStrategyIds.length === 1 ? 'strategy' : 'strategies'}: ${skippedNames}`,
+          'warning',
         );
       }
+
+      updateConfig(
+        'strategies',
+        enabledStrategyIds.map((id: string) => ({ id })),
+      );
     },
-    [recordEvent, isMultiTurnEnabled, updateConfig],
+    [recordEvent, isMultiTurnEnabled, updateConfig, isStrategyDisabled, toast],
   );
 
   const handleStrategyToggle = useCallback(
     (strategyId: string) => {
+      if (isStrategyDisabled(strategyId)) {
+        toast.showToast(
+          'This strategy requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
+          'error',
+        );
+        return;
+      }
+
       const isSelected = config.strategies.some((s) => getStrategyId(s) === strategyId);
 
       if (!isSelected) {
@@ -200,7 +284,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         updateConfig('strategies', [...config.strategies, newStrategy]);
       }
     },
-    [config.strategies, recordEvent, updateConfig, isStatefulValue],
+    [config.strategies, recordEvent, updateConfig, isStatefulValue, isStrategyDisabled, toast],
   );
 
   const handleSelectNoneInSection = useCallback(
@@ -228,13 +312,28 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         return;
       }
 
-      const multiTurnStrats = multiTurnStrategies.map((id: string) => ({
-        id,
-        config: { stateful: isStatefulValue },
-      }));
-
       if (checked) {
-        // Add multi-turn strategies
+        // Filter out disabled strategies
+        const enabledMultiTurnIds = multiTurnStrategies.filter((id) => !isStrategyDisabled(id));
+        const skippedMultiTurnIds = multiTurnStrategies.filter((id) => isStrategyDisabled(id));
+
+        // Show toast if any strategies were skipped
+        if (skippedMultiTurnIds.length > 0) {
+          const skippedNames = skippedMultiTurnIds
+            .map((id) => (strategyDisplayNames as Record<string, string>)[id] || id)
+            .join(', ');
+          toast.showToast(
+            `Skipped ${skippedMultiTurnIds.length} disabled ${skippedMultiTurnIds.length === 1 ? 'strategy' : 'strategies'}: ${skippedNames}`,
+            'warning',
+          );
+        }
+
+        // Add enabled multi-turn strategies
+        const multiTurnStrats = enabledMultiTurnIds.map((id: string) => ({
+          id,
+          config: { stateful: isStatefulValue },
+        }));
+
         const newStrats = [
           ...config.strategies,
           ...multiTurnStrats.filter(
@@ -250,7 +349,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         updateConfig('strategies', filtered);
       }
     },
-    [config.strategies, updateConfig, isStatefulValue, selectedPreset],
+    [config.strategies, updateConfig, isStatefulValue, selectedPreset, isStrategyDisabled, toast],
   );
 
   const handleStatefulChange = useCallback(
@@ -315,136 +414,234 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies],
   );
 
+  // Check if user has selected all or most strategies
+  const hasSelectedMostStrategies = useMemo(() => {
+    const totalAvailable = availableStrategies.length;
+    const totalSelected = selectedStrategyIds.length;
+    // Show warning if more than 80% of strategies are selected or all strategies are selected
+    return totalSelected >= totalAvailable * 0.8 || totalSelected === totalAvailable;
+  }, [selectedStrategyIds, availableStrategies]);
+
   const showSystemConfig = config.strategies.some((s) =>
     ['goat', 'crescendo'].includes(getStrategyId(s)),
   );
 
-  const hasSessionParser = Boolean(
-    config.target.config?.sessionParser || config.target.config?.sessionSource === 'client',
-  );
+  const selectedPresetHasAgenticStrategies =
+    selectedPreset &&
+    selectedPreset !== 'Custom' &&
+    (STRATEGY_PRESETS[selectedPreset as PresetId]?.strategies ?? []).some((s) =>
+      AGENTIC_STRATEGIES.includes(s as any),
+    );
 
   // ----------------------------------------------
   // Render
   // ----------------------------------------------
 
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-        Strategy Configuration
-      </Typography>
-
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          mb: 3,
-          p: 2,
-          borderRadius: 1,
-          backgroundColor: theme.palette.background.paper,
-          border: `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Typography variant="body1" color="text.secondary">
-            Estimated Probes:
+    <PageWrapper
+      title="Strategies"
+      description={
+        <Box sx={{ maxWidth: '1200px' }}>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Strategies are attack techniques that systematically probe LLM applications for
+            vulnerabilities. While plugins generate adversarial inputs, strategies determine how
+            these inputs are delivered to maximize attack success rates.{' '}
+            <RouterLink
+              style={{ textDecoration: 'underline' }}
+              to="https://www.promptfoo.dev/docs/red-team/strategies/"
+              target="_blank"
+            >
+              Learn More
+            </RouterLink>
+          </Typography>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Choose the red team strategies that will guide how attacks are generated and executed.
           </Typography>
         </Box>
-        <Typography variant="body1" fontWeight="bold" color="primary.main">
-          {getEstimatedProbes(config).toLocaleString()}
-        </Typography>
-        <Tooltip title="Probes are the number of requests to target application">
-          <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
-        </Tooltip>
-      </Box>
-
-      {/* Preset Selector */}
-      <PresetSelector
-        presets={Object.values(STRATEGY_PRESETS)}
-        selectedPreset={selectedPreset}
-        onSelect={handlePresetSelect}
-      />
-
-      {/* Recommended-specific options */}
-      {(selectedPreset === PRESET_IDS.MEDIUM || selectedPreset === PRESET_IDS.LARGE) && (
-        <RecommendedOptions
-          isMultiTurnEnabled={isMultiTurnEnabled}
-          isStatefulValue={isStatefulValue}
-          onMultiTurnChange={handleMultiTurnChange}
-          onStatefulChange={handleStatefulChange}
-        />
+      }
+      onNext={onNext}
+      onBack={onBack}
+    >
+      {/* Warning banner when remote generation is disabled - full width sticky */}
+      {isRemoteGenerationDisabled && (
+        <Alert
+          severity="warning"
+          icon={<WarningAmberIcon />}
+          sx={(theme) => ({
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            margin: -3,
+            marginBottom: 3,
+            padding: theme.spacing(2, 3),
+            borderRadius: 0,
+            boxShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.1)}`,
+            '& .MuiAlert-message': {
+              width: '100%',
+            },
+          })}
+        >
+          <Box>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              Remote Generation Disabled
+            </Typography>
+            <Typography variant="body2">
+              Some strategies require remote generation and are currently unavailable. These
+              strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
+              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+            </Typography>
+          </Box>
+        </Alert>
       )}
 
-      {/* Single-turn strategies */}
-      <StrategySection
-        title="Single-turn Strategies"
-        strategies={singleTurnStrategies}
-        selectedIds={selectedStrategyIds}
-        onToggle={handleStrategyToggle}
-        onConfigClick={handleConfigClick}
-        onSelectNone={handleSelectNoneInSection}
-      />
-
-      {/* Multi-turn strategies */}
-      <StrategySection
-        title="Multi-turn Strategies"
-        strategies={multiTurnStrategies}
-        selectedIds={selectedStrategyIds}
-        onToggle={handleStrategyToggle}
-        onConfigClick={handleConfigClick}
-        onSelectNone={handleSelectNoneInSection}
-      />
-
-      {/* Additional system config section, if needed */}
-      {showSystemConfig && (
-        <SystemConfiguration
-          isStatefulValue={isStatefulValue}
-          onStatefulChange={handleStatefulChange}
-          hasSessionParser={hasSessionParser}
-        />
+      {/* Warning banner when all/most strategies are selected - full width sticky */}
+      {hasSelectedMostStrategies && (
+        <Alert
+          severity="warning"
+          icon={<WarningAmberIcon />}
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 9,
+            margin: -3,
+            marginBottom: 3,
+            padding: theme.spacing(2, 3),
+            borderRadius: 0,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            '& .MuiAlert-message': {
+              width: '100%',
+            },
+          }}
+        >
+          <Box>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              Performance Warning: Too Many Strategies Selected
+            </Typography>
+            <Typography variant="body2">
+              Selecting many strategies is usually not efficient and will significantly increase
+              evaluation time and cost. It's recommended to use the preset configurations or select
+              only the strategies specifically needed for your use case.
+            </Typography>
+          </Box>
+        </Alert>
       )}
 
-      {/* Footer Buttons */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-        <Button
-          variant="outlined"
-          onClick={onBack}
-          startIcon={<KeyboardArrowLeftIcon />}
-          sx={{ px: 4, py: 1 }}
-        >
-          Back
-        </Button>
-        <Button
-          variant="contained"
-          onClick={onNext}
-          endIcon={<KeyboardArrowRightIcon />}
-          sx={{ px: 4, py: 1 }}
-        >
-          Next
-        </Button>
-      </Box>
+      <Box>
+        <EstimationsDisplay config={config} />
 
-      {/* Config Dialog */}
-      <StrategyConfigDialog
-        open={configDialog.isOpen}
-        strategy={configDialog.selectedStrategy}
-        config={
-          configDialog.selectedStrategy
-            ? ((
-                config.strategies.find(
-                  (s) => getStrategyId(s) === configDialog.selectedStrategy,
-                ) as RedteamStrategyObject
-              )?.config ?? {})
-            : {}
-        }
-        onClose={() =>
-          setConfigDialog({
-            isOpen: false,
-            selectedStrategy: null,
-          })
-        }
-        onSave={updateStrategyConfig}
-      />
-    </Box>
+        <Divider sx={{ my: 4 }} />
+
+        {/* Preset Selector */}
+        <PresetSelector
+          presets={Object.values(STRATEGY_PRESETS)}
+          selectedPreset={selectedPreset}
+          onSelect={handlePresetSelect}
+        />
+
+        {/* Recommended-specific options */}
+        {selectedPresetHasAgenticStrategies && (
+          <RecommendedOptions
+            isMultiTurnEnabled={isMultiTurnEnabled}
+            isStatefulValue={isStatefulValue}
+            onMultiTurnChange={handleMultiTurnChange}
+            onStatefulChange={handleStatefulChange}
+          />
+        )}
+
+        {/* Recommended strategies */}
+        {categorizedStrategies.recommended.length > 0 && (
+          <StrategySection
+            title="Recommended Strategies"
+            description="Core strategies that provide comprehensive coverage for most use cases"
+            strategies={categorizedStrategies.recommended}
+            selectedIds={selectedStrategyIds}
+            onToggle={handleStrategyToggle}
+            onConfigClick={handleConfigClick}
+            onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+          />
+        )}
+
+        {/* Agentic strategies grouped */}
+        {(categorizedStrategies.agenticSingleTurn.length > 0 ||
+          categorizedStrategies.agenticMultiTurn.length > 0) && (
+          <AgenticStrategiesGroup
+            singleTurnStrategies={categorizedStrategies.agenticSingleTurn}
+            multiTurnStrategies={categorizedStrategies.agenticMultiTurn}
+            selectedIds={selectedStrategyIds}
+            onToggle={handleStrategyToggle}
+            onConfigClick={handleConfigClick}
+            onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+          />
+        )}
+
+        {/* Multi-modal strategies */}
+        {categorizedStrategies.multiModal.length > 0 && (
+          <StrategySection
+            title="Multi-modal Strategies"
+            description="Test handling of non-text content including audio, video, and images"
+            strategies={categorizedStrategies.multiModal}
+            selectedIds={selectedStrategyIds}
+            onToggle={handleStrategyToggle}
+            onConfigClick={handleConfigClick}
+            onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+          />
+        )}
+
+        {/* Other strategies */}
+        {categorizedStrategies.other.length > 0 && (
+          <StrategySection
+            title="Other Strategies"
+            description="Additional specialized strategies for specific attack vectors and edge cases"
+            strategies={categorizedStrategies.other}
+            selectedIds={selectedStrategyIds}
+            onToggle={handleStrategyToggle}
+            onConfigClick={handleConfigClick}
+            onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+          />
+        )}
+
+        {/* Additional system config section, if needed */}
+        {showSystemConfig && !selectedPresetHasAgenticStrategies && (
+          <SystemConfiguration
+            isStatefulValue={isStatefulValue}
+            onStatefulChange={handleStatefulChange}
+          />
+        )}
+
+        {/* Config Dialog */}
+        <StrategyConfigDialog
+          open={configDialog.isOpen}
+          strategy={configDialog.selectedStrategy}
+          config={
+            configDialog.selectedStrategy
+              ? ((
+                  config.strategies.find(
+                    (s) => getStrategyId(s) === configDialog.selectedStrategy,
+                  ) as RedteamStrategyObject
+                )?.config ?? {})
+              : {}
+          }
+          onClose={() =>
+            setConfigDialog({
+              isOpen: false,
+              selectedStrategy: null,
+            })
+          }
+          onSave={updateStrategyConfig}
+          strategyData={
+            availableStrategies.find((s) => s.id === configDialog.selectedStrategy) ?? null
+          }
+        />
+      </Box>
+    </PageWrapper>
   );
 }

@@ -8,7 +8,7 @@ prompts:
   - "You are a helpful concise assistant. User query: {{query}}\n"
   # You can also reference external prompts, e.g.
   # - file:///path/to/prompt.json
-  # Learn more: https://promptfoo.dev/docs/configuration/parameters/#prompts
+  # Learn more: https://promptfoo.dev/docs/configuration/prompts/
 
 targets:
   # Providers are red team targets. To talk directly to your application, use a custom provider.

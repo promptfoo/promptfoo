@@ -1,14 +1,16 @@
 import React from 'react';
+
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import type { ProviderOptions } from '@promptfoo/types';
 import ExtensionEditor from './ExtensionEditor';
+import type { ProviderOptions } from '@promptfoo/types';
 import 'prismjs/themes/prism.css';
+
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 
 interface CommonConfigurationOptionsProps {
   selectedTarget: ProviderOptions;
@@ -18,13 +20,13 @@ interface CommonConfigurationOptionsProps {
   onExtensionsChange?: (extensions: string[]) => void;
 }
 
-const CommonConfigurationOptions: React.FC<CommonConfigurationOptionsProps> = ({
+const CommonConfigurationOptions = ({
   selectedTarget,
   updateCustomTarget,
   onValidationChange,
   extensions = [],
   onExtensionsChange,
-}) => {
+}: CommonConfigurationOptionsProps) => {
   const handleExtensionsChange = React.useCallback(
     (newExtensions: string[]) => {
       onExtensionsChange?.(newExtensions);
@@ -52,12 +54,13 @@ const CommonConfigurationOptions: React.FC<CommonConfigurationOptionsProps> = ({
             for more details.
           </Typography>
           <Box>
-            <TextField
+            <BaseNumberInput
+              min={0}
               value={selectedTarget.delay ?? ''}
-              onChange={(e) => updateCustomTarget('delay', Number(e.target.value))}
+              onChange={(v) => updateCustomTarget('delay', v)}
+              helperText="Delay in milliseconds (default: 0)"
             />
             <br />
-            <Typography variant="caption">Delay in milliseconds (default: 0)</Typography>
           </Box>
         </AccordionDetails>
       </Accordion>

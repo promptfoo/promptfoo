@@ -1,9 +1,10 @@
-import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types';
 import invariant from '../../../util/invariant';
-import type { HARM_PLUGINS } from '../../constants';
 import { RedteamPluginBase } from '../base';
-import { getHarmfulAssertions, createTestCase } from './common';
+import { createTestCase, getHarmfulAssertions } from './common';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';
+
+import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types/index';
+import type { HARM_PLUGINS } from '../../constants';
 import type { HarmfulCategory } from './constants';
 
 export class AlignedHarmfulPlugin extends RedteamPluginBase {
@@ -32,7 +33,7 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
     return categoryConfig.prompt;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return getHarmfulAssertions(this.harmCategory);
   }
 

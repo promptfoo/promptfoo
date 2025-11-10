@@ -1,6 +1,8 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from './shared';
+
 import type {
   ApiProvider,
   ApiSimilarityProvider,
@@ -8,8 +10,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
   ProviderSimilarityResponse,
-} from '../types';
-import { REQUEST_TIMEOUT_MS } from './shared';
+} from '../types/index';
 
 interface HuggingfaceProviderOptions {
   apiKey?: string;
@@ -97,7 +98,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     const url = this.config.apiEndpoint
       ? this.config.apiEndpoint
       : `https://api-inference.huggingface.co/models/${this.modelName}`;
-    logger.debug(`Huggingface API request: ${url} ${JSON.stringify(params)}`);
+    logger.debug(`Huggingface API request: ${url}`, { params });
 
     let response;
     try {
@@ -115,7 +116,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
         REQUEST_TIMEOUT_MS,
       );
 
-      logger.debug(`Huggingface API response: ${JSON.stringify(response.data)}`);
+      logger.debug('Huggingface API response', { data: response.data });
 
       if (response.data.error) {
         return {
@@ -276,7 +277,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
         : `https://api-inference.huggingface.co/models/${this.modelName}`;
-      logger.debug(`Huggingface API request: ${url} ${JSON.stringify(params)}`);
+      logger.debug('Huggingface API request', { url, params });
       response = await fetchWithCache(
         url,
         {

@@ -1,5 +1,19 @@
 ---
-sidebar_position: 40
+sidebar_position: 41
+sidebar_label: Caching
+title: Caching Configuration - Performance Optimization
+description: Configure caching for faster LLM evaluations. Learn cache strategies, storage options, and performance optimization for prompt testing workflows.
+keywords:
+  [
+    LLM caching,
+    performance optimization,
+    evaluation speed,
+    cache configuration,
+    response caching,
+    testing efficiency,
+  ]
+pagination_prev: configuration/chat
+pagination_next: configuration/telemetry
 ---
 
 # Caching

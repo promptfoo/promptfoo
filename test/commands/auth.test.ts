@@ -1,11 +1,14 @@
 import { Command } from 'commander';
 import { authCommand } from '../../src/commands/auth';
-import { fetchWithProxy } from '../../src/fetch';
+import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
-import { createMockResponse } from '../util/utils';
+import { getDefaultTeam } from '../../src/util/cloud';
+import { fetchWithProxy } from '../../src/util/fetch/index';
+import { openAuthBrowser } from '../../src/util/server';
+import { createMockResponse, stripAnsi } from '../util/utils';
 
 const mockCloudUser = {
   id: '1',
@@ -30,11 +33,14 @@ const mockApp = {
   url: 'https://app.example.com',
 };
 
+jest.mock('../../src/envars');
 jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/globalConfig/cloud');
 jest.mock('../../src/logger');
 jest.mock('../../src/telemetry');
-jest.mock('../../src/fetch');
+jest.mock('../../src/util/cloud');
+jest.mock('../../src/util/fetch/index.ts');
+jest.mock('../../src/util/server');
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -57,7 +63,6 @@ describe('auth command', () => {
     });
 
     jest.spyOn(telemetry as any, 'record').mockImplementation(() => {});
-    jest.spyOn(telemetry as any, 'send').mockImplementation(() => Promise.resolve());
   });
 
   describe('login', () => {
@@ -78,29 +83,82 @@ describe('auth command', () => {
       expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith('test-key', undefined);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.send).toHaveBeenCalledTimes(1);
+      expect(telemetry.record).toHaveBeenCalledTimes(1);
     });
 
-    it('should show login instructions when no API key is provided', async () => {
-      // Reset logger mock before test
-      jest.mocked(logger.info).mockClear();
+    it('should prompt for browser opening when no API key is provided in interactive environment', async () => {
+      // Mock interactive environment
+      jest.mocked(isNonInteractive).mockReturnValue(false);
+      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test']);
 
-      // Get the actual logged messages
-      const infoMessages = jest.mocked(logger.info).mock.calls.map((call) => call[0]);
-
-      // Verify they contain our expected text
-      expect(infoMessages).toHaveLength(2);
-      expect(infoMessages[0]).toContain('Please login or sign up at');
-      expect(infoMessages[0]).toContain('https://promptfoo.app');
-      expect(infoMessages[1]).toContain('https://promptfoo.app/welcome');
+      expect(openAuthBrowser).toHaveBeenCalledWith(
+        'https://www.promptfoo.app/',
+        'https://www.promptfoo.app/welcome',
+        0, // BrowserBehavior.ASK
+      );
 
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.send).toHaveBeenCalledTimes(1);
+      expect(telemetry.record).toHaveBeenCalledTimes(1);
+    });
+
+    it('should exit with error when no API key is provided in non-interactive environment', async () => {
+      // Mock non-interactive environment (CI, cron, SSH without TTY, etc.)
+      jest.mocked(isNonInteractive).mockReturnValue(true);
+      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test']);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
+      );
+      // Check that both info calls were made
+      const infoCalls = jest.mocked(logger.info).mock.calls;
+      const infoMessages = infoCalls.map((call) => stripAnsi(String(call[0])));
+      expect(infoCalls.length).toBeGreaterThanOrEqual(2);
+
+      expect(
+        infoMessages.some((message) =>
+          message.includes('Manual login URL: https://www.promptfoo.app/'),
+        ),
+      ).toBe(true);
+      expect(
+        infoMessages.some((message) =>
+          message.includes('After login, get your API token at: https://www.promptfoo.app/welcome'),
+        ),
+      ).toBe(true);
+      expect(process.exitCode).toBe(1);
+      expect(openAuthBrowser).not.toHaveBeenCalled();
+
+      expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
+      expect(telemetry.record).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use custom host for browser opening when provided in interactive environment', async () => {
+      // Mock interactive environment
+      jest.mocked(isNonInteractive).mockReturnValue(false);
+      const customHost = 'https://custom.promptfoo.com';
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--host', customHost]);
+
+      expect(openAuthBrowser).toHaveBeenCalledWith(
+        'https://custom.promptfoo.com/',
+        'https://custom.promptfoo.com/welcome',
+        0, // BrowserBehavior.ASK
+      );
+
+      expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
+      expect(telemetry.record).toHaveBeenCalledTimes(1);
     });
 
     it('should use custom host when provided', async () => {
@@ -112,7 +170,7 @@ describe('auth command', () => {
 
       expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith('test-key', customHost);
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.send).toHaveBeenCalledTimes(1);
+      expect(telemetry.record).toHaveBeenCalledTimes(1);
     });
 
     it('should handle login request failure', async () => {
@@ -130,7 +188,7 @@ describe('auth command', () => {
       );
       expect(process.exitCode).toBe(1);
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.send).toHaveBeenCalledTimes(1);
+      expect(telemetry.record).toHaveBeenCalledTimes(1);
     });
 
     it('should overwrite existing email in config after successful login', async () => {
@@ -152,7 +210,7 @@ describe('auth command', () => {
         expect.stringContaining('Updating local email configuration'),
       );
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.send).toHaveBeenCalledTimes(1);
+      expect(telemetry.record).toHaveBeenCalledTimes(1);
     });
 
     it('should handle non-Error objects in the catch block', async () => {
@@ -171,7 +229,7 @@ describe('auth command', () => {
       );
       expect(process.exitCode).toBe(1);
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.send).toHaveBeenCalledTimes(1);
+      expect(telemetry.record).toHaveBeenCalledTimes(1);
 
       // Reset exitCode
       process.exitCode = 0;
@@ -217,6 +275,13 @@ describe('auth command', () => {
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
 
+      jest.mocked(getDefaultTeam).mockResolvedValueOnce({
+        id: 'team-1',
+        name: 'Default Team',
+        organizationId: 'org-1',
+        createdAt: '2023-01-01T00:00:00Z',
+      });
+
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: true,
@@ -234,7 +299,7 @@ describe('auth command', () => {
 
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Currently logged in as:'));
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth whoami' });
-      expect(telemetry.send).toHaveBeenCalledTimes(1);
+      expect(telemetry.record).toHaveBeenCalledTimes(1);
     });
 
     it('should handle not logged in state', async () => {
@@ -287,7 +352,6 @@ describe('auth command', () => {
       // Only test telemetry if it's actually called in the implementation
       // Since we're resetting telemetry in the test, we need to explicitly call these for coverage
       telemetry.record('command_used', { name: 'auth whoami' });
-      telemetry.send();
 
       process.exitCode = 0;
     });

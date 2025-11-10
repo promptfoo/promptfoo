@@ -14,6 +14,7 @@ keywords:
   ]
 date: 2025-03-25
 authors: [vanessa]
+tags: [compliance-framework, red-teaming, best-practices, owasp]
 ---
 
 # OWASP Red Teaming: A Practical Guide to Getting Started

@@ -1,8 +1,27 @@
 ---
 sidebar_position: 6
 title: Deterministic Metrics for LLM Output Validation
-description: Learn about logical tests that validate LLM outputs with exact matching, pattern recognition, and structural validation
-keywords: [metrics, assertions, testing, validation, contains, regex, json, levenshtein]
+description: Learn how to validate LLM outputs using deterministic logical tests including exact matching, regex patterns, JSON/XML validation, and text similarity metrics
+keywords:
+  [
+    metrics,
+    assertions,
+    testing,
+    validation,
+    contains,
+    regex,
+    json,
+    levenshtein,
+    LLM testing,
+    output validation,
+    deterministic tests,
+    rouge,
+    bleu,
+    perplexity,
+    webhook,
+    sql validation,
+    xml validation,
+  ]
 ---
 
 # Deterministic metrics
@@ -11,18 +30,23 @@ These metrics are created by logical tests that are run on LLM output.
 
 | Assertion Type                                                  | Returns true if...                                                 |
 | --------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [assert-set](#assert-set)                                       | A configurable threshold of grouped assertions pass                |
+| [classifier](#classifier)                                       | HuggingFace classifier returns expected class above threshold      |
 | [contains](#contains)                                           | output contains substring                                          |
 | [contains-all](#contains-all)                                   | output contains all list of substrings                             |
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
+| [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
 | [contains-xml](#contains-xml)                                   | output contains valid xml                                          |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [f-score](#f-score)                                             | F-score is above a threshold                                       |
+| [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
 | [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
+| [is-html](#is-html)                                             | output is valid HTML                                               |
 | [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
 | [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
 | [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
@@ -34,10 +58,16 @@ These metrics are created by logical tests that are run on LLM output.
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
 | [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
+| [pi](#pi)                                                       | Pi Labs scorer returns score above threshold                       |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
 | [regex](#regex)                                                 | output matches regex                                               |
-| rouge-n                                                         | Rouge-N score is above a given threshold                           |
+| [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
+| [select-best](#select-best)                                     | Output is selected as best among multiple outputs                  |
+| [similar](#similar)                                             | Embedding similarity is above threshold                            |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
+| [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
+| [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
+| [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 
 :::tip
@@ -97,8 +127,6 @@ assert:
 ```
 
 For case insensitive matching, use `icontains-any`.
-
-For case insensitive matching, use `icontains-all`.
 
 ### Regex
 
@@ -170,6 +198,54 @@ assert:
 ```
 
 See also: [`is-json`](#is-json)
+
+### Contains-Html
+
+The `contains-html` assertion checks if the LLM output contains HTML content. This is useful when you want to verify that the model has generated HTML markup, even if it's embedded within other text.
+
+Example:
+
+```yaml
+assert:
+  - type: contains-html
+```
+
+The assertion uses multiple indicators to detect HTML:
+
+- Opening and closing tags (e.g., `<div>`, `</div>`)
+- Self-closing tags (e.g., `<br />`, `<img />`)
+- HTML entities (e.g., `&amp;`, `&nbsp;`, `&#123;`)
+- HTML attributes (e.g., `class="example"`, `id="test"`)
+- HTML comments (e.g., `<!-- comment -->`)
+- DOCTYPE declarations
+
+This assertion requires at least two HTML indicators to avoid false positives from text like "a < b" or email addresses.
+
+### Is-Html
+
+The `is-html` assertion checks if the entire LLM output is valid HTML (not just contains HTML fragments). The output must start and end with HTML tags, with no non-HTML content outside the tags.
+
+Example:
+
+```yaml
+assert:
+  - type: is-html
+```
+
+This assertion will pass for:
+
+- Complete HTML documents: `<!DOCTYPE html><html>...</html>`
+- HTML fragments: `<div>Content</div>`
+- Multiple elements: `<h1>Title</h1><p>Paragraph</p>`
+- Self-closing tags: `<img src="test.jpg" />`
+
+It will fail for:
+
+- Plain text: `Just text`
+- Mixed content: `Text before <div>HTML</div> text after`
+- XML documents: `<?xml version="1.0"?><root>...</root>`
+- Incomplete HTML: `<div>Unclosed div`
+- Non-HTML content with HTML inside: `Here is some HTML: <div>test</div>`
 
 ### Contains-Sql
 
@@ -500,7 +576,7 @@ See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 
 ### Latency
 
-The `latency` assertion passes if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
+The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
 
 Example:
 
@@ -516,6 +592,14 @@ Note that `latency` requires that the [cache is disabled](/docs/configuration/ca
 ### Levenshtein distance
 
 The `levenshtein` assertion checks if the LLM output is within a given edit distance from an expected value.
+
+Levenshtein distance measures the number of single-character edits (insertions, deletions, or substitutions) required to change one string into another. This metric is useful for:
+
+- **Fuzzy matching**: When you want to allow minor typos or variations (e.g., "color" vs "colour")
+- **Name matching**: When checking if the model outputs names correctly with some tolerance for spelling
+- **Code generation**: When verifying that generated code is close to expected output
+
+For example, the distance between "kitten" and "sitting" is 3 (substitute 'k'→'s', substitute 'e'→'i', insert 'g'). [Learn more on Wikipedia](https://en.wikipedia.org/wiki/Levenshtein_distance).
 
 Example:
 
@@ -541,17 +625,21 @@ tests:
 
 ### Perplexity
 
-Perplexity is a measurement used in natural language processing to quantify how well a language model predicts a sample of text. It's essentially a measure of the model's uncertainty.
+Perplexity measures how "surprised" a language model is by its own output. It's calculated from the log probabilities of tokens, where lower values indicate higher model confidence.
 
-**High perplexity** suggests it is less certain about its predictions, often because the text is very diverse or the model is not well-tuned to the task at hand.
+**Key points:**
 
-**Low perplexity** means the model predicts the text with greater confidence, implying it's better at understanding and generating text similar to its training data.
+- **Low perplexity** = high confidence (model thinks its output is likely)
+- **High perplexity** = low confidence (often correlates with hallucination or confusion)
+- Useful for quality control and detecting when the model is uncertain
+
+The assertion passes when perplexity is **below** the threshold.
 
 To specify a perplexity threshold, use the `perplexity` assertion type:
 
 ```yaml
 assert:
-  # Fail if the LLM is below perplexity threshold
+  # Fail if the LLM perplexity is above threshold (i.e., model is too confused)
   - type: perplexity
     threshold: 1.5
 ```
@@ -600,6 +688,139 @@ assert:
   - type: starts-with
     value: 'Yes'
 ```
+
+### Trace-Span-Count
+
+The `trace-span-count` assertion counts the number of spans in a trace that match a given pattern and checks if the count is within specified bounds. This is useful for validating that expected operations occurred in your LLM application.
+
+:::note
+Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions.
+
+If trace data is not available, the assertion will throw an error rather than failing, indicating that the assertion could not be evaluated.
+:::
+
+Example:
+
+```yaml
+assert:
+  # Ensure at least one LLM call was made
+  - type: trace-span-count
+    value:
+      pattern: '*llm*'
+      min: 1
+
+  # Ensure no more than 5 database queries
+  - type: trace-span-count
+    value:
+      pattern: '*database*'
+      max: 5
+
+  # Ensure exactly 2-4 retrieval operations
+  - type: trace-span-count
+    value:
+      pattern: '*retriev*'
+      min: 2
+      max: 4
+```
+
+The `pattern` field supports glob-style matching:
+
+- `*` matches any sequence of characters
+- `?` matches any single character
+- Matching is case-insensitive
+
+Common patterns:
+
+- `*llm*` - Matches spans with "llm" anywhere in the name
+- `api.*` - Matches spans starting with "api."
+- `*.error` - Matches spans ending with ".error"
+
+### Trace-Span-Duration
+
+The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
+
+:::note
+This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
+:::
+
+Example:
+
+```yaml
+assert:
+  # Ensure all spans complete within 3 seconds
+  - type: trace-span-duration
+    value:
+      max: 3000 # milliseconds
+
+  # Ensure LLM calls complete quickly (95th percentile)
+  - type: trace-span-duration
+    value:
+      pattern: '*llm*'
+      max: 2000
+      percentile: 95 # Check 95th percentile instead of all spans
+
+  # Ensure database queries are fast
+  - type: trace-span-duration
+    value:
+      pattern: '*database.query*'
+      max: 100
+```
+
+Key features:
+
+- `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
+- `max`: Maximum allowed duration in milliseconds
+- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile)
+
+The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
+
+### Trace-Error-Spans
+
+The `trace-error-spans` assertion detects error spans in a trace and ensures the error rate is within acceptable limits. It automatically detects errors through status codes, error attributes, and status messages.
+
+:::note
+This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
+:::
+
+Example:
+
+```yaml
+assert:
+  # No errors allowed
+  - type: trace-error-spans
+    value: 0 # Backward compatible - simple number means max_count
+
+  # Allow at most 2 errors
+  - type: trace-error-spans
+    value:
+      max_count: 2
+
+  # Allow up to 5% error rate
+  - type: trace-error-spans
+    value:
+      max_percentage: 5
+
+  # Check errors only in API calls
+  - type: trace-error-spans
+    value:
+      pattern: '*api*'
+      max_count: 0
+```
+
+Error detection methods:
+
+- **Status codes**: HTTP status codes >= 400
+- **Error attributes**: Checks for `error`, `exception`, `failed`, `failure` attributes
+- **OpenTelemetry standards**: `otel.status_code: ERROR`, `status.code: ERROR`
+- **Status messages**: Messages containing "error", "failed", "exception", "timeout", "abort"
+
+Configuration options:
+
+- `max_count`: Maximum number of error spans allowed
+- `max_percentage`: Maximum error rate as a percentage (0-100)
+- `pattern`: Filter spans by name pattern
+
+The assertion provides detailed error information including span names and error messages to help with debugging.
 
 ### Webhook
 
@@ -654,7 +875,17 @@ You may also return a score:
 
 The `rouge-n` assertion checks if the Rouge-N score between the LLM output and expected value is above a given threshold.
 
-Rouge-N is a recall-oriented metric that measures the overlap of n-grams between the LLM output and the expected text. The score ranges from 0 (no overlap) to 1 (perfect match).
+ROUGE-N is a **recall-oriented** metric that measures how much of the reference text appears in the generated output. It counts overlapping n-grams (word sequences) between the two texts.
+
+**What "recall-oriented" means:** ROUGE-N asks "How much of what should be there is actually there?" - perfect for summarization tasks where you want to ensure key information isn't missed.
+
+**When to use ROUGE-N:**
+
+- **Summarization**: Ensure summaries include key points from source text
+- **Information extraction**: Verify that important facts are captured
+- **Content coverage**: Check if the output mentions all required elements
+
+ROUGE stands for **Recall-Oriented Understudy for Gisting Evaluation**. [Learn more on Wikipedia](<https://en.wikipedia.org/wiki/ROUGE_(metric)>).
 
 Example:
 
@@ -683,9 +914,22 @@ tests:
 
 ### BLEU
 
-BLEU (Bilingual Evaluation Understudy) is a precision-oriented metric that measures the quality of text by comparing it to one or more reference texts. The score ranges from 0 (no match) to 1 (perfect match). It considers exact matches of words and phrases (n-grams) between the output and reference text.
+BLEU (Bilingual Evaluation Understudy) is a **precision-oriented** metric originally designed for evaluating machine translation. Unlike ROUGE-N which asks "is everything included?", BLEU asks "is everything correct?"
 
-While Rouge-N focuses on recall (how much of the reference text is captured), BLEU focuses on precision (how accurate the generated text is).
+**What "precision-oriented" means:** BLEU checks if the words in the generated output actually appear in the reference - it penalizes made-up or incorrect content.
+
+**When to use BLEU:**
+
+- **Translation tasks**: Ensure translations are accurate, not just complete
+- **Factual generation**: Verify the model isn't hallucinating extra information
+- **Concise outputs**: When you want precise, accurate text without extra fluff
+
+**BLEU vs ROUGE-N:**
+
+- **ROUGE-N**: "Did you mention everything important?" (good for summaries)
+- **BLEU**: "Is what you said actually correct?" (good for translations)
+
+BLEU also includes a brevity penalty to discourage overly short outputs. [See Wikipedia](https://en.wikipedia.org/wiki/BLEU) for more background.
 
 Example:
 
@@ -714,14 +958,26 @@ tests:
 
 ### GLEU
 
-The BLEU score has some undesirable properties when used for single sentences, as it was designed to be a corpus measure. To address these concerns, the 'GLEU (Google-BLEU) score' was introduced as a variant that better correlates with human judgments on sentence-level evaluation.
+GLEU (Google-BLEU) is designed specifically for evaluating **individual sentences**, fixing a major limitation of BLEU which was designed for large documents.
 
-For the GLEU score, we record all sub-sequences of 1, 2, 3 or 4 tokens in output and target sequence (n-grams). We then compute:
+**Why GLEU instead of BLEU for sentences:**
 
-- A recall: the ratio of matching n-grams to total n-grams in the target (ground truth) sequence
-- A precision: the ratio of matching n-grams to total n-grams in the generated output sequence
+- **No weird edge cases**: BLEU can give misleading scores for short sentences due to its brevity penalty
+- **Balanced evaluation**: GLEU considers both precision AND recall, taking the minimum of both
+- **Symmetrical**: Swapping reference and output gives the same score (unlike BLEU)
+- **Better for real-time evaluation**: More reliable for evaluating single responses in chatbots or QA systems
 
-The GLEU score is the minimum of recall and precision. The score's range is always between 0 (no matches) and 1 (all match) and it is symmetrical when switching output and target.
+**How GLEU works differently:**
+
+- Records all n-grams (1-4 word sequences) from both texts
+- Calculates both precision (like BLEU) AND recall (like ROUGE)
+- Final score = minimum(precision, recall)
+
+**When to use GLEU:**
+
+- **Single response evaluation**: Evaluating individual chatbot or model responses
+- **Short text comparison**: When comparing headlines, titles, or short answers
+- **Balanced accuracy needs**: When both precision and recall matter equally
 
 ```yaml
 assert:
@@ -759,9 +1015,32 @@ assert:
 
 ### METEOR
 
-METEOR (Metric for Evaluation of Translation with Explicit ORdering) is an automatic metric for evaluating machine-generated text against reference text. It's particularly useful for assessing translation quality and text generation accuracy.
+METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most sophisticated text similarity metric, going beyond simple word matching to understand meaning.
 
-> **Note:** METEOR requires the `natural` package. If you want to use METEOR assertions, install it using: `npm install natural@latest`
+**What makes METEOR special:**
+
+- **Understands synonyms**: Recognizes that "good" and "nice" mean similar things
+- **Handles word forms**: Knows that "running" and "ran" are the same verb
+- **Considers word order**: Unlike other metrics, it penalizes scrambled sentences
+- **Balanced scoring**: Combines precision, recall, AND word order into a single score
+
+**When to use METEOR:**
+
+- **High-quality translation**: When semantic accuracy matters more than exact wording
+- **Natural language understanding**: Evaluating if the model truly "gets" the meaning
+- **Flexible matching**: When there are many valid ways to express the same idea
+
+For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
+
+:::info Installation Required
+METEOR requires the optional `natural` package. Install it before using METEOR assertions:
+
+```bash
+npm install natural@^8.1.0
+```
+
+If the package is not installed, you'll receive an error message with installation instructions when attempting to use METEOR assertions.
+:::
 
 #### How METEOR Works
 
@@ -784,13 +1063,7 @@ assert:
     value: hello world # Reference text to compare against
 ```
 
-By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 1.0 (perfect match), with typical interpretations:
-
-- 0.0-0.2: Poor match
-- 0.2-0.4: Fair match
-- 0.4-0.6: Good match
-- 0.6-0.8: Very good match
-- 0.8-1.0: Excellent match
+By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 1.0 (perfect match).
 
 #### Custom Threshold
 
@@ -848,10 +1121,10 @@ tests:
   - description: 'Testing various outputs'
     vars:
       outputs:
-        - 'The weather is beautiful today' # Score: 1.0 (exact match)
-        - "Today's weather is beautiful" # Score: ~0.85 (reordered)
-        - 'The weather is nice today' # Score: ~0.7 (synonym)
-        - 'It is sunny outside' # Score: ~0.3 (different words)
+        - 'The weather is beautiful today' # Exact match
+        - "Today's weather is beautiful" # Reordered words
+        - 'The weather is nice today' # Uses synonym
+        - 'It is sunny outside' # Different phrasing
     assert:
       - type: meteor
         value: '{{reference}}'
@@ -862,7 +1135,21 @@ Note: Actual scores may vary based on the specific METEOR implementation and par
 
 ### F-Score
 
-F-score (also F1 score) is a measure of accuracy that considers both precision and recall. It is the harmonic mean of precision and recall, providing a single score that balances both metrics. The score ranges from 0 (worst) to 1 (best).
+F-score (also F1 score) is used for measuring classification accuracy when you need to balance between being correct and being complete.
+
+**Understanding Precision and Recall:**
+
+- **Precision**: "Of all the things I said were positive, how many actually were?" (avoiding false alarms)
+- **Recall**: "Of all the things that were positive, how many did I catch?" (avoiding missed cases)
+- **F-score**: The harmonic mean that balances both - high only when BOTH are good
+
+**When to use F-score:**
+
+- **Classification tasks**: Sentiment analysis, intent detection, category assignment
+- **Imbalanced datasets**: When some categories are rare and you can't just optimize for accuracy
+- **Quality + Coverage**: When you need the model to be both accurate AND comprehensive
+
+See [Wikipedia](https://en.wikipedia.org/wiki/F1_score) for mathematical details.
 
 F-score uses the [named metrics](/docs/configuration/expected-outputs/#defining-named-metrics) and [derived metrics](/docs/configuration/expected-outputs/#creating-derived-metrics) features.
 
@@ -910,6 +1197,145 @@ This is particularly useful for evaluating classification tasks like sentiment a
 
 See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete example.
 
+### Finish Reason
+
+The `finish-reason` assertion checks if the model stopped generating for the expected reason. This is useful for validating that the model completed naturally, hit token limits, triggered content filters, or made tool calls as expected.
+
+#### Standard Finish Reasons
+
+Models can stop generating for various reasons, which are normalized to these standard values:
+
+- **`stop`**: Natural completion (reached end of response, stop sequence matched)
+- **`length`**: Token limit reached (max_tokens exceeded, context length reached)
+- **`content_filter`**: Content filtering triggered due to safety policies
+- **`tool_calls`**: Model made function/tool calls
+
+#### Basic Usage
+
+```yaml
+assert:
+  - type: finish-reason
+    value: stop # Expects natural completion
+```
+
+#### Common Examples
+
+**Test for natural completion:**
+
+```yaml
+tests:
+  - vars:
+      prompt: 'Write a short poem about nature'
+    assert:
+      - type: finish-reason
+        value: stop # Should complete naturally
+```
+
+**Test for token limit:**
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      max_tokens: 10 # Very short limit
+tests:
+  - vars:
+      prompt: 'Write a very long essay about artificial intelligence'
+    assert:
+      - type: finish-reason
+        value: length # Should hit token limit
+```
+
+**Test for tool usage:**
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      tools:
+        - name: get_weather
+          description: Get current weather
+tests:
+  - vars:
+      prompt: 'What is the weather like in San Francisco?'
+    assert:
+      - type: finish-reason
+        value: tool_calls # Should make a tool call
+```
+
+**Test content filtering:**
+
+```yaml
+tests:
+  - vars:
+      prompt: 'Generate harmful content about violence'
+    assert:
+      - type: finish-reason
+        value: content_filter # Should be filtered
+```
+
+#### Provider Compatibility
+
+**Currently Supported Providers:**
+
+- **OpenAI and OpenAI-compatible providers** (GPT-3.5, GPT-4, Azure OpenAI, etc.)
+- **Anthropic** (Claude models)
+
+The assertion automatically normalizes provider-specific values:
+
+- **OpenAI**: `stop`, `length`, `content_filter`, `tool_calls`, `function_call` (legacy)
+- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`
+
+:::note
+Support for additional providers (Google Vertex AI, AWS Bedrock, etc.) is planned for future releases.
+:::
+
+#### Advanced Usage
+
+**With variables:**
+
+```yaml
+tests:
+  - vars:
+      expected_reason: stop
+    assert:
+      - type: finish-reason
+        value: '{{expected_reason}}'
+```
+
+**Multiple test cases:**
+
+```yaml
+tests:
+  - description: 'Normal completion'
+    vars:
+      prompt: 'Hello world'
+    assert:
+      - type: finish-reason
+        value: stop
+
+  - description: 'Token limit test'
+    vars:
+      prompt: 'Write a very long story'
+    assert:
+      - type: finish-reason
+        value: length
+```
+
+#### Troubleshooting
+
+**Assertion fails with "Provider did not supply stop/finish reason":**
+
+- Some providers may not return finish reasons for all requests
+- Check if your provider configuration supports finish reasons
+- Ensure caching is disabled if testing provider-specific behavior
+
+**Expected reason doesn't match:**
+
+- Finish reason comparison is case-insensitive (e.g., `stop`, `Stop`, and `STOP` are all valid)
+- Standard normalized values: `stop`, `length`, `content_filter`, `tool_calls`
+- Check provider documentation for specific finish reason values
+
 ### Is-Refusal
 
 The `is-refusal` assertion checks if the LLM output indicates that the model refused to
@@ -943,6 +1369,187 @@ tests:
       prompt: 'What is 2+2?'
     assert:
       - type: not-is-refusal # Ensure model helps with safe requests
+```
+
+### Similar
+
+The `similar` assertion checks if the LLM output is semantically similar to the expected value using embedding similarity.
+
+This assertion is particularly useful when:
+
+- You want to match meaning rather than exact wording
+- The output might use synonyms or paraphrasing
+- You need more flexibility than string matching
+
+Example:
+
+```yaml
+assert:
+  - type: similar
+    value: 'The expected output'
+    threshold: 0.8 # Default is 0.75
+```
+
+You can also check against multiple expected values:
+
+```yaml
+assert:
+  - type: similar
+    value:
+      - 'The expected output'
+      - 'Expected output'
+      - 'file://my_expected_output.txt'
+    threshold: 0.8
+```
+
+By default, the assertion uses OpenAI's `text-embedding-3-large` model. You can specify a different embedding provider:
+
+```yaml
+assert:
+  - type: similar
+    value: 'Hello world'
+    provider: huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
+```
+
+### Pi
+
+The `pi` assertion uses Pi Labs' preference scoring model as an alternative to LLM-as-a-judge for evaluation. It provides consistent numeric scores for the same inputs.
+
+:::note
+Requires `WITHPI_API_KEY` environment variable to be set.
+:::
+
+Example:
+
+```yaml
+assert:
+  - type: pi
+    value: 'Is the response not apologetic and provides a clear, concise answer?'
+    threshold: 0.8 # Optional, defaults to 0.5
+```
+
+You can use multiple Pi assertions to evaluate different aspects:
+
+```yaml
+tests:
+  - vars:
+      concept: quantum computing
+    assert:
+      - type: pi
+        value: 'Is the explanation easy to understand without technical jargon?'
+        threshold: 0.7
+      - type: pi
+        value: 'Does the response correctly explain the fundamental principles?'
+        threshold: 0.8
+```
+
+### Classifier
+
+The `classifier` assertion runs the LLM output through any HuggingFace text classification model. This is useful for:
+
+- Sentiment analysis
+- Toxicity detection
+- Bias detection
+- PII detection
+- Prompt injection detection
+
+Example for hate speech detection:
+
+```yaml
+assert:
+  - type: classifier
+    provider: huggingface:text-classification:facebook/roberta-hate-speech-dynabench-r4-target
+    value: nothate # The expected class name
+    threshold: 0.5
+```
+
+Example for PII detection (using negation):
+
+```yaml
+assert:
+  - type: not-classifier
+    provider: huggingface:token-classification:bigcode/starpii
+    threshold: 0.75
+```
+
+Example for prompt injection detection:
+
+```yaml
+assert:
+  - type: classifier
+    provider: huggingface:text-classification:protectai/deberta-v3-base-prompt-injection
+    value: 'SAFE'
+    threshold: 0.9
+```
+
+### Assert-Set
+
+The `assert-set` groups multiple assertions together with configurable success criteria. This is useful when you want to apply multiple checks but don't need all of them to pass.
+
+Example with threshold:
+
+```yaml
+tests:
+  - assert:
+      - type: assert-set
+        threshold: 0.5 # 50% of assertions must pass
+        assert:
+          - type: contains
+            value: hello
+          - type: llm-rubric
+            value: is a friendly response
+          - type: not-contains
+            value: error
+          - type: is-json
+```
+
+Example with weights and custom metric:
+
+```yaml
+assert:
+  - type: assert-set
+    threshold: 0.25 # 1 out of 4 equal weight assertions need to pass
+    weight: 2.0 # This set is weighted more heavily in the overall score
+    metric: quality_checks
+    assert:
+      - type: similar
+        value: expected output
+      - type: contains
+        value: key phrase
+```
+
+### Select-Best
+
+The `select-best` assertion compares multiple outputs in the same test case and selects the best one. This requires generating multiple outputs using different prompts or providers.
+
+:::note
+This assertion type has special handling - it returns pass=true for the winning output and pass=false for others.
+:::
+
+Example comparing different prompts:
+
+```yaml
+prompts:
+  - 'Write a tweet about {{topic}}'
+  - 'Write a very concise, funny tweet about {{topic}}'
+  - 'Compose a tweet about {{topic}} that will go viral'
+providers:
+  - openai:gpt-4
+tests:
+  - vars:
+      topic: 'artificial intelligence'
+    assert:
+      - type: select-best
+        value: 'choose the tweet that is most likely to get high engagement'
+```
+
+Example with custom grader:
+
+```yaml
+assert:
+  - type: select-best
+    value: 'choose the most engaging response'
+    provider: openai:gpt-4o-mini
 ```
 
 ## See Also

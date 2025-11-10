@@ -1,10 +1,11 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import invariant from '../../util/invariant';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
@@ -12,11 +13,23 @@ import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
+
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   private mcpClient: MCPClient | null = null;
+  private functionCallbackHandler: FunctionCallbackHandler;
 
   constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
     super(...args);
+
+    // Initialize callback handler immediately (will be replaced if MCP is enabled)
+    this.functionCallbackHandler = new FunctionCallbackHandler();
+
+    // Initialize MCP if enabled
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
@@ -25,6 +38,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   private async initializeMCP(): Promise<void> {
     this.mcpClient = new MCPClient(this.config.mcp!);
     await this.mcpClient.initialize();
+
+    // Initialize callback handler with MCP client
+    this.functionCallbackHandler = new FunctionCallbackHandler(this.mcpClient);
   }
 
   async cleanup(): Promise<void> {
@@ -53,7 +69,30 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     };
 
     // Parse chat prompt
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    let messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+    // Inject system prompt if configured
+    if (config.systemPrompt) {
+      // Check if there's already a system message
+      const existingSystemMessageIndex = messages.findIndex((msg: any) => msg.role === 'system');
+
+      if (existingSystemMessageIndex >= 0) {
+        // Replace existing system message
+        messages[existingSystemMessageIndex] = {
+          role: 'system',
+          content: config.systemPrompt,
+        };
+      } else {
+        // Prepend new system message
+        messages = [
+          {
+            role: 'system',
+            content: config.systemPrompt,
+          },
+          ...messages,
+        ];
+      }
+    }
 
     // Response format with variable rendering
     const responseFormat = config.response_format
@@ -110,14 +149,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
-      ...(config.dataSources ? { dataSources: config.dataSources } : {}),
+      ...(config.dataSources ? { dataSources: config.dataSources } : {}), // legacy support for versions < 2024-02-15-preview
+      ...(config.data_sources ? { data_sources: config.data_sources } : {}),
       ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
     };
 
-    logger.debug(`Azure API request body: ${JSON.stringify(body)}`);
     return { body, config };
   }
 
@@ -140,6 +179,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     let data;
     let cached = false;
+    let latencyMs: number | undefined;
+
     try {
       const url = config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
@@ -153,6 +194,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         data: responseData,
         cached: isCached,
         status,
+        latencyMs: fetchLatencyMs,
       } = await fetchWithCache(
         url,
         {
@@ -170,6 +212,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       );
 
       cached = isCached;
+      latencyMs = fetchLatencyMs;
 
       // Handle the response data
       if (typeof responseData === 'string') {
@@ -189,75 +232,97 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
+    // Inputs and outputs can be flagged by content filters.
+    // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter
+    let flaggedInput = false;
+    let flaggedOutput = false;
+    let output = '';
+    let logProbs: any;
+    let finishReason: string;
+
     try {
       if (data.error) {
-        if (data.error.code === 'content_filter' && data.error.status === 400) {
+        // Was the input prompt deemed inappropriate?
+        if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
+          flaggedInput = true;
+          output = data.error.message;
+          finishReason = FINISH_REASON_MAP.content_filter;
+        } else {
           return {
-            output: data.error.message,
-            guardrails: {
-              flagged: true,
-              flaggedInput: true,
-              flaggedOutput: false,
-            },
+            error: `API response error: ${data.error.code} ${data.error.message}`,
           };
         }
-        return {
-          error: `API response error: ${data.error.code} ${data.error.message}`,
-        };
-      }
-      const hasDataSources = !!config.dataSources;
-      const choice = hasDataSources
-        ? data.choices.find(
-            (choice: { message: { role: string; content: string } }) =>
-              choice.message.role === 'assistant',
-          )
-        : data.choices[0];
+      } else {
+        const hasDataSources = !!config.dataSources || !!config.data_sources;
+        const choice = hasDataSources
+          ? data.choices.find(
+              (choice: { message: { role: string; content: string } }) =>
+                choice.message.role === 'assistant',
+            )
+          : data.choices[0];
 
-      const message = choice?.message;
+        const message = choice?.message;
 
-      // Handle structured output
-      let output = message.content;
+        // NOTE: The `n` parameter is currently (250709) not supported; if and when it is, `finish_reason` must be
+        // checked on all choices; in other words, if n>1 responses are requested, n>1 responses can trigger filters.
+        finishReason = normalizeFinishReason(choice?.finish_reason) as string;
 
-      if (output == null) {
-        if (choice.finish_reason === 'content_filter') {
-          output =
-            "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.";
+        // Handle structured output
+        output = message?.content;
+
+        // Check for errors indicating that the content filters did not run on the completion.
+        if (choice.content_filter_results && choice.content_filter_results.error) {
+          const { code, message } = choice.content_filter_results.error;
+          logger.warn(
+            `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${message}`,
+          );
         } else {
-          // Restore tool_calls and function_call handling
-          output = message.tool_calls ?? message.function_call;
+          // Was the completion filtered?
+          flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
         }
-      } else if (
-        config.response_format?.type === 'json_schema' ||
-        config.response_format?.type === 'json_object'
-      ) {
-        try {
-          output = JSON.parse(output);
-        } catch (err) {
-          logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
+
+        if (output == null) {
+          // Handle tool_calls and function_call
+          const toolCalls = message.tool_calls;
+          const functionCall = message.function_call;
+
+          // Process function/tool calls if callbacks are configured or MCP is available
+          if (
+            (config.functionToolCallbacks && (toolCalls || functionCall)) ||
+            (this.mcpClient && (toolCalls || functionCall))
+          ) {
+            // Combine all calls into a single array for processing
+            const allCalls = [];
+            if (toolCalls) {
+              allCalls.push(...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]));
+            }
+            if (functionCall) {
+              allCalls.push(functionCall);
+            }
+
+            output = await this.functionCallbackHandler.processCalls(
+              allCalls.length === 1 ? allCalls[0] : allCalls,
+              config.functionToolCallbacks,
+            );
+          } else {
+            // No callbacks configured, return raw tool/function calls
+            output = toolCalls ?? functionCall;
+          }
+        } else if (
+          config.response_format?.type === 'json_schema' ||
+          config.response_format?.type === 'json_object'
+        ) {
+          try {
+            output = JSON.parse(output);
+          } catch (err) {
+            logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
+          }
         }
+
+        logProbs = data.choices[0].logprobs?.content?.map(
+          (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
+        );
       }
-
-      const logProbs = data.choices[0].logprobs?.content?.map(
-        (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
-      );
-
-      const contentFilterResults = data.choices[0]?.content_filter_results;
-      const promptFilterResults = data.prompt_filter_results;
-
-      const guardrailsTriggered = !!(
-        (contentFilterResults && Object.keys(contentFilterResults).length > 0) ||
-        (promptFilterResults && promptFilterResults.length > 0)
-      );
-
-      const flaggedInput =
-        promptFilterResults?.some((result: any) =>
-          Object.values(result.content_filter_results).some((filter: any) => filter.filtered),
-        ) ?? false;
-
-      const flaggedOutput = Object.values(contentFilterResults || {}).some(
-        (filter: any) => filter.filtered,
-      );
 
       return {
         output,
@@ -280,22 +345,20 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
                 : {}),
             },
         cached,
+        latencyMs,
         logProbs,
+        finishReason,
         cost: calculateAzureCost(
           this.deploymentName,
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
-        ...(guardrailsTriggered
-          ? {
-              guardrails: {
-                flaggedInput,
-                flaggedOutput,
-                flagged: flaggedInput || flaggedOutput,
-              },
-            }
-          : {}),
+        guardrails: {
+          flagged: flaggedInput || flaggedOutput,
+          flaggedInput,
+          flaggedOutput,
+        },
       };
     } catch (err) {
       return {

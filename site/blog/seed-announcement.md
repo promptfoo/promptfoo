@@ -14,6 +14,7 @@ keywords:
   ]
 date: 2024-07-23
 authors: [ian]
+tags: [company-update]
 ---
 
 # Promptfoo raises $5M to fix vulnerabilities in AI applications

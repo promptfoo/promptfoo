@@ -1,29 +1,32 @@
-import dotenv from 'dotenv';
 import * as fs from 'fs';
-import { globSync } from 'glob';
 import * as path from 'path';
-import { getDb } from '../../src/database';
+
+import dotenv from 'dotenv';
+import { globSync } from 'glob';
+import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
 import {
-  ResultFailureReason,
   type ApiProvider,
   type EvaluateResult,
+  ResultFailureReason,
   type TestCase,
-} from '../../src/types';
+} from '../../src/types/index';
 import {
+  maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   providerToIdentifier,
   readFilters,
   readOutput,
+  renderEnvOnlyInObject,
+  renderVarsInObject,
   resultIsForTestCase,
   setupEnv,
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../src/util';
+  createOutputMetadata,
+} from '../../src/util/index';
 import { TestGrader } from './utils';
 
 jest.mock('../../src/database', () => ({
@@ -36,6 +39,11 @@ jest.mock('proxy-agent', () => ({
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('fs', () => ({
@@ -220,6 +228,14 @@ describe('util', () => {
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
 
+    it('writeOutput with XML output', async () => {
+      const outputPath = 'output.xml';
+      const eval_ = new Eval({});
+      await writeOutput(outputPath, eval_, null);
+
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    });
+
     it('writeOutput with json and txt output', async () => {
       const outputPath = ['output.json', 'output.txt'];
       const eval_ = new Eval({});
@@ -281,6 +297,12 @@ describe('util', () => {
         'Unsupported output file format: yml currently only supports json',
       );
     });
+
+    it('fails for xml output', async () => {
+      await expect(readOutput('output.xml')).rejects.toThrow(
+        'Unsupported output file format: xml currently only supports json',
+      );
+    });
   });
 
   it('readFilters', async () => {
@@ -295,10 +317,8 @@ describe('util', () => {
   });
 
   describe('providerToIdentifier', () => {
-    it('works with string', () => {
-      const provider = 'openai:gpt-4';
-
-      expect(providerToIdentifier(provider)).toStrictEqual(provider);
+    it('works with provider string', () => {
+      expect(providerToIdentifier('gpt-3.5-turbo')).toStrictEqual('gpt-3.5-turbo');
     });
 
     it('works with provider id undefined', () => {
@@ -323,6 +343,49 @@ describe('util', () => {
       };
 
       expect(providerToIdentifier(providerOptions)).toStrictEqual(providerId);
+    });
+
+    it('uses label when present on ProviderOptions', () => {
+      const providerOptions = {
+        id: 'file://provider.js',
+        label: 'my-provider',
+      };
+
+      expect(providerToIdentifier(providerOptions)).toStrictEqual('my-provider');
+    });
+
+    it('canonicalizes relative file paths to absolute', () => {
+      const originalCwd = process.cwd();
+      expect(providerToIdentifier('file://./provider.js')).toStrictEqual(
+        `file://${path.join(originalCwd, 'provider.js')}`,
+      );
+    });
+
+    it('canonicalizes JavaScript files without file:// prefix', () => {
+      const originalCwd = process.cwd();
+      expect(providerToIdentifier('./provider.js')).toStrictEqual(
+        `file://${path.join(originalCwd, 'provider.js')}`,
+      );
+    });
+
+    it('preserves absolute file paths', () => {
+      expect(providerToIdentifier('file:///absolute/path/provider.js')).toStrictEqual(
+        'file:///absolute/path/provider.js',
+      );
+    });
+
+    it('canonicalizes exec: paths', () => {
+      const originalCwd = process.cwd();
+      expect(providerToIdentifier('exec:./script.py')).toStrictEqual(
+        `exec:${path.join(originalCwd, 'script.py')}`,
+      );
+    });
+
+    it('canonicalizes python: paths', () => {
+      const originalCwd = process.cwd();
+      expect(providerToIdentifier('python:./provider.py')).toStrictEqual(
+        `python:${path.join(originalCwd, 'provider.py')}`,
+      );
     });
   });
 
@@ -375,6 +438,97 @@ describe('util', () => {
       };
 
       expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
+    });
+
+    it('matches when test provider is label and result provider has label and id', () => {
+      const labelledResult = {
+        provider: { id: 'file://provider.js', label: 'provider' },
+        vars: { key: 'value' },
+      } as any as EvaluateResult;
+
+      expect(resultIsForTestCase(labelledResult, testCase)).toBe(true);
+    });
+
+    it('matches when test provider is relative path and result provider is absolute', () => {
+      const relativePathTestCase: TestCase = {
+        provider: 'file://./provider.js',
+        vars: { key: 'value' },
+      };
+
+      const absolutePathResult = {
+        provider: { id: `file://${path.join(process.cwd(), 'provider.js')}` },
+        vars: { key: 'value' },
+      } as any as EvaluateResult;
+
+      expect(resultIsForTestCase(absolutePathResult, relativePathTestCase)).toBe(true);
+    });
+
+    it('matches when test provider has no file:// prefix and result has absolute path', () => {
+      const noPathTestCase: TestCase = {
+        provider: './provider.js',
+        vars: { key: 'value' },
+      };
+
+      const absolutePathResult = {
+        provider: `file://${path.join(process.cwd(), 'provider.js')}`,
+        vars: { key: 'value' },
+      } as any as EvaluateResult;
+
+      expect(resultIsForTestCase(absolutePathResult, noPathTestCase)).toBe(true);
+    });
+
+    it('matches when result.vars has runtime variables like _conversation', () => {
+      // This tests the fix for issue #5849 - cache behavior regression
+      // result.vars contains runtime variables that should be filtered out
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+          _conversation: [], // Runtime variable added during evaluation
+        },
+        testCase: {
+          vars: {
+            input: 'hello',
+            language: 'en',
+          },
+        },
+      } as any as EvaluateResult;
+
+      // Should match because _conversation is filtered out
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+
+    it('matches when result.vars has runtime variables and testCase also has them', () => {
+      // Edge case: both have runtime vars (shouldn't happen in practice but should still work)
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+          _conversation: [],
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+          _conversation: [],
+        },
+      } as any as EvaluateResult;
+
+      // Should match because both have same vars after filtering
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
     });
   });
 
@@ -644,14 +798,14 @@ describe('setupEnv', () => {
     jest.resetAllMocks();
   });
 
-  it('should call dotenv.config without parameters when envPath is undefined', () => {
+  it('should call dotenv.config with quiet=true when envPath is undefined', () => {
     setupEnv(undefined);
 
     expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
-    expect(dotenvConfigSpy).toHaveBeenCalledWith();
+    expect(dotenvConfigSpy).toHaveBeenCalledWith({ quiet: true });
   });
 
-  it('should call dotenv.config with path and override=true when envPath is specified', () => {
+  it('should call dotenv.config with path, override=true, and quiet=true when envPath is specified', () => {
     const testEnvPath = '.env.test';
 
     setupEnv(testEnvPath);
@@ -660,6 +814,7 @@ describe('setupEnv', () => {
     expect(dotenvConfigSpy).toHaveBeenCalledWith({
       path: testEnvPath,
       override: true,
+      quiet: true,
     });
   });
 
@@ -867,5 +1022,437 @@ describe('renderVarsInObject', () => {
         metadata: { value: '{{ meta }}' },
       },
     });
+  });
+});
+
+describe('renderEnvOnlyInObject', () => {
+  beforeEach(() => {
+    delete process.env.TEST_ENV_VAR;
+    delete process.env.AZURE_ENDPOINT;
+    delete process.env.API_VERSION;
+    delete process.env.PORT;
+    delete process.env.API_HOST;
+    delete process.env.BASE_URL;
+    delete process.env.EMPTY_VAR;
+    delete process.env.SPECIAL_CHARS;
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+  });
+
+  afterEach(() => {
+    delete process.env.TEST_ENV_VAR;
+    delete process.env.AZURE_ENDPOINT;
+    delete process.env.API_VERSION;
+    delete process.env.PORT;
+    delete process.env.API_HOST;
+    delete process.env.BASE_URL;
+    delete process.env.EMPTY_VAR;
+    delete process.env.SPECIAL_CHARS;
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+  });
+
+  describe('Basic rendering', () => {
+    it('should render simple dot notation env vars', () => {
+      process.env.TEST_ENV_VAR = 'env_value';
+      expect(renderEnvOnlyInObject('{{ env.TEST_ENV_VAR }}')).toBe('env_value');
+    });
+
+    it('should render bracket notation with single quotes', () => {
+      process.env['VAR-WITH-DASH'] = 'dash_value';
+      expect(renderEnvOnlyInObject("{{ env['VAR-WITH-DASH'] }}")).toBe('dash_value');
+    });
+
+    it('should render bracket notation with double quotes', () => {
+      process.env['VAR_NAME'] = 'value';
+      expect(renderEnvOnlyInObject('{{ env["VAR_NAME"] }}')).toBe('value');
+    });
+
+    it('should handle whitespace variations', () => {
+      process.env.TEST = 'value';
+      expect(renderEnvOnlyInObject('{{env.TEST}}')).toBe('value');
+      expect(renderEnvOnlyInObject('{{  env.TEST  }}')).toBe('value');
+      expect(renderEnvOnlyInObject('{{ env.TEST}}')).toBe('value');
+      expect(renderEnvOnlyInObject('{{env.TEST }}')).toBe('value');
+    });
+
+    it('should render empty string env vars', () => {
+      process.env.EMPTY_VAR = '';
+      expect(renderEnvOnlyInObject('{{ env.EMPTY_VAR }}')).toBe('');
+    });
+
+    it('should render env vars with special characters in value', () => {
+      process.env.SPECIAL_CHARS = 'value with spaces & $pecial chars!';
+      expect(renderEnvOnlyInObject('{{ env.SPECIAL_CHARS }}')).toBe(
+        'value with spaces & $pecial chars!',
+      );
+    });
+  });
+
+  describe('Filters and expressions (NEW functionality)', () => {
+    it('should support default filter with fallback', () => {
+      process.env.EXISTING = 'exists';
+      expect(renderEnvOnlyInObject("{{ env.EXISTING | default('fallback') }}")).toBe('exists');
+      // NEW: When env var doesn't exist but has default filter, Nunjucks renders it
+      expect(renderEnvOnlyInObject("{{ env.NONEXISTENT | default('fallback') }}")).toBe('fallback');
+    });
+
+    it('should support upper filter', () => {
+      process.env.LOWERCASE = 'lowercase';
+      expect(renderEnvOnlyInObject('{{ env.LOWERCASE | upper }}')).toBe('LOWERCASE');
+    });
+
+    it('should support lower filter', () => {
+      process.env.UPPERCASE = 'UPPERCASE';
+      expect(renderEnvOnlyInObject('{{ env.UPPERCASE | lower }}')).toBe('uppercase');
+    });
+
+    it('should support chained filters', () => {
+      process.env.TEST = 'test';
+      expect(renderEnvOnlyInObject("{{ env.TEST | default('x') | upper }}")).toBe('TEST');
+    });
+
+    it('should support complex filter expressions', () => {
+      process.env.PORT = '8080';
+      expect(renderEnvOnlyInObject('{{ env.PORT | int }}')).toBe('8080');
+    });
+
+    it('should handle filter with closing brace in argument', () => {
+      process.env.VAR = 'value';
+      // This is a tricky case: the default value contains }
+      expect(renderEnvOnlyInObject("{{ env.VAR | default('}') }}")).toBe('value');
+    });
+  });
+
+  describe('Preservation of non-env templates', () => {
+    it('should preserve vars templates', () => {
+      process.env.TEST_ENV_VAR = 'env_value';
+      expect(renderEnvOnlyInObject('{{ env.TEST_ENV_VAR }}, {{ vars.myVar }}')).toBe(
+        'env_value, {{ vars.myVar }}',
+      );
+    });
+
+    it('should preserve prompt templates', () => {
+      process.env.TEST_ENV_VAR = 'env_value';
+      expect(renderEnvOnlyInObject('{{ env.TEST_ENV_VAR }}, {{ prompt }}')).toBe(
+        'env_value, {{ prompt }}',
+      );
+    });
+
+    it('should preserve multiple non-env templates', () => {
+      process.env.API_HOST = 'api.example.com';
+      const template =
+        'Host: {{ env.API_HOST }}, Message: {{ vars.msg }}, Context: {{ context }}, Prompt: {{ prompt }}';
+      const expected =
+        'Host: api.example.com, Message: {{ vars.msg }}, Context: {{ context }}, Prompt: {{ prompt }}';
+      expect(renderEnvOnlyInObject(template)).toBe(expected);
+    });
+
+    it('should preserve templates with filters on non-env vars', () => {
+      expect(renderEnvOnlyInObject("{{ vars.name | default('Guest') }}")).toBe(
+        "{{ vars.name | default('Guest') }}",
+      );
+    });
+  });
+
+  describe('Undefined env vars', () => {
+    it('should preserve template if env var does not exist', () => {
+      expect(renderEnvOnlyInObject('{{ env.NONEXISTENT }}')).toBe('{{ env.NONEXISTENT }}');
+    });
+
+    it('should preserve bracket notation if env var does not exist', () => {
+      expect(renderEnvOnlyInObject("{{ env['MISSING'] }}")).toBe("{{ env['MISSING'] }}");
+    });
+  });
+
+  describe('Complex data structures', () => {
+    it('should work with nested objects', () => {
+      process.env.LEVEL1 = 'value1';
+      process.env.LEVEL2 = 'value2';
+      const obj = {
+        level1: {
+          level2: {
+            env1: '{{ env.LEVEL1 }}',
+            env2: '{{ env.LEVEL2 }}',
+            vars: '{{ vars.test }}',
+          },
+        },
+      };
+      expect(renderEnvOnlyInObject(obj)).toEqual({
+        level1: {
+          level2: {
+            env1: 'value1',
+            env2: 'value2',
+            vars: '{{ vars.test }}',
+          },
+        },
+      });
+    });
+
+    it('should work with arrays', () => {
+      process.env.ENV1 = 'value1';
+      process.env.ENV2 = 'value2';
+      const arr = ['{{ env.ENV1 }}', '{{ vars.test }}', '{{ env.ENV2 }}', 42];
+      expect(renderEnvOnlyInObject(arr)).toEqual(['value1', '{{ vars.test }}', 'value2', 42]);
+    });
+
+    it('should work with mixed nested structures', () => {
+      process.env.API_KEY = 'secret123';
+      const config = {
+        api: {
+          key: '{{ env.API_KEY }}',
+          endpoints: ['{{ env.BASE_URL }}/users', '{{ env.BASE_URL }}/posts'],
+        },
+        request: {
+          body: { message: '{{ vars.message }}' },
+          headers: { authorization: 'Bearer {{ env.API_KEY }}' },
+        },
+      };
+      const rendered = renderEnvOnlyInObject(config);
+      expect(rendered).toEqual({
+        api: {
+          key: 'secret123',
+          endpoints: ['{{ env.BASE_URL }}/users', '{{ env.BASE_URL }}/posts'],
+        },
+        request: {
+          body: { message: '{{ vars.message }}' },
+          headers: { authorization: 'Bearer secret123' },
+        },
+      });
+    });
+  });
+
+  describe('Primitive types', () => {
+    it('should handle null', () => {
+      expect(renderEnvOnlyInObject(null)).toBeNull();
+    });
+
+    it('should handle undefined', () => {
+      expect(renderEnvOnlyInObject(undefined)).toBeUndefined();
+    });
+
+    it('should handle numbers', () => {
+      expect(renderEnvOnlyInObject(42)).toBe(42);
+    });
+
+    it('should handle booleans', () => {
+      expect(renderEnvOnlyInObject(true)).toBe(true);
+      expect(renderEnvOnlyInObject(false)).toBe(false);
+    });
+  });
+
+  describe('Error handling', () => {
+    it('should preserve template on Nunjucks render error', () => {
+      process.env.TEST = 'value';
+      // Malformed filter that would cause Nunjucks error
+      const template = '{{ env.TEST | nonexistent_filter }}';
+      const rendered = renderEnvOnlyInObject(template);
+      // Should preserve the template if rendering fails
+      expect(rendered).toBe(template);
+    });
+  });
+
+  describe('PROMPTFOO_DISABLE_TEMPLATING flag', () => {
+    it('should return unchanged when flag is set', () => {
+      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+      process.env.TEST_ENV_VAR = 'env_value';
+      expect(renderEnvOnlyInObject('{{ env.TEST_ENV_VAR }}')).toBe('{{ env.TEST_ENV_VAR }}');
+    });
+
+    it('should return unchanged objects when flag is set', () => {
+      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+      process.env.TEST = 'value';
+      const obj = { key: '{{ env.TEST }}' };
+      expect(renderEnvOnlyInObject(obj)).toEqual({ key: '{{ env.TEST }}' });
+    });
+  });
+
+  describe('Real-world scenarios', () => {
+    it('should handle Azure provider config with mixed templates', () => {
+      process.env.AZURE_ENDPOINT = 'test.openai.azure.com';
+      process.env.API_VERSION = '2024-02-15';
+      const config = {
+        apiHost: '{{ env.AZURE_ENDPOINT }}',
+        apiVersion: '{{ env.API_VERSION }}',
+        body: {
+          message: '{{ vars.userMessage }}',
+          user: '{{ vars.userId }}',
+        },
+      };
+      expect(renderEnvOnlyInObject(config)).toEqual({
+        apiHost: 'test.openai.azure.com',
+        apiVersion: '2024-02-15',
+        body: {
+          message: '{{ vars.userMessage }}',
+          user: '{{ vars.userId }}',
+        },
+      });
+    });
+
+    it('should handle HTTP provider with runtime vars', () => {
+      process.env.BASE_URL = 'https://api.example.com';
+      const config = {
+        url: '{{ env.BASE_URL }}/query',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer {{ env.API_TOKEN }}',
+        },
+        body: {
+          query: '{{ vars.userQuery }}',
+          context: '{{ vars.context }}',
+        },
+      };
+      const rendered = renderEnvOnlyInObject(config);
+      expect(rendered).toEqual({
+        url: 'https://api.example.com/query',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer {{ env.API_TOKEN }}', // Undefined, preserved
+        },
+        body: {
+          query: '{{ vars.userQuery }}', // Runtime vars preserved
+          context: '{{ vars.context }}', // Runtime vars preserved
+        },
+      });
+    });
+
+    it('should handle complex provider config with filters', () => {
+      process.env.API_HOST = 'api.example.com';
+      process.env.PORT = '8080';
+      const config = {
+        baseUrl: "{{ env.API_HOST | default('localhost') }}:{{ env.PORT }}",
+        timeout: '{{ env.TIMEOUT | default(30000) }}',
+        request: {
+          body: '{{ vars.payload }}',
+        },
+      };
+      const rendered = renderEnvOnlyInObject(config);
+      expect(rendered).toEqual({
+        baseUrl: 'api.example.com:8080',
+        timeout: '30000', // TIMEOUT undefined, but default filter renders it
+        request: {
+          body: '{{ vars.payload }}',
+        },
+      });
+    });
+  });
+
+  describe('Edge cases', () => {
+    it('should handle multiple env vars in same string', () => {
+      process.env.HOST = 'example.com';
+      process.env.PORT = '8080';
+      expect(renderEnvOnlyInObject('{{ env.HOST }}:{{ env.PORT }}')).toBe('example.com:8080');
+    });
+
+    it('should handle env vars in middle of text', () => {
+      process.env.NAME = 'World';
+      expect(renderEnvOnlyInObject('Hello {{ env.NAME }}!')).toBe('Hello World!');
+    });
+
+    it('should handle templates with newlines', () => {
+      process.env.VAR = 'value';
+      expect(
+        renderEnvOnlyInObject(`Line 1: {{ env.VAR }}
+Line 2: {{ vars.test }}`),
+      ).toBe(`Line 1: value
+Line 2: {{ vars.test }}`);
+    });
+
+    it('should not confuse env in other contexts', () => {
+      process.env.TEST = 'value';
+      // Should not match "environment" or other words containing "env"
+      expect(renderEnvOnlyInObject('environment {{ vars.test }}')).toBe(
+        'environment {{ vars.test }}',
+      );
+    });
+  });
+});
+
+describe('createOutputMetadata', () => {
+  it('should create metadata with all fields when evalRecord has all data', () => {
+    const evalRecord = {
+      createdAt: new Date('2025-01-01T12:00:00.000Z').getTime(),
+      author: 'test-author',
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: '2025-01-01T12:00:00.000Z',
+      author: 'test-author',
+    });
+  });
+
+  it('should handle missing createdAt gracefully', () => {
+    const evalRecord = {
+      author: 'test-author',
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: undefined,
+      author: 'test-author',
+    });
+  });
+
+  it('should handle missing author', () => {
+    const evalRecord = {
+      createdAt: new Date('2025-01-01T12:00:00.000Z').getTime(),
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: '2025-01-01T12:00:00.000Z',
+      author: undefined,
+    });
+  });
+
+  it('should handle invalid date in createdAt', () => {
+    const evalRecord = {
+      createdAt: 'invalid-date',
+      author: 'test-author',
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    // When new Date() is given invalid input, it returns "Invalid Date"
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: undefined,
+      author: 'test-author',
+    });
+  });
+
+  it('should create consistent exportedAt timestamps', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2025-01-15T10:30:00.000Z'));
+
+    const evalRecord = {} as any as Eval;
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata.exportedAt).toBe('2025-01-15T10:30:00.000Z');
+
+    jest.useRealTimers();
   });
 });

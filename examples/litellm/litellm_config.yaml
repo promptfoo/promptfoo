@@ -1,0 +1,26 @@
+# LiteLLM proxy server configuration
+# Usage: litellm --config litellm_config.yaml
+
+model_list:
+  - model_name: gpt-4.1
+    litellm_params:
+      model: openai/gpt-4.1
+      api_key: ${OPENAI_API_KEY}
+
+  - model_name: claude-sonnet-4-20250514
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: ${ANTHROPIC_API_KEY}
+
+  - model_name: gemini-2.5-pro
+    litellm_params:
+      model: google/gemini-2.5-pro
+      api_key: ${GOOGLE_AI_API_KEY}
+
+  - model_name: text-embedding-3-large
+    litellm_params:
+      model: openai/text-embedding-3-large
+      api_key: ${OPENAI_API_KEY}
+
+litellm_settings:
+  drop_params: true

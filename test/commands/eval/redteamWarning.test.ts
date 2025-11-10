@@ -33,7 +33,7 @@ jest.mock('../../../src/evaluator', () => ({
 
 // Mock other dependencies to prevent actual execution
 jest.mock('../../../src/migrate', () => ({
-  runDbMigrations: jest.fn().mockResolvedValue({}),
+  runDbMigrations: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock the table generation

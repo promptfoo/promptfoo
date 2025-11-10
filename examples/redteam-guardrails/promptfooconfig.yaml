@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Guardrails Evaluation Template - Tests guardrails effectiveness against prompt injection, jailbreaking, harmful content, and PII leakage
+targets:
+  - openai:chat:gpt-4o-mini
+prompts:
+  - '{{prompt}}'
+redteam:
+  plugins:
+    - guardrails-eval
+  # Optional: Add strategies for enhanced testing
+  # strategies:
+  #   - jailbreak
+  #   - prompt-injection
+  #   - multilingual

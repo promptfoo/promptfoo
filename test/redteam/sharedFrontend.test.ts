@@ -1,6 +1,7 @@
 import { Severity } from '../../src/redteam/constants';
-import type { Plugin } from '../../src/redteam/constants';
 import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';
+
+import type { Plugin } from '../../src/redteam/constants';
 import type { SavedRedteamConfig } from '../../src/redteam/types';
 
 describe('getRiskCategorySeverityMap', () => {
@@ -77,8 +78,15 @@ describe('getUnifiedConfig', () => {
 
     const result = getUnifiedConfig(configWithDefaultTest);
 
-    expect(result.defaultTest!.vars).toEqual({ test: 'value' });
-    expect(result.defaultTest!.options!.transformVars).toBe('{ ...vars, sessionId: context.uuid }');
+    expect(typeof result.defaultTest).toBe('object');
+    expect(result.defaultTest).toBeDefined();
+    // Type assertion since we've verified it's an object above
+    const defaultTest = result.defaultTest as Exclude<
+      typeof result.defaultTest,
+      string | undefined
+    >;
+    expect(defaultTest.vars).toEqual({ test: 'value' });
+    expect(defaultTest.options!.transformVars).toBe('{ ...vars, sessionId: context.uuid }');
   });
 
   it('should transform plugins correctly', () => {
@@ -106,7 +114,89 @@ describe('getUnifiedConfig', () => {
     expect(result.redteam.strategies).toEqual([
       { id: 'basic' },
       { id: 'goat', config: { stateful: true } },
-      { id: 'custom', config: { option: true } },
+      { id: 'custom', config: { option: true, stateful: true } },
     ]);
+  });
+
+  it('should handle maxConcurrency configuration', () => {
+    const configWithMaxConcurrency: SavedRedteamConfig = {
+      ...baseConfig,
+      maxConcurrency: 5,
+    };
+
+    const result = getUnifiedConfig(configWithMaxConcurrency);
+    expect(result.redteam.maxConcurrency).toBe(5);
+
+    const configWithoutMaxConcurrency = getUnifiedConfig(baseConfig);
+    expect(configWithoutMaxConcurrency.redteam.maxConcurrency).toBeUndefined();
+  });
+
+  it('should include testGenerationInstructions if provided', () => {
+    const configWithInstructions: SavedRedteamConfig = {
+      ...baseConfig,
+      testGenerationInstructions: 'Generate more tests',
+    };
+
+    const result = getUnifiedConfig(configWithInstructions);
+
+    expect(result.redteam.testGenerationInstructions).toBe('Generate more tests');
+  });
+
+  it('should omit plugin config if empty', () => {
+    const configWithEmptyPluginConfig: SavedRedteamConfig = {
+      ...baseConfig,
+      plugins: [{ id: 'plugin-empty', config: {} }],
+    };
+
+    const result = getUnifiedConfig(configWithEmptyPluginConfig);
+
+    expect(result.redteam.plugins).toEqual([{ id: 'plugin-empty' }]);
+  });
+
+  it('should omit strategy config if not needed', () => {
+    const configWithSimpleStrategy: SavedRedteamConfig = {
+      ...baseConfig,
+      strategies: [{ id: 'basic', config: {} }],
+    };
+
+    const result = getUnifiedConfig(configWithSimpleStrategy);
+
+    expect(result.redteam.strategies).toEqual([{ id: 'basic' }]);
+  });
+
+  it('should add stateful to multi-turn strategies if stateful is true', () => {
+    const configWithMultiTurn: SavedRedteamConfig = {
+      ...baseConfig,
+      strategies: ['goat'],
+      target: {
+        ...baseConfig.target,
+        config: {
+          ...baseConfig.target.config,
+          stateful: true,
+        },
+      },
+    };
+
+    const result = getUnifiedConfig(configWithMultiTurn);
+
+    expect(result.redteam.strategies).toEqual([{ id: 'goat', config: { stateful: true } }]);
+  });
+
+  it('should not add stateful config for multi-turn strategies if stateful is false', () => {
+    const configWithNonStateful: SavedRedteamConfig = {
+      ...baseConfig,
+      strategies: ['goat'],
+      target: {
+        ...baseConfig.target,
+        config: {
+          ...baseConfig.target.config,
+          stateful: false,
+        },
+      },
+    };
+
+    const result = getUnifiedConfig(configWithNonStateful);
+
+    expect(result.redteam.strategies).toEqual([{ id: 'goat' }]);
   });
 });

@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
+
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import type { Assertion, TestCase } from '@promptfoo/types';
 import AssertsForm from './AssertsForm';
 import VarsForm from './VarsForm';
+import type { Assertion, TestCase } from '@promptfoo/types';
 
 interface TestCaseFormProps {
   open: boolean;
@@ -17,13 +18,7 @@ interface TestCaseFormProps {
   onCancel: () => void;
 }
 
-const TestCaseForm: React.FC<TestCaseFormProps> = ({
-  open,
-  onAdd,
-  varsList,
-  initialValues,
-  onCancel,
-}) => {
+const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCaseFormProps) => {
   const [description, setDescription] = useState(initialValues?.description || '');
   const [vars, setVars] = useState(initialValues?.vars || {});
   const [asserts, setAsserts] = useState(initialValues?.assert || []);

@@ -1,12 +1,12 @@
-import { fetchWithCache, isCacheEnabled, getCache } from '../../../src/cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../../src/cache';
 import {
-  OpenAiModerationProvider,
-  isTextInput,
-  isImageInput,
-  supportsImageInput,
   formatModerationInput,
-  type TextInput,
   type ImageInput,
+  isImageInput,
+  isTextInput,
+  OpenAiModerationProvider,
+  supportsImageInput,
+  type TextInput,
 } from '../../../src/providers/openai/moderation';
 
 jest.mock('../../../src/cache');
@@ -84,6 +84,9 @@ describe('OpenAiModerationProvider', () => {
           body: expect.stringContaining('"model":"text-moderation-latest"'),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
 
@@ -289,6 +292,9 @@ describe('OpenAiModerationProvider', () => {
           body: expect.stringContaining('"type":"text"'),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
 
@@ -340,6 +346,9 @@ describe('OpenAiModerationProvider', () => {
           body: expect.stringContaining('image_url'),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
 
@@ -436,6 +445,9 @@ describe('OpenAiModerationProvider', () => {
           }),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
   });

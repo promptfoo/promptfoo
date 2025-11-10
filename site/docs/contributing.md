@@ -1,14 +1,14 @@
 ---
 title: Contributing to promptfoo
 sidebar_label: Contributing
-description: Learn how to contribute code, documentation, and providers to the promptfoo
+description: Contribute to promptfoo by submitting code, documentation, providers, and features following our development guidelines
 ---
 
 We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/promptfoo) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
 
 ## Project Overview
 
-promptfoo is an MIT licensed tool for testing and evaluating LLM apps.
+Promptfoo is an MIT-licensed tool for testing and evaluating LLM apps.
 
 ### How to Contribute
 
@@ -42,7 +42,7 @@ We particularly welcome contributions in the following areas:
    3.1. Setup locally
 
    ```bash
-   # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 18)
+   # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 20)
    nvm use
    npm install
    ```
@@ -157,12 +157,25 @@ npx jest providers
 When writing tests, please:
 
 - Run the test suite you modified with the `--randomize` flag to ensure your mocks setup and teardown are not affecting other tests.
+
+  ```bash
+  # Run specific test file with randomization
+  npx jest path/to/your/test.test.ts --randomize
+
+  # Run all tests in a directory with randomization
+  npm run test -- --testPathPattern="test/providers" --randomize
+  ```
+
+- Ensure proper test isolation by:
+  - Using `beforeEach` and `afterEach` to set up and clean up mocks
+  - Calling `jest.clearAllMocks()` or `jest.restoreAllMocks()` as appropriate
+  - Avoiding shared state between tests
 - Check the coverage report to ensure your changes are covered.
 - Avoid adding additional logs to the console.
 
 ## Linting and Formatting
 
-We use ESLint and Prettier for code linting and formatting. Before submitting a pull request, please run:
+We use Biome for JavaScript/TypeScript linting and formatting, and Prettier for CSS/HTML/Markdown. Before submitting a pull request, please run:
 
 ```bash
 npm run format
@@ -211,7 +224,7 @@ Here's a simple example:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:gpt-5
 prompts:
   - Translate "{{input}}" to {{language}}
 tests:
@@ -228,7 +241,7 @@ Providers are defined in TypeScript. We also provide language bindings for Pytho
 
 1. Ensure your provider doesn't already exist in promptfoo and fits its scope. For OpenAI-compatible providers, you may be able to re-use the openai provider and override the base URL and other settings. If your provider is OpenAI compatible, feel free to skip to step 4.
 
-2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as a peer dependency with `npm install --save-peer`.
+2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as an optional dependency.
 
 3. Write unit tests in `test/providers/yourProviderName.test.ts` and create an example in the `examples/` directory.
 
@@ -243,12 +256,10 @@ Providers are defined in TypeScript. We also provide language bindings for Pytho
 Assertions define different ways to compare and validate the output of an LLM against expected results. To contribute a new assertion:
 
 1. **Define the Assertion Type**:
-
    - Add your new assertion type to the `BaseAssertionTypesSchema` enum in `src/types/index.ts`.
    - Run `npm run jsonSchema:generate` to update the JSON schema located at `site/static/config-schema.json`
 
 2. **Implement the Assertion Handler**:
-
    - Create a new file in `src/assertions/` for your assertion logic.
    - Implement a handler function that takes `AssertionParams` and returns a `GradingResult`.
 
@@ -293,7 +304,6 @@ Assertions define different ways to compare and validate the output of an LLM ag
    ```
 
 3. **Register the Assertion Handler**:
-
    - In `src/assertions/index.ts`, import your handler function and add it to the handlers mapping.
 
    ```typescript
@@ -304,9 +314,7 @@ Assertions define different ways to compare and validate the output of an LLM ag
    ```
 
 4. **Document Your Assertion**:
-
    - Update the appropriate documentation files:
-
      - For standard assertions, add details to `site/docs/configuration/expected-outputs/deterministic.md`
      - Include your assertion in the reference table in `site/docs/configuration/expected-outputs/index.md`
 
@@ -400,28 +408,28 @@ This will generate static content in the `build` directory that can be served us
 
 ### Database
 
-Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database.ts` and migrations are stored in `drizzle`. Note that the migrations are all generated and you should not access these files directly.
+Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `~/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database/schema.ts` and migrations are stored in `drizzle/`. Note that the migrations are all generated and you should not access these files directly.
 
 #### Main Tables
 
-- `evals`: Stores evaluation details including results and configuration.
+- `evals`: Stores eval details including results and configuration.
 - `prompts`: Stores information about different prompts.
 - `datasets`: Stores dataset information and test configurations.
-- `evalsToPrompts`: Manages the relationship between evaluations and prompts.
-- `evalsToDatasets`: Manages the relationship between evaluations and datasets.
+- `evalsToPrompts`: Manages the relationship between evals and prompts.
+- `evalsToDatasets`: Manages the relationship between evals and datasets.
 
 You can view the contents of each of these tables by running `npx drizzle-kit studio`, which will start a web server.
 
 #### Adding a Migration
 
-1. **Modify Schema**: Make changes to your schema in `src/database.ts`.
+1. **Modify Schema**: Make changes to your schema in `src/database/schema.ts`.
 2. **Generate Migration**: Run the command to create a new migration:
 
    ```bash
    npm run db:generate
    ```
 
-   This command will create a new SQL file in the `drizzle` directory.
+   This command will create a new SQL file in the `drizzle/` directory.
 
 3. **Review Migration**: Inspect the generated migration file to ensure it captures your intended changes.
 4. **Apply Migration**: Apply the migration with:
@@ -437,14 +445,12 @@ Note: releases are only issued by maintainers. If you need to to release a new v
 As a maintainer, when you are ready to release a new version:
 
 1. From main, run `npm version <minor|patch>`. We do not increment the major version per our adoption of [0ver](https://0ver.org/). This will automatically:
-
    - Pull latest changes from main branch
    - Update `package.json`, `package-lock.json` and `CITATION.cff` with the new version
    - Create a new branch named `chore/bump-version-<new-version>`
    - Create a pull request titled `"chore: bump version <new-version>"`
 
    When creating a new release version, please follow these guidelines:
-
    - Patch will bump the version by `0.0.1` and is used for bug fixes and minor features
    - Minor will bump the version by `0.1.0` and is used for major features and breaking changes
 
@@ -456,8 +462,13 @@ As a maintainer, when you are ready to release a new version:
 
 2. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
 
-3. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
+3. Update `CHANGELOG.md`:
+   - Move all entries from `## [Unreleased]` to a new version section
+   - Format: `## [X.Y.Z] - YYYY-MM-DD`
+   - Keep entries organized by category (Added, Changed, Fixed, etc.)
+   - The release notes will be based on these changelog entries
 
+4. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
    - Break up each PR in the release into one of the following 5 sections (as applicable)
      - New Features
      - Bug Fixes
@@ -467,7 +478,38 @@ As a maintainer, when you are ready to release a new version:
    - Sort the lines in each section alphabetically
    - Ensure that the author of the PR is correctly cited
 
-4. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+5. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+
+## Changelog
+
+All PRs should include an entry in `CHANGELOG.md` under the `## [Unreleased]` section. This is enforced by a GitHub Action.
+
+We follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format with these categories:
+
+- **Added**: New features
+- **Changed**: Changes to existing functionality
+- **Fixed**: Bug fixes
+- **Dependencies**: Dependency updates
+- **Documentation**: Documentation changes
+- **Tests**: Test changes
+
+### Entry Format
+
+```markdown
+- feat(providers): add new provider for XYZ (#1234)
+- fix(evaluator): correct scoring for edge case (#1235)
+```
+
+Each entry must include the PR number and use a conventional commit prefix.
+
+### Bypass Labels
+
+PRs can skip the changelog requirement with these labels:
+
+- `no-changelog` - For exceptional cases (automated bot PRs, reverts)
+- `dependencies` - For automated dependency updates (Dependabot, Renovate)
+
+If the GitHub Action reminds you to update the changelog, either add an entry or apply an appropriate label.
 
 ## Getting Help
 

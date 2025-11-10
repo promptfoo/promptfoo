@@ -1,13 +1,14 @@
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
-import { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
-import { getCache, isCacheEnabled, fetchWithCache } from '../../src/cache';
+import { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
 import * as envarsModule from '../../src/envars';
 import logger from '../../src/logger';
 import {
-  WatsonXProvider,
-  generateConfigHash,
   clearModelSpecsCache,
+  generateConfigHash,
+  WatsonXProvider,
 } from '../../src/providers/watsonx';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 
 jest.mock('@ibm-cloud/watsonx-ai', () => ({
   WatsonXAI: {
@@ -61,6 +62,12 @@ describe('WatsonXProvider', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    clearModelSpecsCache();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    clearModelSpecsCache();
   });
 
   describe('constructor', () => {
@@ -324,7 +331,8 @@ describe('WatsonXProvider', () => {
     });
 
     it('should return cached response if available', async () => {
-      const cachedResponse = {
+      // What's stored in the cache doesn't have cached: true
+      const storedCachedData = {
         error: undefined,
         output: 'Cached response',
         tokenUsage: {
@@ -337,9 +345,15 @@ describe('WatsonXProvider', () => {
         logProbs: undefined,
       };
 
+      // But the response should have cached: true added
+      const expectedResponse = {
+        ...storedCachedData,
+        cached: true,
+      };
+
       const cacheKey = `watsonx:${modelName}:${generateConfigHash(config)}:${prompt}`;
       const cache: Partial<any> = {
-        get: jest.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
+        get: jest.fn().mockResolvedValue(JSON.stringify(storedCachedData)),
         set: jest.fn(),
         wrap: jest.fn(),
         del: jest.fn(),
@@ -354,7 +368,7 @@ describe('WatsonXProvider', () => {
       const generateTextSpy = jest.spyOn(await provider.getClient(), 'generateText');
       const response = await provider.callApi(prompt);
       expect(cache.get).toHaveBeenCalledWith(cacheKey);
-      expect(response).toEqual(cachedResponse);
+      expect(response).toEqual(expectedResponse);
       expect(generateTextSpy).not.toHaveBeenCalled();
     });
 
@@ -379,14 +393,14 @@ describe('WatsonXProvider', () => {
       expect(response).toEqual({
         error: 'API call error: Error: API error',
         output: '',
-        tokenUsage: {},
+        tokenUsage: createEmptyTokenUsage(),
       });
       expect(logger.error).toHaveBeenCalledWith('Watsonx: API call error: Error: API error');
     });
   });
 
   describe('calculateWatsonXCost', () => {
-    const MODEL_ID = 'meta-llama/llama-3-2-1b-instruct';
+    const MODEL_ID = 'meta-llama/llama-3-3-70b-instruct';
     const configWithModelId = {
       ...config,
       modelId: MODEL_ID,
@@ -402,7 +416,7 @@ describe('WatsonXProvider', () => {
               model_id: MODEL_ID,
               input_tier: 'class_c1',
               output_tier: 'class_c1',
-              label: 'llama-3-2-1b-instruct',
+              label: 'llama-3-3-70b-instruct',
               provider: 'Meta',
               source: 'Hugging Face',
               model_limits: {
@@ -526,6 +540,75 @@ describe('WatsonXProvider', () => {
       // Output: 50 tokens * $0.00035/1M = 0.0000175
       // Total expected: 0.000035
       expect(response.cost).toBeCloseTo(0.000035, 6);
+    });
+
+    it('should calculate cost correctly for newer Granite models', async () => {
+      const modelId = 'ibm/granite-3-3-8b-instruct';
+      const configWithGraniteModelId = { ...config, modelId };
+
+      clearModelSpecsCache();
+      jest.mocked(fetchWithCache).mockImplementation(async () => ({
+        data: {
+          resources: [
+            {
+              model_id: modelId,
+              label: 'granite-3-3-8b-instruct',
+              provider: 'IBM',
+              source: 'IBM',
+              functions: [{ id: 'text_chat' }, { id: 'text_generation' }],
+              input_tier: 'class_c1',
+              output_tier: 'class_c1',
+              number_params: '8b',
+              model_limits: {
+                max_sequence_length: 8192,
+                max_output_tokens: 4096,
+              },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      }));
+
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn().mockResolvedValue({
+          result: {
+            model_id: modelId,
+            model_version: '3.3.0',
+            created_at: '2024-10-01T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response from Granite',
+                generated_token_count: 100,
+                input_token_count: 50,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const cache: Partial<any> = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
+      };
+
+      jest.mocked(getCache).mockReturnValue(cache as any);
+      jest.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const provider = new WatsonXProvider(modelId, { config: configWithGraniteModelId });
+      const response = await provider.callApi(prompt);
+
+      expect(response.cost).toBeDefined();
+      expect(typeof response.cost).toBe('number');
+      // For class_c1 tier ($0.0001 per 1M tokens)
+      // Input: 50 tokens * $0.0001/1M = 0.000005
+      // Output: 50 tokens * $0.0001/1M = 0.000005
+      // Total expected: 0.00001
+      expect(response.cost).toBeCloseTo(0.00001, 6);
     });
   });
 });

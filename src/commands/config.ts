@@ -1,10 +1,10 @@
 import confirm from '@inquirer/confirm';
-import type { Command } from 'commander';
 import { z } from 'zod';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import type { Command } from 'commander';
 
 const EmailSchema = z.string().email();
 
@@ -28,7 +28,6 @@ export function configCommand(program: Command) {
         name: 'config get',
         configKey: 'email',
       });
-      await telemetry.send();
     });
 
   setCommand
@@ -55,7 +54,6 @@ export function configCommand(program: Command) {
         name: 'config set',
         configKey: 'email',
       });
-      await telemetry.send();
     });
 
   unsetCommand
@@ -95,6 +93,5 @@ export function configCommand(program: Command) {
         name: 'config unset',
         configKey: 'email',
       });
-      await telemetry.send();
     });
 }

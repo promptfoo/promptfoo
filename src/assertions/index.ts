@@ -1,9 +1,12 @@
-import async from 'async';
 import fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
+
+import async from 'async';
+import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
+import { handleConversationRelevance } from '../external/assertions/deepeval';
+import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
 import {
   matchesAnswerRelevance,
@@ -20,20 +23,14 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import type {
-  AssertionParams,
-  AssertionValueFunctionContext,
-  BaseAssertionTypes,
-  ProviderResponse,
-  ScoringFunction,
-} from '../types';
 import {
   type ApiProvider,
   type Assertion,
   type AssertionType,
   type AtomicTestCase,
+  type CallApiContextParams,
   type GradingResult,
-} from '../types';
+} from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -56,10 +53,12 @@ import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
+import { handleFinishReason } from './finishReason';
 import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
+import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
@@ -72,15 +71,27 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
+import { handleRuby } from './ruby';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
+import { handleTraceErrorSpans } from './traceErrorSpans';
+import { handleTraceSpanCount } from './traceSpanCount';
+import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
+
+import type {
+  AssertionParams,
+  AssertionValueFunctionContext,
+  BaseAssertionTypes,
+  ProviderResponse,
+  ScoringFunction,
+} from '../types/index';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -95,7 +106,107 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-factuality',
 ]);
 
+const ASSERTION_HANDLERS: Record<
+  BaseAssertionTypes,
+  (params: AssertionParams) => GradingResult | Promise<GradingResult>
+> = {
+  'answer-relevance': handleAnswerRelevance,
+  bleu: handleBleuScore,
+  classifier: handleClassifier,
+  contains: handleContains,
+  'contains-all': handleContainsAll,
+  'contains-any': handleContainsAny,
+  'contains-html': handleContainsHtml,
+  'contains-json': handleContainsJson,
+  'contains-sql': handleContainsSql,
+  'contains-xml': handleIsXml,
+  'context-faithfulness': handleContextFaithfulness,
+  'context-recall': handleContextRecall,
+  'context-relevance': handleContextRelevance,
+  'conversation-relevance': handleConversationRelevance,
+  cost: handleCost,
+  equals: handleEquals,
+  factuality: handleFactuality,
+  'finish-reason': handleFinishReason,
+  'g-eval': handleGEval,
+  gleu: handleGleuScore,
+  guardrails: handleGuardrails,
+  icontains: handleIContains,
+  'icontains-all': handleIContainsAll,
+  'icontains-any': handleIContainsAny,
+  'is-html': handleIsHtml,
+  'is-json': handleIsJson,
+  'is-refusal': handleIsRefusal,
+  'is-sql': handleIsSql,
+  'is-valid-function-call': handleIsValidFunctionCall,
+  'is-valid-openai-function-call': handleIsValidFunctionCall,
+  'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
+  'is-xml': handleIsXml,
+  javascript: handleJavascript,
+  latency: handleLatency,
+  levenshtein: handleLevenshtein,
+  'llm-rubric': handleLlmRubric,
+  meteor: async (params: AssertionParams) => {
+    try {
+      const { handleMeteorAssertion } = await import('./meteor');
+      return handleMeteorAssertion(params);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.message.includes('Cannot find module') ||
+          error.message.includes('natural" package is required'))
+      ) {
+        return {
+          pass: false,
+          score: 0,
+          reason:
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
+          assertion: params.assertion,
+        };
+      }
+      throw error;
+    }
+  },
+  'model-graded-closedqa': handleModelGradedClosedQa,
+  'model-graded-factuality': handleFactuality,
+  moderation: handleModeration,
+  perplexity: handlePerplexity,
+  'perplexity-score': handlePerplexityScore,
+  pi: handlePiScorer,
+  python: handlePython,
+  regex: handleRegex,
+  ruby: handleRuby,
+  'rouge-n': handleRougeScore,
+  similar: handleSimilar,
+  'starts-with': handleStartsWith,
+  'trace-error-spans': handleTraceErrorSpans,
+  'trace-span-count': handleTraceSpanCount,
+  'trace-span-duration': handleTraceSpanDuration,
+  webhook: handleWebhook,
+};
+
 const nunjucks = getNunjucksEngine();
+
+/**
+ * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
+ * or "not-contains" is inverse of "contains".
+ * @param assertion - The assertion to test
+ * @returns true if the assertion is inverse, false otherwise
+ */
+export function isAssertionInverse(assertion: Assertion): boolean {
+  return assertion.type.startsWith('not-');
+}
+
+/**
+ * Returns the base type of an assertion i.e. "not-equals" returns "equals"
+ * and "equals" returns "equals".
+ * @param assertion - The assertion to get the base type.
+ * @returns The base type of the assertion.
+ */
+export function getAssertionBaseType(assertion: Assertion): AssertionType {
+  const inverse = isAssertionInverse(assertion);
+  return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
+}
 
 export async function runAssertion({
   prompt,
@@ -104,7 +215,7 @@ export async function runAssertion({
   test,
   latencyMs,
   providerResponse,
-  assertIndex,
+  traceId,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -113,21 +224,18 @@ export async function runAssertion({
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
+  traceId?: string;
 }): Promise<GradingResult> {
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
-  const inverse = assertion.type.startsWith('not-');
-  const baseType = inverse
-    ? (assertion.type.slice(4) as AssertionType)
-    : (assertion.type as AssertionType);
-
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
       vars: test.vars,
       prompt: { label: prompt },
+      ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
     });
   }
 
@@ -140,6 +248,23 @@ export async function runAssertion({
     providerResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
   };
+
+  // Add trace data if traceId is available
+  if (traceId) {
+    try {
+      const { getTraceStore } = await import('../tracing/store');
+      const traceStore = getTraceStore();
+      const traceData = await traceStore.getTrace(traceId);
+      if (traceData) {
+        context.trace = {
+          traceId: traceData.traceId,
+          spans: traceData.spans || [],
+        };
+      }
+    } catch (error) {
+      logger.debug(`Failed to fetch trace data for assertion: ${error}`);
+    }
+  }
 
   // Render assertion values
   let renderedValue = assertion.value;
@@ -178,6 +303,23 @@ export async function runAssertion({
             assertion,
           };
         }
+      } else if (filePath.endsWith('.rb')) {
+        try {
+          const { runRuby } = await import('../ruby/rubyUtils');
+          const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
+            output,
+            context,
+          ]);
+          valueFromScript = rubyScriptOutput;
+          logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
+        } catch (error) {
+          return {
+            pass: false,
+            score: 0,
+            reason: (error as Error).message,
+            assertion,
+          };
+        }
       } else {
         renderedValue = processFileReference(renderedValue);
       }
@@ -208,12 +350,22 @@ export async function runAssertion({
     });
   }
 
+  // Construct CallApiContextParams for model-graded assertions that need originalProvider
+  const providerCallContext: CallApiContextParams | undefined = provider
+    ? {
+        originalProvider: provider,
+        prompt: { raw: prompt || '', label: '' },
+        vars: test.vars || {},
+      }
+    : undefined;
+
   const assertionParams: AssertionParams = {
     assertion,
-    baseType,
-    context,
+    baseType: getAssertionBaseType(assertion),
+    providerCallContext,
+    assertionValueContext: context,
     cost,
-    inverse,
+    inverse: isAssertionInverse(assertion),
     latencyMs,
     logProbs,
     output,
@@ -226,76 +378,25 @@ export async function runAssertion({
     valueFromScript,
   };
 
-  const assertionHandlers: Record<
-    BaseAssertionTypes,
-    (params: AssertionParams) => GradingResult | Promise<GradingResult>
-  > = {
-    'answer-relevance': handleAnswerRelevance,
-    bleu: handleBleuScore,
-    classifier: handleClassifier,
-    contains: handleContains,
-    'contains-all': handleContainsAll,
-    'contains-any': handleContainsAny,
-    'contains-json': handleContainsJson,
-    'contains-sql': handleContainsSql,
-    'contains-xml': handleIsXml,
-    'context-faithfulness': handleContextFaithfulness,
-    'context-recall': handleContextRecall,
-    'context-relevance': handleContextRelevance,
-    cost: handleCost,
-    equals: handleEquals,
-    factuality: handleFactuality,
-    gleu: handleGleuScore,
-    guardrails: handleGuardrails,
-    'g-eval': handleGEval,
-    icontains: handleIContains,
-    'icontains-all': handleIContainsAll,
-    'icontains-any': handleIContainsAny,
-    'is-json': handleIsJson,
-    'is-refusal': handleIsRefusal,
-    'is-sql': handleIsSql,
-    'is-valid-function-call': handleIsValidFunctionCall,
-    'is-valid-openai-function-call': handleIsValidFunctionCall,
-    'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
-    'is-xml': handleIsXml,
-    javascript: handleJavascript,
-    latency: handleLatency,
-    levenshtein: handleLevenshtein,
-    'llm-rubric': handleLlmRubric,
-    meteor: async (params: AssertionParams) => {
-      try {
-        const { handleMeteorAssertion } = await import('./meteor');
-        return handleMeteorAssertion(params);
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('Cannot find module')) {
-          return {
-            pass: false,
-            score: 0,
-            reason:
-              'METEOR assertion requires the natural package. Please install it using: npm install natural',
-            assertion: params.assertion,
-          };
-        }
-        throw error;
-      }
-    },
-    'model-graded-closedqa': handleModelGradedClosedQa,
-    'model-graded-factuality': handleFactuality,
-    moderation: handleModeration,
-    perplexity: handlePerplexity,
-    'perplexity-score': handlePerplexityScore,
-    python: handlePython,
-    regex: handleRegex,
-    'rouge-n': handleRougeScore,
-    similar: handleSimilar,
-    'starts-with': handleStartsWith,
-    webhook: handleWebhook,
-    pi: handlePiScorer,
-  };
+  // Check for redteam assertions first
+  if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
+    return handleRedteam(assertionParams);
+  }
 
-  const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
+  const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
     const result = await handler(assertionParams);
+
+    // Store rendered assertion value in metadata if it differs from the original template
+    // This allows the UI to display substituted variable values instead of raw templates
+    if (
+      renderedValue !== undefined &&
+      renderedValue !== assertion.value &&
+      typeof renderedValue === 'string'
+    ) {
+      result.metadata = result.metadata || {};
+      result.metadata.renderedAssertionValue = renderedValue;
+    }
 
     // If weight is 0, treat this as a metric-only assertion that can't fail
     if (assertion.weight === 0) {
@@ -308,9 +409,6 @@ export async function runAssertion({
     return result;
   }
 
-  if (baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
-  }
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
@@ -321,6 +419,7 @@ export async function runAssertions({
   provider,
   providerResponse,
   test,
+  traceId,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -328,6 +427,7 @@ export async function runAssertions({
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
+  traceId?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -371,8 +471,8 @@ export async function runAssertions({
     asserts,
     ASSERTIONS_MAX_CONCURRENCY,
     async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-')) {
-        // Select-type assertions are handled separately because they depend on multiple outputs.
+      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
         return;
       }
 
@@ -384,6 +484,7 @@ export async function runAssertions({
         test,
         latencyMs,
         assertIndex: index,
+        traceId,
       });
 
       assertResult.addResult({
@@ -417,6 +518,7 @@ export async function runCompareAssertion(
   test: AtomicTestCase,
   assertion: Assertion,
   outputs: string[],
+  context?: CallApiContextParams,
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
   test = getFinalTest(test, assertion);
@@ -425,6 +527,7 @@ export async function runCompareAssertion(
     outputs,
     test.options,
     test.vars,
+    context,
   );
   return comparisonResults.map((result) => ({
     ...result,
@@ -459,4 +562,5 @@ export default {
   matchesContextFaithfulness,
   matchesComparisonBoolean: matchesSelectBest,
   matchesModeration,
+  matchesConversationRelevance,
 };

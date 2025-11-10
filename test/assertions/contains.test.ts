@@ -1,12 +1,18 @@
 import {
   handleContains,
-  handleIContains,
-  handleContainsAny,
-  handleIContainsAny,
   handleContainsAll,
+  handleContainsAny,
+  handleIContains,
   handleIContainsAll,
+  handleIContainsAny,
 } from '../../src/assertions/contains';
-import type { AssertionParams, AssertionValue, AtomicTestCase, ApiProvider } from '../../src/types';
+
+import type {
+  ApiProvider,
+  AssertionParams,
+  AssertionValue,
+  AtomicTestCase,
+} from '../../src/types/index';
 
 const mockProvider: ApiProvider = {
   id: () => 'mock',
@@ -15,7 +21,7 @@ const mockProvider: ApiProvider = {
 
 const defaultParams = {
   baseType: 'contains' as const,
-  context: {
+  assertionValueContext: {
     vars: {},
     test: {} as AtomicTestCase,
     prompt: 'test prompt',

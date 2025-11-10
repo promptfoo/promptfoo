@@ -66,6 +66,9 @@
                             "AI21_API_KEY": {
                               "type": "string"
                             },
+                            "AIML_API_KEY": {
+                              "type": "string"
+                            },
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
@@ -123,16 +126,19 @@
                             "AZURE_TOKEN_SCOPE": {
                               "type": "string"
                             },
-                            "BAM_API_HOST": {
+                            "CLAUDE_CODE_USE_BEDROCK": {
                               "type": "string"
                             },
-                            "BAM_API_KEY": {
+                            "CLAUDE_CODE_USE_VERTEX": {
                               "type": "string"
                             },
                             "CLOUDFLARE_ACCOUNT_ID": {
                               "type": "string"
                             },
                             "CLOUDFLARE_API_KEY": {
+                              "type": "string"
+                            },
+                            "COMETAPI_KEY": {
                               "type": "string"
                             },
                             "COHERE_API_KEY": {
@@ -147,7 +153,16 @@
                             "DATABRICKS_WORKSPACE_URL": {
                               "type": "string"
                             },
+                            "DOCKER_MODEL_RUNNER_BASE_URL": {
+                              "type": "string"
+                            },
+                            "DOCKER_MODEL_RUNNER_API_KEY": {
+                              "type": "string"
+                            },
                             "FAL_KEY": {
+                              "type": "string"
+                            },
+                            "GITHUB_TOKEN": {
                               "type": "string"
                             },
                             "GOOGLE_API_HOST": {
@@ -157,6 +172,18 @@
                               "type": "string"
                             },
                             "GOOGLE_API_KEY": {
+                              "type": "string"
+                            },
+                            "GOOGLE_PROJECT_ID": {
+                              "type": "string"
+                            },
+                            "GOOGLE_LOCATION": {
+                              "type": "string"
+                            },
+                            "GOOGLE_GENERATIVE_AI_API_KEY": {
+                              "type": "string"
+                            },
+                            "GEMINI_API_KEY": {
                               "type": "string"
                             },
                             "GROQ_API_KEY": {
@@ -171,13 +198,13 @@
                             "HF_TOKEN": {
                               "type": "string"
                             },
+                            "HYPERBOLIC_API_KEY": {
+                              "type": "string"
+                            },
                             "HUGGING_FACE_HUB_TOKEN": {
                               "type": "string"
                             },
                             "JFROG_API_KEY": {
-                              "type": "string"
-                            },
-                            "LAMBDA_API_KEY": {
                               "type": "string"
                             },
                             "LANGFUSE_HOST": {
@@ -205,6 +232,12 @@
                               "type": "string"
                             },
                             "MISTRAL_API_KEY": {
+                              "type": "string"
+                            },
+                            "NSCALE_SERVICE_TOKEN": {
+                              "type": "string"
+                            },
+                            "NSCALE_API_KEY": {
                               "type": "string"
                             },
                             "OLLAMA_API_KEY": {
@@ -240,6 +273,21 @@
                             "PROMPTFOO_CA_CERT_PATH": {
                               "type": "string"
                             },
+                            "PROMPTFOO_PFX_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_PFX_PASSWORD": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_PASSWORD": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_ALIAS": {
+                              "type": "string"
+                            },
                             "PROMPTFOO_INSECURE_SSL": {
                               "type": "string"
                             },
@@ -247,6 +295,18 @@
                               "type": "string"
                             },
                             "REPLICATE_API_TOKEN": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_BASE_URL": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_CLIENT_ID": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_TENANT_ID": {
                               "type": "string"
                             },
                             "VERTEX_API_HOST": {
@@ -358,9 +418,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   },
                   {
@@ -380,10 +438,7 @@
                       },
                       "config": {}
                     },
-                    "required": [
-                      "raw",
-                      "label"
-                    ],
+                    "required": ["raw", "label"],
                     "additionalProperties": false
                   }
                 ]
@@ -431,11 +486,7 @@
                             {
                               "type": "array",
                               "items": {
-                                "type": [
-                                  "string",
-                                  "number",
-                                  "boolean"
-                                ]
+                                "type": ["string", "number", "boolean"]
                               }
                             },
                             {
@@ -512,21 +563,25 @@
                                               "contains",
                                               "contains-all",
                                               "contains-any",
+                                              "contains-html",
                                               "contains-json",
                                               "contains-sql",
                                               "contains-xml",
                                               "context-faithfulness",
                                               "context-recall",
                                               "context-relevance",
+                                              "conversation-relevance",
                                               "cost",
                                               "equals",
                                               "factuality",
+                                              "finish-reason",
                                               "g-eval",
                                               "gleu",
                                               "guardrails",
                                               "icontains",
                                               "icontains-all",
                                               "icontains-any",
+                                              "is-html",
                                               "is-json",
                                               "is-refusal",
                                               "is-sql",
@@ -548,8 +603,12 @@
                                               "python",
                                               "regex",
                                               "rouge-n",
+                                              "ruby",
                                               "similar",
                                               "starts-with",
+                                              "trace-error-spans",
+                                              "trace-span-count",
+                                              "trace-span-duration",
                                               "webhook"
                                             ]
                                           },
@@ -558,10 +617,7 @@
                                           },
                                           {
                                             "type": "string",
-                                            "enum": [
-                                              "select-best",
-                                              "human"
-                                            ]
+                                            "enum": ["select-best", "human", "max-score"]
                                           },
                                           {}
                                         ]
@@ -584,6 +640,9 @@
                                       },
                                       "transform": {
                                         "type": "string"
+                                      },
+                                      "contextTransform": {
+                                        "type": "string"
                                       }
                                     },
                                     "additionalProperties": false
@@ -603,10 +662,7 @@
                                   "additionalProperties": {}
                                 }
                               },
-                              "required": [
-                                "type",
-                                "assert"
-                              ],
+                              "required": ["type", "assert"],
                               "additionalProperties": false
                             },
                             {
@@ -680,10 +736,7 @@
                                           "type": "string"
                                         }
                                       },
-                                      "required": [
-                                        "role",
-                                        "content"
-                                      ],
+                                      "required": ["role", "content"],
                                       "additionalProperties": false
                                     }
                                   }
@@ -797,11 +850,7 @@
                             {
                               "type": "array",
                               "items": {
-                                "type": [
-                                  "string",
-                                  "number",
-                                  "boolean"
-                                ]
+                                "type": ["string", "number", "boolean"]
                               }
                             },
                             {
@@ -813,9 +862,7 @@
                         }
                       }
                     },
-                    "required": [
-                      "path"
-                    ],
+                    "required": ["path"],
                     "additionalProperties": false
                   }
                 ]
@@ -882,44 +929,48 @@
                     }
                   }
                 },
-                "required": [
-                  "config",
-                  "tests"
-                ],
+                "required": ["config", "tests"],
                 "additionalProperties": false
               }
             ]
           }
         },
         "defaultTest": {
-          "type": "object",
-          "properties": {
-            "vars": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/vars"
+          "anyOf": [
+            {
+              "type": "string"
             },
-            "provider": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
-            },
-            "providerOutput": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
-            },
-            "assert": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
-            },
-            "assertScoringFunction": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
-            },
-            "options": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
-            },
-            "threshold": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
-            },
-            "metadata": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
+            {
+              "type": "object",
+              "properties": {
+                "vars": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/vars"
+                },
+                "provider": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
+                },
+                "providerOutput": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
+                },
+                "assert": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
+                },
+                "assertScoringFunction": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
+                },
+                "options": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
+                },
+                "threshold": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
+                },
+                "metadata": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
+                }
+              },
+              "additionalProperties": false
             }
-          },
-          "additionalProperties": false
+          ]
         },
         "outputPath": {
           "anyOf": [
@@ -998,10 +1049,7 @@
                 ]
               }
             },
-            "required": [
-              "name",
-              "value"
-            ],
+            "required": ["name", "value"],
             "additionalProperties": false
           }
         },
@@ -1056,8 +1104,18 @@
               "description": "Number of tests to generate"
             },
             "language": {
-              "type": "string",
-              "description": "Language of tests ot generate for this plugin"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ],
+              "description": "Language(s) of tests to generate for this plugin"
             },
             "entities": {
               "type": "array",
@@ -1081,11 +1139,15 @@
                           "beavertails",
                           "bfla",
                           "bias",
+                          "bias:age",
+                          "bias:disability",
                           "bias:gender",
+                          "bias:race",
                           "bola",
                           "cca",
                           "competitors",
                           "contracts",
+                          "coppa",
                           "cross-session-leak",
                           "cyberseceval",
                           "debug-access",
@@ -1108,7 +1170,29 @@
                           "eu:ai-act:art5:social-scoring",
                           "eu:ai-act:art5:subliminal-manipulation",
                           "excessive-agency",
+                          "ferpa",
+                          "financial",
+                          "financial:calculation-error",
+                          "financial:compliance-violation",
+                          "financial:confidential-disclosure",
+                          "financial:counterfactual",
+                          "financial:data-leakage",
+                          "financial:defamation",
+                          "financial:hallucination",
+                          "financial:impartiality",
+                          "financial:misconduct",
+                          "financial:sycophancy",
                           "foundation",
+                          "gdpr",
+                          "gdpr:art15",
+                          "gdpr:art17",
+                          "gdpr:art22",
+                          "gdpr:art25",
+                          "gdpr:art32",
+                          "gdpr:art5",
+                          "gdpr:art9",
+                          "goal-misalignment",
+                          "guardrails-eval",
                           "hallucination",
                           "harmbench",
                           "harmful",
@@ -1142,11 +1226,25 @@
                           "illegal-activity",
                           "imitation",
                           "indirect-prompt-injection",
+                          "insurance",
+                          "insurance:coverage-discrimination",
+                          "insurance:network-misinformation",
+                          "insurance:phi-disclosure",
                           "intent",
+                          "iso:42001",
+                          "iso:42001:accountability",
+                          "iso:42001:fairness",
+                          "iso:42001:privacy",
+                          "iso:42001:robustness",
+                          "iso:42001:safety",
+                          "iso:42001:security",
+                          "iso:42001:transparency",
                           "mcp",
+                          "medical",
                           "medical:anchoring-bias",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
+                          "medical:off-label-use",
                           "medical:prioritization-error",
                           "medical:sycophancy",
                           "misinformation",
@@ -1182,7 +1280,15 @@
                           "nist:ai:measure:4.3",
                           "off-topic",
                           "overreliance",
+                          "owasp:agentic:redteam",
                           "owasp:agentic:t01",
+                          "owasp:agentic:t02",
+                          "owasp:agentic:t03",
+                          "owasp:agentic:t04",
+                          "owasp:agentic:t05",
+                          "owasp:agentic:t06",
+                          "owasp:agentic:t08",
+                          "owasp:agentic:t10",
                           "owasp:api",
                           "owasp:api:01",
                           "owasp:api:02",
@@ -1210,6 +1316,10 @@
                           "owasp:llm:redteam:runtime",
                           "owasp:llm:redteam:system",
                           "personal-safety",
+                          "pharmacy",
+                          "pharmacy:controlled-substance-compliance",
+                          "pharmacy:dosage-calculation",
+                          "pharmacy:drug-interaction",
                           "pii",
                           "pii:api-db",
                           "pii:direct",
@@ -1225,6 +1335,7 @@
                           "reasoning-dos",
                           "religion",
                           "shell-injection",
+                          "special-token-injection",
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
@@ -1233,12 +1344,14 @@
                           "toxic-chat",
                           "toxicity",
                           "unsafebench",
+                          "unverifiable-claims",
+                          "vlguard",
+                          "wordplay",
                           "xstest"
                         ]
                       },
                       {
-                        "type": "string",
-                        "pattern": "^file\\:\\/\\/"
+                        "type": "string"
                       }
                     ],
                     "description": "Name of the plugin or path to custom plugin"
@@ -1257,11 +1370,15 @@
                               "beavertails",
                               "bfla",
                               "bias",
+                              "bias:age",
+                              "bias:disability",
                               "bias:gender",
+                              "bias:race",
                               "bola",
                               "cca",
                               "competitors",
                               "contracts",
+                              "coppa",
                               "cross-session-leak",
                               "cyberseceval",
                               "debug-access",
@@ -1284,7 +1401,29 @@
                               "eu:ai-act:art5:social-scoring",
                               "eu:ai-act:art5:subliminal-manipulation",
                               "excessive-agency",
+                              "ferpa",
+                              "financial",
+                              "financial:calculation-error",
+                              "financial:compliance-violation",
+                              "financial:confidential-disclosure",
+                              "financial:counterfactual",
+                              "financial:data-leakage",
+                              "financial:defamation",
+                              "financial:hallucination",
+                              "financial:impartiality",
+                              "financial:misconduct",
+                              "financial:sycophancy",
                               "foundation",
+                              "gdpr",
+                              "gdpr:art15",
+                              "gdpr:art17",
+                              "gdpr:art22",
+                              "gdpr:art25",
+                              "gdpr:art32",
+                              "gdpr:art5",
+                              "gdpr:art9",
+                              "goal-misalignment",
+                              "guardrails-eval",
                               "hallucination",
                               "harmbench",
                               "harmful",
@@ -1318,11 +1457,25 @@
                               "illegal-activity",
                               "imitation",
                               "indirect-prompt-injection",
+                              "insurance",
+                              "insurance:coverage-discrimination",
+                              "insurance:network-misinformation",
+                              "insurance:phi-disclosure",
                               "intent",
+                              "iso:42001",
+                              "iso:42001:accountability",
+                              "iso:42001:fairness",
+                              "iso:42001:privacy",
+                              "iso:42001:robustness",
+                              "iso:42001:safety",
+                              "iso:42001:security",
+                              "iso:42001:transparency",
                               "mcp",
+                              "medical",
                               "medical:anchoring-bias",
                               "medical:hallucination",
                               "medical:incorrect-knowledge",
+                              "medical:off-label-use",
                               "medical:prioritization-error",
                               "medical:sycophancy",
                               "misinformation",
@@ -1358,7 +1511,15 @@
                               "nist:ai:measure:4.3",
                               "off-topic",
                               "overreliance",
+                              "owasp:agentic:redteam",
                               "owasp:agentic:t01",
+                              "owasp:agentic:t02",
+                              "owasp:agentic:t03",
+                              "owasp:agentic:t04",
+                              "owasp:agentic:t05",
+                              "owasp:agentic:t06",
+                              "owasp:agentic:t08",
+                              "owasp:agentic:t10",
                               "owasp:api",
                               "owasp:api:01",
                               "owasp:api:02",
@@ -1386,6 +1547,10 @@
                               "owasp:llm:redteam:runtime",
                               "owasp:llm:redteam:system",
                               "personal-safety",
+                              "pharmacy",
+                              "pharmacy:controlled-substance-compliance",
+                              "pharmacy:dosage-calculation",
+                              "pharmacy:drug-interaction",
                               "pii",
                               "pii:api-db",
                               "pii:direct",
@@ -1401,6 +1566,7 @@
                               "reasoning-dos",
                               "religion",
                               "shell-injection",
+                              "special-token-injection",
                               "sql-injection",
                               "ssrf",
                               "system-prompt-override",
@@ -1409,12 +1575,14 @@
                               "toxic-chat",
                               "toxicity",
                               "unsafebench",
+                              "unverifiable-claims",
+                              "vlguard",
+                              "wordplay",
                               "xstest"
                             ]
                           },
                           {
-                            "type": "string",
-                            "pattern": "^file\\:\\/\\/"
+                            "type": "string"
                           }
                         ],
                         "description": "Name of the plugin"
@@ -1432,26 +1600,17 @@
                       },
                       "severity": {
                         "type": "string",
-                        "enum": [
-                          "critical",
-                          "high",
-                          "medium",
-                          "low"
-                        ],
+                        "enum": ["critical", "high", "medium", "low"],
                         "description": "Severity level for this plugin"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   }
                 ]
               },
               "description": "Plugins to use for redteam generation",
-              "default": [
-                "default"
-              ]
+              "default": ["default"]
             },
             "strategies": {
               "type": "array",
@@ -1463,12 +1622,14 @@
                         "type": "string",
                         "enum": [
                           "audio",
+                          "authoritative-markup-injection",
                           "base64",
                           "basic",
                           "best-of-n",
                           "camelcase",
                           "citation",
                           "crescendo",
+                          "custom",
                           "default",
                           "emoji",
                           "gcg",
@@ -1478,26 +1639,32 @@
                           "image",
                           "jailbreak",
                           "jailbreak:composite",
+                          "jailbreak:hydra",
                           "jailbreak:likert",
+                          "jailbreak:meta",
                           "jailbreak:tree",
+                          "layer",
                           "leetspeak",
                           "math-prompt",
+                          "mischievous-user",
                           "morse",
                           "multilingual",
                           "other-encodings",
-                          "pandamonium",
                           "piglatin",
                           "prompt-injection",
                           "retry",
                           "rot13",
+                          "simba",
                           "video"
                         ]
                       },
                       {
                         "type": "string"
+                      },
+                      {
+                        "type": "string"
                       }
-                    ],
-                    "description": "Name of the strategy"
+                    ]
                   },
                   {
                     "type": "object",
@@ -1511,17 +1678,13 @@
                         "description": "Strategy-specific configuration"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
-              "default": [
-                "default"
-              ]
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, simba, video",
+              "default": ["default"]
             },
             "maxConcurrency": {
               "type": "integer",
@@ -1536,12 +1699,153 @@
             "excludeTargetOutputFromAgenticAttackGeneration": {
               "type": "boolean",
               "description": "Whether to exclude target output from the agentific attack generation process"
+            },
+            "tracing": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "includeInAttack": {
+                  "type": "boolean"
+                },
+                "includeInGrading": {
+                  "type": "boolean"
+                },
+                "includeInternalSpans": {
+                  "type": "boolean"
+                },
+                "maxSpans": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "maxDepth": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "maxRetries": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "retryDelayMs": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "spanFilter": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sanitizeAttributes": {
+                  "type": "boolean"
+                },
+                "strategies": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/definitions/PromptfooConfigSchema/properties/redteam/properties/tracing"
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "description": "Tracing defaults applied to all strategies unless overridden"
             }
           },
           "additionalProperties": false
         },
         "writeLatestResults": {
           "type": "boolean"
+        },
+        "tracing": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "otlp": {
+              "type": "object",
+              "properties": {
+                "http": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "port": {
+                      "type": "number",
+                      "default": 4318
+                    },
+                    "host": {
+                      "type": "string",
+                      "default": "0.0.0.0"
+                    },
+                    "acceptFormats": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["protobuf", "json"]
+                      },
+                      "default": ["json"]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "grpc": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "port": {
+                      "type": "number",
+                      "default": 4317
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "storage": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["sqlite"],
+                  "default": "sqlite"
+                },
+                "retentionDays": {
+                  "type": "number",
+                  "default": 30
+                }
+              },
+              "additionalProperties": false
+            },
+            "forwarding": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": ["endpoint"],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         },
         "evaluateOptions": {
           "type": "object",
@@ -1575,6 +1879,9 @@
             },
             "maxEvalTimeMs": {
               "type": "number"
+            },
+            "isRedteam": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false
@@ -1656,6 +1963,9 @@
             "share": {
               "type": "boolean"
             },
+            "noShare": {
+              "type": "boolean"
+            },
             "progressBar": {
               "type": "boolean"
             },
@@ -1703,6 +2013,9 @@
             "promptSuffix": {
               "type": "string"
             },
+            "retryErrors": {
+              "type": "boolean"
+            },
             "envPath": {
               "type": "string"
             }
@@ -1713,9 +2026,7 @@
           "$ref": "#/definitions/PromptfooConfigSchema/properties/providers"
         }
       },
-      "required": [
-        "prompts"
-      ],
+      "required": ["prompts"],
       "additionalProperties": false
     }
   },

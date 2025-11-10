@@ -1,7 +1,8 @@
-import React, { type ReactNode, useState, useEffect } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
+
 import { ShiftKeyContext } from './ShiftKeyContextDef';
 
-export const ShiftKeyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const ShiftKeyProvider = ({ children }: { children: ReactNode }) => {
   const [isShiftKeyPressed, setShiftKeyPressed] = useState(false);
 
   useEffect(() => {

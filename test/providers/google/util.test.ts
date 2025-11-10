@@ -1,23 +1,28 @@
 import * as fs from 'fs';
+
 import { GoogleAuth } from 'google-auth-library';
 import * as nunjucks from 'nunjucks';
 import logger from '../../../src/logger';
-import type { Tool } from '../../../src/providers/google/types';
 import {
-  maybeCoerceToGeminiFormat,
   geminiFormatAndSystemInstructions,
-  getGoogleClient,
-  hasGoogleDefaultCredentials,
   loadFile,
+  maybeCoerceToGeminiFormat,
+  normalizeTools,
   parseStringObject,
   validateFunctionCall,
-  normalizeTools,
 } from '../../../src/providers/google/util';
+
+import type { Tool } from '../../../src/providers/google/types';
 
 jest.mock('google-auth-library');
 
 jest.mock('glob', () => ({
   globSync: jest.fn().mockReturnValue([]),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('fs', () => ({
@@ -41,8 +46,6 @@ describe('util', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.resetAllMocks();
-    // Clear the global cache
-    (global as any).cachedAuth = undefined;
     // Reset the GoogleAuth mock to default behavior
     jest.mocked(GoogleAuth).mockClear();
   });
@@ -254,6 +257,58 @@ describe('util', () => {
       });
     });
 
+    it('should map assistant role to model role by default', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'model', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant mapped to model
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should preserve assistant role when useAssistantRole is true', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'assistant', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant preserved
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should map assistant to model when useAssistantRole is false', () => {
+      const input = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'Hello' }] },
+          { role: 'model', parts: [{ text: 'Hi there' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
     it('should handle OpenAI chat format with array content', () => {
       const input = [
         {
@@ -272,6 +327,21 @@ describe('util', () => {
         coerced: true,
         systemInstruction: undefined,
       });
+    });
+
+    it('should respect useAssistantRole flag with array content', () => {
+      const input = [
+        { role: 'user', content: [{ type: 'text', text: 'Question' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'Answer' }] },
+      ];
+
+      // Test with useAssistantRole: true
+      const resultWithAssistant = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(resultWithAssistant.contents[1].role).toBe('assistant');
+
+      // Test with useAssistantRole: false (default)
+      const resultWithModel = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(resultWithModel.contents[1].role).toBe('model');
     });
 
     it('should handle OpenAI chat format with object content', () => {
@@ -515,6 +585,34 @@ describe('util', () => {
       });
     });
 
+    it('should convert system-only prompts to user messages', () => {
+      const input = [{ role: 'system', content: 'You are a helpful assistant.' }];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [{ role: 'user', parts: [{ text: 'You are a helpful assistant.' }] }],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should convert multiple system-only messages to single user message', () => {
+      const input = [
+        { role: 'system', content: 'First instruction.' },
+        { role: 'system', content: 'Second instruction.' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'First instruction.' }, { text: 'Second instruction.' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
     it('should log a warning and return the input for unknown formats', () => {
       const loggerSpy = jest.spyOn(logger, 'warn');
       const input = { unknownFormat: 'test' };
@@ -728,10 +826,20 @@ describe('util', () => {
   });
 
   describe('getGoogleClient', () => {
-    it('should create and return Google client', async () => {
-      // Clear any cached state before this test
-      (global as any).cachedAuth = undefined;
+    beforeEach(() => {
+      // Reset modules before each test to clear cachedAuth
+      jest.resetModules();
+      // Re-mock google-auth-library after module reset
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn(),
+      }));
+    });
 
+    afterEach(() => {
+      jest.dontMock('google-auth-library');
+    });
+
+    it('should create and return Google client', async () => {
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
       const mockAuth = {
@@ -739,9 +847,11 @@ describe('util', () => {
         getProjectId: jest.fn().mockResolvedValue(mockProjectId),
       };
 
-      // Clear and reset the GoogleAuth mock specifically for this test
-      jest.mocked(GoogleAuth).mockClear();
-      jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
+      const googleAuthLib = await import('google-auth-library');
+      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
+
+      // Import getGoogleClient after mocking
+      const { getGoogleClient } = await import('../../../src/providers/google/util');
 
       const result = await getGoogleClient();
       expect(result).toEqual({
@@ -751,9 +861,6 @@ describe('util', () => {
     });
 
     it('should reuse cached auth client', async () => {
-      // Clear any cached state before this test
-      (global as any).cachedAuth = undefined;
-
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
       const mockAuth = {
@@ -761,31 +868,45 @@ describe('util', () => {
         getProjectId: jest.fn().mockResolvedValue(mockProjectId),
       };
 
-      // Clear and reset the GoogleAuth mock specifically for this test
-      jest.mocked(GoogleAuth).mockClear();
-      jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
+      const googleAuthLib = await import('google-auth-library');
+      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
+
+      // Import getGoogleClient after mocking
+      const { getGoogleClient } = await import('../../../src/providers/google/util');
 
       await getGoogleClient();
-      const googleAuthCalls = jest.mocked(GoogleAuth).mock.calls.length;
+      const googleAuthCalls = jest.mocked(googleAuthLib.GoogleAuth).mock.calls.length;
 
       await getGoogleClient();
-      expect(jest.mocked(GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
+      expect(jest.mocked(googleAuthLib.GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
     });
   });
 
   describe('hasGoogleDefaultCredentials', () => {
-    it('should return true when credentials are available', async () => {
-      // Clear any cached state before this test
-      (global as any).cachedAuth = undefined;
+    beforeEach(() => {
+      // Reset modules before each test to clear cachedAuth
+      jest.resetModules();
+      // Re-mock google-auth-library after module reset
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn(),
+      }));
+    });
 
+    afterEach(() => {
+      jest.dontMock('google-auth-library');
+    });
+
+    it('should return true when credentials are available', async () => {
       const mockAuth = {
         getClient: jest.fn().mockResolvedValue({}),
         getProjectId: jest.fn().mockResolvedValue('test-project'),
       };
 
-      // Clear and reset the GoogleAuth mock specifically for this test
-      jest.mocked(GoogleAuth).mockClear();
-      jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
+      const googleAuthLib = await import('google-auth-library');
+      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
+
+      // Import hasGoogleDefaultCredentials after mocking
+      const { hasGoogleDefaultCredentials } = await import('../../../src/providers/google/util');
 
       const result = await hasGoogleDefaultCredentials();
       expect(result).toBe(true);
@@ -909,6 +1030,521 @@ describe('util', () => {
       expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
       expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
     });
+
+    it('should merge system messages from both prompt and config with string config', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        'config system instruction',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'config system instruction' }, { text: 'prompt system instruction' }],
+      });
+    });
+
+    it('should merge system messages from both prompt and config with object config', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        { parts: [{ text: 'config system instruction' }] },
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'config system instruction' }, { text: 'prompt system instruction' }],
+      });
+    });
+
+    it('should merge multiple parts from config systemInstruction', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        {
+          parts: [{ text: 'config system instruction 1' }, { text: 'config system instruction 2' }],
+        },
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'config system instruction 1' },
+          { text: 'config system instruction 2' },
+          { text: 'prompt system instruction' },
+        ],
+      });
+    });
+
+    it('should merge multiple system messages from prompt', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction 1' },
+        { role: 'system', content: 'prompt system instruction 2' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        'config system instruction',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'config system instruction' },
+          { text: 'prompt system instruction 1' },
+          { text: 'prompt system instruction 2' },
+        ],
+      });
+    });
+
+    it('should render Nunjucks templates in config systemInstruction', () => {
+      const prompt = [{ role: 'user', content: 'user message' }];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        { role: 'a helpful assistant', language: 'Japanese' },
+        'You are {{role}}. Respond in {{language}}.',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'You are a helpful assistant. Respond in Japanese.' }],
+      });
+    });
+
+    it('should skip empty string config systemInstruction', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        '',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      // Empty string is falsy, so config systemInstruction is not processed
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'prompt system instruction' }],
+      });
+    });
+
+    describe('support for images in contents', () => {
+      const validBase64Image =
+        '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A/9k=';
+
+      it('should preserve text formatting when no images are present', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          someVar: 'not an image',
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should preserve text formatting when no context variables are provided', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
+              },
+            ],
+          },
+        ]);
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should convert base64 images from context variables while preserving other text', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `Here is some text before the image:\n\n${validBase64Image}\n\nAnd here is some text after the image.`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: validBase64Image,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Here is some text before the image:\n',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: validBase64Image,
+                },
+              },
+              {
+                text: 'And here is some text after the image.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should handle multiple images mixed with text', () => {
+        const image1 = validBase64Image;
+        const image2 =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAGA5w5EQwA7BHigu/QKBgAAAABJRU5ErkJggg==';
+
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `First line of text.\n${image1}\nMiddle text line.\n${image2}\nLast line of text.`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: image1,
+          image2: image2,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'First line of text.',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: image1,
+                },
+              },
+              {
+                text: 'Middle text line.',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/png',
+                  data: image2,
+                },
+              },
+              {
+                text: 'Last line of text.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should preserve complex formatting with whitespace and empty lines', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Title\n\n    Indented paragraph with spaces\n\n\n    Another indented paragraph\n        with more indentation\n\n',
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          notAnImage: 'just text',
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Title\n\n    Indented paragraph with spaces\n\n\n    Another indented paragraph\n        with more indentation\n\n',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should handle edge case with image at the beginning', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `${validBase64Image}\nText after image`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: validBase64Image,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: validBase64Image,
+                },
+              },
+              {
+                text: 'Text after image',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should handle edge case with image at the end', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `Text before image\n${validBase64Image}`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: validBase64Image,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Text before image',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: validBase64Image,
+                },
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should handle non-text parts without modification', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Some text',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/png',
+                  data: 'existing-image-data',
+                },
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: validBase64Image,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Some text',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/png',
+                  data: 'existing-image-data',
+                },
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should handle empty text parts', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: '',
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: validBase64Image,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: '',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should correctly detect and process WebP images', () => {
+        // WebP file starts with "RIFF" (UklGR in base64) followed by file size
+        // This is a longer base64 string to meet the 100 character minimum requirement
+        const webpBase64 =
+          'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vuUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `Here is a WebP image:\n${webpBase64}\nEnd of image.`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          webpImage: webpBase64,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Here is a WebP image:',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/webp',
+                  data: webpBase64,
+                },
+              },
+              {
+                text: 'End of image.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should correctly detect WebP images with variable file sizes', () => {
+        // Different valid WebP base64 strings that start with UklGR (not UklGRg)
+        // These represent "RIFF" followed by different file size bytes
+        // Each is padded to be over 100 characters to meet the minimum requirement
+        const webpVariants = [
+          'UklGRjAAAABXRUJQVlA4IBQAAAAwAQCdASoBAAEAAQAcJaACdLoB/AAAA0AA/v359OAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
+          'UklGRkAAAABXRUJQVlA4IEQAAAAwAgCdASoCAAIAAQAcJaACdLoD/AAAA8AAAAj17Zs+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+          'UklGRlAAAABXRUJQVlA4IEQAAAAwAgCdASoCAAIAAQAcJaACdLoD/AAAA8AAAAj17Zs+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+        ];
+
+        webpVariants.forEach((webpData, index) => {
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: webpData,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            [`webpImage${index}`]: webpData,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts).toEqual([
+            {
+              inlineData: {
+                mimeType: 'image/webp',
+                data: webpData,
+              },
+            },
+          ]);
+        });
+      });
+    });
   });
 
   describe('normalizeTools', () => {
@@ -1009,6 +1645,120 @@ describe('util', () => {
       const tools: any[] = [];
       const normalized = normalizeTools(tools);
       expect(normalized).toEqual([]);
+    });
+  });
+
+  describe('resolveProjectId', () => {
+    const mockProjectId = 'google-auth-project';
+
+    beforeEach(async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Re-mock google-auth-library after module reset
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        getProjectId: jest.fn().mockResolvedValue(mockProjectId),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+    });
+
+    afterEach(() => {
+      jest.dontMock('google-auth-library');
+    });
+
+    it('should prioritize explicit config over environment variables', async () => {
+      // Import resolveProject after mocking in beforeEach
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = { projectId: 'explicit-project' };
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('explicit-project');
+    });
+
+    it('should use environment variables when no explicit config', async () => {
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = {};
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('env-project');
+    });
+
+    it('should fall back to Google Auth Library when no config or env vars', async () => {
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = {};
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe(mockProjectId);
+    });
+
+    it('should handle Google Auth Library getProjectId failure gracefully', async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Mock Google Auth Library where getProjectId throws an error
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        fromJSON: jest.fn().mockResolvedValue({ name: 'mockCredentialClient' }),
+        getProjectId: jest
+          .fn()
+          .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      // Test that explicit config projectId is still used even when getProjectId fails
+      const config = {
+        projectId: 'explicit-project',
+        credentials: '{"type": "service_account", "project_id": "creds-project"}',
+      };
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('explicit-project');
+
+      // Verify that getProjectId was called but failed gracefully
+      expect(mockAuth.getProjectId).toHaveBeenCalled();
+      expect(mockAuth.fromJSON).toHaveBeenCalled();
+    });
+
+    it('should return empty string when all sources fail', async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Mock Google Auth Library where getProjectId throws an error
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        getProjectId: jest
+          .fn()
+          .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      // Test that when no projectId is available anywhere, we get empty string
+      const config = {};
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('');
+
+      // Verify that getProjectId was called but failed gracefully
+      expect(mockAuth.getProjectId).toHaveBeenCalled();
     });
   });
 });

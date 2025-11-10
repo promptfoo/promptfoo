@@ -14,6 +14,7 @@ keywords:
   ]
 date: 2025-05-22
 authors: [ian]
+tags: [technical-guide, red-teaming, anthropic]
 ---
 
 # How to Red Team Claude
@@ -30,7 +31,7 @@ Let's start with a simple setup to test Claude 4 Sonnet, then explore more advan
 
 ### Prerequisites
 
-- **Node.js** 18+: [Download here](https://nodejs.org/)
+- **Node.js** 20+: [Download here](https://nodejs.org/)
 - **API Keys**: Set these environment variables:
 
 ```bash

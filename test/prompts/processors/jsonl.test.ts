@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+
 import { processJsonlFile } from '../../../src/prompts/processors/jsonl';
 
 jest.mock('fs');

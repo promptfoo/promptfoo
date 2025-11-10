@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+
 import { useStore } from '@app/stores/evalConfig';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Accordion from '@mui/material/Accordion';
@@ -11,8 +12,9 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 
-const ConfigureEnvButton: React.FC = () => {
-  const { env: defaultEnv, setEnv: saveEnv } = useStore();
+const ConfigureEnvButton = () => {
+  const { config, updateConfig } = useStore();
+  const defaultEnv = config.env || {};
   const [dialogOpen, setDialogOpen] = useState(false);
   const [env, setEnv] = useState(defaultEnv);
 
@@ -25,7 +27,7 @@ const ConfigureEnvButton: React.FC = () => {
   };
 
   const handleSave = () => {
-    saveEnv(env);
+    updateConfig({ env });
     handleClose();
   };
 

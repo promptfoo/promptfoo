@@ -1,6 +1,7 @@
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { matchesLlmRubric } from '../../src/matchers';
-import type { Assertion, AssertionParams, GradingResult } from '../../src/types';
+
+import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
 jest.mock('../../src/matchers');
 
@@ -17,7 +18,7 @@ describe('handleLlmRubric', () => {
       value: 'test rubric',
     } as Assertion,
     baseType: 'llm-rubric',
-    context: {
+    assertionValueContext: {
       prompt: 'test prompt',
       vars: {},
       test: {
@@ -59,6 +60,8 @@ describe('handleLlmRubric', () => {
       undefined,
       {},
       params.assertion,
+      undefined,
+      undefined,
     );
   });
 
@@ -85,6 +88,8 @@ describe('handleLlmRubric', () => {
       undefined,
       {},
       params.assertion,
+      undefined,
+      undefined,
     );
   });
 
@@ -111,6 +116,8 @@ describe('handleLlmRubric', () => {
       undefined,
       {},
       params.assertion,
+      undefined,
+      undefined,
     );
   });
 
@@ -397,6 +404,8 @@ describe('handleLlmRubric', () => {
       undefined,
       {},
       params.assertion,
+      undefined,
+      undefined,
     );
   });
 });

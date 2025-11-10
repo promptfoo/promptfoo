@@ -1,5 +1,6 @@
-import debounce from 'debounce';
 import fs from 'fs';
+
+import debounce from 'debounce';
 import logger from '../logger';
 import { getDbSignalPath } from './index';
 
@@ -11,9 +12,7 @@ export function updateSignalFile(): void {
   const filePath = getDbSignalPath();
   try {
     const now = new Date();
-    logger.debug(`Writing to signal file ${filePath}`);
     fs.writeFileSync(filePath, now.toISOString());
-    logger.debug('Successfully wrote to signal file');
   } catch (err) {
     logger.warn(`Failed to write database signal file: ${err}`);
   }
@@ -22,7 +21,7 @@ export function updateSignalFile(): void {
 /**
  * Ensures the signal file exists, creating it if necessary.
  */
-export function ensureSignalFile(): void {
+function ensureSignalFile(): void {
   const filePath = getDbSignalPath();
   if (!fs.existsSync(filePath)) {
     logger.debug(`Creating signal file at ${filePath}`);

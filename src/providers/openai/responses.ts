@@ -1,28 +1,62 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
+import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
+import { ResponsesProcessor } from '../responses';
+
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
+import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
-import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage } from './util';
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
+  private functionCallbackHandler = new FunctionCallbackHandler();
+  private processor: ResponsesProcessor;
+
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
     'gpt-4o-2024-08-06',
     'gpt-4o-2024-11-20',
     'gpt-4o-2024-05-13',
+    'gpt-4o-2024-07-18',
+    'gpt-4o-mini',
+    'gpt-4o-mini-2024-07-18',
     'gpt-4.1',
     'gpt-4.1-2025-04-14',
     'gpt-4.1-mini',
     'gpt-4.1-mini-2025-04-14',
     'gpt-4.1-nano',
     'gpt-4.1-nano-2025-04-14',
+    // GPT-5 models
+    'gpt-5',
+    'gpt-5-2025-08-07',
+    'gpt-5-chat',
+    'gpt-5-chat-latest',
+    'gpt-5-nano',
+    'gpt-5-nano-2025-08-07',
+    'gpt-5-mini',
+    'gpt-5-mini-2025-08-07',
+    'gpt-5-pro',
+    'gpt-5-pro-2025-10-06',
+    // Audio models
+    'gpt-audio',
+    'gpt-audio-2025-08-28',
+    'gpt-audio-mini',
+    'gpt-audio-mini-2025-10-06',
+    // Computer use model
+    'computer-use-preview',
+    // Image generation model
+    'gpt-image-1',
+    'gpt-image-1-2025-04-15',
+    // Reasoning models
     'o1',
     'o1-2024-12-17',
     'o1-preview',
@@ -39,9 +73,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o4-mini-2025-04-16',
     'o3-mini',
     'o3-mini-2025-01-31',
-    'gpt-4.5-preview',
-    'gpt-4.5-preview-2025-02-27',
+    // GPT-4.5 models deprecated as of 2025-07-14, removed from API
     'codex-mini-latest',
+    'gpt-5-codex',
+    // Deep research models
+    'o3-deep-research',
+    'o3-deep-research-2025-06-26',
+    'o4-mini-deep-research',
+    'o4-mini-deep-research-2025-06-26',
   ];
 
   config: OpenAiCompletionOptions;
@@ -52,6 +91,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   ) {
     super(modelName, options);
     this.config = options.config || {};
+
+    // Initialize the shared response processor
+    this.processor = new ResponsesProcessor({
+      modelName: this.modelName,
+      providerType: 'openai',
+      functionCallbackHandler: this.functionCallbackHandler,
+      costCalculator: (modelName: string, usage: any, config?: any) =>
+        calculateOpenAICost(modelName, config, usage?.input_tokens, usage?.output_tokens, 0, 0) ??
+        0,
+    });
   }
 
   protected isReasoningModel(): boolean {
@@ -59,7 +108,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
-      this.modelName === 'codex-mini-latest'
+      this.modelName === 'codex-mini-latest' ||
+      this.modelName.startsWith('gpt-5')
     );
   }
 
@@ -72,7 +122,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ) {
     const config = {
       ...this.config,
@@ -162,6 +212,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
       text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
@@ -171,25 +222,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.stream ? { stream: config.stream } : {}),
       ...('store' in config ? { store: Boolean(config.store) } : {}),
+      ...(config.background ? { background: config.background } : {}),
+      ...(config.webhook_url ? { webhook_url: config.webhook_url } : {}),
       ...(config.user ? { user: config.user } : {}),
       ...(config.passthrough || {}),
     };
 
-    // Handle reasoning_effort and reasoning parameters for o-series models
-    if (
-      config.reasoning_effort &&
-      (this.modelName.startsWith('o1') ||
-        this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
-    ) {
-      body.reasoning_effort = config.reasoning_effort;
-    }
-
+    // Handle reasoning parameters for o-series models
+    // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
     if (
       config.reasoning &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.startsWith('gpt-5'))
     ) {
       body.reasoning = config.reasoning;
     }
@@ -209,7 +255,44 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
-    logger.debug(`Calling OpenAI Responses API: ${JSON.stringify(body)}`);
+
+    // Validate deep research models have required tools
+    const isDeepResearchModel = this.modelName.includes('deep-research');
+    if (isDeepResearchModel) {
+      const hasWebSearchTool = config.tools?.some(
+        (tool: any) => tool.type === 'web_search_preview',
+      );
+      if (!hasWebSearchTool) {
+        return {
+          error: `Deep research model ${this.modelName} requires the web_search_preview tool to be configured. Add it to your provider config:\ntools:\n  - type: web_search_preview`,
+        };
+      }
+
+      // Validate MCP configuration for deep research
+      const mcpTools = config.tools?.filter((tool: any) => tool.type === 'mcp') || [];
+      for (const mcpTool of mcpTools) {
+        if (mcpTool.require_approval !== 'never') {
+          return {
+            error: `Deep research model ${this.modelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
+          };
+        }
+      }
+    }
+
+    // Calculate timeout for long-running models (deep research and gpt-5-pro)
+    let timeout = REQUEST_TIMEOUT_MS;
+    const isLongRunningModel = isDeepResearchModel || this.modelName.includes('gpt-5-pro');
+    if (isLongRunningModel) {
+      // For long-running models, use PROMPTFOO_EVAL_TIMEOUT_MS if set,
+      // otherwise default to 10 minutes (600,000ms)
+      const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
+      if (evalTimeout > 0) {
+        timeout = evalTimeout;
+      } else {
+        timeout = 600_000; // 10 minutes default for long-running models
+      }
+      logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
+    }
 
     let data, status, statusText;
     let cached = false;
@@ -226,16 +309,28 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        timeout,
         'json',
         context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
       ));
 
       if (status < 200 || status >= 300) {
+        const errorMessage = `API error: ${status} ${statusText}\n${
+          typeof data === 'string' ? data : JSON.stringify(data)
+        }`;
+
+        // Check if this is an invalid_prompt error code (indicates refusal)
+        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+          return {
+            output: errorMessage,
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            isRefusal: true,
+          };
+        }
+
         return {
-          error: `API error: ${status} ${statusText}\n${
-            typeof data === 'string' ? data : JSON.stringify(data)
-          }`,
+          error: errorMessage,
         };
       }
     } catch (err) {
@@ -246,7 +341,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       };
     }
 
-    logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
     if (data.error) {
       await data.deleteFromCache?.();
       return {
@@ -254,116 +348,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       };
     }
 
-    try {
-      // Find the assistant message in the output
-      const output = data.output;
-      if (!output || !Array.isArray(output) || output.length === 0) {
-        return {
-          error: `Invalid response format: Missing output array`,
-        };
-      }
-
-      let result = '';
-      let refusal = '';
-      let isRefusal = false;
-
-      // Process all output items
-      for (const item of output) {
-        if (item.type === 'function_call') {
-          result = JSON.stringify(item);
-        } else if (item.type === 'message' && item.role === 'assistant') {
-          if (item.content) {
-            for (const contentItem of item.content) {
-              if (contentItem.type === 'output_text') {
-                result += contentItem.text;
-              } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-                result = JSON.stringify(contentItem);
-              } else if (contentItem.type === 'refusal') {
-                refusal = contentItem.refusal;
-                isRefusal = true;
-              }
-            }
-          } else if (item.refusal) {
-            refusal = item.refusal;
-            isRefusal = true;
-          }
-        } else if (item.type === 'tool_result') {
-          result = JSON.stringify(item);
-        } else if (item.type === 'mcp_list_tools') {
-          // MCP tools list - include in result for debugging/visibility
-          if (result) {
-            result += '\n';
-          }
-          result += `MCP Tools from ${item.server_label}: ${JSON.stringify(item.tools, null, 2)}`;
-        } else if (item.type === 'mcp_call') {
-          // MCP tool call result
-          if (item.error) {
-            if (result) {
-              result += '\n';
-            }
-            result += `MCP Tool Error (${item.name}): ${item.error}`;
-          } else {
-            if (result) {
-              result += '\n';
-            }
-            result += `MCP Tool Result (${item.name}): ${item.output}`;
-          }
-        } else if (item.type === 'mcp_approval_request') {
-          // MCP approval request - include in result for user to see
-          if (result) {
-            result += '\n';
-          }
-          result += `MCP Approval Required for ${item.server_label}.${item.name}: ${item.arguments}`;
-        }
-      }
-
-      if (isRefusal) {
-        return {
-          output: refusal,
-          tokenUsage: getTokenUsage(data, cached),
-          isRefusal: true,
-          cached,
-          cost: calculateOpenAICost(
-            this.modelName,
-            config,
-            data.usage?.input_tokens,
-            data.usage?.output_tokens,
-            0,
-            0,
-          ),
-          raw: data,
-        };
-      }
-
-      if (config.response_format?.type === 'json_schema' && typeof result === 'string') {
-        try {
-          result = JSON.parse(result);
-        } catch (error) {
-          logger.error(`Failed to parse JSON output: ${error}`);
-        }
-      }
-
-      const tokenUsage = getTokenUsage(data, cached);
-
-      return {
-        output: result,
-        tokenUsage,
-        cached,
-        cost: calculateOpenAICost(
-          this.modelName,
-          config,
-          data.usage?.input_tokens,
-          data.usage?.output_tokens,
-          0,
-          0,
-        ),
-        raw: data,
-      };
-    } catch (err) {
-      await data?.deleteFromCache?.();
-      return {
-        error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
-      };
-    }
+    // Use shared processor for consistent behavior with Azure
+    return this.processor.processResponseOutput(data, config, cached);
   }
 }

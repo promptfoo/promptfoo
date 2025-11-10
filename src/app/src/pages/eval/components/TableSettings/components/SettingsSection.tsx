@@ -1,5 +1,10 @@
 import React from 'react';
-import { Box, Typography, Stack, useTheme, Paper, alpha } from '@mui/material';
+
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import { alpha, useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import { tokens } from '../tokens';
 
 interface SettingsSectionProps {
@@ -9,12 +14,7 @@ interface SettingsSectionProps {
   description?: string;
 }
 
-const SettingsSection: React.FC<SettingsSectionProps> = ({
-  title,
-  children,
-  icon,
-  description,
-}) => {
+const SettingsSection = ({ title, children, icon, description }: SettingsSectionProps) => {
   const theme = useTheme();
   const sectionId = `section-${title.replace(/\s+/g, '-').toLowerCase()}`;
 

@@ -14,3 +14,11 @@ site/.docusaurus
 site/build
 site/static/config-schema.json
 venv
+# Let Biome handle these
+*.js
+*.jsx
+*.ts
+*.tsx
+*.mjs
+*.cjs
+*.json

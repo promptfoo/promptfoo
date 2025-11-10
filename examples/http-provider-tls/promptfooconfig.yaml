@@ -1,0 +1,166 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: HTTP provider with TLS certificates
+
+prompts:
+  - 'Explain {{topic}} in simple terms'
+
+providers:
+  # Basic configuration with CA certificate
+  - id: http
+    label: HTTPS with CA cert
+    config:
+      url: https://localhost:8443/chat/completions
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: Bearer {{ env.API_KEY }}
+      body:
+        model: gpt-4o-mini
+        messages:
+          - role: system
+            content: You are a helpful assistant that explains complex topics simply
+          - role: user
+            content: '{{prompt}}'
+        temperature: 0.7
+      tls:
+        # CA certificate for verifying server certificates
+        caPath: ./certs/ca-cert.pem
+        rejectUnauthorized: true
+      transformResponse: 'json.choices[0].message.content'
+      maxRetries: 0
+
+  # Mutual TLS (client certificate authentication)
+  - id: http
+    label: HTTPS with mTLS
+    config:
+      url: https://localhost:8443/chat/completions
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        prompt: '{{prompt}}'
+        max_tokens: 150
+      tls:
+        # CA for verifying server
+        caPath: ./certs/ca-cert.pem
+        # Client certificate for authentication
+        certPath: ./certs/client-cert.pem
+        keyPath: ./certs/client-key.pem
+        rejectUnauthorized: true
+        # Optional: Override server name for SNI
+        servername: secure-api.example.com
+      transformResponse: 'json.result'
+      maxRetries: 0
+
+  # PFX/PKCS12 certificate bundle
+  - id: http
+    label: HTTPS with PFX
+    config:
+      url: https://localhost:8443/chat/completions
+      method: POST
+      headers:
+        Content-Type: application/json
+        X-API-Key: '{{ env.API_KEY }}'
+      body:
+        input: '{{prompt}}'
+      tls:
+        # PFX bundle containing cert and key
+        pfxPath: ./certs/client.pfx
+        passphrase: testpassword
+        rejectUnauthorized: true
+      transformResponse: 'json.output'
+      maxRetries: 0
+
+  # Development configuration (self-signed certificates)
+  - id: http
+    label: HTTPS dev mode
+    config:
+      url: https://localhost:8443/chat/completions
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        message: '{{prompt}}'
+      tls:
+        # WARNING: Only for development!
+        rejectUnauthorized: false
+      transformResponse: 'json.response'
+      maxRetries: 0
+
+  # Advanced TLS configuration
+  - id: http
+    label: HTTPS with advanced TLS
+    config:
+      url: https://localhost:8443/chat/completions
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: Bearer {{ env.API_KEY }}
+      body:
+        query: '{{prompt}}'
+      tls:
+        caPath: ./certs/ca-cert.pem
+        certPath: ./certs/client-cert.pem
+        keyPath: ./certs/client-key.pem
+        rejectUnauthorized: true
+        servername: high-security.example.com
+        # Restrict to strong ciphers
+        ciphers: 'TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256'
+        # Enforce modern TLS versions
+        minVersion: 'TLSv1.2'
+        maxVersion: 'TLSv1.3'
+      transformResponse: 'json.data'
+      maxRetries: 0
+
+defaultTest:
+  assert:
+    - type: not-empty
+      value: 'Response should not be empty'
+
+tests:
+  - vars:
+      topic: quantum computing
+    assert:
+      - type: contains-any
+        value:
+          - quantum
+          - qubit
+          - superposition
+          - entanglement
+      - type: min-length
+        value: 50
+
+  - vars:
+      topic: blockchain technology
+    assert:
+      - type: contains-any
+        value:
+          - blockchain
+          - distributed
+          - ledger
+          - cryptocurrency
+      - type: javascript
+        value: |
+          if (!output || output.length < 50) {
+            return {
+              pass: false,
+              score: 0,
+              reason: 'Response too short'
+            };
+          }
+          return {
+            pass: true,
+            score: 1,
+            reason: 'Response is detailed enough'
+          };
+
+  - vars:
+      topic: machine learning
+    assert:
+      - type: llm-rubric
+        value: |
+          The explanation should:
+          1. Be understandable to a non-technical audience
+          2. Include at least one real-world example
+          3. Avoid excessive jargon
+          Rate the response on a scale of 0-1 for clarity and completeness

@@ -1,104 +1,102 @@
 ---
-sidebar_label: Context Faithfulness
+sidebar_position: 50
+description: 'Measure LLM faithfulness to source context by detecting unsupported claims in responses.'
 ---
 
-# Context Faithfulness
+# Context faithfulness
 
-The `context-faithfulness` assertion evaluates whether the LLM's output is faithful to the provided context, ensuring that the response doesn't include information or claims that aren't supported by the context. This is essential for RAG (Retrieval-Augmented Generation) applications to prevent hallucination.
+Checks if the LLM's response only makes claims that are supported by the provided context.
 
-### How to use it
+**Use when**: You need to ensure the LLM isn't adding information beyond what was retrieved.
 
-To use the `context-faithfulness` assertion type, add it to your test configuration like this:
+**How it works**: Extracts factual claims from the response, then verifies each against the context. Score = supported claims / total claims.
+
+**Example**:
+
+```text
+Context: "Paris is the capital of France."
+Response: "Paris, with 2.2 million residents, is France's capital."
+Score: 0.5 (capital ✓, population ✗)
+```
+
+## Configuration
 
 ```yaml
 assert:
   - type: context-faithfulness
-    threshold: 0.9 # Score between 0 and 1
+    threshold: 0.9 # Require 90% of claims to be supported
 ```
 
-Note: This assertion requires `query`, `context`, and the LLM's output to evaluate faithfulness.
+### Required fields
 
-### How it works
+- `query` - User's question (in test vars)
+- `context` - Reference text (in vars or via `contextTransform`)
+- `threshold` - Minimum score 0-1 (default: 0)
 
-The context faithfulness checker:
-
-1. Extracts claims and statements from the LLM's output
-2. Verifies each statement against the provided context
-3. Calculates a faithfulness score based on the proportion of supported statements
-
-A higher threshold requires the output to be more strictly supported by the context.
-
-### Example Configuration
-
-Here's a complete example showing how to use context faithfulness in a RAG system:
+### Full example
 
 ```yaml
-prompts:
-  - |
-    Answer this question: {{query}}
-    Using this context: {{context}}
-    Be specific and detailed in your response.
-providers:
-  - openai:gpt-4
 tests:
   - vars:
-      query: 'What is our parental leave policy?'
-      context: file://docs/policies/parental_leave.md
+      query: 'What is the capital of France?'
+      context: 'Paris is the capital and largest city of France.'
     assert:
       - type: context-faithfulness
         threshold: 0.9
-      - type: context-recall
-        threshold: 0.8
-        value: 'Employees get 4 months paid leave'
 ```
 
-### Overriding the Grader
+### Array context
 
-Like other model-graded assertions, you can override the default grader:
-
-1. Using the CLI:
-
-   ```sh
-   promptfoo eval --grader openai:gpt-4.1-mini
-   ```
-
-2. Using test options:
-
-   ```yaml
-   defaultTest:
-     options:
-       provider: openai:gpt-4.1-mini
-   ```
-
-3. Using assertion-level override:
-   ```yaml
-   assert:
-     - type: context-faithfulness
-       threshold: 0.9
-       provider: openai:gpt-4.1-mini
-   ```
-
-### Customizing the Prompt
-
-Context faithfulness uses two prompts: one for extracting claims and another for verifying them. You can customize both using the `rubricPrompt` property:
+Context can also be an array:
 
 ```yaml
-defaultTest:
-  options:
-    rubricPrompt:
-      - |
-        Question: {{question}}
-        Answer: {{answer}}
-
-        Extract all factual claims from the answer, one per line.
-      - |
-        Context: {{context}}
-        Statements: {{statements}}
-
-        For each statement, determine if it is supported by the context.
-        Answer YES if the statement is fully supported, NO if not.
+tests:
+  - vars:
+      query: 'Tell me about France'
+      context:
+        - 'Paris is the capital and largest city of France.'
+        - 'France is located in Western Europe.'
+        - 'The country has a rich cultural heritage.'
+    assert:
+      - type: context-faithfulness
+        threshold: 0.8
 ```
 
-# Further reading
+### Dynamic context extraction
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+For RAG systems that return context with their response:
+
+```yaml
+# Provider returns { answer: "...", context: "..." }
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.context' # Extract context field
+    threshold: 0.9
+```
+
+### Custom grading
+
+Override the default grader:
+
+```yaml
+assert:
+  - type: context-faithfulness
+    provider: openai:gpt-4 # Use a different model for grading
+    threshold: 0.9
+```
+
+## Limitations
+
+- Depends on judge LLM quality
+- May miss implicit claims
+- Performance degrades with very long contexts
+
+## Related metrics
+
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - Is retrieved context relevant?
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - Does context support the expected answer?
+
+## Further reading
+
+- [Defining context in test cases](/docs/configuration/expected-outputs/model-graded#defining-context-for-context-based-assertions)
+- [RAG Evaluation Guide](/docs/guides/evaluate-rag)

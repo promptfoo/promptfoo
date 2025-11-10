@@ -12,7 +12,7 @@ providers:
       maxOutputTokens: 1024
       tools:
         - googleSearch: {}
-  - id: vertex:gemini-2.5-flash-preview-04-17
+  - id: vertex:gemini-2.5-flash
     config:
       temperature: 0.2
       maxOutputTokens: 1024

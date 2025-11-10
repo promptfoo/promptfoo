@@ -1,12 +1,11 @@
-import type { Command } from 'commander';
 import { getDefaultPort } from '../../constants';
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry from '../../telemetry';
-import { setupEnv } from '../../util';
+import { setupEnv } from '../../util/index';
 import { setConfigDirectoryPath } from '../../util/config/manage';
-import { checkServerRunning, openBrowser } from '../../util/server';
-import { BrowserBehavior } from '../../util/server';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
+import type { Command } from 'commander';
 
 export function redteamReportCommand(program: Command) {
   program
@@ -29,7 +28,7 @@ export function redteamReportCommand(program: Command) {
         telemetry.record('command_used', {
           name: 'redteam report',
         });
-        await telemetry.send();
+        telemetry.record('redteam report', {});
 
         if (directory) {
           setConfigDirectoryPath(directory);

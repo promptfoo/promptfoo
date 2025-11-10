@@ -10,7 +10,6 @@ jest.mock('../../../src/cliState', () => ({
 
 jest.mock('../../../src/telemetry', () => ({
   record: jest.fn(),
-  send: jest.fn(),
 }));
 
 jest.mock('../../../src/util', () => ({
@@ -23,11 +22,6 @@ jest.mock('../../../src/redteam/shared', () => ({
 
 jest.mock('../../../src/util/cloud', () => ({
   getConfigFromCloud: jest.fn(),
-}));
-
-// Add logger mock
-jest.mock('../../../src/logger', () => ({
-  error: jest.fn(),
 }));
 
 describe('redteamRunCommand', () => {

@@ -1,14 +1,22 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
 import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase, type RedteamGradingContext } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
+import type {
+  ApiProvider,
+  Assertion,
+  AssertionValue,
+  AtomicTestCase,
+  GradingResult,
+  TestCase,
+} from '../../types/index';
+
+const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>
@@ -64,7 +72,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
     `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,
@@ -73,7 +81,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs: number): Promise<TestCase[]> {
     const nunjucks = getNunjucksEngine();
     const renderedTemplate = nunjucks.renderString(await this.getTemplate(), {
       purpose: this.purpose,
@@ -135,9 +143,14 @@ export class CrossSessionLeakGrader extends RedteamGraderBase {
   readonly id = PLUGIN_ID;
   rubric = '';
   async getResult(
-    prompt: string,
+    _prompt: string,
     llmOutput: string,
     test: AtomicTestCase,
+    _provider?: ApiProvider,
+    _renderedValue?: AssertionValue,
+    _additionalRubric?: string,
+    _skipRefusalCheck?: boolean,
+    _gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const stringToSearchFor = test.metadata?.crossSessionLeakMatch;
     const match = llmOutput.includes(stringToSearchFor);

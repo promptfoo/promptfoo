@@ -1,12 +1,14 @@
-import { SingleBar, Presets } from 'cli-progress';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+
+import { Presets, SingleBar } from 'cli-progress';
 import cliState from '../../cliState';
 import logger from '../../logger';
-import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { neverGenerateRemote } from '../remoteGeneration';
+
+import type { TestCase } from '../../types/index';
 
 let ffmpegCache: any = null;
 
@@ -14,7 +16,35 @@ function shouldShowProgressBar(): boolean {
   return !cliState.webUI && logger.level !== 'debug';
 }
 
-export async function importFfmpeg(): Promise<any> {
+function getSystemFont(): string {
+  const platform = os.platform();
+
+  if (platform === 'darwin') {
+    // macOS
+    return '/System/Library/Fonts/Helvetica.ttc';
+  } else if (platform === 'win32') {
+    // Windows
+    return 'C:/Windows/Fonts/arial.ttf';
+  } else {
+    // Linux - try common font paths
+    const linuxFonts = [
+      '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+      '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+      '/usr/share/fonts/dejavu/DejaVuSans.ttf',
+    ];
+
+    for (const fontPath of linuxFonts) {
+      if (fs.existsSync(fontPath)) {
+        return fontPath;
+      }
+    }
+
+    // Fallback to a generic font name that ffmpeg might resolve
+    return 'DejaVu-Sans';
+  }
+}
+
+async function importFfmpeg(): Promise<any> {
   if (ffmpegCache) {
     return ffmpegCache;
   }
@@ -34,7 +64,7 @@ export async function importFfmpeg(): Promise<any> {
   }
 }
 
-export async function createTempVideoEnvironment(text: string): Promise<{
+async function createTempVideoEnvironment(text: string): Promise<{
   tempDir: string;
   textFilePath: string;
   outputPath: string;
@@ -70,7 +100,7 @@ export function getFallbackBase64(text: string): string {
   return Buffer.from(text).toString('base64');
 }
 
-export async function textToVideo(text: string): Promise<string> {
+async function textToVideo(text: string): Promise<string> {
   try {
     if (neverGenerateRemote()) {
       const ffmpegModule = await importFfmpeg();
@@ -83,7 +113,7 @@ export async function textToVideo(text: string): Promise<string> {
           .input(textFilePath)
           .inputOptions(['-f', 'concat'])
           .complexFilter([
-            `[0:v]drawtext=fontfile=/System/Library/Fonts/Helvetica.ttc:text='${text.replace(/'/g, "\\'")}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2[v]`,
+            `[0:v]drawtext=fontfile=${getSystemFont()}:text='${text.replace(/'/g, "\\'")}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2[v]`,
           ])
           .outputOptions(['-map', '[v]'])
           .save(outputPath)
@@ -234,7 +264,7 @@ export async function writeVideoFile(base64Video: string, outputFilePath: string
   }
 }
 
-export async function main(): Promise<void> {
+async function main(): Promise<void> {
   const textToConvert = process.argv[2] || 'This is a test of the video encoding strategy.';
 
   logger.info(`Converting text to video: "${textToConvert}"`);

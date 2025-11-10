@@ -1,6 +1,7 @@
+import { TextEncoder } from 'util';
+
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
-import { TextEncoder } from 'util';
 import { disableCache, enableCache } from '../../../src/cache';
 import { NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
 
@@ -153,13 +154,13 @@ describe('NovaSonic Provider', () => {
 
     jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockImplementation(async function (
       this: any,
-      prompt,
+      _prompt,
     ) {
       const sessionId = 'mocked-session-id';
 
       const session = this.createSession(sessionId);
 
-      session.responseHandlers.set('textOutput', (data: any) => {});
+      session.responseHandlers.set('textOutput', (_data: any) => {});
 
       session.responseHandlers.set('contentEnd', () => {});
 
@@ -222,12 +223,15 @@ describe('NovaSonic Provider', () => {
       expect(defaultProvider.modelName).toBe('amazon.nova-sonic-v1:0');
     });
 
-    it('should create the Bedrock client with the correct configuration', () => {
+    it('should create the Bedrock client with the correct configuration', async () => {
       jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
-      new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+      const testProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
         config: { region: 'us-west-2' },
       });
+
+      // Trigger lazy loading of the client by calling getBedrockClient
+      await (testProvider as any).getBedrockClient();
 
       expect(BedrockRuntimeClient).toHaveBeenCalledWith(
         expect.objectContaining({

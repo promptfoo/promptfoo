@@ -69,11 +69,25 @@ prompts:
   - Tell me about the weather in {{city}} in the default unit for the location.
 
 tests:
+  # Test that tool calls result in 'tool_calls' finish reason
   - vars:
       city: Boston
+    assert:
+      - type: finish-reason
+        value: tool_calls # Should trigger tool use for weather lookup
+
   - vars:
       city: New York
+    assert:
+      - type: finish-reason
+        value: tool_calls
+
   - vars:
       city: Paris
+    assert:
+      - type: finish-reason
+        value: tool_calls
+
+  # Negative test case - Mars is not a real city, behavior may vary by provider
   - vars:
       city: Mars

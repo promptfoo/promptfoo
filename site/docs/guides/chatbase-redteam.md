@@ -1,5 +1,6 @@
 ---
 sidebar_label: Red teaming a Chatbase Chatbot
+description: Learn how to test and secure Chatbase RAG chatbots against multi-turn conversation attacks with automated red teaming techniques and security benchmarks
 ---
 
 # Red teaming a Chatbase Chatbot
@@ -24,7 +25,7 @@ In Promptfoo, this state is managed through a `conversationId` that links messag
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - promptfoo CLI (`npm install -g promptfoo`)
 - Chatbase API credentials:
   - API Bearer Token (from your Chatbase dashboard)
@@ -68,7 +69,6 @@ defaultTest:
 :::important Configuration Notes
 
 1. Configure both the `transformRequest` and `transformResponse` for your chatbot:
-
    - `transformRequest`: Formats the request as OpenAI-compatible messages
    - `transformResponse`: Extracts the response text from the JSON body
 
@@ -85,6 +85,9 @@ strategies:
     config:
       stateful: true
   - id: 'crescendo'
+    config:
+      stateful: true
+  - id: 'mischievous-user'
     config:
       stateful: true
 ```

@@ -37,6 +37,7 @@
     "Evals",
     "exfiltration",
     "figcaption",
+    "Garak",
     "generativelanguage",
     "gleu",
     "globbed",
@@ -66,6 +67,7 @@
     "mitigations",
     "mixtral",
     "MMLU",
+    "modelaudit",
     "moderations",
     "multibar",
     "multimodal",
@@ -74,6 +76,7 @@
     "ollama",
     "openai",
     "OPENROUTER",
+    "OTLPJSON",
     "overreliance",
     "OWASP",
     "pandamonium",
@@ -117,5 +120,16 @@
   ],
   "[shellscript]": {
     "editor.defaultFormatter": "foxundermoon.shell-format"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "editor.codeActionsOnSave": {
+    "source.organizeImports.biome": "explicit",
+    "source.fixAll.biome": "explicit"
+
   }
 }

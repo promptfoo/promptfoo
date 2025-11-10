@@ -1,4 +1,5 @@
 import { addHexEncoding } from '../../../src/redteam/strategies/hex';
+
 import type { TestCase } from '../../../src/types';
 
 describe('addHexEncoding', () => {

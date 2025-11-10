@@ -1,31 +1,34 @@
 import { useCallback } from 'react';
-import { callApi } from '@app/utils/api';
-import type { EventProperties, TelemetryEventTypes } from '@promptfoo/telemetry';
 
-export function useTelemetry() {
+import { usePostHog } from '@app/components/PostHogContext';
+
+export const useTelemetry = () => {
+  const { posthog, isInitialized } = usePostHog();
+
   const recordEvent = useCallback(
-    async (eventName: TelemetryEventTypes, properties: EventProperties) => {
-      if (!['0', 'false'].includes(import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY)) {
+    (eventName: string, properties: Record<string, any> = {}) => {
+      if (!isInitialized || !posthog) {
+        return;
+      }
+      posthog.capture(eventName, properties);
+    },
+    [posthog, isInitialized],
+  );
+
+  const identifyUser = useCallback(
+    (userId: string, userProperties: Record<string, any> = {}) => {
+      if (!isInitialized || !posthog) {
         return;
       }
 
-      try {
-        await callApi('/telemetry', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            event: eventName,
-            properties,
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to record telemetry event:', error);
-      }
+      posthog.identify(userId, userProperties);
     },
-    [],
+    [posthog, isInitialized],
   );
 
-  return { recordEvent };
-}
+  return {
+    recordEvent,
+    identifyUser,
+    isInitialized,
+  };
+};

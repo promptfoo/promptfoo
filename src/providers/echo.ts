@@ -1,5 +1,6 @@
-import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types/providers';
 import { sleep } from '../util/time';
+
+import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types/providers';
 
 export class EchoProvider implements ApiProvider {
   private options: ProviderOptions;
@@ -26,7 +27,7 @@ export class EchoProvider implements ApiProvider {
 
   async callApi(
     input: string,
-    options?: Record<string, any>,
+    _options?: Record<string, any>,
     context?: any,
   ): Promise<ProviderResponse> {
     if (this.delay && this.delay > 0) {

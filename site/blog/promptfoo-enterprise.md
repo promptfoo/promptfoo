@@ -15,6 +15,7 @@ keywords:
   ]
 date: 2024-08-21
 authors: [ian]
+tags: [company-update]
 ---
 
 # Promptfoo for Enterprise

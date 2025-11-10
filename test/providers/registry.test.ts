@@ -1,6 +1,8 @@
 import path from 'path';
+
 import { providerMap } from '../../src/providers/registry';
-import type { LoadApiProviderContext } from '../../src/types';
+
+import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
 jest.mock('../../src/providers/adaline.gateway', () => ({
@@ -165,7 +167,7 @@ describe('Provider Registry', () => {
         'promptfoo:redteam:iterative',
         'promptfoo:redteam:iterative:image',
         'promptfoo:redteam:iterative:tree',
-        'promptfoo:redteam:pandamonium',
+        'promptfoo:redteam:mischievous-user',
       ];
 
       const redteamConfig = {
@@ -306,29 +308,39 @@ describe('Provider Registry', () => {
       );
       expect(factory).toBeDefined();
 
+      // Cloudflare AI requires both accountId and apiKey
+      const cloudflareProviderOptions = {
+        ...mockProviderOptions,
+        config: {
+          ...mockProviderOptions.config,
+          accountId: 'test-account-id',
+          apiKey: 'test-api-key',
+        },
+      };
+
       const chatProvider = await factory!.create(
         'cloudflare-ai:chat:@cf/meta/llama-2-7b-chat-fp16',
-        mockProviderOptions,
+        cloudflareProviderOptions,
         mockContext,
       );
       expect(chatProvider).toBeDefined();
 
       const embeddingProvider = await factory!.create(
         'cloudflare-ai:embedding:@cf/baai/bge-base-en-v1.5',
-        mockProviderOptions,
+        cloudflareProviderOptions,
         mockContext,
       );
       expect(embeddingProvider).toBeDefined();
 
       const completionProvider = await factory!.create(
         'cloudflare-ai:completion:@cf/meta/llama-2-7b-chat-fp16',
-        mockProviderOptions,
+        cloudflareProviderOptions,
         mockContext,
       );
       expect(completionProvider).toBeDefined();
 
       await expect(
-        factory!.create('cloudflare-ai:invalid:model', mockProviderOptions, mockContext),
+        factory!.create('cloudflare-ai:invalid:model', cloudflareProviderOptions, mockContext),
       ).rejects.toThrow('Unknown Cloudflare AI model type');
     });
 
@@ -428,6 +440,47 @@ describe('Provider Registry', () => {
       // just verifying that the factories exist and can be found for absolute paths.
       // The actual path resolution logic (path.isAbsolute check) is identical in all providers
       // and is already covered by the implementation in registry.ts.
+    });
+
+    it('should handle helicone provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('helicone:openai/gpt-4o'));
+      expect(factory).toBeDefined();
+
+      // Create a version of options without ID for Helicone tests
+      const heliconeOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      const provider = await factory!.create(
+        'helicone:openai/gpt-4o',
+        heliconeOptions,
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('helicone-gateway:openai/gpt-4o');
+
+      // Test with router configuration
+      const providerWithRouter = await factory!.create(
+        'helicone:anthropic/claude-3-5-sonnet',
+        {
+          ...heliconeOptions,
+          config: {
+            ...heliconeOptions.config,
+            router: 'production',
+          },
+        },
+        mockContext,
+      );
+      expect(providerWithRouter).toBeDefined();
+      expect(providerWithRouter.id()).toBe(
+        'helicone-gateway:production:anthropic/claude-3-5-sonnet',
+      );
+
+      // Test error case with missing model
+      await expect(factory!.create('helicone:', mockProviderOptions, mockContext)).rejects.toThrow(
+        'Helicone provider requires a model in format helicone:<provider/model>',
+      );
     });
   });
 });

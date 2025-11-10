@@ -1,6 +1,19 @@
 ---
-sidebar_position: 5
+sidebar_position: 11
 sidebar_label: Prompts
+title: Prompt Configuration - Text, Chat, and Dynamic Prompts
+description: Configure prompts for LLM evaluation including text prompts, chat conversations, file-based prompts, and dynamic prompt generation with variables.
+keywords:
+  [
+    prompt configuration,
+    LLM prompts,
+    chat conversations,
+    dynamic prompts,
+    template variables,
+    prompt engineering,
+  ]
+pagination_prev: configuration/reference
+pagination_next: configuration/test-cases
 ---
 
 # Prompt Configuration
@@ -112,6 +125,8 @@ prompts:
   - file://scenarios/**/*.json
 ```
 
+Wildcards like `path/to/prompts/**/*.py:func_name` are also supported.
+
 ## Chat Format (JSON)
 
 For conversation-style interactions, use JSON format:
@@ -220,6 +235,96 @@ module.exports = async function ({ vars }) {
 };
 ```
 
+## Executable Scripts
+
+Run any script or binary to generate prompts dynamically. This lets you use your existing tooling and any programming language.
+
+Your script receives test context as JSON in the first argument and outputs the prompt to stdout.
+
+### Usage
+
+Explicitly mark as executable:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - exec:./generate-prompt.sh
+  - exec:/usr/bin/my-prompt-tool
+```
+
+Or just reference the script directly (auto-detected for `.sh`, `.bash`, `.rb`, `.pl`, and other common script extensions):
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - ./generate-prompt.sh
+  - ./prompt_builder.rb
+```
+
+:::note
+Python files (`.py`) are processed as Python prompt templates, not executables. To run a Python script as an executable prompt, use the `exec:` prefix: `exec:./generator.py`
+:::
+
+Pass configuration if needed:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - label: 'Technical Prompt'
+    raw: exec:./generator.sh
+    config:
+      style: technical
+      verbose: true
+```
+
+### Examples
+
+Shell script that reads from a database:
+
+```bash title="fetch-context.sh"
+#!/bin/bash
+CONTEXT=$1
+USER_ID=$(echo "$CONTEXT" | jq -r '.vars.user_id')
+
+# Fetch user history from database
+HISTORY=$(psql -h localhost -U myapp -t -v user_id="$USER_ID" -c \
+  "SELECT prompt_context FROM users WHERE id = :'user_id'")
+
+echo "Based on your previous interactions: $HISTORY
+
+How can I help you today?"
+```
+
+Ruby script:
+
+```ruby title="ab-test.rb"
+#!/usr/bin/env ruby
+require 'json'
+require 'digest'
+
+context = JSON.parse(ARGV[0])
+user_id = context['vars']['user_id']
+
+# Call LLM API here...
+puts "\nUser query: #{context['vars']['query']}"
+```
+
+### Security Considerations
+
+:::warning
+Executable scripts run with full permissions of the promptfoo process. Be mindful of:
+
+- **User Input**: Scripts receive user-controlled `vars` as JSON. Always validate and sanitize inputs before using them in commands.
+- **Untrusted Scripts**: Only run scripts from trusted sources. Scripts can access files, make network calls, and execute commands.
+- **Environment Access**: Scripts can access environment variables, including API keys.
+- **Timeout**: Configure a timeout via `config.timeout` (default: 60 seconds) to prevent hanging scripts.
+  :::
+
+### When to Use
+
+This approach works well when you're already using scripts for prompt generation, need to query external systems (databases, APIs), or want to reuse code written in languages other than JavaScript or Python.
+
+Scripts can be written in any language - Bash, Go, Rust, or even compiled binaries - as long as it reads JSON from argv and prints to stdout.
+
+Note that there are dedicated handlers for Python and Javascript (see above).
+
 ## Model-Specific Prompts
 
 Different prompts for different providers:
@@ -253,6 +358,52 @@ prompt,label
 "Translate to Spanish: {{text}}","Spanish Translation"
 "Translate to German: {{text}}","German Translation"
 ```
+
+## External Prompt Management Systems
+
+Promptfoo integrates with external prompt management platforms, allowing you to centralize and version control your prompts:
+
+### Langfuse
+
+[Langfuse](/docs/integrations/langfuse) is an open-source LLM engineering platform with collaborative prompt management:
+
+```yaml
+prompts:
+  # Reference by version (numeric values)
+  - langfuse://my-prompt:3:text
+  - langfuse://chat-prompt:1:chat
+
+  # Reference by label using @ syntax (recommended for clarity)
+  - langfuse://my-prompt@production
+  - langfuse://chat-prompt@staging:chat
+  - langfuse://email-template@latest:text
+
+  # Reference by label using : syntax (auto-detected strings)
+  - langfuse://my-prompt:production # String detected as label
+  - langfuse://chat-prompt:staging:chat # String detected as label
+```
+
+### Portkey
+
+[Portkey](/docs/integrations/portkey) provides AI observability with prompt management capabilities:
+
+```yaml
+prompts:
+  - portkey://pp-customer-support-v2
+  - portkey://pp-email-generator-prod
+```
+
+### Helicone
+
+[Helicone](/docs/integrations/helicone) offers prompt management alongside observability features:
+
+```yaml
+prompts:
+  - helicone://greeting-prompt:1.0
+  - helicone://support-chat:2.5
+```
+
+Variables from your test cases are automatically passed to these external prompts.
 
 ## Advanced Features
 

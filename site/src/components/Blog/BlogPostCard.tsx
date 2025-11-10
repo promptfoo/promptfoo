@@ -20,7 +20,7 @@ export default function BlogPostCard({ post }: BlogPostCardProps): JSX.Element {
         </div>
       )}
       <div className={styles.blogPostContent}>
-        {tags && tags.length > 0 && <div className={styles.tag}>{tags[0].label}</div>}
+        {/*tags && tags.length > 0 && <div className={styles.tag}>{tags[0].label}</div>*/}
         <h3 className={styles.title}>{title}</h3>
         <div className={styles.blogPostMeta}>
           {author && (

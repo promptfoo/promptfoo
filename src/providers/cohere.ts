@@ -1,15 +1,17 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from './shared';
+
 import type {
+  ApiEmbeddingProvider,
   ApiProvider,
+  CallApiContextParams,
+  ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-  ApiEmbeddingProvider,
-  ProviderEmbeddingResponse,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface CohereChatOptions {
   apiKey?: string;
@@ -79,10 +81,16 @@ export class CohereChatCompletionProvider implements ApiProvider {
     return `cohere:${this.modelName}`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.apiKey) {
       return { error: 'Cohere API key is not set. Please provide a valid apiKey.' };
     }
+
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
 
     const defaultParams = {
       chatHistory: [],
@@ -97,7 +105,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
       presence_penalty: 0,
     };
 
-    const params = { ...defaultParams, ...this.config };
+    const params = { ...defaultParams, ...config };
 
     let body;
     try {
@@ -119,8 +127,6 @@ export class CohereChatCompletionProvider implements ApiProvider {
       };
     }
 
-    logger.debug(`Calling Cohere API: ${JSON.stringify(body)}`);
-
     let data,
       cached = false;
     try {
@@ -137,8 +143,6 @@ export class CohereChatCompletionProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
       )) as unknown as { data: any; cached: boolean });
-
-      logger.debug(`Cohere chat API response: ${JSON.stringify(data)}`);
 
       if (data.message) {
         return { error: data.message };
@@ -244,7 +248,6 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       logger.error(`API call error: ${err}`);
       throw err;
     }
-    logger.debug(`\tCohere embeddings API response: ${JSON.stringify(data)}`);
 
     const embedding = data?.embeddings?.[0];
     if (!embedding) {

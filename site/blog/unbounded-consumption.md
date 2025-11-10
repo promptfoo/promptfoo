@@ -16,6 +16,7 @@ keywords:
   ]
 date: 2024-12-31
 authors: [vanessa]
+tags: [security-vulnerability, best-practices, owasp, unbounded-consumption]
 ---
 
 # Beyond DoS: How Unbounded Consumption is Reshaping LLM Security

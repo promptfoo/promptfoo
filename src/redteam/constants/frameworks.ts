@@ -1,6 +1,6 @@
-import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
-import type { Plugin } from './plugins';
 import { FOUNDATION_PLUGINS, PII_PLUGINS } from './plugins';
+
+import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
 export const FRAMEWORK_NAMES: Record<string, string> = {
@@ -10,6 +10,8 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'owasp:llm': 'OWASP LLM Top 10',
   'owasp:agentic': 'OWASP Agentic v1.0',
   'eu:ai-act': 'EU AI Act',
+  'iso:42001': 'ISO/IEC 42001',
+  gdpr: 'GDPR',
 };
 
 export const OWASP_LLM_TOP_10_NAMES = [
@@ -38,7 +40,26 @@ export const OWASP_API_TOP_10_NAMES = [
   'Unsafe Consumption of APIs',
 ];
 
-export const OWASP_AGENTIC_NAMES = ['T1: Memory Poisoning'];
+export const OWASP_AGENTIC_NAMES = [
+  'T1: Memory Poisoning',
+  'T2: Tool Misuse',
+  'T3: Privilege Compromise',
+  'T4: Cascading Hallucination Attacks',
+  'T5: Intent Breaking & Goal Manipulation',
+  'T6: Misaligned & Deceptive Behaviors',
+  'T8: Identity Spoofing & Impersonation',
+  'T10: Unexpected Remote Code Execution & Code Attacks',
+];
+
+export const GDPR_ARTICLE_NAMES = [
+  'Principles of Processing Personal Data',
+  'Special Categories of Personal Data',
+  'Right of Access',
+  'Right to Erasure',
+  'Automated Decision-Making',
+  'Data Protection by Design',
+  'Security of Processing',
+];
 
 export const OWASP_LLM_TOP_10_MAPPING: Record<
   string,
@@ -72,7 +93,10 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     plugins: [
       'harmful:misinformation-disinformation',
       'harmful:hate',
+      'bias:age',
+      'bias:disability',
       'bias:gender',
+      'bias:race',
       'harmful:radicalization',
       'harmful:specialized-advice',
     ],
@@ -192,8 +216,44 @@ export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
   { plugins: Plugin[]; strategies: Strategy[] }
 > = {
   'owasp:agentic:t01': {
-    plugins: [MEMORY_POISONING_PLUGIN_ID],
+    // T1: Memory Poisoning
+    plugins: ['agentic:memory-poisoning'],
     strategies: [],
+  },
+  'owasp:agentic:t02': {
+    // T2: Tool Misuse
+    plugins: ['excessive-agency', 'mcp', 'tool-discovery'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'owasp:agentic:t03': {
+    // T3: Privilege Compromise
+    plugins: ['rbac', 'bfla', 'bola'],
+    strategies: [],
+  },
+  'owasp:agentic:t04': {
+    // T4: Cascading Hallucination Attacks
+    plugins: ['hallucination', 'harmful:misinformation-disinformation'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'owasp:agentic:t05': {
+    // T5: Intent Breaking & Goal Manipulation
+    plugins: ['hijacking', 'system-prompt-override'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+  },
+  'owasp:agentic:t06': {
+    // T6: Misaligned & Deceptive Behaviors
+    plugins: ['contracts', 'goal-misalignment', 'excessive-agency'],
+    strategies: ['jailbreak', 'crescendo'],
+  },
+  'owasp:agentic:t08': {
+    // T8: Identity Spoofing & Impersonation
+    plugins: ['imitation', 'cross-session-leak', 'pii:session'],
+    strategies: [],
+  },
+  'owasp:agentic:t10': {
+    // T10: Unexpected Remote Code Execution & Code Attacks
+    plugins: ['shell-injection', 'sql-injection', 'harmful:cybercrime:malicious-code', 'ssrf'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
 };
 
@@ -220,7 +280,6 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'goat',
       'prompt-injection',
       'best-of-n',
-      'multilingual',
     ],
   },
 
@@ -269,16 +328,7 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'indirect-prompt-injection',
       'hijacking',
     ],
-    strategies: [
-      'jailbreak',
-      'jailbreak:tree',
-      'jailbreak:composite',
-      'crescendo',
-      'goat',
-      'multilingual',
-      'pandamonium',
-      'gcg',
-    ],
+    strategies: ['jailbreak', 'jailbreak:tree', 'jailbreak:composite', 'crescendo', 'goat', 'gcg'],
   },
 
   /**
@@ -422,7 +472,7 @@ export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
   'mitre:atlas:reconnaissance': {
     plugins: ['competitors', 'policy', 'prompt-extraction', 'rbac'],
-    strategies: ['multilingual'],
+    strategies: [],
   },
   'mitre:atlas:resource-development': {
     plugins: ['harmful:cybercrime', 'harmful:illegal-drugs', 'harmful:indiscriminate-weapons'],
@@ -501,6 +551,150 @@ export const EU_AI_ACT_MAPPING: Record<string, { plugins: Plugin[]; strategies: 
   },
 };
 
+/**
+ * ISO/IEC 42001 – AI Management System (AIMS) framework risk areas
+ * Covers key risk domains: human oversight, fairness, privacy, robustness, security, ethics, transparency.
+ */
+export const ISO_42001_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'iso:42001:accountability': {
+    // Human oversight & accountability – prevent over-autonomy and misuse
+    plugins: ['excessive-agency', 'overreliance', 'hijacking'],
+    strategies: [],
+  },
+  'iso:42001:fairness': {
+    // Fairness & bias – prevent discrimination or hate in AI outcomes
+    plugins: ['bias:age', 'bias:disability', 'bias:gender', 'bias:race', 'harmful:hate'],
+    strategies: [],
+  },
+  'iso:42001:privacy': {
+    // Data privacy & protection – prevent personal data leaks
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:session', 'pii:social'],
+    strategies: [],
+  },
+  'iso:42001:robustness': {
+    // Robustness – resilience against prompt injection and adversarial input
+    plugins: ['ascii-smuggling', 'prompt-extraction'],
+    strategies: ['jailbreak', 'jailbreak:composite', 'jailbreak:tree'],
+  },
+  'iso:42001:security': {
+    // Technical security – resistance to code injection and exploitation
+    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
+    strategies: ['jailbreak', 'jailbreak:composite', 'base64', 'rot13'],
+  },
+  'iso:42001:safety': {
+    // Safety & ethical use – prevent harmful, illegal, or unethical outputs
+    plugins: [
+      'harmful:chemical-biological-weapons',
+      'harmful:child-exploitation',
+      'harmful:violent-crime',
+      'harmful:cybercrime',
+      'harmful:cybercrime:malicious-code',
+    ],
+    strategies: ['jailbreak', 'jailbreak:composite', 'jailbreak:tree'],
+  },
+  'iso:42001:transparency': {
+    // Transparency & trust – avoid misinformation, deception, or unsupported claims
+    plugins: [
+      'harmful:misinformation-disinformation',
+      'hallucination',
+      'imitation',
+      'unverifiable-claims',
+      'politics',
+      'religion',
+    ],
+    strategies: [],
+  },
+};
+
+/**
+ * EU General Data Protection Regulation (GDPR)
+ * Maps key GDPR articles to relevant Promptfoo plugins for testing AI/LLM systems
+ * for compliance with data protection requirements.
+ *
+ * Sources:
+ *  * GDPR full text: https://gdpr-info.eu/
+ */
+export const GDPR_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'gdpr:art5': {
+    // Article 5 - Principles relating to processing of personal data
+    // (lawfulness, fairness, transparency, purpose limitation, data minimization, accuracy)
+    plugins: [
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'hallucination',
+      'harmful:misinformation-disinformation',
+    ],
+    strategies: [],
+  },
+  'gdpr:art9': {
+    // Article 9 - Processing of special categories of personal data
+    // (sensitive data like health, biometric, genetic data, racial/ethnic origin)
+    plugins: [
+      'pii:direct',
+      'pii:social',
+      'harmful:privacy',
+      'bias:age',
+      'bias:disability',
+      'bias:gender',
+      'bias:race',
+    ],
+    strategies: [],
+  },
+  'gdpr:art15': {
+    // Article 15 - Right of access by the data subject
+    plugins: ['pii:api-db', 'pii:session', 'rbac', 'bola', 'bfla'],
+    strategies: [],
+  },
+  'gdpr:art17': {
+    // Article 17 - Right to erasure ("right to be forgotten")
+    plugins: ['pii:api-db', 'pii:direct', 'pii:session', 'harmful:privacy', 'cross-session-leak'],
+    strategies: [],
+  },
+  'gdpr:art22': {
+    // Article 22 - Automated individual decision-making, including profiling
+    plugins: [
+      'bias:age',
+      'bias:disability',
+      'bias:gender',
+      'bias:race',
+      'harmful:hate',
+      'overreliance',
+      'hallucination',
+    ],
+    strategies: [],
+  },
+  'gdpr:art25': {
+    // Article 25 - Data protection by design and by default
+    plugins: [
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'prompt-extraction',
+      // 'cross-session-leak',
+    ],
+    strategies: [],
+  },
+  'gdpr:art32': {
+    // Article 32 - Security of processing
+    plugins: [
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
+      'debug-access',
+      'harmful:cybercrime',
+      'rbac',
+      'bfla',
+      'bola',
+    ],
+    strategies: [],
+  },
+};
+
 // Aliased plugins are like collections, except they are hidden from the standard plugin list.
 export const ALIASED_PLUGINS = [
   'mitre:atlas',
@@ -512,6 +706,7 @@ export const ALIASED_PLUGINS = [
   'owasp:llm:redteam:implementation',
   'owasp:llm:redteam:system',
   'owasp:llm:redteam:runtime',
+  'owasp:agentic:redteam',
   'toxicity',
   'bias',
   'misinformation',
@@ -519,12 +714,16 @@ export const ALIASED_PLUGINS = [
   'personal-safety',
   'tool-discovery:multi-turn',
   'eu:ai-act',
+  'iso:42001',
+  'gdpr',
   ...Object.keys(MITRE_ATLAS_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
   ...Object.keys(OWASP_AGENTIC_REDTEAM_MAPPING),
   ...Object.keys(EU_AI_ACT_MAPPING),
+  ...Object.keys(ISO_42001_MAPPING),
+  ...Object.keys(GDPR_MAPPING),
 ] as const;
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
@@ -538,6 +737,8 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'owasp:llm:redteam': OWASP_LLM_RED_TEAM_MAPPING,
   'owasp:agentic:redteam': OWASP_AGENTIC_REDTEAM_MAPPING,
   'eu:ai-act': EU_AI_ACT_MAPPING,
+  'iso:42001': ISO_42001_MAPPING,
+  gdpr: GDPR_MAPPING,
   'tool-discovery:multi-turn': {
     'tool-discovery:multi-turn': {
       plugins: ['tool-discovery'],
@@ -559,7 +760,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   },
   bias: {
     bias: {
-      plugins: ['politics', 'religion', 'bias:gender'],
+      plugins: ['politics', 'religion', 'bias:age', 'bias:disability', 'bias:gender', 'bias:race'],
       strategies: [],
     },
   },

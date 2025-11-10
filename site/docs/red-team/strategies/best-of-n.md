@@ -1,7 +1,7 @@
 ---
 sidebar_label: Best-of-N
 title: Best-of-N Jailbreaking Strategy
-description: Black-box jailbreaking technique that tests multiple prompt variations to bypass safety mechanisms
+description: Execute black-box jailbreaking by testing multiple prompt variations simultaneously to maximize bypass success probability
 ---
 
 # Best-of-N (BoN) Jailbreaking Strategy
@@ -33,7 +33,6 @@ strategies:
 BoN Jailbreaking works through a simple three-step process:
 
 1. **Generate Variations**: Creates multiple versions of the input prompt using modality-specific augmentations:
-
    - Text: Random capitalization, character scrambling, character noising
    - Vision: Font variations, background colors, text positioning
    - Audio: Speed, pitch, volume, background noise modifications

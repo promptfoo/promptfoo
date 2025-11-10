@@ -1,10 +1,11 @@
 ---
 sidebar_label: Jenkins
+description: Integrate Promptfoo's LLM testing into Jenkins pipelines with automated evaluation, credential management, and CI/CD workflows for production AI deployments
 ---
 
-# Setting up promptfoo with Jenkins
+# Setting up Promptfoo with Jenkins
 
-This guide demonstrates how to integrate promptfoo's LLM evaluation into your Jenkins pipeline. This setup enables automatic testing of your prompts and models whenever changes are made to your repository.
+This guide demonstrates how to integrate Promptfoo's LLM evaluation into your Jenkins pipeline. This setup enables automatic testing of your prompts and models whenever changes are made to your repository.
 
 ## Prerequisites
 
@@ -17,7 +18,7 @@ This guide demonstrates how to integrate promptfoo's LLM evaluation into your Je
 
 ### 1. Create Jenkinsfile
 
-Create a `Jenkinsfile` in your repository root. Here's a basic configuration that installs promptfoo and runs evaluations:
+Create a `Jenkinsfile` in your repository root. Here's a basic configuration that installs Promptfoo and runs evaluations:
 
 ```groovy:Jenkinsfile
 pipeline {
@@ -222,19 +223,16 @@ pipeline {
 Common issues and solutions:
 
 1. **Permission issues:**
-
    - Ensure Jenkins has appropriate permissions to install global npm packages
    - Verify cache directory permissions
    - Check API key credential permissions
 
 2. **Pipeline timeout:**
-
    - Adjust the timeout in pipeline options
    - Consider splitting evaluations into smaller batches
    - Monitor API rate limits
 
 3. **Cache problems:**
-
    - Verify cache path exists and is writable
    - Check disk space availability
    - Clear cache if needed: `rm -rf ~/.promptfoo/cache/*`
@@ -244,4 +242,4 @@ Common issues and solutions:
    - Verify npm is available in PATH
    - Consider using `nodejs` tool installer in Jenkins
 
-For more information on promptfoo configuration and usage, refer to the [configuration reference](/docs/configuration/guide/).
+For more information on Promptfoo configuration and usage, refer to the [configuration reference](/docs/configuration/guide/).

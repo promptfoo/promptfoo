@@ -17,6 +17,7 @@ keywords:
   ]
 date: 2024-12-10
 authors: [vanessa]
+tags: [compliance-framework, best-practices, eu-ai-act]
 ---
 
 # Leveraging Promptfoo for EU AI Act Compliance

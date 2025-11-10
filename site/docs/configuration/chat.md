@@ -1,9 +1,20 @@
 ---
 sidebar_label: Chat threads
-sidebar_position: 10
+sidebar_position: 32
 title: Chat Conversations and Multi-Turn Threads
-description: Learn how to create and manage chat conversations, multi-turn threads, and conversation history in promptfoo
-keywords: [chat, conversations, threads, multi-turn, history, messages, _conversation]
+description: Configure chat conversations and multi-turn threads for LLM evaluation. Learn conversation history, multi-shot prompts, and chat flow testing.
+keywords:
+  [
+    chat conversations,
+    multi-turn evaluation,
+    conversation history,
+    chat threads,
+    dialogue testing,
+    conversational AI,
+    chat flow,
+  ]
+pagination_prev: configuration/outputs
+pagination_next: configuration/caching
 ---
 
 # Chat conversations / threads
@@ -220,7 +231,7 @@ When the `_conversation` variable is present, the eval will run single-threaded 
 
 ## Separating Chat Conversations
 
-When running multiple test files or test sequences, you may want to maintain separate conversation histories in the same eval run. This can be achieved by adding a `conversationId` to the test metadata:
+When running multiple test files or test sequences, you may want to maintain conversation history between tests. This can be achieved by adding a `conversationId` to the test metadata:
 
 ```yaml title="test1.yaml"
 - vars:
@@ -348,7 +359,7 @@ Transforms can be Javascript snippets or they can be entire separate Python or J
 
 ## See Also
 
-- [Prompt Parameters](/docs/configuration/parameters) - Learn about different ways to define prompts
+- [Prompt Parameters](/docs/configuration/prompts) - Learn about different ways to define prompts
 - [Test Configuration](/docs/configuration/guide) - Complete guide to setting up test configurations
 - [Transformer Functions](/docs/configuration/guide/#transforming-outputs) - How to transform outputs between test cases
 - [Nunjucks Templates](https://mozilla.github.io/nunjucks/templating.html) - Documentation for the template language used in prompt files

@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -10,7 +11,7 @@ interface VarsFormProps {
   initialValues?: Record<string, string>;
 }
 
-const VarsForm: React.FC<VarsFormProps> = ({ onAdd, varsList, initialValues }) => {
+const VarsForm = ({ onAdd, varsList, initialValues }: VarsFormProps) => {
   const [vars, setVars] = React.useState<Record<string, string>>(initialValues || {});
 
   useEffect(() => {

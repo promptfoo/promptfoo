@@ -1,44 +1,60 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import path from 'path';
+
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
+import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { safeJoin } from '../../util/pathUtils';
+import { strategyDisplayNames } from '../constants';
+import { isCustomStrategy } from '../constants/strategies';
+import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
+import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
+import { addHydra } from './hydra';
 import { addIterativeJailbreaks } from './iterative';
+import { addLayerTestCases } from './layer';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
-import { addMultilingual } from './multilingual';
+import { addMischievousUser } from './mischievousUser';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
-import { addPandamonium } from './pandamonium';
-import { addInjections } from './promptInjections';
+import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
+import { addSimbaTestCases } from './simba';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+import type { Strategy } from './types';
 
-export interface Strategy {
-  id: string;
-  action: (
-    testCases: TestCaseWithPlugin[],
-    injectVar: string,
-    config: Record<string, any>,
-  ) => Promise<TestCase[]>;
-}
+export type { Strategy };
 
 export const Strategies: Strategy[] = [
+  {
+    id: 'layer',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Layer strategy to ${testCases.length} test cases`);
+      const newTestCases = await addLayerTestCases(
+        testCases,
+        injectVar,
+        config,
+        Strategies,
+        loadStrategy,
+      );
+      logger.debug(`Added ${newTestCases.length} Layer test cases`);
+      return newTestCases;
+    },
+  },
   {
     id: 'base64',
     action: async (testCases, injectVar) => {
@@ -59,7 +75,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'basic',
-    action: async (testCases: TestCase[], injectVar: string, config?: Record<string, any>) => {
+    action: async (_testCases: TestCase[], _injectVar: string, _config?: Record<string, any>) => {
       // Basic strategy doesn't modify test cases, it just controls whether they're included
       // The actual filtering happens in synthesize()
       return [];
@@ -93,6 +109,15 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'custom',
+    action: async (testCases, injectVar, config, strategyId = 'custom') => {
+      logger.debug(`Adding Custom to ${testCases.length} test cases`);
+      const newTestCases = addCustom(testCases, injectVar, config, strategyId);
+      logger.debug(`Added ${newTestCases.length} Custom test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'gcg',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding GCG test cases to ${testCases.length} test cases`);
@@ -107,6 +132,28 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'authoritative-markup-injection',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Authoritative Markup Injection to ${testCases.length} test cases`);
+      const newTestCases = await addAuthoritativeMarkupInjectionTestCases(
+        testCases,
+        injectVar,
+        config,
+      );
+      logger.debug(`Added ${newTestCases.length} Authoritative Markup Injection test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'mischievous-user',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding mischievous user test cases to ${testCases.length} test cases`);
+      const newTestCases = addMischievousUser(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} mischievous user test cases`);
       return newTestCases;
     },
   },
@@ -156,6 +203,24 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'jailbreak:meta',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding meta-agent jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:meta', config);
+      logger.debug(`Added ${newTestCases.length} meta-agent jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'jailbreak:hydra',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding hydra multi-turn jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addHydra(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} hydra jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'image',
     action: async (testCases, injectVar) => {
       logger.debug(`Adding image encoding to ${testCases.length} test cases`);
@@ -201,24 +266,6 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: 'multilingual',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding multilingual test cases to ${testCases.length} test cases`);
-      const newTestCases = await addMultilingual(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} multilingual test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'pandamonium',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding pandamonium runs to ${testCases.length} test cases`);
-      const newTestCases = await addPandamonium(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} Pandamonium test cases`);
-      return newTestCases;
-    },
-  },
-  {
     id: 'prompt-injection',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding prompt injections to ${testCases.length} test cases`);
@@ -242,6 +289,17 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding ROT13 encoding to ${testCases.length} test cases`);
       const newTestCases = addRot13(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'simba',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(
+        `Adding ${strategyDisplayNames.simba} test cases to ${testCases.length} test cases`,
+      );
+      const newTestCases = await addSimbaTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} ${strategyDisplayNames.simba} test cases`);
       return newTestCases;
     },
   },
@@ -292,6 +350,14 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
       continue;
     }
 
+    // Check if it's a custom strategy variant (e.g., custom:greeting-strategy)
+    if (isCustomStrategy(strategy.id)) {
+      if (!strategy.config?.strategyText || typeof strategy.config.strategyText !== 'string') {
+        throw new Error('Custom strategy requires strategyText in config');
+      }
+      continue;
+    }
+
     if (!Strategies.map((s) => s.id).includes(strategy.id)) {
       invalidStrategies.push(strategy);
     }
@@ -323,8 +389,7 @@ export async function loadStrategy(strategyPath: string): Promise<Strategy> {
       throw new Error(`Custom strategy file must be a JavaScript file: ${filePath}`);
     }
 
-    const basePath = cliState.basePath || process.cwd();
-    const modulePath = path.isAbsolute(filePath) ? filePath : path.join(basePath, filePath);
+    const modulePath = safeJoin(cliState.basePath || process.cwd(), filePath);
     const CustomStrategy = (await importModule(modulePath)) as Strategy;
 
     // Validate that the custom strategy implements the Strategy interface

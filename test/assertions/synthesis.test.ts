@@ -1,11 +1,12 @@
 import dedent from 'dedent';
 import {
+  convertQuestionToPythonPrompt,
   generateNewQuestionsPrompt,
   synthesize,
-  convertQuestionToPythonPrompt,
 } from '../../src/assertions/synthesis';
-import { loadApiProvider } from '../../src/providers';
-import type { TestCase } from '../../src/types';
+import { loadApiProvider } from '../../src/providers/index';
+
+import type { TestCase } from '../../src/types/index';
 
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),

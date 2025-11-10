@@ -1,4 +1,4 @@
-import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types';
+import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types/index';
 import invariant from '../util/invariant';
 
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
@@ -53,10 +53,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
 
     // format text
     let resultText: string | undefined;
-    const failReasons = (result.gradingResult?.componentResults || [])
-      .filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason)
-      .join(' --- ');
+
     const outputTextDisplay = (
       typeof result.response?.output === 'object'
         ? JSON.stringify(result.response.output)
@@ -66,7 +63,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       if (result.success) {
         resultText = `${outputTextDisplay || result.error || ''}`;
       } else {
-        resultText = `${result.error || failReasons}\n---\n${outputTextDisplay}`;
+        resultText = `${outputTextDisplay}`;
       }
     } else if (result.error) {
       resultText = `${result.error}`;
@@ -83,6 +80,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       pass: result.success,
       failureReason: result.failureReason,
       cost: result.cost || 0,
+      tokenUsage: result.tokenUsage,
       audio: result.response?.audio
         ? {
             id: result.response.audio.id,

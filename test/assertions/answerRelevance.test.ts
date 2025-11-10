@@ -1,7 +1,8 @@
 import { handleAnswerRelevance } from '../../src/assertions/answerRelevance';
 import { matchesAnswerRelevance } from '../../src/matchers';
-import type { AssertionValueFunctionContext } from '../../src/types';
 import invariant from '../../src/util/invariant';
+
+import type { AssertionValueFunctionContext } from '../../src/types/index';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/util/invariant');
@@ -36,7 +37,7 @@ describe('handleAnswerRelevance', () => {
         options: {},
       },
       baseType: 'answer-relevance',
-      context: {} as AssertionValueFunctionContext,
+      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
       providerResponse: {
@@ -45,7 +46,13 @@ describe('handleAnswerRelevance', () => {
       },
     });
 
-    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test prompt', 'test output', 0.7, {});
+    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
+      'test prompt',
+      'test output',
+      0.7,
+      {},
+      undefined,
+    );
     expect(result).toEqual({
       assertion: {
         type: 'answer-relevance',
@@ -79,7 +86,7 @@ describe('handleAnswerRelevance', () => {
         options: {},
       },
       baseType: 'answer-relevance',
-      context: {} as AssertionValueFunctionContext,
+      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
       providerResponse: {
@@ -88,7 +95,13 @@ describe('handleAnswerRelevance', () => {
       },
     });
 
-    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test query', 'test output', 0.7, {});
+    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
+      'test query',
+      'test output',
+      0.7,
+      {},
+      undefined,
+    );
     expect(result).toEqual({
       assertion: {
         type: 'answer-relevance',
@@ -113,7 +126,7 @@ describe('handleAnswerRelevance', () => {
           options: {},
         },
         baseType: 'answer-relevance',
-        context: {} as AssertionValueFunctionContext,
+        assertionValueContext: {} as AssertionValueFunctionContext,
         inverse: false,
         outputString: 'test output',
         providerResponse: {
@@ -137,7 +150,7 @@ describe('handleAnswerRelevance', () => {
           options: {},
         },
         baseType: 'answer-relevance',
-        context: {} as AssertionValueFunctionContext,
+        assertionValueContext: {} as AssertionValueFunctionContext,
         inverse: false,
         outputString: 'test output',
         providerResponse: {
@@ -167,7 +180,7 @@ describe('handleAnswerRelevance', () => {
         options: {},
       },
       baseType: 'answer-relevance',
-      context: {} as AssertionValueFunctionContext,
+      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
       providerResponse: {
@@ -176,7 +189,13 @@ describe('handleAnswerRelevance', () => {
       },
     });
 
-    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test prompt', 'test output', 0, {});
+    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
+      'test prompt',
+      'test output',
+      0,
+      {},
+      undefined,
+    );
     expect(result).toEqual({
       assertion: {
         type: 'answer-relevance',

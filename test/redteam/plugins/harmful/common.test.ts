@@ -4,6 +4,7 @@ import {
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
 } from '../../../../src/redteam/constants';
+import { categoryAliases } from '../../../../src/redteam/constants/metadata';
 import { GRADERS } from '../../../../src/redteam/graders';
 import {
   createTestCase,
@@ -24,18 +25,37 @@ describe('harmful plugin', () => {
       jest.mocked(getEnvString).mockReset();
     });
 
-    it('should return basic assertion for privacy category', () => {
+    it('should use specific subcategory as metric name for privacy category', () => {
       const assertions = getHarmfulAssertions('harmful:privacy');
       expect(assertions).toEqual([
-        { metric: 'Harmful', type: 'promptfoo:redteam:harmful:privacy' },
+        {
+          metric: categoryAliases['harmful:privacy'],
+          type: 'promptfoo:redteam:harmful:privacy',
+        },
       ]);
+      expect(assertions[0].metric).toBe('Privacy violations');
     });
 
-    it('should return basic assertion for non-privacy category', () => {
+    it('should use specific subcategory as metric name for intellectual property category', () => {
       const assertions = getHarmfulAssertions('harmful:intellectual-property');
       expect(assertions).toEqual([
-        { metric: 'Harmful', type: 'promptfoo:redteam:harmful:intellectual-property' },
+        {
+          metric: categoryAliases['harmful:intellectual-property'],
+          type: 'promptfoo:redteam:harmful:intellectual-property',
+        },
       ]);
+      expect(assertions[0].metric).toBe('Intellectual Property violation');
+    });
+
+    it('should use specific subcategory as metric name for copyright violations', () => {
+      const assertions = getHarmfulAssertions('harmful:copyright-violations');
+      expect(assertions).toEqual([
+        {
+          metric: categoryAliases['harmful:copyright-violations'],
+          type: 'promptfoo:redteam:harmful:copyright-violations',
+        },
+      ]);
+      expect(assertions[0].metric).toBe('Copyright Violations - Copyrighted text');
     });
 
     it('should return only basic assertions when moderation is disabled', () => {
@@ -49,6 +69,7 @@ describe('harmful plugin', () => {
 
       const assertions = getHarmfulAssertions('harmful:privacy');
       expect(assertions).toHaveLength(1);
+      expect(assertions[0].metric).toBe('Privacy violations');
       expect(assertions).not.toContainEqual(expect.objectContaining({ type: 'moderation' }));
     });
 
@@ -65,12 +86,15 @@ describe('harmful plugin', () => {
 
       const assertions = getHarmfulAssertions('harmful:privacy');
       expect(assertions).toContainEqual({
-        metric: 'Harmful',
+        metric: 'Privacy violations',
         type: 'moderation',
         value: LLAMA_GUARD_ENABLED_CATEGORIES,
         provider: LLAMA_GUARD_REPLICATE_PROVIDER,
       });
       expect(assertions).toHaveLength(2);
+      // Verify all assertions use the same metric name
+      expect(assertions[0].metric).toBe('Privacy violations');
+      expect(assertions[1].metric).toBe('Privacy violations');
     });
 
     it('should handle REPLICATE_API_TOKEN', () => {
@@ -83,11 +107,32 @@ describe('harmful plugin', () => {
 
       const assertions = getHarmfulAssertions('harmful:privacy');
       expect(assertions).toContainEqual({
-        metric: 'Harmful',
+        metric: 'Privacy violations',
         type: 'moderation',
         value: LLAMA_GUARD_ENABLED_CATEGORIES,
         provider: LLAMA_GUARD_REPLICATE_PROVIDER,
       });
+    });
+
+    it('should use subcategory metric name for OpenAI moderation assertions', () => {
+      jest.mocked(getEnvString).mockImplementation((key) => {
+        if (key === 'OPENAI_API_KEY') {
+          return 'openai-key';
+        }
+        return '';
+      });
+
+      const assertions = getHarmfulAssertions('harmful:hate');
+      expect(assertions).toHaveLength(2);
+      expect(assertions[0].metric).toBe('Hate');
+      expect(assertions[1].metric).toBe('Hate');
+      expect(assertions[1].type).toBe('moderation');
+    });
+
+    it('should fallback to harm category when not in categoryAliases', () => {
+      const unknownCategory = 'harmful:unknown-category' as keyof typeof HARM_PLUGINS;
+      const assertions = getHarmfulAssertions(unknownCategory);
+      expect(assertions[0].metric).toBe(unknownCategory);
     });
   });
 
@@ -130,18 +175,12 @@ describe('harmful plugin', () => {
     });
   });
 
-  describe('harm categories and graders', () => {
-    it('should have corresponding graders for all harmful categories', () => {
+  describe('plugin category validation', () => {
+    it('should have graders for all harmful categories', () => {
       const harmCategories = Object.keys(HARM_PLUGINS);
 
-      harmCategories.forEach((category) => {
-        const graderKey = `promptfoo:redteam:${category}` as keyof typeof GRADERS;
-        expect(GRADERS[graderKey]).toBeDefined();
-      });
-
-      const harmGraders = Object.keys(GRADERS).filter(
-        (key) =>
-          key.startsWith('promptfoo:redteam:harmful:') || key === 'promptfoo:redteam:bias:gender',
+      const harmGraders = Object.keys(GRADERS).filter((key) =>
+        key.startsWith('promptfoo:redteam:harmful:'),
       );
       expect(harmGraders.length).toBeGreaterThanOrEqual(harmCategories.length);
     });

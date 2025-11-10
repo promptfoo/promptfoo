@@ -1,0 +1,38 @@
+# Shared default test configuration
+# This file defines common assertions and options that apply to all test cases
+
+# Default variables that can be overridden by individual tests
+vars:
+  temperature: 0.7
+  max_tokens: 150
+
+# Common assertions for all tests
+assert:
+  # Ensure responses aren't empty
+  - type: not-equals
+    value: ''
+
+  # Check response length
+  - type: javascript
+    value: |
+      // Ensure response is between 1 and 500 characters
+      const length = output.length;
+      return length >= 1 && length <= 500 ? 1 : 0;
+    metric: response_length_check
+
+  # Cost control
+  - type: cost
+    threshold: 0.01 # Max 1 cent per test
+
+# Default options
+options:
+  # Default to using o4-mini for all tests
+  provider: openai:o4-mini
+
+  # Transform variables to add timestamp
+  transformVars: 'Object.assign({}, vars, { timestamp: new Date().toISOString(), testId: Math.random().toString(36).substring(7) })'
+
+# Metadata that gets attached to all tests
+metadata:
+  suite: 'default-test-example'
+  version: '1.0.0'

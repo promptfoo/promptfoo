@@ -1,11 +1,13 @@
 import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai-assistants';
+
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
+import type { AssistantFunctionCallback } from '../openai/types';
 
 /**
  * Options for configuring retry behavior
  */
-export interface RetryOptions {
+interface RetryOptions {
   /** Maximum number of retry attempts */
   maxRetries: number;
   /** Initial delay in milliseconds before the first retry */
@@ -41,6 +43,9 @@ export interface AzureCompletionOptions {
   apiKeyEnvar?: string;
   apiVersion?: string;
   headers?: { [key: string]: string };
+
+  // System prompt for chat models
+  systemPrompt?: string;
 
   // OpenAI params
   max_tokens?: number;
@@ -84,6 +89,12 @@ export interface AzureCompletionOptions {
   seed?: number;
   reasoning_effort?: 'low' | 'medium' | 'high';
 
+  /**
+   * If set, automatically call these functions when the model calls them.
+   * Keys are function names, values are either functions or strings (JavaScript code).
+   */
+  functionToolCallbacks?: Record<string, AssistantFunctionCallback | string>;
+
   passthrough?: object;
   mcp?: MCPConfig;
 }
@@ -102,10 +113,7 @@ export type AzureAssistantOptions = AzureCompletionOptions &
      * If set, automatically call these functions when the assistant activates
      * these function tools.
      */
-    functionToolCallbacks?: Record<
-      FunctionDefinition['name'],
-      ((arg: string) => Promise<string>) | string
-    >;
+    functionToolCallbacks?: Record<FunctionDefinition['name'], AssistantFunctionCallback | string>;
     /**
      * Model to use for the assistant.
      */
@@ -139,7 +147,8 @@ export interface AzureProviderOptions {
 }
 
 export interface AzureAssistantProviderOptions {
-  config?: AzureAssistantOptions;
+  config?: AzureAssistantOptions & { projectUrl?: string };
   id?: string;
   env?: EnvOverrides;
+  /** Azure AI Project URL for Foundry agent provider */
 }

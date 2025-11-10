@@ -1,5 +1,20 @@
 ---
-sidebar_position: 25
+sidebar_position: 21
+sidebar_label: Dataset generation
+title: Dataset Generation - Automated Test Data Creation
+description: Generate comprehensive test datasets automatically using promptfoo. Create diverse test cases, personas, and edge cases for thorough LLM evaluation.
+keywords:
+  [
+    dataset generation,
+    automated testing,
+    test data creation,
+    LLM datasets,
+    evaluation data,
+    test automation,
+    synthetic data,
+  ]
+pagination_prev: configuration/scenarios
+pagination_next: configuration/huggingface-datasets
 ---
 
 # Dataset generation

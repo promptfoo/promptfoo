@@ -16,6 +16,7 @@ keywords:
 ian_comment: 'images here: https://console.cloud.google.com/storage/browser/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle;tab=objects?project=promptfoo&prefix=&forceOnObjectsSortingFiltering=false'
 date: 2024-07-01
 authors: [ian]
+tags: [security-vulnerability, case-study, openai]
 ---
 
 import ImageJailbreakPreview from '@site/src/components/ImageJailbreakPreview';

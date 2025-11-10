@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../../../src/cache';
+import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 
 jest.mock('../../../src/cache', () => ({
@@ -236,42 +237,6 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.output).toEqual({ test: 'value' });
     });
 
-    it('should handle content_filter finish_reason', async () => {
-      const mockResponse = {
-        id: 'mock-id',
-        object: 'chat.completion',
-        created: Date.now(),
-        model: 'gpt-4',
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: null,
-            },
-            finish_reason: 'content_filter',
-          },
-        ],
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 20,
-          total_tokens: 30,
-        },
-      };
-
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const result = await provider.callApi('test prompt');
-      expect(result.output).toBe(
-        "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-      );
-    });
-
     it('should handle API errors', async () => {
       jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
@@ -339,42 +304,6 @@ describe('AzureChatCompletionProvider', () => {
           },
         },
       ]);
-    });
-
-    it('should handle content filter error response', async () => {
-      const mockResponse = {
-        error: {
-          message:
-            "The response was filtered due to the prompt triggering Azure OpenAI's content management policy.",
-          code: 'content_filter',
-          status: 400,
-          innererror: {
-            code: 'ResponsibleAIPolicyViolation',
-            content_filter_result: {
-              hate: { filtered: true, severity: 'medium' },
-              jailbreak: { filtered: false, detected: false },
-              self_harm: { filtered: false, severity: 'safe' },
-              sexual: { filtered: false, severity: 'safe' },
-              violence: { filtered: false, severity: 'low' },
-            },
-          },
-        },
-      };
-
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 400,
-        statusText: 'Bad Request',
-      });
-
-      const result = await provider.callApi('test prompt');
-      expect(result.output).toBe(mockResponse.error.message);
-      expect(result.guardrails).toEqual({
-        flagged: true,
-        flaggedInput: true,
-        flaggedOutput: false,
-      });
     });
 
     it('should pass custom headers from config to fetchWithCache', async () => {
@@ -528,7 +457,7 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.output).toBe('Invalid JSON response');
     });
 
-    it('should use correct API URL based on datasources config from prompt', async () => {
+    it('should use correct API URL based on legacy dataSources config from prompt', async () => {
       const mockResponse = {
         id: 'mock-id',
         choices: [
@@ -564,6 +493,46 @@ describe('AzureChatCompletionProvider', () => {
       // Verify the URL includes extensions and uses the custom API version
       expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
         '/extensions/chat/completions?api-version=2024-custom',
+      );
+    });
+
+    it('should use correct API URL based on data_sources config from prompt', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'test response',
+            },
+          },
+        ],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt', {
+        prompt: {
+          config: {
+            data_sources: [{ type: 'test' }],
+            apiVersion: '2024-custom',
+          },
+          label: 'test prompt',
+          raw: 'test prompt',
+        },
+        vars: {},
+      });
+
+      // Verify the URL doesn't include the legacy extensions path
+      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).not.toContain('extensions');
+      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+        '/chat/completions?api-version=2024-custom',
       );
     });
   });
@@ -646,6 +615,514 @@ describe('AzureChatCompletionProvider', () => {
       };
       const body = (provider as any).getOpenAiBody('test prompt', context).body;
       expect(body).toHaveProperty('reasoning_effort', 'high');
+    });
+  });
+
+  describe('guardrails and content filtering', () => {
+    let provider: AzureChatCompletionProvider;
+
+    beforeEach(() => {
+      provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+        },
+      });
+    });
+
+    afterEach(() => {
+      jest.resetAllMocks();
+    });
+
+    it('should detect output content filtering', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Some content',
+            },
+            finish_reason: 'content_filter',
+            content_filter_results: {
+              hate: {
+                filtered: false,
+                severity: 'safe',
+              },
+              jailbreak: {
+                filtered: false,
+                detected: false,
+              },
+              self_harm: {
+                filtered: false,
+                severity: 'safe',
+              },
+              sexual: {
+                filtered: false,
+                severity: 'safe',
+              },
+              violence: {
+                filtered: true,
+                severity: 'medium',
+              },
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: false,
+        flaggedOutput: true,
+      });
+      expect(result.finishReason).toBe('content_filter');
+    });
+
+    it('should detect input content filtering', async () => {
+      const mockResponse = {
+        error: {
+          message:
+            "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
+          type: null,
+          param: 'prompt',
+          code: 'content_filter',
+          status: 400,
+          innererror: {
+            code: 'ResponsibleAIPolicyViolation',
+            content_filter_result: {
+              hate: {
+                filtered: false,
+                severity: 'safe',
+              },
+              jailbreak: {
+                filtered: false,
+                detected: false,
+              },
+              self_harm: {
+                filtered: false,
+                severity: 'safe',
+              },
+              sexual: {
+                filtered: false,
+                severity: 'safe',
+              },
+              violence: {
+                filtered: true,
+                severity: 'medium',
+              },
+            },
+          },
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 400,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: true,
+        flaggedOutput: false,
+      });
+      expect(result.output).toBe(
+        "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
+      );
+      expect(result.finishReason).toBe('content_filter');
+    });
+
+    it('should handle content filtering system errors', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            content_filter_results: {
+              error: {
+                code: 'content_filter_error',
+                message: 'The contents are not filtered',
+              },
+            },
+            finish_reason: 'stop',
+            index: 0,
+            logprobs: null,
+            message: {
+              annotations: [],
+              content: 'generated text',
+              refusal: null,
+              role: 'assistant',
+            },
+          },
+        ],
+        created: 1752095779,
+        id: 'chatcmpl-BrWRHfgUxlkb7lRw5ESPuCcmCxFEa',
+        model: 'gpt-4.1-nano-2025-04-14',
+        object: 'chat.completion',
+        prompt_filter_results: [
+          {
+            prompt_index: 0,
+            content_filter_results: {
+              hate: {
+                filtered: false,
+                severity: 'safe',
+              },
+              jailbreak: {
+                filtered: false,
+                detected: false,
+              },
+              self_harm: {
+                filtered: false,
+                severity: 'safe',
+              },
+              sexual: {
+                filtered: false,
+                severity: 'safe',
+              },
+              violence: {
+                filtered: false,
+                severity: 'safe',
+              },
+            },
+          },
+        ],
+        system_fingerprint: 'fp_68472df8fd',
+        usage: {
+          completion_tokens: 37,
+          completion_tokens_details: {
+            accepted_prediction_tokens: 0,
+            audio_tokens: 0,
+            reasoning_tokens: 0,
+            rejected_prediction_tokens: 0,
+          },
+          prompt_tokens: 19,
+          prompt_tokens_details: {
+            audio_tokens: 0,
+            cached_tokens: 0,
+          },
+          total_tokens: 56,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.guardrails).toEqual({
+        flagged: false,
+        flaggedInput: false,
+        flaggedOutput: false,
+      });
+      expect(result.output).toBe('generated text');
+      expect(result.finishReason).toBe('stop');
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Content filtering system is down or otherwise unable to complete the request in time: content_filter_error The contents are not filtered',
+      );
+    });
+
+    it('should not flag when no content filtering is triggered', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Some content',
+            },
+            finish_reason: 'stop',
+            content_filter_results: {
+              hate: { filtered: false, severity: 'safe' },
+              sexual: { filtered: false, severity: 'safe' },
+              violence: { filtered: false, severity: 'safe' },
+              self_harm: { filtered: false, severity: 'safe' },
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.finishReason).toBe('stop');
+    });
+  });
+
+  describe('Function Tool Callbacks', () => {
+    it('should execute function callbacks and return the result', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: {
+                    name: 'addNumbers',
+                    arguments: '{"a": 5, "b": 6}',
+                  },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const providerWithCallbacks = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            addNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args);
+              return JSON.stringify(a + b);
+            },
+          },
+        },
+      });
+
+      const result = await providerWithCallbacks.callApi('Add 5 and 6');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('11');
+    });
+
+    it('should handle multiple function callbacks', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: {
+                    name: 'addNumbers',
+                    arguments: '{"a": 5, "b": 6}',
+                  },
+                },
+                {
+                  id: 'call_456',
+                  type: 'function',
+                  function: {
+                    name: 'multiplyNumbers',
+                    arguments: '{"a": 3, "b": 4}',
+                  },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const providerWithCallbacks = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            addNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args);
+              return JSON.stringify(a + b);
+            },
+            multiplyNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args);
+              return JSON.stringify(a * b);
+            },
+          },
+        },
+      });
+
+      const result = await providerWithCallbacks.callApi('Add 5 and 6, then multiply 3 and 4');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('11\n12');
+    });
+
+    it('should fall back to raw function call when callback fails', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: null,
+              function_call: {
+                name: 'addNumbers',
+                arguments: 'invalid json',
+              },
+            },
+            finish_reason: 'function_call',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const providerWithCallbacks = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            addNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args); // This will throw
+              return JSON.stringify(a + b);
+            },
+          },
+        },
+      });
+
+      const result = await providerWithCallbacks.callApi('Add numbers with invalid JSON');
+
+      expect(result.error).toBeUndefined();
+      // When callback fails, it returns the stringified function call
+      expect(result.output).toBe('{"name":"addNumbers","arguments":"invalid json"}');
+    });
+
+    it('should handle legacy function_call format', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: null,
+              function_call: {
+                name: 'calculateSum',
+                arguments: '{"numbers": [1, 2, 3, 4, 5]}',
+              },
+            },
+            finish_reason: 'function_call',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const providerWithCallbacks = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            calculateSum: async (args: string) => {
+              const { numbers } = JSON.parse(args);
+              const sum = numbers.reduce((a: number, b: number) => a + b, 0);
+              return JSON.stringify(sum);
+            },
+          },
+        },
+      });
+
+      const result = await providerWithCallbacks.callApi('Calculate sum of [1, 2, 3, 4, 5]');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('15');
     });
   });
 });

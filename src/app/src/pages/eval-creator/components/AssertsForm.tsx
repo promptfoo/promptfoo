@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+
 import Delete from '@mui/icons-material/Delete';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -66,9 +67,10 @@ const assertTypes: AssertionType[] = [
   'context-relevance',
   'select-best',
   'moderation',
+  'finish-reason',
 ];
 
-const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
+const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
 
   const handleAdd = () => {
@@ -94,7 +96,7 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
                 value={assert.type}
                 options={assertTypes}
                 sx={{ minWidth: 200 }}
-                onChange={(event, newValue) => {
+                onChange={(_event, newValue) => {
                   const newType = newValue;
                   const newAsserts = asserts.map((a, i) =>
                     i === index ? { ...a, type: newType as AssertionType } : a,

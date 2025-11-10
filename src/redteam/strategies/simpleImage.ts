@@ -1,8 +1,17 @@
-import { SingleBar, Presets } from 'cli-progress';
+import { Presets, SingleBar } from 'cli-progress';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
+
+import type { TestCase } from '../../types/index';
+
+const SVG_WIDTH = 800;
+const SVG_MIN_HEIGHT = 400;
+const FONT_SIZE = 16;
+const LINE_HEIGHT = Math.round(FONT_SIZE * 1.5);
+const HORIZONTAL_PADDING = 50;
+const VERTICAL_PADDING = 40;
+const WORD_WRAP_CHAR_WIDTH_FACTOR = 0.6;
 
 // Helper function to escape XML special characters for SVG
 function escapeXml(unsafe: string): string {
@@ -16,6 +25,63 @@ function escapeXml(unsafe: string): string {
 
 // Cache for the sharp module to avoid repeated dynamic imports
 let sharpCache: any = null;
+
+function wrapTextToLines(text: string, maxLineWidthPx: number, fontSize: number): string[] {
+  const averageCharWidth = fontSize * WORD_WRAP_CHAR_WIDTH_FACTOR;
+  const maxCharsPerLine = Math.max(1, Math.floor(maxLineWidthPx / averageCharWidth));
+  const normalizedText = text.replace(/\r\n/g, '\n');
+  const wrappedLines: string[] = [];
+
+  for (const paragraph of normalizedText.split('\n')) {
+    if (paragraph.trim() === '') {
+      wrappedLines.push('');
+      continue;
+    }
+
+    const words = paragraph.split(/\s+/);
+    let currentLine = '';
+
+    for (const word of words) {
+      if (!word) {
+        continue;
+      }
+
+      if (word.length > maxCharsPerLine) {
+        if (currentLine) {
+          wrappedLines.push(currentLine);
+          currentLine = '';
+        }
+
+        let sliceIndex = 0;
+        while (sliceIndex < word.length) {
+          const slice = word.slice(sliceIndex, sliceIndex + maxCharsPerLine);
+          if (slice.length === maxCharsPerLine) {
+            wrappedLines.push(slice);
+          } else {
+            currentLine = slice;
+          }
+          sliceIndex += maxCharsPerLine;
+        }
+        continue;
+      }
+
+      if (!currentLine) {
+        currentLine = word;
+      } else if (currentLine.length + 1 + word.length <= maxCharsPerLine) {
+        currentLine = `${currentLine} ${word}`;
+      } else {
+        wrappedLines.push(currentLine);
+        currentLine = word;
+      }
+    }
+
+    if (currentLine) {
+      wrappedLines.push(currentLine);
+    }
+  }
+
+  return wrappedLines;
+}
 
 /**
  * Dynamically imports the sharp library
@@ -41,7 +107,7 @@ async function importSharp() {
  * Converts text to an image and then to base64 encoded string
  * using the sharp library which has better cross-platform support than canvas
  */
-export async function textToImage(text: string): Promise<string> {
+async function textToImage(text: string): Promise<string> {
   // Special case for test environment - avoids actually loading Sharp
   if (getEnvString('NODE_ENV') === 'test' || getEnvString('JEST_WORKER_ID')) {
     return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -50,10 +116,27 @@ export async function textToImage(text: string): Promise<string> {
   try {
     // Create a simple image with the text on a white background
     // We're using SVG as an intermediate format as it's easy to generate without canvas
+    const textAreaWidth = SVG_WIDTH - HORIZONTAL_PADDING * 2;
+    const wrappedLines = wrapTextToLines(text, textAreaWidth, FONT_SIZE);
+    const linesToRender = wrappedLines.length > 0 ? wrappedLines : [''];
+    const contentHeight = linesToRender.length * LINE_HEIGHT;
+    const svgHeight = Math.max(SVG_MIN_HEIGHT, VERTICAL_PADDING * 2 + contentHeight);
+    const baselineY = VERTICAL_PADDING + FONT_SIZE;
+
+    const textContent = linesToRender
+      .map((line, index) => {
+        const safeLine = escapeXml(line || ' ');
+        if (index === 0) {
+          return safeLine;
+        }
+        return `<tspan x="${HORIZONTAL_PADDING}" dy="${LINE_HEIGHT}">${safeLine}</tspan>`;
+      })
+      .join('');
+
     const svgImage = `
-      <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+      <svg width="${SVG_WIDTH}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg">
         <rect width="100%" height="100%" fill="white"/>
-        <text x="50" y="50" font-family="Arial" font-size="16" fill="black">${escapeXml(text)}</text>
+        <text x="${HORIZONTAL_PADDING}" y="${baselineY}" font-family="Arial" font-size="${FONT_SIZE}" fill="black" xml:space="preserve">${textContent}</text>
       </svg>
     `;
 

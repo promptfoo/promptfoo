@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -6,8 +7,8 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import type { ProviderOptions } from '@promptfoo/types';
 import { isJavascriptFile } from '@promptfoo/util/fileExtensions';
+import type { ProviderOptions } from '@promptfoo/types';
 
 interface AddLocalProviderDialogProps {
   open: boolean;
@@ -15,11 +16,7 @@ interface AddLocalProviderDialogProps {
   onAdd: (provider: ProviderOptions) => void;
 }
 
-const AddLocalProviderDialog: React.FC<AddLocalProviderDialogProps> = ({
-  open,
-  onClose,
-  onAdd,
-}) => {
+const AddLocalProviderDialog = ({ open, onClose, onAdd }: AddLocalProviderDialogProps) => {
   const [path, setPath] = React.useState('');
   const [error, setError] = React.useState('');
 
@@ -34,9 +31,10 @@ const AddLocalProviderDialog: React.FC<AddLocalProviderDialogProps> = ({
     if (
       !isJavascriptFile(trimmedPath) &&
       !trimmedPath.endsWith('.py') &&
-      !trimmedPath.endsWith('.go')
+      !trimmedPath.endsWith('.go') &&
+      !trimmedPath.endsWith('.rb')
     ) {
-      setError('Only javascript, python, and go files are supported');
+      setError('Only javascript, python, go and ruby files are supported');
       return;
     }
 
@@ -69,8 +67,8 @@ const AddLocalProviderDialog: React.FC<AddLocalProviderDialogProps> = ({
       <DialogTitle sx={{ pb: 1 }}>Add Local Provider</DialogTitle>
       <DialogContent sx={{ pb: 2 }}>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Enter the absolute path to your local provider implementation (.py or .js file). This file
-          will be referenced in your promptfoo configuration.
+          Enter the absolute path to your local provider implementation (.py, .js or .rb file). This
+          file will be referenced in your promptfoo configuration.
         </Typography>
         <TextField
           fullWidth

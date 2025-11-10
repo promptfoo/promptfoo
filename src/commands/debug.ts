@@ -1,13 +1,15 @@
-import chalk from 'chalk';
-import type { Command } from 'commander';
 import * as fs from 'fs';
 import * as os from 'os';
+
+import chalk from 'chalk';
 import { version } from '../../package.json';
-import { getEnvString } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
-import type { UnifiedConfig } from '../types';
-import { printBorder } from '../util';
 import { resolveConfigs } from '../util/config/load';
+import { printBorder } from '../util/index';
+import type { Command } from 'commander';
+
+import type { UnifiedConfig } from '../types/index';
 
 interface DebugOptions {
   config?: string;
@@ -32,6 +34,8 @@ async function doDebug(options: DebugOptions): Promise<void> {
       noProxy: getEnvString('NO_PROXY') || getEnvString('no_proxy'),
       nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
       nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
+      telemetryDisabled: getEnvBool('PROMPTFOO_DISABLE_TELEMETRY'),
+      telemetryDebug: getEnvBool('PROMPTFOO_TELEMETRY_DEBUG'),
     },
     configInfo: {
       defaultConfigPath: options.defaultConfigPath,

@@ -1,5 +1,10 @@
 import React from 'react';
-import { Alert, Box, Button, Collapse, Typography } from '@mui/material';
+
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Collapse from '@mui/material/Collapse';
+import Typography from '@mui/material/Typography';
 
 interface Props {
   children: React.ReactNode;
@@ -53,7 +58,7 @@ class ErrorBoundary extends React.Component<Props, State> {
         return this.props.fallback;
       }
 
-      const isDev = process.env.NODE_ENV === 'development';
+      const isDev = import.meta.env.DEV;
 
       return (
         <Box sx={{ p: 2, maxWidth: '100%' }}>

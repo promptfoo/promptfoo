@@ -1,4 +1,5 @@
 import { MemoryPoisoningProvider } from '../../../../src/redteam/providers/agentic/memoryPoisoning';
+
 import type { ApiProvider, CallApiContextParams } from '../../../../src/types/providers';
 
 describe('MemoryPoisoningProvider', () => {

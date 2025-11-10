@@ -1,9 +1,12 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import cliState from './cliState';
+
 import type { EnvOverrides } from './types/env';
 
+dotenv.config({ quiet: true });
+
 // Define the supported environment variables and their types
-export type EnvVars = {
+type EnvVars = {
   //=========================================================================
   // Core promptfoo configuration
   //=========================================================================
@@ -19,11 +22,22 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
+  PROMPTFOO_DISABLE_DEBUG_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
   PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64?: boolean;
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
   PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
+  /**
+   * Disable ALL remote generation (superset of PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION).
+   * Affects: SimulatedUser, red team features, all promptfoo-hosted inference.
+   */
+  PROMPTFOO_DISABLE_REMOTE_GENERATION?: boolean;
+  /**
+   * Disable remote generation for red team features only (subset of PROMPTFOO_DISABLE_REMOTE_GENERATION).
+   * Affects: Harmful content generation, red team strategies, red team simulated users.
+   * Does NOT affect: Regular (non-redteam) SimulatedUser usage.
+   */
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;
@@ -34,11 +48,13 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_TEMPLATING?: boolean;
   PROMPTFOO_DISABLE_UPDATE?: boolean;
   PROMPTFOO_DISABLE_VAR_EXPANSION?: boolean;
+  PROMPTFOO_DISABLE_WAL_MODE?: boolean;
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
+  PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
@@ -49,6 +65,8 @@ export type EnvVars = {
   PROMPTFOO_STRIP_RESPONSE_OUTPUT?: boolean;
   PROMPTFOO_STRIP_TEST_VARS?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
+  PROMPTFOO_TRACING_ENABLED?: boolean;
+  PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
 
   //=========================================================================
   // promptfoo configuration options
@@ -74,6 +92,7 @@ export type EnvVars = {
   PROMPTFOO_PASS_RATE_THRESHOLD?: number;
   PROMPTFOO_PROMPT_SEPARATOR?: string;
   PROMPTFOO_PYTHON?: string;
+  PROMPTFOO_RUBY?: string;
   PROMPTFOO_REMOTE_API_BASE_URL?: string;
   PROMPTFOO_REMOTE_APP_BASE_URL?: string;
   PROMPTFOO_REMOTE_GENERATION_URL?: string;
@@ -83,6 +102,11 @@ export type EnvVars = {
   PROMPTFOO_SHARE_CHUNK_SIZE?: number;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
   PROMPTFOO_CA_CERT_PATH?: string;
+  PROMPTFOO_PFX_CERT_PATH?: string;
+  PROMPTFOO_PFX_PASSWORD?: string;
+  PROMPTFOO_JKS_CERT_PATH?: string;
+  PROMPTFOO_JKS_PASSWORD?: string;
+  PROMPTFOO_JKS_ALIAS?: string;
 
   //=========================================================================
   // HTTP proxy settings
@@ -154,6 +178,9 @@ export type EnvVars = {
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
 
+  // AIML API
+  AIML_API_KEY?: string;
+
   // Anthropic
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MAX_TOKENS?: number;
@@ -161,6 +188,7 @@ export type EnvVars = {
   ANTHROPIC_TEMPERATURE?: number;
 
   // AWS Bedrock
+  AWS_BEARER_TOKEN_BEDROCK?: string;
   AWS_BEDROCK_FREQUENCY_PENALTY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
   AWS_BEDROCK_MAX_NEW_TOKENS?: number;
@@ -171,6 +199,11 @@ export type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+
+  // AWS Bedrock Agents
+  AWS_BEDROCK_AGENT_ID?: string;
+  AWS_BEDROCK_AGENT_ALIAS_ID?: string;
+
   CEREBRAS_API_KEY?: string;
 
   // Azure OpenAI auth params
@@ -200,11 +233,17 @@ export type EnvVars = {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_KEY?: string;
 
+  // CometAPI
+  COMETAPI_KEY?: string;
+
   // CDP
   CDP_DOMAIN?: string;
 
   // FAL
   FAL_KEY?: string;
+
+  // GitHub
+  GITHUB_TOKEN?: string;
 
   // Groq
   GROQ_API_KEY?: string;
@@ -217,6 +256,9 @@ export type EnvVars = {
   HF_API_TOKEN?: string;
   HF_TOKEN?: string;
 
+  // Hyperbolic
+  HYPERBOLIC_API_KEY?: string;
+
   // Langfuse
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
@@ -224,6 +266,9 @@ export type EnvVars = {
 
   // LLaMa
   LLAMA_BASE_URL?: string;
+
+  // Llama API
+  LLAMA_API_KEY?: string;
 
   // Local AI
   LOCALAI_BASE_URL?: string;
@@ -234,6 +279,10 @@ export type EnvVars = {
   MISTRAL_TEMPERATURE?: string;
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
+
+  // Nscale
+  NSCALE_SERVICE_TOKEN?: string;
+  NSCALE_API_KEY?: string;
 
   // Ollama
   OLLAMA_API_KEY?: string;
@@ -268,8 +317,24 @@ export type EnvVars = {
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
 
+  // SharePoint
+  SHAREPOINT_BASE_URL?: string;
+  SHAREPOINT_CERT_PATH?: string;
+  SHAREPOINT_CLIENT_ID?: string;
+  SHAREPOINT_TENANT_ID?: string;
+
+  // Slack
+  SLACK_BOT_TOKEN?: string;
+
+  // Snowflake
+  SNOWFLAKE_ACCOUNT_IDENTIFIER?: string;
+  SNOWFLAKE_API_KEY?: string;
+
   // Together AI
   TOGETHER_API_KEY?: string;
+
+  // TrueFoundry
+  TRUEFOUNDRY_API_KEY?: string;
 
   // Vertex AI
   VERTEX_API_VERSION?: string;
@@ -382,7 +447,8 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
 }
 
 /**
- * Get the evaluation timeout in milliseconds.
+ * Get the timeout in milliseconds for each individual test case/provider API call.
+ * When this timeout is reached, that specific test is marked as an error.
  * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no timeout).
  * @returns The timeout value in milliseconds, or the default value if not set.
  */
@@ -391,7 +457,8 @@ export function getEvalTimeoutMs(defaultValue: number = 0): number {
 }
 
 /**
- * Get the maximum duration for an evaluation in milliseconds.
+ * Get the maximum total runtime in milliseconds for the entire evaluation process.
+ * When this timeout is reached, all remaining tests are marked as errors and the evaluation ends.
  * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no limit).
  * @returns The max duration in milliseconds, or the default value if not set.
  */
@@ -419,4 +486,13 @@ export function isCI() {
     getEnvBool('BUILDKITE') ||
     getEnvBool('TEAMCITY_VERSION')
   );
+}
+
+/**
+ * Check if the application is running in a non-interactive environment.
+ * This includes CI environments, cron jobs, SSH scripts without TTY, etc.
+ * @returns True if running in a non-interactive environment, false otherwise.
+ */
+export function isNonInteractive() {
+  return isCI() || !process.stdin.isTTY || !process.stdout.isTTY;
 }

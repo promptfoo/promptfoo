@@ -1,9 +1,9 @@
 import { fetchWithCache } from '../cache';
 import { getEnvFloat, getEnvString } from '../envars';
-import logger from '../logger';
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
 import type { EnvOverrides } from '../types/env';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;
@@ -39,7 +39,7 @@ class LocalAiGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(_prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -52,7 +52,6 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
       messages,
       temperature: this.config.temperature || getEnvFloat('LOCALAI_TEMPERATURE') || 0.7,
     };
-    logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
     let data;
     try {
@@ -72,7 +71,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tLocalAI API chat completions response: ${JSON.stringify(data)}`);
+
     try {
       return {
         output: data.choices[0].message.content,
@@ -109,7 +108,6 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tLocalAI embeddings API response: ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;
@@ -134,7 +132,6 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
       prompt,
       temperature: this.config.temperature || getEnvFloat('LOCALAI_TEMPERATURE') || 0.7,
     };
-    logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
     let data;
     try {
@@ -154,7 +151,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tLocalAI completions API response: ${JSON.stringify(data)}`);
+
     try {
       return {
         output: data.choices[0].text,

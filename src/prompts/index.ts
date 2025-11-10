@@ -1,19 +1,12 @@
+import { stat } from 'fs/promises';
 import { globSync } from 'glob';
 import logger from '../logger';
-import type {
-  UnifiedConfig,
-  Prompt,
-  PromptFunction,
-  ProviderOptionsMap,
-  TestSuite,
-  ProviderOptions,
-  EvaluateTestSuite,
-} from '../types';
-import { parsePathOrGlob } from '../util';
+import { parsePathOrGlob } from '../util/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
 import { processCsvPrompts } from './processors/csv';
+import { processExecutableFile } from './processors/executable';
 import { processJsFile } from './processors/javascript';
 import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
@@ -24,6 +17,16 @@ import { processString } from './processors/string';
 import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
 import { maybeFilePath, normalizeInput } from './utils';
+
+import type {
+  EvaluateTestSuite,
+  Prompt,
+  PromptFunction,
+  ProviderOptions,
+  ProviderOptionsMap,
+  TestSuite,
+  UnifiedConfig,
+} from '../types/index';
 
 export * from './grading';
 
@@ -89,7 +92,7 @@ export function readProviderPromptMap(
  * @param maxRecursionDepth - Maximum recursion depth for globbing.
  * @returns Promise resolving to an array of processed prompts.
  */
-export async function processPrompt(
+async function processPrompt(
   prompt: Partial<Prompt>,
   basePath: string = '',
   maxRecursionDepth: number = 1,
@@ -102,6 +105,13 @@ export async function processPrompt(
   // Handling when the prompt is a raw function (e.g. javascript function)
   if (prompt.function) {
     return [prompt as Prompt];
+  }
+
+  // Handle exec: prefix for executable prompts
+  if (prompt.raw.startsWith('exec:')) {
+    const execSpec = prompt.raw.substring(5); // Remove 'exec:' prefix
+    const { filePath, functionName } = parsePathOrGlob(basePath, execSpec);
+    return await processExecutableFile(filePath, prompt, functionName);
   }
 
   if (!maybeFilePath(prompt.raw)) {
@@ -129,8 +139,9 @@ export async function processPrompt(
     );
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedPath) {
+      const rawPath = functionName ? `${globbedFilePath}:${functionName}` : globbedFilePath;
       const processedPrompts = await processPrompt(
-        { raw: globbedFilePath },
+        { raw: rawPath },
         basePath,
         maxRecursionDepth - 1,
       );
@@ -172,6 +183,23 @@ export async function processPrompt(
   }
   if (extension && ['.yml', '.yaml'].includes(extension)) {
     return processYamlFile(filePath, prompt);
+  }
+  // Handle common executable extensions
+  if (
+    extension &&
+    ['.sh', '.bash', '.exe', '.bat', '.cmd', '.ps1', '.rb', '.pl'].includes(extension)
+  ) {
+    return await processExecutableFile(filePath, prompt, functionName);
+  }
+  // If no extension matched but file exists and is executable, treat it as an executable
+  try {
+    const stats = await stat(filePath);
+    if (stats.isFile() && (stats.mode & 0o111) !== 0) {
+      // File is executable
+      return await processExecutableFile(filePath, prompt, functionName);
+    }
+  } catch (_e) {
+    // File doesn't exist or can't be accessed, fall through
   }
   return [];
 }

@@ -1,17 +1,26 @@
-import { type Page, type ElementHandle, type BrowserContext } from 'playwright';
+import os from 'os';
+import path from 'path';
+
+import { type BrowserContext, type ElementHandle, type Page } from 'playwright';
 import logger from '../logger';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderOptions,
-  ProviderResponse,
-} from '../types';
+import { fetchWithTimeout } from '../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types/index';
+
 const nunjucks = getNunjucksEngine();
+
+// Constants for connection configuration
+const DEFAULT_DEBUGGING_PORT = 9222;
+const DEFAULT_FETCH_TIMEOUT_MS = 5000;
 
 interface BrowserAction {
   action: string;
@@ -36,9 +45,16 @@ interface BrowserProviderConfig {
    * @deprecated
    */
   responseParser?: string | Function;
+
+  // Connection options for existing browser
+  connectOptions?: {
+    mode?: 'cdp' | 'websocket';
+    debuggingPort?: number;
+    wsEndpoint?: string;
+  };
 }
 
-function createTransformResponse(
+export function createTransformResponse(
   parser: any,
 ): (extracted: Record<string, any>, finalHtml: string) => ProviderResponse {
   if (typeof parser === 'function') {
@@ -50,7 +66,7 @@ function createTransformResponse(
       finalHtml: string,
     ) => ProviderResponse;
   }
-  return ({ extracted, finalHtml }) => ({ output: finalHtml });
+  return (_extracted, finalHtml) => ({ output: finalHtml });
 }
 
 export class BrowserProvider implements ApiProvider {
@@ -100,38 +116,84 @@ export class BrowserProvider implements ApiProvider {
 
     chromium.use(stealth());
 
-    const browser = await chromium.launch({
-      headless: this.headless,
-      args: ['--ignore-certificate-errors'],
-    });
-    const browserContext = await browser.newContext({
-      ignoreHTTPSErrors: true,
-    });
-
-    if (this.config.cookies) {
-      await this.setCookies(browserContext);
-    }
-
-    const page = await browserContext.newPage();
-    const extracted: Record<string, any> = {};
+    let browser;
+    let shouldCloseBrowser = true;
+    let browserContext: BrowserContext;
 
     try {
-      // Execute all actions
-      for (const step of this.config.steps) {
-        await this.executeAction(page, step, vars, extracted);
+      // Connect to existing browser or launch new one
+      if (this.config.connectOptions) {
+        const connectionResult = await this.connectToExistingBrowser(chromium);
+        browser = connectionResult.browser;
+        shouldCloseBrowser = connectionResult.shouldClose;
+      } else {
+        browser = await chromium.launch({
+          headless: this.headless,
+          args: ['--ignore-certificate-errors'],
+        });
+      }
+
+      // Get or create browser context
+      const contexts = browser.contexts();
+      if (contexts.length > 0 && this.config.connectOptions) {
+        // Use existing context when connecting to existing browser
+        browserContext = contexts[0];
+        logger.debug('Using existing browser context');
+      } else {
+        // Create new context
+        browserContext = await browser.newContext({
+          ignoreHTTPSErrors: true,
+        });
+      }
+
+      if (this.config.cookies) {
+        await this.setCookies(browserContext);
+      }
+
+      const page = await browserContext.newPage();
+      const extracted: Record<string, any> = {};
+
+      try {
+        // Execute all actions
+        for (const step of this.config.steps) {
+          await this.executeAction(page, step, vars, extracted);
+        }
+
+        const finalHtml = await page.content();
+
+        // Clean up
+        if (this.config.connectOptions && !shouldCloseBrowser) {
+          // Only close the page when connected to existing browser
+          await page.close();
+        }
+
+        logger.debug(`Browser results: ${safeJsonStringify(extracted)}`);
+        const ret = this.transformResponse(extracted, finalHtml);
+        logger.debug(`Browser response transform output: ${safeJsonStringify(ret)}`);
+
+        // Check if ret is already a ProviderResponse object (has error or output property)
+        // or if it's a raw value that needs to be wrapped
+        if (typeof ret === 'object' && ret !== null && ('output' in ret || 'error' in ret)) {
+          // Already a ProviderResponse, return as-is
+          return ret;
+        } else {
+          // Raw value, wrap it
+          return { output: ret };
+        }
+      } catch (error) {
+        // Clean up on error
+        if (this.config.connectOptions && !shouldCloseBrowser) {
+          await page.close();
+        }
+        throw error;
       }
     } catch (error) {
-      await browser.close();
-      return { error: `Headless execution error: ${error}` };
+      return { error: `Browser execution error: ${error}` };
+    } finally {
+      if (shouldCloseBrowser && browser) {
+        await browser.close();
+      }
     }
-
-    const finalHtml = await page.content();
-    await browser.close();
-
-    logger.debug(`Browser results: ${safeJsonStringify(extracted)}`);
-    const ret = this.transformResponse(extracted, finalHtml);
-    logger.debug(`Browser response transform output: ${ret}`);
-    return { output: ret };
   }
 
   private async setCookies(browserContext: BrowserContext): Promise<void> {
@@ -150,6 +212,55 @@ export class BrowserProvider implements ApiProvider {
     }
   }
 
+  private async connectToExistingBrowser(
+    chromium: any,
+  ): Promise<{ browser: any; shouldClose: boolean }> {
+    const connectOptions = this.config.connectOptions!;
+
+    try {
+      let browser;
+
+      if (connectOptions.mode === 'websocket' && connectOptions.wsEndpoint) {
+        logger.debug(`Connecting via WebSocket: ${connectOptions.wsEndpoint}`);
+        browser = await chromium.connect({
+          wsEndpoint: connectOptions.wsEndpoint,
+        });
+      } else {
+        // Default to CDP connection
+        const port = connectOptions.debuggingPort || DEFAULT_DEBUGGING_PORT;
+        const cdpUrl = `http://localhost:${port}`;
+
+        logger.debug(`Connecting via Chrome DevTools Protocol at ${cdpUrl}`);
+
+        // Check if Chrome is accessible
+        try {
+          const response = await fetchWithTimeout(
+            `${cdpUrl}/json/version`,
+            {},
+            DEFAULT_FETCH_TIMEOUT_MS,
+          );
+          const version = await response.json();
+          logger.debug(`Connected to browser: ${version.Browser}`);
+        } catch {
+          throw new Error(
+            `Cannot connect to Chrome at ${cdpUrl}. ` +
+              `Make sure Chrome is running with debugging enabled:\n` +
+              `  chrome --remote-debugging-port=${port}\n` +
+              `  or\n` +
+              `  chrome --remote-debugging-port=${port} --user-data-dir=${path.join(os.tmpdir(), 'chrome-debug')}`,
+          );
+        }
+
+        browser = await chromium.connectOverCDP(cdpUrl);
+      }
+
+      return { browser, shouldClose: false };
+    } catch (error) {
+      logger.error(`Failed to connect to existing browser: ${error}`);
+      throw error;
+    }
+  }
+
   private async executeAction(
     page: Page,
     action: BrowserAction,
@@ -163,14 +274,30 @@ export class BrowserProvider implements ApiProvider {
 
     switch (actionType) {
       case 'navigate':
-        invariant(renderedArgs.url, `Expected headless action to have a url when using 'navigate'`);
+        invariant(
+          renderedArgs.url,
+          `Browser action 'navigate' requires a 'url' parameter. ` +
+            `Please provide the URL to navigate to.\n\n` +
+            `Example:\n` +
+            `- action: navigate\n` +
+            `  args:\n` +
+            `    url: 'https://example.com'\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
+        );
         logger.debug(`Navigating to ${renderedArgs.url}`);
         await page.goto(renderedArgs.url);
         break;
       case 'click':
         invariant(
           renderedArgs.selector,
-          `Expected headless action to have a selector when using 'click'`,
+          `Browser action 'click' requires a 'selector' parameter. ` +
+            `Please provide a CSS selector to identify the element to click.\n\n` +
+            `Example:\n` +
+            `- action: click\n` +
+            `  args:\n` +
+            `    selector: '#submit-button'\n` +
+            `    optional: true  # optional: won't fail if element doesn't exist\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
         );
         logger.debug(`Waiting for and clicking on ${renderedArgs.selector}`);
         const element = await this.waitForSelector(page, renderedArgs.selector);
@@ -183,10 +310,27 @@ export class BrowserProvider implements ApiProvider {
         }
         break;
       case 'type':
-        invariant(renderedArgs.text, `Expected headless action to have a text when using 'type'`);
+        invariant(
+          renderedArgs.text,
+          `Browser action 'type' requires a 'text' parameter. ` +
+            `Please provide the text to type into the selected element.\n\n` +
+            `Example:\n` +
+            `- action: type\n` +
+            `  args:\n` +
+            `    selector: '#input-field'\n` +
+            `    text: 'Hello world'\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
+        );
         invariant(
           renderedArgs.selector,
-          `Expected headless action to have a selector when using 'type'`,
+          `Browser action 'type' requires a 'selector' parameter. ` +
+            `Please provide a CSS selector to identify the input element.\n\n` +
+            `Example:\n` +
+            `- action: type\n` +
+            `  args:\n` +
+            `    selector: '#input-field'\n` +
+            `    text: 'Hello world'\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
         );
         logger.debug(`Waiting for and typing into ${renderedArgs.selector}: ${renderedArgs.text}`);
         await this.waitForSelector(page, renderedArgs.selector);
@@ -202,7 +346,9 @@ export class BrowserProvider implements ApiProvider {
           for (const [placeholder, key] of Object.entries(specialKeys)) {
             const lowerText = renderedArgs.text.toLowerCase();
             if (lowerText.includes(placeholder)) {
-              const parts = lowerText.split(placeholder);
+              // Use case-insensitive regex to split while preserving original case
+              const regex = new RegExp(placeholder.replace(/[<>]/g, '\\$&'), 'gi');
+              const parts = renderedArgs.text.split(regex);
               for (let i = 0; i < parts.length; i++) {
                 if (parts[i]) {
                   await page.fill(renderedArgs.selector, parts[i]);
@@ -222,7 +368,14 @@ export class BrowserProvider implements ApiProvider {
       case 'screenshot':
         invariant(
           renderedArgs.path,
-          `Expected headless action to have a path when using 'screenshot'`,
+          `Browser action 'screenshot' requires a 'path' parameter. ` +
+            `Please provide the file path where the screenshot should be saved.\n\n` +
+            `Example:\n` +
+            `- action: screenshot\n` +
+            `  args:\n` +
+            `    path: 'screenshots/page.png'\n` +
+            `    fullPage: true  # optional: capture entire page\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
         );
         logger.debug(
           `Taking screenshot of ${renderedArgs.selector} and saving to ${renderedArgs.path}`,
@@ -235,9 +388,27 @@ export class BrowserProvider implements ApiProvider {
       case 'extract':
         invariant(
           renderedArgs.selector,
-          `Expected headless action to have a selector when using 'extract'`,
+          `Browser action 'extract' requires a 'selector' parameter. ` +
+            `Please provide a CSS selector to identify the element to extract text from.\n\n` +
+            `Example:\n` +
+            `- action: extract\n` +
+            `  args:\n` +
+            `    selector: '.result-title'\n` +
+            `  name: title\n\n` +
+            `Current action args: ${safeJsonStringify(args)}`,
         );
-        invariant(name, `Expected headless action to have a name when using 'extract'`);
+        invariant(
+          name,
+          `Browser action 'extract' requires a 'name' parameter. ` +
+            `Please provide a name to store the extracted content.\n\n` +
+            `Example:\n` +
+            `- action: extract\n` +
+            `  args:\n` +
+            `    selector: '.result-title'\n` +
+            `  name: title\n\n` +
+            `The extracted content will be available as extracted.title in transformResponse.\n\n` +
+            `Current action: ${safeJsonStringify(action)}`,
+        );
         logger.debug(`Waiting for and extracting content from ${renderedArgs.selector}`);
         await this.waitForSelector(page, renderedArgs.selector);
         const extractedContent = await page.$eval(
@@ -248,7 +419,16 @@ export class BrowserProvider implements ApiProvider {
         if (name) {
           extracted[name] = extractedContent;
         } else {
-          throw new Error('Expected headless action to have a name when using `extract`');
+          throw new Error(
+            `Browser action 'extract' requires a 'name' parameter. ` +
+              `Please provide a name to store the extracted content.\n\n` +
+              `Example:\n` +
+              `- action: extract\n` +
+              `  args:\n` +
+              `    selector: '.result-title'\n` +
+              `  name: title\n\n` +
+              `The extracted content will be available as extracted.title in transformResponse.`,
+          );
         }
         break;
       case 'wait':
@@ -288,11 +468,17 @@ export class BrowserProvider implements ApiProvider {
 
     const initialChildCount = await page.$$eval(
       `${parentSelector} > *`,
-      (elements) => elements.length,
+      (elements: any[]) => elements.length,
     );
 
     await page.waitForFunction(
-      ({ parentSelector, initialChildCount }) => {
+      ({
+        parentSelector,
+        initialChildCount,
+      }: {
+        parentSelector: string;
+        initialChildCount: number;
+      }) => {
         const currentCount = document.querySelectorAll(`${parentSelector} > *`).length;
         return currentCount > initialChildCount;
       },

@@ -1,5 +1,6 @@
 import logger from '../logger';
-import type { AssertionParams, GradingResult } from '../types';
+
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleGuardrails = async ({
   assertion,
@@ -19,6 +20,7 @@ export const handleGuardrails = async ({
       } else if (guardrails?.flaggedOutput) {
         reason = 'Output failed safety checks';
       }
+      reason = guardrails.reason || reason;
       return {
         pass: false,
         score: 0,

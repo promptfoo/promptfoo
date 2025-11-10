@@ -1,9 +1,9 @@
-import type Anthropic from '@anthropic-ai/sdk';
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
+import type Anthropic from '@anthropic-ai/sdk';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -604,11 +604,146 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
     });
+
+    describe('finish reason handling', () => {
+      it('should surface a normalized finishReason for Anthropic reasons', async () => {
+        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+        jest
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockImplementation()
+          .mockResolvedValue({
+            content: [{ type: 'text', text: 'Test response' }],
+            stop_reason: 'end_turn', // Should be normalized to 'stop'
+            usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
+          } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.finishReason).toBe('stop');
+      });
+
+      it('should normalize max_tokens to length', async () => {
+        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+        jest
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockImplementation()
+          .mockResolvedValue({
+            content: [{ type: 'text', text: 'Test response' }],
+            stop_reason: 'max_tokens', // Should be normalized to 'length'
+            usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
+          } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.finishReason).toBe('length');
+      });
+
+      it('should normalize tool_use to tool_calls', async () => {
+        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+        jest
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockImplementation()
+          .mockResolvedValue({
+            content: [{ type: 'text', text: 'Test response' }],
+            stop_reason: 'tool_use', // Should be normalized to 'tool_calls'
+            usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
+          } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.finishReason).toBe('tool_calls');
+      });
+
+      it('should exclude finishReason when stop_reason is null', async () => {
+        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+        jest
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockImplementation()
+          .mockResolvedValue({
+            content: [{ type: 'text', text: 'Test response' }],
+            stop_reason: null,
+            usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
+          } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.finishReason).toBeUndefined();
+      });
+
+      it('should exclude finishReason when stop_reason is undefined', async () => {
+        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+        jest
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockImplementation()
+          .mockResolvedValue({
+            content: [{ type: 'text', text: 'Test response' }],
+            stop_reason: undefined as any,
+            usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
+          } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.finishReason).toBeUndefined();
+      });
+
+      it('should handle cached responses with finishReason', async () => {
+        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+
+        const cacheKey = expect.stringContaining('anthropic:');
+        await getCache().set(
+          cacheKey,
+          JSON.stringify({
+            content: [{ type: 'text', text: 'Cached response' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 5, output_tokens: 5, server_tool_use: null },
+          }),
+        );
+
+        // Set up specific cache key for our test
+        jest
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockImplementation()
+          .mockResolvedValue({} as any);
+
+        const specificCacheKey =
+          'anthropic:' +
+          JSON.stringify({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 1024,
+            messages: [{ role: 'user', content: [{ type: 'text', text: 'Test prompt' }] }],
+            stream: false,
+            temperature: 0,
+          });
+
+        await getCache().set(
+          specificCacheKey,
+          JSON.stringify({
+            content: [{ type: 'text', text: 'Cached response' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 5, output_tokens: 5, server_tool_use: null },
+          }),
+        );
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.finishReason).toBe('stop');
+        expect(result.output).toBe('Cached response');
+      });
+
+      it('should handle unknown stop reasons by passing them through', async () => {
+        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+        jest
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockImplementation()
+          .mockResolvedValue({
+            content: [{ type: 'text', text: 'Test response' }],
+            stop_reason: 'unknown_reason' as any,
+            usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
+          } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.finishReason).toBe('unknown_reason');
+      });
+    });
   });
 
   describe('cleanup', () => {
     it('should await initialization before cleanup', async () => {
-      provider = new AnthropicMessagesProvider('claude-3-sonnet', {
+      provider = new AnthropicMessagesProvider('claude-3-5-sonnet-latest', {
         config: {
           mcp: {
             enabled: true,
@@ -631,7 +766,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle cleanup when MCP is not enabled', async () => {
-      provider = new AnthropicMessagesProvider('claude-3-sonnet', {
+      provider = new AnthropicMessagesProvider('claude-3-5-sonnet-latest', {
         config: {
           mcp: {
             enabled: false,
@@ -645,7 +780,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle cleanup errors gracefully', async () => {
-      provider = new AnthropicMessagesProvider('claude-3-sonnet', {
+      provider = new AnthropicMessagesProvider('claude-3-5-sonnet-latest', {
         config: {
           mcp: {
             enabled: true,

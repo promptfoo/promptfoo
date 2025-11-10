@@ -1,4 +1,4 @@
-import type { GradingConfig } from '../../dist/src/types.js';
+import type { GradingConfig } from '../../dist/src/types';
 import { installJestMatchers } from './matchers';
 
 installJestMatchers();

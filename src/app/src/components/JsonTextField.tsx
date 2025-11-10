@@ -1,12 +1,13 @@
 import React from 'react';
-import type { TextFieldProps } from '@mui/material/TextField';
+
 import TextField from '@mui/material/TextField';
+import type { TextFieldProps } from '@mui/material/TextField';
 
 interface JsonTextFieldProps extends Omit<TextFieldProps, 'onChange'> {
   onChange?: (parsed: any) => void;
 }
 
-const JsonTextField: React.FC<JsonTextFieldProps> = ({ onChange, ...props }) => {
+const JsonTextField = ({ onChange, ...props }: JsonTextFieldProps) => {
   const [value, setValue] = React.useState('');
   const [error, setError] = React.useState(false);
 

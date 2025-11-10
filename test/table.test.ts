@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TERMINAL_MAX_WIDTH } from '../src/constants';
 import { generateTable, wrapTable } from '../src/table';
-import { ResultFailureReason, type EvaluateTable } from '../src/types';
+import { type EvaluateTable, ResultFailureReason } from '../src/types/index';
 
 jest.mock('cli-table3');
 
@@ -242,6 +242,39 @@ describe('table', () => {
         wordWrap: true,
         wrapOnWordBoundary: true,
       });
+    });
+
+    it('should return a string representation of the table', () => {
+      const rows = [
+        { col1: 'value1', col2: 'value2' },
+        { col1: 'value3', col2: 'value4' },
+      ];
+
+      const mockTableString = 'mocked table string output';
+      const table = new Table({});
+      table.toString = jest.fn().mockReturnValue(mockTableString);
+      jest.mocked(Table).mockReturnValue(table);
+
+      const result = wrapTable(rows);
+
+      expect(result).toBe(mockTableString);
+      expect(typeof result).toBe('string');
+      expect(table.toString).toHaveBeenCalled();
+    });
+
+    it('should return string for single row', () => {
+      const rows = [{ name: 'John', age: 30 }];
+
+      const mockTableString =
+        '┌──────┬─────┐\n│ name │ age │\n├──────┼─────┤\n│ John │ 30  │\n└──────┴─────┘';
+      const table = new Table({});
+      table.toString = jest.fn().mockReturnValue(mockTableString);
+      jest.mocked(Table).mockReturnValue(table);
+
+      const result = wrapTable(rows);
+
+      expect(typeof result).toBe('string');
+      expect(result).toBe(mockTableString);
     });
   });
 });

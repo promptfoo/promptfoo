@@ -1,7 +1,7 @@
 ---
 sidebar_label: GCG
 title: Greedy Coordinate Gradient Strategy
-description: Use gradient-based optimization to find adversarial prompts that can bypass AI safety mechanisms
+description: Generate adversarial prompts using Greedy Coordinate Gradient optimization to systematically bypass LLM safety guardrails
 ---
 
 # Greedy Coordinate Gradient (GCG)

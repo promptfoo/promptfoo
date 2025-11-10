@@ -1,8 +1,9 @@
 import dedent from 'dedent';
-import type { Assertion } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:sql-injection';
+import type { Assertion } from '../../types/index';
+
+const PLUGIN_ID = 'promptfoo:redteam:sql-injection';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>
@@ -43,7 +44,7 @@ export class SqlInjectionPlugin extends RedteamPluginBase {
   `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,

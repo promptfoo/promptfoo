@@ -1,8 +1,13 @@
-import { Editor } from '@monaco-editor/react';
 import React, { useState } from 'react';
+import { Editor } from '@monaco-editor/react';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import { Box, Button, Grid, Paper, Typography, IconButton } from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
 import { dump as yamlDump } from 'js-yaml';
 
 interface HttpConfigGeneratorProps {
@@ -48,7 +53,8 @@ Content-Type: application/json
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('https://api.promptfoo.app/api/http-provider-generator', {
+      // biome-ignore lint/style/noRestrictedGlobals: Site documentation file, fetch is acceptable here
+      const res = await fetch('https://api.promptfoo.app/api/v1/http-provider-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -87,17 +93,23 @@ Content-Type: application/json
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(config);
-    setCopied(true);
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
+    navigator.clipboard
+      .writeText(config)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+        }, 2000);
+      })
+      .catch(() => {
+        setError('Unable to copy to clipboard');
+      });
   };
 
   return (
     <Box sx={{ my: 4 }} className={className}>
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="h6" gutterBottom>
             Example Request
           </Typography>
@@ -117,7 +129,7 @@ Content-Type: application/json
             />
           </Paper>
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="h6" gutterBottom>
             Example Response
           </Typography>
@@ -137,20 +149,20 @@ Content-Type: application/json
             />
           </Paper>
         </Grid>
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Button variant="contained" onClick={handleSubmit} disabled={loading} sx={{ mr: 2 }}>
             {loading ? 'Generating...' : 'Generate Configuration'}
           </Button>
         </Grid>
         {error && (
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Typography color="error" sx={{ mt: 2 }}>
               Error: {error}
             </Typography>
           </Grid>
         )}
         {config && (
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
               <Typography variant="h6" sx={{ flexGrow: 1 }}>
                 Generated HTTP Configuration

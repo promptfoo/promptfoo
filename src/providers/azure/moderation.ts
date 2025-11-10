@@ -1,21 +1,23 @@
 import { getCache, isCacheEnabled } from '../../cache';
-import type { EnvVarKey } from '../../envars';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
+import { REQUEST_TIMEOUT_MS } from '../shared';
+import { AzureGenericProvider } from './generic';
+
+import type { EnvVarKey } from '../../envars';
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiModerationProvider,
   ModerationFlag,
   ProviderModerationResponse,
-} from '../../types';
-import type { EnvOverrides } from '../../types/env';
-import { REQUEST_TIMEOUT_MS } from '../shared';
-import { AzureGenericProvider } from './generic';
+} from '../../types/index';
 
-export const AZURE_MODERATION_MODELS = [
+const AZURE_MODERATION_MODELS = [
   { id: 'text-content-safety', maxTokens: 10000, capabilities: ['text'] },
 ];
 
-export type AzureModerationModelId = string;
+type AzureModerationModelId = string;
 export type AzureModerationCategory = 'Hate' | 'SelfHarm' | 'Sexual' | 'Violence';
 
 interface AzureTextCategoriesAnalysis {
@@ -34,7 +36,7 @@ interface AzureAnalyzeTextResult {
   blocklistsMatch?: AzureTextBlocklistMatch[];
 }
 
-export interface AzureModerationConfig {
+interface AzureModerationConfig {
   apiKey?: string;
   apiKeyEnvar?: string;
   endpoint?: string;
@@ -98,7 +100,7 @@ export function handleApiError(err: any, data?: any): ProviderModerationResponse
   return { error: err.message || 'Unknown error', flags: [] };
 }
 
-export function getModerationCacheKey(modelName: string, config: any, content: string): string {
+export function getModerationCacheKey(modelName: string, _config: any, content: string): string {
   return `azure-moderation:${modelName}:${JSON.stringify(content)}`;
 }
 
@@ -155,7 +157,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
   }
 
   async callModerationApi(
-    userPrompt: string,
+    _userPrompt: string,
     assistantResponse: string,
   ): Promise<ProviderModerationResponse> {
     await this.ensureInitialized();
@@ -217,13 +219,10 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         ...(this.configWithHeaders.passthrough || {}),
       };
 
-      logger.debug(`Making Azure Content Safety API request to: ${url}`);
-      logger.debug(`Request body: ${JSON.stringify(body)}`);
-
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-      const response = await fetch(url, {
+      const response = await fetchWithProxy(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),

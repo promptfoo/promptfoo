@@ -16,6 +16,7 @@ keywords:
   ]
 date: 2025-03-11
 authors: [vanessa]
+tags: [security-vulnerability, best-practices, owasp]
 ---
 
 # Sensitive Information Disclosure in LLMs: Privacy and Compliance in Generative AI

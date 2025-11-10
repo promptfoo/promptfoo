@@ -1,4 +1,5 @@
 import { getEnvString } from '../envars';
+import { fetchWithProxy } from '../util/fetch/index';
 
 const heliconeApiKey = getEnvString('HELICONE_API_KEY');
 
@@ -12,17 +13,17 @@ interface PromptVersionCompiled {
   prompt_compiled: any;
 }
 
-export interface ResultError<K> {
+interface ResultError<K> {
   data: null;
   error: K;
 }
 
-export interface ResultSuccess<T> {
+interface ResultSuccess<T> {
   data: T;
   error: null;
 }
 
-export type Result<T, K> = ResultSuccess<T> | ResultError<K>;
+type Result<T, K> = ResultSuccess<T> | ResultError<K>;
 
 const buildFilter = (majorVersion?: number, minorVersion?: number): any => {
   const filter: any = {};
@@ -80,7 +81,7 @@ export async function getPrompt(
     minorVersion?: number,
     variables?: Record<string, any>,
   ) => {
-    const res = await fetch(`https://api.helicone.ai/v1/prompt/${id}/compile`, {
+    const res = await fetchWithProxy(`https://api.helicone.ai/v1/prompt/${id}/compile`, {
       headers: {
         Authorization: `Bearer ${heliconeApiKey}`,
         'Content-Type': 'application/json',

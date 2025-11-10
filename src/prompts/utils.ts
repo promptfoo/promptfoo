@@ -1,6 +1,7 @@
-import type { Prompt } from '../types';
 import { sha256 } from '../util/createHash';
 import { VALID_FILE_EXTENSIONS } from './constants';
+
+import type { Prompt } from '../types/index';
 
 /**
  * Determines if a string is a valid file path.
@@ -56,7 +57,7 @@ export function normalizeInput(
     ];
   }
   if (Array.isArray(promptPathOrGlobs)) {
-    return promptPathOrGlobs.map((promptPathOrGlob, index) => {
+    return promptPathOrGlobs.map((promptPathOrGlob, _index) => {
       if (typeof promptPathOrGlob === 'string') {
         return {
           raw: promptPathOrGlob,

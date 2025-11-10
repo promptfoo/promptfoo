@@ -1,15 +1,14 @@
-import checkbox from '@inquirer/checkbox';
-import { Separator } from '@inquirer/checkbox';
+import fs from 'fs';
+import * as path from 'path';
+
+import checkbox, { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import dedent from 'dedent';
-import fs from 'fs';
-import * as path from 'path';
 import { getDefaultPort } from '../../constants';
 import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
@@ -17,22 +16,24 @@ import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/g
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
-import type { ProviderOptions, RedteamPluginObject } from '../../types';
-import { setupEnv, isRunningUnderNpx } from '../../util';
-import { BrowserBehavior } from '../../util/server';
-import { checkServerRunning, openBrowser } from '../../util/server';
+import { setupEnv } from '../../util/index';
+import { promptfooCommand } from '../../util/promptfooCommand';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
-  type Plugin,
   ADDITIONAL_STRATEGIES,
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
+  HARM_PLUGINS,
+  type Plugin,
   type Strategy,
   subCategoryDescriptions,
-  HARM_PLUGINS,
 } from '../constants';
 import { doGenerateRedteam } from './generate';
+import type { Command } from 'commander';
+
+import type { ProviderOptions, RedteamPluginObject } from '../../types/index';
 
 const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
@@ -49,7 +50,7 @@ prompts:
   {% if prompts.length > 0 and not prompts[0].startsWith('file://') -%}
   # You can also reference external prompts, e.g.
   # - file:///path/to/prompt.json
-  # Learn more: https://promptfoo.dev/docs/configuration/parameters/#prompts
+  # Learn more: https://promptfoo.dev/docs/configuration/prompts/
   {% endif %}
 {% endif -%}
 
@@ -135,7 +136,7 @@ def call_api(prompt, options, context):
 `;
 
 function recordOnboardingStep(step: string, properties: EventProperties = {}) {
-  telemetry.recordAndSend('funnel', {
+  telemetry.record('funnel', {
     type: 'redteam onboarding',
     step,
     ...properties,
@@ -206,6 +207,7 @@ export function renderRedteamConfig({
 
 export async function redteamInit(directory: string | undefined) {
   telemetry.record('command_used', { name: 'redteam init - started' });
+  telemetry.record('redteam init', { phase: 'started' });
   recordOnboardingStep('start');
 
   const projectDir = directory || '.';
@@ -310,11 +312,15 @@ export async function redteamInit(directory: string | undefined) {
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
-      { name: 'openai:gpt-4.1-mini', value: 'openai:gpt-4.1-mini' },
-      { name: 'openai:gpt-4.1', value: 'openai:gpt-4.1' },
+      { name: 'openai:gpt-5-mini', value: 'openai:gpt-5-mini' },
+      { name: 'openai:gpt-5', value: 'openai:gpt-5' },
       {
-        name: 'anthropic:claude-sonnet-4-20250514',
-        value: 'anthropic:messages:claude-sonnet-4-20250514',
+        name: 'anthropic:claude-sonnet-4-5-20250929',
+        value: 'anthropic:messages:claude-sonnet-4-5-20250929',
+      },
+      {
+        name: 'anthropic:claude-opus-4-1-20250805',
+        value: 'anthropic:messages:claude-opus-4-1-20250805',
       },
       {
         name: 'anthropic:claude-opus-4-20250514',
@@ -324,7 +330,10 @@ export async function redteamInit(directory: string | undefined) {
         name: 'anthropic:claude-3-7-sonnet-20250219',
         value: 'anthropic:messages:claude-3-7-sonnet-20250219',
       },
-      { name: 'vertex:gemini-2.5-pro-preview-03-25', value: 'vertex:gemini-2.5-pro-preview-03-25' },
+      {
+        name: 'Google Vertex Gemini 2.5 Pro',
+        value: 'vertex:gemini-2.5-pro',
+      },
     ];
 
     const selectedProvider = await select({
@@ -336,7 +345,7 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose provider', { value: selectedProvider });
 
     if (selectedProvider === 'Other') {
-      providers = [{ id: 'openai:gpt-4.1-mini', label }];
+      providers = [{ id: 'openai:gpt-5-mini', label }];
     } else {
       providers = [{ id: selectedProvider, label }];
     }
@@ -618,6 +627,7 @@ export async function redteamInit(directory: string | undefined) {
   );
 
   telemetry.record('command_used', { name: 'redteam init' });
+  telemetry.record('redteam init', { phase: 'completed' });
   await recordOnboardingStep('finish');
 
   if (deferGeneration) {
@@ -626,7 +636,7 @@ export async function redteamInit(directory: string | undefined) {
         chalk.green(dedent`
           To generate test cases and run your red team, use the command:
 
-              ${chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`)}
+              ${chalk.bold(promptfooCommand('redteam run'))}
         `),
     );
     return;
@@ -654,7 +664,7 @@ export async function redteamInit(directory: string | undefined) {
         '\n' +
           chalk.blue(
             'To generate test cases and run your red team later, use the command: ' +
-              chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`),
+              chalk.bold(promptfooCommand('redteam run')),
           ),
       );
     }
@@ -699,7 +709,7 @@ export function initCommand(program: Command) {
                 chalk.blue(
                   'Red team initialization paused. To continue setup later, use the command: ',
                 ) +
-                chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam init`),
+                chalk.bold(promptfooCommand('redteam init')),
             );
             logger.info(
               chalk.blue('For help or feedback, visit ') +

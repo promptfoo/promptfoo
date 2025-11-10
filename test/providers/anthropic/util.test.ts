@@ -1,10 +1,16 @@
-import type Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import {
   calculateAnthropicCost,
   outputFromMessage,
   parseMessages,
+  processAnthropicTools,
 } from '../../../src/providers/anthropic/util';
+import type Anthropic from '@anthropic-ai/sdk';
+
+import type {
+  WebFetchToolConfig,
+  WebSearchToolConfig,
+} from '../../../src/providers/anthropic/types';
 
 describe('Anthropic utilities', () => {
   describe('calculateAnthropicCost', () => {
@@ -38,6 +44,11 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(6); // (0.02 * 100) + (0.02 * 200) - when config.cost is provided, it's used for both
     });
 
+    it('should calculate default cost for Claude Opus 4.1 model', () => {
+      const cost = calculateAnthropicCost('claude-opus-4-1-20250805', {}, 100, 200);
+      expect(cost).toBe(0.0165); // (0.000015 * 100) + (0.000075 * 200) - using default model costs
+    });
+
     it('should calculate default cost for Claude Opus 4 model', () => {
       const cost = calculateAnthropicCost('claude-opus-4-20250514', {}, 100, 200);
       expect(cost).toBe(0.0165); // (0.000015 * 100) + (0.000075 * 200) - using default model costs
@@ -46,6 +57,68 @@ describe('Anthropic utilities', () => {
     it('should calculate default cost for Claude Sonnet 4 model', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-20250514', {}, 100, 200);
       expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - using default model costs
+    });
+
+    it('should calculate default cost for Claude Sonnet 4.5 model', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 100, 200);
+      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - using Sonnet 4 pricing
+    });
+
+    it('should calculate default cost for Claude Haiku 4.5 model', () => {
+      const cost = calculateAnthropicCost('claude-haiku-4-5-20251001', {}, 100, 200);
+      expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
+    });
+
+    it('should calculate default cost for Claude Haiku 4.5 latest model', () => {
+      const cost = calculateAnthropicCost('claude-haiku-4-5-latest', {}, 100, 200);
+      expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.5 with prompt <= 200k tokens', () => {
+      // Test with 150k tokens (below threshold)
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 150_000, 10_000);
+      expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.5 with prompt exactly 200k tokens', () => {
+      // Test with exactly 200k tokens (at threshold, should use lower tier)
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 200_000, 10_000);
+      expect(cost).toBe(0.75); // (3/1e6 * 200,000) + (15/1e6 * 10,000) = 0.6 + 0.15 = 0.75
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.5 with prompt > 200k tokens', () => {
+      // Test with 250k tokens (above threshold)
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 250_000, 10_000);
+      expect(cost).toBe(1.725); // (6/1e6 * 250,000) + (22.5/1e6 * 10,000) = 1.5 + 0.225 = 1.725
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.5 20250929 with > 200k tokens', () => {
+      // Only claude-sonnet-4-5-20250929 has tiered pricing
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 300_000, 20_000);
+      // (6/1e6 * 300,000) + (22.5/1e6 * 20,000) = 1.8 + 0.45 = 2.25
+      expect(cost).toBe(2.25);
+    });
+
+    it('should use base pricing for other Claude Sonnet 4 models', () => {
+      // Other Sonnet 4 models don't have tiered pricing
+      const models = ['claude-sonnet-4-20250514', 'claude-sonnet-4-0', 'claude-sonnet-4-latest'];
+
+      models.forEach((model) => {
+        const cost = calculateAnthropicCost(model, {}, 300_000, 20_000);
+        // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2
+        expect(cost).toBe(1.2);
+      });
+    });
+
+    it('should respect config.cost override for Claude Sonnet 4.5 models', () => {
+      // When config.cost is provided, it should override tiered pricing
+      const cost = calculateAnthropicCost(
+        'claude-sonnet-4-5-20250929',
+        { cost: 0.02 },
+        250_000,
+        10_000,
+      );
+      expect(cost).toBe(5200); // (0.02 * 250,000) + (0.02 * 10,000) = 5000 + 200 = 5200
     });
 
     it('should return undefined for missing model', () => {
@@ -74,6 +147,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -97,6 +171,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -123,6 +198,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -159,6 +235,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -193,6 +270,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -218,6 +296,7 @@ describe('Anthropic utilities', () => {
                 cited_text: 'The sky is blue.',
                 document_index: 0,
                 document_title: 'Nature Facts',
+                file_id: null,
                 start_char_index: 0,
                 end_char_index: 15,
               },
@@ -233,6 +312,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -264,6 +344,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -297,6 +378,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -327,6 +409,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -357,6 +440,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -643,6 +727,185 @@ describe('Anthropic utilities', () => {
           content: [{ type: 'text', text: 'Hello!' }],
         },
       ]);
+    });
+  });
+
+  describe('processAnthropicTools', () => {
+    it('should handle empty tools array', () => {
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([]);
+
+      expect(processedTools).toEqual([]);
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should pass through standard Anthropic tools unchanged', () => {
+      const standardTool: Anthropic.Tool = {
+        name: 'get_weather',
+        description: 'Get weather information',
+        input_schema: {
+          type: 'object',
+          properties: {
+            location: { type: 'string', description: 'City name' },
+          },
+          required: ['location'],
+        },
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([standardTool]);
+
+      expect(processedTools).toEqual([standardTool]);
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should process web_fetch_20250910 tool and add beta feature', () => {
+      const webFetchTool: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 5,
+        allowed_domains: ['example.com'],
+        citations: { enabled: true },
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 5,
+        allowed_domains: ['example.com'],
+        citations: { enabled: true },
+      });
+      expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
+    });
+
+    it('should process web_search_20250305 tool without adding beta feature', () => {
+      const webSearchTool: WebSearchToolConfig = {
+        type: 'web_search_20250305',
+        name: 'web_search',
+        max_uses: 3,
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webSearchTool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_search_20250305',
+        name: 'web_search',
+        max_uses: 3,
+      });
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should handle mixed tool types', () => {
+      const standardTool: Anthropic.Tool = {
+        name: 'calculate',
+        description: 'Perform calculations',
+        input_schema: {
+          type: 'object',
+          properties: {
+            expression: { type: 'string' },
+          },
+        },
+      };
+
+      const webFetchTool: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 2,
+        blocked_domains: ['spam.com'],
+      };
+
+      const webSearchTool: WebSearchToolConfig = {
+        type: 'web_search_20250305',
+        name: 'web_search',
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([
+        standardTool,
+        webFetchTool,
+        webSearchTool,
+      ]);
+
+      expect(processedTools).toHaveLength(3);
+      expect(processedTools[0]).toEqual(standardTool);
+      expect(processedTools[1]).toMatchObject({
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 2,
+        blocked_domains: ['spam.com'],
+      });
+      expect(processedTools[2]).toMatchObject({
+        type: 'web_search_20250305',
+        name: 'web_search',
+      });
+      expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
+    });
+
+    it('should handle web_fetch tool with all optional parameters', () => {
+      const webFetchTool: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 10,
+        allowed_domains: ['docs.example.com', 'help.example.com'],
+        blocked_domains: ['ads.example.com'],
+        citations: { enabled: true },
+        max_content_tokens: 50000,
+        cache_control: { type: 'ephemeral' },
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 10,
+        allowed_domains: ['docs.example.com', 'help.example.com'],
+        blocked_domains: ['ads.example.com'],
+        citations: { enabled: true },
+        max_content_tokens: 50000,
+        cache_control: { type: 'ephemeral' },
+      });
+      expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
+    });
+
+    it('should handle web_fetch tool with minimal configuration', () => {
+      const webFetchTool: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+      });
+      expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
+    });
+
+    it('should not duplicate beta features', () => {
+      const webFetchTool1: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 2,
+      };
+
+      const webFetchTool2: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 3,
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([
+        webFetchTool1,
+        webFetchTool2,
+      ]);
+
+      expect(processedTools).toHaveLength(2);
+      expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
     });
   });
 });

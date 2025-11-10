@@ -1,6 +1,8 @@
-import React from 'react';
-import { Security as SecurityIcon } from '@mui/icons-material';
-import { Button, Container, Paper, Typography } from '@mui/material';
+import SecurityIcon from '@mui/icons-material/Security';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
 
 export default function InstallationCheck() {
   return (
@@ -13,7 +15,7 @@ export default function InstallationCheck() {
         <Typography variant="body1" color="text.secondary" paragraph>
           The ModelAudit Python package is required to scan ML models for security vulnerabilities.
         </Typography>
-        <Paper sx={{ p: 3, bgcolor: 'grey.100', maxWidth: 500, mx: 'auto', my: 3 }}>
+        <Paper sx={{ p: 3, bgcolor: 'action.hover', maxWidth: 500, mx: 'auto', my: 3 }}>
           <Typography variant="body1" fontFamily="monospace" fontWeight={500}>
             pip install modelaudit
           </Typography>

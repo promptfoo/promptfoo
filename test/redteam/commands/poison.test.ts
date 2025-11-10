@@ -1,17 +1,23 @@
 import fs from 'fs';
 import path from 'path';
+
 import { getUserEmail } from '../../../src/globalConfig/accounts';
 import {
-  getAllFiles,
-  generatePoisonedDocument,
-  poisonDocument,
   doPoisonDocuments,
+  generatePoisonedDocument,
+  getAllFiles,
+  poisonDocument,
 } from '../../../src/redteam/commands/poison';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
 jest.mock('fs');
-jest.mock('path');
-jest.mock('node-fetch');
+jest.mock('path', () => ({
+  ...jest.requireActual('path'),
+  resolve: jest.fn(),
+  join: jest.fn(),
+  relative: jest.fn(),
+  dirname: jest.fn().mockReturnValue('mock-dir'),
+}));
 
 describe('poison command', () => {
   beforeEach(() => {
@@ -66,9 +72,9 @@ describe('poison command', () => {
 
       expect(fetch).toHaveBeenCalledWith(getRemoteGenerationUrl(), {
         method: 'POST',
-        headers: {
+        headers: expect.objectContaining({
           'Content-Type': 'application/json',
-        },
+        }),
         body: JSON.stringify({
           task: 'poison-document',
           document: 'test doc',
@@ -113,7 +119,11 @@ describe('poison command', () => {
       };
 
       jest.mocked(fs.readFileSync).mockReturnValue('test content');
-      jest.mocked(path.relative).mockReturnValue('test.txt');
+      jest.mocked(path.relative).mockImplementation((from, to) => {
+        return 'test.txt';
+      });
+      jest.mocked(path.dirname).mockReturnValue('output-dir');
+      jest.mocked(path.join).mockImplementation((...args) => args.join('/'));
 
       const mockPoisonResponse = {
         poisonedDocument: 'poisoned content',
@@ -208,6 +218,10 @@ describe('poison command', () => {
         isDirectory: () => false,
       } as fs.Stats);
 
+      jest.mocked(path.relative).mockImplementation((from, to) => 'test.txt');
+      jest.mocked(path.dirname).mockReturnValue('output-dir');
+      jest.mocked(path.join).mockImplementation((...args) => args.join('/'));
+
       const mockPoisonResponse = {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
@@ -253,6 +267,8 @@ describe('poison command', () => {
 
       jest.mocked(fs.readdirSync).mockReturnValueOnce(['file1.txt'] as any);
       jest.mocked(path.join).mockImplementation((...parts) => parts.join('/'));
+      jest.mocked(path.relative).mockImplementation((from, to) => 'file1.txt');
+      jest.mocked(path.dirname).mockReturnValue('output-dir');
 
       const mockPoisonResponse = {
         poisonedDocument: 'poisoned content',

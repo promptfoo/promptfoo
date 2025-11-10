@@ -1,11 +1,12 @@
 import {
   addOtherEncodings,
   EncodingType,
-  toMorseCode,
-  toPigLatin,
   toCamelCase,
   toEmojiEncoding,
+  toMorseCode,
+  toPigLatin,
 } from '../../../src/redteam/strategies/otherEncodings';
+
 import type { TestCase } from '../../../src/types';
 
 describe('other encodings strategy', () => {

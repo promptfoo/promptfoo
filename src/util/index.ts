@@ -1,38 +1,42 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
-import * as fs from 'fs';
-import { globSync } from 'glob';
+import { XMLBuilder } from 'fast-xml-parser';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
-import * as path from 'path';
-import { TERMINAL_MAX_WIDTH } from '../constants';
+import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import type Eval from '../models/eval';
-import type EvalResult from '../models/evalResult';
-import type { Vars } from '../types';
 import {
+  type CsvRow,
   type EvaluateResult,
   type EvaluateTableOutput,
-  type NunjucksFilterMap,
-  type TestCase,
-  type OutputFile,
-  type CompletedPrompt,
-  type CsvRow,
   isApiProvider,
   isProviderOptions,
+  type NunjucksFilterMap,
+  type OutputFile,
   OutputFileExtension,
   ResultFailureReason,
-} from '../types';
+  type TestCase,
+} from '../types/index';
 import invariant from '../util/invariant';
-import { convertTestResultsToTableRow } from './exportToFile';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
+import { convertTestResultsToTableRow } from './exportToFile/index';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
+
+import type Eval from '../models/eval';
+import type EvalResult from '../models/evalResult';
+import type { Vars } from '../types/index';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -58,6 +62,72 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
       ${gradingResultText}
     `.trim();
 };
+
+export function createOutputMetadata(evalRecord: Eval) {
+  let evaluationCreatedAt: string | undefined;
+  if (evalRecord.createdAt) {
+    try {
+      const date = new Date(evalRecord.createdAt);
+      evaluationCreatedAt = Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+    } catch {
+      evaluationCreatedAt = undefined;
+    }
+  }
+
+  return {
+    promptfooVersion: VERSION,
+    nodeVersion: process.version,
+    platform: os.platform(),
+    arch: os.arch(),
+    exportedAt: new Date().toISOString(),
+    evaluationCreatedAt,
+    author: evalRecord.author,
+  };
+}
+
+/**
+ * JSON writer with improved error handling for large datasets.
+ * Provides helpful error messages when memory limits are exceeded.
+ */
+async function writeJsonOutputSafely(
+  outputPath: string,
+  evalRecord: Eval,
+  shareableUrl: string | null,
+): Promise<void> {
+  const metadata = createOutputMetadata(evalRecord);
+
+  try {
+    const summary = await evalRecord.toEvaluateSummary();
+    const outputData: OutputFile = {
+      evalId: evalRecord.id,
+      results: summary,
+      config: evalRecord.config,
+      shareableUrl,
+      metadata,
+    };
+
+    // Use standard JSON.stringify with proper formatting
+    const jsonString = JSON.stringify(outputData, null, 2);
+    fs.writeFileSync(outputPath, jsonString);
+  } catch (error) {
+    const msg = (error as Error)?.message ?? '';
+    const isStringLen = error instanceof RangeError && msg.includes('Invalid string length');
+    const isHeapOOM = /heap out of memory|Array buffer allocation failed|ERR_STRING_TOO_LONG/i.test(
+      msg,
+    );
+    if (isStringLen || isHeapOOM) {
+      // The dataset is too large to load into memory at once
+      const resultCount = await evalRecord.getResultsCount();
+      logger.error(`Dataset too large for JSON export (${resultCount} results).`);
+      throw new Error(
+        `Dataset too large for JSON export. The evaluation has ${resultCount} results which exceeds memory limits. ` +
+          'Consider using JSONL format instead: --output output.jsonl',
+      );
+    } else {
+      throw error;
+    }
+  }
+}
 
 export async function writeOutput(
   outputPath: string,
@@ -96,6 +166,8 @@ export async function writeOutput(
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
+  const metadata = createOutputMetadata(evalRecord);
+
   if (outputExtension === 'csv') {
     // Write headers first
     const headers = getHeaderForTable(evalRecord);
@@ -124,20 +196,7 @@ export async function writeOutput(
       fs.appendFileSync(outputPath, batchCsv);
     }
   } else if (outputExtension === 'json') {
-    const summary = await evalRecord.toEvaluateSummary();
-    fs.writeFileSync(
-      outputPath,
-      JSON.stringify(
-        {
-          evalId: evalRecord.id,
-          results: summary,
-          config: evalRecord.config,
-          shareableUrl,
-        } satisfies OutputFile,
-        null,
-        2,
-      ),
-    );
+    await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
     fs.writeFileSync(
@@ -147,13 +206,14 @@ export async function writeOutput(
         results: summary,
         config: evalRecord.config,
         shareableUrl,
+        metadata,
       } as OutputFile),
     );
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
-    const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
+    const template = fs.readFileSync(path.join(getDirectory(), 'tableOutput.html'), 'utf-8');
     const htmlTable = [
       [
         ...table.head.vars,
@@ -169,9 +229,51 @@ export async function writeOutput(
     fs.writeFileSync(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      const text = batchResults.map((result) => JSON.stringify(result)).join('\n');
+      const text = batchResults.map((result) => JSON.stringify(result)).join(os.EOL) + os.EOL;
       fs.appendFileSync(outputPath, text);
     }
+  } else if (outputExtension === 'xml') {
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Sanitize data for XML builder to prevent textValue.replace errors
+    const sanitizeForXml = (obj: any): any => {
+      if (obj === null || obj === undefined) {
+        return '';
+      }
+      if (typeof obj === 'boolean' || typeof obj === 'number') {
+        return String(obj);
+      }
+      if (typeof obj === 'string') {
+        return obj;
+      }
+      if (Array.isArray(obj)) {
+        return obj.map(sanitizeForXml);
+      }
+      if (typeof obj === 'object') {
+        const sanitized: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+          sanitized[key] = sanitizeForXml(value);
+        }
+        return sanitized;
+      }
+      // For any other type, convert to string
+      return String(obj);
+    };
+
+    const xmlBuilder = new XMLBuilder({
+      ignoreAttributes: false,
+      format: true,
+      indentBy: '  ',
+    });
+    const xmlData = xmlBuilder.build({
+      promptfoo: {
+        evalId: evalRecord.id,
+        results: sanitizeForXml(summary),
+        config: sanitizeForXml(evalRecord.config),
+        shareableUrl: shareableUrl || '',
+      },
+    });
+    fs.writeFileSync(outputPath, xmlData);
   }
 }
 
@@ -222,33 +324,92 @@ export function printBorder() {
 export function setupEnv(envPath: string | undefined) {
   if (envPath) {
     logger.info(`Loading environment variables from ${envPath}`);
-    dotenv.config({ path: envPath, override: true });
+    dotenv.config({ path: envPath, override: true, quiet: true });
   } else {
-    dotenv.config();
+    dotenv.config({ quiet: true });
   }
 }
 
-export type StandaloneEval = CompletedPrompt & {
-  evalId: string;
-  description: string | null;
-  datasetId: string | null;
-  promptId: string | null;
-  isRedteam: boolean;
-  createdAt: number;
-  uuid: string;
-  pluginFailCount: Record<string, number>;
-  pluginPassCount: Record<string, number>;
-};
-
-export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
-  if (isApiProvider(provider)) {
-    return provider.id();
-  } else if (isProviderOptions(provider)) {
-    return provider.id;
-  } else if (typeof provider === 'string') {
-    return provider;
+function canonicalizeProviderId(id: string): string {
+  // Handle file:// prefix
+  if (id.startsWith('file://')) {
+    const filePath = id.slice('file://'.length);
+    return path.isAbsolute(filePath) ? id : `file://${path.resolve(filePath)}`;
   }
+
+  // Handle other executable prefixes with file paths
+  const executablePrefixes = ['exec:', 'python:', 'golang:'];
+  for (const prefix of executablePrefixes) {
+    if (id.startsWith(prefix)) {
+      const filePath = id.slice(prefix.length);
+      if (filePath.includes('/') || filePath.includes('\\')) {
+        return `${prefix}${path.resolve(filePath)}`;
+      }
+      return id;
+    }
+  }
+
+  // For JavaScript/TypeScript files without file:// prefix
+  if (
+    (id.endsWith('.js') || id.endsWith('.ts') || id.endsWith('.mjs')) &&
+    (id.includes('/') || id.includes('\\'))
+  ) {
+    return `file://${path.resolve(id)}`;
+  }
+
+  return id;
+}
+
+function getProviderLabel(provider: any): string | undefined {
+  return provider?.label && typeof provider.label === 'string' ? provider.label : undefined;
+}
+
+export function providerToIdentifier(
+  provider: TestCase['provider'] | { id?: string; label?: string } | undefined,
+): string | undefined {
+  if (!provider) {
+    return undefined;
+  }
+
+  if (typeof provider === 'string') {
+    return canonicalizeProviderId(provider);
+  }
+
+  // Check for label first on any provider type
+  const label = getProviderLabel(provider);
+  if (label) {
+    return label;
+  }
+
+  if (isApiProvider(provider)) {
+    return canonicalizeProviderId(provider.id());
+  }
+
+  if (isProviderOptions(provider)) {
+    if (provider.id) {
+      return canonicalizeProviderId(provider.id);
+    }
+    return undefined;
+  }
+
+  // Handle any other object with id property
+  if (typeof provider === 'object' && 'id' in provider && typeof provider.id === 'string') {
+    return canonicalizeProviderId(provider.id);
+  }
+
   return undefined;
+}
+
+/**
+ * Filters out runtime-only variables that are added during evaluation
+ * but aren't part of the original test definition
+ */
+function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
+  if (!vars) {
+    return vars;
+  }
+  const { _conversation, ...userVars } = vars;
+  return userVars;
 }
 
 export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
@@ -260,7 +421,101 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
     ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
     : true;
 
-  return varsMatch(testCase.vars, result.vars) && providersMatch;
+  // Filter out runtime variables like _conversation when matching
+  // These are added during evaluation but shouldn't affect test matching
+  // Use result.vars (not result.testCase.vars) as it contains the actual vars used during evaluation
+  const resultVars = filterRuntimeVars(result.vars);
+  const testVars = filterRuntimeVars(testCase.vars);
+  return varsMatch(testVars, resultVars) && providersMatch;
+}
+
+/**
+ * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
+ * This allows env vars to be resolved at provider load time while preserving runtime var templates.
+ *
+ * Supports full Nunjucks syntax for env vars including filters and expressions:
+ * - {{ env.VAR_NAME }}
+ * - {{ env['VAR-NAME'] }}
+ * - {{ env["VAR-NAME"] }}
+ * - {{ env.VAR | default('fallback') }}
+ * - {{ env.VAR | upper }}
+ *
+ * Preserves non-env templates for runtime rendering:
+ * - {{ vars.x }} - preserved as literal
+ * - {{ prompt }} - preserved as literal
+ *
+ * Implementation: Uses regex to find env templates, delegates to Nunjucks for rendering.
+ * This ensures full Nunjucks feature support while preserving non-env templates.
+ *
+ * @param obj - The object to process
+ * @returns The object with only env templates rendered
+ */
+export function renderEnvOnlyInObject<T>(obj: T): T {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return obj;
+  }
+
+  if (typeof obj === 'string') {
+    // Prevent ReDoS: Skip regex matching on extremely long strings
+    // The regex pattern has nested quantifiers that can cause exponential backtracking
+    const MAX_STRING_LENGTH = 50000; // Reasonable limit for config strings
+    if (obj.length > MAX_STRING_LENGTH) {
+      logger.warn(
+        `String too long (${obj.length} chars) for template matching. Skipping env var rendering.`,
+      );
+      return obj as unknown as T;
+    }
+
+    const nunjucks = getNunjucksEngine();
+    const envGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
+
+    // Match ALL Nunjucks templates {{ ... }}
+    // The pattern (?:[^}]|\}(?!\}))* matches content that may contain } but not }}
+    return obj.replace(/\{\{(?:[^}]|\}(?!\}))*\}\}/g, (match) => {
+      // Only process templates that reference env
+      if (!match.match(/\benv\.|env\[/)) {
+        return match; // Not an env template, preserve as-is
+      }
+
+      // Extract the variable name to check if it exists
+      const varMatch = match.match(/env\.(\w+)|env\[['"]([^'"]+)['"]\]/);
+      const varName = varMatch?.[1] || varMatch?.[2];
+
+      // Check if template contains a filter (indicated by |)
+      // Filters often handle undefined values (e.g., default filter)
+      const hasFilter = match.includes('|');
+
+      // Render if:
+      // 1. Template has a filter (let Nunjucks handle undefined with filter logic)
+      // 2. Variable exists (even if it's an empty string)
+      if (hasFilter || (varName && varName in envGlobals)) {
+        try {
+          // Use Nunjucks to render the template (supports filters, expressions, etc.)
+          return nunjucks.renderString(match, { env: envGlobals });
+        } catch (_error) {
+          // On render error, preserve the template
+          return match;
+        }
+      }
+
+      // Variable doesn't exist and no filter - preserve template for potential runtime resolution
+      return match;
+    }) as unknown as T;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => renderEnvOnlyInObject(item)) as unknown as T;
+  }
+
+  if (typeof obj === 'object' && obj !== null) {
+    const result: Record<string, unknown> = {};
+    for (const key in obj) {
+      result[key] = renderEnvOnlyInObject((obj as Record<string, unknown>)[key]);
+    }
+    return result as T;
+  }
+
+  return obj;
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
@@ -314,12 +569,19 @@ export function parsePathOrGlob(
   let functionName: string | undefined;
 
   if (filename.includes(':')) {
-    const splits = filename.split(':');
-    if (
-      splits[0] &&
-      (isJavascriptFile(splits[0]) || splits[0].endsWith('.py') || splits[0].endsWith('.go'))
-    ) {
-      [filename, functionName] = splits;
+    // Windows-aware path parsing: check if colon is part of drive letter
+    const lastColonIndex = filename.lastIndexOf(':');
+    if (lastColonIndex > 1) {
+      const pathWithoutFunction = filename.slice(0, lastColonIndex);
+      if (
+        isJavascriptFile(pathWithoutFunction) ||
+        pathWithoutFunction.endsWith('.py') ||
+        pathWithoutFunction.endsWith('.go') ||
+        pathWithoutFunction.endsWith('.rb')
+      ) {
+        functionName = filename.slice(lastColonIndex + 1);
+        filename = pathWithoutFunction;
+      }
     }
   }
 
@@ -333,11 +595,12 @@ export function parsePathOrGlob(
     }
   }
 
-  const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
-  const safeFilename = path.relative(
-    basePath,
-    path.isAbsolute(filename) ? filename : path.resolve(basePath, filename),
-  );
+  // Check for glob patterns in the original path or the resolved path
+  // On Windows, normalize separators for cross-platform glob pattern detection
+  const normalizedFilePath = filePath.replace(/\\/g, '/');
+  const isPathPattern =
+    stats?.isDirectory() || hasMagic(promptPath) || hasMagic(normalizedFilePath);
+  const safeFilename = path.relative(basePath, safeResolve(basePath, filename));
   return {
     extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
     filePath: safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename),
