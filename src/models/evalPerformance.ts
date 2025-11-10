@@ -5,6 +5,16 @@ import logger from '../logger';
 
 import type { EvalResultsFilterMode } from '../types/index';
 
+/** Result from COUNT queries using db.all() - count is always a number in result array */
+interface CountResult {
+  count: number;
+}
+
+/** Result from queries selecting test_idx column */
+interface TestIndexRow {
+  test_idx: number;
+}
+
 interface CountCacheEntry {
   count: number;
   timestamp: number;
@@ -101,7 +111,7 @@ export async function queryTestIndicesOptimized(
     WHERE ${whereClause}
   `;
 
-  const countResult = db.all<{ count: number }>(countQuery);
+  const countResult = db.all<CountResult>(countQuery);
   const filteredCount = Number(countResult[0]?.count ?? 0);
   logger.debug(`Optimized count query took ${Date.now() - countStart}ms`);
 
@@ -116,7 +126,7 @@ export async function queryTestIndicesOptimized(
     OFFSET ${offset}
   `;
 
-  const rows = db.all<{ test_idx: number }>(idxQuery);
+  const rows = db.all<TestIndexRow>(idxQuery);
   const testIndices = rows.map((row) => row.test_idx);
   logger.debug(`Optimized index query took ${Date.now() - idxStart}ms`);
 
