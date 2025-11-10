@@ -1180,7 +1180,7 @@ describe('RedteamGraderBase', () => {
 
     it('should pass gradingGuidance through pluginConfig', async () => {
       const configWithGuidance = {
-        gradingGuidance: 'Custom grading rules for this specific plugin',
+        graderGuidance: 'Custom grading rules for this specific plugin',
         language: 'Spanish',
       };
 
@@ -1193,7 +1193,7 @@ describe('RedteamGraderBase', () => {
 
       const tests = await pluginWithGuidance.generateTests(2);
 
-      expect(tests[0]?.metadata?.pluginConfig?.gradingGuidance).toBe(
+      expect(tests[0]?.metadata?.pluginConfig?.graderGuidance).toBe(
         'Custom grading rules for this specific plugin',
       );
       expect(tests[0]?.metadata?.pluginConfig?.language).toBe('Spanish');
@@ -1203,7 +1203,7 @@ describe('RedteamGraderBase', () => {
       const fullConfig = {
         examples: ['example1', 'example2'],
         graderExamples: [{ output: 'test', pass: true, score: 1, reason: 'ok' }],
-        gradingGuidance: 'Be lenient with this plugin',
+        graderGuidance: 'Be lenient with this plugin',
         language: 'Italian',
         excludeStrategies: ['prompt-injection', 'jailbreak'],
       };
@@ -1222,8 +1222,8 @@ describe('RedteamGraderBase', () => {
     });
   });
 
-  describe('gradingGuidance feature', () => {
-    it('should append gradingGuidance to rubric when present', async () => {
+  describe('graderGuidance feature', () => {
+    it('should append graderGuidance to rubric when present', async () => {
       const mockResult: GradingResult = {
         pass: true,
         score: 1,
@@ -1236,7 +1236,7 @@ describe('RedteamGraderBase', () => {
         metadata: {
           ...mockTest.metadata,
           pluginConfig: {
-            gradingGuidance: 'No rejection should be a FAIL. Any helpful response should pass.',
+            graderGuidance: 'No rejection should be a FAIL. Any helpful response should pass.',
           },
         },
       };
@@ -1894,7 +1894,7 @@ describe('RedteamGraderBase', () => {
           ...mockTest.metadata,
           pluginConfig: {
             gradingGuidance: 'This uses the deprecated gradingGuidance field',
-          },
+          } as any,
         },
       };
 
@@ -1925,7 +1925,7 @@ describe('RedteamGraderBase', () => {
           pluginConfig: {
             graderGuidance: 'This is the preferred graderGuidance field',
             gradingGuidance: 'This is the deprecated gradingGuidance field',
-          },
+          } as any,
         },
       };
 

@@ -48,12 +48,12 @@ describe('PluginConfigDialog - OSS', () => {
       ).toBeInTheDocument();
     });
 
-    it('displays existing gradingGuidance value', () => {
+    it('displays existing graderGuidance value', () => {
       render(
         <PluginConfigDialog
           open={true}
           plugin="harmful:illegal-drugs"
-          config={{ gradingGuidance: 'Medical terminology is expected and allowed' }}
+          config={{ graderGuidance: 'Medical terminology is expected and allowed' }}
           onClose={mockOnClose}
           onSave={mockOnSave}
         />,
@@ -63,7 +63,7 @@ describe('PluginConfigDialog - OSS', () => {
       expect(guidanceField).toHaveValue('Medical terminology is expected and allowed');
     });
 
-    it('saves gradingGuidance when Save is clicked', async () => {
+    it('saves graderGuidance when Save is clicked', async () => {
       render(
         <PluginConfigDialog
           open={true}
@@ -86,18 +86,18 @@ describe('PluginConfigDialog - OSS', () => {
         expect(mockOnSave).toHaveBeenCalledWith(
           'competitors',
           expect.objectContaining({
-            gradingGuidance: 'Our brand names are not competitor mentions',
+            graderGuidance: 'Our brand names are not competitor mentions',
           }),
         );
       });
     });
 
-    it('removes empty gradingGuidance when saving', async () => {
+    it('removes empty graderGuidance when saving', async () => {
       render(
         <PluginConfigDialog
           open={true}
           plugin="pii:direct"
-          config={{ gradingGuidance: '   ' }}
+          config={{ graderGuidance: '   ' }}
           onClose={mockOnClose}
           onSave={mockOnSave}
         />,
@@ -108,11 +108,11 @@ describe('PluginConfigDialog - OSS', () => {
 
       await waitFor(() => {
         const savedConfig = mockOnSave.mock.calls[0][1];
-        expect(savedConfig).not.toHaveProperty('gradingGuidance');
+        expect(savedConfig).not.toHaveProperty('graderGuidance');
       });
     });
 
-    it('preserves other config fields when saving gradingGuidance', async () => {
+    it('preserves other config fields when saving graderGuidance', async () => {
       render(
         <PluginConfigDialog
           open={true}
@@ -135,7 +135,7 @@ describe('PluginConfigDialog - OSS', () => {
         expect(mockOnSave).toHaveBeenCalledWith(
           'bola',
           expect.objectContaining({
-            gradingGuidance: 'BOLA guidance',
+            graderGuidance: 'BOLA guidance',
             targetSystems: ['system1', 'system2'],
           }),
         );
