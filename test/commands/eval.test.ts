@@ -89,6 +89,9 @@ describe('evalCommand', () => {
         providers: [],
       },
       basePath: path.resolve('/'),
+      commandLineOptions: {
+        table: false, // Disable table output by default in tests to avoid database mock issues
+      },
     });
     jest.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     jest.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
@@ -114,6 +117,68 @@ describe('evalCommand', () => {
     expect(disableCache).toHaveBeenCalledTimes(1);
   });
 
+  it('should use commandLineOptions.maxConcurrency from config', async () => {
+    const cmdObj = { table: false };
+    const config = {} as UnifiedConfig;
+    const mockEvalRecord = new Eval(config);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+      commandLineOptions: {
+        maxConcurrency: 5,
+        table: false,
+      },
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        maxConcurrency: 5,
+      }),
+    );
+  });
+
+  it('should prioritize CLI maxConcurrency over commandLineOptions', async () => {
+    const cmdObj = { maxConcurrency: 10 };
+    const config = {} as UnifiedConfig;
+    const mockEvalRecord = new Eval(config);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+      commandLineOptions: {
+        maxConcurrency: 5,
+        table: false,
+      },
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        maxConcurrency: 10,
+      }),
+    );
+  });
+
   it('should handle --write option', async () => {
     const cmdObj = { write: true };
     const mockEvalRecord = new Eval(defaultConfig);
@@ -124,7 +189,7 @@ describe('evalCommand', () => {
   });
 
   it('should handle redteam config', async () => {
-    const cmdObj = {};
+    const cmdObj = { table: false };
     const config = {
       redteam: { plugins: ['test-plugin'] as any },
       prompts: [],
@@ -150,7 +215,7 @@ describe('evalCommand', () => {
   });
 
   it('should handle share option when enabled', async () => {
-    const cmdObj = { share: true };
+    const cmdObj = { share: true, table: false };
     const config = { sharing: true } as UnifiedConfig;
     const evalRecord = new Eval(config);
 
@@ -173,7 +238,7 @@ describe('evalCommand', () => {
   });
 
   it('should not share when share is explicitly set to false even if config has sharing enabled', async () => {
-    const cmdObj = { share: false };
+    const cmdObj = { share: false, table: false };
     const config = { sharing: true } as UnifiedConfig;
     const evalRecord = new Eval(config);
 
@@ -195,7 +260,7 @@ describe('evalCommand', () => {
   });
 
   it('should share when share is true even if config has no sharing enabled', async () => {
-    const cmdObj = { share: true };
+    const cmdObj = { share: true, table: false };
     const config = {} as UnifiedConfig;
     const evalRecord = new Eval(config);
 
@@ -218,7 +283,7 @@ describe('evalCommand', () => {
   });
 
   it('should share when share is undefined and config has sharing enabled', async () => {
-    const cmdObj = {};
+    const cmdObj = { table: false };
     const config = { sharing: true } as UnifiedConfig;
     const evalRecord = new Eval(config);
 
@@ -241,7 +306,7 @@ describe('evalCommand', () => {
   });
 
   it('should auto-share when connected to cloud even if sharing is not explicitly enabled', async () => {
-    const cmdObj = {};
+    const cmdObj = { table: false };
     const config = {} as UnifiedConfig; // No sharing config
     const evalRecord = new Eval(config);
 
@@ -267,7 +332,7 @@ describe('evalCommand', () => {
   });
 
   it('should not auto-share when connected to cloud if share is explicitly set to false', async () => {
-    const cmdObj = { share: false };
+    const cmdObj = { share: false, table: false };
     const config = {} as UnifiedConfig;
     const evalRecord = new Eval(config);
 
@@ -336,7 +401,7 @@ describe('evalCommand', () => {
   });
 
   it('should fallback to evaluateOptions.maxConcurrency when cmdObj.maxConcurrency is undefined', async () => {
-    const cmdObj = {};
+    const cmdObj = { table: false };
     const evaluateOptions = { maxConcurrency: 3 };
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions);
@@ -349,7 +414,7 @@ describe('evalCommand', () => {
   });
 
   it('should fallback to DEFAULT_MAX_CONCURRENCY when both cmdObj and evaluateOptions maxConcurrency are undefined', async () => {
-    const cmdObj = {};
+    const cmdObj = { table: false };
     const evaluateOptions = {};
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions);
@@ -394,7 +459,7 @@ describe('checkCloudPermissions', () => {
       basePath: path.resolve('/'),
     });
 
-    const cmdObj = {};
+    const cmdObj = { table: false };
 
     await expect(doEval(cmdObj, config, defaultConfigPath, {})).rejects.toThrow(
       'Permission denied: insufficient access',
@@ -432,7 +497,7 @@ describe('checkCloudPermissions', () => {
     const mockEvalRecord = new Eval(config);
     jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
 
-    const cmdObj = {};
+    const cmdObj = { table: false };
 
     const result = await doEval(cmdObj, config, defaultConfigPath, {});
 
@@ -471,7 +536,7 @@ describe('checkCloudPermissions', () => {
     const mockEvalRecord = new Eval(config);
     jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
 
-    const cmdObj = {};
+    const cmdObj = { table: false };
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
@@ -653,7 +718,7 @@ describe('doEval with external defaultTest', () => {
   });
 
   it('should handle grader option with string defaultTest', async () => {
-    const cmdObj = { grader: 'test-grader' };
+    const cmdObj = { grader: 'test-grader', table: false };
     const mockProvider = {
       id: () => 'test-grader',
       callApi: async () => ({ output: 'test' }),
@@ -689,7 +754,7 @@ describe('doEval with external defaultTest', () => {
   });
 
   it('should handle var option with string defaultTest', async () => {
-    const cmdObj = { var: { key: 'value' } };
+    const cmdObj = { var: { key: 'value' }, table: false };
 
     const testSuite = {
       prompts: [],
@@ -722,6 +787,7 @@ describe('doEval with external defaultTest', () => {
     const cmdObj = {
       grader: 'test-grader',
       var: { key: 'value' },
+      table: false,
     };
 
     const mockProvider = {
@@ -765,7 +831,7 @@ describe('doEval with external defaultTest', () => {
   });
 
   it('should not modify defaultTest when no grader or var options', async () => {
-    const cmdObj = {};
+    const cmdObj = { table: false };
 
     const originalDefaultTest = {
       options: {},
