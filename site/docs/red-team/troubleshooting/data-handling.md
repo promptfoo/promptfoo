@@ -6,9 +6,22 @@ description: What data promptfoo collects and how to configure data transmission
 
 # Data handling and privacy
 
-What data promptfoo collects depends on your API key configuration.
+What data promptfoo collects depends on whether you're using red team testing and your API key configuration.
 
-## Data sent to promptfoo servers
+## Red team vs regular evals
+
+**Red team testing** generates adversarial test cases and requires more data transmission:
+
+- Without `OPENAI_API_KEY`: Test generation and grading use promptfoo servers
+- Many plugins require remote generation (competitors, hijacking, indirect prompt injection, etc.)
+
+**Regular evals** (non-red team) send minimal data:
+
+- Test cases you define run against your target
+- Only anonymous telemetry sent to promptfoo servers
+- No test content sent to promptfoo
+
+## Red team data sent to promptfoo servers
 
 ### Without OPENAI_API_KEY
 
@@ -56,7 +69,13 @@ Use [Enterprise on-prem](/docs/enterprise/) for airgapped deployment with no ext
 
 **Force local generation:**
 
-Disable remote generation to use your local provider. See [remote generation configuration](/docs/red-team/configuration/#remote-generation).
+Disable remote generation to use your local provider:
+
+```bash
+export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
+```
+
+**Warning**: Disables 20+ red team plugins that require remote generation including competitors, hijacking, indirect-prompt-injection, goal-misalignment, rag-poisoning, and others. See [remote generation configuration](/docs/red-team/configuration/#remote-generation).
 
 **Offline environments:**
 
