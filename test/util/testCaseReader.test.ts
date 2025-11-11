@@ -1683,7 +1683,7 @@ describe('loadTestsFromGlob', () => {
       // Handle arrays - preserve array type and return resolved content
       if (Array.isArray(config)) {
         // Map over array to handle each element
-        return config.map(item => {
+        return config.map((item) => {
           // If it matches our test data structure, return the resolved version
           if (item && item.description === 'Test with file refs') {
             return resolvedContent[0];
@@ -1744,7 +1744,7 @@ describe('loadTestsFromGlob', () => {
     mockMaybeLoadConfig.mockImplementation((config: any) => {
       // Handle arrays - preserve array type and return resolved content
       if (Array.isArray(config)) {
-        return config.map(item => {
+        return config.map((item) => {
           if (item && item.description === 'Complex test') {
             return resolvedContent[0];
           }
