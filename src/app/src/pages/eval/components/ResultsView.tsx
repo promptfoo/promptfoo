@@ -815,9 +815,14 @@ export default function ResultsView({
                         // This should match the display format used in the dropdown
                         const policyName = filters.policyIdToNameMap?.[filter.value];
                         label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
-                      } else {
-                        // metadata type
-                        label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                      }
+                      // Metadata:
+                      else {
+                        if (filter.operator === 'exists') {
+                          label = `Metadata: ${filter.field}`;
+                        } else {
+                          label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                        }
                       }
 
                       return (
