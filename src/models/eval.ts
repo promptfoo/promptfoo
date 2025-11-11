@@ -111,11 +111,6 @@ export interface VarKeyResult {
 
 const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
-interface MetadataValueRow {
-  value_raw: string | number | boolean | null;
-  value_type: string | null;
-}
-
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
@@ -205,39 +200,21 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
 
       const query = sql`
         SELECT DISTINCT
-          json_extract(${evalResultsTable.metadata}, ${jsonPath}) AS value_raw,
-          json_type(${evalResultsTable.metadata}, ${jsonPath}) AS value_type
+          json_extract(${evalResultsTable.metadata}, ${jsonPath}) AS value
         FROM ${evalResultsTable}
         WHERE ${evalResultsTable.evalId} = ${evalId}
           AND ${evalResultsTable.metadata} IS NOT NULL
           AND ${evalResultsTable.metadata} != '{}'
           AND json_valid(${evalResultsTable.metadata})
-          AND json_type(${evalResultsTable.metadata}, ${jsonPath}) IN ('text', 'number', 'boolean')
           AND json_extract(${evalResultsTable.metadata}, ${jsonPath}) IS NOT NULL
-        ORDER BY value_raw
+        ORDER BY value
         LIMIT 1000
       `;
 
-      const rows = db.all<MetadataValueRow>(query);
+      const rows = db.all<{ value: string }>(query);
       const values = rows
-        .map((row) => {
-          if (row.value_raw == null) {
-            return null;
-          }
-
-          if (row.value_type === 'boolean') {
-            const raw = row.value_raw;
-            if (raw === 1 || raw === '1' || raw === true) {
-              return 'true';
-            }
-            if (raw === 0 || raw === '0' || raw === false) {
-              return 'false';
-            }
-          }
-
-          return String(row.value_raw).trim();
-        })
-        .filter((val): val is string => Boolean(val && val.length > 0));
+        .map(({ value }) => String(value).trim())
+        .filter((value) => Boolean(value && value.length > 0));
 
       return Array.from(new Set(values));
     } catch (error) {
