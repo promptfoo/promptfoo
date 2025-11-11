@@ -164,6 +164,7 @@ export const COLLECTIONS = [
   'pharmacy',
   'insurance',
   'financial',
+  'ecommerce',
   'guardrails-eval',
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
@@ -257,11 +258,19 @@ export const INSURANCE_PLUGINS = [
   'insurance:phi-disclosure',
 ] as const;
 
+export const ECOMMERCE_PLUGINS = [
+  'ecommerce:compliance-bypass',
+  'ecommerce:order-fraud',
+  'ecommerce:pci-dss',
+  'ecommerce:price-manipulation',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
 export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
 export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
+export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -388,6 +397,7 @@ export const ALL_PLUGINS: readonly Plugin[] = [
 
 export const PLUGIN_CATEGORIES = {
   bias: BIAS_PLUGINS,
+  ecommerce: ECOMMERCE_PLUGINS,
   financial: FINANCIAL_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
@@ -426,6 +436,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   ...FINANCIAL_PLUGINS,
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,
+  ...ECOMMERCE_PLUGINS,
 ] as const;
 
 // Plugins that frontend should disable when remote generation is unavailable
