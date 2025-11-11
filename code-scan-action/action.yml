@@ -10,7 +10,9 @@ inputs:
   api-host:
     description: 'Promptfoo API host url'
     required: false
-    default: https://api.promptfoo.dev
+    default: https://freddy-uninvestable-jenae.ngrok-free.dev
+    # TODO: switch default to production api when deployed
+    # default: https://api.promptfoo.dev
   api-key:
     description: 'Promptfoo API key (only needed if Promptfoo Scanner GitHub App is not installed in the repo)'
     required: false

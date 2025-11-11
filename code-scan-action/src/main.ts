@@ -142,8 +142,13 @@ async function run(): Promise<void> {
       core.info('✅ Mock scan completed successfully');
     } else {
       // Run real scan in production
-      core.info('📦 Installing promptfoo from git...');
-      await exec.exec('npm', ['install', '-g', 'git+https://github.com/promptfoo/promptfoo.git']);
+      core.info('📦 Installing promptfoo...');
+      // TODO: Switch to real promptfoo npm package (not git url)
+      await exec.exec('npm', [
+        'install',
+        '-g',
+        'git+https://github.com/promptfoo/promptfoo.git#dane/code_scan',
+      ]);
       core.info('✅ Promptfoo installed successfully');
 
       core.info(`🚀 Running promptfoo code-scans run...`);

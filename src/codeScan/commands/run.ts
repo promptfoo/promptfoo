@@ -93,25 +93,42 @@ async function createSocketConnection(
 ): Promise<Socket> {
   return new Promise((resolve, reject) => {
     logger.debug(`Connecting to ${apiHost}...`);
+    let settled = false;
+
+    const cleanup = () => {
+      clearTimeout(timeoutId); // Clear the connection timeout
+      socket.io.reconnection(false); // Stop any reconnection attempts
+      socket.removeAllListeners();
+      socket.close();
+    };
 
     const socket = io(apiHost, {
       // Use websocket-only transport (polling requires sticky sessions)
       transports: ['websocket'],
+      // Enable reconnection with limits - will be used during scan phase
       reconnection: true,
       reconnectionDelay: 500,
       reconnectionDelayMax: 10000,
+      reconnectionAttempts: 5,
       auth,
     });
 
-    // Connection success
+    // Connection success - return socket with reconnection enabled for scan phase
     socket.on('connect', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
       logger.debug(`Socket.io connected (id: ${socket.id})`);
       resolve(socket);
     });
 
-    // Connection error
+    // Connection error - fail immediately, cleanup to stop any reconnection attempts
     socket.on('connect_error', (error) => {
-      logger.error(`Socket.io connection error: ${error.message}`);
+      if (settled) return;
+      settled = true;
+      // Don't log here - error will be shown in "Scan failed" message
+      logger.debug(`Socket.io connection error: ${error.message}`);
+      cleanup(); // Stop reconnection and close socket
       reject(new Error(`Failed to connect to server: ${error.message}`));
     });
 
@@ -122,13 +139,16 @@ async function createSocketConnection(
 
     // Error handling
     socket.on('error', (error) => {
-      logger.error(`Socket.io error: ${String(error)}`);
+      // Log at debug level to avoid noise with spinner
+      logger.debug(`Socket.io error: ${String(error)}`);
     });
 
-    // Connection timeout
-    setTimeout(() => {
-      if (!socket.connected) {
-        reject(new Error('Socket.io connection timeout after 10 seconds'));
+    // Connection timeout - cleanup and reject
+    const timeoutId = setTimeout(() => {
+      if (!socket.connected && !settled) {
+        settled = true;
+        cleanup();
+        reject(new Error('Connection timeout after 10 seconds'));
       }
     }, 10000);
   });
@@ -145,18 +165,23 @@ function registerCleanupHandlers(refs: CleanupRefs): void {
     if (refs.mcpProcess) {
       await stopFilesystemMcpServer(refs.mcpProcess).catch(() => {});
     }
-    // Cleanup socket
+    // Cleanup socket - disable reconnection before disconnecting
     if (refs.socket) {
+      refs.socket.io.reconnection(false); // Disable reconnection to prevent further attempts
+      refs.socket.removeAllListeners(); // Remove all event listeners
       refs.socket.disconnect();
+      refs.socket.close(); // Fully close the socket
     }
 
-    // don't force exit, let global cleanup run if needed
+    // Don't force exit - allow finally block and telemetry shutdown to run
+    // The socket.close() should release the event loop and allow natural exit
   };
 
   // Register handlers for common termination signals
-  process.on('SIGINT', () => cleanup('SIGINT')); // Ctrl+C
-  process.on('SIGTERM', () => cleanup('SIGTERM')); // Termination signal
-  process.on('SIGQUIT', () => cleanup('SIGQUIT')); // Quit signal
+  // Use void operator to handle async cleanup without awaiting
+  process.on('SIGINT', () => void cleanup('SIGINT')); // Ctrl+C
+  process.on('SIGTERM', () => void cleanup('SIGTERM')); // Termination signal
+  process.on('SIGQUIT', () => void cleanup('SIGQUIT')); // Quit signal
 }
 
 async function executeScan(repoPath: string, options: ScanOptions): Promise<void> {
@@ -404,6 +429,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       const onComplete = (response: ScanResponse) => {
         socket?.off('scan:complete', onComplete);
         socket?.off('scan:error', onError);
+        socket?.off('reconnect_failed', onReconnectFailed);
         if (firstPulseTimeout) {
           clearTimeout(firstPulseTimeout);
         }
@@ -416,6 +442,7 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       const onError = (error: { success: false; error: string; message: string }) => {
         socket?.off('scan:complete', onComplete);
         socket?.off('scan:error', onError);
+        socket?.off('reconnect_failed', onReconnectFailed);
         if (firstPulseTimeout) {
           clearTimeout(firstPulseTimeout);
         }
@@ -425,8 +452,22 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
         reject(new Error(error.message || error.error));
       };
 
+      const onReconnectFailed = () => {
+        socket?.off('scan:complete', onComplete);
+        socket?.off('scan:error', onError);
+        socket?.off('reconnect_failed', onReconnectFailed);
+        if (firstPulseTimeout) {
+          clearTimeout(firstPulseTimeout);
+        }
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+        }
+        reject(new Error('Lost connection to server during scan'));
+      };
+
       socket?.on('scan:complete', onComplete);
       socket?.on('scan:error', onError);
+      socket?.on('reconnect_failed', onReconnectFailed);
 
       // Emit scan request
       socket?.emit('scan:start', scanRequest);
