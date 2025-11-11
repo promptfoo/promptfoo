@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Link as RouterLink } from 'react-router-dom';
+
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Divider from '@mui/material/Divider';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
@@ -18,21 +21,20 @@ import {
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
-import { Link as RouterLink } from 'react-router-dom';
+import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import EstimationsDisplay from './EstimationsDisplay';
 import PageWrapper from './PageWrapper';
-import StrategyConfigDialog from './StrategyConfigDialog';
-import { PresetSelector } from './strategies/PresetSelector';
 import { AgenticStrategiesGroup } from './strategies/AgenticStrategiesGroup';
+import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
+import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
 import { getStrategyId } from './strategies/utils';
-import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
-import EstimationsDisplay from './EstimationsDisplay';
-import type { ConfigDialogState, StrategyCardData } from './strategies/types';
-import Divider from '@mui/material/Divider';
+import StrategyConfigDialog from './StrategyConfigDialog';
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -59,7 +61,7 @@ const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
 };
 
 const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter(
-  (id) => id !== 'default' && id !== 'multilingual', // multilingual is deprecated
+  (id) => id !== 'default' && id !== 'multilingual' && id !== 'simba',
 ).map((id) => ({
   id,
   name: strategyDisplayNames[id] || id,
@@ -94,6 +96,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       return isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE.includes(strategyId as any);
     },
     [isRemoteGenerationDisabled],
+  );
+
+  const selectedStrategyIds = useMemo(
+    () => config.strategies.map((s) => getStrategyId(s)),
+    [config.strategies],
   );
 
   // Categorize strategies by type
@@ -409,18 +416,13 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   // Derived states
   // ----------------------------------------------
 
-  const selectedStrategyIds = useMemo(
-    () => config.strategies.map((s) => getStrategyId(s)),
-    [config.strategies],
-  );
-
   // Check if user has selected all or most strategies
   const hasSelectedMostStrategies = useMemo(() => {
     const totalAvailable = availableStrategies.length;
     const totalSelected = selectedStrategyIds.length;
     // Show warning if more than 80% of strategies are selected or all strategies are selected
     return totalSelected >= totalAvailable * 0.8 || totalSelected === totalAvailable;
-  }, [selectedStrategyIds, availableStrategies]);
+  }, [selectedStrategyIds]);
 
   const showSystemConfig = config.strategies.some((s) =>
     ['goat', 'crescendo'].includes(getStrategyId(s)),

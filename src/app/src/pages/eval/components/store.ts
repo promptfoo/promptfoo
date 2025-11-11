@@ -1,4 +1,5 @@
 import { callApi } from '@app/utils/api';
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -237,6 +238,7 @@ export type ResultsFilterType =
 
 export type ResultsFilterOperator =
   | 'equals'
+  | 'not_equals'
   | 'contains'
   | 'not_contains'
   | 'exists'
@@ -861,17 +863,18 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
       if (resp.ok) {
         const data = await resp.json();
+        const filteredKeys = data.keys.filter((key: string) => !HIDDEN_METADATA_KEYS.includes(key));
 
         // Check if this request is still current before updating state
         const latestState = get();
         if (latestState.currentMetadataKeysRequest === abortController) {
           set({
-            metadataKeys: data.keys,
+            metadataKeys: filteredKeys,
             metadataKeysLoading: false,
             currentMetadataKeysRequest: null,
           });
         }
-        return data.keys;
+        return filteredKeys;
       } else {
         throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
       }

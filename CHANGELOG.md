@@ -5,19 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+## [Unreleased]
 
 ### Added
 
 - feat(app): implement filter URL persistence for eval results - filters automatically sync to URL for sharing and browser navigation, with backwards compatible legacy format support (#6148)
-- feat(providers): add missing Alibaba Cloud models - qwen3-vl-flash, qwen3-asr-flash-realtime, qwen3-vl-32b/8b (thinking/instruct), text-embedding-v4 (7d658dc)
-
-### Fixed
-
-- fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
 
 ### Documentation
 
-- docs(providers): comprehensive Alibaba Cloud documentation update with 100+ models including Qwen3 flagship variants, qwen-long (10M context), all DeepSeek/QwQ reasoning models, complete vision/multimodal lineup, audio/speech models, coding/math specializations, open-source Qwen3 series, and third-party models (Kimi); reorganized with Commercial/Open-source sections; fixes configuration to use `apiBaseUrl` and adds Beijing region endpoint (#6118)
+- docs(providers): update Vertex AI documentation - removed deprecated models (PaLM/Bison, Claude 3 Opus, Claude 3.5 Sonnet v2), added Claude Sonnet 4.5, added missing Gemini 2.0 models, reorganized model listings by generation (Gemini 2.5/2.0/1.5, Claude 4/3, Llama 4/3.3/3.2/3.1), marked Preview/Experimental models, removed temporal language to make docs evergreen (#3169)
+
+### Changed
+
+- chore(site): remove Koala analytics and migrate Google tracking to Docusaurus built-in gtag configuration with multiple tracking IDs (G-3TS8QLZQ93, G-3YM29CN26E, AW-17347444171) (#6169)
+
+### Fixed
+- fix(redteam): respect redteam.provider configuration for local grading - fixes issue where configuring a local provider (e.g., ollama:llama3.2) still sent grading requests to remote API instead of using the configured provider (#5959)
+
+## [0.119.5] - 2025-11-10
+
+### Added
+
+- feat(test-cases): add support for Excel files (.xlsx, .xls) as test case sources with optional xlsx dependency and sheet selection syntax (file.xlsx#SheetName or file.xlsx#2) (#4841)
+- feat(providers): add OpenAI audio transcription support for whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe, and gpt-4o-transcribe-diarize models with speaker identification, timestamp granularities, and per-minute cost tracking (#5957)
+- feat(webui): display rendered assertion values with substituted variables in Evaluation tab instead of raw templates, improving readability for assertions with Nunjucks variables and loops (#5988)
+- feat(prompts): add executable prompt scripts - use any script/binary to dynamically generate prompts via `exec:` prefix or auto-detection for common extensions (.sh, .bash, .rb, .pl); scripts receive context as JSON (#5329)
+- feat(providers): add variable templating support for initialMessages in simulated-user provider, enabling template reuse across test cases with Nunjucks variables (#6143)
+- feat(redteam): add `jailbreak:hydra` strategy - multi-turn conversational adversarial agent that learns from target responses and shares learnings across tests in the same scan for improved attack success rates (#6151)
+- feat(providers): add missing Alibaba Cloud models - qwen3-vl-flash, qwen3-asr-flash-realtime, qwen3-vl-32b/8b (thinking/instruct), text-embedding-v4 (#6118)
+- feat(eval): add 'not_equals' operator for plugin filters (#6155)
+
+### Fixed
+
+- fix(webui): correct multi-target filtering in red team report - statistics now properly filter by selected target instead of showing aggregated data across all targets; replaced modal with Select dropdown for clearer UX (#4251)
+- fix(providers): auto-detect reasoning models by deployment name in Azure provider - now recognizes o1, o3, o4, and gpt-5 models and automatically uses `max_completion_tokens` instead of `max_tokens` (#6154)
+- fix(prompts): fix basePath resolution for executable prompts with `exec:` prefix - relative paths now resolve correctly (5308c5d)
+- fix(prompts): convert sync fs operations to async in executable prompt processor for better performance (5308c5d)
+- fix(test-cases): improve xlsx error handling to avoid double-wrapping validation errors, provide clearer error messages for file not found, empty sheets, and invalid data (#4841)
+- fix(docs): update xlsx documentation to use consistent version (0.18.5) and correct anchor links (#4841)
+- fix(assertions): fix runtime variables not working in custom rubricPrompt for factuality and model-graded-closedqa assertions (#5340)
+- fix(openai): fix timeouts on gpt-5-pro models by extending automatic timeout to 10 minutes (#6147)
+- fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
+- fix(deps): fix test coverage reporting errors (#6122)
+- fix(cli): honor `commandLineOptions` from config file for `maxConcurrency`, `repeat`, `delay`, `cache`, `progressBar`, `generateSuggestions`, `table`, `share`, and `write` — previously ignored in favor of defaults (#6142)
+
+### Changed
+
+- chore(ci): make staging redteam test non-blocking to prevent intermittent API timeouts from failing CI runs (#6159)
+- refactor(redteam): update risk score thresholds to match CVSS v3.x/v4.0 standards (Critical: 9.0-10.0, High: 7.0-8.9, Medium: 4.0-6.9, Low: 0.1-3.9) (#6132)
+- chore(server): change traces fetch log to debug level (#6152)
+- chore(redteam): rename `gradingGuidance` to `graderGuidance` for consistency with `graderExamples` - `gradingGuidance` still works as a deprecated alias for backward compatibility (#6128)
+
+### Documentation
+
+- docs(cli): document `promptfoo view --no` flag in command-line docs (#6067)
+- docs(site): add blog post on Anthropic threat intelligence covering PROMPTFLUX and PROMPTSTEAL (first observed LLM-querying malware by Google), AI-orchestrated extortion campaigns, three categories of AI-assisted attacks (operator/builder/enabler), operational security implications, and practical Promptfoo testing examples for AI system exploitation risks (#5583)
+- docs(site): re-add adaptive guardrails documentation covering enterprise feature for generating target-specific security policies from red team findings, including architecture, API integration, use cases, troubleshooting, and comparison to AWS Bedrock/Azure AI Content Safety (#5955)
+- docs(guides): add comprehensive Portkey integration guide covering prompt management, multi-model testing across 1600+ providers, red-teaming workflows, and production deployment strategies by @ladyofcode (#5730)
+
+### Tests
+
+- test(providers): add test coverage for auto-detection of reasoning models by deployment name in Azure provider (#6154)
+- test(assertions): add comprehensive test coverage for rendered assertion value metadata including variable substitution, loops, static text handling, and UI display fallback priority (#6145)
 
 ### Dependencies
 
@@ -27,14 +76,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(webui): add confirmation dialog and smart navigation for delete eval with improved UX (Material-UI dialog, next→previous→home navigation, loading states, toast notifications) (#6113)
 - feat(redteam): pass policy text to intent extraction for custom policy tests, enabling more accurate and self-contained testing objectives that include specific policy requirements (#6116)
-
 - feat(redteam): add timestamp context to all grading rubrics for time-aware evaluation and temporal context in security assessments (#6110)
 - feat(model-audit): add revision tracking, content hash generation, and deduplication for model scans to prevent re-scanning unchanged models (saving ~99% time and bandwidth); add `--stream` flag to delete downloaded files immediately after scan ([#6058](https://github.com/promptfoo/promptfoo/pull/6058))
 - feat(redteam): add FERPA compliance plugin
 
 ### Fixed
 
+- fix(redteam): dynamically update crescendo system prompt with currentRound and successFlag each iteration instead of rendering once with stale values (#6133)
 - fix(examples): change Zod schema from `.optional()` to `.default('')` for OpenAI Agents SDK compatibility (#6114)
 - fix(redteam): pass all gradingContext properties to rubric templates to fix categoryGuidance rendering errors in BeavertailsGrader (#6111)
 - fix(webui): custom policy name consistency (#6123)
