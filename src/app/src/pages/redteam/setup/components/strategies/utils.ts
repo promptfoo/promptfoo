@@ -27,6 +27,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   image: 1,
   jailbreak: 10,
   'jailbreak:composite': 5,
+  'jailbreak:hydra': 10,
   'jailbreak:likert': 1,
   'jailbreak:meta': 10,
   'jailbreak:tree': 150,

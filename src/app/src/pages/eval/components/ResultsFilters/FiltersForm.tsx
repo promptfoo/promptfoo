@@ -35,6 +35,7 @@ const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
 
 const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
   equals: 'Equals',
+  not_equals: 'Not Equals',
   contains: 'Contains',
   not_contains: 'Not Contains',
   exists: 'Exists',
@@ -51,7 +52,7 @@ const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
  * Convenience predicate function to determine if a filter type solely has equals operator.
  */
 function solelyHasEqualsOperator(type: ResultsFilter['type']): boolean {
-  return ['plugin', 'strategy', 'severity', 'policy'].includes(type);
+  return ['strategy', 'severity', 'policy'].includes(type);
 }
 
 function Dropdown({
@@ -219,6 +220,9 @@ function Filter({
       }
       // Reset operator to 'equals' when changing to types that only support 'equals'
       if (solelyHasEqualsOperator(filterType) && value.operator !== 'equals') {
+        updatedFilter.operator = 'equals';
+      }
+      if (filterType === 'plugin' && !['equals', 'not_equals'].includes(value.operator)) {
         updatedFilter.operator = 'equals';
       }
       // Reset operator to 'is_defined' when switching to metric type with an incompatible operator
@@ -457,14 +461,19 @@ function Filter({
                   { label: OPERATOR_LABELS_BY_OPERATOR.lt, value: 'lt' },
                   { label: OPERATOR_LABELS_BY_OPERATOR.lte, value: 'lte' },
                 ]
-              : solelyHasEqualsOperator(value.type)
-                ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
-                : [
+              : value.type === 'plugin'
+                ? [
                     { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
-                    { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
-                    { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
-                    { label: OPERATOR_LABELS_BY_OPERATOR.exists, value: 'exists' },
+                    { label: OPERATOR_LABELS_BY_OPERATOR.not_equals, value: 'not_equals' },
                   ]
+                : solelyHasEqualsOperator(value.type)
+                  ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
+                  : [
+                      { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.exists, value: 'exists' },
+                    ]
           }
           value={value.operator}
           onChange={(e) => handleOperatorChange(e as ResultsFilter['operator'])}
@@ -481,7 +490,7 @@ function Filter({
               minWidth: 250,
             }}
           >
-            {solelyHasEqualsOperator(value.type) ? (
+            {value.type === 'plugin' || solelyHasEqualsOperator(value.type) ? (
               <Dropdown
                 id={`${index}-value-select`}
                 label={TYPE_LABELS_BY_TYPE[value.type]}
