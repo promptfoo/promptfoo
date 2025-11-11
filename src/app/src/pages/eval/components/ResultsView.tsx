@@ -796,7 +796,10 @@ export default function ResultsView({
                         const displayName =
                           displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
                           filter.value;
-                        label = `Plugin: ${displayName}`;
+                        label =
+                          filter.operator === 'not_equals'
+                            ? `Plugin != ${displayName}`
+                            : `Plugin: ${displayName}`;
                       } else if (filter.type === 'strategy') {
                         const displayName =
                           displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||

@@ -370,7 +370,7 @@ function SolutionSection() {
       <div className="container">
         <div className={styles.sectionEyebrow}>THE PROMPTFOO APPROACH</div>
         <h2 className={styles.sectionTitle}>
-          Security testing built into
+          AI security testing built into
           <br />
           your development workflow
         </h2>
@@ -910,7 +910,7 @@ function FinalCTA() {
   return (
     <section className={styles.finalCTA}>
       <div className="container">
-        <h2 className={styles.finalCTATitle}>Ship AI with confidence</h2>
+        <h2 className={styles.finalCTATitle}>Ship Secure, Stay Secure</h2>
         <p className={styles.finalCTASubtitle}>
           Join hundreds of enterprises and thousands of developers securing AI applications from day
           one.
