@@ -89,19 +89,3 @@ posthog.init('phc_gOS5ctlYqd64vmJtYVpAU0W5iew7OopcETkyYNpkyYP', {
     (n.onload = t),
     document.head.appendChild(n);
 })();
-
-/* Google tag (gtag.js) */
-(function () {
-  var script = document.createElement('script');
-  script.src = 'https://www.googletagmanager.com/gtag/js?id=G-3YM29CN26E';
-  script.async = true;
-  document.head.appendChild(script);
-
-  window.dataLayer = window.dataLayer || [];
-  function gtag() {
-    dataLayer.push(arguments);
-  }
-  gtag('js', new Date());
-  gtag('config', 'G-3YM29CN26E');
-  gtag('config', 'AW-17347444171');
-})();
