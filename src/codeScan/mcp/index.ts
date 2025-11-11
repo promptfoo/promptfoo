@@ -1,0 +1,61 @@
+/**
+ * MCP Bridge Orchestration
+ *
+ * Main entry point for MCP module - handles setup and initialization of MCP bridge.
+ */
+
+import crypto from 'crypto';
+import type { ChildProcess } from 'child_process';
+import type { Socket } from 'socket.io-client';
+import logger from '../../logger';
+import { startFilesystemMcpServer } from './filesystem';
+import { SocketIoMcpBridge } from './transport';
+
+/**
+ * Result of MCP bridge setup
+ */
+export interface McpBridgeSetup {
+  mcpProcess: ChildProcess;
+  mcpBridge: SocketIoMcpBridge;
+  sessionId: string;
+}
+
+/**
+ * Set up MCP bridge for filesystem access
+ *
+ * Creates a filesystem MCP server, bridges it with Socket.IO, and announces
+ * the runner to the server with the session ID and repository root.
+ *
+ * @param socket - Connected Socket.IO socket
+ * @param absoluteRepoPath - Absolute path to repository root
+ * @returns MCP bridge setup result
+ */
+export async function setupMcpBridge(
+  socket: Socket,
+  absoluteRepoPath: string,
+): Promise<McpBridgeSetup> {
+  logger.debug('Setting up repo MCP access...');
+
+  // Generate unique session ID
+  const sessionId = crypto.randomUUID();
+  logger.debug(`Session ID: ${sessionId}`);
+
+  // Start filesystem MCP server
+  const mcpProcess = startFilesystemMcpServer(absoluteRepoPath);
+
+  // Create MCP bridge using existing socket
+  const mcpBridge = new SocketIoMcpBridge(mcpProcess, socket, sessionId);
+  await mcpBridge.connect();
+
+  // Announce as runner with repository root for MCP roots/list
+  socket.emit('runner:hello', {
+    session_id: sessionId,
+    repo_root: absoluteRepoPath,
+  });
+
+  return {
+    mcpProcess,
+    mcpBridge,
+    sessionId,
+  };
+}

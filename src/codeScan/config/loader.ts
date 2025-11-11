@@ -84,3 +84,114 @@ export function loadConfigOrDefault(configPath?: string): Config {
 
   return loadConfig(configPath);
 }
+
+/**
+ * Options that can be passed to merge with config
+ */
+export interface ConfigMergeOptions {
+  diffsOnly?: boolean;
+  minSeverity?: string;
+  minimumSeverity?: string;
+  apiKey?: string;
+  apiHost?: string;
+}
+
+/**
+ * Merge CLI options with configuration
+ *
+ * CLI options take precedence over config file settings
+ *
+ * @param config - Base configuration
+ * @param options - CLI options to merge
+ * @returns Merged configuration
+ */
+export function mergeConfigWithOptions(config: Config, options: ConfigMergeOptions): Config {
+  const merged = { ...config };
+
+  // Allow options to override config file settings
+  if (options.diffsOnly !== undefined) {
+    merged.diffsOnly = options.diffsOnly;
+  }
+
+  // Allow CLI flags to override config severity (minSeverity takes precedence over minimumSeverity)
+  if (options.minSeverity || options.minimumSeverity) {
+    const cliSeverity = (options.minSeverity || options.minimumSeverity) as string;
+    // Validate severity input (throws ZodError if invalid)
+    const { validateSeverity } = require('../../types/codeScan');
+    merged.minimumSeverity = validateSeverity(cliSeverity);
+  }
+
+  // Override API key if provided
+  if (options.apiKey) {
+    merged.apiKey = options.apiKey;
+  }
+
+  // Override API host if provided
+  if (options.apiHost) {
+    merged.apiHost = options.apiHost;
+  }
+
+  return merged;
+}
+
+/**
+ * Options for resolving guidance
+ */
+export interface GuidanceOptions {
+  guidance?: string;
+  guidanceFile?: string;
+}
+
+/**
+ * Resolve guidance from options or config
+ *
+ * CLI options take precedence over config file settings
+ *
+ * @param options - Options that may contain guidance
+ * @param config - Configuration that may contain guidance
+ * @returns Guidance string or undefined
+ * @throws Error if both guidance and guidanceFile are specified
+ */
+export function resolveGuidance(options: GuidanceOptions, config: Config): string | undefined {
+  // Handle guidance options (mutually exclusive)
+  if (options.guidance && options.guidanceFile) {
+    throw new Error('Cannot specify both --guidance and --guidance-file options');
+  }
+
+  // CLI options take precedence over config
+  if (options.guidance) {
+    return options.guidance;
+  }
+
+  if (options.guidanceFile) {
+    const absoluteGuidancePath = path.resolve(options.guidanceFile);
+    try {
+      return fs.readFileSync(absoluteGuidancePath, 'utf-8');
+    } catch (error) {
+      throw new Error(
+        `Failed to read guidance file: ${absoluteGuidancePath} - ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  // Config loader already read guidanceFile and populated guidance field
+  return config.guidance;
+}
+
+/**
+ * Options for resolving API host
+ */
+export interface ApiHostOptions {
+  apiHost?: string;
+}
+
+/**
+ * Resolve API host from options or config
+ *
+ * @param options - Options that may contain API host
+ * @param config - Configuration that may contain API host
+ * @returns API host URL
+ */
+export function resolveApiHost(options: ApiHostOptions, config: Config): string {
+  return options.apiHost || config.apiHost || 'https://api.promptfoo.dev';
+}

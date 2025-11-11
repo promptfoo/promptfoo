@@ -4,44 +4,35 @@
  * Main command that orchestrates the scanning process.
  */
 
-import crypto from 'crypto';
-import fs from 'fs';
 import path from 'path';
 import type { ChildProcess } from 'child_process';
+import type { Socket } from 'socket.io-client';
+import type { Command } from 'commander';
 
-import chalk from 'chalk';
-import ora from 'ora';
-import { io, type Socket } from 'socket.io-client';
 import cliState from '../../cliState';
 import logger, { getLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
-import { formatDuration } from '../../util/formatDuration';
-import { TERMINAL_MAX_WIDTH } from '../../constants';
-import { printBorder } from '../../util/index';
 import { resolveAuthCredentials } from '../util/auth';
+import { parseGitHubPr } from '../util/github';
 import type { Config } from '../config/schema';
-import { loadConfigOrDefault } from '../config/loader';
+import {
+  loadConfigOrDefault,
+  mergeConfigWithOptions,
+  resolveGuidance,
+  resolveApiHost,
+} from '../config/loader';
 import { validateOnBranch } from '../git/diff';
 import { processDiff } from '../git/diffProcessor';
 import { extractMetadata } from '../git/metadata';
-import { startFilesystemMcpServer, stopFilesystemMcpServer } from '../mcp/filesystem';
-import { SocketIoMcpBridge } from '../mcp/transport';
-import type { Command } from 'commander';
+import { setupMcpBridge } from '../mcp';
+import { stopFilesystemMcpServer } from '../mcp/filesystem';
+import type { SocketIoMcpBridge } from '../mcp/transport';
+import { createSocketConnection } from '../scanner/socket';
+import { type CleanupRefs, registerCleanupHandlers } from '../scanner/cleanup';
+import { createSpinner, displayScanResults } from '../scanner/output';
+import { buildScanRequest, executeScanRequest } from '../scanner';
 
-import type {
-  ParsedGitHubPR,
-  PullRequestContext,
-  ScanRequest,
-  ScanResponse,
-  SocketAuthCredentials,
-} from '../../types/codeScan';
-import {
-  CodeScanSeverity,
-  formatSeverity,
-  countBySeverity,
-  getSeverityRank,
-  validateSeverity,
-} from '../../types/codeScan';
+import type { PullRequestContext } from '../../types/codeScan';
 
 export interface ScanOptions {
   config?: string;
@@ -58,132 +49,6 @@ export interface ScanOptions {
   guidanceFile?: string; // Path to file containing custom guidance
 }
 
-/**
- * Mutable references for cleanup handlers
- * Allows signal handlers to access updated MCP resources
- */
-interface CleanupRefs {
-  repoPath: string;
-  socket: Socket | null;
-  mcpBridge: SocketIoMcpBridge | null;
-  mcpProcess: ChildProcess | null;
-}
-
-/**
- * Parse GitHub PR string
- * Format: owner/repo#number (e.g., promptfoo/promptfoo#123)
- */
-function parseGitHubPr(prString: string): ParsedGitHubPR | null {
-  const match = prString.match(/^([^/]+)\/([^#]+)#(\d+)$/);
-  if (!match) {
-    return null;
-  }
-
-  const [, owner, repo, prNumber] = match;
-  return {
-    owner,
-    repo,
-    number: parseInt(prNumber, 10),
-  };
-}
-
-async function createSocketConnection(
-  apiHost: string,
-  auth: SocketAuthCredentials,
-): Promise<Socket> {
-  return new Promise((resolve, reject) => {
-    logger.debug(`Connecting to ${apiHost}...`);
-    let settled = false;
-
-    const cleanup = () => {
-      clearTimeout(timeoutId); // Clear the connection timeout
-      socket.io.reconnection(false); // Stop any reconnection attempts
-      socket.removeAllListeners();
-      socket.close();
-    };
-
-    const socket = io(apiHost, {
-      // Use websocket-only transport (polling requires sticky sessions)
-      transports: ['websocket'],
-      // Enable reconnection with limits - will be used during scan phase
-      reconnection: true,
-      reconnectionDelay: 500,
-      reconnectionDelayMax: 10000,
-      reconnectionAttempts: 5,
-      auth,
-    });
-
-    // Connection success - return socket with reconnection enabled for scan phase
-    socket.on('connect', () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeoutId);
-      logger.debug(`Socket.io connected (id: ${socket.id})`);
-      resolve(socket);
-    });
-
-    // Connection error - fail immediately, cleanup to stop any reconnection attempts
-    socket.on('connect_error', (error) => {
-      if (settled) return;
-      settled = true;
-      // Don't log here - error will be shown in "Scan failed" message
-      logger.debug(`Socket.io connection error: ${error.message}`);
-      cleanup(); // Stop reconnection and close socket
-      reject(new Error(`Failed to connect to server: ${error.message}`));
-    });
-
-    // Disconnection
-    socket.on('disconnect', (reason) => {
-      logger.debug(`Socket.io disconnected: ${reason}`);
-    });
-
-    // Error handling
-    socket.on('error', (error) => {
-      // Log at debug level to avoid noise with spinner
-      logger.debug(`Socket.io error: ${String(error)}`);
-    });
-
-    // Connection timeout - cleanup and reject
-    const timeoutId = setTimeout(() => {
-      if (!socket.connected && !settled) {
-        settled = true;
-        cleanup();
-        reject(new Error('Connection timeout after 10 seconds'));
-      }
-    }, 10000);
-  });
-}
-
-function registerCleanupHandlers(refs: CleanupRefs): void {
-  const cleanup = async (signal: string) => {
-    logger.info(`\n\n⚠️  Received ${signal}, cleaning up...`);
-
-    // Cleanup MCP resources
-    if (refs.mcpBridge) {
-      await refs.mcpBridge.disconnect().catch(() => {});
-    }
-    if (refs.mcpProcess) {
-      await stopFilesystemMcpServer(refs.mcpProcess).catch(() => {});
-    }
-    // Cleanup socket - disable reconnection before disconnecting
-    if (refs.socket) {
-      refs.socket.io.reconnection(false); // Disable reconnection to prevent further attempts
-      refs.socket.removeAllListeners(); // Remove all event listeners
-      refs.socket.disconnect();
-      refs.socket.close(); // Fully close the socket
-    }
-
-    // Don't force exit - allow finally block and telemetry shutdown to run
-    // The socket.close() should release the event loop and allow natural exit
-  };
-
-  // Register handlers for common termination signals
-  // Use void operator to handle async cleanup without awaiting
-  process.on('SIGINT', () => void cleanup('SIGINT')); // Ctrl+C
-  process.on('SIGTERM', () => void cleanup('SIGTERM')); // Termination signal
-  process.on('SIGQUIT', () => void cleanup('SIGQUIT')); // Quit signal
-}
-
 async function executeScan(repoPath: string, options: ScanOptions): Promise<void> {
   let socket: Socket | null = null;
   let mcpProcess: ChildProcess | null = null;
@@ -192,44 +57,12 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
   const startTime = Date.now();
 
-  // Load configuration
-  const config: Config = loadConfigOrDefault(options.config);
+  // Load and merge configuration
+  const baseConfig: Config = loadConfigOrDefault(options.config);
+  const config = mergeConfigWithOptions(baseConfig, options);
 
-  // Allow options to override config file settings
-  if (options.diffsOnly !== undefined) {
-    config.diffsOnly = options.diffsOnly;
-  }
-
-  // Allow CLI flags to override config severity (minSeverity takes precedence over minimumSeverity)
-  if (options.minSeverity || options.minimumSeverity) {
-    const cliSeverity = (options.minSeverity || options.minimumSeverity) as string;
-    // Validate severity input (throws ZodError if invalid)
-    config.minimumSeverity = validateSeverity(cliSeverity);
-  }
-
-  // Handle guidance options (mutually exclusive)
-  let guidance: string | undefined = undefined;
-  if (options.guidance && options.guidanceFile) {
-    throw new Error('Cannot specify both --guidance and --guidance-file options');
-  }
-
-  // CLI options take precedence over config
-  if (options.guidance) {
-    guidance = options.guidance;
-  } else if (options.guidanceFile) {
-    const absoluteGuidancePath = path.resolve(options.guidanceFile);
-    try {
-      guidance = fs.readFileSync(absoluteGuidancePath, 'utf-8');
-      logger.debug(`Loaded guidance from: ${absoluteGuidancePath}`);
-    } catch (error) {
-      throw new Error(
-        `Failed to read guidance file: ${absoluteGuidancePath} - ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  } else if (config.guidance) {
-    // Config loader already read guidanceFile and populated guidance field
-    guidance = config.guidance;
-  }
+  // Resolve guidance (CLI options take precedence)
+  const guidance = resolveGuidance(options, config);
 
   // Resolve repository path
   const absoluteRepoPath = path.resolve(repoPath);
@@ -253,6 +86,8 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     socket: null,
     mcpBridge: null,
     mcpProcess: null,
+    spinner: null,
+    abortController: null,
   };
 
   // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
@@ -260,22 +95,28 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
   // Initialize spinner (hide in JSON mode, but still show logger.info status)
   const isWebUI = Boolean(cliState.webUI);
-  const showSpinner = !isWebUI && !options.json && getLogLevel() !== 'debug';
+  const spinner = createSpinner({
+    json: options.json || false,
+    isWebUI,
+    logLevel: getLogLevel(),
+  });
 
-  let spinner: ReturnType<typeof ora> | undefined;
-  if (showSpinner) {
-    spinner = ora({ text: '', color: 'green' }).start();
+  if (spinner) {
+    cleanupRefs.spinner = spinner; // Update ref for signal handlers
   }
 
+  const showSpinner = Boolean(spinner);
+
   try {
-    // Determine API key for authentication (waterfall: CLI arg → config file)
-    const apiKey = options.apiKey || config.apiKey;
+    // Create AbortController for cancelling the scan
+    const abortController = new AbortController();
+    cleanupRefs.abortController = abortController; // Update ref for signal handlers
 
     // Resolve auth credentials for socket.io
-    const auth = resolveAuthCredentials(apiKey);
+    const auth = resolveAuthCredentials(config.apiKey);
 
     // Determine API host URL
-    const apiHost = options.apiHost || config.apiHost || 'https://api.promptfoo.dev';
+    const apiHost = resolveApiHost(options, config);
 
     logger.debug(`Promptfoo API host URL: ${apiHost}`);
 
@@ -289,26 +130,13 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
 
     // Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
-      logger.debug('Setting up repo MCP access...');
+      const mcpSetup = await setupMcpBridge(socket, absoluteRepoPath);
+      mcpProcess = mcpSetup.mcpProcess;
+      mcpBridge = mcpSetup.mcpBridge;
+      sessionId = mcpSetup.sessionId;
 
-      // Generate unique session ID
-      sessionId = crypto.randomUUID();
-      logger.debug(`Session ID: ${sessionId}`);
-
-      // Start filesystem MCP server
-      mcpProcess = startFilesystemMcpServer(absoluteRepoPath);
       cleanupRefs.mcpProcess = mcpProcess; // Update ref for signal handlers
-
-      // Create MCP bridge using existing socket
-      mcpBridge = new SocketIoMcpBridge(mcpProcess, socket, sessionId);
       cleanupRefs.mcpBridge = mcpBridge; // Update ref for signal handlers
-      await mcpBridge.connect();
-
-      // Announce as runner with repository root for MCP roots/list
-      socket.emit('runner:hello', {
-        session_id: sessionId,
-        repo_root: absoluteRepoPath,
-      });
     }
 
     // Validate branch and determine base branch
@@ -367,7 +195,6 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
       }
 
       // Get current commit SHA
-      const git = simpleGit(absoluteRepoPath);
       const currentCommit = await git.revparse(['HEAD']);
 
       pullRequest = {
@@ -383,199 +210,31 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     }
 
     // Send scan request via Socket.IO
-    if (showSpinner && spinner) {
-      spinner.text = 'Scanning...';
-    } else {
+    if (!showSpinner) {
       logger.debug('Scanning code...');
     }
 
-    // Add heartbeat to show progress during long scans
-    let heartbeatInterval: NodeJS.Timeout | undefined;
-    let firstPulseTimeout: NodeJS.Timeout | undefined;
-    if (showSpinner) {
-      const pulse = () => {
-        // Show "Still scanning..." for 4 seconds
-        spinner!.text = 'Still scanning...';
-        setTimeout(() => {
-          if (spinner?.isSpinning) {
-            spinner.text = 'Scanning...';
-          }
-        }, 4000);
-      };
+    const scanRequest = buildScanRequest(files, metadata, config, sessionId, pullRequest, guidance);
 
-      // First pulse at 8 seconds
-      firstPulseTimeout = setTimeout(() => {
-        pulse();
-        // Then pulse every 12 seconds (8s "Scanning..." + 4s "Still scanning...")
-        heartbeatInterval = setInterval(pulse, 12000);
-      }, 8000);
-    }
-
-    const scanRequest: ScanRequest = {
-      files,
-      metadata,
-      config: {
-        minimumSeverity: config.minimumSeverity,
-        diffsOnly: config.diffsOnly,
-        guidance,
-      },
-      sessionId, // Include session ID if MCP is enabled
-      pullRequest, // Include PR context if --github-pr flag provided
-    };
-
-    // Send scan request and wait for response
-    const scanResponse: ScanResponse = await new Promise((resolve, reject) => {
-      // Set up event listeners
-      const onComplete = (response: ScanResponse) => {
-        socket?.off('scan:complete', onComplete);
-        socket?.off('scan:error', onError);
-        socket?.off('reconnect_failed', onReconnectFailed);
-        if (firstPulseTimeout) {
-          clearTimeout(firstPulseTimeout);
-        }
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval);
-        }
-        resolve(response);
-      };
-
-      const onError = (error: { success: false; error: string; message: string }) => {
-        socket?.off('scan:complete', onComplete);
-        socket?.off('scan:error', onError);
-        socket?.off('reconnect_failed', onReconnectFailed);
-        if (firstPulseTimeout) {
-          clearTimeout(firstPulseTimeout);
-        }
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval);
-        }
-        reject(new Error(error.message || error.error));
-      };
-
-      const onReconnectFailed = () => {
-        socket?.off('scan:complete', onComplete);
-        socket?.off('scan:error', onError);
-        socket?.off('reconnect_failed', onReconnectFailed);
-        if (firstPulseTimeout) {
-          clearTimeout(firstPulseTimeout);
-        }
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval);
-        }
-        reject(new Error('Lost connection to server during scan'));
-      };
-
-      socket?.on('scan:complete', onComplete);
-      socket?.on('scan:error', onError);
-      socket?.on('reconnect_failed', onReconnectFailed);
-
-      // Emit scan request
-      socket?.emit('scan:start', scanRequest);
+    const scanResponse = await executeScanRequest(socket, scanRequest, {
+      showSpinner,
+      spinner,
+      abortController,
     });
 
     // Stop spinner silently
-    if (showSpinner) {
-      spinner!.stop();
+    if (showSpinner && spinner) {
+      spinner.stop();
     }
 
     const endTime = Date.now();
     const duration = endTime - startTime;
 
     // Display results
-    if (options.json) {
-      // Output full scan response to stdout for programmatic consumption
-      console.log(JSON.stringify(scanResponse, null, 2));
-    } else {
-      // Pretty-print results for human consumption
-      const { comments, review } = scanResponse;
-      const severityCounts = countBySeverity(comments || []);
-
-      // 1. Completion message and issue summary
-      printBorder();
-      logger.info(`${chalk.green('✓')} Scan complete (${formatDuration(duration / 1000)})`);
-      if (severityCounts.total > 0) {
-        logger.info(
-          chalk.yellow(
-            `⚠ Found ${severityCounts.total} issue${severityCounts.total === 1 ? '' : 's'}`,
-          ),
-        );
-      }
-      printBorder();
-
-      // 3. Review summary - shown even when no issues
-      // If no review field, check for severity="none" comment to use as review
-      let reviewText = review;
-      if (!reviewText && comments && comments.length > 0) {
-        const noneComment = comments.find((c) => c.severity === CodeScanSeverity.NONE);
-        if (noneComment) {
-          reviewText = noneComment.finding;
-        }
-      }
-
-      if (reviewText) {
-        logger.info('');
-        logger.info(reviewText);
-        logger.info('');
-        printBorder();
-      }
-
-      // 4. Detailed findings (only show issues with valid severity)
-      if (severityCounts.total > 0) {
-        const validSeverities = [
-          CodeScanSeverity.CRITICAL,
-          CodeScanSeverity.HIGH,
-          CodeScanSeverity.MEDIUM,
-          CodeScanSeverity.LOW,
-        ];
-        const issuesWithSeverity = (comments || []).filter(
-          (c) => c.severity && validSeverities.includes(c.severity),
-        );
-
-        // Sort by severity (descending)
-        const sortedComments = [...issuesWithSeverity].sort((a, b) => {
-          const rankA = a.severity ? getSeverityRank(a.severity) : 0;
-          const rankB = b.severity ? getSeverityRank(b.severity) : 0;
-          return rankB - rankA;
-        });
-
-        logger.info('');
-        for (let i = 0; i < sortedComments.length; i++) {
-          const comment = sortedComments[i];
-          const severity = formatSeverity(comment.severity);
-          const location = comment.line ? `${comment.file}:${comment.line}` : comment.file || '';
-
-          logger.info(`${severity} ${chalk.gray(location)}`);
-          logger.info('');
-          logger.info(comment.finding);
-
-          if (comment.fix) {
-            logger.info('');
-            logger.info(chalk.bold('Suggested Fix:'));
-            logger.info(comment.fix);
-          }
-
-          if (comment.aiAgentPrompt) {
-            logger.info('');
-            logger.info(chalk.bold('AI Agent Prompt:'));
-            logger.info(comment.aiAgentPrompt);
-          }
-
-          // Add separator between comments (but not after the last one)
-          if (i < sortedComments.length - 1) {
-            logger.info('');
-            logger.info(chalk.gray('─'.repeat(TERMINAL_MAX_WIDTH)));
-            logger.info('');
-          }
-        }
-        printBorder();
-
-        // 5. Next steps (only if there are issues)
-        if (options.githubPr) {
-          logger.info(`» Comments posted to PR: ${chalk.cyan(options.githubPr)}`);
-          printBorder();
-        }
-      }
-    }
+    displayScanResults(scanResponse, duration, {
+      json: options.json || false,
+      githubPr: options.githubPr,
+    });
   } catch (error) {
     if (showSpinner && spinner) {
       spinner.fail('Scan failed');
