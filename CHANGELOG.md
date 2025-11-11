@@ -4,10 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- fix(redteam): respect redteam.provider configuration for local grading - fixes issue where configuring a local provider (e.g., ollama:llama3.2) still sent grading requests to remote API instead of using the configured provider (#5959)
+
 ## [0.119.5] - 2025-11-10
 
 ### Added
 
+- feat(test-cases): add support for Excel files (.xlsx, .xls) as test case sources with optional xlsx dependency and sheet selection syntax (file.xlsx#SheetName or file.xlsx#2) (#4841)
 - feat(providers): add OpenAI audio transcription support for whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe, and gpt-4o-transcribe-diarize models with speaker identification, timestamp granularities, and per-minute cost tracking (#5957)
 - feat(webui): display rendered assertion values with substituted variables in Evaluation tab instead of raw templates, improving readability for assertions with Nunjucks variables and loops (#5988)
 - feat(prompts): add executable prompt scripts - use any script/binary to dynamically generate prompts via `exec:` prefix or auto-detection for common extensions (.sh, .bash, .rb, .pl); scripts receive context as JSON (#5329)
@@ -18,8 +25,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(webui): correct multi-target filtering in red team report - statistics now properly filter by selected target instead of showing aggregated data across all targets; replaced modal with Select dropdown for clearer UX (#4251)
+- fix(providers): auto-detect reasoning models by deployment name in Azure provider - now recognizes o1, o3, o4, and gpt-5 models and automatically uses `max_completion_tokens` instead of `max_tokens` (#6154)
+- fix(prompts): fix basePath resolution for executable prompts with `exec:` prefix - relative paths now resolve correctly (5308c5d)
+- fix(prompts): convert sync fs operations to async in executable prompt processor for better performance (5308c5d)
+- fix(test-cases): improve xlsx error handling to avoid double-wrapping validation errors, provide clearer error messages for file not found, empty sheets, and invalid data (#4841)
+- fix(docs): update xlsx documentation to use consistent version (0.18.5) and correct anchor links (#4841)
 - fix(assertions): fix runtime variables not working in custom rubricPrompt for factuality and model-graded-closedqa assertions (#5340)
 - fix(openai): fix timeouts on gpt-5-pro models by extending automatic timeout to 10 minutes (#6147)
+- fix(deps): add @vitest/coverage-v8@3.2.4 to app workspace to match vitest version and fix coverage reporting "Cannot read properties of undefined (reading 'reportsDirectory')" error
 - fix(deps): fix test coverage reporting errors (#6122)
 - fix(cli): honor `commandLineOptions` from config file for `maxConcurrency`, `repeat`, `delay`, `cache`, `progressBar`, `generateSuggestions`, `table`, `share`, and `write` — previously ignored in favor of defaults (#6142)
 
@@ -39,6 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
+- test(providers): add test coverage for auto-detection of reasoning models by deployment name in Azure provider (#6154)
 - test(assertions): add comprehensive test coverage for rendered assertion value metadata including variable substitution, loops, static text handling, and UI display fallback priority (#6145)
 
 ### Dependencies

@@ -64,6 +64,37 @@ defaultTest:
         apiHost: 'xxxxxxx.openai.azure.com'
 ```
 
+### Using Local Providers for Grading
+
+The `redteam.provider` configuration controls both attack generation and grading. When you configure a local provider (like Ollama), promptfoo uses it for generating attacks and evaluating results:
+
+```yaml
+redteam:
+  provider: ollama:chat:llama3.2
+  plugins:
+    - harmful:hate
+    - excessive-agency
+```
+
+This configuration:
+
+- Generates adversarial inputs using `ollama:chat:llama3.2`
+- Grades results with the same provider
+- Runs entirely locally when combined with `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`
+
+:::tip Fully Local Testing
+
+To run redteam tests without any remote API calls:
+
+1. Configure a local provider: `redteam.provider: ollama:chat:llama3.2`
+2. Disable remote generation: `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`
+
+Both attack generation and grading will use your local model.
+
+:::
+
+**Balancing quality and cost:** Remote generation produces significantly better attacks than local models, while grading works well locally. To reduce API costs without sacrificing attack quality, configure `redteam.provider` for local grading but leave `PROMPTFOO_DISABLE_REMOTE_GENERATION` unset (default).
+
 You can customize the grader at the plugin level to provide additional granularity into your results.
 
 ### Customizing Graders for Specific Plugins in Promptfoo Enterprise
