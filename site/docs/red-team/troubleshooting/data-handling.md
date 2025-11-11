@@ -13,7 +13,9 @@ What data promptfoo collects depends on whether you're using red team testing an
 **Red team testing** generates adversarial test cases and requires more data transmission:
 
 - Without `OPENAI_API_KEY`: Test generation and grading use promptfoo servers
-- Many plugins require remote generation (competitors, hijacking, indirect prompt injection, etc.)
+- Many plugins require remote generation (20+ including competitors, hijacking, indirect-prompt-injection)
+- Some strategies require remote generation (citation, gcg, likert, audio/image/video, math-prompt)
+- Some jailbreak methods require remote (hydra, goat, iterativeMeta, bestOfN, authoritativeMarkupInjection)
 
 **Regular evals** (non-red team) send minimal data:
 
@@ -75,7 +77,7 @@ Disable remote generation to use your local provider:
 export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
 ```
 
-**Warning**: Disables 20+ red team plugins that require remote generation including competitors, hijacking, indirect-prompt-injection, goal-misalignment, rag-poisoning, and others. See [remote generation configuration](/docs/red-team/configuration/#remote-generation).
+**Warning**: Disables 20+ plugins, multiple strategies (citation, gcg, likert, audio/image/video, math-prompt), and jailbreak methods (hydra, goat, iterativeMeta, bestOfN) that require remote generation. See [remote generation configuration](/docs/red-team/configuration/#remote-generation).
 
 **Offline environments:**
 
