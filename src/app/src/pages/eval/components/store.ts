@@ -818,9 +818,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
       if (resp.ok) {
         const data = await resp.json();
-        const filteredKeys = data.keys.filter(
-          (key: string) => !HIDDEN_METADATA_KEYS.includes(key),
-        );
+        const filteredKeys = data.keys.filter((key: string) => !HIDDEN_METADATA_KEYS.includes(key));
 
         // Check if this request is still current before updating state
         const latestState = get();
