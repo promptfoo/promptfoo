@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(test-cases): add support for Excel files (.xlsx, .xls) as test case sources with optional xlsx dependency and sheet selection syntax (file.xlsx#SheetName or file.xlsx#2) (#4841)
 - feat(providers): add OpenAI audio transcription support for whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe, and gpt-4o-transcribe-diarize models with speaker identification, timestamp granularities, and per-minute cost tracking (#5957)
 - feat(webui): display rendered assertion values with substituted variables in Evaluation tab instead of raw templates, improving readability for assertions with Nunjucks variables and loops (#5988)
 - feat(prompts): add executable prompt scripts - use any script/binary to dynamically generate prompts via `exec:` prefix or auto-detection for common extensions (.sh, .bash, .rb, .pl); scripts receive context as JSON (#5329)
@@ -18,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(test-cases): improve xlsx error handling to avoid double-wrapping validation errors, provide clearer error messages for file not found, empty sheets, and invalid data (#4841)
+- fix(docs): update xlsx documentation to use consistent version (0.18.5) and correct anchor links (#4841)
 - fix(assertions): fix runtime variables not working in custom rubricPrompt for factuality and model-graded-closedqa assertions (#5340)
 - fix(openai): fix timeouts on gpt-5-pro models by extending automatic timeout to 10 minutes (#6147)
 - fix(deps): fix test coverage reporting errors (#6122)
