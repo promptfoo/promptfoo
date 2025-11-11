@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useMemo } from 'react';
 import type { ResultsFile, EvaluateResult } from '@promptfoo/types';
