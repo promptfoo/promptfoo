@@ -279,6 +279,7 @@ export class CrescendoProvider implements ApiProvider {
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
       conversationObjective: this.userGoal,
       maxTurns: this.maxTurns,
+      successFlag: this.successfulAttacks.length,
       purpose: context?.test?.metadata?.purpose,
       modifierSection:
         Object.entries(context?.test?.metadata?.modifiers || {})
@@ -309,11 +310,12 @@ export class CrescendoProvider implements ApiProvider {
       try {
         roundNum++;
 
-        // Update system prompt with current round number
+        // Update system prompt with current round number and success count
         const updatedSystemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
           conversationObjective: this.userGoal,
           currentRound: roundNum,
           maxTurns: this.maxTurns,
+          successFlag: this.successfulAttacks.length,
           purpose: context?.test?.metadata?.purpose,
           modifierSection:
             Object.entries(context?.test?.metadata?.modifiers || {})

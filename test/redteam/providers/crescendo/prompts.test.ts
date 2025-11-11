@@ -8,6 +8,8 @@ describe('Crescendo prompts', () => {
   describe('CRESCENDO_SYSTEM_PROMPT', () => {
     it('should contain required template variables', () => {
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('{{maxTurns}}');
+      expect(CRESCENDO_SYSTEM_PROMPT).toContain('{{currentRound}}');
+      expect(CRESCENDO_SYSTEM_PROMPT).toContain('{{successFlag}}');
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('{{conversationObjective}}');
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('{{purpose}}');
     });
