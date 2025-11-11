@@ -10,13 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(providers): support function providers in defaultTest.options.provider and assertions (#3784)
 
+### Documentation
+
+- docs(providers): update Vertex AI documentation - removed deprecated models (PaLM/Bison, Claude 3 Opus, Claude 3.5 Sonnet v2), added Claude Sonnet 4.5, added missing Gemini 2.0 models, reorganized model listings by generation (Gemini 2.5/2.0/1.5, Claude 4/3, Llama 4/3.3/3.2/3.1), marked Preview/Experimental models, removed temporal language to make docs evergreen (#3169)
+
 ### Changed
 
 - chore(site): remove Koala analytics and migrate Google tracking to Docusaurus built-in gtag configuration with multiple tracking IDs (G-3TS8QLZQ93, G-3YM29CN26E, AW-17347444171) (#6169)
-
-### Fixed
-
-- fix(redteam): respect redteam.provider configuration for local grading - fixes issue where configuring a local provider (e.g., ollama:llama3.2) still sent grading requests to remote API instead of using the configured provider (#5959)
 
 ## [0.119.5] - 2025-11-10
 
