@@ -54,6 +54,9 @@ type PresetWithName = StrategyPreset | CustomPreset;
 // Define recommended strategies based on DEFAULT_STRATEGIES for consistency
 const RECOMMENDED_STRATEGIES = DEFAULT_STRATEGIES;
 
+// Strategies that require configuration before they can be used
+const STRATEGIES_REQUIRING_CONFIG = ['layer'];
+
 // UI-friendly description overrides
 const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
   basic:
@@ -412,6 +415,69 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies, updateConfig],
   );
 
+  // Check if a specific strategy is configured
+  const isStrategyConfiguredById = useCallback(
+    (strategyId: string): boolean => {
+      const strategy = config.strategies.find((s) => getStrategyId(s) === strategyId);
+      if (!strategy) {
+        return true; // Not selected, so not applicable
+      }
+
+      if (!STRATEGIES_REQUIRING_CONFIG.includes(strategyId)) {
+        return true;
+      }
+
+      // For layer strategy, check if steps array exists and has at least one step
+      if (strategyId === 'layer') {
+        const strategyConfig = typeof strategy === 'object' ? strategy.config : undefined;
+        const steps = strategyConfig?.steps;
+        return Array.isArray(steps) && steps.length > 0;
+      }
+
+      return true;
+    },
+    [config.strategies],
+  );
+
+  // Validation function to check if all selected strategies are properly configured
+  const isStrategyConfigValid = useCallback(() => {
+    for (const strategy of config.strategies) {
+      const strategyId = getStrategyId(strategy);
+      if (STRATEGIES_REQUIRING_CONFIG.includes(strategyId)) {
+        // For layer strategy, check if steps array exists and has at least one step
+        if (strategyId === 'layer') {
+          const strategyConfig = typeof strategy === 'object' ? strategy.config : undefined;
+          const steps = strategyConfig?.steps;
+          if (!Array.isArray(steps) || steps.length === 0) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }, [config.strategies]);
+
+  const getNextButtonTooltip = useCallback(() => {
+    if (!isStrategyConfigValid()) {
+      const unconfiguredStrategies = config.strategies
+        .filter((strategy) => {
+          const strategyId = getStrategyId(strategy);
+          if (strategyId === 'layer') {
+            const strategyConfig = typeof strategy === 'object' ? strategy.config : undefined;
+            const steps = strategyConfig?.steps;
+            return !Array.isArray(steps) || steps.length === 0;
+          }
+          return false;
+        })
+        .map((s) => getStrategyId(s));
+
+      if (unconfiguredStrategies.length > 0) {
+        return `Please configure the following ${unconfiguredStrategies.length === 1 ? 'strategy' : 'strategies'}: ${unconfiguredStrategies.join(', ')}`;
+      }
+    }
+    return '';
+  }, [config.strategies, isStrategyConfigValid]);
+
   // ----------------------------------------------
   // Derived states
   // ----------------------------------------------
@@ -463,6 +529,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       }
       onNext={onNext}
       onBack={onBack}
+      nextDisabled={!isStrategyConfigValid()}
+      warningMessage={getNextButtonTooltip()}
     >
       {/* Warning banner when remote generation is disabled - full width sticky */}
       {isRemoteGenerationDisabled && (
@@ -563,6 +631,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             isStrategyDisabled={isStrategyDisabled}
             isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isStrategyConfigured={isStrategyConfiguredById}
           />
         )}
 
@@ -578,6 +647,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             isStrategyDisabled={isStrategyDisabled}
             isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isStrategyConfigured={isStrategyConfiguredById}
           />
         )}
 
@@ -593,6 +663,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             isStrategyDisabled={isStrategyDisabled}
             isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isStrategyConfigured={isStrategyConfiguredById}
           />
         )}
 
@@ -608,6 +679,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             isStrategyDisabled={isStrategyDisabled}
             isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isStrategyConfigured={isStrategyConfiguredById}
           />
         )}
 

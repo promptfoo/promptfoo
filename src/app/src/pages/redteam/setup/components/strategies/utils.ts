@@ -8,6 +8,30 @@ export function getStrategyId(strategy: RedteamStrategy): string {
   return typeof strategy === 'string' ? strategy : strategy.id;
 }
 
+// Strategies that require configuration before they can be used
+const STRATEGIES_REQUIRING_CONFIG = ['layer'];
+
+/**
+ * Checks if a strategy is properly configured
+ * @param strategyId The ID of the strategy to check
+ * @param strategy The full strategy object
+ * @returns true if the strategy is configured or doesn't require configuration
+ */
+export function isStrategyConfigured(strategyId: string, strategy: RedteamStrategy): boolean {
+  if (!STRATEGIES_REQUIRING_CONFIG.includes(strategyId)) {
+    return true;
+  }
+
+  // For layer strategy, check if steps array exists and has at least one step
+  if (strategyId === 'layer') {
+    const config = typeof strategy === 'object' ? strategy.config : undefined;
+    const steps = config?.steps;
+    return Array.isArray(steps) && steps.length > 0;
+  }
+
+  return true;
+}
+
 const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   simba: 10,
   audio: 1,
