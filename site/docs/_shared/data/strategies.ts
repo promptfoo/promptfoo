@@ -24,6 +24,17 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/custom/',
   },
   {
+    category: 'Custom',
+    strategy: 'custom-strategy',
+    displayName: 'Custom Strategy',
+    description: 'Custom prompt-based multi-turn strategy',
+    longDescription:
+      'Write natural language instructions to create powerful multi-turn red team strategies. No coding required.',
+    cost: 'Variable',
+    asrIncrease: 'Variable',
+    link: '/docs/red-team/strategies/custom-strategy/',
+  },
+  {
     category: 'Dynamic (Single-Turn)',
     strategy: 'best-of-n',
     displayName: 'Best-of-N',
@@ -93,6 +104,18 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Dynamic (Single-Turn)',
+    strategy: 'jailbreak:meta',
+    displayName: 'Meta-Agent Jailbreaks',
+    description: 'Strategic taxonomy builder',
+    longDescription:
+      'Builds custom attack taxonomies and learns from all attempts using persistent strategic memory to choose which attack types work against your specific target',
+    cost: 'High',
+    asrIncrease: '70-90%',
+    link: '/docs/red-team/strategies/meta/',
+    recommended: true,
+  },
+  {
+    category: 'Dynamic (Single-Turn)',
     strategy: 'jailbreak:likert',
     displayName: 'Likert-based Jailbreaks',
     description: 'Academic evaluation framework',
@@ -155,6 +178,17 @@ export const strategies: Strategy[] = [
     cost: 'High',
     asrIncrease: '10-20%',
     link: '/docs/red-team/strategies/mischievous-user/',
+  },
+  {
+    category: 'Multi-turn',
+    strategy: 'simba',
+    displayName: 'Simba',
+    description: 'Autonomous red team agent',
+    longDescription:
+      'Autonomous multi-phase agent that conducts reconnaissance, probing, and targeted attacks with adaptive learning to systematically discover vulnerabilities',
+    cost: 'High',
+    asrIncrease: '70-90%',
+    link: '/docs/red-team/strategies/simba/',
   },
   {
     category: 'Static (Single-Turn)',
@@ -246,17 +280,6 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
-    strategy: 'multilingual',
-    displayName: 'Multilingual',
-    description: 'Cross-language testing',
-    longDescription:
-      'Tests handling of inputs across multiple languages, focusing on low-resource languages that may bypass content filters',
-    cost: 'Low',
-    asrIncrease: '30-40%',
-    link: '/docs/red-team/strategies/multilingual/',
-  },
-  {
-    category: 'Static (Single-Turn)',
     strategy: 'prompt-injection',
     displayName: 'Prompt Injection',
     description: 'Direct system prompts',
@@ -327,7 +350,7 @@ export const strategies: Strategy[] = [
     displayName: 'Layer',
     description: 'Compose multiple strategies',
     longDescription:
-      'Compose multiple red team strategies sequentially (e.g., multilingual → rot13) to create sophisticated attack chains',
+      'Compose multiple red team strategies sequentially (e.g., jailbreak → prompt-injection) to create sophisticated attack chains',
     cost: 'Variable',
     asrIncrease: 'Cumulative',
     link: '/docs/red-team/strategies/layer/',

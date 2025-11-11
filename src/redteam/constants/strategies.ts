@@ -9,10 +9,17 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
-export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
+export const DEFAULT_STRATEGIES = ['basic', 'jailbreak:meta', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'custom', 'mischievous-user'] as const;
+export const MULTI_TURN_STRATEGIES = [
+  'crescendo',
+  'goat',
+  'jailbreak:hydra',
+  'custom',
+  'mischievous-user',
+  'simba',
+] as const;
 
 // Helper function to check if a strategy is a custom variant
 export const isCustomStrategy = (strategyId: string): boolean => {
@@ -28,8 +35,11 @@ export const AGENTIC_STRATEGIES = [
   'goat',
   'custom',
   'jailbreak',
+  'jailbreak:hydra',
+  'jailbreak:meta',
   'jailbreak:tree',
   'mischievous-user',
+  'simba',
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
@@ -47,7 +57,6 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
-  'layer',
   'audio',
   'authoritative-markup-injection',
   'base64',
@@ -56,23 +65,28 @@ export const ADDITIONAL_STRATEGIES = [
   'citation',
   'crescendo',
   'custom',
+  'emoji',
   'gcg',
   'goat',
   'hex',
   'homoglyph',
   'image',
-  'emoji',
+  'jailbreak:hydra',
+  'jailbreak',
   'jailbreak:likert',
+  'jailbreak:meta',
   'jailbreak:tree',
+  'layer',
   'leetspeak',
   'math-prompt',
   'mischievous-user',
   'morse',
-  'multilingual',
+  'multilingual', // Deprecated: Use top-level language config instead
   'piglatin',
   'prompt-injection',
   'retry',
   'rot13',
+  'simba',
   'video',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
@@ -89,22 +103,25 @@ const _ALL_STRATEGIES = [
   ...DEFAULT_STRATEGIES,
   ...ADDITIONAL_STRATEGIES,
   ...STRATEGY_COLLECTIONS,
+  ...AGENTIC_STRATEGIES,
 ] as const;
 export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
   'layer',
-  'multilingual',
   'best-of-n',
   'goat',
   'crescendo',
   'jailbreak',
+  'jailbreak:hydra',
+  'jailbreak:meta',
   'jailbreak:tree',
   'gcg',
   'citation',
   'custom',
   'mischievous-user',
+  'simba',
 ] as const;
 
 export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];
@@ -139,6 +156,18 @@ export function isEncodingStrategy(strategyId: string | undefined): boolean {
 }
 
 /**
+ * Strategies that should not have language configuration applied to them.
+ */
+export const LANGUAGE_DISALLOWED_STRATEGIES = new Set(['audio', 'video', 'image', 'math-prompt']);
+
+/**
+ * Determines if a strategy should not use language configuration
+ */
+export function isLanguageDisallowedStrategy(strategyId: string | undefined): boolean {
+  return strategyId ? LANGUAGE_DISALLOWED_STRATEGIES.has(strategyId) : false;
+}
+
+/**
  * Default 'n' fan out for strategies that can add additional test cases during generation
  */
 const DEFAULT_N_FAN_OUT_BY_STRATEGY = {
@@ -161,3 +190,16 @@ export function getDefaultNFanout(strategyId: FanOutStrategy): number {
 export function isFanoutStrategy(strategyId: string): strategyId is FanOutStrategy {
   return strategyId in DEFAULT_N_FAN_OUT_BY_STRATEGY;
 }
+
+// Strategies that require remote generation to function
+// These strategies will be disabled in the UI when PROMPTFOO_DISABLE_REMOTE_GENERATION is set
+export const STRATEGIES_REQUIRING_REMOTE = [
+  'audio',
+  'citation',
+  'gcg',
+  'goat',
+  'jailbreak:composite',
+  'jailbreak:hydra',
+  'jailbreak:likert',
+  'jailbreak:meta',
+] as const;

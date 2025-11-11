@@ -32,6 +32,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     let statusText: string | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let cached = false;
+    let latencyMs: number | undefined;
     try {
       const response = await fetchWithCache(
         `${this.getApiUrl()}/embeddings`,
@@ -50,7 +51,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         false,
         this.config.maxRetries,
       );
-      ({ data, cached, status, statusText, deleteFromCache } = response as any);
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache } = response as any);
 
       // Check HTTP status like chat provider
       if (status && (status < 200 || status >= 300)) {
@@ -75,6 +76,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       }
       return {
         embedding,
+        latencyMs,
         tokenUsage: getTokenUsage(data, cached),
       };
     } catch (err) {

@@ -18,7 +18,6 @@ jest.mock('path', () => ({
   relative: jest.fn(),
   dirname: jest.fn().mockReturnValue('mock-dir'),
 }));
-jest.mock('node-fetch');
 
 describe('poison command', () => {
   beforeEach(() => {

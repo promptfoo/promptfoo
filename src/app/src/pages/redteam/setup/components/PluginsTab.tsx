@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -23,6 +23,7 @@ import {
   displayNameOverrides,
   EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
+  GDPR_MAPPING,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   ISO_42001_MAPPING,
@@ -63,7 +64,6 @@ const ErrorFallback = ({ error }: { error: Error }) => (
 
 // Constants
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
-const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
 
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
@@ -107,14 +107,9 @@ export default function PluginsTab({
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
   const [isCustomMode, setIsCustomMode] = useState(true);
 
-  // TODO: This effect is component-scoped, so `checkHealth` needs to be called redundantly in each
-  // component which needs to check API health. Instead, the hook should be backed by app-scoped
-  // context (e.g. via a Zustand store).
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
-
-  useEffect(() => {
-    checkHealth();
-  }, [checkHealth]);
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
 
   // Test case generation state - now from context
   const {
@@ -184,6 +179,10 @@ export default function PluginsTab({
       {
         name: 'ISO 42001',
         plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'GDPR',
+        plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
       },
     ],
     [],
@@ -367,8 +366,7 @@ export default function PluginsTab({
   const handleGenerateTestCase = useCallback(
     async (plugin: Plugin) => {
       // For plugins that require config, we need to show config dialog first
-      // This is handled by the config dialog flow
-      if (PLUGINS_SUPPORTING_CONFIG.includes(plugin) && PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
         setSelectedConfigPlugin(plugin);
         setConfigDialogOpen(true);
       }
@@ -533,7 +531,7 @@ export default function PluginsTab({
                   onClick={() => {
                     if (pluginDisabled) {
                       toast.showToast(
-                        'This plugin requires remote generation to be enabled. Set PROMPTFOO_DISABLE_REMOTE_GENERATION=false or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=false.',
+                        'This plugin requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
                         'error',
                       );
                       return;
@@ -656,8 +654,8 @@ export default function PluginsTab({
                             : 'Promptfoo Cloud connection is required for test generation'
                       }
                     />
-                    {/* Config button for plugins that support config */}
-                    {PLUGINS_SUPPORTING_CONFIG.includes(plugin) && (
+                    {/* Config button - available for all plugins (gradingGuidance is universal) */}
+                    {selectedPlugins.has(plugin) && (
                       <Tooltip
                         title={`Configure ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
                       >
@@ -669,7 +667,6 @@ export default function PluginsTab({
                           }}
                           sx={{
                             color:
-                              selectedPlugins.has(plugin) &&
                               PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
                               !isPluginConfigured(plugin)
                                 ? 'error.main'

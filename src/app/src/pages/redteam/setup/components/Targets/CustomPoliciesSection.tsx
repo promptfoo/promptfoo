@@ -1,10 +1,8 @@
-import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
 
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useToast } from '@app/hooks/useToast';
 import AddIcon from '@mui/icons-material/Add';
-import CheckIcon from '@mui/icons-material/Check';
-import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
@@ -16,20 +14,18 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import {
   DataGrid,
   type GridColDef,
   type GridRenderCellParams,
-  type GridRenderEditCellParams,
   type GridRowSelectionModel,
-  type GridRowEditStartParams,
-  type GridRowEditStopParams,
   GridToolbarContainer,
-  useGridApiContext,
   useGridApiRef,
 } from '@mui/x-data-grid';
 import { parse } from 'csv-parse/browser/esm/sync';
+import { makeInlinePolicyId, makeDefaultPolicyName } from '@promptfoo/redteam/plugins/policy/utils';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
@@ -46,47 +42,24 @@ declare module '@mui/x-data-grid' {
 }
 
 type PolicyRow = {
-  id: number;
+  id: string;
   name: string;
   policyText: string;
 };
 
-// Custom multiline edit component for policy text
-function MultilineEditCell(props: GridRenderEditCellParams<PolicyRow>) {
-  const { id, field, value } = props;
-  const apiRef = useGridApiContext();
-
-  const handleChange = useCallback(
-    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      apiRef.current.setEditCellValue({
-        id,
-        field,
-        value: event.target.value,
-      });
-    },
-    [apiRef, id, field],
-  );
-
-  return (
-    <textarea
-      value={value || ''}
-      onChange={handleChange}
-      style={{
-        width: '100%',
-        height: '100%',
-        minHeight: '120px',
-        border: 'none',
-        outline: 'none',
-        padding: '8px',
-        fontFamily: 'inherit',
-        fontSize: 'inherit',
-        resize: 'vertical',
-        backgroundColor: 'transparent',
-      }}
-      autoFocus
-    />
-  );
-}
+type PolicyDialogState = {
+  open: boolean;
+  mode: 'create' | 'edit';
+  editingPolicy: PolicyRow | null;
+  formData: {
+    name: string;
+    policyText: string;
+  };
+  errors: {
+    name?: string;
+    policyText?: string;
+  };
+};
 
 function CustomToolbar({
   selectedCount,
@@ -151,76 +124,214 @@ export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const toast = useToast();
   const apiRef = useGridApiRef();
-  const [generatingPolicyIndex, setGeneratingPolicyIndex] = useState<number | null>(null);
+  const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [editingRowId, setEditingRowId] = useState<number | null>(null);
-  const [autoEditRowId, setAutoEditRowId] = useState<number | null>(null);
 
-  // TODO: This effect is component-scoped, so `checkHealth` needs to be called redundantly in each
-  // component which needs to check API health. Instead, the hook should be backed by app-scoped
-  // context (e.g. via a Zustand store).
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+  // Policy dialog state
+  const [policyDialog, setPolicyDialog] = useState<PolicyDialogState>({
+    open: false,
+    mode: 'create',
+    editingPolicy: null,
+    formData: {
+      name: '',
+      policyText: '',
+    },
+    errors: {},
+  });
 
-  useEffect(() => {
-    checkHealth();
-  }, []);
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
 
   // Test case generation state - now from context
   const { generateTestCase, isGenerating: generatingTestCase } = useTestCaseGeneration();
 
-  // Track custom names for policies (by index)
-  const [policyNames, setPolicyNames] = useState<Record<number, string>>({});
+  // Track custom names for policies (by policy ID)
+  const [policyNames, setPolicyNames] = useState<Record<string, string>>({});
 
   // Get policy plugins from config
   const policyPlugins = config.plugins.filter(
     (p) => typeof p === 'object' && p.id === 'policy',
-  ) as Array<{ id: string; config: { policy: string } }>;
+  ) as Array<{
+    id: string;
+    config: { policy: string | { id: string; text: string; name?: string } };
+  }>;
 
   // Convert policies to rows for the data grid
   const rows: PolicyRow[] = useMemo(() => {
     if (policyPlugins.length === 0) {
       return [];
     }
-    return policyPlugins.map((p, index) => ({
-      id: index,
-      name: policyNames[index] || `Custom Policy ${index + 1}`,
-      policyText: p.config.policy,
-    }));
+    return policyPlugins.map((p, index) => {
+      // Handle both string and PolicyObject formats
+      let policyText: string;
+      let policyId: string;
+      let policyName: string;
+
+      if (typeof p.config.policy === 'string') {
+        policyText = p.config.policy;
+        policyId = makeInlinePolicyId(policyText);
+        policyName = makeDefaultPolicyName(index);
+      } else {
+        policyText = p.config.policy.text;
+        policyId = p.config.policy.id;
+        policyName = p.config.policy.name || policyNames[policyId] || makeDefaultPolicyName(index);
+      }
+
+      return {
+        id: policyId,
+        name: policyName,
+        policyText: policyText,
+      };
+    });
   }, [policyPlugins, policyNames]);
 
-  // Auto-edit newly added rows
-  useEffect(() => {
-    if (autoEditRowId !== null && rows.some((row) => row.id === autoEditRowId)) {
-      // Row has been rendered, start edit mode
-      apiRef.current.startRowEditMode({ id: autoEditRowId });
-      setEditingRowId(autoEditRowId);
-      setAutoEditRowId(null);
-    }
-  }, [autoEditRowId, rows, apiRef]);
+  // Validate policy text uniqueness
+  const validatePolicyText = useCallback(
+    (text: string, currentPolicyId?: string): string | undefined => {
+      const trimmedText = text.trim();
+      if (!trimmedText) {
+        return 'Policy text is required';
+      }
+
+      // Check if this policy text already exists (excluding current policy being edited)
+      const duplicateExists = policyPlugins.some((p) => {
+        const existingText =
+          typeof p.config.policy === 'string' ? p.config.policy : p.config.policy.text;
+        const existingId =
+          typeof p.config.policy === 'string'
+            ? makeInlinePolicyId(p.config.policy)
+            : p.config.policy.id;
+
+        return existingText === trimmedText && existingId !== currentPolicyId;
+      });
+
+      if (duplicateExists) {
+        return 'This policy text already exists. Policy texts must be unique.';
+      }
+
+      return undefined;
+    },
+    [policyPlugins],
+  );
 
   const handleAddPolicy = () => {
+    setPolicyDialog({
+      open: true,
+      mode: 'create',
+      editingPolicy: null,
+      formData: {
+        name: '',
+        policyText: '',
+      },
+      errors: {},
+    });
+  };
+
+  const handleEditPolicy = (policy: PolicyRow) => {
+    setPolicyDialog({
+      open: true,
+      mode: 'edit',
+      editingPolicy: policy,
+      formData: {
+        name: policy.name,
+        policyText: policy.policyText,
+      },
+      errors: {},
+    });
+  };
+
+  const handleClosePolicyDialog = () => {
+    setPolicyDialog((prev) => ({
+      ...prev,
+      open: false,
+      errors: {},
+    }));
+  };
+
+  const handleSavePolicy = () => {
+    const { formData, mode, editingPolicy } = policyDialog;
+    const trimmedText = formData.policyText.trim();
+    const trimmedName = formData.name.trim();
+
+    // Validate
+    const errors: typeof policyDialog.errors = {};
+
+    if (!trimmedName) {
+      errors.name = 'Name is required';
+    }
+
+    const policyTextError = validatePolicyText(
+      trimmedText,
+      mode === 'edit' ? editingPolicy?.id : undefined,
+    );
+    if (policyTextError) {
+      errors.policyText = policyTextError;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setPolicyDialog((prev) => ({ ...prev, errors }));
+      return;
+    }
+
     const otherPlugins = config.plugins.filter((p) =>
       typeof p === 'string' ? true : p.id !== 'policy',
     );
 
-    const newPolicies = [
-      ...policyPlugins.map((p) => ({
-        id: 'policy',
-        config: { policy: p.config.policy },
-      })),
-      {
-        id: 'policy',
-        config: { policy: '' },
-      },
-    ];
+    const newPolicyId = makeInlinePolicyId(trimmedText);
 
-    // Update the config state
-    updateConfig('plugins', [...otherPlugins, ...newPolicies]);
+    if (mode === 'create') {
+      // Add new policy
+      const newPolicies = [
+        ...policyPlugins.map((p) => ({
+          id: 'policy',
+          config: { policy: p.config.policy },
+        })),
+        {
+          id: 'policy',
+          config: {
+            policy: {
+              id: newPolicyId,
+              text: trimmedText,
+              name: trimmedName,
+            },
+          },
+        },
+      ];
+      updateConfig('plugins', [...otherPlugins, ...newPolicies]);
+      toast.showToast('Policy added successfully', 'success');
+    } else {
+      // Update existing policy
+      const updatedPolicies = policyPlugins.map((p) => {
+        const currentPolicyId =
+          typeof p.config.policy === 'string'
+            ? makeInlinePolicyId(p.config.policy)
+            : p.config.policy.id;
 
-    // Set the new row to be auto-edited (id will be the current length)
-    setAutoEditRowId(policyPlugins.length);
+        if (currentPolicyId === editingPolicy?.id) {
+          return {
+            id: 'policy',
+            config: {
+              policy: {
+                id: newPolicyId,
+                text: trimmedText,
+                name: trimmedName,
+              },
+            },
+          };
+        }
+        return {
+          id: 'policy',
+          config: { policy: p.config.policy },
+        };
+      });
+      updateConfig('plugins', [...otherPlugins, ...updatedPolicies]);
+      toast.showToast('Policy updated successfully', 'success');
+    }
+
+    handleClosePolicyDialog();
   };
 
   const handleDeleteSelected = () => {
@@ -235,22 +346,24 @@ export const CustomPoliciesSection = () => {
       typeof p === 'string' ? true : p.id !== 'policy',
     );
 
-    const selectedIndices = new Set(rowSelectionModel as number[]);
+    const selectedIds = new Set(rowSelectionModel as string[]);
     const remainingPolicies = policyPlugins
-      .filter((_, index) => !selectedIndices.has(index))
+      .filter((p) => {
+        const policyId =
+          typeof p.config.policy === 'string'
+            ? makeInlinePolicyId(p.config.policy)
+            : p.config.policy.id;
+        return !selectedIds.has(policyId);
+      })
       .map((p) => ({
         id: 'policy',
         config: { policy: p.config.policy },
       }));
 
     // Clean up policy names for removed policies
-    const newPolicyNames: Record<number, string> = {};
-    let newIndex = 0;
-    policyPlugins.forEach((_, oldIndex) => {
-      if (!selectedIndices.has(oldIndex) && policyNames[oldIndex]) {
-        newPolicyNames[newIndex] = policyNames[oldIndex];
-        newIndex++;
-      }
+    const newPolicyNames = { ...policyNames };
+    selectedIds.forEach((id) => {
+      delete newPolicyNames[id];
     });
 
     setPolicyNames(newPolicyNames);
@@ -262,40 +375,6 @@ export const CustomPoliciesSection = () => {
   const handleCancelDelete = () => {
     setConfirmDeleteOpen(false);
   };
-
-  const processRowUpdate = useCallback(
-    (newRow: PolicyRow, oldRow: PolicyRow) => {
-      const otherPlugins = config.plugins.filter((p) =>
-        typeof p === 'string' ? true : p.id !== 'policy',
-      );
-
-      const updatedPolicies = policyPlugins.map((p, index) => {
-        if (index === newRow.id) {
-          return {
-            id: 'policy',
-            config: { policy: newRow.policyText },
-          };
-        }
-        return {
-          id: 'policy',
-          config: { policy: p.config.policy },
-        };
-      });
-
-      // Update policy name if changed
-      if (newRow.name !== oldRow.name) {
-        setPolicyNames((prev) => ({
-          ...prev,
-          [newRow.id]: newRow.name,
-        }));
-      }
-
-      updateConfig('plugins', [...otherPlugins, ...updatedPolicies]);
-      setEditingRowId(null);
-      return newRow;
-    },
-    [config.plugins, policyPlugins, updateConfig],
-  );
 
   const handleCsvUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -326,15 +405,26 @@ export const CustomPoliciesSection = () => {
             typeof p === 'string' ? true : p.id !== 'policy',
           );
 
+          const currentPolicyCount = policyPlugins.length;
           const allPolicies = [
             ...policyPlugins.map((p) => ({
               id: 'policy',
               config: { policy: p.config.policy },
             })),
-            ...newPolicies.map((policy) => ({
-              id: 'policy',
-              config: { policy: policy.trim() },
-            })),
+            ...newPolicies.map((policy, index) => {
+              const policyText = policy.trim();
+              const policyId = makeInlinePolicyId(policyText);
+              return {
+                id: 'policy',
+                config: {
+                  policy: {
+                    id: policyId,
+                    text: policyText,
+                    name: makeDefaultPolicyName(currentPolicyCount + index),
+                  },
+                },
+              };
+            }),
           ];
 
           updateConfig('plugins', [...otherPlugins, ...allPolicies]);
@@ -363,167 +453,89 @@ export const CustomPoliciesSection = () => {
         return;
       }
 
-      setGeneratingPolicyIndex(row.id);
+      setGeneratingPolicyId(row.id);
 
       await generateTestCase(
         'policy',
         {
-          policy: row.policyText,
+          policy: {
+            id: row.id,
+            text: row.policyText,
+            name: row.name,
+          },
         },
         {
           telemetryFeature: 'redteam_policy_generate_test_case',
           mode: 'result',
           onSuccess: () => {
-            setGeneratingPolicyIndex(null);
+            setGeneratingPolicyId(null);
           },
           onError: () => {
-            setGeneratingPolicyIndex(null);
+            setGeneratingPolicyId(null);
           },
         },
       );
     },
-    [toast],
+    [toast, generateTestCase],
   );
-
-  const handleEditClick = useCallback(
-    (row: PolicyRow) => {
-      setEditingRowId(row.id);
-      apiRef.current.startRowEditMode({ id: row.id });
-    },
-    [apiRef],
-  );
-
-  const handleSaveClick = useCallback(
-    (row: PolicyRow) => {
-      apiRef.current.stopRowEditMode({ id: row.id });
-      setEditingRowId(null);
-    },
-    [apiRef],
-  );
-
-  const handleCancelClick = useCallback(
-    (row: PolicyRow) => {
-      apiRef.current.stopRowEditMode({ id: row.id, ignoreModifications: true });
-      setEditingRowId(null);
-    },
-    [apiRef],
-  );
-
-  const handleRowEditStart = useCallback((params: GridRowEditStartParams) => {
-    setEditingRowId(params.id as number);
-  }, []);
-
-  const handleRowEditStop = useCallback((_params: GridRowEditStopParams) => {
-    setEditingRowId(null);
-  }, []);
 
   const columns: GridColDef<PolicyRow>[] = useMemo(
     () => [
       {
         field: 'name',
         headerName: 'Name',
-        flex: 1,
-        minWidth: 150,
-        editable: true,
+        flex: 0.75,
       },
       {
         field: 'policyText',
         headerName: 'Policy Text',
-        flex: 2,
-        minWidth: 300,
-        editable: true,
-        renderCell: (params: GridRenderCellParams<PolicyRow>) => (
-          <Box
-            sx={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              width: '100%',
-            }}
-          >
-            {params.value || '(empty)'}
-          </Box>
-        ),
-        renderEditCell: (params: GridRenderEditCellParams<PolicyRow>) => (
-          <MultilineEditCell {...params} />
-        ),
+        flex: 3,
       },
       {
         field: 'actions',
         headerName: 'Actions',
-        flex: 0.7,
+        flex: 0.5,
         minWidth: 160,
         sortable: false,
         filterable: false,
-        renderCell: (params: GridRenderCellParams<PolicyRow>) => {
-          const isEditing = editingRowId === params.row.id;
-
-          return (
-            <Box
-              sx={{
-                display: 'flex',
-                gap: 0.5,
-                alignItems: 'center',
-                height: '100%',
-                py: 1,
-              }}
-            >
-              {isEditing ? (
-                <>
-                  <Tooltip title="Save">
-                    <IconButton
-                      size="small"
-                      onClick={() => handleSaveClick(params.row)}
-                      color="primary"
-                    >
-                      <CheckIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Cancel">
-                    <IconButton
-                      size="small"
-                      onClick={() => handleCancelClick(params.row)}
-                      color="error"
-                    >
-                      <CloseIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </>
-              ) : (
-                <>
-                  <Tooltip title="Edit">
-                    <IconButton size="small" onClick={() => handleEditClick(params.row)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <TestCaseGenerateButton
-                    onClick={() => handleGenerateTestCase(params.row)}
-                    disabled={
-                      apiHealthStatus !== 'connected' ||
-                      (generatingTestCase && generatingPolicyIndex === params.row.id)
-                    }
-                    isGenerating={generatingTestCase && generatingPolicyIndex === params.row.id}
-                    tooltipTitle={
-                      apiHealthStatus === 'connected'
-                        ? undefined
-                        : 'Promptfoo Cloud connection is required for test generation'
-                    }
-                  />
-                </>
-              )}
-            </Box>
-          );
-        },
+        renderCell: (params: GridRenderCellParams<PolicyRow>) => (
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 0.5,
+              alignItems: 'center',
+              height: '100%',
+              py: 1,
+            }}
+          >
+            <Tooltip title="Edit">
+              <IconButton size="small" onClick={() => handleEditPolicy(params.row)}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <TestCaseGenerateButton
+              onClick={() => handleGenerateTestCase(params.row)}
+              disabled={
+                apiHealthStatus !== 'connected' ||
+                (generatingTestCase && generatingPolicyId === params.row.id)
+              }
+              isGenerating={generatingTestCase && generatingPolicyId === params.row.id}
+              tooltipTitle={
+                apiHealthStatus === 'connected'
+                  ? undefined
+                  : 'Promptfoo Cloud connection is required for test generation'
+              }
+            />
+          </Box>
+        ),
       },
     ],
     [
       generatingTestCase,
-      generatingPolicyIndex,
-      editingRowId,
-      handleEditClick,
-      handleSaveClick,
-      handleCancelClick,
+      generatingPolicyId,
+      handleEditPolicy,
       handleGenerateTestCase,
+      apiHealthStatus,
     ],
   );
 
@@ -538,7 +550,6 @@ export const CustomPoliciesSection = () => {
           columns={columns}
           checkboxSelection
           disableRowSelectionOnClick
-          processRowUpdate={processRowUpdate}
           slots={{ toolbar: CustomToolbar }}
           slotProps={{
             toolbar: {
@@ -551,10 +562,6 @@ export const CustomPoliciesSection = () => {
           }}
           onRowSelectionModelChange={setRowSelectionModel}
           rowSelectionModel={rowSelectionModel}
-          onRowEditStart={handleRowEditStart}
-          onRowEditStop={handleRowEditStop}
-          editMode="row"
-          getRowHeight={(params) => (params.id === editingRowId ? 'auto' : 52)}
         />
       </Box>
 
@@ -580,6 +587,64 @@ export const CustomPoliciesSection = () => {
             startIcon={<DeleteIcon />}
           >
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Policy edit/create dialog */}
+      <Dialog open={policyDialog.open} onClose={handleClosePolicyDialog} maxWidth="md" fullWidth>
+        <DialogTitle>
+          {policyDialog.mode === 'create' ? 'Add New Policy' : 'Edit Policy'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Name"
+              value={policyDialog.formData.name}
+              onChange={(e) =>
+                setPolicyDialog((prev) => ({
+                  ...prev,
+                  formData: { ...prev.formData, name: e.target.value },
+                  errors: { ...prev.errors, name: undefined },
+                }))
+              }
+              error={!!policyDialog.errors.name}
+              helperText={policyDialog.errors.name}
+              placeholder="e.g., Data Privacy Policy"
+              fullWidth
+            />
+            <TextField
+              label="Policy Text"
+              value={policyDialog.formData.policyText}
+              onChange={(e) =>
+                setPolicyDialog((prev) => ({
+                  ...prev,
+                  formData: { ...prev.formData, policyText: e.target.value },
+                  errors: { ...prev.errors, policyText: undefined },
+                }))
+              }
+              error={!!policyDialog.errors.policyText}
+              helperText={policyDialog.errors.policyText}
+              multiline
+              rows={8}
+              fullWidth
+              placeholder="Enter the policy text that describes what should be checked..."
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClosePolicyDialog} variant="outlined">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSavePolicy}
+            variant="contained"
+            color="primary"
+            disabled={
+              !policyDialog.formData.name.trim() || !policyDialog.formData.policyText.trim()
+            }
+          >
+            Save
           </Button>
         </DialogActions>
       </Dialog>

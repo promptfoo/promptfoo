@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'SharePoint CSV Import Example'
+
+prompts:
+  - 'Please translate the following text to {{language}}: {{input}}'
+
+providers:
+  - openai:gpt-5
+  - openai:gpt-5-mini
+  - anthropic:claude-sonnet-4-5-20250929
+
+# Replace with your SharePoint URL to the CSV file
+tests: https://yourcompany.sharepoint.com/sites/yoursite/Shared%20Documents/test-cases.csv
+# Optional: Override the LLM grader for model-graded metrics
+# defaultTest:
+#   options:
+#     provider:
+#       text:
+#         id: openai:gpt-5-mini
+
