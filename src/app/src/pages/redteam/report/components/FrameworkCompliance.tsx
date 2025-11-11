@@ -11,7 +11,9 @@ import {
   FRAMEWORK_COMPLIANCE_IDS,
   riskCategorySeverityMap,
   Severity,
+  type FrameworkComplianceId,
 } from '@promptfoo/redteam/constants';
+import type { UnifiedConfig } from '@promptfoo/types';
 import { getProgressColor } from '../utils/color';
 import FrameworkCard from './FrameworkCard';
 import { categorizePlugins, expandPluginCollections } from './FrameworkComplianceUtils';
@@ -25,10 +27,26 @@ import { type TestResultStats } from './FrameworkComplianceUtils';
 interface FrameworkComplianceProps {
   evalId: string;
   categoryStats: Record<string, Required<TestResultStats>>;
+  config?: Partial<UnifiedConfig>;
 }
 
-const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps) => {
+const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplianceProps) => {
   const { pluginPassRateThreshold } = useReportStore();
+
+  // Filter frameworks based on config
+  const frameworksToShow = React.useMemo(() => {
+    const configuredFrameworks = config?.redteam?.frameworks;
+
+    // If not configured or empty, show all frameworks (default behavior)
+    if (!configuredFrameworks || configuredFrameworks.length === 0) {
+      return FRAMEWORK_COMPLIANCE_IDS;
+    }
+
+    // Filter to only show configured frameworks
+    return FRAMEWORK_COMPLIANCE_IDS.filter((id) =>
+      configuredFrameworks.includes(id as FrameworkComplianceId),
+    );
+  }, [config?.redteam?.frameworks]);
 
   const getNonCompliantPlugins = React.useCallback(
     (framework: string) => {
@@ -87,7 +105,7 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
   );
 
   const frameworkCompliance = React.useMemo(() => {
-    return FRAMEWORK_COMPLIANCE_IDS.reduce(
+    return frameworksToShow.reduce(
       (acc, framework) => {
         const nonCompliantPlugins = getNonCompliantPlugins(framework);
         acc[framework] = nonCompliantPlugins.length === 0;
@@ -95,13 +113,13 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
       },
       {} as Record<string, boolean>,
     );
-  }, [getNonCompliantPlugins]);
+  }, [frameworksToShow, getNonCompliantPlugins]);
 
   const pluginComplianceStats = React.useMemo(() => {
-    // Collect all unique plugins across all frameworks
+    // Collect all unique plugins across all frameworks to show
     const allFrameworkPlugins = new Set<string>();
 
-    FRAMEWORK_COMPLIANCE_IDS.forEach((framework) => {
+    frameworksToShow.forEach((framework) => {
       const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
       if (!mappings) {
         return;
@@ -137,18 +155,19 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
       failedTests: totalFailedTests,
       totalTests,
     };
-  }, [categoryStats, pluginPassRateThreshold]);
+  }, [frameworksToShow, categoryStats, pluginPassRateThreshold]);
 
   return (
     <Box sx={{ pageBreakBefore: 'always', breakBefore: 'always' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5">
           Framework Compliance ({Object.values(frameworkCompliance).filter(Boolean).length}/
-          {FRAMEWORK_COMPLIANCE_IDS.length})
+          {frameworksToShow.length})
         </Typography>
         <CSVExporter
           categoryStats={categoryStats}
           pluginPassRateThreshold={pluginPassRateThreshold}
+          frameworksToShow={frameworksToShow}
         />
       </Box>
       <Card className="framework-compliance-card">
@@ -176,7 +195,7 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
             }}
           />
           <Grid container spacing={3} className="framework-grid">
-            {FRAMEWORK_COMPLIANCE_IDS.map((framework, idx) => {
+            {frameworksToShow.map((framework, idx) => {
               const nonCompliantPlugins = getNonCompliantPlugins(framework);
               const isCompliant = frameworkCompliance[framework];
               const frameworkSeverity = getFrameworkSeverity(framework);

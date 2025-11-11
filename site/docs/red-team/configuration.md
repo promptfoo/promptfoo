@@ -73,8 +73,10 @@ Allowed framework IDs:
 - `nist:ai:measure`
 - `owasp:api`
 - `owasp:llm`
+- `owasp:agentic`
 - `eu:ai-act`
 - `iso:42001`
+- `gdpr`
 
 ```yaml
 redteam:
