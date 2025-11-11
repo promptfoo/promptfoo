@@ -1,5 +1,7 @@
 import React from 'react';
 
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -54,6 +56,8 @@ export default function StrategyConfigDialog({
   const [error, setError] = React.useState<string>('');
   const [goals, setGoals] = React.useState<string[]>(config.goals || []);
   const [newGoal, setNewGoal] = React.useState<string>('');
+  const [steps, setSteps] = React.useState<string[]>(config.steps || []);
+  const [newStep, setNewStep] = React.useState<string>('');
 
   React.useEffect(() => {
     if (!open || !strategy) {
@@ -70,6 +74,8 @@ export default function StrategyConfigDialog({
     setGoals(
       strategy === 'simba' ? nextConfig.goals || DEFAULT_SIMBA_GOALS : nextConfig.goals || [],
     );
+    setSteps(strategy === 'layer' ? nextConfig.steps || [] : []);
+    setNewStep('');
   }, [open, strategy, config]);
 
   const handleAddGoal = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -81,6 +87,38 @@ export default function StrategyConfigDialog({
 
   const handleRemoveGoal = (goal: string) => {
     setGoals((prev) => prev.filter((g) => g !== goal));
+  };
+
+  const handleAddStep = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && newStep.trim()) {
+      setSteps((prev) => [...prev, newStep.trim()]);
+      setNewStep('');
+    }
+  };
+
+  const handleRemoveStep = (index: number) => {
+    setSteps((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleMoveStepUp = (index: number) => {
+    if (index > 0) {
+      setSteps((prev) => {
+        const newSteps = [...prev];
+        [newSteps[index - 1], newSteps[index]] = [newSteps[index], newSteps[index - 1]];
+        return newSteps;
+      });
+    }
+  };
+
+  const handleMoveStepDown = (index: number) => {
+    setSteps((prev) => {
+      if (index < prev.length - 1) {
+        const newSteps = [...prev];
+        [newSteps[index], newSteps[index + 1]] = [newSteps[index + 1], newSteps[index]];
+        return newSteps;
+      }
+      return prev;
+    });
   };
 
   const handleNumTestsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,6 +171,11 @@ export default function StrategyConfigDialog({
       onSave(strategy, {
         ...localConfig,
         goals,
+      });
+    } else if (strategy === 'layer') {
+      onSave(strategy, {
+        ...localConfig,
+        steps,
       });
     } else if (strategy === 'retry') {
       const num = Number.parseInt(numTests, 10);
@@ -671,6 +714,96 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
+    } else if (strategy === 'layer') {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Configure the Layer strategy by adding transformation steps that will be applied
+            sequentially. Each step receives the output from the previous step.
+          </Typography>
+
+          <Box>
+            <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
+              Steps (in order)
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Add strategies to chain together. Examples: base64, rot13, hex, jailbreak, etc.
+            </Typography>
+
+            {steps.length > 0 && (
+              <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {steps.map((step, index) => (
+                  <Box
+                    key={`${step}-${index}`}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      p: 1.5,
+                      border: 1,
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      bgcolor: 'background.paper',
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                      },
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{ flex: 1, mr: 1, fontFamily: 'monospace', fontSize: '0.9rem' }}
+                    >
+                      {index + 1}. {step}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleMoveStepUp(index)}
+                        disabled={index === 0}
+                        aria-label="move step up"
+                        sx={{ opacity: index === 0 ? 0.3 : 1 }}
+                      >
+                        <ArrowUpwardIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleMoveStepDown(index)}
+                        disabled={index === steps.length - 1}
+                        aria-label="move step down"
+                        sx={{ opacity: index === steps.length - 1 ? 0.3 : 1 }}
+                      >
+                        <ArrowDownwardIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleRemoveStep(index)}
+                        aria-label="delete step"
+                        color="error"
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            )}
+
+            <TextField
+              fullWidth
+              label="Add Step (press Enter)"
+              value={newStep}
+              onChange={(e) => setNewStep(e.target.value)}
+              onKeyPress={handleAddStep}
+              placeholder="e.g., base64, rot13, jailbreak, file://custom-strategy.js"
+              helperText={
+                steps.length === 0
+                  ? 'Add at least one strategy step (required)'
+                  : 'Add strategy IDs or file:// paths to custom strategies'
+              }
+              error={steps.length === 0}
+            />
+          </Box>
+        </Box>
+      );
     } else {
       return (
         <Typography color="text.secondary">
@@ -693,7 +826,11 @@ export default function StrategyConfigDialog({
         <Button
           onClick={handleSave}
           variant="contained"
-          disabled={(strategy === 'retry' && (!!error || !numTests)) || !isCustomStrategyValid()}
+          disabled={
+            (strategy === 'retry' && (!!error || !numTests)) ||
+            !isCustomStrategyValid() ||
+            (strategy === 'layer' && steps.length === 0)
+          }
         >
           Save
         </Button>
