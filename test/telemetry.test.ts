@@ -319,7 +319,7 @@ describe('Telemetry', () => {
 
       expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
         distinctId: 'test-user-id',
-        properties: { email: 'test@example.com', isLoggedIntoCloud: false },
+        properties: { email: 'test@example.com', isLoggedIntoCloud: false, isRunningInCi: false },
       });
       expect(mockPostHogInstance.flush).toHaveBeenCalledWith();
     });
@@ -393,6 +393,46 @@ describe('Telemetry', () => {
       const _telemetry = new telemetryModule.Telemetry();
 
       expect(() => _telemetry.identify()).not.toThrow();
+    });
+
+    it('should call PostHog shutdown when telemetry shutdown is called', async () => {
+      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
+      delete process.env.IS_TESTING;
+      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+
+      mockPostHogInstance.shutdown = jest.fn().mockResolvedValue(undefined);
+
+      const telemetryModule = await import('../src/telemetry');
+      const _telemetry = new telemetryModule.Telemetry();
+
+      await _telemetry.shutdown();
+
+      expect(mockPostHogInstance.shutdown).toHaveBeenCalled();
+    });
+
+    it('should handle PostHog shutdown errors gracefully', async () => {
+      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
+      delete process.env.IS_TESTING;
+      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+
+      mockPostHogInstance.shutdown = jest.fn().mockRejectedValue(new Error('Shutdown failed'));
+
+      const { default: logger } = await import('../src/logger');
+      const loggerSpy = jest.spyOn(logger, 'debug');
+      const telemetryModule = await import('../src/telemetry');
+      const _telemetry = new telemetryModule.Telemetry();
+
+      await expect(_telemetry.shutdown()).resolves.not.toThrow();
+      expect(loggerSpy).toHaveBeenCalledWith('PostHog shutdown error: Error: Shutdown failed');
+    });
+
+    it('should handle shutdown when PostHog client is not initialized', async () => {
+      process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
+
+      const telemetryModule = await import('../src/telemetry');
+      const _telemetry = new telemetryModule.Telemetry();
+
+      await expect(_telemetry.shutdown()).resolves.not.toThrow();
     });
   });
 

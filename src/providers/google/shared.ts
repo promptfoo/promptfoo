@@ -45,6 +45,8 @@ export const CHAT_MODELS = [
   // Gemini 2.5 models
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
+  'gemini-2.5-flash-preview-09-2025',
+  'gemini-2.5-flash-lite-preview-09-2025',
   'gemini-2.5-flash-preview-04-17',
   'gemini-2.5-flash-preview-05-20',
   'gemini-2.5-pro',

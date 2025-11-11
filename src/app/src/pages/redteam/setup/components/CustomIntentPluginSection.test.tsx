@@ -52,13 +52,17 @@ describe('CustomIntentPluginSection', () => {
     it('renders with default empty intent', () => {
       render(<CustomIntentPluginSection />);
 
-      expect(
-        screen.getByText(/These prompts are passed directly to your target/),
-      ).toBeInTheDocument();
-      expect(screen.getByText('Add prompt')).toBeInTheDocument();
+      // Check for drag & drop zone
+      expect(screen.getByText('Drop files here or click to upload')).toBeInTheDocument();
+      expect(screen.getByText('Supports .csv and .json files')).toBeInTheDocument();
+
+      // Check for action buttons
+      expect(screen.getByText('Add Intent')).toBeInTheDocument();
       expect(screen.getByText('Upload File')).toBeInTheDocument();
       expect(screen.getByText('Clear All')).toBeInTheDocument();
-      expect(screen.getByText('Drop files here or click to upload')).toBeInTheDocument();
+
+      // Check for at least one text field (the empty intent)
+      expect(screen.getByRole('textbox')).toBeInTheDocument();
     });
 
     it('renders with existing intents', () => {
@@ -82,7 +86,7 @@ describe('CustomIntentPluginSection', () => {
   });
 
   describe('Intent Management', () => {
-    it('adds new intent when Add prompt button is clicked', async () => {
+    it('adds new intent when add button is clicked', async () => {
       render(<CustomIntentPluginSection />);
 
       // First fill the empty field to enable the Add button
@@ -91,11 +95,11 @@ describe('CustomIntentPluginSection', () => {
 
       // Wait for the Add button to be enabled
       await waitFor(() => {
-        const addButton = screen.getByText('Add prompt');
+        const addButton = screen.getByText('Add Intent');
         expect(addButton).not.toBeDisabled();
       });
 
-      const addButton = screen.getByText('Add prompt');
+      const addButton = screen.getByText('Add Intent');
       fireEvent.click(addButton);
 
       // Should have 2 text fields now (with longer timeout for state update)
@@ -137,10 +141,10 @@ describe('CustomIntentPluginSection', () => {
       });
     });
 
-    it('disables Add prompt button when empty intents exist', () => {
+    it('disables Add button when empty intents exist', () => {
       render(<CustomIntentPluginSection />);
 
-      const addButton = screen.getByText('Add prompt');
+      const addButton = screen.getByText('Add Intent');
       expect(addButton).toBeDisabled();
     });
   });
@@ -296,11 +300,13 @@ describe('CustomIntentPluginSection', () => {
   });
 
   describe('Error Handling', () => {
-    it('shows tooltip with file format information', () => {
+    it('shows file format information in the upload zone', () => {
       render(<CustomIntentPluginSection />);
 
-      const infoIcon = screen.getByTestId('InfoIcon');
-      expect(infoIcon).toBeInTheDocument();
+      // File format info is now displayed directly in the drop zone
+      expect(screen.getByText('Supports .csv and .json files')).toBeInTheDocument();
+      expect(screen.getByText('CSV')).toBeInTheDocument();
+      expect(screen.getByText('JSON')).toBeInTheDocument();
     });
   });
 

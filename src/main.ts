@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
+import cliState from './cliState';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
@@ -18,6 +19,7 @@ import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
+import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
@@ -32,9 +34,11 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
+import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
-import { setupEnv } from './util/index';
 import { loadDefaultConfig } from './util/config/default';
+import { printErrorInformation } from './util/errors';
+import { setupEnv } from './util/index';
 
 /**
  * Adds verbose and env-file options to all commands recursively
@@ -111,6 +115,7 @@ async function main() {
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
+  setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 
@@ -137,10 +142,18 @@ async function main() {
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
 
+  program.hook('postAction', () => {
+    printErrorInformation(cliState.errorLogFile, cliState.debugLogFile);
+  });
+
   program.parse();
 }
 
 if (require.main === module) {
   checkNodeVersion();
-  main();
+  main().finally(async () => {
+    logger.debug('Shutting down gracefully...');
+    await telemetry.shutdown();
+    logger.debug('Shutdown complete');
+  });
 }

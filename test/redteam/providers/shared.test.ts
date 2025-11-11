@@ -13,8 +13,6 @@ import {
   redteamProviderManager,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
-import { sleep } from '../../../src/util/time';
-
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -22,6 +20,7 @@ import type {
   Prompt,
   ProviderResponse,
 } from '../../../src/types';
+import { sleep } from '../../../src/util/time';
 
 jest.mock('../../../src/util/time');
 jest.mock('../../../src/cliState', () => ({
@@ -284,6 +283,50 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Once for regular, once for jsonOnly
     });
 
+    describe('getGradingProvider', () => {
+      it('returns cached grading provider set via setGradingProvider', async () => {
+        redteamProviderManager.clearProvider();
+        const gradingInstance: ApiProvider = {
+          id: () => 'grading-cached',
+          callApi: jest.fn(),
+        } as any;
+
+        // Set concrete instance and retrieve it (jsonOnly false)
+        await redteamProviderManager.setGradingProvider(gradingInstance as any);
+        const got = await redteamProviderManager.getGradingProvider();
+        expect(got.id()).toBe('grading-cached');
+      });
+
+      it('uses defaultTest chain when no cached grading provider', async () => {
+        redteamProviderManager.clearProvider();
+        const mockProvider: ApiProvider = {
+          id: () => 'from-defaultTest-provider',
+          callApi: jest.fn(),
+        } as any;
+        mockedLoadApiProviders.mockResolvedValue([mockProvider]);
+
+        // Inject defaultTest provider config
+        (cliState as any).config = {
+          defaultTest: {
+            provider: 'from-defaultTest-provider',
+          },
+        };
+
+        const got = await redteamProviderManager.getGradingProvider();
+        expect(got).toBe(mockProvider);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['from-defaultTest-provider']);
+      });
+
+      it('falls back to redteam provider when grading not set', async () => {
+        redteamProviderManager.clearProvider();
+        (cliState as any).config = {}; // no defaultTest
+
+        // Expect fallback to default OpenAI redteam provider
+        const got = await redteamProviderManager.getGradingProvider({ jsonOnly: true });
+        expect(got.id()).toContain('openai:');
+      });
+    });
+
     it('handles thrown errors in getTargetResponse', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
@@ -298,6 +341,63 @@ describe('shared redteam provider utilities', () => {
         output: '',
         error: 'Network error',
         tokenUsage: { numRequests: 1 },
+      });
+    });
+
+    describe('Multilingual provider', () => {
+      it('getMultilingualProvider returns undefined when not set', async () => {
+        // Ensure clean state
+        redteamProviderManager.clearProvider();
+        const result = await redteamProviderManager.getMultilingualProvider();
+        expect(result).toBeUndefined();
+      });
+
+      it('setMultilingualProvider caches provider and getMultilingualProvider returns it', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-multilingual-provider',
+          callApi: jest.fn<
+            Promise<ProviderResponse>,
+            [string, CallApiContextParams | undefined, any]
+          >(),
+        };
+
+        mockedLoadApiProviders.mockResolvedValueOnce([mockProvider]);
+
+        await redteamProviderManager.setMultilingualProvider('test-multilingual-provider');
+        const result = await redteamProviderManager.getMultilingualProvider();
+
+        expect(result).toBe(mockProvider);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['test-multilingual-provider']);
+      });
+
+      it('setMultilingualProvider uses jsonOnly response_format when defaulting to OpenAI', async () => {
+        const mockOpenAiInstance = {
+          id: () => `openai:${ATTACKER_MODEL}`,
+          callApi: jest.fn(),
+          toString: () => `OpenAI(${ATTACKER_MODEL})`,
+          config: { temperature: TEMPERATURE, response_format: { type: 'json_object' } },
+          getApiKey: jest.fn(),
+          getApiUrl: jest.fn(),
+          getApiUrlDefault: jest.fn(),
+          getOrganization: jest.fn(),
+          requiresApiKey: jest.fn(),
+          initializationPromise: null,
+          loadedFunctionCallbacks: {},
+          mcpClient: null,
+        };
+
+        mockedOpenAiProvider.mockClear();
+        mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance as any);
+
+        // Pass undefined to trigger default provider creation
+        await redteamProviderManager.setMultilingualProvider(undefined as any);
+
+        expect(mockedOpenAiProvider).toHaveBeenCalledWith(ATTACKER_MODEL, {
+          config: {
+            temperature: TEMPERATURE,
+            response_format: { type: 'json_object' },
+          },
+        });
       });
     });
   });
@@ -643,18 +743,18 @@ describe('shared redteam provider utilities', () => {
 
   // New tests for tryUnblocking env flag
   describe('tryUnblocking environment flag', () => {
-    const originalEnv = process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+    const originalEnv = process.env.PROMPTFOO_ENABLE_UNBLOCKING;
 
     afterEach(() => {
       if (originalEnv === undefined) {
-        delete process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+        delete process.env.PROMPTFOO_ENABLE_UNBLOCKING;
       } else {
-        process.env.PROMPTFOO_DISABLE_UNBLOCKING = originalEnv;
+        process.env.PROMPTFOO_ENABLE_UNBLOCKING = originalEnv;
       }
     });
 
-    it('short-circuits when PROMPTFOO_DISABLE_UNBLOCKING=true', async () => {
-      process.env.PROMPTFOO_DISABLE_UNBLOCKING = 'true';
+    it('short-circuits by default when PROMPTFOO_ENABLE_UNBLOCKING is not set', async () => {
+      delete process.env.PROMPTFOO_ENABLE_UNBLOCKING;
 
       const result = await tryUnblocking({
         messages: [],
@@ -665,6 +765,29 @@ describe('shared redteam provider utilities', () => {
 
       expect(result.success).toBe(false);
       expect(result.unblockingPrompt).toBeUndefined();
+    });
+
+    it('does not short-circuit when PROMPTFOO_ENABLE_UNBLOCKING=true', async () => {
+      process.env.PROMPTFOO_ENABLE_UNBLOCKING = 'true';
+
+      // Spy on logger to verify we don't see the "disabled by default" message
+      const loggerSpy = jest.spyOn(require('../../../src/logger').default, 'debug');
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'What industry are you in?',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      // Verify we did NOT log the "disabled by default" message
+      expect(loggerSpy).not.toHaveBeenCalledWith(expect.stringContaining('Disabled by default'));
+
+      // The function should still return false (because server feature check will fail in test env)
+      // but for a different reason than the env var check
+      expect(result.success).toBe(false);
+
+      loggerSpy.mockRestore();
     });
   });
 });

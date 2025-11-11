@@ -80,10 +80,12 @@ describe('matchesGEval', () => {
     expect(mockCallApi).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining('Custom steps template with'),
+      expect.any(Object),
     );
     expect(mockCallApi).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining('Custom evaluation template with'),
+      expect.any(Object),
     );
 
     DefaultGradingProvider.callApi = originalCallApi;

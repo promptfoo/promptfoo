@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { useEvalOperations } from '@app/hooks/useEvalOperations';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
@@ -38,10 +40,28 @@ export interface EvalOutputCellProps {
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
-  onMetricFilter?: (metric: string | null) => void;
   isRedteam?: boolean;
 }
 
+/**
+ * Renders a single evaluation output cell including content, pass/fail badges, metrics, actions, and dialogs.
+ *
+ * This component displays an evaluation output (text, image, or audio), optional diffs against a reference
+ * output, human grading UI (pass/fail/score/comment), token/latency/cost stats, and utility actions
+ * (copy, share, highlight). It also manages internal dialogs for viewing the prompt/test details and editing comments.
+ *
+ * @param output - The evaluation output record to render (text/audio/metadata, grading results, scores, etc.).
+ * @param maxTextLength - Maximum characters shown before truncation.
+ * @param firstOutput - Reference output used when `showDiffs` is true to compute and render diffs.
+ * @param showDiffs - When true, attempt to show a diff between `firstOutput` and `output`.
+ * @param searchText - Optional search string; when present and table highlighting is enabled, matches are highlighted in the output text.
+ * @param showStats - When true, renders token usage, latency, tokens/sec, cost, and other detail stats.
+ * @param onRating - Callback invoked to report human grading changes. Called as `onRating(pass?: boolean, score?: number, comment?: string)`.
+ * @param evaluationId - Evaluation identifier passed to the prompt/details dialog.
+ * @param testCaseId - Test case identifier passed to the prompt/details dialog (falls back to `output.id` when not provided).
+ * @param onMetricFilter - Optional callback to filter by a custom metric (passed through to the CustomMetrics child).
+ * @param isRedteam - When true, shows probe-specific stats (e.g., numRequests) in the stats panel.
+ */
 function EvalOutputCell({
   output,
   maxTextLength,
@@ -54,7 +74,6 @@ function EvalOutputCell({
   showStats,
   evaluationId,
   testCaseId,
-  onMetricFilter,
   isRedteam,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
@@ -64,7 +83,9 @@ function EvalOutputCell({
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
     useResultsViewSettingsStore();
 
-  const { shouldHighlightSearchText } = useTableStore();
+  const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
+  const { data: cloudConfig } = useCloudConfig();
+  const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -122,7 +143,7 @@ function EvalOutputCell({
     setCommentText(newCommentText);
   };
 
-  let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
@@ -134,18 +155,9 @@ function EvalOutputCell({
       .filter((reason) => reason); // Filter out empty/undefined reasons
   }
 
-  // Handle failure messages by splitting the text at '---' if present
-  if (text && text.includes('---')) {
-    text = text.split('---').slice(1).join('---');
-  }
-
   if (showDiffs && firstOutput) {
-    let firstOutputText =
+    const firstOutputText =
       typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
-
-    if (firstOutputText.includes('---')) {
-      firstOutputText = firstOutputText.split('---').slice(1).join('---');
-    }
 
     let diffResult;
     try {
@@ -242,30 +254,40 @@ function EvalOutputCell({
         )}
       </div>
     );
-  } else if (renderMarkdown && !showDiffs) {
-    node = (
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          img: ({ src, alt }) => (
-            <img
-              loading="lazy"
-              src={src}
-              alt={alt}
-              onClick={() => toggleLightbox(src)}
-              style={{ cursor: 'pointer' }}
-            />
-          ),
-        }}
-      >
-        {text}
-      </ReactMarkdown>
-    );
-  } else if (prettifyJson) {
-    try {
-      node = <pre>{JSON.stringify(JSON.parse(text), null, 2)}</pre>;
-    } catch {
-      // Ignore because it's probably not JSON.
+  } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
+    // When both prettifyJson and renderMarkdown are enabled,
+    // display as JSON if it's a valid object/array, otherwise render as Markdown
+    let isJsonHandled = false;
+    if (prettifyJson) {
+      try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed === 'object' && parsed !== null) {
+          node = <pre>{JSON.stringify(parsed, null, 2)}</pre>;
+          isJsonHandled = true;
+        }
+      } catch {
+        // Not valid JSON, continue to Markdown if enabled
+      }
+    }
+    if (!isJsonHandled && renderMarkdown) {
+      node = (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            img: ({ src, alt }) => (
+              <img
+                loading="lazy"
+                src={src}
+                alt={alt}
+                onClick={() => toggleLightbox(src)}
+                style={{ cursor: 'pointer' }}
+              />
+            ),
+          }}
+        >
+          {text}
+        </ReactMarkdown>
+      );
     }
   }
 
@@ -317,9 +339,11 @@ function EvalOutputCell({
   let costDisplay;
 
   if (output.latencyMs) {
+    const isCached = output.response?.cached;
     latencyDisplay = (
       <span>
         {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms
+        {isCached ? ' (cached)' : ''}
       </span>
     );
   }
@@ -327,7 +351,7 @@ function EvalOutputCell({
   // Check for token usage in both output.tokenUsage and output.response?.tokenUsage
   const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
 
-  if (tokenUsage?.completion) {
+  if (tokenUsage?.completion && output.latencyMs && output.latencyMs > 0) {
     const tokPerSec = tokenUsage.completion / (output.latencyMs / 1000);
     tokPerSecDisplay = (
       <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokPerSec)}</span>
@@ -604,7 +628,13 @@ function EvalOutputCell({
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
+              promptIndex={promptIndex}
               variables={output.testCase?.vars}
+              onAddFilter={addFilter}
+              onResetFilters={resetFilters}
+              onReplay={replayEvaluation}
+              fetchTraces={fetchTraces}
+              cloudConfig={cloudConfig}
             />
           )}
         </>
@@ -649,7 +679,7 @@ function EvalOutputCell({
             </div>
             {providerOverride}
           </div>
-          <CustomMetrics lookup={output.namedScores} onMetricFilter={onMetricFilter} />
+          <CustomMetrics lookup={output.namedScores} />
           {failReasons.length > 0 && (
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />

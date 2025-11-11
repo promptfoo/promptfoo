@@ -3,7 +3,7 @@ import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
-import { isRunningUnderNpx } from '../../util/index';
+import { isRunningUnderNpx } from '../../util/promptfooCommand';
 import logger from '../../logger';
 import type { Request, Response } from 'express';
 
@@ -20,7 +20,7 @@ let versionCache: {
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', async (_req: Request, res: Response): Promise<void> => {
   try {
     const now = Date.now();
     let latestVersion = versionCache.latestVersion;

@@ -12,7 +12,6 @@ const config: Config = {
     globalsCleanup: 'soft',
   },
   testPathIgnorePatterns: [
-    '.*\\.test\\.tsx$',
     '.*\\.integration\\.test\\.ts$',
     '<rootDir>/dist',
     '<rootDir>/examples',

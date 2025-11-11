@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
 dotenv.config({ quiet: true });
 
 import http from 'node:http';
@@ -90,11 +91,11 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
-  app.get('/health', (req, res) => {
+  app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'OK', version: VERSION });
   });
 
-  app.get('/api/remote-health', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/remote-health', async (_req: Request, res: Response): Promise<void> => {
     const apiUrl = getRemoteHealthUrl();
 
     if (apiUrl === null) {
@@ -115,10 +116,19 @@ export function createApp() {
   app.get(
     '/api/results',
     async (
-      req: Request<{}, {}, {}, { datasetId?: string }>,
+      req: Request<
+        {},
+        {},
+        {},
+        { datasetId?: string; type?: 'redteam' | 'eval'; includeProviders?: boolean }
+      >,
       res: Response<{ data: EvalSummary[] }>,
     ): Promise<void> => {
-      const previousResults = await getEvalSummaries(req.query.datasetId);
+      const previousResults = await getEvalSummaries(
+        req.query.datasetId,
+        req.query.type,
+        req.query.includeProviders,
+      );
       res.json({ data: previousResults });
     },
   );
@@ -133,7 +143,7 @@ export function createApp() {
     res.json({ data: file.result });
   });
 
-  app.get('/api/prompts', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/prompts', async (_req: Request, res: Response): Promise<void> => {
     if (allPrompts == null) {
       allPrompts = await getPrompts();
     }
@@ -160,7 +170,7 @@ export function createApp() {
     res.json({ data: prompts });
   });
 
-  app.get('/api/datasets', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/datasets', async (_req: Request, res: Response): Promise<void> => {
     res.json({ data: await getTestCases() });
   });
 
@@ -258,7 +268,7 @@ export function createApp() {
   app.use(express.static(staticDir, { dotfiles: 'allow' }));
 
   // Handle client routing, return all requests to the app
-  app.get('/*splat', (req: Request, res: Response): void => {
+  app.get('/*splat', (_req: Request, res: Response): void => {
     res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
   });
   return app;

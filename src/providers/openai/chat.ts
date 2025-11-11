@@ -5,23 +5,22 @@ import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { isJavascriptFile } from '../../util/fileExtensions';
-import { normalizeFinishReason } from '../../util/finishReason';
-import { MCPClient } from '../mcp/client';
-import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
-
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileExtensions';
+import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToOpenAi } from '../mcp/transform';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from './';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
+import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
@@ -333,8 +332,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     let data, status, statusText;
     let cached = false;
+    let latencyMs: number | undefined;
     try {
-      ({ data, cached, status, statusText } = await fetchWithCache(
+      ({ data, cached, status, statusText, latencyMs } = await fetchWithCache(
         `${this.getApiUrl()}/chat/completions`,
         {
           method: 'POST',
@@ -353,8 +353,24 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ));
 
       if (status < 200 || status >= 300) {
+        const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
+
+        // Check if this is an invalid_prompt error code (indicates refusal)
+        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+          return {
+            output: errorMessage,
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            latencyMs,
+            isRefusal: true,
+            guardrails: {
+              flagged: true,
+              flaggedInput: true, // This error specifically indicates input was rejected
+            },
+          };
+        }
+
         return {
-          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+          error: errorMessage,
         };
       }
     } catch (err) {
@@ -369,14 +385,36 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
 
+      // Track content filtering for guardrails
+      const contentFiltered = finishReason === FINISH_REASON_MAP.content_filter;
+
       if (message.refusal) {
         return {
           output: message.refusal,
           tokenUsage: getTokenUsage(data, cached),
+          cached,
+          latencyMs,
           isRefusal: true,
           ...(finishReason && { finishReason }),
+          guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
         };
       }
+
+      // Check if content was filtered
+      if (contentFiltered) {
+        return {
+          output: message.content || 'Content filtered by provider',
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          latencyMs,
+          isRefusal: true,
+          finishReason: FINISH_REASON_MAP.content_filter,
+          guardrails: {
+            flagged: true,
+          },
+        };
+      }
+
       let output = '';
       if (message.reasoning) {
         output = message.reasoning;
@@ -501,6 +539,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             output: results.join('\n'),
             tokenUsage: getTokenUsage(data, cached),
             cached,
+            latencyMs,
             logProbs,
             ...(finishReason && { finishReason }),
             cost: calculateOpenAICost(
@@ -511,6 +550,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               data.usage?.audio_prompt_tokens,
               data.usage?.audio_completion_tokens,
             ),
+            guardrails: { flagged: contentFiltered },
           };
         }
       }
@@ -536,6 +576,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           },
           tokenUsage: getTokenUsage(data, cached),
           cached,
+          latencyMs,
           logProbs,
           ...(finishReason && { finishReason }),
           cost: calculateOpenAICost(
@@ -546,6 +587,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             data.usage?.audio_prompt_tokens,
             data.usage?.audio_completion_tokens,
           ),
+          guardrails: { flagged: contentFiltered },
         };
       }
 
@@ -553,6 +595,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output,
         tokenUsage: getTokenUsage(data, cached),
         cached,
+        latencyMs,
         logProbs,
         ...(finishReason && { finishReason }),
         cost: calculateOpenAICost(
@@ -563,6 +606,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           data.usage?.audio_prompt_tokens,
           data.usage?.audio_completion_tokens,
         ),
+        guardrails: { flagged: contentFiltered },
       };
     } catch (err) {
       await data?.deleteFromCache?.();

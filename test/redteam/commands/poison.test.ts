@@ -18,7 +18,6 @@ jest.mock('path', () => ({
   relative: jest.fn(),
   dirname: jest.fn().mockReturnValue('mock-dir'),
 }));
-jest.mock('node-fetch');
 
 describe('poison command', () => {
   beforeEach(() => {
@@ -71,21 +70,18 @@ describe('poison command', () => {
 
       const result = await generatePoisonedDocument('test doc', 'test goal');
 
-      expect(fetch).toHaveBeenCalledWith(
-        getRemoteGenerationUrl(),
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-          }),
-          body: JSON.stringify({
-            task: 'poison-document',
-            document: 'test doc',
-            goal: 'test goal',
-            email: getUserEmail(),
-          }),
+      expect(fetch).toHaveBeenCalledWith(getRemoteGenerationUrl(), {
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
         }),
-      );
+        body: JSON.stringify({
+          task: 'poison-document',
+          document: 'test doc',
+          goal: 'test goal',
+          email: getUserEmail(),
+        }),
+      });
 
       expect(result).toEqual({
         poisonedDocument: 'poisoned content',

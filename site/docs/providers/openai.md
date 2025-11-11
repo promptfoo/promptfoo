@@ -751,7 +751,14 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
 
 ## Audio capabilities
 
-OpenAI models with audio support (like `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+OpenAI models with audio support (like `gpt-audio`, `gpt-audio-mini`, `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+
+**Available audio models:**
+
+- `gpt-audio` - Latest audio model ($2.50/$10 per 1M text tokens, $40/$80 per 1M audio tokens)
+- `gpt-audio-mini` - Cost-efficient audio model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
+- `gpt-4o-audio-preview` - Preview audio model
+- `gpt-4o-mini-audio-preview` - Preview mini audio model
 
 ### Using audio inputs
 
@@ -817,12 +824,96 @@ In the web UI, audio outputs display with an embedded player and transcript. For
 npx promptfoo@latest init --example openai-audio
 ```
 
+### Audio transcription
+
+OpenAI provides dedicated transcription models for converting speech to text. These models charge per minute of audio rather than per token.
+
+**Available transcription models:**
+
+| Model                       | Description                          | Cost per minute |
+| --------------------------- | ------------------------------------ | --------------- |
+| `whisper-1`                 | Original Whisper transcription model | $0.006          |
+| `gpt-4o-transcribe`         | GPT-4o optimized for transcription   | $0.006          |
+| `gpt-4o-mini-transcribe`    | Faster, more cost-effective option   | $0.003          |
+| `gpt-4o-transcribe-diarize` | Identifies different speakers        | $0.006          |
+
+To use transcription models, specify the provider format `openai:transcription:<model name>`:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - file://sample-audio.mp3
+
+providers:
+  - id: openai:transcription:whisper-1
+    config:
+      language: en # Optional: specify language for better accuracy
+      temperature: 0 # Optional: 0 for more deterministic output
+
+  - id: openai:transcription:gpt-4o-transcribe
+    config:
+      language: en
+      prompt: This is a technical discussion about AI and machine learning.
+
+  - id: openai:transcription:gpt-4o-transcribe-diarize
+    config:
+      num_speakers: 2 # Optional: expected number of speakers
+      speaker_labels: ['Alice', 'Bob'] # Optional: provide speaker names
+
+tests:
+  - assert:
+      - type: contains
+        value: expected transcript content
+```
+
+#### Transcription configuration options
+
+| Parameter                 | Description                               | Options                |
+| ------------------------- | ----------------------------------------- | ---------------------- |
+| `language`                | Language of the audio (ISO-639-1)         | e.g., 'en', 'es', 'fr' |
+| `prompt`                  | Context to improve transcription accuracy | Any text string        |
+| `temperature`             | Controls randomness (0-1)                 | Number between 0 and 1 |
+| `timestamp_granularities` | Get word or segment-level timestamps      | ['word', 'segment']    |
+| `num_speakers`            | Expected number of speakers (diarization) | Number                 |
+| `speaker_labels`          | Names for speakers (diarization)          | Array of strings       |
+
+Supported audio formats include MP3, MP4, MPEG, MPGA, M4A, WAV, and WEBM.
+
+#### Diarization example
+
+The diarization model identifies different speakers in the audio:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - file://interview.mp3
+
+providers:
+  - id: openai:transcription:gpt-4o-transcribe-diarize
+    config:
+      num_speakers: 2
+      speaker_labels: ['Interviewer', 'Guest']
+
+tests:
+  - assert:
+      - type: contains
+        value: Interviewer
+      - type: contains
+        value: Guest
+```
+
+For a complete working example, see the [OpenAI audio transcription example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-audio-transcription) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-audio-transcription
+```
+
 ## Realtime API Models
 
 The Realtime API allows for real-time communication with GPT-4o class models using WebSockets, supporting both text and audio inputs/outputs with streaming responses.
 
 ### Supported Realtime Models
 
+- `gpt-realtime` - Latest realtime model ($4/$16 per 1M text tokens, $40/$80 per 1M audio tokens)
+- `gpt-realtime-mini` - Cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
 - `gpt-4o-realtime-preview-2024-12-17`
 - `gpt-4.1-mini-realtime-preview-2024-12-17`
 
@@ -961,6 +1052,8 @@ The Responses API supports a wide range of models, including:
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Latest fast, cost-effective reasoning model
 - `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
+- `gpt-5-codex` - GPT-5 based coding model optimized for code generation
+- `gpt-5-pro` - Premium GPT-5 model with highest reasoning capability ($15/$120 per 1M tokens)
 
 ### Using the Responses API
 
@@ -1288,6 +1381,45 @@ Deep research models require high `max_output_tokens` values (50,000+) and long 
 The `web_search_preview` tool is **required** for deep research models. The provider will return an error if this tool is not configured.
 :::
 
+### GPT-5-pro Timeout Configuration
+
+GPT-5-pro is a long-running model that often requires extended timeouts due to its advanced reasoning capabilities. Like deep research models, GPT-5-pro **automatically** receives a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
+
+**Automatic timeout behavior:**
+
+- GPT-5-pro automatically gets a 10-minute timeout (600,000ms) - **no configuration needed**
+- If you need longer, set `PROMPTFOO_EVAL_TIMEOUT_MS` (e.g., 900000 for 15 minutes)
+- `REQUEST_TIMEOUT_MS` is **ignored** for GPT-5-pro (the automatic timeout takes precedence)
+
+**Most users won't need any timeout configuration** - the automatic 10-minute timeout is sufficient for most GPT-5-pro requests.
+
+**If you experience timeouts, configure this:**
+
+```bash
+# Only if you need more than the automatic 10 minutes
+export PROMPTFOO_EVAL_TIMEOUT_MS=1200000   # 20 minutes
+
+# For infrastructure reliability (recommended)
+export PROMPTFOO_RETRY_5XX=true            # Retry 502 Bad Gateway errors
+export PROMPTFOO_REQUEST_BACKOFF_MS=10000  # Longer retry backoff
+
+# Reduce concurrency to avoid rate limits
+promptfoo eval --max-concurrency 2
+```
+
+**Common GPT-5-pro errors and solutions:**
+
+If you encounter errors with GPT-5-pro:
+
+1. **Request timed out** - If GPT-5-pro needs more than the automatic 10 minutes, set `PROMPTFOO_EVAL_TIMEOUT_MS=1200000` (20 minutes)
+2. **502 Bad Gateway** - Enable `PROMPTFOO_RETRY_5XX=true` to retry Cloudflare/OpenAI infrastructure timeouts
+3. **getaddrinfo ENOTFOUND** - Transient DNS errors; reduce concurrency with `--max-concurrency 2`
+4. **Upstream connection errors** - OpenAI load balancer issues; increase backoff with `PROMPTFOO_REQUEST_BACKOFF_MS=10000`
+
+:::tip
+GPT-5-pro automatically gets a 10-minute timeout - you likely don't need any timeout configuration. If you see infrastructure errors (502, DNS failures), enable `PROMPTFOO_RETRY_5XX=true` and reduce concurrency.
+:::
+
 ### Sending Images in Prompts
 
 The Responses API supports structured prompts with text and image inputs. Example:
@@ -1345,7 +1477,7 @@ providers:
   - id: openai:responses:gpt-4.1
     config:
       apiHost: 'your-resource.openai.azure.com'
-      apiKey: '${AZURE_API_KEY}'
+      apiKey: '{{ env.AZURE_API_KEY }}' # or set OPENAI_API_KEY env var
       temperature: 0.7
       instructions: 'You are a helpful assistant.'
       response_format: file://./response-schema.json
@@ -1379,15 +1511,15 @@ To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY
 
 ## Agents SDK Integration
 
-Promptfoo supports evaluation of OpenAI's Agents SDK, which enables building multi-agent systems with specialized agents, handoffs, and persistent context. You can integrate the Agents SDK as a [Python provider](./python.md).
+Test multi-turn agentic workflows with the [OpenAI Agents provider](/docs/providers/openai-agents). This provider supports the [@openai/agents](https://github.com/openai/openai-agents-js) SDK with tools, handoffs, and tracing.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - file://agent_provider.py:call_api
+  - openai:agents:my-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      tools: file://./tools/support-tools.ts
+      maxTurns: 10
 ```
 
-For a complete working example of an airline customer service system with multiple agents, see the [OpenAI Agents SDK example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) or initialize it with:
-
-```bash
-npx promptfoo@latest init --example openai-agents
-```
+See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full configuration options and examples.

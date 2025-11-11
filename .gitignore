@@ -4,6 +4,7 @@
 
 # Temporary and generated files
 scratch
+.worktrees/
 *.sw[op]
 *.log
 .DS_Store
@@ -11,8 +12,9 @@ node_modules
 dist
 .aider*
 .vite
-*.tsbuildinfo
+**/*.tsbuildinfo
 src/generated/
+task.md
 
 # pnpm-specific
 .pnpm-store/
