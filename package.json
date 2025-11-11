@@ -164,6 +164,7 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "winston-transport": "^4.9.0",
+    "xlsx": "^0.18.5",
     "zod-to-json-schema": "^3.24.6"
   },
   "optionalDependencies": {
@@ -214,7 +215,8 @@
     "playwright": "^1.56.1",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "xlsx": "^0.18.5"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
