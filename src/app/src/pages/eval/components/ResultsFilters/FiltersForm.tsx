@@ -199,7 +199,7 @@ function Filter({
     .map((filter) => filter.value);
 
   const metadataKey = value.field ?? '';
-  const metadataValueOptions = metadataKey ? metadataValues[metadataKey] ?? [] : [];
+  const metadataValueOptions = metadataKey ? (metadataValues[metadataKey] ?? []) : [];
   const metadataValuesAreLoading = metadataKey
     ? Boolean(metadataValuesLoading[metadataKey])
     : false;
