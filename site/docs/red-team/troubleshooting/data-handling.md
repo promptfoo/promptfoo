@@ -6,97 +6,98 @@ description: Understand what data is sent to promptfoo servers during red-team e
 
 # Data handling and privacy
 
-This guide explains what data promptfoo sends to external services and how to control data transmission for compliance and security requirements.
+When data is sent to promptfoo servers depends on your configuration.
 
-## What data is sent to Promptfoo servers
+## What data is sent to promptfoo servers
 
-### Community version
+### Without OPENAI_API_KEY set
 
-1. **Red team test generation**: Application details and purpose description for creating contextual attacks.
-2. **Test result grading**: Prompts and responses for vulnerability assessment (unless you use your own OpenAI API key or override [`redteam.provider`](/docs/red-team/configuration/#changing-the-model) for grading).
-3. **Basic telemetry**: Anonymous usage analytics (see [telemetry docs](/docs/configuration/telemetry/)).
+Promptfoo provides free remote generation and grading. Data sent:
 
-### What is NOT sent
+1. **Red team test generation**: Application details and purpose description
+2. **Test result grading**: Prompts and responses for vulnerability assessment
+3. **Telemetry**: Anonymous usage analytics (see [telemetry docs](/docs/configuration/telemetry/))
 
-Promptfoo never sends:
+### With OPENAI_API_KEY set
+
+Your OpenAI key is used for both generation and grading. You pay for usage. Data sent:
+
+1. **Telemetry only**: Anonymous usage analytics (see [telemetry docs](/docs/configuration/telemetry/))
+
+**Exception**: If `redteam.provider` is configured, that provider is used for grading. See [changing the model](/docs/red-team/configuration/#changing-the-model).
+
+### Never sent
 
 - Model weights or training data
 - Configuration files or secrets
 
-With local grading configured (using your own API keys or overriding `redteam.provider`):
+## Control data transmission
 
-- Test cases and results are not sent to promptfoo servers
-- Only anonymous telemetry is sent (unless disabled)
+### Use your own OpenAI API key
 
-With telemetry disabled (`PROMPTFOO_DISABLE_TELEMETRY=1`):
+Set `OPENAI_API_KEY` to use your own key for both generation and grading:
 
-- No anonymous usage analytics are sent
-- Red team generation and grading still use configured providers (local or remote)
+```bash
+export OPENAI_API_KEY=sk-...
+```
 
-## How to minimize external data transmission
+Promptfoo automatically detects this and routes all requests through your OpenAI account instead of promptfoo servers.
 
-### 1. Use your own OpenAI API key
-
-Set `OPENAI_API_KEY` in your environment - promptfoo automatically detects it and uses your key for grading instead of our servers.
-
-### 2. Disable telemetry
+### Disable telemetry
 
 ```bash
 export PROMPTFOO_DISABLE_TELEMETRY=1
 ```
 
-### 3. Force local generation
+### Force local generation
 
-To default to local red team generation instead of remote, you can use:
+Force local red team generation instead of remote:
 
 ```bash
 export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
 ```
 
-**Note**: This will disable many plugins that require remote generation capabilities.
+**Note**: Disables many plugins that require remote generation.
 
-### 4. Disable updates (for offline environments)
+### Disable updates
 
-For completely offline environments, also disable update checks:
+For offline environments:
 
 ```bash
 export PROMPTFOO_DISABLE_UPDATE=1
 ```
 
-Note: Local generation quality depends on your configured model and is generally lower than our remote service. See the [red team configuration guide](/docs/red-team/configuration/) and [red team remote generation section](/docs/red-team/configuration/#remote-generation) for details.
+See [red team configuration](/docs/red-team/configuration/) and [remote generation](/docs/red-team/configuration/#remote-generation) for details.
 
-## Enterprise solutions for complete data control
+## Enterprise on-prem
 
-For organizations requiring complete data isolation, see [Enterprise On-Prem](/docs/enterprise/) which provides:
+[Enterprise on-prem](/docs/enterprise/) provides:
 
-- Fully airgapped deployments with no external dependencies.
-- Dedicated runner within your infrastructure.
-- Complete control over all data flow.
-- Enterprise-grade security and compliance features.
-- Compliance support for regulated industries (banking, healthcare, government).
+- Airgapped deployment
+- Runs in your infrastructure
+- No external data transmission
+- Supports regulated industries (banking, healthcare, government)
 
-## Network connectivity requirements
+## Network connectivity
 
-Community version requires access to:
+Without `OPENAI_API_KEY`, community version requires access to:
 
-- `api.promptfoo.app` - Test generation and grading.
-- `*.promptfoo.app` - Additional API services.
+- `api.promptfoo.app` - Test generation and grading
+- `*.promptfoo.app` - Additional API services
 
-### Corporate firewall issues
+### Corporate firewall
 
-If blocked by corporate firewall:
+If blocked:
 
-1. Request IT allowlist Promptfoo domains.
-2. Test with: `curl https://api.promptfoo.app/version`.
-3. See [remote generation troubleshooting](/docs/red-team/troubleshooting/remote-generation/).
+1. Allowlist promptfoo domains with IT
+2. Test connectivity: `curl https://api.promptfoo.app/version`
+3. See [remote generation troubleshooting](/docs/red-team/troubleshooting/remote-generation/)
 
-## Verifying data transmission
+## Verify data transmission
 
-To verify what data promptfoo sends:
-
-- **Monitor network traffic**: Use tools like Burp Suite or Wireshark to inspect outbound connections
-- **Check logs**: Review promptfoo logs for external API calls
-- **Test first**: Start with dummy data to verify your configuration before using sensitive information
+- Monitor network traffic with Burp Suite or Wireshark
+- Review promptfoo logs for external API calls
+- Test with dummy data first
 
 ## Related documentation
 
