@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documentation
+
+- docs(examples): add TypeScript configuration with dynamic schema generation example showing how to reuse Zod schemas from application code, including automatic schema conversion for different providers (OpenAI/Gemini) (#4851)
+- docs(config): add comprehensive TypeScript configuration documentation to modular-configs guide with examples of sharing code between application and tests (#4851)
+
 ### Changed
 
 - chore(site): remove Koala analytics and migrate Google tracking to Docusaurus built-in gtag configuration with multiple tracking IDs (G-3TS8QLZQ93, G-3YM29CN26E, AW-17347444171) (#6169)
