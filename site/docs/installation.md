@@ -103,4 +103,5 @@ For more detailed usage instructions, please refer to our [Getting Started guide
 ## See Also
 
 - [Getting Started](./getting-started.md)
+- [Troubleshooting](./usage/troubleshooting.md)
 - [Contributing](./contributing.md)

@@ -47,12 +47,24 @@ import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import type { EvalResultsFilterMode } from '../types/index';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 
+/**
+ * Database query result type interfaces
+ * These types ensure type safety for raw SQL queries that don't use Drizzle's query builder
+ */
+
+/** Result from COUNT queries using db.get() - count may be null if query fails */
 interface FilteredCountRow {
   count: number | null;
 }
 
+/** Result from queries selecting test_idx column */
 interface TestIndexRow {
   test_idx: number;
+}
+
+/** Result from queries selecting distinct metadata or variable keys */
+interface MetadataKeyResult {
+  key: string;
 }
 
 /**
@@ -87,6 +99,17 @@ export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
+/** Result from queries extracting variable keys with eval IDs */
+export interface VarKeyWithEvalIdResult {
+  key: string;
+  eval_id: string;
+}
+
+/** Result from queries extracting variable keys */
+export interface VarKeyResult {
+  key: string;
+}
+
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
@@ -94,8 +117,7 @@ export class EvalQueries {
       `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
 FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string; eval_id: string }[] = await db.all(query);
+    const results = await db.all<VarKeyWithEvalIdResult>(query);
     const vars = results.reduce((acc: Record<string, string[]>, r) => {
       acc[r.eval_id] = acc[r.eval_id] || [];
       acc[r.eval_id].push(r.key);
@@ -110,8 +132,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
       `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
     FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string }[] = await db.all(query);
+    const results = await db.all<VarKeyResult>(query);
     const vars = results.map((r) => r.key);
 
     return vars;
@@ -120,7 +141,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
   static async setVars(evalId: string, vars: string[]) {
     const db = getDb();
     try {
-      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+      db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
     } catch (e) {
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
     }
@@ -130,10 +151,6 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
     evalId: string,
     comparisonEvalIds: string[] = [],
   ): Promise<string[]> {
-    interface MetadataKeyResult {
-      key: string;
-    }
-
     const db = getDb();
     try {
       // Combine primary eval ID with comparison eval IDs
@@ -152,7 +169,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
         ORDER BY j.key
         LIMIT 1000
       `;
-      const results: MetadataKeyResult[] = await db.all(query);
+      const results = await db.all<MetadataKeyResult>(query);
       return results.map((r) => r.key);
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
@@ -447,7 +464,7 @@ export default class Eval {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
   }
 
@@ -602,17 +619,24 @@ export default class Eval {
             // Use a single json_extract call with LENGTH(TRIM()) for better performance
             condition = `LENGTH(TRIM(COALESCE(json_extract(metadata, '$."${escapedField}"'), ''))) > 0`;
           }
-        } else if (type === 'plugin' && operator === 'equals') {
+        } else if (type === 'plugin') {
           const sanitizedValue = sanitizeValue(value);
-          // Is the value a category? e.g. `harmful` or `bias`
-          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
           const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
 
-          // Plugin ID is stored in metadata.pluginId
-          if (isCategory) {
-            condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
-          } else {
-            condition = `${pluginIdPath} = '${sanitizedValue}'`;
+          if (operator === 'equals') {
+            // Plugin ID is stored in metadata.pluginId
+            if (isCategory) {
+              condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
+            } else {
+              condition = `${pluginIdPath} = '${sanitizedValue}'`;
+            }
+          } else if (operator === 'not_equals') {
+            if (isCategory) {
+              condition = `(${pluginIdPath} IS NULL OR (${pluginIdPath} != '${sanitizedValue}' AND ${pluginIdPath} NOT LIKE '${sanitizedValue}:%'))`;
+            } else {
+              condition = `(${pluginIdPath} IS NULL OR ${pluginIdPath} != '${sanitizedValue}')`;
+            }
           }
         } else if (type === 'strategy' && operator === 'equals') {
           const sanitizedValue = sanitizeValue(value);
@@ -880,7 +904,7 @@ export default class Eval {
     this.prompts = prompts;
     if (this.persisted) {
       const db = getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
     }
   }
 

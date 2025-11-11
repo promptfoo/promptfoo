@@ -1,5 +1,6 @@
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { act } from '@testing-library/react';
 import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -67,6 +68,10 @@ describe('useTableStore', () => {
         shouldHighlightSearchText: false,
         isStreaming: false,
         filteredMetrics: null,
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        currentMetadataKeysRequest: null,
       });
     });
     vi.clearAllMocks();
@@ -731,7 +736,6 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.values[mockFilterId3].logicOperator).toBe('and');
     });
-
     it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has an undefined logicOperator', () => {
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
@@ -1117,7 +1121,6 @@ describe('useTableStore', () => {
       expect(isFetchingDuringFetch).toBe(true);
       expect(state.isFetching).toBe(false);
     });
-
     it('should complete successfully without showing loading indicators when skipLoadingState=true and isStreaming=false', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -1473,7 +1476,6 @@ describe('useTableStore', () => {
 
       expect(useTableStore.getState().isStreaming).toBe(false);
     });
-
     it('should allow isStreaming and isFetching to be true simultaneously when fetchEvalData is called without skipLoadingState and isStreaming is already true', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -1813,7 +1815,6 @@ describe('useTableStore', () => {
       const availableMetrics = useTableStore.getState().filters.options.metric;
       expect(availableMetrics).toEqual(['accuracy', 'bleu', 'rouge']);
     });
-
     it('should correctly handle unusual metric names, such as those containing special characters or very long strings', () => {
       const longMetricName = 'a'.repeat(200);
       const mockTable: EvaluateTable = {
@@ -2205,6 +2206,112 @@ describe('useTableStore', () => {
 
       const state = useTableStore.getState();
       expect(state.filteredMetrics).toEqual(initialMetrics);
+    });
+  });
+
+  describe('fetchMetadataKeys', () => {
+    it('should handle an empty array of keys from the API response and return an empty array', async () => {
+      const mockEvalId = 'test-eval-id';
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ keys: [] }),
+      });
+
+      let metadataKeys: string[] = [];
+      await act(async () => {
+        metadataKeys = await useTableStore.getState().fetchMetadataKeys(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.metadataKeys).toEqual([]);
+      expect(metadataKeys).toEqual([]);
+    });
+
+    it('should return an empty array and update the store with an empty array when fetchMetadataKeys receives a response where all keys are in the HIDDEN_METADATA_KEYS list', async () => {
+      const mockEvalId = 'test-eval-id';
+      const hiddenKeys = [...HIDDEN_METADATA_KEYS];
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ keys: hiddenKeys }),
+      });
+
+      let result: string[] = [];
+      await act(async () => {
+        result = await useTableStore.getState().fetchMetadataKeys(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(result).toEqual([]);
+      expect(state.metadataKeys).toEqual([]);
+    });
+
+    it('should store and return only non-hidden metadata keys when the API response includes both hidden and non-hidden keys', async () => {
+      const mockEvalId = 'test-eval-id';
+      const allKeys = ['visibleKey1', '_promptfooFileMetadata', 'visibleKey2', 'citations'];
+      const expectedVisibleKeys = allKeys.filter((key) => !HIDDEN_METADATA_KEYS.includes(key));
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ keys: allKeys }),
+      });
+
+      let returnedKeys: string[] = [];
+      await act(async () => {
+        returnedKeys = await useTableStore.getState().fetchMetadataKeys(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.metadataKeys).toEqual(expectedVisibleKeys);
+      expect(returnedKeys).toEqual(expectedVisibleKeys);
+    });
+    it('should set metadataKeysError to true and metadataKeysLoading to false when the API call fails with an error (not an abort)', async () => {
+      const mockEvalId = 'test-eval-id';
+      const mockError = new Error('API error');
+      vi.mocked(callApi).mockRejectedValue(mockError);
+
+      await act(async () => {
+        await useTableStore.getState().fetchMetadataKeys(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.metadataKeysError).toBe(true);
+      expect(state.metadataKeysLoading).toBe(false);
+    });
+
+    it('should abort the request after 30 seconds if fetchMetadataKeys API call does not complete', async () => {
+      vi.useFakeTimers();
+      const mockEvalId = 'test-eval-id';
+
+      vi.mocked(callApi).mockImplementation((_url: string, options?: any) => {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => {
+            const abortError = new Error('The operation was aborted');
+            abortError.name = 'AbortError';
+            reject(abortError);
+          });
+        });
+      });
+
+      act(() => {
+        useTableStore.setState({ currentMetadataKeysRequest: null });
+      });
+
+      act(() => {
+        useTableStore.getState().fetchMetadataKeys(mockEvalId);
+      });
+
+      expect(useTableStore.getState().metadataKeysLoading).toBe(true);
+
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+
+      const state = useTableStore.getState();
+      expect(state.metadataKeysLoading).toBe(false);
+      expect(state.metadataKeysError).toBe(false);
+      expect(state.currentMetadataKeysRequest).toBeNull();
+
+      vi.useRealTimers();
     });
   });
 });

@@ -403,6 +403,11 @@ export interface GradingResult {
   metadata?: {
     pluginId?: string;
     strategyId?: string;
+    // Context value for context-related assertions (context-faithfulness, context-recall, context-relevance)
+    context?: string | string[];
+    contextUnits?: string[];
+    // Rendered assertion value with substituted variables (for display in UI)
+    renderedAssertionValue?: string;
     [key: string]: any;
   };
 }
