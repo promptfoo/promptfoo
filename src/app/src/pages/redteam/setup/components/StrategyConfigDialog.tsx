@@ -3,8 +3,14 @@ import React from 'react';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -14,7 +20,9 @@ import IconButton from '@mui/material/IconButton';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { ALL_PLUGINS } from '@promptfoo/redteam/constants';
 import {
+  ADDITIONAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
@@ -30,6 +38,9 @@ const DEFAULT_SIMBA_GOALS = [
   'Access other customers order history',
   'Manipulate order status or pricing through injection attacks',
 ];
+
+// Strategies that can be used in layer steps (exclude layer itself to prevent recursion)
+const AVAILABLE_LAYER_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
 
 interface StrategyConfigDialogProps {
   open: boolean;
@@ -56,7 +67,10 @@ export default function StrategyConfigDialog({
   const [error, setError] = React.useState<string>('');
   const [goals, setGoals] = React.useState<string[]>(config.goals || []);
   const [newGoal, setNewGoal] = React.useState<string>('');
-  const [steps, setSteps] = React.useState<string[]>(config.steps || []);
+
+  // Steps can be strings or objects with { id, config: { plugins: [] } }
+  type LayerStep = string | { id: string; config?: { plugins?: string[] } };
+  const [steps, setSteps] = React.useState<LayerStep[]>(config.steps || []);
   const [newStep, setNewStep] = React.useState<string>('');
 
   React.useEffect(() => {
@@ -89,15 +103,36 @@ export default function StrategyConfigDialog({
     setGoals((prev) => prev.filter((g) => g !== goal));
   };
 
-  const handleAddStep = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && newStep.trim()) {
-      setSteps((prev) => [...prev, newStep.trim()]);
+  const getStepId = (step: LayerStep): string => {
+    return typeof step === 'string' ? step : step.id;
+  };
+
+  const handleAddStep = (value: string | null) => {
+    if (value && value.trim()) {
+      setSteps((prev) => [...prev, value.trim()]);
       setNewStep('');
     }
   };
 
   const handleRemoveStep = (index: number) => {
     setSteps((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateStepPlugins = (index: number, plugins: string[]) => {
+    setSteps((prev) =>
+      prev.map((step, i) => {
+        if (i !== index) {
+          return step;
+        }
+        const stepId = getStepId(step);
+        if (plugins.length === 0) {
+          // If no plugins, convert back to string
+          return stepId;
+        }
+        // Convert to object form with plugins
+        return { id: stepId, config: { plugins } };
+      }),
+    );
   };
 
   const handleMoveStepUp = (index: number) => {
@@ -727,79 +762,149 @@ export default function StrategyConfigDialog({
               Steps (in order)
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Add strategies to chain together. Examples: base64, rot13, hex, jailbreak, etc.
+              Select strategies from the dropdown or enter custom file:// paths
             </Typography>
 
             {steps.length > 0 && (
-              <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {steps.map((step, index) => (
-                  <Box
-                    key={`${step}-${index}`}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      p: 1.5,
-                      border: 1,
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                      bgcolor: 'background.paper',
-                      '&:hover': {
-                        bgcolor: 'action.hover',
-                      },
-                    }}
-                  >
-                    <Typography
-                      variant="body2"
-                      sx={{ flex: 1, mr: 1, fontFamily: 'monospace', fontSize: '0.9rem' }}
+              <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {steps.map((step, index) => {
+                  const stepId = getStepId(step);
+                  const stepPlugins =
+                    typeof step === 'object' && step.config?.plugins ? step.config.plugins : [];
+
+                  return (
+                    <Accordion
+                      key={`${stepId}-${index}`}
+                      sx={{
+                        border: 1,
+                        borderColor: 'divider',
+                        '&:before': { display: 'none' },
+                        boxShadow: 'none',
+                      }}
                     >
-                      {index + 1}. {step}
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleMoveStepUp(index)}
-                        disabled={index === 0}
-                        aria-label="move step up"
-                        sx={{ opacity: index === 0 ? 0.3 : 1 }}
+                      <AccordionSummary
+                        expandIcon={<ExpandMoreIcon />}
+                        sx={{
+                          '& .MuiAccordionSummary-content': {
+                            alignItems: 'center',
+                            gap: 1,
+                          },
+                        }}
                       >
-                        <ArrowUpwardIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleMoveStepDown(index)}
-                        disabled={index === steps.length - 1}
-                        aria-label="move step down"
-                        sx={{ opacity: index === steps.length - 1 ? 0.3 : 1 }}
-                      >
-                        <ArrowDownwardIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleRemoveStep(index)}
-                        aria-label="delete step"
-                        color="error"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  </Box>
-                ))}
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            flex: 1,
+                            fontFamily: 'monospace',
+                            fontSize: '0.9rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                          }}
+                        >
+                          <span>{index + 1}.</span>
+                          <span>{stepId}</span>
+                          {stepPlugins.length > 0 && (
+                            <Chip
+                              label={`${stepPlugins.length} plugin${stepPlugins.length > 1 ? 's' : ''}`}
+                              size="small"
+                              sx={{ height: 20, fontSize: '0.7rem' }}
+                            />
+                          )}
+                        </Typography>
+                        <Box
+                          sx={{ display: 'flex', gap: 0.5 }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <IconButton
+                            size="small"
+                            onClick={() => handleMoveStepUp(index)}
+                            disabled={index === 0}
+                            aria-label="move step up"
+                            sx={{ opacity: index === 0 ? 0.3 : 1 }}
+                          >
+                            <ArrowUpwardIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleMoveStepDown(index)}
+                            disabled={index === steps.length - 1}
+                            aria-label="move step down"
+                            sx={{ opacity: index === steps.length - 1 ? 0.3 : 1 }}
+                          >
+                            <ArrowDownwardIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleRemoveStep(index)}
+                            aria-label="delete step"
+                            color="error"
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      </AccordionSummary>
+                      <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Configure which plugins this step applies to (optional)
+                          </Typography>
+                          <Autocomplete
+                            multiple
+                            options={ALL_PLUGINS}
+                            value={stepPlugins}
+                            onChange={(_, newValue) => handleUpdateStepPlugins(index, newValue)}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Target Plugins"
+                                placeholder="Select plugins or leave empty for all"
+                                helperText="If empty, this step will apply to all plugins. Select specific plugins to limit scope."
+                              />
+                            )}
+                            renderTags={(value, getTagProps) =>
+                              value.map((option, index) => (
+                                <Chip
+                                  label={option}
+                                  size="small"
+                                  {...getTagProps({ index })}
+                                  key={option}
+                                />
+                              ))
+                            }
+                          />
+                        </Box>
+                      </AccordionDetails>
+                    </Accordion>
+                  );
+                })}
               </Box>
             )}
 
-            <TextField
-              fullWidth
-              label="Add Step (press Enter)"
+            <Autocomplete
               value={newStep}
-              onChange={(e) => setNewStep(e.target.value)}
-              onKeyPress={handleAddStep}
-              placeholder="e.g., base64, rot13, jailbreak, file://custom-strategy.js"
-              helperText={
-                steps.length === 0
-                  ? 'Add at least one strategy step (required)'
-                  : 'Add strategy IDs or file:// paths to custom strategies'
-              }
-              error={steps.length === 0}
+              onChange={(_, newValue) => {
+                if (newValue) {
+                  handleAddStep(newValue);
+                }
+              }}
+              inputValue={newStep}
+              onInputChange={(_, newInputValue) => setNewStep(newInputValue)}
+              options={AVAILABLE_LAYER_STRATEGIES}
+              freeSolo
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Add Strategy Step"
+                  placeholder="Select or type: base64, rot13, file://custom.js, etc."
+                  helperText={
+                    steps.length === 0
+                      ? 'Add at least one strategy step (required)'
+                      : 'Select from dropdown or type file:// paths for custom strategies'
+                  }
+                  error={steps.length === 0}
+                />
+              )}
             />
           </Box>
         </Box>
