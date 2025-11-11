@@ -1,7 +1,60 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { renderHook } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { useMemo } from 'react';
-import type { ResultsFile, EvaluateResult } from '@promptfoo/types';
+import type { ResultsFile, EvaluateResult, GradingResult } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types';
+import App from './Report';
+import { callApi } from '@app/utils/api';
+
+vi.mock('@app/utils/api');
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+  };
+});
+vi.mock('@app/hooks/useTelemetry', () => ({
+  useTelemetry: () => ({
+    recordEvent: vi.fn(),
+  }),
+}));
+vi.mock('@app/hooks/usePageMeta', () => ({
+  usePageMeta: vi.fn(),
+}));
+
+vi.mock('./Overview', () => ({
+  default: ({ categoryStats }: { categoryStats: any }) => {
+    const total = Object.values(categoryStats).reduce(
+      (sum: number, stat: any) => sum + stat.total,
+      0,
+    );
+    const passes = Object.values(categoryStats).reduce(
+      (sum: number, stat: any) => sum + stat.pass,
+      0,
+    );
+    const failures = total - passes;
+    return (
+      <div>
+        <div data-testid="overview-total">{total}</div>
+        <div data-testid="overview-passes">{passes}</div>
+        <div data-testid="overview-failures">{failures}</div>
+        <div data-testid="overview-category-stats">{JSON.stringify(categoryStats)}</div>
+      </div>
+    );
+  },
+}));
+vi.mock('@app/components/EnterpriseBanner', () => ({ default: () => null }));
+vi.mock('./StrategyStats', () => ({ default: () => null }));
+vi.mock('./RiskCategories', () => ({ default: () => null }));
+vi.mock('./TestSuites', () => ({ default: () => null }));
+vi.mock('./FrameworkCompliance', () => ({ default: () => null }));
+vi.mock('./ReportDownloadButton', () => ({ default: () => null }));
+vi.mock('./ReportSettingsDialogButton', () => ({ default: () => null }));
+vi.mock('./ToolsDialog', () => ({ default: () => null }));
 
 describe('Report filtering logic', () => {
   const createMockResult = (promptIdx: number, pluginId: string, pass: boolean): EvaluateResult =>
@@ -379,10 +432,10 @@ describe('Report filtering logic', () => {
       const evalData = createMockEvalData(2, results);
 
       // Verify the mock data structure includes provider labels
-      expect(evalData.prompts?.[0].provider).toBe('Provider 0');
-      expect(evalData.prompts?.[1].provider).toBe('Provider 1');
-      expect(evalData.prompts?.[0].label).toBe('Prompt 0');
-      expect(evalData.prompts?.[1].label).toBe('Prompt 1');
+      expect(evalData.prompts?.[0]?.provider).toBe('Provider 0');
+      expect(evalData.prompts?.[1]?.provider).toBe('Provider 1');
+      expect(evalData.prompts?.[0]?.label).toBe('Prompt 0');
+      expect(evalData.prompts?.[1]?.label).toBe('Prompt 1');
     });
   });
 
@@ -472,5 +525,274 @@ describe('Report filtering logic', () => {
       expect(result1.current['plugin2'][0].promptIdx).toBe(1);
       expect(result1.current['plugin1']).toBeUndefined();
     });
+  });
+});
+
+const createComponentMockResult = (
+  promptIdx: number,
+  pluginId: string,
+  pass: boolean,
+  componentResults?: GradingResult[],
+): EvaluateResult =>
+  ({
+    promptIdx,
+    promptId: `prompt-${promptIdx}`,
+    success: pass,
+    failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+    gradingResult: { pass, componentResults },
+    prompt: { raw: 'test', label: 'test' },
+    response: { output: 'test output' },
+    vars: { prompt: 'test prompt' },
+    provider: {
+      id: `provider-${promptIdx}`,
+      label: `Provider ${promptIdx}`,
+    },
+    metadata: {
+      pluginId,
+    },
+    testCase: {},
+    score: pass ? 1 : 0,
+    latencyMs: 1,
+    namedScores: {},
+    tokenUsage: { prompt: 1, completion: 1, total: 2 },
+  }) as unknown as EvaluateResult;
+
+const createComponentMockEvalData = (numPrompts: number, results: EvaluateResult[]): ResultsFile =>
+  ({
+    version: 4,
+    createdAt: '2025-01-01T00:00:00Z',
+    config: { redteam: {} },
+    prompts: Array.from({ length: numPrompts }, (_, i) => ({
+      id: `prompt-${i}`,
+      raw: '{{prompt}}',
+      label: `Prompt ${i}`,
+      provider: `Provider ${i}`,
+      metrics: { tokenUsage: { total: 100, numRequests: 10 } },
+    })),
+    results: {
+      version: 3,
+      timestamp: '2025-01-01T00:00:00Z',
+      results,
+    },
+  }) as unknown as ResultsFile;
+
+describe('App component target selection', () => {
+  const mockCallApi = callApi as Mock;
+  let originalWindowLocation: Location;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    originalWindowLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: {
+        ...originalWindowLocation,
+        search: '?evalId=test-eval-id',
+      },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: originalWindowLocation,
+    });
+  });
+
+  it('should handle evalData with empty prompts array and non-zero selectedPromptIndex gracefully', async () => {
+    const evalData: ResultsFile = {
+      version: 4,
+      createdAt: '2025-01-01T00:00:00Z',
+      config: { redteam: {} },
+      prompts: [],
+      results: {
+        version: 3,
+        timestamp: '2025-01-01T00:00:00Z',
+        results: [createComponentMockResult(0, 'plugin1', false)],
+      },
+    } as unknown as ResultsFile;
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const overviewTotal = await screen.findByTestId('overview-total');
+    expect(overviewTotal).toHaveTextContent('1');
+  });
+
+  it('should update displayed statistics when a different target is selected', async () => {
+    const results = [
+      createComponentMockResult(0, 'plugin1', true),
+      createComponentMockResult(0, 'plugin2', false),
+      createComponentMockResult(1, 'plugin1', true),
+      createComponentMockResult(1, 'plugin2', false),
+      createComponentMockResult(1, 'plugin3', false),
+    ];
+    const evalData = createComponentMockEvalData(2, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const dropdown = await screen.findByRole('combobox');
+    expect(dropdown).toHaveTextContent('Target: Provider 0');
+
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('2');
+    expect(screen.getByTestId('overview-passes')).toHaveTextContent('1');
+    expect(screen.getByTestId('overview-failures')).toHaveTextContent('1');
+
+    await userEvent.click(dropdown);
+
+    const provider1Option = await screen.findByRole('option', { name: 'Provider 1' });
+    await userEvent.click(provider1Option);
+
+    await waitFor(() => {
+      expect(dropdown).toHaveTextContent('Target: Provider 1');
+    });
+
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('3');
+    expect(screen.getByTestId('overview-passes')).toHaveTextContent('1');
+    expect(screen.getByTestId('overview-failures')).toHaveTextContent('2');
+  });
+});
+
+describe('App component target selector rendering', () => {
+  const mockCallApi = callApi as Mock;
+  let originalWindowLocation: Location;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    originalWindowLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: {
+        ...originalWindowLocation,
+        search: '?evalId=test-eval-id',
+      },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: originalWindowLocation,
+    });
+  });
+
+  it('should render the target selector dropdown when there are multiple prompts', async () => {
+    const results = [
+      createComponentMockResult(0, 'plugin1', true),
+      createComponentMockResult(1, 'plugin1', false),
+    ];
+    const evalData = createComponentMockEvalData(2, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const dropdown = await screen.findByRole('combobox');
+    expect(dropdown).toBeInTheDocument();
+  });
+
+  it('should render a static chip when there is only one prompt', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const chip = await screen.findByText('Target:');
+    expect(chip).toBeInTheDocument();
+
+    const dropdown = screen.queryByRole('combobox');
+    expect(dropdown).toBeNull();
+  });
+});
+
+describe('App component categoryStats calculation with moderation', () => {
+  const mockCallApi = callApi as Mock;
+  let originalWindowLocation: Location;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    originalWindowLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: {
+        ...originalWindowLocation,
+        search: '?evalId=test-eval-id',
+      },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: originalWindowLocation,
+    });
+  });
+
+  it('should correctly increment passWithFilter but not pass when moderation tests fail but other tests pass', async () => {
+    const pluginId = 'testPlugin';
+    const moderationFailure: GradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Moderation failed',
+      assertion: { type: 'moderation' },
+    };
+    const passingTest: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+      assertion: { type: 'equals' },
+    };
+
+    const results = [
+      createComponentMockResult(0, pluginId, false, [moderationFailure, passingTest]),
+    ];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    render(
+      <MemoryRouter>
+        <App />,
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('overview-category-stats')).toBeInTheDocument();
+    });
+
+    const categoryStatsElement = screen.getByTestId('overview-category-stats');
+    const categoryStats = JSON.parse(categoryStatsElement.textContent);
+
+    expect(categoryStats[pluginId]).toBeDefined();
+    expect(categoryStats[pluginId].pass).toBe(0);
+    expect(categoryStats[pluginId].passWithFilter).toBe(1);
+    expect(categoryStats[pluginId].total).toBe(1);
+    expect(categoryStats[pluginId].failCount).toBe(1);
   });
 });
