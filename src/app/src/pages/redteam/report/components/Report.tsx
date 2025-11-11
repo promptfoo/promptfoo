@@ -161,11 +161,7 @@ const App = () => {
     > = {};
     evalData?.results.results.forEach((result) => {
       // Filter by selected target/provider if multiple targets exist
-      if (
-        prompts.length > 1 &&
-        selectedPrompt &&
-        result.provider.id !== selectedPrompt.provider
-      ) {
+      if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
         return;
       }
 
@@ -218,11 +214,7 @@ const App = () => {
     > = {};
     evalData?.results.results.forEach((result) => {
       // Filter by selected target/provider if multiple targets exist
-      if (
-        prompts.length > 1 &&
-        selectedPrompt &&
-        result.provider.id !== selectedPrompt.provider
-      ) {
+      if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
         return;
       }
 
@@ -267,11 +259,7 @@ const App = () => {
     return evalData.results.results.reduce(
       (acc, row) => {
         // Filter by selected target/provider if multiple targets exist
-        if (
-          prompts.length > 1 &&
-          selectedPrompt &&
-          row.provider.id !== selectedPrompt.provider
-        ) {
+        if (prompts.length > 1 && selectedPrompt && row.promptIdx !== selectedPromptIndex) {
           return acc;
         }
 
