@@ -339,6 +339,12 @@ interface TableState {
   fetchMetadataKeys: (id: string) => Promise<string[]>;
   currentMetadataKeysRequest: AbortController | null;
 
+  metadataValues: Record<string, string[]>;
+  metadataValuesLoading: Record<string, boolean>;
+  metadataValuesError: Record<string, boolean>;
+  fetchMetadataValues: (id: string, key: string) => Promise<string[]>;
+  currentMetadataValuesRequests: Record<string, AbortController | null>;
+
   filterMode: EvalResultsFilterMode;
   setFilterMode: (filterMode: EvalResultsFilterMode) => void;
   resetFilterMode: () => void;
@@ -547,6 +553,10 @@ export const useTableStore = create<TableState>()((set, get) => ({
       metadataKeysLoading: false,
       metadataKeysError: false,
       currentMetadataKeysRequest: null,
+      metadataValues: {},
+      metadataValuesLoading: {},
+      metadataValuesError: {},
+      currentMetadataValuesRequests: {},
     });
 
     try {
@@ -778,6 +788,11 @@ export const useTableStore = create<TableState>()((set, get) => ({
   metadataKeysError: false,
   currentMetadataKeysRequest: null,
 
+  metadataValues: {},
+  metadataValuesLoading: {},
+  metadataValuesError: {},
+  currentMetadataValuesRequests: {},
+
   fetchMetadataKeys: async (id: string) => {
     // Cancel any existing request to prevent race conditions
     const currentState = get();
@@ -858,6 +873,104 @@ export const useTableStore = create<TableState>()((set, get) => ({
       }
     }
     return [];
+  },
+
+  fetchMetadataValues: async (evalId: string, key: string) => {
+    const trimmedKey = key.trim();
+    if (!trimmedKey) {
+      return [];
+    }
+
+    const currentState = get();
+    const hasCachedValues = Object.prototype.hasOwnProperty.call(
+      currentState.metadataValues,
+      trimmedKey,
+    );
+    if (hasCachedValues) {
+      return currentState.metadataValues[trimmedKey];
+    }
+
+    const existingController = currentState.currentMetadataValuesRequests[trimmedKey];
+    if (existingController) {
+      existingController.abort();
+    }
+
+    const abortController = new AbortController();
+    set((prevState) => ({
+      currentMetadataValuesRequests: {
+        ...prevState.currentMetadataValuesRequests,
+        [trimmedKey]: abortController,
+      },
+      metadataValuesLoading: {
+        ...prevState.metadataValuesLoading,
+        [trimmedKey]: true,
+      },
+      metadataValuesError: {
+        ...prevState.metadataValuesError,
+        [trimmedKey]: false,
+      },
+    }));
+
+    try {
+      const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
+      const url = new URL(`/eval/${evalId}/metadata-values`, window.location.origin);
+      url.searchParams.set('key', trimmedKey);
+      comparisonEvalIds.forEach((compId) => {
+        url.searchParams.append('comparisonEvalIds', compId);
+      });
+
+      const resp = await callApi(url.toString().replace(window.location.origin, ''), {
+        signal: abortController.signal,
+      });
+
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      }
+
+      const data = await resp.json();
+      const values: string[] = Array.isArray(data.values) ? data.values : [];
+
+      set((prevState) => ({
+        metadataValues: {
+          ...prevState.metadataValues,
+          [trimmedKey]: values,
+        },
+        metadataValuesLoading: {
+          ...prevState.metadataValuesLoading,
+          [trimmedKey]: false,
+        },
+        metadataValuesError: {
+          ...prevState.metadataValuesError,
+          [trimmedKey]: false,
+        },
+        currentMetadataValuesRequests: {
+          ...prevState.currentMetadataValuesRequests,
+          [trimmedKey]: null,
+        },
+      }));
+
+      return values;
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        return get().metadataValues[trimmedKey] ?? [];
+      }
+
+      set((prevState) => ({
+        metadataValuesLoading: {
+          ...prevState.metadataValuesLoading,
+          [trimmedKey]: false,
+        },
+        metadataValuesError: {
+          ...prevState.metadataValuesError,
+          [trimmedKey]: true,
+        },
+        currentMetadataValuesRequests: {
+          ...prevState.currentMetadataValuesRequests,
+          [trimmedKey]: null,
+        },
+      }));
+      return [];
+    }
   },
 
   filterMode: 'all',

@@ -365,6 +365,34 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
   }
 });
 
+evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = ApiSchemas.Eval.MetadataValues.Params.parse(req.params);
+    const { key } = ApiSchemas.Eval.MetadataValues.Query.parse(req.query);
+
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    const values = await EvalQueries.getMetadataValuesFromEval(id, key);
+    const response = ApiSchemas.Eval.MetadataValues.Response.parse({ values });
+    res.json(response);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+      return;
+    }
+
+    const { id } = req.params;
+    logger.error(
+      `Error fetching metadata values for eval ${id}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    res.status(500).json({ error: 'Failed to fetch metadata values' });
+  }
+});
+
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {
   const { id } = req.params;
   const results = req.body as unknown as EvalResult[];

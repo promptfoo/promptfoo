@@ -109,6 +109,13 @@ export interface VarKeyResult {
   key: string;
 }
 
+const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+interface MetadataValueRow {
+  value_raw: string | number | boolean | null;
+  value_type: string | null;
+}
+
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
@@ -174,6 +181,61 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
       // Log error but return empty array to prevent breaking the UI
       logger.error(
         `Error fetching metadata keys for eval ${evalId} and comparisons [${comparisonEvalIds.join(', ')}]: ${error}`,
+      );
+      return [];
+    }
+  }
+
+  static async getMetadataValuesFromEval(evalId: string, key: string): Promise<string[]> {
+    const db = getDb();
+    const trimmedKey = key.trim();
+    if (!trimmedKey) {
+      return [];
+    }
+
+    try {
+      const escapedKey = escapeJsonPathKey(trimmedKey);
+      const jsonPath = `$."${escapedKey}"`;
+
+      const query = sql`
+        SELECT DISTINCT
+          json_extract(${evalResultsTable.metadata}, ${jsonPath}) AS value_raw,
+          json_type(${evalResultsTable.metadata}, ${jsonPath}) AS value_type
+        FROM ${evalResultsTable}
+        WHERE ${evalResultsTable.evalId} = ${evalId}
+          AND ${evalResultsTable.metadata} IS NOT NULL
+          AND json_valid(${evalResultsTable.metadata})
+          AND json_type(${evalResultsTable.metadata}, ${jsonPath}) IN ('string', 'number', 'boolean')
+          AND json_extract(${evalResultsTable.metadata}, ${jsonPath}) IS NOT NULL
+        ORDER BY value_raw
+        LIMIT 1000
+      `;
+
+      const rows = await db.all<MetadataValueRow>(query);
+      const values = rows
+        .map((row) => {
+          if (row.value_raw == null) {
+            return null;
+          }
+
+          if (row.value_type === 'boolean') {
+            const raw = row.value_raw;
+            if (raw === 1 || raw === '1' || raw === true) {
+              return 'true';
+            }
+            if (raw === 0 || raw === '0' || raw === false) {
+              return 'false';
+            }
+          }
+
+          return String(row.value_raw).trim();
+        })
+        .filter((val): val is string => Boolean(val && val.length > 0));
+
+      return Array.from(new Set(values));
+    } catch (error) {
+      logger.error(
+        `Error fetching metadata values for eval ${evalId} and key ${trimmedKey}: ${error instanceof Error ? error.message : String(error)}`,
       );
       return [];
     }
