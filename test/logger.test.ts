@@ -474,6 +474,34 @@ describe('logger', () => {
       expect(mockLogger.add).not.toHaveBeenCalled();
       expect(winston.transports.File).toHaveBeenCalledTimes(1);
     });
+
+    it('should respect PROMPTFOO_LOG_DIR environment variable', () => {
+      const customLogDir = '/custom/log/dir';
+      mockGetEnvString.mockImplementation((key: string, defaultValue: any) => {
+        if (key === 'PROMPTFOO_LOG_DIR') {
+          return customLogDir;
+        }
+        return defaultValue;
+      });
+
+      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+      (fsMock.readdirSync as jest.Mock).mockReturnValue([]);
+
+      logger.initializeRunLogging();
+
+      const expectedCustomDebugFile = path.join(
+        customLogDir,
+        'promptfoo-debug-2025-03-01_12-00-00-000Z.log',
+      );
+      const expectedCustomErrorFile = path.join(
+        customLogDir,
+        'promptfoo-error-2025-03-01_12-00-00-000Z.log',
+      );
+
+      expect(cliState.debugLogFile).toBe(expectedCustomDebugFile);
+      expect(cliState.errorLogFile).toBe(expectedCustomErrorFile);
+      expect(fsMock.mkdirSync).toHaveBeenCalledWith(customLogDir, { recursive: true });
+    });
   });
 
   describe('initializeSourceMapSupport', () => {
