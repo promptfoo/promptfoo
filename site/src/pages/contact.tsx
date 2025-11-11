@@ -33,7 +33,7 @@ function Calendar() {
     <div className={styles.calendarContainer}>
       <Cal
         calLink="team/promptfoo/intro2"
-        style={{ width: '100%', height: '100%', overflow: 'scroll' }}
+        style={{ width: '100%', height: '100%', overflow: 'visible' }}
         config={{ layout: 'month_view' }}
       />
     </div>
