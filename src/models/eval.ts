@@ -186,7 +186,13 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
     }
   }
 
-  static async getMetadataValuesFromEval(evalId: string, key: string): Promise<string[]> {
+  /**
+   * Queries all unique metadata values for a given metadata key.
+   * @param evalId - The ID of the eval to get the metadata values from.
+   * @param key - The key of the metadata to get the values from.
+   * @returns An array of unique metadata values.
+   */
+  static getMetadataValuesFromEval(evalId: string, key: string): string[] {
     const db = getDb();
     const trimmedKey = key.trim();
     if (!trimmedKey) {
@@ -204,14 +210,15 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
         FROM ${evalResultsTable}
         WHERE ${evalResultsTable.evalId} = ${evalId}
           AND ${evalResultsTable.metadata} IS NOT NULL
+          AND ${evalResultsTable.metadata} != '{}'
           AND json_valid(${evalResultsTable.metadata})
-          AND json_type(${evalResultsTable.metadata}, ${jsonPath}) IN ('string', 'number', 'boolean')
+          AND json_type(${evalResultsTable.metadata}, ${jsonPath}) IN ('text', 'number', 'boolean')
           AND json_extract(${evalResultsTable.metadata}, ${jsonPath}) IS NOT NULL
         ORDER BY value_raw
         LIMIT 1000
       `;
 
-      const rows = await db.all<MetadataValueRow>(query);
+      const rows = db.all<MetadataValueRow>(query);
       const values = rows
         .map((row) => {
           if (row.value_raw == null) {

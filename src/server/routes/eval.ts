@@ -376,7 +376,7 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
       return;
     }
 
-    const values = await EvalQueries.getMetadataValuesFromEval(id, key);
+    const values = EvalQueries.getMetadataValuesFromEval(id, key);
     const response = ApiSchemas.Eval.MetadataValues.Response.parse({ values });
     res.json(response);
   } catch (error) {
