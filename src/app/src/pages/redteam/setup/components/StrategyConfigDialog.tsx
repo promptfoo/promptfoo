@@ -72,6 +72,7 @@ export default function StrategyConfigDialog({
   type LayerStep = string | { id: string; config?: { plugins?: string[] } };
   const [steps, setSteps] = React.useState<LayerStep[]>(config.steps || []);
   const [newStep, setNewStep] = React.useState<string>('');
+  const [layerPlugins, setLayerPlugins] = React.useState<string[]>(config.plugins || []);
 
   React.useEffect(() => {
     if (!open || !strategy) {
@@ -89,6 +90,7 @@ export default function StrategyConfigDialog({
       strategy === 'simba' ? nextConfig.goals || DEFAULT_SIMBA_GOALS : nextConfig.goals || [],
     );
     setSteps(strategy === 'layer' ? nextConfig.steps || [] : []);
+    setLayerPlugins(strategy === 'layer' ? nextConfig.plugins || [] : []);
     setNewStep('');
   }, [open, strategy, config]);
 
@@ -208,10 +210,15 @@ export default function StrategyConfigDialog({
         goals,
       });
     } else if (strategy === 'layer') {
-      onSave(strategy, {
+      const layerConfig: Record<string, any> = {
         ...localConfig,
         steps,
-      });
+      };
+      // Only include plugins if they're specified
+      if (layerPlugins.length > 0) {
+        layerConfig.plugins = layerPlugins;
+      }
+      onSave(strategy, layerConfig);
     } else if (strategy === 'retry') {
       const num = Number.parseInt(numTests, 10);
       if (num >= 1) {
@@ -756,6 +763,35 @@ export default function StrategyConfigDialog({
             Configure the Layer strategy by adding transformation steps that will be applied
             sequentially. Each step receives the output from the previous step.
           </Typography>
+
+          <Box>
+            <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
+              Default Plugins (Optional)
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Select plugins that all steps will apply to by default. Individual steps can override
+              this.
+            </Typography>
+            <Autocomplete
+              multiple
+              options={ALL_PLUGINS}
+              value={layerPlugins}
+              onChange={(_, newValue) => setLayerPlugins(newValue)}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Default Target Plugins"
+                  placeholder="Select plugins or leave empty for all"
+                  helperText="If empty, steps will apply to all plugins unless overridden per-step"
+                />
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip label={option} size="small" {...getTagProps({ index })} key={option} />
+                ))
+              }
+            />
+          </Box>
 
           <Box>
             <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
