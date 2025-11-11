@@ -368,10 +368,6 @@ async function determineTextStatus(repoPath: string, files: FileRecord[]): Promi
   return Promise.all(tasks);
 }
 
-function _sanitizePathForFilename(filePath: string): string {
-  return filePath.replace(/[/\\:*?"<>|]/g, '_');
-}
-
 async function generatePatchForFile(
   repoPath: string,
   base: string,
