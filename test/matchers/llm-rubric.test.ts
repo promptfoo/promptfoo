@@ -994,7 +994,7 @@ describe('matchesLlmRubric', () => {
     });
   });
 
-  it('should use local provider when configured even if redteam is enabled and remote generation is available', async () => {
+  it('should use local provider when redteam.provider is configured even if remote generation is available', async () => {
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';
     const grading = {
@@ -1019,12 +1019,12 @@ describe('matchesLlmRubric', () => {
     const { shouldGenerateRemote } = jest.requireMock('../../src/redteam/remoteGeneration');
     jest.mocked(shouldGenerateRemote).mockReturnValue(true);
 
-    // Give it a redteam config
-    (cliState as any).config = { redteam: {} };
+    // Give it a redteam config WITH a provider configured
+    (cliState as any).config = { redteam: { provider: 'ollama:llama3.2' } };
 
     const result = await matchesLlmRubric(rubric, llmOutput, grading);
 
-    // Remote grading should NOT be called when provider is configured
+    // Remote grading should NOT be called when redteam.provider is configured
     const { doRemoteGrading } = remoteGrading;
     expect(doRemoteGrading).not.toHaveBeenCalled();
 

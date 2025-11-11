@@ -522,7 +522,7 @@ export async function matchesLlmRubric(
   // Use remote grading only if no provider is explicitly configured and remote generation is enabled
   if (
     !grading.rubricPrompt &&
-    !grading.provider &&
+    !cliState.config?.redteam?.provider &&
     cliState.config?.redteam &&
     shouldGenerateRemote()
   ) {
