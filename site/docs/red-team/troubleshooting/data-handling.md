@@ -6,103 +6,100 @@ description: What data promptfoo collects and how to configure data transmission
 
 # Data handling and privacy
 
-What data promptfoo collects depends on whether you're using red team testing and your API key configuration.
+Data sent to promptfoo servers depends on your configuration.
 
-## Red team vs regular evals
+## Data sent to promptfoo servers
 
-**Red team testing** generates adversarial test cases and requires more data transmission:
+**Regular evals** (non-red team):
 
-- Without `OPENAI_API_KEY`: Test generation and grading use promptfoo servers
-- Many plugins require remote generation (20+ including competitors, hijacking, indirect-prompt-injection)
-- Some strategies require remote generation (citation, gcg, likert, audio/image/video, math-prompt)
-- Some jailbreak methods require remote (hydra, goat, iterativeMeta, bestOfN, authoritativeMarkupInjection)
-
-**Regular evals** (non-red team) send minimal data:
-
-- Test cases you define run against your target
-- Only anonymous telemetry sent to promptfoo servers
+- Anonymous telemetry only
+- Test cases run locally against your target
 - No test content sent to promptfoo
 
-## Red team data sent to promptfoo servers
+**Red team testing without `OPENAI_API_KEY`:**
 
-### Without OPENAI_API_KEY
+- Test generation: Application details and purpose
+- Grading: Prompts and model responses
+- Telemetry: Anonymous usage analytics
 
-Promptfoo provides free remote generation and grading using promptfoo's OpenAI account. Data sent:
+Many plugins, strategies, and jailbreak methods require remote generation:
 
-- **Test generation**: Application details and purpose description
-- **Grading**: Prompts and model responses
-- **Telemetry**: Anonymous usage analytics
+- 20+ plugins (competitors, hijacking, indirect-prompt-injection)
+- Strategies (citation, gcg, likert, audio/image/video, math-prompt)
+- Jailbreak methods (hydra, goat, iterativeMeta, bestOfN)
 
-### With OPENAI_API_KEY
+**Red team testing with `OPENAI_API_KEY`:**
 
-Your OpenAI key is used for both generation and grading via your OpenAI account. Data sent:
+- Telemetry only
+- Generation and grading use your OpenAI account
+- Test data goes to OpenAI, not promptfoo servers
 
-- **Telemetry only**: Anonymous usage analytics
+If you configure [`redteam.provider`](/docs/red-team/configuration/#changing-the-model), that provider is used for grading.
 
-**Exception**: If you configure [`redteam.provider`](/docs/red-team/configuration/#changing-the-model), that provider is used for grading instead of OpenAI.
-
-### Never sent
+## What is never sent
 
 - Model weights or training data
 - Configuration files or secrets
 - API keys or credentials
 
-## Recommended configurations
+## Configuration recommendations
 
 **Development and testing:**
 
-Use the free tier. Promptfoo handles generation and grading via promptfoo's OpenAI account.
+Use the free tier without setting `OPENAI_API_KEY`. Generation and grading use promptfoo's OpenAI account.
 
 **Production or sensitive data:**
 
-Set your OpenAI API key. Test data goes to your OpenAI account, not promptfoo servers:
+Set your OpenAI API key:
 
 ```bash
 export OPENAI_API_KEY=sk-...
 ```
 
-Disable telemetry if required. See [telemetry configuration](/docs/configuration/telemetry/).
+Test data goes to your OpenAI account, not promptfoo servers. Optionally disable telemetry (see [telemetry configuration](/docs/configuration/telemetry/)).
 
 **Regulated industries:**
 
-Use [Enterprise on-prem](/docs/enterprise/) for airgapped deployment with no external data transmission.
+Use [Enterprise on-prem](/docs/enterprise/) for airgapped deployment.
 
-## Additional controls
+## Advanced options
 
-**Force local generation:**
+**Disable remote generation:**
 
-Disable remote generation to use your local provider:
+Force local generation with your own provider:
 
 ```bash
 export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
 ```
 
-**Warning**: Disables 20+ plugins, multiple strategies (citation, gcg, likert, audio/image/video, math-prompt), and jailbreak methods (hydra, goat, iterativeMeta, bestOfN) that require remote generation. See [remote generation configuration](/docs/red-team/configuration/#remote-generation).
+**Warning**: Disables 20+ plugins, multiple strategies (citation, gcg, likert, audio/image/video, math-prompt), and jailbreak methods (hydra, goat, iterativeMeta, bestOfN). See [remote generation configuration](/docs/red-team/configuration/#remote-generation).
 
 **Offline environments:**
 
-Disable update checks: `PROMPTFOO_DISABLE_UPDATE=1`
+Disable update checks:
 
-## Data retention and usage
+```bash
+export PROMPTFOO_DISABLE_UPDATE=1
+```
+
+## Data retention
 
 **Test data:**
 
-When using remote generation and grading (without `OPENAI_API_KEY`), test data is processed to generate tests and grade results. See [privacy policy](/privacy/) for retention details.
+With remote generation (without `OPENAI_API_KEY`), promptfoo processes test data to generate tests and grade results. See [privacy policy](/privacy/) for retention details.
 
 **Telemetry:**
 
-Anonymous usage analytics are collected for product improvements. No personally identifiable information. See [telemetry documentation](/docs/configuration/telemetry/).
+Promptfoo collects anonymous usage analytics. No personally identifiable information. See [telemetry documentation](/docs/configuration/telemetry/).
 
-## Network connectivity
+## Network requirements
 
-Without `OPENAI_API_KEY`, the community version requires access to:
+Without `OPENAI_API_KEY`, promptfoo requires access to:
 
 - `api.promptfoo.app` - Test generation and grading
 - `*.promptfoo.app` - Additional services
 
-**Corporate firewall issues:**
-
-If blocked, allowlist promptfoo domains or see [remote generation troubleshooting](/docs/red-team/troubleshooting/remote-generation/).
+If blocked by corporate firewall, allowlist these domains or see [remote generation troubleshooting](/docs/red-team/troubleshooting/remote-generation/).
 
 ## Related documentation
 
