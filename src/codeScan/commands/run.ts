@@ -4,6 +4,7 @@
  * Main command that orchestrates the scanning process.
  */
 
+import crypto from 'crypto';
 import path from 'path';
 import type { ChildProcess } from 'child_process';
 import type { Socket } from 'socket.io-client';
@@ -128,12 +129,18 @@ async function executeScan(repoPath: string, options: ScanOptions): Promise<void
     socket = await createSocketConnection(apiHost, auth);
     cleanupRefs.socket = socket; // Update ref for signal handlers
 
+    // Generate session ID for all scans (used for cancellation and MCP)
+    sessionId = crypto.randomUUID();
+    logger.debug(`Session ID: ${sessionId}`);
+
+    // Emit scan:session to establish session on server
+    socket.emit('scan:session', { sessionId });
+
     // Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
-      const mcpSetup = await setupMcpBridge(socket, absoluteRepoPath);
+      const mcpSetup = await setupMcpBridge(socket, absoluteRepoPath, sessionId);
       mcpProcess = mcpSetup.mcpProcess;
       mcpBridge = mcpSetup.mcpBridge;
-      sessionId = mcpSetup.sessionId;
 
       cleanupRefs.mcpProcess = mcpProcess; // Update ref for signal handlers
       cleanupRefs.mcpBridge = mcpBridge; // Update ref for signal handlers

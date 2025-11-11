@@ -205,7 +205,7 @@ export const ScanRequestSchema = z.object({
   files: z.array(FileRecordSchema).min(1, 'Files array cannot be empty'),
   metadata: GitMetadataSchema,
   config: ScanConfigSchema,
-  sessionId: z.string().optional(),
+  sessionId: z.string(),
   pullRequest: PullRequestContextSchema.optional(),
 });
 

@@ -30,7 +30,7 @@ export interface ScanExecutionOptions {
  * @param files - Files to scan
  * @param metadata - Git metadata
  * @param config - Scan configuration
- * @param sessionId - Optional MCP session ID
+ * @param sessionId - Session ID for scan tracking and cancellation
  * @param pullRequest - Optional PR context
  * @param guidance - Optional custom guidance
  * @returns Scan request object
@@ -39,7 +39,7 @@ export function buildScanRequest(
   files: FileRecord[],
   metadata: GitMetadata,
   config: Config,
-  sessionId?: string,
+  sessionId: string,
   pullRequest?: PullRequestContext,
   guidance?: string,
 ): ScanRequest {
@@ -51,7 +51,7 @@ export function buildScanRequest(
       diffsOnly: config.diffsOnly,
       guidance,
     },
-    sessionId, // Include session ID if MCP is enabled
+    sessionId, // Always included for scan tracking and cancellation
     pullRequest, // Include PR context if --github-pr flag provided
   };
 }
@@ -145,6 +145,10 @@ export async function executeScanRequest(
     };
 
     const onAbort = () => {
+      // Emit cancellation to server
+      socket?.emit('scan:cancel');
+
+      // Remove listeners
       socket?.off('scan:complete', onComplete);
       socket?.off('scan:error', onError);
       socket?.off('reconnect_failed', onReconnectFailed);
