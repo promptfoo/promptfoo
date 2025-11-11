@@ -379,10 +379,10 @@ describe('Report filtering logic', () => {
       const evalData = createMockEvalData(2, results);
 
       // Verify the mock data structure includes provider labels
-      expect(evalData.prompts[0].provider).toBe('Provider 0');
-      expect(evalData.prompts[1].provider).toBe('Provider 1');
-      expect(evalData.prompts[0].label).toBe('Prompt 0');
-      expect(evalData.prompts[1].label).toBe('Prompt 1');
+      expect(evalData.prompts?.[0].provider).toBe('Provider 0');
+      expect(evalData.prompts?.[1].provider).toBe('Provider 1');
+      expect(evalData.prompts?.[0].label).toBe('Prompt 0');
+      expect(evalData.prompts?.[1].label).toBe('Prompt 1');
     });
   });
 
