@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Documentation
 
 - docs(providers): update Vertex AI documentation - removed deprecated models (PaLM/Bison, Claude 3 Opus, Claude 3.5 Sonnet v2), added Claude Sonnet 4.5, added missing Gemini 2.0 models, reorganized model listings by generation (Gemini 2.5/2.0/1.5, Claude 4/3, Llama 4/3.3/3.2/3.1), marked Preview/Experimental models, removed temporal language to make docs evergreen (#3169)
+- docs(cli): document PROMPTFOO_LOG_DIR behavior and correct default (~/.promptfoo/logs) (#6179)
 
 ### Changed
 
@@ -19,7 +20,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(webui): filter hidden metadata keys from metadata filter dropdown - ensures consistent filtering of 'citations' and '\_promptfooFileMetadata' keys across MetadataPanel, EvalOutputPromptDialog, and metadata filter dropdown (#6177)
 - fix(cli): format object and array variables with pretty-printed JSON in console table and HTML outputs for improved readability (#6175)
 - fix(redteam): respect redteam.provider configuration for local grading - fixes issue where configuring a local provider (e.g., ollama:llama3.2) still sent grading requests to remote API instead of using the configured provider (#5959)
-- fix(logging): implement previously documented PROMPTFOO_LOG_DIR environment variable - now properly redirects debug and error log files from default ~/.promptfoo/logs to custom directory when set
+- fix(cli): respect PROMPTFOO_LOG_DIR to change log directory (default ~/.promptfoo/logs) (#6179)
+
+### Tests
+
+- test(logging): add unit test verifying custom log directory creation and log file paths via PROMPTFOO_LOG_DIR (#6179)
 
 ## [0.119.5] - 2025-11-10
 
