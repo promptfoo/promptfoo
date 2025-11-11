@@ -309,6 +309,23 @@ export class CrescendoProvider implements ApiProvider {
       try {
         roundNum++;
 
+        // Update system prompt with current round number
+        const updatedSystemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
+          conversationObjective: this.userGoal,
+          currentRound: roundNum,
+          maxTurns: this.maxTurns,
+          purpose: context?.test?.metadata?.purpose,
+          modifierSection:
+            Object.entries(context?.test?.metadata?.modifiers || {})
+              .map(([key, value]) => `${key}: ${value}`)
+              .join('\n') || undefined,
+        });
+
+        const conversation = this.memory.getConversation(this.redTeamingChatConversationId);
+        if (conversation[0]?.role === 'system') {
+          conversation[0].content = updatedSystemPrompt;
+        }
+
         logger.debug(`\n[Crescendo] ROUND ${roundNum}\n`);
 
         const { generatedQuestion: attackPrompt } = await this.getAttackPrompt(
