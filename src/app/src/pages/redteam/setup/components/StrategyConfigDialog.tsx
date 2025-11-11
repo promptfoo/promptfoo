@@ -212,12 +212,12 @@ export default function StrategyConfigDialog({
     } else if (strategy === 'layer') {
       const layerConfig: Record<string, any> = {
         ...localConfig,
-        steps,
       };
-      // Only include plugins if they're specified
+      // Add plugins first, then steps to maintain order in YAML output
       if (layerPlugins.length > 0) {
         layerConfig.plugins = layerPlugins;
       }
+      layerConfig.steps = steps;
       onSave(strategy, layerConfig);
     } else if (strategy === 'retry') {
       const num = Number.parseInt(numTests, 10);
