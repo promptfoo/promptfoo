@@ -37,11 +37,11 @@ Hydra relies on Promptfoo Cloud to coordinate the attacker agent, maintain scan-
 
 ## Configuration Options
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `maxTurns` | `10` | Maximum conversation turns Hydra will take with the target before stopping. Increase for deeper explorations. |
-| `maxBacktracks` | `10` | Number of times Hydra can roll back the last turn when it detects a refusal. Set to `0` automatically when `stateful: true`. |
-| `stateful` | `false` | When `true`, Hydra sends only the latest turn alongside the session identifier. Keep `false` (stateless mode) if your target expects the full conversation each time. |
+| Option          | Default | Description                                                                                                                                                           |
+| --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maxTurns`      | `10`    | Maximum conversation turns Hydra will take with the target before stopping. Increase for deeper explorations.                                                         |
+| `maxBacktracks` | `10`    | Number of times Hydra can roll back the last turn when it detects a refusal. Set to `0` automatically when `stateful: true`.                                          |
+| `stateful`      | `false` | When `true`, Hydra sends only the latest turn alongside the session identifier. Keep `false` (stateless mode) if your target expects the full conversation each time. |
 
 ::::tip
 Hydra automatically manages backtracking and session handling. In Promptfoo Cloud, it derives session support from the target’s configuration. When using the open-source CLI/UI, set `stateful: true` in the Hydra configuration if your provider expects persistent sessions.
@@ -59,11 +59,11 @@ Hydra keeps a per-scan memory so later test cases can reuse successful tactics d
 
 ## Hydra vs Other Agentic Strategies
 
-| Strategy | Turn Model | Best For | Cost Profile |
-| --- | --- | --- | --- |
-| `jailbreak` | Single-turn | Fast baselines, low cost | Low |
-| `jailbreak:meta` | Iterative taxonomy | Broad single-shot coverage | Medium |
-| `jailbreak:hydra` | Multi-turn branching | Stateful agents, evasive defenses | High |
+| Strategy          | Turn Model           | Best For                          | Cost Profile |
+| ----------------- | -------------------- | --------------------------------- | ------------ |
+| `jailbreak`       | Single-turn          | Fast baselines, low cost          | Low          |
+| `jailbreak:meta`  | Iterative taxonomy   | Broad single-shot coverage        | Medium       |
+| `jailbreak:hydra` | Multi-turn branching | Stateful agents, evasive defenses | High         |
 
 ## When to Use Hydra
 
@@ -79,5 +79,3 @@ Hydra is most effective when paired with plugin suites like `harmful`, `pii`, or
 - [Meta-Agent Jailbreaks](meta.md) – Strategic taxonomy builder for complex single-turn attacks
 - [Multi-turn Jailbreaks](multi-turn.md) – Overview of conversational attacker agents
 - [Tree-based Jailbreaks](tree.md) – Branching exploration without multi-turn conversations
-
-
