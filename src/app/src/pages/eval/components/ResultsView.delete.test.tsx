@@ -25,10 +25,18 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
 
-vi.mock('./store', () => ({
-  useTableStore: () => mockUseTableStore(),
-  useResultsViewSettingsStore: () => mockUseResultsViewSettingsStore(),
-}));
+vi.mock('./store', async (importOriginal) => {
+  const actual = await importOriginal();
+  const mockStoreWithSubscribe = Object.assign(() => mockUseTableStore(), {
+    subscribe: vi.fn(() => vi.fn()),
+    getState: vi.fn(() => mockUseTableStore()),
+  });
+  return {
+    ...actual,
+    useTableStore: mockStoreWithSubscribe,
+    useResultsViewSettingsStore: () => mockUseResultsViewSettingsStore(),
+  };
+});
 
 vi.mock('@app/stores/evalConfig', () => ({
   useStore: () => ({

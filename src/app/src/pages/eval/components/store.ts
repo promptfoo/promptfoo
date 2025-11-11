@@ -49,15 +49,40 @@ export const resultsFilterTypeSchema = z.enum([
   'policy',
 ]);
 
-export const resultsFilterSchema = z.object({
-  id: z.string().optional(), // Allow missing id when deserializing from URL
-  type: resultsFilterTypeSchema,
-  value: z.string(),
-  operator: resultsFilterOperatorSchema,
-  logicOperator: z.enum(['and', 'or']),
-  field: z.string().optional(),
-  sortIndex: z.number().optional(), // Allow missing sortIndex when deserializing
-});
+export const resultsFilterSchema = z
+  .object({
+    id: z.string().optional(), // Allow missing id when deserializing from URL
+    type: resultsFilterTypeSchema,
+    value: z.string(),
+    operator: resultsFilterOperatorSchema,
+    logicOperator: z.enum(['and', 'or']),
+    field: z.string().optional(),
+    sortIndex: z.number().optional(), // Allow missing sortIndex when deserializing
+  })
+  .refine(
+    (data) => {
+      // When operator is exists or is_defined, field must be present
+      if (data.operator === 'exists' || data.operator === 'is_defined') {
+        return data.field !== undefined && data.field !== '';
+      }
+      return true;
+    },
+    {
+      message: 'field is required when operator is "exists" or "is_defined"',
+    },
+  )
+  .refine(
+    (data) => {
+      // When type is metadata, field must be present
+      if (data.type === 'metadata') {
+        return data.field !== undefined && data.field !== '';
+      }
+      return true;
+    },
+    {
+      message: 'field is required for metadata filters',
+    },
+  );
 
 export const resultsFiltersArraySchema = z.array(resultsFilterSchema);
 
