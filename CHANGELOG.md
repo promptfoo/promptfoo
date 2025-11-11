@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(app): Metadata value autocomplete eval filter (#6167)
+- feat(app): Metadata value autocomplete eval filter (#6176)
 
 ### Documentation
 
