@@ -81,7 +81,7 @@ describe('parseXlsxFile', () => {
     xlsx.utils.sheet_to_json.mockReturnValue([]);
 
     await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
-      'Failed to parse Excel file test.xlsx: Sheet "Sheet1" is empty or contains no valid data rows',
+      'Sheet "Sheet1" is empty or contains no valid data rows',
     );
   });
 
@@ -119,7 +119,7 @@ describe('parseXlsxFile', () => {
     jest.spyOn(fs, 'existsSync').mockReturnValue(false);
 
     await expect(parseXlsxFile('nonexistent.xlsx')).rejects.toThrow(
-      'Failed to parse Excel file nonexistent.xlsx: File not found: nonexistent.xlsx',
+      'File not found: nonexistent.xlsx',
     );
   });
 
@@ -174,7 +174,7 @@ describe('parseXlsxFile', () => {
       });
 
       await expect(parseXlsxFile('test.xlsx#NonExistentSheet')).rejects.toThrow(
-        'Failed to parse Excel file test.xlsx#NonExistentSheet: Sheet "NonExistentSheet" not found. Available sheets: Sheet1, Sheet2',
+        'Sheet "NonExistentSheet" not found. Available sheets: Sheet1, Sheet2',
       );
     });
 
@@ -188,7 +188,7 @@ describe('parseXlsxFile', () => {
       });
 
       await expect(parseXlsxFile('test.xlsx#5')).rejects.toThrow(
-        'Failed to parse Excel file test.xlsx#5: Sheet index 5 is out of range. Available sheets: 2 (1-2)',
+        'Sheet index 5 is out of range. Available sheets: 2 (1-2)',
       );
     });
 
@@ -202,7 +202,7 @@ describe('parseXlsxFile', () => {
       });
 
       await expect(parseXlsxFile('test.xlsx#0')).rejects.toThrow(
-        'Failed to parse Excel file test.xlsx#0: Sheet index 0 is out of range. Available sheets: 2 (1-2)',
+        'Sheet index 0 is out of range. Available sheets: 2 (1-2)',
       );
     });
   });
@@ -219,7 +219,7 @@ describe('parseXlsxFile', () => {
       xlsx.utils.sheet_to_json.mockReturnValue([]);
 
       await expect(parseXlsxFile('test.xlsx#EmptySheet')).rejects.toThrow(
-        'Failed to parse Excel file test.xlsx#EmptySheet: Sheet "EmptySheet" is empty or contains no valid data rows',
+        'Sheet "EmptySheet" is empty or contains no valid data rows',
       );
     });
 
@@ -234,7 +234,7 @@ describe('parseXlsxFile', () => {
       xlsx.utils.sheet_to_json.mockReturnValue([{}]);
 
       await expect(parseXlsxFile('test.xlsx#NoHeaders')).rejects.toThrow(
-        'Failed to parse Excel file test.xlsx#NoHeaders: Sheet "NoHeaders" has no valid column headers',
+        'Sheet "NoHeaders" has no valid column headers',
       );
     });
 
@@ -253,7 +253,7 @@ describe('parseXlsxFile', () => {
       ]);
 
       await expect(parseXlsxFile('test.xlsx#EmptyData')).rejects.toThrow(
-        'Failed to parse Excel file test.xlsx#EmptyData: Sheet "EmptyData" contains only empty data. Please ensure the sheet has both headers and data rows.',
+        'Sheet "EmptyData" contains only empty data. Please ensure the sheet has both headers and data rows.',
       );
     });
 

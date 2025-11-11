@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(test-cases): improve xlsx error handling to avoid double-wrapping validation errors, provide clearer error messages for file not found, empty sheets, and invalid data (#4841)
+- fix(docs): update xlsx documentation to use consistent version (0.18.5) and correct anchor links (#4841)
 - fix(assertions): fix runtime variables not working in custom rubricPrompt for factuality and model-graded-closedqa assertions (#5340)
 - fix(openai): fix timeouts on gpt-5-pro models by extending automatic timeout to 10 minutes (#6147)
 - fix(deps): fix test coverage reporting errors (#6122)

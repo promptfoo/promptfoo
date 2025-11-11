@@ -156,7 +156,7 @@ describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
     clearAllMocks();
     // Reset getEnvString to default behavior
-    jest.mocked(getEnvString).mockImplementation((key, defaultValue) => defaultValue || '');
+    jest.mocked(getEnvString).mockImplementation((_key, defaultValue) => defaultValue || '');
     // Restore maybeLoadConfigFromExternalFile mock
     jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
       // Handle arrays first to preserve their type
@@ -546,9 +546,7 @@ describe('readStandaloneTestsFile', () => {
     try {
       const { parseXlsxFile } = await import('../../src/util/xlsx');
 
-      await expect(parseXlsxFile('empty.xlsx')).rejects.toThrow(
-        'Failed to parse Excel file empty.xlsx: Excel file has no sheets',
-      );
+      await expect(parseXlsxFile('empty.xlsx')).rejects.toThrow('Excel file has no sheets');
     } finally {
       jest.dontMock('xlsx');
       jest.dontMock('fs');
@@ -1817,8 +1815,8 @@ describe('loadTestsFromGlob', () => {
 describe('CSV parsing with JSON fields', () => {
   beforeEach(() => {
     clearAllMocks();
-    jest.mocked(getEnvBool).mockImplementation((key, defaultValue = false) => defaultValue);
-    jest.mocked(getEnvString).mockImplementation((key, defaultValue) => defaultValue || '');
+    jest.mocked(getEnvBool).mockImplementation((_key, defaultValue = false) => defaultValue);
+    jest.mocked(getEnvString).mockImplementation((_key, defaultValue) => defaultValue || '');
   });
 
   afterEach(() => {
@@ -1891,7 +1889,7 @@ another_label,What is the time?,too,many,columns,here`;
     jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
 
     // Use default settings (not strict mode) to get past quote checking
-    jest.mocked(getEnvBool).mockImplementation((key, defaultValue = false) => defaultValue);
+    jest.mocked(getEnvBool).mockImplementation((_key, defaultValue = false) => defaultValue);
     jest
       .mocked(getEnvString)
       .mockImplementation((key, defaultValue) =>

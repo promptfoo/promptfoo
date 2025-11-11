@@ -109,16 +109,16 @@ Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel 
 1. Install the `xlsx` package as a peer dependency:
 
    ```bash
-   # Install latest version from npm
+   # Install latest version from npm (recommended)
    npm install xlsx
 
-   # OR install specific version from SheetJS CDN (for version control)
-   npm install https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+   # OR install specific version from SheetJS CDN
+   npm install https://cdn.sheetjs.com/xlsx-0.18.5/xlsx-0.18.5.tgz
    ```
 
    **Why two options?**
-   - **npm install xlsx**: Gets the latest stable version from npm registry (recommended for most users)
-   - **CDN URL**: Installs a specific version for consistent behavior across environments
+   - **npm install xlsx**: Gets version 0.18.5 from npm registry (recommended for most users)
+   - **CDN URL**: Installs the same version from SheetJS CDN for environments that prefer CDN sources
 
 2. Use Excel files just like CSV files:
    ```yaml title="promptfooconfig.yaml"
