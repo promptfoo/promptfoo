@@ -489,18 +489,20 @@ describe('logger', () => {
 
       logger.initializeRunLogging();
 
+      // Use path.resolve() to match the actual implementation behavior (handles Windows paths correctly)
+      const resolvedCustomLogDir = path.resolve(customLogDir);
       const expectedCustomDebugFile = path.join(
-        customLogDir,
+        resolvedCustomLogDir,
         'promptfoo-debug-2025-03-01_12-00-00-000Z.log',
       );
       const expectedCustomErrorFile = path.join(
-        customLogDir,
+        resolvedCustomLogDir,
         'promptfoo-error-2025-03-01_12-00-00-000Z.log',
       );
 
       expect(cliState.debugLogFile).toBe(expectedCustomDebugFile);
       expect(cliState.errorLogFile).toBe(expectedCustomErrorFile);
-      expect(fsMock.mkdirSync).toHaveBeenCalledWith(customLogDir, { recursive: true });
+      expect(fsMock.mkdirSync).toHaveBeenCalledWith(resolvedCustomLogDir, { recursive: true });
     });
   });
 
