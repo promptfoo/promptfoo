@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(webui): correct multi-target filtering in red team report - statistics now properly filter by selected target instead of showing aggregated data across all targets; replaced modal with Select dropdown for clearer UX (#4251)
 - fix(providers): auto-detect reasoning models by deployment name in Azure provider - now recognizes o1, o3, o4, and gpt-5 models and automatically uses `max_completion_tokens` instead of `max_tokens` (#6154)
 - fix(prompts): fix basePath resolution for executable prompts with `exec:` prefix - relative paths now resolve correctly (5308c5d)
 - fix(prompts): convert sync fs operations to async in executable prompt processor for better performance (5308c5d)
