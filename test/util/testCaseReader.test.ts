@@ -1618,40 +1618,9 @@ describe('readVarsFiles', () => {
 describe('loadTestsFromGlob', () => {
   beforeEach(() => {
     clearAllMocks();
-    // Restore maybeLoadConfigFromExternalFile mock
-    jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
-      // Handle arrays first to preserve their type
-      if (Array.isArray(config)) {
-        return config.map((item) => {
-          const mockFn = jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
-          return mockFn(item);
-        });
-      }
-
-      // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
-        const result = { ...config };
-        for (const [key, value] of Object.entries(config)) {
-          if (typeof value === 'string' && value.startsWith('file://')) {
-            // Extract the file path from the file:// URL
-            const filePath = value.slice('file://'.length);
-            // Get the mocked file content using the extracted path
-            const fs = jest.requireMock('fs');
-            const fileContent = fs.readFileSync(filePath, 'utf-8');
-            if (typeof fileContent === 'string') {
-              try {
-                result[key] = JSON.parse(fileContent);
-              } catch {
-                result[key] = fileContent;
-              }
-            }
-          }
-        }
-        return result;
-      }
-
-      return config;
-    });
+    // Explicitly set a simple pass-through mock to ensure no pollution from previous describe blocks
+    // Individual tests will override this with their own specific implementations
+    jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any) => config);
   });
 
   afterEach(() => {
@@ -1682,6 +1651,11 @@ describe('loadTestsFromGlob', () => {
   });
 
   it('should recursively resolve file:// references in YAML test files', async () => {
+    // Set up mock implementation FIRST, before any other setup
+    // Use jest.mocked() for consistency with clearAllMocks()
+    const mockMaybeLoadConfig = jest.mocked(maybeLoadConfigFromExternalFile);
+    mockMaybeLoadConfig.mockReset();
+
     const yamlContentWithRefs = [
       {
         description: 'Test with file refs',
@@ -1704,12 +1678,7 @@ describe('loadTestsFromGlob', () => {
       },
     ];
 
-    jest.mocked(globSync).mockReturnValue(['tests.yaml']);
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlContentWithRefs));
-
     // Mock maybeLoadConfigFromExternalFile to resolve file:// references
-    const mockMaybeLoadConfig =
-      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
     mockMaybeLoadConfig.mockImplementation((config: any) => {
       // Handle arrays - preserve array type and return resolved content
       if (Array.isArray(config)) {
@@ -1729,6 +1698,10 @@ describe('loadTestsFromGlob', () => {
       return config;
     });
 
+    // Set up file system mocks AFTER setting up the maybeLoadConfigFromExternalFile mock
+    jest.mocked(globSync).mockReturnValue(['tests.yaml']);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlContentWithRefs));
+
     const result = await loadTestsFromGlob('tests.yaml');
 
     // The mock should be called with the array from YAML
@@ -1737,6 +1710,11 @@ describe('loadTestsFromGlob', () => {
   });
 
   it('should handle nested file:// references in complex test structures', async () => {
+    // Set up mock implementation FIRST, before any other setup
+    // Use jest.mocked() for consistency with clearAllMocks()
+    const mockMaybeLoadConfig = jest.mocked(maybeLoadConfigFromExternalFile);
+    mockMaybeLoadConfig.mockReset();
+
     const complexYamlWithRefs = [
       {
         description: 'Complex test',
@@ -1762,12 +1740,7 @@ describe('loadTestsFromGlob', () => {
       },
     ];
 
-    jest.mocked(globSync).mockReturnValue(['complex-tests.yaml']);
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(complexYamlWithRefs));
-
     // Mock maybeLoadConfigFromExternalFile to resolve file:// references
-    const mockMaybeLoadConfig =
-      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
     mockMaybeLoadConfig.mockImplementation((config: any) => {
       // Handle arrays - preserve array type and return resolved content
       if (Array.isArray(config)) {
@@ -1785,6 +1758,10 @@ describe('loadTestsFromGlob', () => {
       return config;
     });
 
+    // Set up file system mocks AFTER setting up the maybeLoadConfigFromExternalFile mock
+    jest.mocked(globSync).mockReturnValue(['complex-tests.yaml']);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(complexYamlWithRefs));
+
     const result = await loadTestsFromGlob('complex-tests.yaml');
 
     expect(mockMaybeLoadConfig).toHaveBeenCalled();
@@ -1796,6 +1773,11 @@ describe('loadTestsFromGlob', () => {
 
   it('should preserve Python assertion file references when loading YAML tests', async () => {
     // This test verifies the fix for issue #5519
+    // Set up mock implementation FIRST, before any other setup
+    // Use jest.mocked() for consistency with clearAllMocks()
+    const mockMaybeLoadConfig = jest.mocked(maybeLoadConfigFromExternalFile);
+    mockMaybeLoadConfig.mockReset();
+
     const yamlContentWithPythonAssertion = [
       {
         vars: { name: 'Should PASS' },
@@ -1808,12 +1790,7 @@ describe('loadTestsFromGlob', () => {
       },
     ];
 
-    jest.mocked(globSync).mockReturnValue(['tests.yaml']);
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlContentWithPythonAssertion));
-
     // Mock maybeLoadConfigFromExternalFile to preserve Python files in assertion contexts
-    const mockMaybeLoadConfig =
-      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
     mockMaybeLoadConfig.mockImplementation((config: any) => {
       // Handle arrays - preserve array type
       if (Array.isArray(config)) {
@@ -1825,6 +1802,10 @@ describe('loadTestsFromGlob', () => {
       }
       return config;
     });
+
+    // Set up file system mocks AFTER setting up the maybeLoadConfigFromExternalFile mock
+    jest.mocked(globSync).mockReturnValue(['tests.yaml']);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlContentWithPythonAssertion));
 
     const result = await loadTestsFromGlob('tests.yaml');
 
