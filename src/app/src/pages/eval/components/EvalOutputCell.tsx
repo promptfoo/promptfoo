@@ -14,6 +14,7 @@ import FailReasonCarousel from './FailReasonCarousel';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
+import { getHumanRating } from './utils';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -89,15 +90,12 @@ function EvalOutputCell({
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
-    output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
-      ?.pass ?? null,
+    getHumanRating(output)?.pass ?? null,
   );
 
   // Update activeRating when output changes
   React.useEffect(() => {
-    const humanRating = output.gradingResult?.componentResults?.find(
-      (result) => result.assertion?.type === 'human',
-    )?.pass;
+    const humanRating = getHumanRating(output)?.pass;
     setActiveRating(humanRating ?? null);
   }, [output]);
 
