@@ -72,8 +72,9 @@ export default function StrategyConfigDialog({
   const [goals, setGoals] = React.useState<string[]>(config.goals || []);
   const [newGoal, setNewGoal] = React.useState<string>('');
 
-  // Steps are just strategy IDs (strings)
-  const [steps, setSteps] = React.useState<string[]>(config.steps || []);
+  // Steps can be strings or objects with nested config
+  type StepType = string | { id: string; config?: Record<string, any> };
+  const [steps, setSteps] = React.useState<StepType[]>(config.steps || []);
   const [newStep, setNewStep] = React.useState<string>('');
   const [layerPlugins, setLayerPlugins] = React.useState<string[]>(config.plugins || []);
   // Plugin targeting: 'all' or 'specific'
@@ -83,12 +84,19 @@ export default function StrategyConfigDialog({
 
   const availablePlugins = selectedPlugins;
 
+  // Helper functions to extract step ID
+  const getStepId = (step: StepType): string => {
+    return typeof step === 'string' ? step : step.id;
+  };
+
   // Helper functions to check strategy types
-  const isAgenticStrategy = (strategyId: string): boolean => {
+  const isAgenticStrategy = (step: StepType): boolean => {
+    const strategyId = getStepId(step);
     return (AGENTIC_STRATEGIES as readonly string[]).includes(strategyId);
   };
 
-  const isMultiModalStrategy = (strategyId: string): boolean => {
+  const isMultiModalStrategy = (step: StepType): boolean => {
+    const strategyId = getStepId(step);
     return (MULTI_MODAL_STRATEGIES as readonly string[]).includes(strategyId);
   };
 
@@ -103,9 +111,11 @@ export default function StrategyConfigDialog({
       return [];
     }
 
+    const stepIds = steps.map(getStepId);
+
     return AVAILABLE_LAYER_STRATEGIES.filter((strategy) => {
       // Cannot add duplicates
-      if (steps.includes(strategy)) {
+      if (stepIds.includes(strategy)) {
         return false;
       }
 
@@ -181,12 +191,9 @@ export default function StrategyConfigDialog({
     );
 
     if (strategy === 'layer') {
-      // Normalize steps: convert objects with {id, config} to just strings
+      // Keep steps as-is (can be strings or objects with {id, config})
       const rawSteps = nextConfig.steps || [];
-      const normalizedSteps = rawSteps.map((step: any) =>
-        typeof step === 'string' ? step : step.id,
-      );
-      setSteps(normalizedSteps);
+      setSteps(rawSteps);
 
       // Filter layerPlugins to only include plugins that are in availablePlugins
       const configPlugins = nextConfig.plugins || [];
@@ -249,7 +256,24 @@ export default function StrategyConfigDialog({
       const isValidStrategy = (availableStrategies as string[]).includes(trimmedValue);
 
       if (isValidStrategy) {
-        setSteps((prev) => [...prev, trimmedValue]);
+        // If strategy requires config, get its config from allStrategies
+        if (STRATEGIES_REQUIRING_CONFIG.includes(trimmedValue)) {
+          const strategyConfig = allStrategies.find((s) => {
+            const id = typeof s === 'string' ? s : s.id;
+            return id === trimmedValue;
+          });
+
+          if (strategyConfig && typeof strategyConfig === 'object') {
+            // Add step with its config
+            setSteps((prev) => [...prev, { id: trimmedValue, config: strategyConfig.config }]);
+          } else {
+            // Shouldn't reach here due to filtering, but add as string fallback
+            setSteps((prev) => [...prev, trimmedValue]);
+          }
+        } else {
+          // Regular strategy without config requirements
+          setSteps((prev) => [...prev, trimmedValue]);
+        }
         setNewStep('');
       }
     }
@@ -992,12 +1016,14 @@ export default function StrategyConfigDialog({
             {steps.length > 0 && (
               <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {steps.map((step, index) => {
+                  const stepId = getStepId(step);
+                  const hasConfig = typeof step === 'object' && step.config;
                   const isAgentic = isAgenticStrategy(step);
                   const isMultiModal = isMultiModalStrategy(step);
 
                   return (
                     <Box
-                      key={`${step}-${index}`}
+                      key={`${stepId}-${index}`}
                       sx={{
                         display: 'flex',
                         alignItems: 'center',
@@ -1023,7 +1049,19 @@ export default function StrategyConfigDialog({
                         }}
                       >
                         <span>{index + 1}.</span>
-                        <span>{step}</span>
+                        <span>{stepId}</span>
+                        {hasConfig && (
+                          <Chip
+                            label="configured"
+                            size="small"
+                            sx={{
+                              height: 20,
+                              fontSize: '0.7rem',
+                              bgcolor: 'success.main',
+                              color: 'success.contrastText',
+                            }}
+                          />
+                        )}
                         {isAgentic && (
                           <Chip
                             label="agentic"
