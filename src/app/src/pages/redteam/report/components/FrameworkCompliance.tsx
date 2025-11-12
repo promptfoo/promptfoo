@@ -105,14 +105,12 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
   );
 
   const frameworkCompliance = React.useMemo(() => {
-    return frameworksToShow.reduce(
-      (acc, framework) => {
-        const nonCompliantPlugins = getNonCompliantPlugins(framework);
-        acc[framework] = nonCompliantPlugins.length === 0;
-        return acc;
-      },
-      {} as Record<string, boolean>,
-    );
+    const result: Partial<Record<FrameworkComplianceId, boolean>> = {};
+    frameworksToShow.forEach((framework) => {
+      const nonCompliantPlugins = getNonCompliantPlugins(framework);
+      result[framework] = nonCompliantPlugins.length === 0;
+    });
+    return result;
   }, [frameworksToShow, getNonCompliantPlugins]);
 
   const pluginComplianceStats = React.useMemo(() => {
@@ -197,7 +195,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
           <Grid container spacing={3} className="framework-grid">
             {frameworksToShow.map((framework, idx) => {
               const nonCompliantPlugins = getNonCompliantPlugins(framework);
-              const isCompliant = frameworkCompliance[framework];
+              const isCompliant = frameworkCompliance[framework] ?? false;
               const frameworkSeverity = getFrameworkSeverity(framework);
 
               return (

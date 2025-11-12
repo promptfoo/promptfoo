@@ -67,7 +67,7 @@ redteam:
 
 Use the optional `redteam.frameworks` array when you only care about a subset of the built-in compliance programs. This filters which frameworks appear in the generated report, `promptfoo redteam run`, and future automation surfaces.
 
-Allowed framework IDs:
+Exmaples of allowed framework IDs:
 
 - `mitre:atlas`
 - `nist:ai:measure`
@@ -233,7 +233,7 @@ Example usage:
 ```yaml
 redteam:
   testGenerationInstructions: |
-    Focus on healthcare-specific attacks using medical terminology and patient scenarios. 
+    Focus on healthcare-specific attacks using medical terminology and patient scenarios.
     Ensure all prompts reference realistic medical situations that could occur in patient interactions.
     Consider HIPAA compliance requirements when generating privacy-related attacks.
 ```

@@ -37,9 +37,9 @@ describe('FrameworkCompliance', () => {
   });
 
   const renderFrameworkCompliance = (
-    categoryStats = {},
+    categoryStats: any = {},
     pluginPassRateThreshold = 0.9,
-    config = undefined,
+    config?: any,
   ) => {
     mockUseReportStore.mockReturnValue({
       pluginPassRateThreshold,
