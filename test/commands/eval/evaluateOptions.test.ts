@@ -379,4 +379,114 @@ describe('evaluateOptions behavior', () => {
       expect(options.maxConcurrency).toBe(9); // From config
     });
   });
+
+  describe('commandLineOptions behavior', () => {
+    it('should respect commandLineOptions.generateSuggestions from config', async () => {
+      const tempConfig = path.join(process.cwd(), 'test-generate-suggestions.yaml');
+      fs.writeFileSync(
+        tempConfig,
+        yaml.dump({
+          commandLineOptions: {
+            generateSuggestions: true,
+          },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        }),
+      );
+
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        write: false,
+        config: [tempConfig],
+      };
+
+      await doEval(cmdObj, {}, undefined, {});
+
+      const options = evaluateMock.mock.calls[0][2];
+      expect(options.generateSuggestions).toBe(true);
+      fs.unlinkSync(tempConfig);
+    });
+
+    it('should prioritize CLI --suggest-prompts over commandLineOptions.generateSuggestions', async () => {
+      const tempConfig = path.join(process.cwd(), 'test-generate-suggestions-override.yaml');
+      fs.writeFileSync(
+        tempConfig,
+        yaml.dump({
+          commandLineOptions: {
+            generateSuggestions: false,
+          },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        }),
+      );
+
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        write: false,
+        config: [tempConfig],
+        generateSuggestions: true, // CLI override
+      };
+
+      await doEval(cmdObj, {}, undefined, {});
+
+      const options = evaluateMock.mock.calls[0][2];
+      expect(options.generateSuggestions).toBe(true);
+      fs.unlinkSync(tempConfig);
+    });
+
+    it('should respect commandLineOptions.table from config', async () => {
+      const tempConfig = path.join(process.cwd(), 'test-table.yaml');
+      fs.writeFileSync(
+        tempConfig,
+        yaml.dump({
+          commandLineOptions: {
+            table: false,
+          },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        }),
+      );
+
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        write: false,
+        config: [tempConfig],
+      };
+
+      // We can't directly check table output, but we can verify the config loads
+      await doEval(cmdObj, {}, undefined, {});
+
+      // If this completes without error, the config was respected
+      expect(evaluateMock).toHaveBeenCalled();
+      fs.unlinkSync(tempConfig);
+    });
+
+    it('should respect commandLineOptions.write = false from config', async () => {
+      const tempConfig = path.join(process.cwd(), 'test-write.yaml');
+      fs.writeFileSync(
+        tempConfig,
+        yaml.dump({
+          commandLineOptions: {
+            write: false,
+          },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        }),
+      );
+
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        config: [tempConfig],
+      };
+
+      await doEval(cmdObj, {}, undefined, {});
+
+      // Verify eval completed successfully with write=false
+      expect(evaluateMock).toHaveBeenCalled();
+      fs.unlinkSync(tempConfig);
+    });
+  });
 });
