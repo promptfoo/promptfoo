@@ -37,6 +37,7 @@ export default function FrameworkPluginResult({
           type: 'plugin',
           operator: 'equals',
           value: pluginId,
+          logicOperator: 'or',
         },
       ]),
     );

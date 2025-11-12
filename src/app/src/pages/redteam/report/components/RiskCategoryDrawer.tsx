@@ -213,6 +213,7 @@ const RiskCategoryDrawer = ({
                       type: 'plugin',
                       operator: 'equals',
                       value: pluginId,
+                      logicOperator: 'or',
                     },
                   ]),
                 )}`

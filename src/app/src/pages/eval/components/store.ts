@@ -418,6 +418,13 @@ interface TableState {
   resetFilterMode: () => void;
 
   /**
+   * Flag to prevent circular updates when syncing filters from URL.
+   * Set to true when applying filters from URL, false when done.
+   */
+  isApplyingFiltersFromUrl: boolean;
+  setIsApplyingFiltersFromUrl: (value: boolean) => void;
+
+  /**
    * Resets the entire table store to its initial state.
    * Useful when navigating between different evals.
    */
@@ -952,6 +959,10 @@ export const useTableStore = create<TableState>()((set, get) => ({
     set((prevState) => ({ ...prevState, filterMode })),
   resetFilterMode: () => set((prevState) => ({ ...prevState, filterMode: 'all' })),
 
+  isApplyingFiltersFromUrl: false,
+  setIsApplyingFiltersFromUrl: (value: boolean) =>
+    set((prevState) => ({ ...prevState, isApplyingFiltersFromUrl: value })),
+
   reset: () => {
     set({
       evalId: null,
@@ -975,6 +986,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
       metadataKeysError: false,
       currentMetadataKeysRequest: null,
       filterMode: 'all',
+      isApplyingFiltersFromUrl: false,
       isFetching: false,
       isStreaming: false,
       shouldHighlightSearchText: false,

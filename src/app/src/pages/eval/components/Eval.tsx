@@ -18,25 +18,8 @@ import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { resultsFiltersArraySchema, useResultsViewSettingsStore, useTableStore } from './store';
-import { MAX_FILTERS_FROM_URL } from './constants';
-import type { ResultsFilter, ResultsFilterType, ResultsFilterOperator } from './store';
+import type { ResultsFilterType, ResultsFilterOperator } from './store';
 import './Eval.css';
-
-/**
- * Serializes a filter object for URL comparison with deterministic key ordering.
- * Strips internal fields (id, sortIndex) and sorts keys alphabetically for consistent JSON output.
- * This must match the serialization logic in ResultsView.tsx subscription.
- */
-function serializeFilterForComparison(filter: Partial<ResultsFilter>): Record<string, any> {
-  // biome-ignore lint/correctness/noUnusedVariables: id and sortIndex are intentionally excluded from comparison
-  const { id, sortIndex, ...rest } = filter as any;
-  const sortedKeys = Object.keys(rest).sort();
-  const sorted: Record<string, any> = {};
-  for (const key of sortedKeys) {
-    sorted[key] = rest[key];
-  }
-  return sorted;
-}
 
 /**
  * Parses filters from URL search params and applies them to the store.
@@ -63,16 +46,7 @@ function parseAndApplyFiltersFromUrl(
       const validationResult = resultsFiltersArraySchema.safeParse(parsedFilters);
 
       if (validationResult.success) {
-        // Limit number of filters to prevent DoS
-        const filtersToApply = validationResult.data.slice(0, MAX_FILTERS_FROM_URL);
-
-        if (validationResult.data.length > MAX_FILTERS_FROM_URL) {
-          console.warn(
-            `URL contains ${validationResult.data.length} filters. Limited to ${MAX_FILTERS_FROM_URL}.`,
-          );
-        }
-
-        filtersToApply.forEach((filter) => {
+        validationResult.data.forEach((filter) => {
           addFilter({
             type: filter.type,
             operator: filter.operator,
@@ -145,6 +119,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setIsStreaming,
     setFilterMode,
     resetFilterMode,
+    setIsApplyingFiltersFromUrl,
   } = useTableStore();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
@@ -251,7 +226,13 @@ export default function Eval({ fetchId }: EvalOptions) {
     resetFilters();
 
     // Apply filters from URL for the new eval
+    setIsApplyingFiltersFromUrl(true);
     parseAndApplyFiltersFromUrl(searchParams, addFilter, setFilterMode, resetFilterMode);
+
+    // Reset flag after current execution completes
+    queueMicrotask(() => {
+      setIsApplyingFiltersFromUrl(false);
+    });
 
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
@@ -319,8 +300,8 @@ export default function Eval({ fetchId }: EvalOptions) {
         setIsStreaming(false);
       };
     } else {
+      // Non-websocket branches: fetch from server
       console.log('Eval init: Fetching eval via recent');
-      // Fetch from server
       const run = async () => {
         const evals = await fetchRecentFileEvals();
         if (evals && evals.length > 0) {
@@ -341,6 +322,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       };
       run();
     }
+
     console.log('Eval init: Resetting comparison mode');
     setInComparisonMode(false);
     setComparisonEvalIds([]);
@@ -350,59 +332,56 @@ export default function Eval({ fetchId }: EvalOptions) {
     fetchId,
     // loadEvalById, setTableFromResultsFile, setConfig, setAuthor, setEvalId, setDefaultEvalId,
     // setInComparisonMode, setComparisonEvalIds, setIsStreaming are stable Zustand store functions
-    // resetFilters, addFilter, setFilterMode, resetFilterMode are stable Zustand store functions
-    searchParams,
+    // resetFilters, addFilter, setFilterMode, resetFilterMode, setIsApplyingFiltersFromUrl are stable
   ]);
 
   // Effect 2: Handle filter updates from URL (browser back/forward)
-  // This runs when searchParams changes but only applies changes if filters actually differ from store
-  const prevFetchId = useRef<string | null>(null);
-  const hasInitializedForFetchId = useRef<string | null>(null);
+  // This runs when searchParams changes (e.g., when user clicks browser back/forward)
+  const prevSearchParamsRef = useRef<string>('');
 
   useEffect(() => {
-    // Skip if we haven't initialized for this fetchId yet - Effect 1 handles initial filter setup
-    if (hasInitializedForFetchId.current !== fetchId) {
-      hasInitializedForFetchId.current = fetchId;
-      prevFetchId.current = fetchId;
+    const currentSearchParamsStr = searchParams.toString();
+
+    // Skip if searchParams haven't actually changed
+    if (prevSearchParamsRef.current === currentSearchParamsStr) {
       return;
     }
 
-    // Skip if eval changed (Effect 1 handles that)
-    if (prevFetchId.current !== fetchId) {
-      prevFetchId.current = fetchId;
+    // Skip if we're currently applying filters (prevents circular updates)
+    if (useTableStore.getState().isApplyingFiltersFromUrl) {
+      prevSearchParamsRef.current = currentSearchParamsStr;
       return;
     }
 
-    const currentFiltersParam = searchParams.get('filter');
+    // URL changed (browser back/forward) - sync from URL to store
+    console.log('URL changed - syncing filters from URL (browser back/forward)');
+    setIsApplyingFiltersFromUrl(true);
+    resetFilters();
+    parseAndApplyFiltersFromUrl(searchParams, addFilter, setFilterMode, resetFilterMode);
+    prevSearchParamsRef.current = currentSearchParamsStr;
 
-    // Get current filters from store and serialize them the same way the subscription does
-    const { filters } = useTableStore.getState();
-    const serializedStoreFilters =
-      filters.appliedCount > 0
-        ? JSON.stringify(
-            Object.values(filters.values)
-              .map(serializeFilterForComparison)
-              .sort((a, b) => {
-                // Sort filters by type then value for consistent ordering
-                const typeCompare = a.type.localeCompare(b.type);
-                if (typeCompare !== 0) {
-                  return typeCompare;
-                }
-                return a.value.localeCompare(b.value);
-              }),
-          )
-        : null;
-
-    // Only apply URL filters if they differ from current store state
-    if (currentFiltersParam !== serializedStoreFilters) {
-      console.log('URL filters differ from store - syncing from URL (browser back/forward)');
-      resetFilters();
-      parseAndApplyFiltersFromUrl(searchParams, addFilter, setFilterMode, resetFilterMode);
+    // Re-fetch eval data with updated filters
+    const currentEvalId = useTableStore.getState().evalId;
+    if (currentEvalId) {
+      const { filters, filterMode } = useTableStore.getState();
+      fetchEvalData(currentEvalId, {
+        skipSettingEvalId: true,
+        filterMode,
+        filters: Object.values(filters.values).filter((filter) =>
+          filter.type === 'metadata'
+            ? Boolean(filter.value && filter.field)
+            : Boolean(filter.value),
+        ),
+      });
     }
+
+    // Reset flag after current execution completes
+    queueMicrotask(() => {
+      setIsApplyingFiltersFromUrl(false);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     searchParams,
-    fetchId,
     // resetFilters, addFilter, setFilterMode, resetFilterMode are stable Zustand store functions
   ]);
 

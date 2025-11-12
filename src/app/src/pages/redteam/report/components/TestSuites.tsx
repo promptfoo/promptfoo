@@ -493,6 +493,7 @@ const TestSuites = ({
                     type: plugin?.id === 'policy' ? 'policy' : 'plugin',
                     operator: 'equals',
                     value: pluginId,
+                    logicOperator: 'or',
                   },
                 ]),
               )}&mode=failures`;
