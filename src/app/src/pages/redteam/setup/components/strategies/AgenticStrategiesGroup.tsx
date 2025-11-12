@@ -111,7 +111,17 @@ export function AgenticStrategiesGroup({
                   onConfigClick={onConfigClick}
                   isDisabled={isStrategyDisabled(strategy.id)}
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-                  isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
+                  isConfigured={
+                    isStrategyConfigured
+                      ? (() => {
+                          try {
+                            return isStrategyConfigured(strategy.id);
+                          } catch {
+                            return true;
+                          }
+                        })()
+                      : true
+                  }
                 />
               ))}
             </Box>
@@ -147,7 +157,17 @@ export function AgenticStrategiesGroup({
                   onConfigClick={onConfigClick}
                   isDisabled={isStrategyDisabled(strategy.id)}
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-                  isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
+                  isConfigured={
+                    isStrategyConfigured
+                      ? (() => {
+                          try {
+                            return isStrategyConfigured(strategy.id);
+                          } catch {
+                            return true;
+                          }
+                        })()
+                      : true
+                  }
                 />
               ))}
             </Box>

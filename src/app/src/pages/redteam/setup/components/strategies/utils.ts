@@ -19,7 +19,12 @@ export const STRATEGIES_REQUIRING_CONFIG = ['layer', 'custom'];
 function isLayerStrategyConfigValid(strategy: RedteamStrategy): boolean {
   const config = typeof strategy === 'object' ? strategy.config : undefined;
   const steps = config?.steps;
-  return Array.isArray(steps) && steps.length > 0;
+  // Validate that steps array exists, has length, and contains valid non-empty values
+  return (
+    Array.isArray(steps) &&
+    steps.length > 0 &&
+    steps.every((step) => step != null && step !== '' && typeof step !== 'undefined')
+  );
 }
 
 /**
