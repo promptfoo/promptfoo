@@ -11,7 +11,7 @@ import {
   resultsFiltersArraySchema,
   filterModeSchema,
 } from './store';
-import type { EvaluateTable, PromptMetrics, ResultsFile } from '@promptfoo/types';
+import type { EvaluateTable, PromptMetrics, ResultsFile, EvalTableDTO } from '@promptfoo/types';
 
 vi.mock('uuid', () => ({
   v4: vi.fn(),
@@ -73,6 +73,7 @@ describe('useTableStore', () => {
         },
         shouldHighlightSearchText: false,
         isStreaming: false,
+        filteredMetrics: null,
         metadataKeys: [],
         metadataKeysLoading: false,
         metadataKeysError: false,
@@ -104,6 +105,38 @@ describe('useTableStore', () => {
 
     const state = useTableStore.getState();
     expect(state.filterMode).toBe('all');
+  });
+
+  it('should reset filteredMetrics to null when setEvalId is called', () => {
+    const initialMetrics: PromptMetrics[] = [
+      {
+        cost: 0.1,
+        score: 0.9,
+        testPassCount: 10,
+        testFailCount: 2,
+        testErrorCount: 0,
+        assertPassCount: 5,
+        assertFailCount: 1,
+        totalLatencyMs: 500,
+        tokenUsage: { prompt: 100, completion: 50, total: 150 },
+        namedScores: { accuracy: 0.85, fluency: 0.92 },
+        namedScoresCount: { accuracy: 12, fluency: 12 },
+      },
+    ];
+
+    act(() => {
+      useTableStore.setState({ filteredMetrics: initialMetrics });
+    });
+
+    const newEvalId = 'new-eval-id';
+
+    act(() => {
+      useTableStore.getState().setEvalId(newEvalId);
+    });
+
+    const state = useTableStore.getState();
+    expect(state.filteredMetrics).toBeNull();
+    expect(state.evalId).toBe(newEvalId);
   });
 
   describe('filterMode', () => {
@@ -2038,6 +2071,145 @@ describe('useTableStore', () => {
       expect(metadataFilter?.type).toBe('metadata');
       expect(metadataFilter?.field).toBe('plugin');
       expect(metadataFilter?.value).toBe('my-custom-plugin');
+    });
+  });
+
+  describe('filteredMetrics', () => {
+    it('should set `filteredMetrics` to the value returned by the backend after a successful `fetchEvalData` call', async () => {
+      const mockEvalId = 'test-eval-id';
+      const mockFilteredMetrics: PromptMetrics[] = [
+        {
+          cost: 1,
+          score: 0.5,
+          testPassCount: 5,
+          testFailCount: 5,
+          testErrorCount: 0,
+          assertPassCount: 0,
+          assertFailCount: 0,
+          totalLatencyMs: 100,
+          tokenUsage: { prompt: 10, completion: 20, total: 30 },
+          namedScores: { accuracy: 0.9 },
+          namedScoresCount: { accuracy: 10 },
+        },
+      ];
+
+      const mockEvalTableDTO: EvalTableDTO = {
+        table: { head: { prompts: [], vars: [] }, body: [] },
+        totalCount: 100,
+        filteredCount: 50,
+        filteredMetrics: mockFilteredMetrics,
+        config: {},
+        version: 4,
+        author: 'test',
+        id: mockEvalId,
+      };
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => mockEvalTableDTO,
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filteredMetrics).toEqual(mockFilteredMetrics);
+    });
+
+    it('should set `filteredMetrics` to null after a successful `fetchEvalData` call when no filters are active', async () => {
+      const mockEvalId = 'test-eval-id';
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          filteredMetrics: null,
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filteredMetrics).toBe(null);
+    });
+
+    it('should update `filteredMetrics` when `setFilteredMetrics` is called with a valid array of metrics, and reset to null when called with null', () => {
+      const mockMetrics: PromptMetrics[] = [
+        {
+          ...baseMetrics,
+          namedScores: { accuracy: 0.9 },
+        },
+        {
+          ...baseMetrics,
+          namedScores: { latency: 0.5 },
+        },
+      ];
+
+      act(() => {
+        useTableStore.getState().setFilteredMetrics(mockMetrics);
+      });
+
+      let state = useTableStore.getState();
+      expect(state.filteredMetrics).toEqual(mockMetrics);
+
+      act(() => {
+        useTableStore.getState().setFilteredMetrics(null);
+      });
+
+      state = useTableStore.getState();
+      expect(state.filteredMetrics).toBeNull();
+    });
+
+    it('should not immediately affect `filteredMetrics` when `setFilterMode` is called', () => {
+      const initialMetrics: PromptMetrics[] = [
+        {
+          score: 0.8,
+          cost: 1,
+          testPassCount: 1,
+          testFailCount: 0,
+          testErrorCount: 0,
+          assertPassCount: 0,
+          assertFailCount: 0,
+          totalLatencyMs: 0,
+          tokenUsage: {},
+          namedScores: {},
+          namedScoresCount: {},
+        },
+      ];
+      act(() => {
+        useTableStore.setState({ filteredMetrics: initialMetrics });
+      });
+
+      const newFilterMode = 'failures';
+      act(() => {
+        useTableStore.getState().setFilterMode(newFilterMode);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filteredMetrics).toBe(initialMetrics);
+    });
+
+    it('should not affect `filteredMetrics` when `setTable` is called', () => {
+      const initialMetrics: any[] = [{ score: 0.8, cost: 1, testPassCount: 1 }];
+      act(() => {
+        useTableStore.getState().setFilteredMetrics(initialMetrics);
+      });
+
+      const newTable: EvaluateTable = {
+        head: { prompts: [], vars: [] },
+        body: [],
+      };
+
+      act(() => {
+        useTableStore.getState().setTable(newTable);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filteredMetrics).toEqual(initialMetrics);
     });
   });
 

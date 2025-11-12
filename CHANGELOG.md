@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - feat(app): implement filter URL persistence for eval results - filters automatically sync to URL for sharing and browser navigation, with backwards compatible legacy format support (#6148)
+- feat(webui): display both total and filtered metrics simultaneously when filters are active, showing "X/Y filtered, Z total" format in evaluation results table for better visibility into filtered vs unfiltered data (#5969)
 
 ## [0.119.6] - 2025-11-12
 
