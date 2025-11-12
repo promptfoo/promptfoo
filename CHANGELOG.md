@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(webui): add enhanced layer strategy configuration UI in red team setup - users can now configure the layer strategy with autocomplete dropdown for strategy selection, support for custom file:// paths, parent-level default plugins configuration, per-step plugin targeting with multi-select, and expandable accordions for advanced step configuration
+- feat(webui): add layer strategy configuration UI in red team setup with per-step plugin targeting (#6180)
 
 ### Documentation
 

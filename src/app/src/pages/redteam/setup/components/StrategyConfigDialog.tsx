@@ -216,6 +216,8 @@ export default function StrategyConfigDialog({
       // Add plugins first, then steps to maintain order in YAML output
       if (layerPlugins.length > 0) {
         layerConfig.plugins = layerPlugins;
+      } else {
+        delete layerConfig.plugins;
       }
       layerConfig.steps = steps;
       onSave(strategy, layerConfig);
