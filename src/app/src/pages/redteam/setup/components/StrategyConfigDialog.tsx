@@ -224,7 +224,7 @@ export default function StrategyConfigDialog({
       }
 
       // For predefined strategies, check if it's in the available list
-      const isValidStrategy = availableStrategies.includes(trimmedValue);
+      const isValidStrategy = (availableStrategies as string[]).includes(trimmedValue);
 
       if (isValidStrategy) {
         setSteps((prev) => [...prev, trimmedValue]);
