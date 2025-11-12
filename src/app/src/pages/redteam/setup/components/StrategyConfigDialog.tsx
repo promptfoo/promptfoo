@@ -3,10 +3,6 @@ import React from 'react';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteIcon from '@mui/icons-material/Delete';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -19,10 +15,14 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { ALL_PLUGINS } from '@promptfoo/redteam/constants';
 import {
   ADDITIONAL_STRATEGIES,
+  AGENTIC_STRATEGIES,
+  MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
@@ -70,11 +70,14 @@ export default function StrategyConfigDialog({
   const [goals, setGoals] = React.useState<string[]>(config.goals || []);
   const [newGoal, setNewGoal] = React.useState<string>('');
 
-  // Steps can be strings or objects with { id, config: { plugins: [] } }
-  type LayerStep = string | { id: string; config?: { plugins?: string[] } };
-  const [steps, setSteps] = React.useState<LayerStep[]>(config.steps || []);
+  // Steps are just strategy IDs (strings)
+  const [steps, setSteps] = React.useState<string[]>(config.steps || []);
   const [newStep, setNewStep] = React.useState<string>('');
   const [layerPlugins, setLayerPlugins] = React.useState<string[]>(config.plugins || []);
+  // Plugin targeting: 'all' or 'specific'
+  const [pluginTargeting, setPluginTargeting] = React.useState<'all' | 'specific'>(
+    config.plugins && config.plugins.length > 0 ? 'specific' : 'all',
+  );
 
   // Filter available plugins to only show those selected in the Plugins step
   const availablePlugins = React.useMemo(() => {
@@ -83,6 +86,68 @@ export default function StrategyConfigDialog({
     }
     return ALL_PLUGINS.filter((plugin) => selectedPlugins.includes(plugin));
   }, [selectedPlugins]);
+
+  // Helper functions to check strategy types
+  const isAgenticStrategy = (strategyId: string): boolean => {
+    return (AGENTIC_STRATEGIES as readonly string[]).includes(strategyId);
+  };
+
+  const isMultiModalStrategy = (strategyId: string): boolean => {
+    return (MULTI_MODAL_STRATEGIES as readonly string[]).includes(strategyId);
+  };
+
+  // Compute available strategies based on current steps
+  const availableStrategies = React.useMemo(() => {
+    const hasAgenticStrategy = steps.some(isAgenticStrategy);
+    const hasMultiModalStrategy = steps.some(isMultiModalStrategy);
+    const lastStepIsMultiModal = steps.length > 0 && isMultiModalStrategy(steps[steps.length - 1]);
+
+    // If last step is multi-modal, no more steps can be added
+    if (lastStepIsMultiModal) {
+      return [];
+    }
+
+    return AVAILABLE_LAYER_STRATEGIES.filter((strategy) => {
+      // Cannot add duplicates
+      if (steps.includes(strategy)) {
+        return false;
+      }
+
+      // Cannot add multiple agentic strategies
+      if (hasAgenticStrategy && isAgenticStrategy(strategy)) {
+        return false;
+      }
+
+      // Cannot add multiple multi-modal strategies
+      if (hasMultiModalStrategy && isMultiModalStrategy(strategy)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [steps]);
+
+  // Get validation message for why strategies might be disabled
+  const getValidationMessage = (): string | null => {
+    const lastStepIsMultiModal = steps.length > 0 && isMultiModalStrategy(steps[steps.length - 1]);
+
+    if (lastStepIsMultiModal) {
+      return 'Multi-modal strategies must be the last step. Remove the current multi-modal step to add more strategies.';
+    }
+
+    const hasAgenticStrategy = steps.some(isAgenticStrategy);
+    const hasMultiModalStrategy = steps.some(isMultiModalStrategy);
+
+    const messages: string[] = [];
+    if (hasAgenticStrategy) {
+      messages.push('Only one agentic strategy allowed');
+    }
+    if (hasMultiModalStrategy) {
+      messages.push('Only one multi-modal strategy allowed (must be last)');
+    }
+
+    return messages.length > 0 ? messages.join('. ') : null;
+  };
 
   React.useEffect(() => {
     if (!open || !strategy) {
@@ -99,7 +164,12 @@ export default function StrategyConfigDialog({
     setGoals(
       strategy === 'simba' ? nextConfig.goals || DEFAULT_SIMBA_GOALS : nextConfig.goals || [],
     );
-    setSteps(strategy === 'layer' ? nextConfig.steps || [] : []);
+    // Normalize steps: convert objects with {id, config} to just strings
+    const rawSteps = strategy === 'layer' ? nextConfig.steps || [] : [];
+    const normalizedSteps = rawSteps.map((step: any) =>
+      typeof step === 'string' ? step : step.id,
+    );
+    setSteps(normalizedSteps);
     // Filter layerPlugins to only include plugins that are in availablePlugins
     const configPlugins = strategy === 'layer' ? nextConfig.plugins || [] : [];
     const filteredPlugins =
@@ -107,6 +177,7 @@ export default function StrategyConfigDialog({
         ? configPlugins.filter((p: string) => selectedPlugins.includes(p))
         : configPlugins;
     setLayerPlugins(filteredPlugins);
+    setPluginTargeting(filteredPlugins.length > 0 ? 'specific' : 'all');
     setNewStep('');
   }, [open, strategy, config, selectedPlugins]);
 
@@ -121,20 +192,41 @@ export default function StrategyConfigDialog({
     setGoals((prev) => prev.filter((g) => g !== goal));
   };
 
-  const getStepId = (step: LayerStep): string => {
-    return typeof step === 'string' ? step : step.id;
+  const handlePluginTargetingChange = (
+    _event: React.MouseEvent<HTMLElement>,
+    newTargeting: 'all' | 'specific' | null,
+  ) => {
+    if (newTargeting !== null) {
+      setPluginTargeting(newTargeting);
+      if (newTargeting === 'all') {
+        // Clear plugin selection when switching to "all"
+        setLayerPlugins([]);
+      }
+    }
   };
 
   const handleAddStep = (value: string | null) => {
     if (value && value.trim()) {
       const trimmedValue = value.trim();
-      // Only allow valid strategies from the list or file:// paths
-      const isValidStrategy = (AVAILABLE_LAYER_STRATEGIES as readonly string[]).includes(
-        trimmedValue,
-      );
       const isFilePath = trimmedValue.startsWith('file://');
 
-      if (isValidStrategy || isFilePath) {
+      // For file paths, allow them without additional validation
+      if (isFilePath) {
+        // Still check if last step is multi-modal
+        const lastStepIsMultiModal =
+          steps.length > 0 && isMultiModalStrategy(steps[steps.length - 1]);
+        if (lastStepIsMultiModal) {
+          return; // Don't add if last step is multi-modal
+        }
+        setSteps((prev) => [...prev, trimmedValue]);
+        setNewStep('');
+        return;
+      }
+
+      // For predefined strategies, check if it's in the available list
+      const isValidStrategy = availableStrategies.includes(trimmedValue);
+
+      if (isValidStrategy) {
         setSteps((prev) => [...prev, trimmedValue]);
         setNewStep('');
       }
@@ -145,27 +237,22 @@ export default function StrategyConfigDialog({
     setSteps((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleUpdateStepPlugins = (index: number, plugins: string[]) => {
-    setSteps((prev) =>
-      prev.map((step, i) => {
-        if (i !== index) {
-          return step;
-        }
-        const stepId = getStepId(step);
-        if (plugins.length === 0) {
-          // If no plugins, convert back to string
-          return stepId;
-        }
-        // Convert to object form with plugins
-        return { id: stepId, config: { plugins } };
-      }),
-    );
-  };
-
   const handleMoveStepUp = (index: number) => {
     if (index > 0) {
       setSteps((prev) => {
         const newSteps = [...prev];
+        const stepToMove = newSteps[index];
+
+        // Prevent moving a multi-modal strategy up (it must stay at the end)
+        if (isMultiModalStrategy(stepToMove) && index === prev.length - 1) {
+          return prev;
+        }
+
+        // Prevent moving up if the step below is multi-modal
+        if (index < prev.length - 1 && isMultiModalStrategy(prev[index + 1])) {
+          return prev;
+        }
+
         [newSteps[index - 1], newSteps[index]] = [newSteps[index], newSteps[index - 1]];
         return newSteps;
       });
@@ -175,6 +262,11 @@ export default function StrategyConfigDialog({
   const handleMoveStepDown = (index: number) => {
     setSteps((prev) => {
       if (index < prev.length - 1) {
+        // Prevent moving down if the next step is multi-modal (multi-modal must stay last)
+        if (isMultiModalStrategy(prev[index + 1])) {
+          return prev;
+        }
+
         const newSteps = [...prev];
         [newSteps[index], newSteps[index + 1]] = [newSteps[index + 1], newSteps[index]];
         return newSteps;
@@ -239,7 +331,8 @@ export default function StrategyConfigDialog({
         ...localConfig,
       };
       // Add plugins first, then steps to maintain order in YAML output
-      if (layerPlugins.length > 0) {
+      // Only include plugins if specific targeting is selected and plugins are chosen
+      if (pluginTargeting === 'specific' && layerPlugins.length > 0) {
         layerConfig.plugins = layerPlugins;
       } else {
         delete layerConfig.plugins;
@@ -792,33 +885,37 @@ export default function StrategyConfigDialog({
           </Typography>
 
           <Box>
-            <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
-              Default Plugins (Optional)
+            <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600 }}>
+              Target Plugins
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Select plugins that all steps will apply to by default. Individual steps can override
-              this.
-            </Typography>
-            <Autocomplete
-              multiple
-              options={availablePlugins}
-              value={layerPlugins}
-              onChange={(_, newValue) => setLayerPlugins(newValue)}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Default Target Plugins"
-                  placeholder="Select plugins or leave empty for all"
-                  helperText="If empty, steps will apply to all plugins unless overridden per-step"
-                />
-              )}
-              renderTags={(value, getTagProps) =>
-                value.map((option, index) => {
-                  const tagProps = getTagProps({ index });
-                  return <Chip label={option} size="small" {...tagProps} key={option} />;
-                })
-              }
-            />
+            <ToggleButtonGroup
+              value={pluginTargeting}
+              exclusive
+              onChange={handlePluginTargetingChange}
+              fullWidth
+              sx={{ mb: pluginTargeting === 'specific' ? 2 : 0 }}
+            >
+              <ToggleButton value="all">All plugins</ToggleButton>
+              <ToggleButton value="specific">Specific plugins only</ToggleButton>
+            </ToggleButtonGroup>
+
+            {pluginTargeting === 'specific' && (
+              <Autocomplete
+                multiple
+                options={availablePlugins}
+                value={layerPlugins}
+                onChange={(_, newValue) => setLayerPlugins(newValue)}
+                renderInput={(params) => (
+                  <TextField {...params} label="Select Plugins" placeholder="Choose plugins" />
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((option, index) => {
+                    const tagProps = getTagProps({ index });
+                    return <Chip label={option} size="small" {...tagProps} key={option} />;
+                  })
+                }
+              />
+            )}
           </Box>
 
           <Box>
@@ -829,122 +926,6 @@ export default function StrategyConfigDialog({
               Select strategies from the dropdown or enter custom file:// paths
             </Typography>
 
-            {steps.length > 0 && (
-              <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {steps.map((step, index) => {
-                  const stepId = getStepId(step);
-                  const stepPlugins =
-                    typeof step === 'object' && step.config?.plugins ? step.config.plugins : [];
-
-                  return (
-                    <Accordion
-                      key={`${stepId}-${index}`}
-                      sx={{
-                        border: 1,
-                        borderColor: 'divider',
-                        '&:before': { display: 'none' },
-                        boxShadow: 'none',
-                      }}
-                    >
-                      <AccordionSummary
-                        expandIcon={<ExpandMoreIcon />}
-                        sx={{
-                          '& .MuiAccordionSummary-content': {
-                            alignItems: 'center',
-                            gap: 1,
-                          },
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            flex: 1,
-                            fontFamily: 'monospace',
-                            fontSize: '0.9rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                          }}
-                        >
-                          <span>{index + 1}.</span>
-                          <span>{stepId}</span>
-                          {stepPlugins.length > 0 && (
-                            <Chip
-                              label={`${stepPlugins.length} plugin${stepPlugins.length > 1 ? 's' : ''}`}
-                              size="small"
-                              sx={{ height: 20, fontSize: '0.7rem' }}
-                            />
-                          )}
-                        </Typography>
-                        <Box
-                          sx={{ display: 'flex', gap: 0.5 }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <IconButton
-                            size="small"
-                            onClick={() => handleMoveStepUp(index)}
-                            disabled={index === 0}
-                            aria-label="move step up"
-                            sx={{ opacity: index === 0 ? 0.3 : 1 }}
-                          >
-                            <ArrowUpwardIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleMoveStepDown(index)}
-                            disabled={index === steps.length - 1}
-                            aria-label="move step down"
-                            sx={{ opacity: index === steps.length - 1 ? 0.3 : 1 }}
-                          >
-                            <ArrowDownwardIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleRemoveStep(index)}
-                            aria-label="delete step"
-                            color="error"
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      </AccordionSummary>
-                      <AccordionDetails>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-                          <Typography variant="body2" color="text.secondary">
-                            Configure which plugins this step applies to (optional)
-                          </Typography>
-                          <Autocomplete
-                            multiple
-                            options={availablePlugins}
-                            value={stepPlugins}
-                            onChange={(_, newValue) => handleUpdateStepPlugins(index, newValue)}
-                            renderInput={(params) => (
-                              <TextField
-                                {...params}
-                                label="Target Plugins"
-                                placeholder="Select plugins or leave empty for all"
-                                helperText="If empty, this step will apply to all plugins. Select specific plugins to limit scope."
-                              />
-                            )}
-                            renderTags={(value, getTagProps) =>
-                              value.map((option, index) => (
-                                <Chip
-                                  label={option}
-                                  size="small"
-                                  {...getTagProps({ index })}
-                                  key={option}
-                                />
-                              ))
-                            }
-                          />
-                        </Box>
-                      </AccordionDetails>
-                    </Accordion>
-                  );
-                })}
-              </Box>
-            )}
-
             <Autocomplete
               value={null}
               onChange={(_, newValue) => {
@@ -954,20 +935,25 @@ export default function StrategyConfigDialog({
               }}
               inputValue={newStep}
               onInputChange={(_, newInputValue) => setNewStep(newInputValue)}
-              options={newStep.startsWith('file://') ? [] : AVAILABLE_LAYER_STRATEGIES}
+              options={newStep.startsWith('file://') ? [] : availableStrategies}
               freeSolo
               clearOnBlur={false}
               selectOnFocus
               handleHomeEndKeys
+              disabled={availableStrategies.length === 0 && !newStep.startsWith('file://')}
               renderInput={(params) => (
                 <TextField
                   {...params}
                   label="Add Strategy Step"
-                  placeholder="Select a strategy or type file://path/to/custom.js"
+                  placeholder={
+                    availableStrategies.length === 0
+                      ? 'No more strategies available'
+                      : 'Select a strategy or type file://path/to/custom.js'
+                  }
                   helperText={
                     steps.length === 0
                       ? 'Add at least one strategy step (required)'
-                      : 'Only valid strategies from the list or file:// paths are accepted. Press Enter to add.'
+                      : getValidationMessage() || 'Press Enter to add'
                   }
                   error={steps.length === 0}
                   onKeyDown={(e) => {
@@ -980,6 +966,120 @@ export default function StrategyConfigDialog({
                 />
               )}
             />
+
+            {steps.length > 0 && (
+              <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {steps.map((step, index) => {
+                  const isAgentic = isAgenticStrategy(step);
+                  const isMultiModal = isMultiModalStrategy(step);
+
+                  return (
+                    <Box
+                      key={`${step}-${index}`}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        p: 1.5,
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        bgcolor: 'background.paper',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                        },
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          flex: 1,
+                          fontFamily: 'monospace',
+                          fontSize: '0.9rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                        }}
+                      >
+                        <span>{index + 1}.</span>
+                        <span>{step}</span>
+                        {isAgentic && (
+                          <Chip
+                            label="agentic"
+                            size="small"
+                            sx={{
+                              height: 20,
+                              fontSize: '0.7rem',
+                              bgcolor: 'primary.main',
+                              color: 'primary.contrastText',
+                            }}
+                          />
+                        )}
+                        {isMultiModal && (
+                          <Chip
+                            label="multi-modal"
+                            size="small"
+                            sx={{
+                              height: 20,
+                              fontSize: '0.7rem',
+                              bgcolor: 'secondary.main',
+                              color: 'secondary.contrastText',
+                            }}
+                          />
+                        )}
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleMoveStepUp(index)}
+                          disabled={
+                            index === 0 ||
+                            (isMultiModal && index === steps.length - 1) ||
+                            (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
+                          }
+                          aria-label="move step up"
+                          sx={{
+                            opacity:
+                              index === 0 ||
+                              (isMultiModal && index === steps.length - 1) ||
+                              (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
+                                ? 0.3
+                                : 1,
+                          }}
+                        >
+                          <ArrowUpwardIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleMoveStepDown(index)}
+                          disabled={
+                            index === steps.length - 1 ||
+                            (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
+                          }
+                          aria-label="move step down"
+                          sx={{
+                            opacity:
+                              index === steps.length - 1 ||
+                              (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
+                                ? 0.3
+                                : 1,
+                          }}
+                        >
+                          <ArrowDownwardIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemoveStep(index)}
+                          aria-label="delete step"
+                          color="error"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
           </Box>
         </Box>
       );

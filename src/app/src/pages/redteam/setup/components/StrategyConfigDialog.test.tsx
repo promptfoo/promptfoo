@@ -697,4 +697,102 @@ describe('StrategyConfigDialog', () => {
     expect(numIterationsInput).toBeInTheDocument();
     expect(numIterationsInput).toHaveValue(10);
   });
+
+  describe('layer strategy', () => {
+    it('should render layer strategy configuration correctly', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(screen.getByText('Target Plugins')).toBeInTheDocument();
+      expect(screen.getByText('Steps (in order)')).toBeInTheDocument();
+      expect(screen.getByLabelText('Add Strategy Step')).toBeInTheDocument();
+    });
+
+    it('should save layer strategy with all plugins by default', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['base64'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      fireEvent.click(saveButton);
+
+      expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
+    });
+
+    it('should save layer strategy with specific plugins when selected', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['base64'], plugins: ['harmful', 'pii'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          selectedPlugins={['harmful', 'pii', 'contracts']}
+        />,
+      );
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      fireEvent.click(saveButton);
+
+      expect(mockOnSave).toHaveBeenCalledWith('layer', {
+        plugins: ['harmful', 'pii'],
+        steps: ['base64'],
+      });
+    });
+
+    it('should disable save button when no steps are configured', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should normalize steps with id and config to strings', () => {
+      const config = {
+        steps: [{ id: 'base64', config: { plugins: ['harmful'] } }, 'rot13'],
+      };
+
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={config}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      // Steps should be displayed as strings
+      expect(screen.getByText(/1\./)).toBeInTheDocument();
+      expect(screen.getByText('base64')).toBeInTheDocument();
+      expect(screen.getByText(/2\./)).toBeInTheDocument();
+      expect(screen.getByText('rot13')).toBeInTheDocument();
+    });
+  });
 });
