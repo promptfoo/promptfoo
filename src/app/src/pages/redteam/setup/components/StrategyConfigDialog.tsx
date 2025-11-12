@@ -127,8 +127,15 @@ export default function StrategyConfigDialog({
 
   const handleAddStep = (value: string | null) => {
     if (value && value.trim()) {
-      setSteps((prev) => [...prev, value.trim()]);
-      setNewStep('');
+      const trimmedValue = value.trim();
+      // Only allow valid strategies from the list or file:// paths
+      const isValidStrategy = AVAILABLE_LAYER_STRATEGIES.includes(trimmedValue);
+      const isFilePath = trimmedValue.startsWith('file://');
+
+      if (isValidStrategy || isFilePath) {
+        setSteps((prev) => [...prev, trimmedValue]);
+        setNewStep('');
+      }
     }
   };
 
@@ -954,11 +961,11 @@ export default function StrategyConfigDialog({
                 <TextField
                   {...params}
                   label="Add Strategy Step"
-                  placeholder="Select or type: base64, rot13, file://custom.js, etc."
+                  placeholder="Select a strategy or type file://path/to/custom.js"
                   helperText={
                     steps.length === 0
                       ? 'Add at least one strategy step (required)'
-                      : 'Select from dropdown or type file:// paths for custom strategies. Press Enter to add.'
+                      : 'Only valid strategies from the list or file:// paths are accepted. Press Enter to add.'
                   }
                   error={steps.length === 0}
                   onKeyDown={(e) => {
