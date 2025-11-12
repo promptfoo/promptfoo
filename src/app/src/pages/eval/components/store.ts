@@ -1,5 +1,6 @@
 import { callApi } from '@app/utils/api';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { hasHumanRating } from './utils';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -34,6 +35,19 @@ function computeHighlightCount(table: EvaluateTable | null): number {
       count +
       row.outputs.filter((o) => o?.gradingResult?.comment?.trim().startsWith('!highlight')).length
     );
+  }, 0);
+}
+
+/**
+ * Counts the number of outputs that have been manually rated by users.
+ * A result is considered user-rated if it has a componentResult with assertion.type === 'human'.
+ */
+function computeUserRatedCount(table: EvaluateTable | null): number {
+  if (!table) {
+    return 0;
+  }
+  return table.body.reduce((count, row) => {
+    return count + row.outputs.filter(hasHumanRating).length;
   }, 0);
 }
 
@@ -253,6 +267,7 @@ interface TableState {
   setFilteredResultsCount: (count: number) => void;
 
   highlightedResultsCount: number;
+  userRatedResultsCount: number;
 
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
@@ -473,6 +488,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
     set((prevState) => ({
       table,
       highlightedResultsCount: computeHighlightCount(table),
+      userRatedResultsCount: computeUserRatedCount(table),
       filters: prevState.filters,
     }));
   },
@@ -485,6 +501,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
         table,
         version: resultsFile.version,
         highlightedResultsCount: computeHighlightCount(table),
+        userRatedResultsCount: computeUserRatedCount(table),
         filters: {
           ...prevState.filters,
           options: {
@@ -501,6 +518,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
         table: results.table,
         version: resultsFile.version,
         highlightedResultsCount: computeHighlightCount(results.table),
+        userRatedResultsCount: computeUserRatedCount(results.table),
         filters: {
           ...prevState.filters,
           options: {
@@ -526,6 +544,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
     set(() => ({ filteredMetrics: metrics })),
 
   highlightedResultsCount: 0,
+  userRatedResultsCount: 0,
 
   isFetching: false,
   isStreaming: false,
@@ -612,6 +631,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           filteredResultsCount: data.filteredCount,
           totalResultsCount: data.totalCount,
           highlightedResultsCount: computeHighlightCount(data.table),
+          userRatedResultsCount: computeUserRatedCount(data.table),
           config: data.config,
           version: data.version,
           author: data.author,
