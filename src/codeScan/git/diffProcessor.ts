@@ -14,7 +14,7 @@ import path from 'path';
 import binaryExtensions from 'binary-extensions';
 import { execa } from 'execa';
 import { isText } from 'istextorbinary';
-import pLimit from 'p-limit';
+import async from 'async';
 import textExtensions from 'text-extensions';
 import { annotateSingleFileDiffWithLineNumbers } from './diffAnnotator';
 import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../constants/filtering';
@@ -361,11 +361,9 @@ async function determineTextStatusForFile(repoPath: string, file: FileRecord): P
 }
 
 async function determineTextStatus(repoPath: string, files: FileRecord[]): Promise<FileRecord[]> {
-  const limit = pLimit(TEXT_DETECTION_CONCURRENCY);
-
-  const tasks = files.map((file) => limit(() => determineTextStatusForFile(repoPath, file)));
-
-  return Promise.all(tasks);
+  return async.mapLimit(files, TEXT_DETECTION_CONCURRENCY, async (file: FileRecord) =>
+    determineTextStatusForFile(repoPath, file),
+  );
 }
 
 async function generatePatchForFile(
@@ -428,34 +426,25 @@ async function generatePatches(
   compare: string,
   files: FileRecord[],
 ): Promise<FileRecord[]> {
-  const limit = pLimit(PATCH_CONCURRENCY);
-  const results: FileRecord[] = [];
-  const tasks = files.map((file) =>
-    limit(async () => {
-      if (file.skipReason) {
-        return file;
-      }
+  return async.mapLimit(files, PATCH_CONCURRENCY, async (file: FileRecord) => {
+    if (file.skipReason) {
+      return file;
+    }
 
-      const result = await generatePatchForFile(repoPath, base, compare, file.path);
+    const result = await generatePatchForFile(repoPath, base, compare, file.path);
 
-      if (!result.success) {
-        return {
-          ...file,
-          skipReason: result.skipReason,
-        };
-      }
-
+    if (!result.success) {
       return {
         ...file,
-        patch: result.patch,
+        skipReason: result.skipReason,
       };
-    }),
-  );
+    }
 
-  const settled = await Promise.all(tasks);
-  results.push(...settled);
-
-  return results;
+    return {
+      ...file,
+      patch: result.patch,
+    };
+  });
 }
 
 export async function processDiff(

@@ -4,7 +4,6 @@
  * Main entry point for MCP module - handles setup and initialization of MCP bridge.
  */
 
-import crypto from 'crypto';
 import type { ChildProcess } from 'child_process';
 import type { Socket } from 'socket.io-client';
 import logger from '../../logger';
