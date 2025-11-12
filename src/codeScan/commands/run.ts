@@ -6,7 +6,7 @@
 
 import type { Command } from 'commander';
 import telemetry from '../../telemetry';
-import { executeScan, type ScanOptions } from '../scanner';
+import type { ScanOptions } from '../scanner';
 
 /**
  * Register the run subcommand with Commander
@@ -35,6 +35,9 @@ export function runCommand(program: Command): void {
         hasGithubPr: !!cmdObj.githubPr,
         hasGuidance: !!(cmdObj.guidance || cmdObj.guidanceFile),
       });
+
+      // lazy import so we only load the scanner's dependencies when needed
+      const { executeScan } = await import("../scanner/index");
 
       await executeScan(repoPath, cmdObj);
     });
