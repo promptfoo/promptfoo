@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useToast } from '@app/hooks/useToast';
@@ -31,8 +31,8 @@ import {
   GridToolbarContainer,
   useGridApiRef,
 } from '@mui/x-data-grid';
+import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
 import { parse } from 'csv-parse/browser/esm/sync';
-import { makeInlinePolicyId, makeDefaultPolicyName } from '@promptfoo/redteam/plugins/policy/utils';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
@@ -134,7 +134,9 @@ export const CustomPoliciesSection = () => {
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
   const [isGeneratingPolicies, setIsGeneratingPolicies] = useState(false);
-  const [suggestedPolicies, setSuggestedPolicies] = useState<string[]>([]);
+  const [suggestedPolicies, setSuggestedPolicies] = useState<Array<{ name: string; text: string }>>(
+    [],
+  );
   const [hasAttemptedGeneration, setHasAttemptedGeneration] = useState(false);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -415,7 +417,7 @@ export const CustomPoliciesSection = () => {
       // Get existing policy texts to avoid duplicates (both active and suggested)
       const existingPolicies = [
         ...rows.map((row) => row.policyText),
-        ...suggestedPolicies,
+        ...suggestedPolicies.map((p) => p.text),
       ];
 
       const response = await callApi('/v1/redteam/generate-policies', {
@@ -435,7 +437,7 @@ export const CustomPoliciesSection = () => {
       }
 
       const data = await response.json();
-      const generatedPolicies: string[] = data.policies || [];
+      const generatedPolicies: Array<{ name: string; text: string }> = data.policies || [];
 
       if (generatedPolicies.length === 0) {
         setSuggestedPolicies([]);
@@ -454,26 +456,36 @@ export const CustomPoliciesSection = () => {
 
   // Auto-generate policies on component mount if purpose exists and we have few policies
   useEffect(() => {
-    if (canGeneratePolicies && shouldAutoGenerate && !hasAttemptedGeneration && suggestedPolicies.length === 0) {
+    if (
+      canGeneratePolicies &&
+      shouldAutoGenerate &&
+      !hasAttemptedGeneration &&
+      suggestedPolicies.length === 0
+    ) {
       handleGeneratePolicies();
     }
-  }, [canGeneratePolicies, shouldAutoGenerate, hasAttemptedGeneration, suggestedPolicies.length, handleGeneratePolicies]);
+  }, [
+    canGeneratePolicies,
+    shouldAutoGenerate,
+    hasAttemptedGeneration,
+    suggestedPolicies.length,
+    handleGeneratePolicies,
+  ]);
 
   const handleAddSuggestedPolicy = useCallback(
-    (policyText: string) => {
+    (policy: { name: string; text: string }) => {
       const otherPlugins = config.plugins.filter((p) =>
         typeof p === 'string' ? true : p.id !== 'policy',
       );
 
-      const currentPolicyCount = policyPlugins.length;
-      const policyId = makeInlinePolicyId(policyText);
+      const policyId = makeInlinePolicyId(policy.text);
       const newPolicy = {
         id: 'policy',
         config: {
           policy: {
             id: policyId,
-            text: policyText,
-            name: makeDefaultPolicyName(currentPolicyCount),
+            text: policy.text,
+            name: policy.name,
           },
         },
       };
@@ -489,7 +501,7 @@ export const CustomPoliciesSection = () => {
       updateConfig('plugins', [...otherPlugins, ...allPolicies]);
 
       // Remove from suggested policies
-      setSuggestedPolicies((prev) => prev.filter((p) => p !== policyText));
+      setSuggestedPolicies((prev) => prev.filter((p) => p.text !== policy.text));
 
       toast.showToast('Policy added successfully', 'success');
     },
@@ -757,7 +769,15 @@ export const CustomPoliciesSection = () => {
               )}
 
               {isGeneratingPolicies && suggestedPolicies.length === 0 && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 4 }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 2,
+                    py: 4,
+                  }}
+                >
                   <CircularProgress size={32} />
                   <Typography variant="body2" color="text.secondary" align="center">
                     Analyzing your application to generate relevant policies...
@@ -794,9 +814,23 @@ export const CustomPoliciesSection = () => {
                               flexShrink: 0,
                             }}
                           />
-                          <Typography variant="body2" color="text.primary" sx={{ flex: 1, lineHeight: 1.5 }}>
-                            {policy}
-                          </Typography>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography
+                              variant="subtitle2"
+                              fontWeight={600}
+                              color="text.primary"
+                              gutterBottom
+                            >
+                              {policy.name}
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ lineHeight: 1.5 }}
+                            >
+                              {policy.text}
+                            </Typography>
+                          </Box>
                         </Box>
                       </CardContent>
                     </Card>
