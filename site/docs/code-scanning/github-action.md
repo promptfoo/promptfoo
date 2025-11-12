@@ -141,8 +141,9 @@ jobs:
 
       - name: Run Promptfoo Code Scan
         uses: promptfoo/code-scan-action@v1
+        env:
+          PROMPTFOO_API_KEY: ${{ secrets.PROMPTFOO_API_KEY }}
         with:
-          api-key: ${{ secrets.PROMPTFOO_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           min-severity: medium # or any other severity threshold: low, medium, high, critical
           # ... other configuration options...

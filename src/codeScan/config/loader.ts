@@ -92,7 +92,6 @@ export interface ConfigMergeOptions {
   diffsOnly?: boolean;
   minSeverity?: string;
   minimumSeverity?: string;
-  apiKey?: string;
   apiHost?: string;
 }
 
@@ -119,11 +118,6 @@ export function mergeConfigWithOptions(config: Config, options: ConfigMergeOptio
     // Validate severity input (throws ZodError if invalid)
     const { validateSeverity } = require('../../types/codeScan');
     merged.minimumSeverity = validateSeverity(cliSeverity);
-  }
-
-  // Override API key if provided
-  if (options.apiKey) {
-    merged.apiKey = options.apiKey;
   }
 
   // Override API host if provided

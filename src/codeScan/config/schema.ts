@@ -18,10 +18,6 @@ export const ConfigSchema = z
       .boolean()
       .default(false)
       .describe('Only scan PR diffs, skip filesystem exploration (default: explore full repo)'),
-    apiKey: z
-      .string()
-      .optional()
-      .describe('Promptfoo API key for authentication (alternative to promptfoo auth login)'),
     apiHost: z.string().optional().describe('Scan server URL (default: https://api.promptfoo.dev)'),
     guidance: z.string().optional().describe('Custom guidance for the security scan'),
     guidanceFile: z.string().optional().describe('Path to file containing custom guidance'),

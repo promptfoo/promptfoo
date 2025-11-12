@@ -109,9 +109,6 @@ guidance: |
 # Or load guidance from a file (path relative to config file)
 # guidanceFile: ./scan-guidance.md
 
-# Optional: API key (alternative to promptfoo auth login)
-# apiKey: your-api-key-here
-
 # Optional: Promptfoo API host URL
 # apiHost: https://api.promptfoo.dev
 ```
