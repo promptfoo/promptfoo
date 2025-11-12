@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(webui): add user-rated filter to show only manually rated results - new "Show user-rated only" filter mode displays results with thumbs up/down ratings using EXISTS + json_each SQL pattern for accurate JSON querying without database migrations (#6193)
+- feat(webui): add 'user-rated' filter to show only results with manual thumbs up/down ratings (#6193)
 - feat(webui): display both total and filtered metrics simultaneously when filters are active, showing "X/Y filtered, Z total" format in evaluation results table for better visibility into filtered vs unfiltered data (#5969)
 
 ## [0.119.6] - 2025-11-12

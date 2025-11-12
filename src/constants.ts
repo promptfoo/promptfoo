@@ -55,6 +55,7 @@ export const FILE_METADATA_KEY = '_promptfooFileMetadata';
  * Used to distinguish human ratings from automated assertions.
  */
 export const HUMAN_ASSERTION_TYPE = 'human' as const;
+export type HumanAssertionType = typeof HUMAN_ASSERTION_TYPE;
 
 export const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 export const EVENTS_ENDPOINT = 'https://a.promptfoo.app';

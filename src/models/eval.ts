@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { DEFAULT_QUERY_LIMIT } from '../constants';
+import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
 import {
@@ -555,7 +555,7 @@ export default class Eval {
         EXISTS (
           SELECT 1
           FROM json_each(grading_result, '$.componentResults')
-          WHERE json_extract(value, '$.assertion.type') = 'human'
+          WHERE json_extract(value, '$.assertion.type') = '${HUMAN_ASSERTION_TYPE}'
         )
       `);
     }

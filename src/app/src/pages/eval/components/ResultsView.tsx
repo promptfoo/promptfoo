@@ -854,6 +854,8 @@ export default function ResultsView({
                 size="small"
                 label={`${userRatedResultsCount} user-rated`}
                 title={`${userRatedResultsCount} output${userRatedResultsCount !== 1 ? 's' : ''} with user ratings`}
+                clickable
+                onClick={() => setFilterMode('user-rated')}
                 sx={{
                   backgroundColor: 'rgba(156, 39, 176, 0.08)',
                   color: 'rgba(156, 39, 176, 1)',
