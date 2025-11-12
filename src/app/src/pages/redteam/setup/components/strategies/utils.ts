@@ -9,7 +9,29 @@ export function getStrategyId(strategy: RedteamStrategy): string {
 }
 
 // Strategies that require configuration before they can be used
-const STRATEGIES_REQUIRING_CONFIG = ['layer'];
+export const STRATEGIES_REQUIRING_CONFIG = ['layer', 'custom'];
+
+/**
+ * Checks if layer strategy has valid configuration
+ * @param strategy The strategy object
+ * @returns true if layer strategy has steps configured
+ */
+function isLayerStrategyConfigValid(strategy: RedteamStrategy): boolean {
+  const config = typeof strategy === 'object' ? strategy.config : undefined;
+  const steps = config?.steps;
+  return Array.isArray(steps) && steps.length > 0;
+}
+
+/**
+ * Checks if custom strategy has valid configuration
+ * @param strategy The strategy object
+ * @returns true if custom strategy has strategyText configured
+ */
+function isCustomStrategyConfigValid(strategy: RedteamStrategy): boolean {
+  const config = typeof strategy === 'object' ? strategy.config : undefined;
+  const strategyText = config?.strategyText;
+  return typeof strategyText === 'string' && strategyText.trim().length > 0;
+}
 
 /**
  * Checks if a strategy is properly configured
@@ -22,11 +44,12 @@ export function isStrategyConfigured(strategyId: string, strategy: RedteamStrate
     return true;
   }
 
-  // For layer strategy, check if steps array exists and has at least one step
   if (strategyId === 'layer') {
-    const config = typeof strategy === 'object' ? strategy.config : undefined;
-    const steps = config?.steps;
-    return Array.isArray(steps) && steps.length > 0;
+    return isLayerStrategyConfigValid(strategy);
+  }
+
+  if (strategyId === 'custom') {
+    return isCustomStrategyConfigValid(strategy);
   }
 
   return true;

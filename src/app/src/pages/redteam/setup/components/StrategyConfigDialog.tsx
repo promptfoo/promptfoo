@@ -18,7 +18,6 @@ import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
-import { ALL_PLUGINS } from '@promptfoo/redteam/constants';
 import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,
@@ -79,13 +78,7 @@ export default function StrategyConfigDialog({
     config.plugins && config.plugins.length > 0 ? 'specific' : 'all',
   );
 
-  // Filter available plugins to only show those selected in the Plugins step
-  const availablePlugins = React.useMemo(() => {
-    if (selectedPlugins.length === 0) {
-      return ALL_PLUGINS;
-    }
-    return ALL_PLUGINS.filter((plugin) => selectedPlugins.includes(plugin));
-  }, [selectedPlugins]);
+  const availablePlugins = selectedPlugins;
 
   // Helper functions to check strategy types
   const isAgenticStrategy = (strategyId: string): boolean => {

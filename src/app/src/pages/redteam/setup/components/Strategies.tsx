@@ -33,7 +33,7 @@ import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
-import { getStrategyId } from './strategies/utils';
+import { getStrategyId, STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 import StrategyConfigDialog from './StrategyConfigDialog';
 
 // ------------------------------------------------------------------
@@ -53,9 +53,6 @@ type PresetWithName = StrategyPreset | CustomPreset;
 
 // Define recommended strategies based on DEFAULT_STRATEGIES for consistency
 const RECOMMENDED_STRATEGIES = DEFAULT_STRATEGIES;
-
-// Strategies that require configuration before they can be used
-const STRATEGIES_REQUIRING_CONFIG = ['layer'];
 
 // UI-friendly description overrides
 const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
