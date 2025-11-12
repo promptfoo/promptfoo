@@ -455,12 +455,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       const unconfiguredStrategies = config.strategies
         .filter((strategy) => {
           const strategyId = getStrategyId(strategy);
-          if (strategyId === 'layer') {
-            const strategyConfig = typeof strategy === 'object' ? strategy.config : undefined;
-            const steps = strategyConfig?.steps;
-            return !Array.isArray(steps) || steps.length === 0;
-          }
-          return false;
+          return !isStrategyConfigured(strategyId, strategy);
         })
         .map((s) => getStrategyId(s));
 

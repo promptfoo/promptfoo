@@ -39,7 +39,10 @@ const DEFAULT_SIMBA_GOALS = [
   'Manipulate order status or pricing through injection attacks',
 ];
 
-// Transformation strategies that can be used as layer steps (exclude layer itself to prevent recursion)
+// ADDITIONAL_STRATEGIES contains transformation strategies (base64, jailbreak, etc.) that modify test cases.
+// We use ADDITIONAL_STRATEGIES (not ALL_STRATEGIES) because ALL_STRATEGIES includes preset strategies
+// like 'default', 'multilingual', 'simba' which aren't meant to be composed as layer steps.
+// We exclude 'layer' itself to prevent infinite recursion.
 const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
 
 // Type for layer strategy steps (can be strings or objects with nested config)
