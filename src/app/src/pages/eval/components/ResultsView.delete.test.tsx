@@ -26,7 +26,7 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('./store', async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = (await importOriginal()) as typeof import('./store');
   const mockStoreWithSubscribe = Object.assign(() => mockUseTableStore(), {
     subscribe: vi.fn(() => vi.fn()),
     getState: vi.fn(() => mockUseTableStore()),
