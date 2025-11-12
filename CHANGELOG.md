@@ -6,11 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [Unreleased]
-
 ### Added
 
 - feat(app): implement filter URL persistence for eval results - filters automatically sync to URL for sharing and browser navigation, with backwards compatible legacy format support (#6148)
+
+## [0.119.6] - 2025-11-12
 
 ### Documentation
 
@@ -22,8 +22,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(webui): filter hidden metadata keys from metadata filter dropdown - ensures consistent filtering of 'citations' and '\_promptfooFileMetadata' keys across MetadataPanel, EvalOutputPromptDialog, and metadata filter dropdown (#6177)
+- fix(cli): format object and array variables with pretty-printed JSON in console table and HTML outputs for improved readability (#6175)
+- fix(cli): only show error counter when >0
 - fix(redteam): respect redteam.provider configuration for local grading - fixes issue where configuring a local provider (e.g., ollama:llama3.2) still sent grading requests to remote API instead of using the configured provider (#5959)
-
+- fix: Reverts #6142 (#6189)
 ## [0.119.5] - 2025-11-10
 
 ### Added
