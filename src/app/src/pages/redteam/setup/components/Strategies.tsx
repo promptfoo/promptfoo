@@ -292,9 +292,25 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         }
 
         updateConfig('strategies', [...config.strategies, newStrategy]);
+
+        // Auto-open config dialog for strategies that require configuration
+        if (STRATEGIES_REQUIRING_CONFIG.includes(strategyId)) {
+          setConfigDialog({
+            isOpen: true,
+            selectedStrategy: strategyId,
+          });
+        }
       }
     },
-    [config.strategies, recordEvent, updateConfig, isStatefulValue, isStrategyDisabled, toast],
+    [
+      config.strategies,
+      recordEvent,
+      updateConfig,
+      isStatefulValue,
+      isStrategyDisabled,
+      toast,
+      setConfigDialog,
+    ],
   );
 
   const handleSelectNoneInSection = useCallback(
