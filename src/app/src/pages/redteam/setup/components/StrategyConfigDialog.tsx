@@ -129,7 +129,9 @@ export default function StrategyConfigDialog({
     if (value && value.trim()) {
       const trimmedValue = value.trim();
       // Only allow valid strategies from the list or file:// paths
-      const isValidStrategy = AVAILABLE_LAYER_STRATEGIES.includes(trimmedValue);
+      const isValidStrategy = (AVAILABLE_LAYER_STRATEGIES as readonly string[]).includes(
+        trimmedValue,
+      );
       const isFilePath = trimmedValue.startsWith('file://');
 
       if (isValidStrategy || isFilePath) {
