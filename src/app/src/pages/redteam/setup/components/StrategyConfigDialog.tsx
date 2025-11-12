@@ -157,20 +157,27 @@ export default function StrategyConfigDialog({
     setGoals(
       strategy === 'simba' ? nextConfig.goals || DEFAULT_SIMBA_GOALS : nextConfig.goals || [],
     );
-    // Normalize steps: convert objects with {id, config} to just strings
-    const rawSteps = strategy === 'layer' ? nextConfig.steps || [] : [];
-    const normalizedSteps = rawSteps.map((step: any) =>
-      typeof step === 'string' ? step : step.id,
-    );
-    setSteps(normalizedSteps);
-    // Filter layerPlugins to only include plugins that are in availablePlugins
-    const configPlugins = strategy === 'layer' ? nextConfig.plugins || [] : [];
-    const filteredPlugins =
-      selectedPlugins.length > 0
-        ? configPlugins.filter((p: string) => selectedPlugins.includes(p))
-        : configPlugins;
-    setLayerPlugins(filteredPlugins);
-    setPluginTargeting(filteredPlugins.length > 0 ? 'specific' : 'all');
+
+    if (strategy === 'layer') {
+      // Normalize steps: convert objects with {id, config} to just strings
+      const rawSteps = nextConfig.steps || [];
+      const normalizedSteps = rawSteps.map((step: any) =>
+        typeof step === 'string' ? step : step.id,
+      );
+      setSteps(normalizedSteps);
+
+      // Filter layerPlugins to only include plugins that are in availablePlugins
+      const configPlugins = nextConfig.plugins || [];
+      const filteredPlugins =
+        selectedPlugins.length > 0
+          ? configPlugins.filter((p: string) => selectedPlugins.includes(p))
+          : configPlugins;
+      setLayerPlugins(filteredPlugins);
+      setPluginTargeting(filteredPlugins.length > 0 ? 'specific' : 'all');
+    } else {
+      setSteps([]);
+      setLayerPlugins([]);
+    }
     setNewStep('');
   }, [open, strategy, config, selectedPlugins]);
 
