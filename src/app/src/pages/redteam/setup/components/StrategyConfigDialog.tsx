@@ -49,6 +49,7 @@ interface StrategyConfigDialogProps {
   onClose: () => void;
   onSave: (strategy: string, config: Record<string, any>) => void;
   strategyData: StrategyCardData | null;
+  selectedPlugins?: string[];
 }
 
 export default function StrategyConfigDialog({
@@ -58,6 +59,7 @@ export default function StrategyConfigDialog({
   onClose,
   onSave,
   strategyData,
+  selectedPlugins = [],
 }: StrategyConfigDialogProps) {
   const [localConfig, setLocalConfig] = React.useState<Record<string, any>>(config || {});
   const [enabled, setEnabled] = React.useState<boolean>(
@@ -73,6 +75,14 @@ export default function StrategyConfigDialog({
   const [steps, setSteps] = React.useState<LayerStep[]>(config.steps || []);
   const [newStep, setNewStep] = React.useState<string>('');
   const [layerPlugins, setLayerPlugins] = React.useState<string[]>(config.plugins || []);
+
+  // Filter available plugins to only show those selected in the Plugins step
+  const availablePlugins = React.useMemo(() => {
+    if (selectedPlugins.length === 0) {
+      return ALL_PLUGINS;
+    }
+    return ALL_PLUGINS.filter((plugin) => selectedPlugins.includes(plugin));
+  }, [selectedPlugins]);
 
   React.useEffect(() => {
     if (!open || !strategy) {
@@ -776,7 +786,7 @@ export default function StrategyConfigDialog({
             </Typography>
             <Autocomplete
               multiple
-              options={ALL_PLUGINS}
+              options={availablePlugins}
               value={layerPlugins}
               onChange={(_, newValue) => setLayerPlugins(newValue)}
               renderInput={(params) => (
@@ -889,7 +899,7 @@ export default function StrategyConfigDialog({
                           </Typography>
                           <Autocomplete
                             multiple
-                            options={ALL_PLUGINS}
+                            options={availablePlugins}
                             value={stepPlugins}
                             onChange={(_, newValue) => handleUpdateStepPlugins(index, newValue)}
                             renderInput={(params) => (
