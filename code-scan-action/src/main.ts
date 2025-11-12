@@ -161,37 +161,15 @@ async function run(): Promise<void> {
       core.info('✅ Mock scan completed successfully');
     } else {
       // Run real scan in production
-      // TODO: Remove build tools installation when switching to npm package
-      // Install build tools needed for native dependencies (better-sqlite3)
-      // when installing from git source. Not needed when installing from npm
-      // because npm packages include prebuilt binaries.
-      core.info('🔧 Installing build tools for native dependencies...');
-      try {
-        await exec.exec('sudo', ['apt-get', 'update', '-qq']);
-        await exec.exec('sudo', ['apt-get', 'install', '-y', '-qq', 'python3', 'make', 'g++', 'git']);
-        core.info('✅ Build tools installed');
-      } catch (error) {
-        core.warning(
-          `Failed to install build tools: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        core.warning('Installation may fail if native dependencies need compilation');
-      }
-
       core.info('📦 Installing promptfoo...');
       // TODO: Switch to real promptfoo npm package (not git url)
 
-      // Debug: Check environment
-      await exec.exec('which', ['sh']);
-      await exec.exec('which', ['git']);
-
-      // Set npm to use sh explicitly and increase verbosity for debugging
-      await exec.exec('npm', ['config', 'set', 'script-shell', '/bin/sh']);
-
+      // Use --ignore-scripts to skip build and rely on prebuilt binaries
       await exec.exec('npm', [
         'install',
         '-g',
         'git+https://github.com/promptfoo/promptfoo.git#dane/code_scan',
-        '--verbose',
+        '--ignore-scripts',
       ]);
       core.info('✅ Promptfoo installed successfully');
 
