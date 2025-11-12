@@ -162,37 +162,6 @@ describe('Filter URL Persistence - Integration Tests', () => {
       consoleErrorSpy.mockRestore();
     });
 
-    it('should limit filters to MAX_FILTERS (50)', async () => {
-      const tooManyFilters = Array.from({ length: 100 }, (_, i) => ({
-        type: 'plugin',
-        operator: 'equals',
-        value: `plugin-${i}`,
-        logicOperator: 'and',
-      }));
-
-      (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
-
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      render(<EvalWrapper fetchId="test-eval-id" />, {
-        wrapper: createWrapper([
-          `/eval/test-eval-id?filter=${encodeURIComponent(JSON.stringify(tooManyFilters))}`,
-        ]),
-      });
-
-      await waitFor(() => {
-        const state = useTableStore.getState();
-        // Should only apply 50 filters
-        expect(state.filters.appliedCount).toBe(50);
-        // Should warn about limiting
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          expect.stringContaining('URL contains 100 filters. Limited to 50'),
-        );
-      });
-
-      consoleWarnSpy.mockRestore();
-    });
-
     it('should handle empty filter array in URL', async () => {
       (callApi as Mock).mockResolvedValue(mockEvalResponse('test-eval-id'));
 

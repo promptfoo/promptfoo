@@ -58,6 +58,7 @@ describe('FrameworkPluginResult', () => {
         type: 'plugin',
         operator: 'equals',
         value: pluginId,
+        logicOperator: 'or',
       },
     ];
     const expectedFilterParam = encodeURIComponent(JSON.stringify(expectedFilterObject));
@@ -86,6 +87,7 @@ describe('FrameworkPluginResult', () => {
         type: 'plugin',
         operator: 'equals',
         value: pluginId,
+        logicOperator: 'or',
       },
     ];
     const expectedFilterParam = encodeURIComponent(JSON.stringify(expectedFilterObject));
@@ -129,6 +131,7 @@ describe('FrameworkPluginResult', () => {
         type: 'plugin',
         operator: 'equals',
         value: pluginId,
+        logicOperator: 'or',
       },
     ];
     const expectedFilterParam = encodeURIComponent(JSON.stringify(expectedFilterObject));

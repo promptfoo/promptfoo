@@ -661,6 +661,7 @@ describe('TestSuites Component Navigation with Long Plugin ID', () => {
             type: 'plugin',
             operator: 'equals',
             value: longPluginId,
+            logicOperator: 'or',
           },
         ]),
       )}&mode=failures`,

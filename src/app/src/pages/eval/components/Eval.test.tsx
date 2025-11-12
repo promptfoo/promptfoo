@@ -78,12 +78,15 @@ const baseMockTableStore = {
   setFilterMode: vi.fn(),
   resetFilterMode: vi.fn(),
   addFilter: vi.fn(),
+  setIsApplyingFiltersFromUrl: vi.fn(),
 };
 
 // Mock getState for the store
 (useTableStore as any).getState = vi.fn(() => ({
   filters: { values: {} },
   filterMode: undefined,
+  isApplyingFiltersFromUrl: false,
+  evalId: '',
 }));
 
 describe('Eval Page Metadata', () => {
