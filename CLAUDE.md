@@ -318,9 +318,9 @@ All user-facing changes must be documented in `CHANGELOG.md`. The changelog is e
 
 ### When to Update
 
-**IMPORTANT: ALL merged PRs must be documented in the changelog.**
+**IMPORTANT: ALL PRs that modify user-facing code must be documented in the changelog.**
 
-Update the changelog for EVERY pull request, including:
+Update the changelog for pull requests that change:
 
 - New features or functionality
 - Bug fixes
@@ -335,7 +335,17 @@ Update the changelog for EVERY pull request, including:
 - Build configuration changes
 - Code style/formatting changes
 - CI/CD changes
-- Documentation updates
+
+### Automatic Exemptions
+
+PRs that **only** modify these non-user-facing files are **automatically exempt** from changelog requirements:
+
+- Documentation website (`site/` directory)
+- Root markdown files (README.md, CONTRIBUTING.md, SECURITY.md, CLAUDE.md, AGENTS.md, LICENSE)
+- Development environment configs (.vscode/, .cursor/, .devcontainer/)
+- Configuration files (.gitignore, .prettierrc, .rubocop.yml, .ruff.toml, .coderabbit.yaml, etc.)
+
+If your PR modifies **any** code outside these directories, a changelog entry is required.
 
 ### Bypass Labels
 
