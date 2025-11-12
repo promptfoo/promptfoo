@@ -9,7 +9,8 @@ import * as exec from '@actions/exec';
 import * as github from '@actions/github';
 import * as fs from 'fs';
 import { generateConfigFile } from './config';
-import { getGitHubContext } from './github';
+import { getGitHubContext, getPRFiles } from './github';
+import { detectSetupPR, handleSetupPR } from './setupPr';
 import {
   type Comment,
   type ScanResponse,
@@ -53,6 +54,29 @@ async function run(): Promise<void> {
     // Validate we're in a PR context
     const context = getGitHubContext();
     core.info(`📋 Scanning PR #${context.number} in ${context.owner}/${context.repo}`);
+
+    // Check if this is a setup PR (workflow file addition) - detect early to skip CLI installation
+    core.info('🔎 Checking if this is a setup PR...');
+    const files = await getPRFiles(githubToken, context);
+
+    if (detectSetupPR(files)) {
+      core.info('🎉 Setup PR detected - skipping scan and posting welcome message');
+
+      // Get OIDC token if available for branded comment
+      let oidcToken: string | undefined;
+      try {
+        oidcToken = await core.getIDToken('promptfoo');
+        core.info('🔐 Got OIDC token for branded comment');
+      } catch (error) {
+        core.info('ℹ️ No OIDC token - will post as GitHub Actions bot');
+      }
+
+      // Handle setup PR and exit
+      await handleSetupPR(githubToken, apiHost, oidcToken);
+      return;
+    }
+
+    core.info('✅ Not a setup PR - proceeding with security scan');
 
     // Get OIDC token from GitHub to prove workflow identity
     try {
@@ -142,6 +166,22 @@ async function run(): Promise<void> {
       core.info('✅ Mock scan completed successfully');
     } else {
       // Run real scan in production
+      // TODO: Remove build tools installation when switching to npm package
+      // Install build tools needed for native dependencies (better-sqlite3)
+      // when installing from git source. Not needed when installing from npm
+      // because npm packages include prebuilt binaries.
+      core.info('🔧 Installing build tools for native dependencies...');
+      try {
+        await exec.exec('sudo', ['apt-get', 'update', '-qq']);
+        await exec.exec('sudo', ['apt-get', 'install', '-y', '-qq', 'python3', 'make', 'g++']);
+        core.info('✅ Build tools installed');
+      } catch (error) {
+        core.warning(
+          `Failed to install build tools: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        core.warning('Installation may fail if native dependencies need compilation');
+      }
+
       core.info('📦 Installing promptfoo...');
       // TODO: Switch to real promptfoo npm package (not git url)
       await exec.exec('npm', [

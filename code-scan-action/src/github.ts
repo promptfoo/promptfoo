@@ -7,7 +7,12 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { Octokit } from '@octokit/rest';
-import { type Comment, type PullRequestContext } from '../../src/types/codeScan';
+import {
+  type Comment,
+  type FileChange,
+  FileChangeStatus,
+  type PullRequestContext,
+} from '../../src/types/codeScan';
 
 /**
  * Get GitHub context from the current workflow
@@ -26,6 +31,30 @@ export function getGitHubContext(): PullRequestContext {
     number: context.payload.pull_request.number,
     sha: context.payload.pull_request.head.sha,
   };
+}
+
+/**
+ * Get list of files changed in the PR
+ * @param token GitHub token
+ * @param context GitHub PR context
+ * @returns Array of file changes
+ */
+export async function getPRFiles(
+  token: string,
+  context: PullRequestContext,
+): Promise<FileChange[]> {
+  const octokit = new Octokit({ auth: token });
+
+  const { data: files } = await octokit.pulls.listFiles({
+    owner: context.owner,
+    repo: context.repo,
+    pull_number: context.number,
+  });
+
+  return files.map((file) => ({
+    path: file.filename,
+    status: file.status as FileChangeStatus,
+  }));
 }
 
 /**

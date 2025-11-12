@@ -12,6 +12,13 @@ export enum CodeScanSeverity {
   NONE = 'none',
 }
 
+export enum FileChangeStatus {
+  ADDED = 'added',
+  MODIFIED = 'modified',
+  REMOVED = 'removed',
+  RENAMED = 'renamed',
+}
+
 // ============================================================================
 // Severity Utility Types
 // ============================================================================
@@ -281,6 +288,11 @@ export interface ParsedGitHubPR {
   owner: string;
   repo: string;
   number: number;
+}
+
+export interface FileChange {
+  path: string;
+  status: FileChangeStatus;
 }
 
 // ============================================================================
