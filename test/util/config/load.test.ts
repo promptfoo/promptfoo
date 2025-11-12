@@ -288,6 +288,7 @@ describe('combineConfigs', () => {
       commandLineOptions: { verbose: true },
       metadata: {},
       sharing: false,
+      tracing: undefined,
     });
 
     const config2Result = await combineConfigs(['config2.json']);
@@ -322,7 +323,8 @@ describe('combineConfigs', () => {
       outputPath: [],
       commandLineOptions: { verbose: false },
       metadata: {},
-      sharing: false,
+      sharing: undefined,
+      tracing: undefined,
     });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
@@ -366,6 +368,7 @@ describe('combineConfigs', () => {
       commandLineOptions: { verbose: false },
       metadata: {},
       sharing: false,
+      tracing: undefined,
     });
   });
 
