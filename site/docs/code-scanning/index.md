@@ -80,4 +80,3 @@ Scans run on Promptfoo Cloud by default. For organizations that need to run scan
 - [GitHub Action](./github-action.md)
 - [CLI Command](./cli.md)
 - [Promptfoo Scanner GitHub App](https://github.com/apps/promptfoo-scanner)
-- [Promptfoo Code Scan Action](https://github.com/promptfoo/code-scan-action)

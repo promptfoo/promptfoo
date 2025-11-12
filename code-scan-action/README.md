@@ -23,6 +23,10 @@ Once merged, the scanner will automatically run on future pull requests. Authent
 
 **[Read the full documentation →](https://promptfoo.dev/docs/code-scanning/github-action)** for configuration options, manual installation, and more.
 
+## Contributing
+
+Please note that this a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/promptfoo/code-scan-action) in the main promptfoo repository.
+
 ## License
 
 MIT
