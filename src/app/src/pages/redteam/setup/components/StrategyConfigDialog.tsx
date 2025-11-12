@@ -112,11 +112,19 @@ export default function StrategyConfigDialog({
       return [];
     }
 
-    const stepIds = steps.map(getStepId);
+    const stepIds = new Set(steps.map(getStepId));
+
+    // Create a Map for O(1) lookup instead of O(n) find
+    const strategyConfigMap = new Map(
+      allStrategies.map((s) => {
+        const id = typeof s === 'string' ? s : s.id;
+        return [id, s];
+      }),
+    );
 
     return AVAILABLE_LAYER_STRATEGIES.filter((strategy) => {
       // Cannot add duplicates
-      if (stepIds.includes(strategy)) {
+      if (stepIds.has(strategy)) {
         return false;
       }
 
@@ -132,10 +140,7 @@ export default function StrategyConfigDialog({
 
       // Only include strategies that don't require config, or if they do, they must be configured
       if (STRATEGIES_REQUIRING_CONFIG.includes(strategy)) {
-        const strategyConfig = allStrategies.find((s) => {
-          const id = typeof s === 'string' ? s : s.id;
-          return id === strategy;
-        });
+        const strategyConfig = strategyConfigMap.get(strategy);
 
         if (!strategyConfig) {
           return false; // Not configured, don't show
