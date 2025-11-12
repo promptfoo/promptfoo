@@ -3,14 +3,14 @@
  */
 
 import { detectSetupPR, SETUP_WORKFLOW_PATH } from './setupPr';
-import type { FileChange } from '../../src/types/codeScan';
+import { FileChangeStatus, type FileChange } from '../../src/types/codeScan';
 
 describe('detectSetupPR', () => {
   it('should return true for single workflow file addition', () => {
     const files: FileChange[] = [
       {
         path: SETUP_WORKFLOW_PATH,
-        status: 'added',
+        status: FileChangeStatus.ADDED,
       },
     ];
 
@@ -21,7 +21,7 @@ describe('detectSetupPR', () => {
     const files: FileChange[] = [
       {
         path: SETUP_WORKFLOW_PATH,
-        status: 'modified',
+        status: FileChangeStatus.MODIFIED,
       },
     ];
 
@@ -32,7 +32,7 @@ describe('detectSetupPR', () => {
     const files: FileChange[] = [
       {
         path: SETUP_WORKFLOW_PATH,
-        status: 'removed',
+        status: FileChangeStatus.REMOVED,
       },
     ];
 
@@ -43,7 +43,7 @@ describe('detectSetupPR', () => {
     const files: FileChange[] = [
       {
         path: '.github/workflows/other-workflow.yml',
-        status: 'added',
+        status: FileChangeStatus.ADDED,
       },
     ];
 
@@ -54,11 +54,11 @@ describe('detectSetupPR', () => {
     const files: FileChange[] = [
       {
         path: SETUP_WORKFLOW_PATH,
-        status: 'added',
+        status: FileChangeStatus.ADDED,
       },
       {
         path: 'README.md',
-        status: 'modified',
+        status: FileChangeStatus.MODIFIED,
       },
     ];
 
@@ -75,7 +75,7 @@ describe('detectSetupPR', () => {
     const files: FileChange[] = [
       {
         path: SETUP_WORKFLOW_PATH,
-        status: 'renamed',
+        status: FileChangeStatus.RENAMED,
       },
     ];
 
