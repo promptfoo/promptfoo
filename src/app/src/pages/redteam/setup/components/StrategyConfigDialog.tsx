@@ -945,7 +945,7 @@ export default function StrategyConfigDialog({
               }}
               inputValue={newStep}
               onInputChange={(_, newInputValue) => setNewStep(newInputValue)}
-              options={AVAILABLE_LAYER_STRATEGIES}
+              options={newStep.startsWith('file://') ? [] : AVAILABLE_LAYER_STRATEGIES}
               freeSolo
               clearOnBlur={false}
               selectOnFocus
