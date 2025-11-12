@@ -37,7 +37,7 @@ export function runCommand(program: Command): void {
       });
 
       // lazy import so we only load the scanner's dependencies when needed
-      const { executeScan } = await import("../scanner/index");
+      const { executeScan } = await import('../scanner/index');
 
       await executeScan(repoPath, cmdObj);
     });
