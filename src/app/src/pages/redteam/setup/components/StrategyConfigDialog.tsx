@@ -937,7 +937,7 @@ export default function StrategyConfigDialog({
             )}
 
             <Autocomplete
-              value={newStep}
+              value={null}
               onChange={(_, newValue) => {
                 if (newValue) {
                   handleAddStep(newValue);
@@ -947,6 +947,9 @@ export default function StrategyConfigDialog({
               onInputChange={(_, newInputValue) => setNewStep(newInputValue)}
               options={AVAILABLE_LAYER_STRATEGIES}
               freeSolo
+              clearOnBlur={false}
+              selectOnFocus
+              handleHomeEndKeys
               renderInput={(params) => (
                 <TextField
                   {...params}
@@ -961,6 +964,7 @@ export default function StrategyConfigDialog({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && newStep.trim()) {
                       e.preventDefault();
+                      e.stopPropagation();
                       handleAddStep(newStep);
                     }
                   }}
