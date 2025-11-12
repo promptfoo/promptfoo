@@ -27,6 +27,7 @@ import {
 } from '@promptfoo/redteam/constants/strategies';
 
 import type { StrategyCardData } from './strategies/types';
+import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 
 const DEFAULT_SIMBA_GOALS = [
   'Generate harmful content',
@@ -49,6 +50,7 @@ interface StrategyConfigDialogProps {
   onSave: (strategy: string, config: Record<string, any>) => void;
   strategyData: StrategyCardData | null;
   selectedPlugins?: string[];
+  allStrategies?: Array<string | { id: string; config?: Record<string, any> }>;
 }
 
 export default function StrategyConfigDialog({
@@ -59,6 +61,7 @@ export default function StrategyConfigDialog({
   onSave,
   strategyData,
   selectedPlugins = [],
+  allStrategies = [],
 }: StrategyConfigDialogProps) {
   const [localConfig, setLocalConfig] = React.useState<Record<string, any>>(config || {});
   const [enabled, setEnabled] = React.useState<boolean>(
@@ -116,9 +119,28 @@ export default function StrategyConfigDialog({
         return false;
       }
 
+      // Only include strategies that don't require config, or if they do, they must be configured
+      if (STRATEGIES_REQUIRING_CONFIG.includes(strategy)) {
+        const strategyConfig = allStrategies.find((s) => {
+          const id = typeof s === 'string' ? s : s.id;
+          return id === strategy;
+        });
+
+        if (!strategyConfig) {
+          return false; // Not configured, don't show
+        }
+
+        const config = typeof strategyConfig === 'object' ? strategyConfig.config : undefined;
+
+        if (strategy === 'custom') {
+          // Custom strategy needs strategyText
+          return !!(config?.strategyText && config.strategyText.trim());
+        }
+      }
+
       return true;
     });
-  }, [steps]);
+  }, [steps, allStrategies]);
 
   // Get validation message for why strategies might be disabled
   const getValidationMessage = (): string | null => {

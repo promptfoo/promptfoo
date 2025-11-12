@@ -730,6 +730,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             availableStrategies.find((s) => s.id === configDialog.selectedStrategy) ?? null
           }
           selectedPlugins={config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) ?? []}
+          allStrategies={config.strategies}
         />
       </Box>
     </PageWrapper>
