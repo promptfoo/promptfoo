@@ -33,7 +33,11 @@ import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
-import { getStrategyId, isStrategyConfigured } from './strategies/utils';
+import {
+  getStrategyId,
+  isStrategyConfigured,
+  STRATEGIES_REQUIRING_CONFIG,
+} from './strategies/utils';
 import StrategyConfigDialog from './StrategyConfigDialog';
 
 // ------------------------------------------------------------------
