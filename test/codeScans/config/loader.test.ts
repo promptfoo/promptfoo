@@ -44,7 +44,7 @@ describe('Configuration Loader', () => {
       const config = loadConfig(configPath);
 
       expect(config).toEqual({
-        minimumSeverity: CodeScanSeverity.HIGH,
+        minimumSeverity: CodeScanSeverity.MEDIUM,
         diffsOnly: false,
       });
     });
@@ -191,7 +191,7 @@ describe('Configuration Loader', () => {
       const config = loadConfigOrDefault();
 
       expect(config).toEqual({
-        minimumSeverity: CodeScanSeverity.HIGH,
+        minimumSeverity: CodeScanSeverity.MEDIUM,
         diffsOnly: false,
       });
     });
@@ -212,7 +212,7 @@ describe('Configuration Loader', () => {
       const config = loadConfigOrDefault('');
 
       expect(config).toEqual({
-        minimumSeverity: CodeScanSeverity.HIGH,
+        minimumSeverity: CodeScanSeverity.MEDIUM,
         diffsOnly: false,
       });
     });

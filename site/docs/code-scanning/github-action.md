@@ -41,8 +41,8 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 | Input              | Description                                                      | Default                     |
 | ------------------ | ---------------------------------------------------------------- | --------------------------- |
 | `api-host`         | Promptfoo API host URL                                           | `https://api.promptfoo.dev` |
-| `min-severity`     | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `high`                      |
-| `minimum-severity` | Alias for `min-severity`                                         | `high`                      |
+| `min-severity`     | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `medium`                    |
+| `minimum-severity` | Alias for `min-severity`                                         | `medium`                    |
 | `config-path`      | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |
 | `guidance`         | Custom guidance to tailor the scan (see [CLI docs][1])           | None                        |
 | `guidance-file`    | Path to file containing custom guidance (see [CLI docs][1])      | None                        |
@@ -57,7 +57,7 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 - name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v1
   with:
-    min-severity: high # Report high and critical severity issues only (if omitted, all severity levels are reported)
+    min-severity: medium # Report medium, high and critical severity issues only (if omitted, all severity levels are reported)
 ```
 
 **Use custom guidance:**
@@ -95,7 +95,7 @@ Create a `.promptfoo-code-scan.yaml` in your repository root. See the [CLI docum
 
 ```yaml
 # Minimum severity level to report
-minSeverity: high
+minSeverity: medium
 
 # Scan only PR diffs without filesystem exploration (default: false)
 diffsOnly: false

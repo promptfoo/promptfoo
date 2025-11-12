@@ -27,7 +27,7 @@ export const ConfigSchema = z
   })
   .transform((data) => {
     // Resolve severity with precedence: minSeverity > minimumSeverity > default
-    const minimumSeverity = data.minSeverity ?? data.minimumSeverity ?? CodeScanSeverity.HIGH;
+    const minimumSeverity = data.minSeverity ?? data.minimumSeverity ?? CodeScanSeverity.MEDIUM;
 
     // Remove minimumSeverity from output (it's just an alias)
     const { minimumSeverity: _, ...rest } = data;
@@ -41,6 +41,6 @@ export const ConfigSchema = z
 export type Config = z.infer<typeof ConfigSchema>;
 
 export const DEFAULT_CONFIG: Config = {
-  minimumSeverity: CodeScanSeverity.HIGH,
+  minimumSeverity: CodeScanSeverity.MEDIUM,
   diffsOnly: false,
 };

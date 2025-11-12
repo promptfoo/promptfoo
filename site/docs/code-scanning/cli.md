@@ -96,7 +96,7 @@ Create a `.promptfoo-code-scan.yaml` file in your repository root:
 ```yaml
 # Minimum severity level to report (low|medium|high|critical)
 # Both minSeverity and minimumSeverity are supported
-minSeverity: high
+minSeverity: medium
 
 # Scan only PR diffs without filesystem exploration (default: false = explore full repo)
 diffsOnly: false
