@@ -10,11 +10,11 @@ import * as github from '@actions/github';
 import * as fs from 'fs';
 import { generateConfigFile } from './config';
 import { getGitHubContext, getPRFiles } from './github';
-import { detectSetupPR, handleSetupPR } from './setupPr';
 import {
   type Comment,
   type ScanResponse,
   CodeScanSeverity,
+  FileChangeStatus,
   formatSeverity,
   getSeverityRank,
 } from '../../src/types/codeScan';
@@ -59,20 +59,15 @@ async function run(): Promise<void> {
     core.info('🔎 Checking if this is a setup PR...');
     const files = await getPRFiles(githubToken, context);
 
-    if (detectSetupPR(files)) {
-      core.info('🎉 Setup PR detected - skipping scan and posting welcome message');
+    // Detect if this is a setup PR (single file adding the workflow)
+    const SETUP_WORKFLOW_PATH = '.github/workflows/promptfoo-code-scan.yml';
+    const isSetupPR =
+      files.length === 1 &&
+      files[0].path === SETUP_WORKFLOW_PATH &&
+      files[0].status === FileChangeStatus.ADDED;
 
-      // Get OIDC token if available for branded comment
-      let oidcToken: string | undefined;
-      try {
-        oidcToken = await core.getIDToken('promptfoo');
-        core.info('🔐 Got OIDC token for branded comment');
-      } catch (error) {
-        core.info('ℹ️ No OIDC token - will post as GitHub Actions bot');
-      }
-
-      // Handle setup PR and exit
-      await handleSetupPR(githubToken, apiHost, oidcToken);
+    if (isSetupPR) {
+      core.info('✅ Setup PR detected - workflow file will be added on merge');
       return;
     }
 
