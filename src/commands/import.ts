@@ -1,7 +1,7 @@
 import fs from 'fs';
 
 import { getDb } from '../database/index';
-import { evalsTable } from '../database/tables';
+import { evalsTable } from '../database/dynamic-tables';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';

@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import { and, eq } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
-import { evalResultsTable } from '../database/tables';
+import { evalResultsTable } from '../database/dynamic-tables';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
@@ -42,7 +42,7 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
     )
     .all();
 
-  return errorResults.map((r) => r.id);
+  return errorResults.map((r: any) => r.id);
 }
 
 /**

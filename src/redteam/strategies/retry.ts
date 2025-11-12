@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from '../../database/index';
-import { evalResultsTable } from '../../database/tables';
+import { evalResultsTable } from '../../database/dynamic-tables';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 

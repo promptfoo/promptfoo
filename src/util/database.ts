@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import NodeCache from 'node-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database/index';
+import { getDb, withTransaction } from '../database/index';
 import {
   datasetsTable,
   evalResultsTable,
@@ -11,7 +11,7 @@ import {
   evalsToTagsTable,
   promptsTable,
   tagsTable,
-} from '../database/tables';
+} from '../database/dynamic-tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
@@ -438,17 +438,19 @@ export async function getEvalFromId(hash: string) {
 }
 
 export async function deleteEval(evalId: string) {
-  const db = getDb();
-  db.transaction(() => {
+  await withTransaction(async (db) => {
     // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
-    db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
-    db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
-    db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
-    db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
+    await db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId));
+    await db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId));
+    await db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId));
+    await db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId));
 
     // Finally, delete the eval record
-    const deletedIds = db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
-    if (deletedIds.changes === 0) {
+    const deletedIds = await db.delete(evalsTable).where(eq(evalsTable.id, evalId));
+    
+    // For MySQL compatibility, we need to check if any rows were affected differently
+    const deletedCount = deletedIds instanceof Array ? deletedIds.length : (deletedIds as any)?.changes || 0;
+    if (deletedCount === 0) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
@@ -458,14 +460,13 @@ export async function deleteEval(evalId: string) {
  * Deletes evals by their IDs.
  * @param ids - The IDs of the evals to delete.
  */
-export function deleteEvals(ids: string[]) {
-  const db = getDb();
-  db.transaction(() => {
-    db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
-    db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
-    db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
-    db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
-    db.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
+export async function deleteEvals(ids: string[]) {
+  await withTransaction(async (db) => {
+    await db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids));
+    await db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids));
+    await db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids));
+    await db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids));
+    await db.delete(evalsTable).where(inArray(evalsTable.id, ids));
   });
 }
 
@@ -475,13 +476,12 @@ export function deleteEvals(ids: string[]) {
  * @returns {Promise<void>}
  */
 export async function deleteAllEvals(): Promise<void> {
-  const db = getDb();
-  db.transaction(() => {
-    db.delete(evalResultsTable).run();
-    db.delete(evalsToPromptsTable).run();
-    db.delete(evalsToDatasetsTable).run();
-    db.delete(evalsToTagsTable).run();
-    db.delete(evalsTable).run();
+  await withTransaction(async (db) => {
+    await db.delete(evalResultsTable);
+    await db.delete(evalsToPromptsTable);
+    await db.delete(evalsToDatasetsTable);
+    await db.delete(evalsToTagsTable);
+    await db.delete(evalsTable);
   });
 }
 

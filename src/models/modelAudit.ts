@@ -1,6 +1,6 @@
-import { and, desc, eq, isNotNull, or } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '../database/index';
-import { modelAuditsTable } from '../database/tables';
+import { modelAuditsTable } from '../database/dynamic-tables';
 import logger from '../logger';
 import { randomSequence } from '../util/createHash';
 
@@ -26,7 +26,7 @@ export interface ModelAuditRecord {
   passedChecks?: number | null;
   failedChecks?: number | null;
   metadata?: Record<string, any> | null;
-  // Revision tracking fields for deduplication
+  // Model revision tracking
   modelId?: string | null;
   revisionSha?: string | null;
   contentHash?: string | null;
@@ -51,7 +51,7 @@ export default class ModelAudit {
   passedChecks?: number | null;
   failedChecks?: number | null;
   metadata?: Record<string, any> | null;
-  // Revision tracking fields for deduplication
+  // Model revision tracking
   modelId?: string | null;
   revisionSha?: string | null;
   contentHash?: string | null;
@@ -93,7 +93,7 @@ export default class ModelAudit {
     this.passedChecks = data.passedChecks;
     this.failedChecks = data.failedChecks;
     this.metadata = data.metadata;
-    // Revision tracking
+    // Model revision tracking
     this.modelId = data.modelId;
     this.revisionSha = data.revisionSha;
     this.contentHash = data.contentHash;
@@ -110,13 +110,6 @@ export default class ModelAudit {
     modelType?: string;
     results: ModelAuditScanResults;
     metadata?: Record<string, any>;
-    // Revision tracking fields
-    modelId?: string;
-    revisionSha?: string | null;
-    contentHash?: string;
-    modelSource?: string;
-    sourceLastModified?: number;
-    scannerVersion?: string;
   }): Promise<ModelAudit> {
     const now = Date.now();
     const createdAtDate = new Date(now);
@@ -147,13 +140,6 @@ export default class ModelAudit {
       passedChecks: params.results.passed_checks || null,
       failedChecks: params.results.failed_checks || null,
       metadata: params.metadata || null,
-      // Revision tracking
-      modelId: params.modelId || null,
-      revisionSha: params.revisionSha ?? null,
-      contentHash: params.contentHash || null,
-      modelSource: params.modelSource || null,
-      sourceLastModified: params.sourceLastModified || null,
-      scannerVersion: params.scannerVersion || null,
     };
     const db = getDb();
     await db.insert(modelAuditsTable).values(data).run();
@@ -187,68 +173,21 @@ export default class ModelAudit {
       .orderBy(modelAuditsTable.createdAt)
       .all();
 
-    return results.map((r) => new ModelAudit({ ...r, persisted: true }));
+    return results.map((r: any) => new ModelAudit({ ...r, persisted: true }));
   }
 
-  /**
-   * Find existing model audit by revision information for deduplication.
-   * Checks both revision_sha and content_hash based on availability.
-   *
-   * Strategy:
-   * 1. If revisionSha provided, check (modelId, revisionSha) first (fast path for HF)
-   * 2. If not found, check (modelId, contentHash) as fallback
-   *
-   * @param modelId - Normalized model identifier
-   * @param revisionSha - Native revision (HF Git SHA, S3 version ID, etc.) - optional
-   * @param contentHash - SHA-256 of actual content - optional
-   * @returns Existing ModelAudit or null if not found
-   */
-  static async findByRevision(
-    modelId: string,
-    revisionSha?: string | null,
-    contentHash?: string,
-  ): Promise<ModelAudit | null> {
+  static async findByRevision(modelId: string, revisionSha: string): Promise<ModelAudit | null> {
     const db = getDb();
-
-    // Build query conditions based on available fields
-    const conditions = [];
-
-    // If we have revision_sha, check (modelId, revisionSha)
-    if (revisionSha) {
-      conditions.push(
-        and(
-          eq(modelAuditsTable.modelId, modelId),
-          eq(modelAuditsTable.revisionSha, revisionSha),
-          isNotNull(modelAuditsTable.revisionSha),
-        ),
-      );
-    }
-
-    // If we have contentHash, check (modelId, contentHash)
-    if (contentHash) {
-      conditions.push(
-        and(eq(modelAuditsTable.modelId, modelId), eq(modelAuditsTable.contentHash, contentHash)),
-      );
-    }
-
-    // If no conditions, return null
-    if (conditions.length === 0) {
-      return null;
-    }
-
-    // Query with OR condition (check either revision_sha or content_hash)
     const result = await db
       .select()
       .from(modelAuditsTable)
-      .where(or(...conditions))
-      .orderBy(desc(modelAuditsTable.createdAt))
+      .where(and(eq(modelAuditsTable.modelId, modelId), eq(modelAuditsTable.revisionSha, revisionSha)))
       .get();
 
     if (!result) {
       return null;
     }
 
-    logger.debug(`Found existing scan for ${modelId} (id: ${result.id})`);
     return new ModelAudit({ ...result, persisted: true });
   }
 
@@ -261,7 +200,7 @@ export default class ModelAudit {
       .limit(limit)
       .all();
 
-    return results.map((r) => new ModelAudit({ ...r, persisted: true }));
+    return results.map((r: any) => new ModelAudit({ ...r, persisted: true }));
   }
 
   static async getLatest(limit: number = 10): Promise<ModelAudit[]> {
@@ -273,7 +212,7 @@ export default class ModelAudit {
       .limit(limit)
       .all();
 
-    return results.map((r) => new ModelAudit({ ...r, persisted: true }));
+    return results.map((r: any) => new ModelAudit({ ...r, persisted: true }));
   }
 
   /**
@@ -304,7 +243,6 @@ export default class ModelAudit {
           passedChecks: this.passedChecks,
           failedChecks: this.failedChecks,
           metadata: this.metadata,
-          // Revision tracking
           modelId: this.modelId,
           revisionSha: this.revisionSha,
           contentHash: this.contentHash,
@@ -332,7 +270,6 @@ export default class ModelAudit {
           passedChecks: this.passedChecks,
           failedChecks: this.failedChecks,
           metadata: this.metadata,
-          // Revision tracking
           modelId: this.modelId,
           revisionSha: this.revisionSha,
           contentHash: this.contentHash,

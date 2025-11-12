@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
-import { evalResultsTable } from '../database/tables';
+import { evalResultsTable } from '../database/dynamic-tables';
 import logger from '../logger';
 
 import type { EvalResultsFilterMode } from '../types/index';

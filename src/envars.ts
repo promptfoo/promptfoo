@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
-import cliState from './cliState';
 
+import cliState from './cliState';
 import type { EnvOverrides } from './types/env';
 
 dotenv.config({ quiet: true });
@@ -22,7 +22,6 @@ type EnvVars = {
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
-  PROMPTFOO_DISABLE_DEBUG_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
   PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64?: boolean;
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
@@ -67,6 +66,21 @@ type EnvVars = {
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_TRACING_ENABLED?: boolean;
   PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
+  PROMPTFOO_USE_MYSQL?: boolean;
+
+  //=========================================================================
+  // Database configuration
+  //=========================================================================
+  PROMPTFOO_MYSQL_HOST?: string;
+  PROMPTFOO_MYSQL_PORT?: string;
+  PROMPTFOO_MYSQL_USER?: string;
+  PROMPTFOO_MYSQL_PASSWORD?: string;
+  PROMPTFOO_MYSQL_DATABASE?: string;
+  PROMPTFOO_MYSQL_SSL?: string;
+  PROMPTFOO_MYSQL_SSL_REJECT_UNAUTHORIZED?: string;
+  PROMPTFOO_MYSQL_SSL_CA?: string;
+  PROMPTFOO_MYSQL_SSL_CERT?: string;
+  PROMPTFOO_MYSQL_SSL_KEY?: string;
 
   //=========================================================================
   // promptfoo configuration options
@@ -90,6 +104,7 @@ type EnvVars = {
   PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST?: number;
   PROMPTFOO_NUM_JAILBREAK_ITERATIONS?: string;
   PROMPTFOO_PASS_RATE_THRESHOLD?: number;
+  PROMPTFOO_PROJECT_NAME?: string;
   PROMPTFOO_PROMPT_SEPARATOR?: string;
   PROMPTFOO_PYTHON?: string;
   PROMPTFOO_RUBY?: string;
@@ -317,12 +332,6 @@ type EnvVars = {
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
 
-  // SharePoint
-  SHAREPOINT_BASE_URL?: string;
-  SHAREPOINT_CERT_PATH?: string;
-  SHAREPOINT_CLIENT_ID?: string;
-  SHAREPOINT_TENANT_ID?: string;
-
   // Slack
   SLACK_BOT_TOKEN?: string;
 
@@ -332,9 +341,6 @@ type EnvVars = {
 
   // Together AI
   TOGETHER_API_KEY?: string;
-
-  // TrueFoundry
-  TRUEFOUNDRY_API_KEY?: string;
 
   // Vertex AI
   VERTEX_API_VERSION?: string;

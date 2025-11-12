@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { getDb } from './database/index';
+import { getDbAsync, isMysqlMode } from './database/index';
 import logger from './logger';
 
 /**
@@ -12,18 +12,26 @@ import logger from './logger';
  * operations to proceed while migrations run.
  */
 export async function runDbMigrations(): Promise<void> {
+  // Check if MySQL mode is enabled
+  if (isMysqlMode()) {
+    // Use MySQL migrations
+    const { runMysqlDbMigrations } = await import('./database/mysql-migrate');
+    return runMysqlDbMigrations();
+  }
+
+  // Use SQLite migrations
   return new Promise((resolve, reject) => {
     // Run the synchronous migration in the next tick to avoid blocking
-    setImmediate(() => {
+    setImmediate(async () => {
       try {
-        const db = getDb();
+        const db = await getDbAsync();
         const migrationsFolder = path.join(__dirname, '..', 'drizzle');
-        logger.debug(`Running database migrations...`);
+        logger.debug(`Running SQLite database migrations...`);
         migrate(db, { migrationsFolder });
-        logger.debug('Database migrations completed');
+        logger.debug('SQLite database migrations completed');
         resolve();
       } catch (error) {
-        logger.error(`Database migration failed: ${error}`);
+        logger.error(`SQLite database migration failed: ${error}`);
         reject(error);
       }
     });
