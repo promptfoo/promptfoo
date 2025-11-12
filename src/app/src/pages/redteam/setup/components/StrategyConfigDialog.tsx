@@ -39,8 +39,8 @@ const DEFAULT_SIMBA_GOALS = [
   'Manipulate order status or pricing through injection attacks',
 ];
 
-// Strategies that can be used in layer steps (exclude layer itself to prevent recursion)
-const AVAILABLE_LAYER_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
+// Transformation strategies that can be used as layer steps (exclude layer itself to prevent recursion)
+const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
 
 // Type for layer strategy steps (can be strings or objects with nested config)
 type StepType = string | { id: string; config?: Record<string, any> };
@@ -122,7 +122,7 @@ export default function StrategyConfigDialog({
       }),
     );
 
-    return AVAILABLE_LAYER_STRATEGIES.filter((strategy) => {
+    return LAYER_TRANSFORMABLE_STRATEGIES.filter((strategy) => {
       // Cannot add duplicates
       if (stepIds.has(strategy)) {
         return false;
