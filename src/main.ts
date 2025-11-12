@@ -144,8 +144,12 @@ async function main() {
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
 
-  program.hook('postAction', () => {
+  program.hook('postAction', async () => {
     printErrorInformation(cliState.errorLogFile, cliState.debugLogFile);
+
+    if (cliState.postActionCallback) {
+      await cliState.postActionCallback();
+    }
   });
 
   program.parse();

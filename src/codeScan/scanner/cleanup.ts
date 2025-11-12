@@ -33,12 +33,7 @@ export interface CleanupRefs {
  */
 export function registerCleanupHandlers(refs: CleanupRefs): void {
   const cleanup = (signal: string) => {
-    // Stop spinner first for clean output
-    if (refs.spinner?.isSpinning) {
-      refs.spinner.stop();
-    }
-
-    logger.info(`\n\n⚠️  Received ${signal}, cleaning up...`);
+    logger.debug(`Received ${signal}, cleaning up...`);
 
     // Abort the scan Promise - this will trigger the catch/finally blocks
     // which handle all the actual resource cleanup
@@ -46,11 +41,8 @@ export function registerCleanupHandlers(refs: CleanupRefs): void {
       refs.abortController.abort();
     }
 
-    // Set exit code for SIGINT (standard is 130)
-    process.exitCode = 130;
-
-    // Let the Promise rejection flow through catch → finally → telemetry shutdown
-    // The finally block will handle MCP and socket cleanup
+    // Exit code will be set in the catch block after output is flushed
+    // This prevents output from appearing after the shell prompt
   };
 
   // Register handlers for common termination signals
