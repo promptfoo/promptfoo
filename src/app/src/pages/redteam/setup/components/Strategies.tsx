@@ -61,6 +61,8 @@ const STRATEGIES_REQUIRING_CONFIG = ['layer'];
 const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
   basic:
     'Standard testing without additional attack strategies. Tests prompts as-is to establish baseline behavior.',
+  layer:
+    'Applies multiple transformation strategies sequentially, where each step modifies test cases before passing to the next step.',
 };
 
 const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter(
