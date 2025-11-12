@@ -1,21 +1,28 @@
-import React, { useCallback, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
+import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import {
   DataGrid,
   type GridColDef,
@@ -126,6 +133,9 @@ export const CustomPoliciesSection = () => {
   const apiRef = useGridApiRef();
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
+  const [isGeneratingPolicies, setIsGeneratingPolicies] = useState(false);
+  const [suggestedPolicies, setSuggestedPolicies] = useState<string[]>([]);
+  const [hasAttemptedGeneration, setHasAttemptedGeneration] = useState(false);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
@@ -144,6 +154,9 @@ export const CustomPoliciesSection = () => {
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
+
+  // For policy generation, we'll try regardless of Cloud status since it can work with local servers
+  const canGeneratePolicies = Boolean(config.applicationDefinition?.purpose);
 
   // Test case generation state - now from context
   const { generateTestCase, isGenerating: generatingTestCase } = useTestCaseGeneration();
@@ -187,6 +200,10 @@ export const CustomPoliciesSection = () => {
       };
     });
   }, [policyPlugins, policyNames]);
+
+  // Auto-generate only if we have 5 or fewer policies
+  const AUTO_GENERATION_THRESHOLD = 5;
+  const shouldAutoGenerate = rows.length <= AUTO_GENERATION_THRESHOLD;
 
   // Validate policy text uniqueness
   const validatePolicyText = useCallback(
@@ -376,6 +393,109 @@ export const CustomPoliciesSection = () => {
     setConfirmDeleteOpen(false);
   };
 
+  const handleGeneratePolicies = useCallback(async () => {
+    if (!config.applicationDefinition?.purpose) {
+      return;
+    }
+
+    // Reevaluate threshold at call time - don't generate if we now have too many policies
+    const AUTO_GENERATION_THRESHOLD = 5;
+    const currentShouldAutoGenerate = rows.length <= AUTO_GENERATION_THRESHOLD;
+
+    // Only auto-generate if we're still under the threshold
+    // Manual generation (button click) can bypass this for explicit user action
+    if (!currentShouldAutoGenerate && hasAttemptedGeneration) {
+      // Already generated once and now we have too many policies - don't auto-regenerate
+      return;
+    }
+
+    setIsGeneratingPolicies(true);
+    setHasAttemptedGeneration(true);
+    try {
+      // Get existing policy texts to avoid duplicates (both active and suggested)
+      const existingPolicies = [
+        ...rows.map((row) => row.policyText),
+        ...suggestedPolicies,
+      ];
+
+      const response = await callApi('/v1/redteam/generate-policies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          applicationDefinition: config.applicationDefinition,
+          existingPolicies,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate policies');
+      }
+
+      const data = await response.json();
+      const generatedPolicies: string[] = data.policies || [];
+
+      if (generatedPolicies.length === 0) {
+        setSuggestedPolicies([]);
+        return;
+      }
+
+      // Store as suggested policies instead of directly adding them
+      setSuggestedPolicies(generatedPolicies);
+    } catch (error) {
+      console.error('Error generating policies:', error);
+      setSuggestedPolicies([]);
+    } finally {
+      setIsGeneratingPolicies(false);
+    }
+  }, [config.applicationDefinition, rows, suggestedPolicies, hasAttemptedGeneration]);
+
+  // Auto-generate policies on component mount if purpose exists and we have few policies
+  useEffect(() => {
+    if (canGeneratePolicies && shouldAutoGenerate && !hasAttemptedGeneration && suggestedPolicies.length === 0) {
+      handleGeneratePolicies();
+    }
+  }, [canGeneratePolicies, shouldAutoGenerate, hasAttemptedGeneration, suggestedPolicies.length, handleGeneratePolicies]);
+
+  const handleAddSuggestedPolicy = useCallback(
+    (policyText: string) => {
+      const otherPlugins = config.plugins.filter((p) =>
+        typeof p === 'string' ? true : p.id !== 'policy',
+      );
+
+      const currentPolicyCount = policyPlugins.length;
+      const policyId = makeInlinePolicyId(policyText);
+      const newPolicy = {
+        id: 'policy',
+        config: {
+          policy: {
+            id: policyId,
+            text: policyText,
+            name: makeDefaultPolicyName(currentPolicyCount),
+          },
+        },
+      };
+
+      const allPolicies = [
+        ...policyPlugins.map((p) => ({
+          id: 'policy',
+          config: { policy: p.config.policy },
+        })),
+        newPolicy,
+      ];
+
+      updateConfig('plugins', [...otherPlugins, ...allPolicies]);
+
+      // Remove from suggested policies
+      setSuggestedPolicies((prev) => prev.filter((p) => p !== policyText));
+
+      toast.showToast('Policy added successfully', 'success');
+    },
+    [config.plugins, policyPlugins, updateConfig, toast],
+  );
+
   const handleCsvUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -541,28 +661,151 @@ export const CustomPoliciesSection = () => {
 
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Determine if we should show the suggestions sidebar - show whenever policy generation is possible
+  const showSuggestionsSidebar = canGeneratePolicies;
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} ref={containerRef}>
-      <Box sx={{ height: containerRef.current?.clientHeight ?? 500 }}>
-        <DataGrid
-          apiRef={apiRef}
-          rows={rows}
-          columns={columns}
-          checkboxSelection
-          disableRowSelectionOnClick
-          slots={{ toolbar: CustomToolbar }}
-          slotProps={{
-            toolbar: {
-              selectedCount: rowSelectionModel.length,
-              onDeleteSelected: handleDeleteSelected,
-              onAddPolicy: handleAddPolicy,
-              onUploadCsv: handleCsvUpload,
-              isUploadingCsv,
-            },
-          }}
-          onRowSelectionModelChange={setRowSelectionModel}
-          rowSelectionModel={rowSelectionModel}
-        />
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: showSuggestionsSidebar ? '1fr 380px' : '1fr',
+          gap: 2,
+          height: 600,
+          minHeight: 400,
+        }}
+      >
+        {/* Main table area */}
+        <Box sx={{ height: '100%', minWidth: 0 }}>
+          <DataGrid
+            apiRef={apiRef}
+            rows={rows}
+            columns={columns}
+            checkboxSelection
+            disableRowSelectionOnClick
+            slots={{ toolbar: CustomToolbar }}
+            slotProps={{
+              toolbar: {
+                selectedCount: rowSelectionModel.length,
+                onDeleteSelected: handleDeleteSelected,
+                onAddPolicy: handleAddPolicy,
+                onUploadCsv: handleCsvUpload,
+                isUploadingCsv,
+              },
+            }}
+            onRowSelectionModelChange={setRowSelectionModel}
+            rowSelectionModel={rowSelectionModel}
+          />
+        </Box>
+
+        {/* Suggested Policies Sidebar */}
+        {showSuggestionsSidebar && (
+          <Paper
+            elevation={2}
+            sx={{
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              backgroundColor: 'background.paper',
+              border: '1px solid',
+              borderColor: 'divider',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Header - fixed */}
+            <Box
+              sx={{
+                p: 2,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                backgroundColor: 'action.hover',
+                flexShrink: 0,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AutoFixHighIcon color="action" />
+                <Typography variant="subtitle1" fontWeight={600} color="text.primary">
+                  Suggested Policies
+                </Typography>
+              </Box>
+            </Box>
+
+            {/* Content - scrollable */}
+            <Box
+              sx={{
+                flex: 1,
+                overflow: 'auto',
+                p: 2,
+              }}
+            >
+              {/* Show generate button when not generating and no suggestions */}
+              {!isGeneratingPolicies && suggestedPolicies.length === 0 && (
+                <Box sx={{ py: 4, px: 1 }}>
+                  <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 2 }}>
+                    Generate AI-powered policy suggestions based on your application.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    onClick={handleGeneratePolicies}
+                    startIcon={<AutoFixHighIcon />}
+                  >
+                    Generate Suggestions
+                  </Button>
+                </Box>
+              )}
+
+              {isGeneratingPolicies && suggestedPolicies.length === 0 && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 4 }}>
+                  <CircularProgress size={32} />
+                  <Typography variant="body2" color="text.secondary" align="center">
+                    Analyzing your application to generate relevant policies...
+                  </Typography>
+                </Box>
+              )}
+
+              {suggestedPolicies.length > 0 && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  {suggestedPolicies.map((policy, index) => (
+                    <Card
+                      key={index}
+                      variant="outlined"
+                      onClick={() => handleAddSuggestedPolicy(policy)}
+                      sx={{
+                        backgroundColor: 'background.default',
+                        cursor: 'pointer',
+                        '&:hover': {
+                          boxShadow: 2,
+                          borderColor: 'primary.main',
+                          backgroundColor: 'background.paper',
+                          transform: 'translateY(-1px)',
+                        },
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                          <AddIcon
+                            fontSize="small"
+                            color="primary"
+                            sx={{
+                              mt: 0.25,
+                              flexShrink: 0,
+                            }}
+                          />
+                          <Typography variant="body2" color="text.primary" sx={{ flex: 1, lineHeight: 1.5 }}>
+                            {policy}
+                          </Typography>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          </Paper>
+        )}
       </Box>
 
       {/* Delete confirmation dialog */}
