@@ -71,7 +71,4 @@ jobs:
           echo "To bypass this check, add one of these labels:"
           echo "  - 'no-changelog' (exceptional cases only)"
           echo "  - 'dependencies' (automated dependency updates)"
-          echo ""
-          echo "Note: This check is automatically skipped for PRs that only modify documentation"
-          echo "(site/), dev configs (.vscode/, .cursor/, etc.), or root markdown files."
           exit 1
