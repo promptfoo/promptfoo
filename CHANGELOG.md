@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - chore(site): remove Koala analytics and migrate Google tracking to Docusaurus built-in gtag configuration with multiple tracking IDs (G-3TS8QLZQ93, G-3YM29CN26E, AW-17347444171) (#6169)
+- chore(webui): order 'plugins' before 'steps' in layer strategy YAML to match documentation examples (#6180)
 
 ### Fixed
 

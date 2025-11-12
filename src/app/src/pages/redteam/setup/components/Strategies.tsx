@@ -33,7 +33,7 @@ import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
-import { getStrategyId, STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
+import { getStrategyId, isStrategyConfigured } from './strategies/utils';
 import StrategyConfigDialog from './StrategyConfigDialog';
 
 // ------------------------------------------------------------------
@@ -434,42 +434,16 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const isStrategyConfiguredById = useCallback(
     (strategyId: string): boolean => {
       const strategy = config.strategies.find((s) => getStrategyId(s) === strategyId);
-      if (!strategy) {
-        return true; // Not selected, so not applicable
-      }
-
-      if (!STRATEGIES_REQUIRING_CONFIG.includes(strategyId)) {
-        return true;
-      }
-
-      // For layer strategy, check if steps array exists and has at least one step
-      if (strategyId === 'layer') {
-        const strategyConfig = typeof strategy === 'object' ? strategy.config : undefined;
-        const steps = strategyConfig?.steps;
-        return Array.isArray(steps) && steps.length > 0;
-      }
-
-      return true;
+      return strategy ? isStrategyConfigured(strategyId, strategy) : true;
     },
     [config.strategies],
   );
 
   // Validation function to check if all selected strategies are properly configured
   const isStrategyConfigValid = useCallback(() => {
-    for (const strategy of config.strategies) {
-      const strategyId = getStrategyId(strategy);
-      if (STRATEGIES_REQUIRING_CONFIG.includes(strategyId)) {
-        // For layer strategy, check if steps array exists and has at least one step
-        if (strategyId === 'layer') {
-          const strategyConfig = typeof strategy === 'object' ? strategy.config : undefined;
-          const steps = strategyConfig?.steps;
-          if (!Array.isArray(steps) || steps.length === 0) {
-            return false;
-          }
-        }
-      }
-    }
-    return true;
+    return config.strategies.every((strategy) =>
+      isStrategyConfigured(getStrategyId(strategy), strategy),
+    );
   }, [config.strategies]);
 
   const getNextButtonTooltip = useCallback(() => {
