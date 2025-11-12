@@ -59,15 +59,11 @@ export function StrategyItem({
         cursor: isDisabled ? 'not-allowed' : 'pointer',
         userSelect: 'none',
         opacity: isDisabled ? 0.5 : 1,
-        border: (() => {
-          if (hasError) {
-            return `2px solid ${theme.palette.error.main}`;
-          }
-          if (isSelected) {
-            return `1px solid ${theme.palette.primary.main}`;
-          }
-          return undefined;
-        })(),
+        border: hasError
+          ? `2px solid ${theme.palette.error.main}`
+          : isSelected
+            ? `1px solid ${theme.palette.primary.main}`
+            : undefined,
         backgroundColor: isDisabled
           ? theme.palette.action.disabledBackground
           : hasError
