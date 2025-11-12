@@ -168,7 +168,7 @@ async function run(): Promise<void> {
       core.info('🔧 Installing build tools for native dependencies...');
       try {
         await exec.exec('sudo', ['apt-get', 'update', '-qq']);
-        await exec.exec('sudo', ['apt-get', 'install', '-y', '-qq', 'python3', 'make', 'g++']);
+        await exec.exec('sudo', ['apt-get', 'install', '-y', '-qq', 'python3', 'make', 'g++', 'git']);
         core.info('✅ Build tools installed');
       } catch (error) {
         core.warning(
@@ -179,10 +179,19 @@ async function run(): Promise<void> {
 
       core.info('📦 Installing promptfoo...');
       // TODO: Switch to real promptfoo npm package (not git url)
+
+      // Debug: Check environment
+      await exec.exec('which', ['sh']);
+      await exec.exec('which', ['git']);
+
+      // Set npm to use sh explicitly and increase verbosity for debugging
+      await exec.exec('npm', ['config', 'set', 'script-shell', '/bin/sh']);
+
       await exec.exec('npm', [
         'install',
         '-g',
         'git+https://github.com/promptfoo/promptfoo.git#dane/code_scan',
+        '--verbose',
       ]);
       core.info('✅ Promptfoo installed successfully');
 
