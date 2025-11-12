@@ -50,6 +50,12 @@ export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
 
 export const FILE_METADATA_KEY = '_promptfooFileMetadata';
 
+/**
+ * Identifier for manual user ratings in componentResults.
+ * Used to distinguish human ratings from automated assertions.
+ */
+export const HUMAN_ASSERTION_TYPE = 'human' as const;
+
 export const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 export const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
 
