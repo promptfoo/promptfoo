@@ -139,6 +139,7 @@ export const CustomPoliciesSection = () => {
   );
   const [hasAttemptedGeneration, setHasAttemptedGeneration] = useState(false);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
+  const isGeneratingPoliciesRef = useRef(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   // Policy dialog state
@@ -400,6 +401,11 @@ export const CustomPoliciesSection = () => {
       return;
     }
 
+    // Guard against multiple simultaneous requests
+    if (isGeneratingPoliciesRef.current) {
+      return;
+    }
+
     // Reevaluate threshold at call time - don't generate if we now have too many policies
     const AUTO_GENERATION_THRESHOLD = 5;
     const currentShouldAutoGenerate = rows.length <= AUTO_GENERATION_THRESHOLD;
@@ -411,6 +417,7 @@ export const CustomPoliciesSection = () => {
       return;
     }
 
+    isGeneratingPoliciesRef.current = true;
     setIsGeneratingPolicies(true);
     setHasAttemptedGeneration(true);
     try {
@@ -450,6 +457,7 @@ export const CustomPoliciesSection = () => {
       console.error('Error generating policies:', error);
       setSuggestedPolicies([]);
     } finally {
+      isGeneratingPoliciesRef.current = false;
       setIsGeneratingPolicies(false);
     }
   }, [config.applicationDefinition, rows, suggestedPolicies, hasAttemptedGeneration]);
@@ -762,6 +770,7 @@ export const CustomPoliciesSection = () => {
                     fullWidth
                     onClick={handleGeneratePolicies}
                     startIcon={<AutoFixHighIcon />}
+                    disabled={isGeneratingPolicies}
                   >
                     Generate Suggestions
                   </Button>
