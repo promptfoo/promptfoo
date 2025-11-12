@@ -187,6 +187,7 @@ export default function ResultsView({
     filteredResultsCount,
     totalResultsCount,
     highlightedResultsCount,
+    userRatedResultsCount,
     filters,
     removeFilter,
     filterMode,
@@ -844,6 +845,19 @@ export default function ResultsView({
                   backgroundColor: 'rgba(25, 118, 210, 0.08)',
                   color: 'rgba(25, 118, 210, 1)',
                   border: '1px solid rgba(25, 118, 210, 0.2)',
+                  fontWeight: 500,
+                }}
+              />
+            )}
+            {userRatedResultsCount > 0 && (
+              <Chip
+                size="small"
+                label={`${userRatedResultsCount} user-rated`}
+                title={`${userRatedResultsCount} output${userRatedResultsCount !== 1 ? 's' : ''} with user ratings`}
+                sx={{
+                  backgroundColor: 'rgba(156, 39, 176, 0.08)',
+                  color: 'rgba(156, 39, 176, 1)',
+                  border: '1px solid rgba(156, 39, 176, 0.2)',
                   fontWeight: 500,
                 }}
               />

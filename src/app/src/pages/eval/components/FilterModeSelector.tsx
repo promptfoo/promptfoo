@@ -18,6 +18,7 @@ const BASE_OPTIONS = [
   { value: 'errors', label: 'Show errors only' },
   { value: 'different', label: 'Show different outputs' },
   { value: 'highlights', label: 'Show highlights only' },
+  { value: 'user-rated', label: 'Show user-rated only' },
 ];
 
 export const FilterModeSelector = ({
