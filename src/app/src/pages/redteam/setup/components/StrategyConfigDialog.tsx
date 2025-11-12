@@ -100,16 +100,13 @@ export default function StrategyConfigDialog({
       strategy === 'simba' ? nextConfig.goals || DEFAULT_SIMBA_GOALS : nextConfig.goals || [],
     );
     setSteps(strategy === 'layer' ? nextConfig.steps || [] : []);
-    // For layer strategy, default to all selected plugins if config.plugins is not set
-    // Only use config.plugins if it was explicitly saved (meaning user changed it)
-    const configPlugins = strategy === 'layer' ? nextConfig.plugins : undefined;
-    const defaultPlugins =
-      configPlugins !== undefined
-        ? configPlugins
-        : selectedPlugins.length > 0
-          ? selectedPlugins
-          : [];
-    setLayerPlugins(defaultPlugins);
+    // Filter layerPlugins to only include plugins that are in availablePlugins
+    const configPlugins = strategy === 'layer' ? nextConfig.plugins || [] : [];
+    const filteredPlugins =
+      selectedPlugins.length > 0
+        ? configPlugins.filter((p: string) => selectedPlugins.includes(p))
+        : configPlugins;
+    setLayerPlugins(filteredPlugins);
     setNewStep('');
   }, [open, strategy, config, selectedPlugins]);
 
@@ -239,18 +236,10 @@ export default function StrategyConfigDialog({
       const layerConfig: Record<string, any> = {
         ...localConfig,
       };
-      // Only include plugins in YAML if user has modified from default (all selected plugins)
-      // If layerPlugins matches selectedPlugins exactly, don't include it (will apply to all)
-      const isDefaultPlugins =
-        layerPlugins.length === selectedPlugins.length &&
-        layerPlugins.every((p) => selectedPlugins.includes(p)) &&
-        selectedPlugins.every((p) => layerPlugins.includes(p));
-
-      if (!isDefaultPlugins && layerPlugins.length > 0) {
-        // User has customized the plugins list, include it in YAML
+      // Add plugins first, then steps to maintain order in YAML output
+      if (layerPlugins.length > 0) {
         layerConfig.plugins = layerPlugins;
       } else {
-        // Either default (all plugins) or empty, don't include in YAML
         delete layerConfig.plugins;
       }
       layerConfig.steps = steps;
