@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - feat(webui): add layer strategy configuration UI in red team setup with per-step plugin targeting (#6180)
 
+## [0.119.6] - 2025-11-12
+
 ### Documentation
 
 - docs(providers): update Vertex AI documentation - removed deprecated models (PaLM/Bison, Claude 3 Opus, Claude 3.5 Sonnet v2), added Claude Sonnet 4.5, added missing Gemini 2.0 models, reorganized model listings by generation (Gemini 2.5/2.0/1.5, Claude 4/3, Llama 4/3.3/3.2/3.1), marked Preview/Experimental models, removed temporal language to make docs evergreen (#3169)
@@ -23,7 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(webui): require configuration for layer strategy before allowing navigation in red team setup - layer strategy now shows red border and blocks Next button until steps array is configured, similar to plugins requiring configuration
 - fix(webui): filter hidden metadata keys from metadata filter dropdown - ensures consistent filtering of 'citations' and '\_promptfooFileMetadata' keys across MetadataPanel, EvalOutputPromptDialog, and metadata filter dropdown (#6177)
 - fix(cli): format object and array variables with pretty-printed JSON in console table and HTML outputs for improved readability (#6175)
+- fix(cli): only show error counter when >0
 - fix(redteam): respect redteam.provider configuration for local grading - fixes issue where configuring a local provider (e.g., ollama:llama3.2) still sent grading requests to remote API instead of using the configured provider (#5959)
+- fix: Reverts #6142 (#6189)
 
 ## [0.119.5] - 2025-11-10
 
