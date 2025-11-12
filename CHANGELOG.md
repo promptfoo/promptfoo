@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(cli): enable auto-sharing when cloud is enabled by not defaulting `config.sharing` to `false` - when sharing is unset in config, it now correctly falls through to cloud auto-share behavior instead of defaulting to disabled (#6142)
 - fix(webui): filter hidden metadata keys from metadata filter dropdown - ensures consistent filtering of 'citations' and '\_promptfooFileMetadata' keys across MetadataPanel, EvalOutputPromptDialog, and metadata filter dropdown (#6177)
 - fix(cli): format object and array variables with pretty-printed JSON in console table and HTML outputs for improved readability (#6175)
 - fix(cli): only show error counter when >0
