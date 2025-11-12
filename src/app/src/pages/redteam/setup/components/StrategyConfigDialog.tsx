@@ -100,9 +100,15 @@ export default function StrategyConfigDialog({
       strategy === 'simba' ? nextConfig.goals || DEFAULT_SIMBA_GOALS : nextConfig.goals || [],
     );
     setSteps(strategy === 'layer' ? nextConfig.steps || [] : []);
-    setLayerPlugins(strategy === 'layer' ? nextConfig.plugins || [] : []);
+    // Filter layerPlugins to only include plugins that are in availablePlugins
+    const configPlugins = strategy === 'layer' ? nextConfig.plugins || [] : [];
+    const filteredPlugins =
+      selectedPlugins.length > 0
+        ? configPlugins.filter((p: string) => selectedPlugins.includes(p))
+        : configPlugins;
+    setLayerPlugins(filteredPlugins);
     setNewStep('');
-  }, [open, strategy, config]);
+  }, [open, strategy, config, selectedPlugins]);
 
   const handleAddGoal = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && newGoal.trim()) {
@@ -798,9 +804,10 @@ export default function StrategyConfigDialog({
                 />
               )}
               renderTags={(value, getTagProps) =>
-                value.map((option, index) => (
-                  <Chip label={option} size="small" {...getTagProps({ index })} key={option} />
-                ))
+                value.map((option, index) => {
+                  const tagProps = getTagProps({ index });
+                  return <Chip label={option} size="small" {...tagProps} key={option} />;
+                })
               }
             />
           </Box>
@@ -948,9 +955,15 @@ export default function StrategyConfigDialog({
                   helperText={
                     steps.length === 0
                       ? 'Add at least one strategy step (required)'
-                      : 'Select from dropdown or type file:// paths for custom strategies'
+                      : 'Select from dropdown or type file:// paths for custom strategies. Press Enter to add.'
                   }
                   error={steps.length === 0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newStep.trim()) {
+                      e.preventDefault();
+                      handleAddStep(newStep);
+                    }
+                  }}
                 />
               )}
             />
