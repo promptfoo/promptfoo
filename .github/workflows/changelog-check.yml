@@ -3,6 +3,22 @@ name: Changelog Check
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths-ignore:
+      - 'site/**'
+      - '.vscode/**'
+      - '.cursor/**'
+      - '.devcontainer/**'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'LICENSE'
+      - '.**ignore'
+      - '.prettierrc*'
+      - '.rubocop.yml'
+      - '.ruff.toml'
+      - '.coderabbit.yaml'
 
 jobs:
   check-changelog:
@@ -45,66 +61,17 @@ jobs:
             exit 0
           fi
 
-          # Get list of changed files
-          CHANGED_FILES=$(git diff --name-only origin/"$BASE_REF"...HEAD)
-
-          # Define patterns for non-user-facing files that don't require changelog
-          # These are documentation, dev environment configs, and other non-code changes
-          EXCLUDED_PATTERNS=(
-            "^site/"                    # Documentation website
-            "^\.vscode/"                # VSCode config
-            "^\.cursor/"                # Cursor IDE config
-            "^\.devcontainer/"          # Dev container config
-            "^README\.md$"              # Root README
-            "^CONTRIBUTING\.md$"        # Contributing guide
-            "^SECURITY\.md$"            # Security policy
-            "^AGENTS\.md$"              # Agents documentation
-            "^CLAUDE\.md$"              # Claude instructions
-            "^LICENSE$"                 # License file
-            "^\..*ignore$"              # Ignore files (.gitignore, .dockerignore, etc)
-            "^\.prettierrc"             # Prettier config
-            "^\.rubocop\.yml$"          # Rubocop config
-            "^\.ruff\.toml$"            # Ruff config
-            "^\.coderabbit\.yaml$"      # CodeRabbit config
-          )
-
-          # Filter changed files to find user-facing changes
-          USER_FACING_CHANGES=""
-          while IFS= read -r file; do
-            EXCLUDED=false
-            for pattern in "${EXCLUDED_PATTERNS[@]}"; do
-              if echo "$file" | grep -qE "$pattern"; then
-                EXCLUDED=true
-                break
-              fi
-            done
-
-            if [ "$EXCLUDED" = false ]; then
-              USER_FACING_CHANGES="$USER_FACING_CHANGES$file"$'\n'
-            fi
-          done <<< "$CHANGED_FILES"
-
-          # If no user-facing files were changed, skip changelog requirement
-          if [ -z "$(echo "$USER_FACING_CHANGES" | tr -d '[:space:]')" ]; then
-            echo "✅ Only non-user-facing files changed (docs, dev configs) - bypassing changelog check"
-            echo ""
-            echo "Changed files (all excluded from changelog requirement):"
-            echo "$CHANGED_FILES"
-            exit 0
-          fi
-
-          # User-facing changes require changelog update
+          # All PRs must update the changelog
           echo "❌ Changelog update required"
           echo ""
-          echo "This PR modifies user-facing code and must update CHANGELOG.md under the 'Unreleased' section."
+          echo "ALL PRs must update CHANGELOG.md under the 'Unreleased' section."
           echo ""
-          echo "User-facing files changed:"
-          echo "$USER_FACING_CHANGES"
+          echo "This ensures complete traceability of all changes to the codebase."
           echo ""
           echo "To bypass this check, add one of these labels:"
           echo "  - 'no-changelog' (exceptional cases only)"
           echo "  - 'dependencies' (automated dependency updates)"
           echo ""
-          echo "Note: Changes to documentation (site/), dev configs (.vscode/, .cursor/, etc.),"
-          echo "and root markdown files (README.md, CONTRIBUTING.md, etc.) don't require changelog updates."
+          echo "Note: This check is automatically skipped for PRs that only modify documentation"
+          echo "(site/), dev configs (.vscode/, .cursor/, etc.), or root markdown files."
           exit 1

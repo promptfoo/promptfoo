@@ -338,14 +338,14 @@ Update the changelog for pull requests that change:
 
 ### Automatic Exemptions
 
-PRs that **only** modify these non-user-facing files are **automatically exempt** from changelog requirements:
+The changelog check workflow is **automatically skipped** (won't run at all) for PRs that **only** modify these non-user-facing files:
 
 - Documentation website (`site/` directory)
 - Root markdown files (README.md, CONTRIBUTING.md, SECURITY.md, CLAUDE.md, AGENTS.md, LICENSE)
 - Development environment configs (.vscode/, .cursor/, .devcontainer/)
 - Configuration files (.gitignore, .prettierrc, .rubocop.yml, .ruff.toml, .coderabbit.yaml, etc.)
 
-If your PR modifies **any** code outside these directories, a changelog entry is required.
+This is handled via GitHub Actions' `paths-ignore` configuration. If your PR modifies **any** code outside these paths, the changelog check will run and require an entry.
 
 ### Bypass Labels
 
