@@ -38,7 +38,7 @@ You can specify which metric to use by including it in the assertion type. The d
 
 ### Cosine Similarity (default)
 
-Measures the cosine of the angle between two vectors. Range: 0 to 1 (higher is more similar).
+Measures the cosine of the angle between two vectors. Range: -1 to 1 (higher is more similar), though text embeddings typically produce values between 0 and 1.
 
 ```yaml
 assert:
