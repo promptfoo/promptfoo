@@ -75,6 +75,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
+- test(webui): fix act() warnings and clean up test output by wrapping 16 tests in act(), removing 22 unnecessary console suppression patterns, and reducing setupTests.ts from 95 to 37 lines (#6199)
 - test(providers): add test coverage for auto-detection of reasoning models by deployment name in Azure provider (#6154)
 - test(assertions): add comprehensive test coverage for rendered assertion value metadata including variable substitution, loops, static text handling, and UI display fallback priority (#6145)
 
