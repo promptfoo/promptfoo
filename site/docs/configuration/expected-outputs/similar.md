@@ -1,13 +1,13 @@
 ---
 sidebar_position: 55
-description: Calculate semantic similarity scores between actual and expected outputs using advanced embedding models and cosine distance
+description: Calculate semantic similarity scores between actual and expected outputs using advanced embedding models and multiple distance metrics
 ---
 
 # Similarity (embeddings)
 
 The `similar` assertion checks if an embedding of the LLM's output
 is semantically similar to the expected value,
-using a cosine similarity threshold.
+using a configurable similarity or distance metric with a threshold.
 
 By default, embeddings are computed via OpenAI's `text-embedding-3-large` model.
 
@@ -31,6 +31,54 @@ assert:
       - file://my_expected_output.txt
     threshold: 0.8
 ```
+
+## Similarity Metrics
+
+You can specify which metric to use for comparing embeddings with the `similarityMetric` parameter. The default is `cosine`.
+
+### Cosine Similarity (default)
+
+Measures the cosine of the angle between two vectors. Range: 0 to 1 (higher is more similar).
+
+```yaml
+assert:
+  - type: similar
+    value: 'The expected output'
+    threshold: 0.8
+    similarityMetric: cosine  # Optional, this is the default
+```
+
+**When to use:** Best for semantic similarity where you care about the direction of the embedding vector, not its magnitude. This is the industry standard for embeddings.
+
+### Dot Product
+
+Computes the dot product of two vectors. Range: unbounded, but typically 0 to 1 for normalized embeddings (higher is more similar).
+
+```yaml
+assert:
+  - type: similar
+    value: 'The expected output'
+    threshold: 0.8
+    similarityMetric: dot_product
+```
+
+**When to use:** Useful when you want to match the metric used in your production vector database (many use dot product for performance). For normalized embeddings, dot product is nearly equivalent to cosine similarity.
+
+### Euclidean Distance
+
+Computes the straight-line distance between two vectors. Range: 0 to ∞ (lower is more similar).
+
+```yaml
+assert:
+  - type: similar
+    value: 'The expected output'
+    threshold: 0.5  # Maximum distance threshold
+    similarityMetric: euclidean
+```
+
+**When to use:** When you care about both the angle and magnitude differences between vectors. Note that the threshold represents the _maximum_ distance (not minimum similarity), so lower values are stricter.
+
+**Important:** For euclidean distance, the threshold semantics are inverted - it represents the _maximum_ acceptable distance rather than minimum similarity.
 
 ## Overriding the provider
 

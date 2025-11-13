@@ -1,7 +1,7 @@
 import { handleSimilar } from '../../src/assertions/similar';
 
 jest.mock('../../src/matchers', () => ({
-  matchesSimilarity: jest.fn().mockImplementation(async (expected, output, threshold, inverse) => {
+  matchesSimilarity: jest.fn().mockImplementation(async (expected, output, _threshold, inverse) => {
     if (inverse) {
       return {
         pass: expected !== output,
@@ -241,5 +241,148 @@ describe('handleSimilar', () => {
         providerResponse: { output: 'test' },
       }),
     ).rejects.toThrow('Similarity assertion type must have a string or array of strings value');
+  });
+
+  it('should use dot_product metric when specified', async () => {
+    const mockMatchesSimilarity = require('../../src/matchers').matchesSimilarity as jest.Mock;
+
+    await handleSimilar({
+      assertion: {
+        type: 'similar',
+        value: 'hello world',
+        similarityMetric: 'dot_product',
+      },
+      baseType: 'similar' as any,
+      renderedValue: 'hello world',
+      outputString: 'hello world',
+      inverse: false,
+      test: {
+        description: 'test',
+        vars: {},
+        assert: [],
+        options: {},
+      },
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test: {
+          description: 'test',
+          vars: {},
+          assert: [],
+          options: {},
+        },
+        logProbs: undefined,
+        // @ts-ignore
+        provider: { id: () => 'test-provider', callApi: async () => ({}) },
+        providerResponse: { output: 'hello world' },
+      },
+      output: 'hello world',
+      providerResponse: { output: 'hello world' },
+    });
+
+    // Verify that matchesSimilarity was called with dot_product metric
+    expect(mockMatchesSimilarity).toHaveBeenCalledWith(
+      'hello world',
+      'hello world',
+      expect.any(Number),
+      false,
+      expect.any(Object),
+      'dot_product',
+    );
+  });
+
+  it('should use euclidean metric when specified', async () => {
+    const mockMatchesSimilarity = require('../../src/matchers').matchesSimilarity as jest.Mock;
+
+    await handleSimilar({
+      assertion: {
+        type: 'similar',
+        value: 'hello world',
+        similarityMetric: 'euclidean',
+      },
+      baseType: 'similar' as any,
+      renderedValue: 'hello world',
+      outputString: 'hello world',
+      inverse: false,
+      test: {
+        description: 'test',
+        vars: {},
+        assert: [],
+        options: {},
+      },
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test: {
+          description: 'test',
+          vars: {},
+          assert: [],
+          options: {},
+        },
+        logProbs: undefined,
+        // @ts-ignore
+        provider: { id: () => 'test-provider', callApi: async () => ({}) },
+        providerResponse: { output: 'hello world' },
+      },
+      output: 'hello world',
+      providerResponse: { output: 'hello world' },
+    });
+
+    // Verify that matchesSimilarity was called with euclidean metric
+    expect(mockMatchesSimilarity).toHaveBeenCalledWith(
+      'hello world',
+      'hello world',
+      expect.any(Number),
+      false,
+      expect.any(Object),
+      'euclidean',
+    );
+  });
+
+  it('should default to cosine metric when not specified', async () => {
+    const mockMatchesSimilarity = require('../../src/matchers').matchesSimilarity as jest.Mock;
+
+    await handleSimilar({
+      assertion: {
+        type: 'similar',
+        value: 'hello world',
+      },
+      baseType: 'similar' as any,
+      renderedValue: 'hello world',
+      outputString: 'hello world',
+      inverse: false,
+      test: {
+        description: 'test',
+        vars: {},
+        assert: [],
+        options: {},
+      },
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test: {
+          description: 'test',
+          vars: {},
+          assert: [],
+          options: {},
+        },
+        logProbs: undefined,
+        // @ts-ignore
+        provider: { id: () => 'test-provider', callApi: async () => ({}) },
+        providerResponse: { output: 'hello world' },
+      },
+      output: 'hello world',
+      providerResponse: { output: 'hello world' },
+    });
+
+    // Verify that matchesSimilarity was called with cosine metric (default)
+    expect(mockMatchesSimilarity).toHaveBeenCalledWith(
+      'hello world',
+      'hello world',
+      expect.any(Number),
+      false,
+      expect.any(Object),
+      'cosine',
+    );
   });
 });

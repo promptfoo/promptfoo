@@ -544,6 +544,10 @@ export const AssertionSchema = z.object({
   // The threshold value, only applicable for similarity (cosine distance)
   threshold: z.number().optional(),
 
+  // The similarity metric to use for the 'similar' assertion type
+  // Options: 'cosine' (default), 'dot_product', 'euclidean'
+  similarityMetric: z.enum(['cosine', 'dot_product', 'euclidean']).optional(),
+
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
 

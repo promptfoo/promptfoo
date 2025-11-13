@@ -15,11 +15,19 @@ export const handleSimilar = async ({
     'Similarity assertion type must have a string or array of strings value',
   );
   const threshold = assertion.threshold ?? 0.75;
+  const metric = assertion.similarityMetric ?? 'cosine';
 
   if (Array.isArray(renderedValue)) {
     let minScore = Number.POSITIVE_INFINITY;
     for (const value of renderedValue) {
-      const result = await matchesSimilarity(value, outputString, threshold, inverse, test.options);
+      const result = await matchesSimilarity(
+        value,
+        outputString,
+        threshold,
+        inverse,
+        test.options,
+        metric,
+      );
       if (result.pass) {
         return {
           assertion,
@@ -39,7 +47,14 @@ export const handleSimilar = async ({
   } else {
     return {
       assertion,
-      ...(await matchesSimilarity(renderedValue, outputString, threshold, inverse, test.options)),
+      ...(await matchesSimilarity(
+        renderedValue,
+        outputString,
+        threshold,
+        inverse,
+        test.options,
+        metric,
+      )),
     };
   }
 };
