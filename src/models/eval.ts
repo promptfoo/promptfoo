@@ -42,6 +42,7 @@ import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
+import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 
 import type { EvalResultsFilterMode } from '../types/index';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
@@ -567,18 +568,20 @@ export default class Eval {
   }
 
   /**
-   * Private helper method to build filter conditions and query for test indices
+   * CRITICAL: Builds the WHERE SQL clause for filtering results.
+   * This is the single source of truth for all filtering logic.
+   * Used by both queryTestIndices() (pagination) and getFilteredMetrics().
+   *
+   * Any changes to filter logic MUST be made here to ensure consistency
+   * between displayed rows and calculated metrics.
+   *
+   * @returns SQL WHERE clause string (without "WHERE" keyword)
    */
-  private async queryTestIndices(opts: {
-    offset?: number;
-    limit?: number;
+  private buildFilterWhereSql(opts: {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
-  }): Promise<{ testIndices: number[]; filteredCount: number }> {
-    const db = getDb();
-    const offset = opts.offset ?? 0;
-    const limit = opts.limit ?? 50;
+  }): string {
     const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
     // Build filter conditions
@@ -764,7 +767,29 @@ export default class Eval {
       conditions.push(`(${searchConditions.join(' OR ')})`);
     }
 
-    const whereSql = conditions.join(' AND ');
+    return conditions.join(' AND ');
+  }
+
+  /**
+   * Private helper method to build filter conditions and query for test indices
+   */
+  private async queryTestIndices(opts: {
+    offset?: number;
+    limit?: number;
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<{ testIndices: number[]; filteredCount: number }> {
+    const db = getDb();
+    const offset = opts.offset ?? 0;
+    const limit = opts.limit ?? 50;
+
+    // CRITICAL: Use single source of truth for WHERE clause
+    const whereSql = this.buildFilterWhereSql({
+      filterMode: opts.filterMode,
+      searchQuery: opts.searchQuery,
+      filters: opts.filters,
+    });
 
     // Get filtered count
     const filteredCountQuery = sql.raw(
@@ -789,6 +814,31 @@ export default class Eval {
     const testIndices = rows.map((row) => row.test_idx);
 
     return { testIndices, filteredCount };
+  }
+
+  /**
+   * CRITICAL: Calculates metrics for filtered results.
+   * Uses the SAME WHERE clause as queryTestIndices() to ensure consistency.
+   *
+   * This method is called from the API route when filters are active to provide
+   * metrics that accurately reflect the filtered dataset.
+   *
+   * @returns Array of PromptMetrics, one per prompt
+   */
+  async getFilteredMetrics(opts: {
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<import('../types').PromptMetrics[]> {
+    // CRITICAL: Use the SAME WHERE clause as queryTestIndices
+    const whereSql = this.buildFilterWhereSql(opts);
+
+    return calculateFilteredMetrics({
+      evalId: this.id,
+      numPrompts: this.prompts.length,
+      whereSql,
+      whereParams: [], // SQLite uses string interpolation in this codebase
+    });
   }
 
   async getTablePage(opts: {
