@@ -17,7 +17,7 @@ import Select from '@mui/material/Select';
 import { alpha } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { FILE_METADATA_KEY } from '@promptfoo/constants';
+import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/constants';
 import {
   type EvalResultsFilterMode,
   type EvaluateTable,
@@ -319,7 +319,7 @@ function ResultsTable({
         modifiedComponentResults = true;
 
         const humanResultIndex = componentResults.findIndex(
-          (result) => result.assertion?.type === 'human',
+          (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
         );
 
         const newResult = {
@@ -327,7 +327,7 @@ function ResultsTable({
           score: finalScore,
           reason: 'Manual result (overrides all other grading results)',
           comment,
-          assertion: { type: 'human' as const },
+          assertion: { type: HUMAN_ASSERTION_TYPE },
         };
 
         if (humanResultIndex === -1) {

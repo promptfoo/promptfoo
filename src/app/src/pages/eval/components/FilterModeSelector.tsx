@@ -11,13 +11,14 @@ interface FilterModeSelectorProps {
   showDifferentOption?: boolean;
 }
 
-const BASE_OPTIONS = [
+const BASE_OPTIONS: ReadonlyArray<{ value: EvalResultsFilterMode; label: string }> = [
   { value: 'all', label: 'Show all results' },
   { value: 'failures', label: 'Show failures only' },
   { value: 'passes', label: 'Show passes only' },
   { value: 'errors', label: 'Show errors only' },
   { value: 'different', label: 'Show different outputs' },
   { value: 'highlights', label: 'Show highlights only' },
+  { value: 'user-rated', label: 'Show user-rated only' },
 ];
 
 export const FilterModeSelector = ({

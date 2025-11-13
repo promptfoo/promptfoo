@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(webui): add 'user-rated' filter to show only results with manual thumbs up/down ratings (#6193)
 - feat(redteam): allow configuring `redteam.frameworks` to limit compliance frameworks surfaced in reports and commands (#6170)
 - feat(webui): add layer strategy configuration UI in red team setup with per-step plugin targeting (#6180)
 - feat(app): Metadata value autocomplete eval filter (#6176)

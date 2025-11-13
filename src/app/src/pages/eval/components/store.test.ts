@@ -5,7 +5,13 @@ import { act } from '@testing-library/react';
 import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
-import type { EvaluateTable, PromptMetrics, ResultsFile, EvalTableDTO } from '@promptfoo/types';
+import type {
+  EvaluateTable,
+  PromptMetrics,
+  ResultsFile,
+  EvalTableDTO,
+  EvaluateTableOutput,
+} from '@promptfoo/types';
 
 vi.mock('uuid', () => ({
   v4: vi.fn(),
@@ -47,6 +53,45 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   return Array.from(metrics).sort();
 }
 
+const HUMAN_ASSERTION_TYPE = 'human';
+
+function createMockOutput(hasHumanRating: boolean): EvaluateTableOutput {
+  const output: EvaluateTableOutput = {
+    id: 'test-output',
+    text: 'test output',
+    prompt: 'test prompt',
+    provider: 'test provider',
+    pass: true,
+    failureReason: 0,
+    score: 1,
+    cost: 0,
+    latencyMs: 0,
+    namedScores: {},
+    testCase: {},
+  };
+
+  if (hasHumanRating) {
+    output.gradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Manual rating',
+      comment: 'User rated',
+      componentResults: [
+        {
+          pass: true,
+          score: 1,
+          reason: 'Human rating',
+          assertion: {
+            type: HUMAN_ASSERTION_TYPE,
+          },
+        },
+      ],
+    };
+  }
+
+  return output;
+}
+
 describe('useTableStore', () => {
   beforeEach(() => {
     act(() => {
@@ -72,9 +117,58 @@ describe('useTableStore', () => {
         metadataKeysLoading: false,
         metadataKeysError: false,
         currentMetadataKeysRequest: null,
+        userRatedResultsCount: 0,
       });
     });
     vi.clearAllMocks();
+  });
+
+  it('should set `userRatedResultsCount` to 0 when `setTable` is called with null', () => {
+    act(() => {
+      useTableStore.getState().setTable(null);
+    });
+
+    const state = useTableStore.getState();
+    expect(state.userRatedResultsCount).toBe(0);
+  });
+
+  it('should initialize `userRatedResultsCount` to 0 when the store is created or reset', () => {
+    const state = useTableStore.getState();
+    expect(state.userRatedResultsCount).toBe(0);
+  });
+
+  it('should update `userRatedResultsCount` to the correct value when `setTable` is called with a table containing user-rated outputs', () => {
+    const mockTable: EvaluateTable = {
+      head: { prompts: [], vars: [] },
+      body: [
+        { outputs: [createMockOutput(true), createMockOutput(false)] },
+        { outputs: [createMockOutput(true), createMockOutput(true)] },
+      ] as any,
+    };
+
+    act(() => {
+      useTableStore.getState().setTable(mockTable);
+    });
+
+    const state = useTableStore.getState();
+    expect(state.userRatedResultsCount).toBe(3);
+  });
+
+  it('should preserve userRatedResultsCount when changing filterMode', () => {
+    const initialUserRatedResultsCount = 5;
+
+    act(() => {
+      useTableStore.setState({ userRatedResultsCount: initialUserRatedResultsCount });
+    });
+
+    const newFilterMode = 'failures';
+
+    act(() => {
+      useTableStore.getState().setFilterMode(newFilterMode);
+    });
+
+    const state = useTableStore.getState();
+    expect(state.userRatedResultsCount).toBe(initialUserRatedResultsCount);
   });
 
   it('should set `filterMode` to the provided value when `setFilterMode` is called', () => {
@@ -133,6 +227,113 @@ describe('useTableStore', () => {
     expect(state.evalId).toBe(newEvalId);
   });
 
+  describe('computeUserRatedCount', () => {
+    it('should update userRatedResultsCount with the total number of outputs with human ratings when a table with some user-rated outputs is set', () => {
+      const mockTableWithHumanRatings = {
+        head: { prompts: [], vars: [] },
+        body: [
+          {
+            outputs: [
+              { gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } },
+              { gradingResult: { componentResults: [{ assertion: { type: 'equals' } }] } },
+            ],
+            vars: [],
+            test: {},
+          },
+          {
+            outputs: [
+              { gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } },
+              { gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } },
+            ],
+            vars: [],
+            test: {},
+          },
+          {
+            outputs: [
+              {},
+              { gradingResult: {} },
+              { gradingResult: { componentResults: [] } },
+              { gradingResult: { componentResults: [{ assertion: { type: 'contains' } }] } },
+            ],
+            vars: [],
+            test: {},
+          },
+        ],
+      } as unknown as EvaluateTable;
+
+      act(() => {
+        useTableStore.getState().setTable(mockTableWithHumanRatings);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.userRatedResultsCount).toBe(3);
+    });
+
+    it('should handle a table with rows that have empty outputs arrays', () => {
+      const mockTableWithEmptyOutputs = {
+        head: { prompts: [], vars: [] },
+        body: [
+          {
+            outputs: [],
+            vars: [],
+            test: {},
+          },
+        ],
+      } as unknown as EvaluateTable;
+
+      act(() => {
+        useTableStore.getState().setTable(mockTableWithEmptyOutputs);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.userRatedResultsCount).toBe(0);
+    });
+
+    it('should return 0 when given an EvaluateTable with an empty body (no rows).', () => {
+      const mockTableWithEmptyBody: EvaluateTable = {
+        head: { prompts: [], vars: [] },
+        body: [],
+      };
+
+      act(() => {
+        useTableStore.getState().setTable(mockTableWithEmptyBody);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.userRatedResultsCount).toBe(0);
+    });
+
+    it('should return the total number of outputs in the table when all outputs are user-rated', () => {
+      const mockTable = {
+        head: { prompts: [], vars: [] },
+        body: [
+          {
+            outputs: [
+              { gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } },
+              { gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } },
+            ],
+            vars: [],
+            test: {},
+          },
+          {
+            outputs: [{ gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } }],
+            vars: [],
+            test: {},
+          },
+        ],
+      } as unknown as EvaluateTable;
+
+      const totalOutputs = mockTable.body.reduce((sum, row) => sum + row.outputs.length, 0);
+
+      act(() => {
+        useTableStore.getState().setTable(mockTable);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.userRatedResultsCount).toBe(totalOutputs);
+    });
+  });
+
   describe('filterMode', () => {
     it('should handle interaction between URL-based filterMode setting and direct calls to setFilterMode/resetFilterMode', () => {
       act(() => {
@@ -156,8 +357,20 @@ describe('useTableStore', () => {
       state = useTableStore.getState();
       expect(state.filterMode).toBe('all');
     });
-  });
 
+    it('should set filterMode to "user-rated" when userRatedResultsCount is 0', () => {
+      act(() => {
+        useTableStore.setState({ userRatedResultsCount: 0 });
+      });
+
+      act(() => {
+        useTableStore.getState().setFilterMode('user-rated');
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filterMode).toBe('user-rated');
+    });
+  });
   describe('filterMode persistence', () => {
     it('should persist the existing filterMode when fetchEvalData is called without a filterMode option', async () => {
       const mockEvalId = 'test-eval-id';
@@ -512,7 +725,6 @@ describe('useTableStore', () => {
       expect(state.filters.options.plugin).toBeUndefined();
       expect(state.filters.options.severity).toBeUndefined();
     });
-
     it('should populate strategy options including basic when redteam config is present in fetchEvalData', async () => {
       const mockEvalId = 'redteam-eval-id';
       const mockStrategies = ['jailbreak', 'prompt-injection'];
@@ -1278,7 +1490,6 @@ describe('useTableStore', () => {
 
         expect(stateAfterFetch.shouldHighlightSearchText).toBe(true);
       });
-
       it('should update shouldHighlightSearchText based on the most recent completed request when multiple fetchEvalData calls are made in succession', async () => {
         const mockEvalId = 'test-eval-id';
         const mockCallApi = vi.mocked(callApi);
@@ -1597,7 +1808,6 @@ describe('useTableStore', () => {
         Severity.Low,
       ]);
     });
-
     it('should correctly populate severity options when handling a results file with version < 4 that contains redteam plugins with severities', () => {
       const mockResultsFile: ResultsFile = {
         version: 3,
@@ -1631,6 +1841,94 @@ describe('useTableStore', () => {
         Severity.Medium,
         Severity.Low,
       ]);
+    });
+
+    it('should set `userRatedResultsCount` to the correct value when `setTableFromResultsFile` is called with a results file containing user-rated outputs', () => {
+      const mockResultsFile: ResultsFile = {
+        version: 4,
+        config: {},
+        results: {
+          results: [
+            {
+              id: '1',
+              testIdx: 0,
+              promptIdx: 0,
+              promptId: 'prompt1',
+              prompt: { raw: 'test' },
+              provider: { id: 'test' },
+              success: true,
+              cost: 0,
+              latencyMs: 0,
+              response: { output: 'test' },
+              testCase: {
+                vars: {},
+              },
+              gradingResult: {
+                componentResults: [
+                  {
+                    assertion: { type: 'human' },
+                    pass: true,
+                    score: 1,
+                    reason: 'test',
+                    comment: 'test',
+                  },
+                ],
+              },
+            },
+            {
+              id: '2',
+              testIdx: 0,
+              promptIdx: 1,
+              promptId: 'prompt2',
+              prompt: { raw: 'test' },
+              provider: { id: 'test' },
+              success: true,
+              cost: 0,
+              latencyMs: 0,
+              response: { output: 'test' },
+              testCase: {
+                vars: {},
+              },
+            },
+            {
+              id: '3',
+              testIdx: 1,
+              promptIdx: 0,
+              promptId: 'prompt3',
+              prompt: { raw: 'test' },
+              provider: { id: 'test' },
+              success: true,
+              cost: 0,
+              latencyMs: 0,
+              response: { output: 'test' },
+              testCase: {
+                vars: {},
+              },
+              gradingResult: {
+                componentResults: [
+                  {
+                    assertion: { type: 'human' },
+                    pass: true,
+                    score: 1,
+                    reason: 'test',
+                    comment: 'test',
+                  },
+                ],
+              },
+            },
+          ] as any,
+        } as any,
+        prompts: [{ raw: 'test', label: 'test', provider: 'test' }],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      };
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.userRatedResultsCount).toBe(2);
     });
   });
 
@@ -1900,7 +2198,6 @@ describe('useTableStore', () => {
       expect(availableMetrics).toEqual([]);
     });
   });
-
   describe('computeAvailableSeverities', () => {
     beforeEach(() => {
       act(() => {
@@ -2208,7 +2505,6 @@ describe('useTableStore', () => {
       expect(state.filteredMetrics).toEqual(initialMetrics);
     });
   });
-
   describe('fetchMetadataKeys', () => {
     it('should handle an empty array of keys from the API response and return an empty array', async () => {
       const mockEvalId = 'test-eval-id';
