@@ -84,6 +84,38 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
     globals: true,
+    // Suppress known MUI and React Testing Library warnings that don't indicate real problems
+    onConsoleLog(log: string, type: 'stdout' | 'stderr'): false | undefined {
+      if (type === 'stderr') {
+        const suppressPatterns = [
+          // Suppress act() warnings (we've fixed all fixable tests, these are library-level issues)
+          /An update to ForwardRef\(Tabs\) inside a test was not wrapped in act/,
+          /An update to ForwardRef\(TouchRipple\) inside a test was not wrapped in act/,
+          /An update to ForwardRef\(ButtonBase\) inside a test was not wrapped in act/,
+          /An update to ForwardRef\(FormControl\) inside a test was not wrapped in act/,
+          /An update to ForwardRef\(Tooltip\) inside a test was not wrapped in act/,
+          /An update to TransitionGroup inside a test was not wrapped in act/,
+          /An update to \w+ inside a test was not wrapped in act/,
+          /The current testing environment is not configured to support act/,
+
+          // Keep these suppressed (not fixable - library/DOM issues)
+          /validateDOMNesting/,
+          /MUI: You have provided an out-of-range value/,
+          /MUI: The `value` provided to the Tabs component is invalid/,
+          /Failed prop type: MUI/,
+          /ReactDOM\.render is no longer supported/,
+          /unmountComponentAtNode is deprecated/,
+          /A component is changing an uncontrolled input to be controlled/,
+          /Function components cannot be given refs/,
+          /React does not recognize the `.*` prop on a DOM element/,
+          /No worst strategy found for plugin/,
+        ];
+
+        if (suppressPatterns.some((pattern) => pattern.test(log))) {
+          return false; // Suppress this log
+        }
+      }
+    },
   },
   define: {
     'import.meta.env.VITE_PROMPTFOO_VERSION': JSON.stringify(packageJson.version),
