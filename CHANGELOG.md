@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(redteam): allow configuring `redteam.frameworks` to limit compliance frameworks surfaced in reports and commands (#6170)
 - feat(webui): add layer strategy configuration UI in red team setup with per-step plugin targeting (#6180)
 - feat(app): Metadata value autocomplete eval filter (#6176)
 - feat(webui): display both total and filtered metrics simultaneously when filters are active, showing "X/Y filtered, Z total" format in evaluation results table for better visibility into filtered vs unfiltered data (#5969)
@@ -37,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(webui): prevent infinite loop in StrategyConfigDialog useEffect - fixes vitest tests hanging by using stable empty array references for default parameters (#6203)
 - fix(webui): require configuration for layer strategy before allowing navigation in red team setup - layer strategy now shows red border and blocks Next button until steps array is configured, similar to plugins requiring configuration
 - fix(webui): filter hidden metadata keys from metadata filter dropdown - ensures consistent filtering of 'citations' and '\_promptfooFileMetadata' keys across MetadataPanel, EvalOutputPromptDialog, and metadata filter dropdown (#6177)
 - fix(cli): format object and array variables with pretty-printed JSON in console table and HTML outputs for improved readability (#6175)
@@ -99,6 +101,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(cli): add `code-scans run` command for scanning code changes for LLM security vulnerabilities including prompt injection, PII exposure, and excessive agency - uses AI agents to trace data flows, analyze vulnerabilities across batches, and suggest fixes with configurable severity thresholds (see https://promptfoo.com/docs/code-scanning/ for more details) (#6121)
+- feat(github-action): add Code Scan GitHub Action for automated PR security scanning with GitHub App OIDC authentication or manual API token setup; automatically posts review comments with severity levels and suggested fixes (see https://promptfoo.com/docs/code-scanning/ for more details) (#6121)
 - feat(webui): add confirmation dialog and smart navigation for delete eval with improved UX (Material-UI dialog, next→previous→home navigation, loading states, toast notifications) (#6113)
 - feat(redteam): pass policy text to intent extraction for custom policy tests, enabling more accurate and self-contained testing objectives that include specific policy requirements (#6116)
 - feat(redteam): add timestamp context to all grading rubrics for time-aware evaluation and temporal context in security assessments (#6110)
