@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(assertions): add dot product and euclidean distance metrics for similarity assertion - introduces `similarityMetric` parameter (cosine, dot_product, euclidean) to allow matching production vector database metrics and support different similarity use cases (4d1f735)
 - feat(webui): display both total and filtered metrics simultaneously when filters are active, showing "X/Y filtered, Z total" format in evaluation results table for better visibility into filtered vs unfiltered data (#5969)
 
 ## [0.119.6] - 2025-11-12
