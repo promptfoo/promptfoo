@@ -13,9 +13,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
 import { useFilterMode } from './FilterModeProvider';
+import { useToast } from '@app/hooks/useToast';
 interface EvalOptions {
   /**
    * ID of a specific eval to load.
@@ -27,6 +28,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { showToast } = useToast();
 
   const {
     table,
@@ -162,50 +164,23 @@ export default function Eval({ fetchId }: EvalOptions) {
   }, [setSearchParams]);
 
   useEffect(() => {
-    // Reset filters when navigating to a different eval; necessary because Zustand
-    // is a global store.
+    const _searchParams = new URLSearchParams(window.location.search);
+
     resetFilters();
 
-    // Check for a `plugin` param in the URL; we support filtering on plugins via the URL which
-    // enables the "View Logs" functionality in Vulnerability reports.
-    const pluginParams = searchParams.getAll('plugin');
+     // Read search params
+     const filtersParam = _searchParams.get('filter');
 
-    // Check for >=1 metric params in the URL.
-    const metricParams = searchParams.getAll('metric');
-
-    // Check for >=1 policyId params in the URL.
-    const policyIdParams = searchParams.getAll('policy');
-
-    if (pluginParams.length > 0) {
-      pluginParams.forEach((pluginParam) => {
-        addFilter({
-          type: 'plugin',
-          operator: 'equals',
-          value: pluginParam,
-          logicOperator: 'or',
-        });
-      });
-    }
-
-    if (metricParams.length > 0) {
-      metricParams.forEach((metricParam) => {
-        addFilter({
-          type: 'metric',
-          operator: 'equals',
-          value: metricParam,
-          logicOperator: 'or',
-        });
-      });
-    }
-
-    if (policyIdParams.length > 0) {
-      policyIdParams.forEach((policyId) => {
-        addFilter({
-          type: 'policy',
-          operator: 'equals',
-          value: policyId,
-          logicOperator: 'or',
-        });
+     if (filtersParam) {
+      let filters: ResultsFilter[] = [];
+      try {
+        filters = JSON.parse(filtersParam) as ResultsFilter[];
+      } catch {
+        showToast('URL contains invalid JSON-encoded filters', 'error');
+        return;
+      }
+      filters.forEach((filter: ResultsFilter) => {
+        addFilter(filter);
       });
     }
 
