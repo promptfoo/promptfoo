@@ -58,9 +58,6 @@ const SUPPRESSED_WARNING_PATTERNS = [
   /An update to ForwardRef\(FormControl\) inside a test was not wrapped in act/,
   /An update to ForwardRef\(Tooltip\) inside a test was not wrapped in act/,
   /An update to TransitionGroup inside a test was not wrapped in act/,
-  /An update to EvalOutputPromptDialog inside a test was not wrapped in act/,
-  /An update to RunTestSuiteButton inside a test was not wrapped in act/,
-  /An update to ResultsView inside a test was not wrapped in act/,
 
   // React Testing Library configuration messages
   /The current testing environment is not configured to support act/,
