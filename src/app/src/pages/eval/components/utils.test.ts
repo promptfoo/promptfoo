@@ -3,15 +3,28 @@ import type { EvaluateTableOutput } from '@promptfoo/types';
 import { describe, expect, it } from 'vitest';
 import { getHumanRating, hasHumanRating } from './utils';
 
+// Helper to create a base output object with all required properties
+const createBaseOutput = (): EvaluateTableOutput => ({
+  id: 'test-id',
+  text: 'test output',
+  prompt: 'test prompt',
+  pass: true,
+  score: 1,
+  cost: 0,
+  failureReason: 0,
+  latencyMs: 0,
+  namedScores: {},
+  testCase: {},
+});
+
 describe('hasHumanRating', () => {
   it('should return true when output has human rating in componentResults', () => {
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
         componentResults: [
           {
             pass: true,
@@ -28,12 +41,11 @@ describe('hasHumanRating', () => {
 
   it('should return false when output has no human rating in componentResults', () => {
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
         componentResults: [
           {
             pass: true,
@@ -57,23 +69,17 @@ describe('hasHumanRating', () => {
   });
 
   it('should return false when gradingResult is missing', () => {
-    const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
-    };
-
+    const output = createBaseOutput();
     expect(hasHumanRating(output)).toBe(false);
   });
 
   it('should return false when componentResults is missing', () => {
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
       },
     };
 
@@ -82,12 +88,11 @@ describe('hasHumanRating', () => {
 
   it('should return false when componentResults is empty', () => {
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
         componentResults: [],
       },
     };
@@ -97,12 +102,11 @@ describe('hasHumanRating', () => {
 
   it('should handle componentResults with null or undefined assertion properties', () => {
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
         componentResults: [
           {
             pass: true,
@@ -124,12 +128,11 @@ describe('hasHumanRating', () => {
 
   it('should find human rating among multiple componentResults', () => {
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
         componentResults: [
           {
             pass: true,
@@ -167,12 +170,11 @@ describe('getHumanRating', () => {
     };
 
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
         componentResults: [humanResult],
       },
     };
@@ -182,12 +184,11 @@ describe('getHumanRating', () => {
 
   it('should return undefined when no human rating exists', () => {
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
         componentResults: [
           {
             pass: true,
@@ -211,23 +212,17 @@ describe('getHumanRating', () => {
   });
 
   it('should return undefined when gradingResult is missing', () => {
-    const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
-    };
-
+    const output = createBaseOutput();
     expect(getHumanRating(output)).toBeUndefined();
   });
 
   it('should return undefined when componentResults is missing', () => {
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
       },
     };
 
@@ -236,12 +231,11 @@ describe('getHumanRating', () => {
 
   it('should return undefined when componentResults is empty', () => {
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
         componentResults: [],
       },
     };
@@ -251,12 +245,11 @@ describe('getHumanRating', () => {
 
   it('should handle componentResults without assertion property', () => {
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
         componentResults: [
           {
             pass: true,
@@ -286,12 +279,11 @@ describe('getHumanRating', () => {
     };
 
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
         componentResults: [
           {
             pass: true,
@@ -310,12 +302,11 @@ describe('getHumanRating', () => {
 
   it('should handle componentResults with null elements', () => {
     const output: EvaluateTableOutput = {
-      pass: true,
-      score: 1,
-      text: 'test output',
+      ...createBaseOutput(),
       gradingResult: {
         pass: true,
         score: 1,
+        reason: 'Overall rating',
         componentResults: [null as any, undefined as any],
       },
     };
