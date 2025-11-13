@@ -11,6 +11,7 @@ import {
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
 import PageLoading from './components/PageLoading';
+import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -92,9 +93,11 @@ function App() {
   return (
     <ToastProvider>
       <QueryClientProvider client={queryClient}>
-        <Suspense fallback={<PageLoading />}>
-          <RouterProvider router={router} />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoading />}>
+            <RouterProvider router={router} />
+          </Suspense>
+        </ErrorBoundary>
       </QueryClientProvider>
     </ToastProvider>
   );
