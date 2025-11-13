@@ -210,7 +210,6 @@ GPT-5.1 introduces several improvements over GPT-5:
 
 - **`none` reasoning mode**: New lowest reasoning setting for low-latency interactions (default setting)
 - **Increased steerability**: Better control over personality, tone, and output format
-- **New tool types**: Built-in `apply_patch` and `shell` tools for coding workflows
 - **Configurable verbosity**: Control output length with `low`, `medium`, or `high` settings (default: `medium`)
 
 #### Usage Examples
@@ -223,8 +222,7 @@ providers:
     config:
       reasoning:
         effort: 'none' # Default setting - no reasoning tokens
-      text:
-        verbosity: 'low' # Concise outputs
+      verbosity: 'low' # Concise outputs
 ```
 
 Complex coding and reasoning tasks:
@@ -235,20 +233,8 @@ providers:
     config:
       reasoning:
         effort: 'high' # Maximum reasoning for complex tasks
-      text:
-        verbosity: 'medium' # Balanced output length
+      verbosity: 'medium' # Balanced output length
       max_output_tokens: 4096
-```
-
-Using built-in tools:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:gpt-5.1
-    config:
-      tools:
-        - type: apply_patch # Built-in code editing tool
-        - type: shell # Built-in shell command tool
 ```
 
 #### Reasoning Modes

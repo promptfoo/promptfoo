@@ -203,6 +203,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       textFormat = { format: { type: 'text' } };
     }
 
+    // Add verbosity for GPT-5.1 models if configured
+    if (this.modelName.startsWith('gpt-5') && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
+    }
+
     const body = {
       model: this.modelName,
       input,

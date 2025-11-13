@@ -11,8 +11,7 @@ providers:
     config:
       reasoning:
         effort: 'none' # Default - no reasoning tokens, fastest
-      text:
-        verbosity: 'low' # Concise output
+      verbosity: 'low' # Concise output
       max_output_tokens: 1000
 
   - id: openai:responses:gpt-5.1
@@ -20,8 +19,7 @@ providers:
     config:
       reasoning:
         effort: 'medium' # Balanced reasoning
-      text:
-        verbosity: 'medium' # Default verbosity
+      verbosity: 'medium' # Default verbosity
       max_output_tokens: 2000
 
   - id: openai:responses:gpt-5.1
@@ -29,8 +27,7 @@ providers:
     config:
       reasoning:
         effort: 'high' # Maximum reasoning for complex tasks
-      text:
-        verbosity: 'high' # Detailed output
+      verbosity: 'high' # Detailed output
       max_output_tokens: 4000
 
 tests:
