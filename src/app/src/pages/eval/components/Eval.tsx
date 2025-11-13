@@ -19,7 +19,7 @@ import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
-
+import { useFilterMode } from './FilterModeProvider';
 interface EvalOptions {
   /**
    * ID of a specific eval to load.
@@ -45,9 +45,9 @@ export default function Eval({ fetchId }: EvalOptions) {
     resetFilters,
     addFilter,
     setIsStreaming,
-    setFilterMode,
-    resetFilterMode,
   } = useTableStore();
+
+  const { filterMode } = useFilterMode();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -87,7 +87,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         setEvalId(id);
 
-        const { filters, filterMode } = useTableStore.getState();
+        const { filters } = useTableStore.getState();
 
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
@@ -111,7 +111,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         return false;
       }
     },
-    [fetchEvalData, setFailed, setEvalId],
+    [fetchEvalData, setFailed, setEvalId, filterMode],
   );
 
   /**
@@ -146,9 +146,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Check for >=1 policyId params in the URL.
     const policyIdParams = searchParams.getAll('policy');
 
-    // Check for a `mode` param in the URL.
-    const modeParam = searchParams.get('mode');
-
     if (pluginParams.length > 0) {
       pluginParams.forEach((pluginParam) => {
         addFilter({
@@ -180,15 +177,6 @@ export default function Eval({ fetchId }: EvalOptions) {
           logicOperator: 'or',
         });
       });
-    }
-
-    // If a mode param is provided, set the filter mode to the provided value.
-    // Otherwise, reset the filter mode to ensure that the filter mode from the previously viewed eval
-    // is not applied (again, because Zustand is a global store).
-    if (modeParam && EvalResultsFilterMode.safeParse(modeParam).success) {
-      setFilterMode(modeParam as EvalResultsFilterMode);
-    } else {
-      resetFilterMode();
     }
 
     if (fetchId) {

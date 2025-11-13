@@ -77,30 +77,6 @@ describe('useTableStore', () => {
     vi.clearAllMocks();
   });
 
-  it('should set `filterMode` to the provided value when `setFilterMode` is called', () => {
-    const newFilterMode = 'failures';
-
-    act(() => {
-      useTableStore.getState().setFilterMode(newFilterMode);
-    });
-
-    const state = useTableStore.getState();
-    expect(state.filterMode).toBe(newFilterMode);
-  });
-
-  it('should reset filterMode to "all" when resetFilterMode is called', () => {
-    act(() => {
-      useTableStore.getState().setFilterMode('failures');
-    });
-
-    act(() => {
-      useTableStore.getState().resetFilterMode();
-    });
-
-    const state = useTableStore.getState();
-    expect(state.filterMode).toBe('all');
-  });
-
   it('should reset filteredMetrics to null when setEvalId is called', () => {
     const initialMetrics: PromptMetrics[] = [
       {
@@ -131,56 +107,6 @@ describe('useTableStore', () => {
     const state = useTableStore.getState();
     expect(state.filteredMetrics).toBeNull();
     expect(state.evalId).toBe(newEvalId);
-  });
-
-  describe('filterMode', () => {
-    it('should handle interaction between URL-based filterMode setting and direct calls to setFilterMode/resetFilterMode', () => {
-      act(() => {
-        useTableStore.setState({ filterMode: 'failures' });
-      });
-
-      let state = useTableStore.getState();
-      expect(state.filterMode).toBe('failures');
-
-      act(() => {
-        useTableStore.getState().setFilterMode('all');
-      });
-
-      state = useTableStore.getState();
-      expect(state.filterMode).toBe('all');
-
-      act(() => {
-        useTableStore.getState().resetFilterMode();
-      });
-
-      state = useTableStore.getState();
-      expect(state.filterMode).toBe('all');
-    });
-  });
-
-  describe('filterMode persistence', () => {
-    it('should persist the existing filterMode when fetchEvalData is called without a filterMode option', async () => {
-      const mockEvalId = 'test-eval-id';
-      (callApi as Mock).mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          table: { head: { prompts: [] }, body: [] },
-          totalCount: 0,
-          filteredCount: 0,
-        }),
-      });
-
-      act(() => {
-        useTableStore.getState().setFilterMode('failures');
-      });
-
-      await act(async () => {
-        await useTableStore.getState().fetchEvalData(mockEvalId);
-      });
-
-      const state = useTableStore.getState();
-      expect(state.filterMode).toBe('failures');
-    });
   });
 
   describe('extractUniqueStrategyIds', () => {
@@ -2158,35 +2084,6 @@ describe('useTableStore', () => {
 
       state = useTableStore.getState();
       expect(state.filteredMetrics).toBeNull();
-    });
-
-    it('should not immediately affect `filteredMetrics` when `setFilterMode` is called', () => {
-      const initialMetrics: PromptMetrics[] = [
-        {
-          score: 0.8,
-          cost: 1,
-          testPassCount: 1,
-          testFailCount: 0,
-          testErrorCount: 0,
-          assertPassCount: 0,
-          assertFailCount: 0,
-          totalLatencyMs: 0,
-          tokenUsage: {},
-          namedScores: {},
-          namedScoresCount: {},
-        },
-      ];
-      act(() => {
-        useTableStore.setState({ filteredMetrics: initialMetrics });
-      });
-
-      const newFilterMode = 'failures';
-      act(() => {
-        useTableStore.getState().setFilterMode(newFilterMode);
-      });
-
-      const state = useTableStore.getState();
-      expect(state.filteredMetrics).toBe(initialMetrics);
     });
 
     it('should not affect `filteredMetrics` when `setTable` is called', () => {

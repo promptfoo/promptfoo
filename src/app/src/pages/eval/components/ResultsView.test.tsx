@@ -38,6 +38,13 @@ vi.mock('./store', () => {
   };
 });
 
+vi.mock('./FilterModeProvider', () => ({
+  useFilterMode: () => ({
+    filterMode: 'all',
+    setFilterMode: vi.fn(),
+  }),
+}));
+
 vi.mock('./ShareModal', () => ({
   default: vi.fn(({ open }) => (open ? <div data-testid="share-modal">Share Modal</div> : null)),
 }));
@@ -200,8 +207,6 @@ describe('ResultsView Share Button', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
 
@@ -359,8 +364,6 @@ describe('ResultsView Copy Eval', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
 
@@ -453,8 +456,6 @@ describe('ResultsView Copy Menu Item', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
 
@@ -544,8 +545,6 @@ describe('ResultsView', () => {
         },
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
     renderWithRouter(
@@ -622,8 +621,6 @@ describe('ResultsView Plugin Filter - Not Equals', () => {
         },
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
 
@@ -718,8 +715,6 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
@@ -785,8 +780,6 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
     renderWithRouter(
@@ -825,8 +818,6 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
     renderWithRouter(
@@ -894,8 +885,6 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
     renderWithRouter(
@@ -953,8 +942,6 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
   it('should not render ResultsCharts if there is only one prompt', async () => {
@@ -989,8 +976,6 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
     renderWithRouter(
@@ -1045,8 +1030,6 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
     renderWithRouter(
@@ -1101,8 +1084,6 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
     renderWithRouter(
@@ -1184,8 +1165,6 @@ describe('ResultsView with extreme score values', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
   it('renders ResultsCharts when there are multiple prompts and extreme score values with variance', () => {
@@ -1255,8 +1234,6 @@ describe('ResultsView - Size Warning in Copy Dialog', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
 
@@ -1340,8 +1317,6 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
     renderWithRouter(
@@ -1428,8 +1403,6 @@ describe('ResultsView Size Warning', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
 

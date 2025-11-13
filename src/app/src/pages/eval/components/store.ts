@@ -173,11 +173,11 @@ function computeAvailableSeverities(
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
-  filterMode?: EvalResultsFilterMode;
   searchText?: string;
   skipSettingEvalId?: boolean;
   skipLoadingState?: boolean;
   filters?: ResultsFilter[];
+  filterMode?: EvalResultsFilterMode;
 }
 
 interface ColumnState {
@@ -354,10 +354,6 @@ interface TableState {
   metadataValuesError: Record<string, boolean>;
   fetchMetadataValues: (id: string, key: string) => Promise<string[]>;
   currentMetadataValuesRequests: Record<string, AbortController | null>;
-
-  filterMode: EvalResultsFilterMode;
-  setFilterMode: (filterMode: EvalResultsFilterMode) => void;
-  resetFilterMode: () => void;
 }
 
 interface SettingsState {
@@ -543,8 +539,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
     const {
       pageIndex = 0,
       pageSize = 50,
-      // Default to current store value to keep initial load consistent with UI state
-      filterMode = get().filterMode,
+      filterMode = 'all',
       searchText = '',
       skipSettingEvalId = false,
       skipLoadingState = false,
@@ -989,9 +984,4 @@ export const useTableStore = create<TableState>()((set, get) => ({
       return [];
     }
   },
-
-  filterMode: 'all',
-  setFilterMode: (filterMode: EvalResultsFilterMode) =>
-    set((prevState) => ({ ...prevState, filterMode })),
-  resetFilterMode: () => set((prevState) => ({ ...prevState, filterMode: 'all' })),
 }));

@@ -15,6 +15,12 @@ vi.mock('./store', () => ({
   useTableStore: vi.fn(),
   useResultsViewSettingsStore: vi.fn(),
 }));
+vi.mock('./FilterModeProvider', () => ({
+  useFilterMode: () => ({
+    filterMode: 'all',
+    setFilterMode: vi.fn(),
+  }),
+}));
 vi.mock('./ResultsView', () => ({
   default: ({ defaultEvalId }: { defaultEvalId: string }) => (
     <div data-testid="results-view" data-default-eval-id={defaultEvalId} />
@@ -58,7 +64,6 @@ const baseMockTableStore = {
   highlightedResultsCount: 0,
   isFetching: false,
   filters: { values: {} },
-  filterMode: undefined,
   setEvalId: vi.fn(),
   setAuthor: vi.fn(),
   setVersion: vi.fn(),
@@ -72,15 +77,12 @@ const baseMockTableStore = {
     .mockResolvedValue({ table: mockTable, config: {}, totalCount: 0, filteredCount: 0 }),
   resetFilters: vi.fn(),
   setIsStreaming: vi.fn(),
-  setFilterMode: vi.fn(),
-  resetFilterMode: vi.fn(),
   addFilter: vi.fn(),
 };
 
 // Mock getState for the store
 (useTableStore as any).getState = vi.fn(() => ({
   filters: { values: {} },
-  filterMode: undefined,
 }));
 
 describe('Eval Page Metadata', () => {
