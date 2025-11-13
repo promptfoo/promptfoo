@@ -162,15 +162,7 @@ async function run(): Promise<void> {
     } else {
       // Run real scan in production
       core.info('📦 Installing promptfoo...');
-      // TODO: Switch to real promptfoo npm package (not git url)
-
-      // Use --ignore-scripts to skip build and rely on prebuilt binaries
-      await exec.exec('npm', [
-        'install',
-        '-g',
-        'git+https://github.com/promptfoo/promptfoo.git#dane/code_scan',
-        '--ignore-scripts',
-      ]);
+      await exec.exec('npm', ['install', '-g', 'promptfoo']);
       core.info('✅ Promptfoo installed successfully');
 
       core.info(`🚀 Running promptfoo code-scans run...`);
