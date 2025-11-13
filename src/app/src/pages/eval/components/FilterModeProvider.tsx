@@ -14,7 +14,7 @@ type FilterModeContextType = {
 
 const FilterModeContext = createContext<FilterModeContextType>({
   filterMode: DEFAULT_FILTER_MODE,
-  setFilterMode: (value: EvalResultsFilterMode) => {},
+  setFilterMode: (_value: EvalResultsFilterMode) => {},
 });
 
 export const useFilterMode = () => {
