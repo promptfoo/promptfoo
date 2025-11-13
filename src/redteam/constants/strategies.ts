@@ -4,8 +4,10 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
   'nist:ai:measure',
   'owasp:api',
   'owasp:llm',
+  'owasp:agentic',
   'eu:ai-act',
   'iso:42001',
+  'gdpr',
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 

@@ -6,6 +6,7 @@ import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
+import { codeScansCommand } from './codeScan';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
@@ -106,6 +107,7 @@ async function main() {
   // Alphabetical order
   authCommand(program);
   cacheCommand(program);
+  codeScansCommand(program);
   configCommand(program);
   debugCommand(program, defaultConfig, defaultConfigPath);
   deleteCommand(program);
@@ -142,8 +144,12 @@ async function main() {
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
 
-  program.hook('postAction', () => {
+  program.hook('postAction', async () => {
     printErrorInformation(cliState.errorLogFile, cliState.debugLogFile);
+
+    if (cliState.postActionCallback) {
+      await cliState.postActionCallback();
+    }
   });
 
   program.parse();

@@ -53,6 +53,10 @@ const getStepId = (step: StepType): string => {
   return typeof step === 'string' ? step : step.id;
 };
 
+// Stable empty arrays to avoid infinite loops in useEffect dependencies
+const EMPTY_PLUGINS_ARRAY: string[] = [];
+const EMPTY_STRATEGIES_ARRAY: Array<string | { id: string; config?: Record<string, any> }> = [];
+
 interface StrategyConfigDialogProps {
   open: boolean;
   strategy: string | null;
@@ -71,8 +75,8 @@ export default function StrategyConfigDialog({
   onClose,
   onSave,
   strategyData,
-  selectedPlugins = [],
-  allStrategies = [],
+  selectedPlugins = EMPTY_PLUGINS_ARRAY,
+  allStrategies = EMPTY_STRATEGIES_ARRAY,
 }: StrategyConfigDialogProps) {
   const [localConfig, setLocalConfig] = React.useState<Record<string, any>>(config || {});
   const [enabled, setEnabled] = React.useState<boolean>(
