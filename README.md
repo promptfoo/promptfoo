@@ -38,7 +38,6 @@ See [Getting Started](https://www.promptfoo.dev/docs/getting-started/) (evals) o
 - **Secure your LLM apps** with [red teaming](https://www.promptfoo.dev/docs/red-team/) and vulnerability scanning
 - **Compare models** side-by-side (OpenAI, Anthropic, Azure, Bedrock, Ollama, and [more](https://www.promptfoo.dev/docs/providers/))
 - **Automate checks** in [CI/CD](https://www.promptfoo.dev/docs/integrations/ci-cd/)
-- **Review pull requests** for LLM-related security and compliance issues with [code scanning](https://www.promptfoo.dev/docs/code-scanning/)
 - **Share results** with your team
 
 Here's what it looks like in action:
@@ -70,7 +69,6 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 - 💻 [CLI Usage](https://www.promptfoo.dev/docs/usage/command-line/)
 - 📦 [Node.js Package](https://www.promptfoo.dev/docs/usage/node-package/)
 - 🤖 [Supported Models](https://www.promptfoo.dev/docs/providers/)
-- 🔬 [Code Scanning Guide](https://www.promptfoo.dev/docs/code-scanning/)
 
 ## Contributing
 
