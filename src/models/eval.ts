@@ -93,15 +93,52 @@ export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
+/**
+ * Helper to execute Drizzle queries for both SQLite and MySQL.
+ * For select queries, SQLite uses .all(), MySQL awaits the promise.
+ * For update/delete queries, SQLite uses .run(), MySQL awaits the promise.
+ * For raw SQL, SQLite uses db.all(), MySQL uses db.execute().
+ */
+async function executeQuery(query: any, method: 'select' | 'update' | 'rawSql' = 'select'): Promise<any> {
+  const usingMysql = shouldUseMysql();
+  
+  if (method === 'rawSql') {
+    // Raw SQL queries
+    if (usingMysql) {
+      // MySQL: execute returns [rows, fields]
+      const [rows] = await query.execute();
+      return rows;
+    } else {
+      // SQLite: db.all() returns rows directly
+      return query;
+    }
+  } else if (method === 'select') {
+    // Select queries
+    if (usingMysql) {
+      return await query;
+    } else {
+      return query.all();
+    }
+  } else {
+    // Update/Delete queries
+    if (usingMysql) {
+      return await query;
+    } else {
+      return query.run();
+    }
+  }
+}
+
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
-    const db = getDb();
+    const usingMysql = shouldUseMysql();
+    const db = usingMysql ? await getDbAsync() : getDb();
     const query = sql.raw(
       `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
 FROM eval_results where eval_id IN (${evals.map((e: Eval) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
     );
     // @ts-ignore
-    const results: { key: string; eval_id: string }[] = await db.all(query);
+    const results: { key: string; eval_id: string }[] = usingMysql ? await (db as any).execute(query).then(([rows]: any) => rows) : await db.all(query);
     const vars = results.reduce((acc: Record<string, string[]>, r) => {
       acc[r.eval_id] = acc[r.eval_id] || [];
       acc[r.eval_id].push(r.key);
@@ -111,22 +148,29 @@ FROM eval_results where eval_id IN (${evals.map((e: Eval) => `'${e.id}'`).join('
   }
 
   static async getVarsFromEval(evalId: string) {
-    const db = getDb();
+    const usingMysql = shouldUseMysql();
+    const db = usingMysql ? await getDbAsync() : getDb();
     const query = sql.raw(
       `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
     FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
     );
     // @ts-ignore
-    const results: { key: string }[] = await db.all(query);
+    const results: { key: string }[] = usingMysql ? await (db as any).execute(query).then(([rows]: any) => rows) : await db.all(query);
     const vars = results.map((r) => r.key);
 
     return vars;
   }
 
   static async setVars(evalId: string, vars: string[]) {
-    const db = getDb();
+    const usingMysql = shouldUseMysql();
+    const db = usingMysql ? await getDbAsync() : getDb();
     try {
-      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+      const updateQuery = db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId));
+      if (usingMysql) {
+        await updateQuery;
+      } else {
+        updateQuery.run();
+      }
     } catch (e) {
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
     }
@@ -140,7 +184,8 @@ FROM eval_results where eval_id IN (${evals.map((e: Eval) => `'${e.id}'`).join('
       key: string;
     }
 
-    const db = getDb();
+    const usingMysql = shouldUseMysql();
+    const db = usingMysql ? await getDbAsync() : getDb();
     try {
       // Combine primary eval ID with comparison eval IDs
       const allEvalIds = [evalId, ...comparisonEvalIds];
@@ -158,7 +203,7 @@ FROM eval_results where eval_id IN (${evals.map((e: Eval) => `'${e.id}'`).join('
         ORDER BY j.key
         LIMIT 1000
       `;
-      const results: MetadataKeyResult[] = await db.all(query);
+      const results: MetadataKeyResult[] = usingMysql ? await (db as any).execute(query).then(([rows]: any) => rows) : await db.all(query);
       return results.map((r) => r.key);
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
@@ -188,14 +233,16 @@ export default class Eval {
   _shared: boolean = false;
 
   static async latest() {
-    const db = getDb();
-    const db_results = await db
+    const usingMysql = shouldUseMysql();
+    const db = usingMysql ? await getDbAsync() : getDb();
+    const latestQuery = db
       .select({
         id: evalsTable.id,
       })
       .from(evalsTable)
       .orderBy(desc(evalsTable.createdAt))
       .limit(1);
+    const db_results = usingMysql ? await latestQuery : latestQuery.all();
 
     if (db_results.length === 0) {
       return undefined;
@@ -205,22 +252,24 @@ export default class Eval {
   }
 
   static async findById(id: string) {
-    const db = getDb();
+    const usingMysql = shouldUseMysql();
+    const db = usingMysql ? await getDbAsync() : getDb();
 
-    const evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
+    const evalQuery = db.select().from(evalsTable).where(eq(evalsTable.id, id));
+    const evalData = usingMysql ? await evalQuery : evalQuery.all();
 
     if (evalData.length === 0) {
       return undefined;
     }
 
-    const datasetResults = db
+    const datasetQuery = db
       .select({
         datasetId: evalsToDatasetsTable.datasetId,
       })
       .from(evalsToDatasetsTable)
       .where(eq(evalsToDatasetsTable.evalId, id))
-      .limit(1)
-      .all();
+      .limit(1);
+    const datasetResults = usingMysql ? await datasetQuery : datasetQuery.all();
 
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
@@ -251,15 +300,16 @@ export default class Eval {
   }
 
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
-    const db = getDb();
-    const evals = await db
+    const usingMysql = shouldUseMysql();
+    const db = usingMysql ? await getDbAsync() : getDb();
+    const evalsQuery = db
       .select()
       .from(evalsTable)
       .limit(limit)
-      .orderBy(desc(evalsTable.createdAt))
-      .all();
+      .orderBy(desc(evalsTable.createdAt));
+    const evals = usingMysql ? await evalsQuery : evalsQuery.all();
     return evals.map(
-      (e) =>
+      (e: any) =>
         new Eval(e.config, {
           id: e.id,
           createdAt: new Date(e.createdAt),
@@ -423,7 +473,8 @@ export default class Eval {
   }
 
   async save() {
-    const db = getDb();
+    const usingMysql = shouldUseMysql();
+    const db = usingMysql ? await getDbAsync() : getDb();
     const updateObj: Record<string, any> = {
       config: this.config,
       prompts: this.prompts,
@@ -438,7 +489,12 @@ export default class Eval {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    const updateQuery = db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id));
+    if (usingMysql) {
+      await updateQuery;
+    } else {
+      updateQuery.run();
+    }
     this.persisted = true;
   }
 
@@ -505,7 +561,8 @@ export default class Eval {
     searchQuery?: string;
     filters?: string[];
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
-    const db = getDb();
+    const usingMysql = shouldUseMysql();
+    const db = usingMysql ? await getDbAsync() : getDb();
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
     const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
@@ -657,7 +714,7 @@ export default class Eval {
       `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
     );
     const countStart = Date.now();
-    const countResult = (await db.all(filteredCountQuery))[0] as FilteredCountRow | undefined;
+    const countResult = (usingMysql ? await (db as any).execute(filteredCountQuery).then(([rows]: any) => rows) : await db.all(filteredCountQuery))[0] as FilteredCountRow | undefined;
     const countEnd = Date.now();
     logger.debug(`Count query took ${countEnd - countStart}ms`);
     const filteredCount = countResult?.count || 0;
@@ -667,7 +724,7 @@ export default class Eval {
       `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
     );
     const idxStart = Date.now();
-    const rows = (await db.all(idxQuery)) as TestIndexRow[];
+    const rows = (usingMysql ? await (db as any).execute(idxQuery).then(([rows]: any) => rows) : await db.all(idxQuery)) as TestIndexRow[];
     const idxEnd = Date.now();
     logger.debug(`Index query took ${idxEnd - idxStart}ms`);
 
@@ -928,7 +985,8 @@ export async function getEvalSummaries(
   type?: 'redteam' | 'eval',
   includeProviders: boolean = false,
 ): Promise<EvalSummary[]> {
-  const db = getDb();
+  const usingMysql = shouldUseMysql();
+  const db = usingMysql ? await getDbAsync() : getDb();
 
   const whereClauses: any[] = [];
 
@@ -944,7 +1002,7 @@ export async function getEvalSummaries(
     }
   }
 
-  const results = db
+  const resultsQuery = db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
@@ -957,8 +1015,8 @@ export async function getEvalSummaries(
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(and(...whereClauses))
-    .orderBy(desc(evalsTable.createdAt))
-    .all();
+    .orderBy(desc(evalsTable.createdAt));
+  const results = usingMysql ? await resultsQuery : resultsQuery.all();
 
   /**
    * Deserialize the evals. A few things to note:

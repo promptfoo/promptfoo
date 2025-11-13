@@ -149,15 +149,6 @@ CREATE INDEX `eval_result_eval_test_idx` ON `eval_results` (`eval_id`,`test_idx`
 CREATE INDEX `eval_result_eval_success_idx` ON `eval_results` (`eval_id`,`success`);--> statement-breakpoint
 CREATE INDEX `eval_result_eval_failure_idx` ON `eval_results` (`eval_id`,`failure_reason`);--> statement-breakpoint
 CREATE INDEX `eval_result_eval_test_success_idx` ON `eval_results` (`eval_id`,`test_idx`,`success`);--> statement-breakpoint
-CREATE INDEX `eval_result_response_idx` ON `eval_results` (`response`);--> statement-breakpoint
-CREATE INDEX `eval_result_grading_result_reason_idx` ON `eval_results` (`(JSON_UNQUOTE(JSON_EXTRACT(`grading_result``,` '$.reason')))`);--> statement-breakpoint
-CREATE INDEX `eval_result_grading_result_comment_idx` ON `eval_results` (`(JSON_UNQUOTE(JSON_EXTRACT(`grading_result``,` '$.comment')))`);--> statement-breakpoint
-CREATE INDEX `eval_result_test_case_vars_idx` ON `eval_results` (`(JSON_UNQUOTE(JSON_EXTRACT(`test_case``,` '$.vars')))`);--> statement-breakpoint
-CREATE INDEX `eval_result_test_case_metadata_idx` ON `eval_results` (`(JSON_UNQUOTE(JSON_EXTRACT(`metadata``,` '$')))`);--> statement-breakpoint
-CREATE INDEX `eval_result_named_scores_idx` ON `eval_results` (`(JSON_UNQUOTE(JSON_EXTRACT(`named_scores``,` '$')))`);--> statement-breakpoint
-CREATE INDEX `eval_result_metadata_idx` ON `eval_results` (`(JSON_UNQUOTE(JSON_EXTRACT(`metadata``,` '$')))`);--> statement-breakpoint
-CREATE INDEX `eval_result_metadata_plugin_id_idx` ON `eval_results` (`(JSON_UNQUOTE(JSON_EXTRACT(`metadata``,` '$.pluginId')))`);--> statement-breakpoint
-CREATE INDEX `eval_result_metadata_strategy_id_idx` ON `eval_results` (`(JSON_UNQUOTE(JSON_EXTRACT(`metadata``,` '$.strategyId')))`);--> statement-breakpoint
 CREATE INDEX `evals_created_at_idx` ON `evals` (`created_at`);--> statement-breakpoint
 CREATE INDEX `evals_author_idx` ON `evals` (`author`);--> statement-breakpoint
 CREATE INDEX `evals_is_redteam_idx` ON `evals` (`is_redteam`);--> statement-breakpoint

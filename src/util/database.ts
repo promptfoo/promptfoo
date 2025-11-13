@@ -89,11 +89,9 @@ export async function writeResultsToDatabase(
     logger.debug(`Inserting prompt ${promptId}`);
   }
 
-  // Record dataset relation
   const datasetId = sha256(JSON.stringify(config.tests || []));
   const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
 
-  // Log when non-array tests are converted to empty array for database storage
   if (config.tests && !Array.isArray(config.tests)) {
     const testsType = typeof config.tests;
     const hasPath =
@@ -439,17 +437,31 @@ export async function getEvalFromId(hash: string) {
 
 export async function deleteEval(evalId: string) {
   await withTransaction(async (db) => {
+    // Helper to execute delete queries for both SQLite and MySQL
+    const execute = async (query: any) => {
+      if (typeof query.run === 'function') {
+        // SQLite: query.run() returns synchronously
+        return query.run();
+      }
+      // MySQL: query is already a promise
+      return await query;
+    };
+
     // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
-    await db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId));
-    await db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId));
-    await db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId));
-    await db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId));
+    await execute(db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)));
+    await execute(db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)));
+    await execute(db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)));
+    await execute(db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)));
 
     // Finally, delete the eval record
-    const deletedIds = await db.delete(evalsTable).where(eq(evalsTable.id, evalId));
+    const deleteResult = await execute(db.delete(evalsTable).where(eq(evalsTable.id, evalId)));
     
-    // For MySQL compatibility, we need to check if any rows were affected differently
-    const deletedCount = deletedIds instanceof Array ? deletedIds.length : (deletedIds as any)?.changes || 0;
+    // Check deleted count - MySQL returns affectedRows, SQLite returns changes
+    const deletedCount =
+      typeof deleteResult?.affectedRows === 'number'
+        ? deleteResult.affectedRows
+        : deleteResult?.changes ?? 0;
+    
     if (deletedCount === 0) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
@@ -462,11 +474,21 @@ export async function deleteEval(evalId: string) {
  */
 export async function deleteEvals(ids: string[]) {
   await withTransaction(async (db) => {
-    await db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids));
-    await db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids));
-    await db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids));
-    await db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids));
-    await db.delete(evalsTable).where(inArray(evalsTable.id, ids));
+    // Helper to execute delete queries for both SQLite and MySQL
+    const execute = async (query: any) => {
+      if (typeof query.run === 'function') {
+        // SQLite: query.run() returns synchronously
+        return query.run();
+      }
+      // MySQL: query is already a promise
+      return await query;
+    };
+
+    await execute(db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)));
+    await execute(db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)));
+    await execute(db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)));
+    await execute(db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)));
+    await execute(db.delete(evalsTable).where(inArray(evalsTable.id, ids)));
   });
 }
 
@@ -477,11 +499,21 @@ export async function deleteEvals(ids: string[]) {
  */
 export async function deleteAllEvals(): Promise<void> {
   await withTransaction(async (db) => {
-    await db.delete(evalResultsTable);
-    await db.delete(evalsToPromptsTable);
-    await db.delete(evalsToDatasetsTable);
-    await db.delete(evalsToTagsTable);
-    await db.delete(evalsTable);
+    // Helper to execute delete queries for both SQLite and MySQL
+    const execute = async (query: any) => {
+      if (typeof query.run === 'function') {
+        // SQLite: query.run() returns synchronously
+        return query.run();
+      }
+      // MySQL: query is already a promise
+      return await query;
+    };
+
+    await execute(db.delete(evalResultsTable));
+    await execute(db.delete(evalsToPromptsTable));
+    await execute(db.delete(evalsToDatasetsTable));
+    await execute(db.delete(evalsToTagsTable));
+    await execute(db.delete(evalsTable));
   });
 }
 

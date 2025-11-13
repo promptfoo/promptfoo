@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 
 import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
-import { getDb, getDbAsync, withTransaction, supportsReturning } from '../database/index';
+import { getDb, getDbAsync, withTransaction, supportsReturning, shouldUseMysql } from '../database/index';
 import { evalResultsTable } from '../database/dynamic-tables';
 import { getEnvBool } from '../envars';
 import { hashPrompt } from '../prompts/utils';
@@ -411,7 +411,8 @@ export default class EvalResult {
     evalId?: string;
   }): Promise<EvalResult[]> {
     try {
-      const db = await getDbAsync();
+      const usingMysql = shouldUseMysql();
+      const db = usingMysql ? await getDbAsync() : getDb();
       if (!db || typeof db.select !== 'function') {
         console.warn('Database connection is not properly initialized');
         // Fallback to in-memory search
@@ -422,11 +423,12 @@ export default class EvalResult {
         ).slice(opts?.offset || 0, (opts?.offset || 0) + (opts?.limit || 100));
       }
 
-      let whereConditions = [
-        // Use JSON extraction to filter by projectName in metadata
-        // This works for both MySQL and SQLite with JSON support
-        eq(sql`JSON_EXTRACT(${evalResultsTable.metadata}, '$.projectName')`, projectName)
-      ];
+      // MySQL returns quoted JSON strings, SQLite returns unquoted values
+      const projectNameExpr = usingMysql
+        ? sql`JSON_UNQUOTE(JSON_EXTRACT(${evalResultsTable.metadata}, '$.projectName'))`
+        : sql`json_extract(${evalResultsTable.metadata}, '$.projectName')`;
+      
+      const whereConditions = [eq(projectNameExpr, projectName)];
 
       if (opts?.evalId) {
         whereConditions.push(eq(evalResultsTable.evalId, opts.evalId));
@@ -444,7 +446,7 @@ export default class EvalResult {
         query = query.offset(opts.offset);
       }
 
-      const rows = await query.all();
+      const rows = usingMysql ? await query : query.all();
       const evalResults = rows.map((row: any) => new EvalResult({ ...row, persisted: true }));
       EvalResult.rememberMany(evalResults);
       return evalResults;
@@ -464,7 +466,8 @@ export default class EvalResult {
    */
   static async getProjectNames(): Promise<string[]> {
     try {
-      const db = await getDbAsync();
+      const usingMysql = shouldUseMysql();
+      const db = usingMysql ? await getDbAsync() : getDb();
       if (!db || typeof db.select !== 'function') {
         console.warn('Database connection is not properly initialized');
         // Fallback to in-memory search
@@ -478,17 +481,24 @@ export default class EvalResult {
         return Array.from(projectNames);
       }
 
-      // Use JSON extraction to get unique project names
-      const rows = await db
-        .selectDistinct({
-          projectName: sql`JSON_EXTRACT(${evalResultsTable.metadata}, '$.projectName')`
-        })
+      // MySQL returns quoted JSON strings, SQLite returns unquoted values
+      const projectNameExpr = usingMysql
+        ? sql`JSON_UNQUOTE(JSON_EXTRACT(${evalResultsTable.metadata}, '$.projectName'))`
+        : sql`json_extract(${evalResultsTable.metadata}, '$.projectName')`;
+      
+      const query = db
+        .selectDistinct({ projectName: projectNameExpr })
         .from(evalResultsTable)
-        .where(sql`JSON_EXTRACT(${evalResultsTable.metadata}, '$.projectName') IS NOT NULL`)
-        .all();
+        .where(
+          usingMysql
+            ? sql`JSON_UNQUOTE(JSON_EXTRACT(${evalResultsTable.metadata}, '$.projectName')) IS NOT NULL`
+            : sql`json_extract(${evalResultsTable.metadata}, '$.projectName') IS NOT NULL`,
+        );
+      
+      const rows = usingMysql ? await query : query.all();
 
       return rows
-        .map((row: any) => row.projectName)
+        .map((row: any) => row.projectName as string)
         .filter((name: string) => name && name !== 'null');
     } catch (error) {
       console.warn('Failed to get project names:', error);

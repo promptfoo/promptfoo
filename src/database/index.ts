@@ -6,27 +6,34 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
 
-// MySQL imports - conditional
 let mysqlModule: any = null;
 let mysqlDrizzle: any = null;
 let mysqlIndex: any = null;
 
-// Detect if MySQL should be used
+/**
+ * Determines whether MySQL should be used instead of SQLite.
+ * Checks for explicit PROMPTFOO_USE_MYSQL flag or presence of MySQL environment variables.
+ * 
+ * @returns {boolean} True if MySQL should be used, false for SQLite
+ */
 export function shouldUseMysql(): boolean {
   // Check explicit flag
   if (getEnvBool('PROMPTFOO_USE_MYSQL', false)) {
     return true;
   }
   
-  // Check if MySQL environment variables are set
   const mysqlHost = process.env.PROMPTFOO_MYSQL_HOST;
   const mysqlDatabase = process.env.PROMPTFOO_MYSQL_DATABASE;
   
-  // Use MySQL if host is explicitly set (and not testing)
   return !!(mysqlHost && mysqlDatabase) && !getEnvBool('IS_TESTING');
 }
 
-// Lazy load MySQL modules to avoid errors if mysql2 is not installed
+/**
+ * Lazily loads MySQL modules to avoid errors if mysql2 package is not installed.
+ * Modules are cached after first successful load.
+ * 
+ * @returns {boolean} True if modules loaded successfully, false otherwise
+ */
 function loadMysqlModules() {
   if (!mysqlModule) {
     try {
@@ -42,6 +49,9 @@ function loadMysqlModules() {
   return true;
 }
 
+/**
+ * Custom log writer for Drizzle ORM that respects PROMPTFOO_ENABLE_DATABASE_LOGS setting.
+ */
 export class DrizzleLogWriter implements LogWriter {
   write(message: string) {
     if (getEnvBool('PROMPTFOO_ENABLE_DATABASE_LOGS', false)) {
@@ -53,6 +63,11 @@ export class DrizzleLogWriter implements LogWriter {
 let dbInstance: ReturnType<typeof drizzle> | null = null;
 let sqliteInstance: Database.Database | null = null;
 
+/**
+ * Gets the database file path or MySQL config path.
+ * 
+ * @returns {string} Absolute path to the database file or MySQL config directory
+ */
 export function getDbPath() {
   if (shouldUseMysql() && mysqlIndex) {
     return mysqlIndex.getDbPath();
@@ -60,6 +75,11 @@ export function getDbPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
 }
 
+/**
+ * Gets the path to the signal file used to track when evaluations are written.
+ * 
+ * @returns {string} Absolute path to the signal file
+ */
 export function getDbSignalPath() {
   if (shouldUseMysql() && mysqlIndex) {
     return mysqlIndex.getDbSignalPath();
@@ -67,6 +87,12 @@ export function getDbSignalPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
 }
 
+/**
+ * Gets or creates the database instance (SQLite or MySQL).
+ * Automatically configures WAL mode for SQLite when applicable.
+ * 
+ * @returns {ReturnType<typeof drizzle>} Drizzle ORM database instance
+ */
 export function getDb() {
   if (!dbInstance) {
     // Check if MySQL should be used
@@ -80,20 +106,16 @@ export function getDb() {
       }
     }
 
-    // Default to SQLite (synchronous)
     logger.debug('Using SQLite database');
     const isMemoryDb = getEnvBool('IS_TESTING');
     const dbPath = isMemoryDb ? ':memory:' : getDbPath();
 
     sqliteInstance = new Database(dbPath);
 
-    // Configure WAL mode unless explicitly disabled or using in-memory database
     if (!isMemoryDb && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
       try {
-        // Enable WAL mode for better concurrency
         sqliteInstance.pragma('journal_mode = WAL');
 
-        // Verify WAL mode was actually enabled
         const result = sqliteInstance.prepare('PRAGMA journal_mode').get() as {
           journal_mode: string;
         };
@@ -108,9 +130,8 @@ export function getDb() {
           );
         }
 
-        // Additional WAL configuration for optimal performance
-        sqliteInstance.pragma('wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
-        sqliteInstance.pragma('synchronous = NORMAL'); // Good balance of safety and speed with WAL
+        sqliteInstance.pragma('wal_autocheckpoint = 1000');
+        sqliteInstance.pragma('synchronous = NORMAL');
       } catch (err) {
         logger.warn(
           `Error configuring SQLite WAL mode: ${err}. ` +
@@ -128,7 +149,10 @@ export function getDb() {
 }
 
 /**
- * Async version of getDb that properly handles both MySQL and SQLite
+ * Async version of getDb that properly handles both MySQL and SQLite.
+ * For MySQL, awaits the async connection. For SQLite, returns the sync instance.
+ * 
+ * @returns {Promise<ReturnType<typeof drizzle>>} Promise resolving to Drizzle ORM database instance
  */
 export async function getDbAsync() {
   if (shouldUseMysql()) {
@@ -140,41 +164,67 @@ export async function getDbAsync() {
     }
   }
   
-  // For SQLite, just return the sync version
   return getDb();
 }
 
 /**
- * Universal transaction wrapper that works with both SQLite and MySQL
+ * Universal transaction wrapper that works with both SQLite and MySQL.
+ * For SQLite, wraps async operations in a manual BEGIN/COMMIT transaction using the raw database.
+ * 
+ * @template T - Return type of the callback function
+ * @param {(db: any) => T | Promise<T>} callback - Function to execute within transaction
+ * @returns {Promise<T>} Promise resolving to the callback's return value
  */
 export async function withTransaction<T>(callback: (db: any) => T | Promise<T>): Promise<T> {
   if (shouldUseMysql()) {
     if (loadMysqlModules()) {
       const db = await mysqlIndex.getDb();
       // MySQL uses async transactions
-      return await db.transaction(async (tx: any) => {
-        return await callback(tx);
-      });
+      return db.transaction(async (tx: any) => callback(tx));
     }
   }
-  
-  // SQLite doesn't support async transactions, so we handle it differently
+
+  // SQLite: For async callbacks, use manual transaction control with raw database
   const db = getDb();
   
-  // Check if the callback is async by calling it and checking if it returns a Promise
-  const result = callback(db);
-  if (result && typeof (result as any).then === 'function') {
-    // If it's a Promise, we can't use SQLite transactions with async callbacks
-    // Just execute the callback directly (this is acceptable for most use cases)
-    return await (result as Promise<T>);
+  // Check if callback is async
+  const isAsync = callback.constructor.name === 'AsyncFunction';
+  
+  if (isAsync) {
+    // Get the raw better-sqlite3 database instance
+    const rawDb = (db as any).$client || sqliteInstance;
+    if (!rawDb) {
+      throw new Error('Unable to access raw SQLite database for transaction');
+    }
+    
+    // Manual transaction for async operations
+    rawDb.prepare('BEGIN').run();
+    try {
+      const result = await callback(db);
+      rawDb.prepare('COMMIT').run();
+      return result;
+    } catch (error) {
+      rawDb.prepare('ROLLBACK').run();
+      throw error;
+    }
   } else {
-    // If it's synchronous, we can use the transaction
-    return db.transaction(() => {
-      return callback(db);
-    })();
+    // Synchronous callback can use better-sqlite3's transaction()
+    const rawDb = (db as any).$client || sqliteInstance;
+    if (!rawDb) {
+      throw new Error('Unable to access raw SQLite database for transaction');
+    }
+    const runTransaction = rawDb.transaction(() => callback(db));
+    return runTransaction();
   }
 }
 
+/**
+ * Closes the database connection and performs cleanup.
+ * For SQLite, checkpoints WAL file before closing.
+ * For MySQL, closes the connection pool.
+ * 
+ * @returns {Promise<void>}
+ */
 export async function closeDb() {
   if (shouldUseMysql() && mysqlIndex) {
     // Close MySQL connection
@@ -182,7 +232,6 @@ export async function closeDb() {
     dbInstance = null;
   } else if (sqliteInstance) {
     try {
-      // Attempt to checkpoint WAL file before closing
       if (!getEnvBool('IS_TESTING') && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
         try {
           sqliteInstance.pragma('wal_checkpoint(TRUNCATE)');
@@ -206,7 +255,9 @@ export async function closeDb() {
 }
 
 /**
- * Check if the database is currently open
+ * Checks if the database is currently open.
+ * 
+ * @returns {boolean} True if database connection is open, false otherwise
  */
 export function isDbOpen(): boolean {
   if (shouldUseMysql() && mysqlIndex) {
@@ -216,7 +267,11 @@ export function isDbOpen(): boolean {
 }
 
 /**
- * Test MySQL connection (only works if MySQL is configured)
+ * Tests the MySQL connection to verify connectivity.
+ * Requires MySQL to be configured via environment variables.
+ * 
+ * @returns {Promise<boolean>} Promise resolving to true if connection successful
+ * @throws {Error} If MySQL is not configured or modules not available
  */
 export async function testMysqlConnection(): Promise<boolean> {
   if (!shouldUseMysql()) {
@@ -231,14 +286,20 @@ export async function testMysqlConnection(): Promise<boolean> {
 }
 
 /**
- * Check if MySQL mode is enabled
+ * Checks if MySQL mode is currently enabled.
+ * 
+ * @returns {boolean} True if MySQL mode is active, false if using SQLite
  */
 export function isMysqlMode(): boolean {
   return shouldUseMysql();
 }
 
 /**
- * Helper function to convert Date to appropriate format for the current database
+ * Converts a Date object to the appropriate format for the current database.
+ * MySQL expects Date objects, SQLite expects Unix timestamps (numbers).
+ * 
+ * @param {Date} date - The date to convert
+ * @returns {Date | number} Date object for MySQL, Unix timestamp for SQLite
  */
 export function convertDateForDb(date: Date): Date | number {
   if (shouldUseMysql()) {
@@ -251,9 +312,11 @@ export function convertDateForDb(date: Date): Date | number {
 }
 
 /**
- * Database-agnostic conflict resolution for insert operations
- * SQLite: uses onConflictDoNothing()
- * MySQL: uses INSERT IGNORE pattern or try/catch
+ * Database-agnostic conflict resolution for insert operations.
+ * SQLite uses onConflictDoNothing(), MySQL requires try/catch handling.
+ * 
+ * @param {any} insertQuery - The insert query to modify
+ * @returns {any} Modified query with conflict handling
  */
 export function handleInsertConflict(insertQuery: any): any {
   if (shouldUseMysql()) {
@@ -267,8 +330,10 @@ export function handleInsertConflict(insertQuery: any): any {
 }
 
 /**
- * Universal database access function that works with both MySQL and SQLite
- * This should be used in static methods and other contexts where you need database access
+ * Universal database access function that works with both MySQL and SQLite.
+ * Should be used in static methods and other contexts requiring database access.
+ * 
+ * @returns {Promise<ReturnType<typeof drizzle>>} Promise resolving to database instance
  */
 export async function getDbUniversal() {
   if (shouldUseMysql()) {
@@ -279,7 +344,13 @@ export async function getDbUniversal() {
 }
 
 /**
- * Execute insert with conflict handling for MySQL
+ * Executes an insert query with conflict handling for MySQL.
+ * Ignores duplicate key errors (ER_DUP_ENTRY) as expected behavior.
+ * For SQLite, use onConflictDoNothing() directly on the query.
+ * 
+ * @param {any} insertQuery - The insert query to execute
+ * @returns {Promise<void>}
+ * @throws {Error} Re-throws non-duplicate key errors
  */
 export async function executeInsertWithConflictHandling(insertQuery: any): Promise<void> {
   if (shouldUseMysql()) {
@@ -310,34 +381,36 @@ export async function executeInsertWithConflictHandling(insertQuery: any): Promi
 
 
 /**
- * Execute insert with returning support for both databases
- * MySQL doesn't support RETURNING, so we need to handle it differently
+ * Executes an insert query with RETURNING support for both databases.
+ * MySQL doesn't support RETURNING, so returns insert metadata instead.
+ * SQLite supports RETURNING and returns the actual inserted rows.
+ * 
+ * @param {any} insertQuery - The insert query to execute
+ * @param {any} returningColumns - Columns to return (SQLite only)
+ * @returns {Promise<any>} Insert result (format varies by database)
+ * - MySQL: { insertId: number, affectedRows: number } or null on duplicate
+ * - SQLite: Array of inserted rows with selected columns
  */
 export async function executeInsertWithReturning(insertQuery: any, returningColumns: any) {
     if (shouldUseMysql()) {
-        // MySQL doesn't support RETURNING clause
         try {
             const result = await insertQuery;
-            // Return the insert result metadata instead
             return {
                 insertId: result.insertId,
                 affectedRows: result.affectedRows
             };
         } catch (error) {
-            // Handle duplicate key errors like in executeInsertWithConflictHandling
             const isDuplicateKey = (error as any).code === 'ER_DUP_ENTRY' ||
                 (error as any).errno === 1062 ||
                 ((error as any).cause && ((error as any).cause.code === 'ER_DUP_ENTRY' || (error as any).cause.errno === 1062)) ||
                 ((error as any).message && (error as any).message.includes('Duplicate entry'));
             
             if (isDuplicateKey) {
-                // Return null for duplicates
                 return null;
             }
             throw error;
         }
     } else {
-        // SQLite supports RETURNING
         if (returningColumns && Array.isArray(returningColumns)) {
             return await insertQuery.returning(returningColumns.reduce((acc, col) => {
                 acc[col] = true;
@@ -350,7 +423,10 @@ export async function executeInsertWithReturning(insertQuery: any, returningColu
 }
 
 /**
- * Check if the current database supports RETURNING clause
+ * Checks if the current database supports the RETURNING clause.
+ * SQLite supports RETURNING, MySQL does not.
+ * 
+ * @returns {boolean} True if database supports RETURNING clause
  */
 export function supportsReturning() {
     return !shouldUseMysql();

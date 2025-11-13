@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/mysql2/migrator';
 import { getDb } from './mysql-index';
 import logger from '../logger';
@@ -9,22 +10,23 @@ import logger from '../logger';
 async function ensureMigrationTable(db: any): Promise<void> {
   try {
     // Check if the __drizzle_migrations table exists
-    const [rows] = await db.execute(`
-      SELECT COUNT(*) as count 
-      FROM information_schema.tables 
-      WHERE table_schema = DATABASE() 
-      AND table_name = '__drizzle_migrations'
-    `);
-    
-    if (rows[0].count === 0) {
+    const result = await db.execute(
+      sql`SELECT COUNT(*) AS count
+          FROM information_schema.tables
+          WHERE table_schema = DATABASE()
+          AND table_name = '__drizzle_migrations'`,
+    );
+    const count = Number(result.rows?.[0]?.count ?? 0);
+
+    if (count === 0) {
       logger.debug('Creating Drizzle migration tracking table...');
-      await db.execute(`
-        CREATE TABLE \`__drizzle_migrations\` (
+      await db.execute(
+        sql`CREATE TABLE \`__drizzle_migrations\` (
           \`id\` SERIAL PRIMARY KEY,
           \`hash\` text NOT NULL,
           \`created_at\` bigint
-        )
-      `);
+        )`,
+      );
     }
   } catch (error) {
     logger.debug(`Migration table check/creation failed: ${error}`);
@@ -38,51 +40,48 @@ async function ensureMigrationTable(db: any): Promise<void> {
 async function handleExistingTables(db: any): Promise<boolean> {
   try {
     // Check if key tables exist (indicating the schema is already set up)
-    const [rows] = await db.execute(`
-      SELECT COUNT(*) as count 
-      FROM information_schema.tables 
-      WHERE table_schema = DATABASE() 
-      AND table_name IN ('configs', 'evals', 'eval_results', 'prompts')
-    `);
-    
-    const existingTables = rows[0].count;
-    
+    const result = await db.execute(
+      sql`SELECT COUNT(*) AS count
+          FROM information_schema.tables
+          WHERE table_schema = DATABASE()
+          AND table_name IN ('configs', 'evals', 'eval_results', 'prompts')`,
+    );
+    const existingTables = Number(result.rows?.[0]?.count ?? 0);
+
     if (existingTables > 0) {
       logger.debug(`Found ${existingTables} existing tables. Checking migration status...`);
-      
-      // Check if migration is already recorded by looking for the initial migration tag
+
+      // Ensure migration table exists first
+      await ensureMigrationTable(db);
+
+      // Check if migration is already recorded
       try {
-        const [migrationRows] = await db.execute(`
-          SELECT COUNT(*) as count 
-          FROM \`__drizzle_migrations\`
-        `);
-        
-        if (migrationRows[0].count === 0) {
+        const migrationResult = await db.execute(
+          sql`SELECT COUNT(*) AS count FROM \`__drizzle_migrations\``,
+        );
+        const migrationCount = Number(migrationResult.rows?.[0]?.count ?? 0);
+
+        if (migrationCount === 0) {
           logger.info('Tables exist but no migrations recorded. Marking initial migration as applied...');
-          // Calculate hash for the initial migration file
-          const fs = require('fs');
-          const crypto = require('crypto');
-          const migrationPath = path.join(__dirname, '..', '..', 'drizzle-mysql', '0000_sparkling_hulk.sql');
           
-          let hash = '0000_sparkling_hulk'; // Default fallback
-          try {
-            const migrationContent = fs.readFileSync(migrationPath, 'utf8');
-            hash = crypto.createHash('sha256').update(migrationContent).digest('hex');
-          } catch (error) {
-            logger.debug(`Could not read migration file: ${error}`);
-          }
+          // Use the Drizzle migration hash format
+          const migrationHash = '0000_sparkling_hulk';
+          const timestamp = Date.now();
           
-          await db.execute(`
-            INSERT INTO \`__drizzle_migrations\` (\`hash\`, \`created_at\`) 
-            VALUES (?, ?)
-          `, [hash, Date.now()]);
+          await db.execute(
+            sql`INSERT INTO \`__drizzle_migrations\` (\`hash\`, \`created_at\`)
+                VALUES (${migrationHash}, ${timestamp})`,
+          );
+          logger.info(`Marked migration ${migrationHash} as applied`);
           return true;
+        } else {
+          logger.info(`Migration tracking table already has ${migrationCount} entries`);
         }
       } catch (error) {
         logger.debug(`Migration table query failed: ${error}`);
       }
     }
-    
+
     return false;
   } catch (error) {
     logger.debug(`Table existence check failed: ${error}`);
@@ -96,14 +95,15 @@ async function handleExistingTables(db: any): Promise<boolean> {
 async function isSchemaSetup(db: any): Promise<boolean> {
   try {
     // Check for essential tables
-    const [rows] = await db.execute(`
-      SELECT COUNT(*) as count 
-      FROM information_schema.tables 
-      WHERE table_schema = DATABASE() 
-      AND table_name IN ('configs', 'evals', 'eval_results', 'prompts')
-    `);
-    
-    return rows[0].count >= 4; // All core tables exist
+    const result = await db.execute(
+      sql`SELECT COUNT(*) AS count
+          FROM information_schema.tables
+          WHERE table_schema = DATABASE()
+          AND table_name IN ('configs', 'evals', 'eval_results', 'prompts')`,
+    );
+    const count = Number(result.rows?.[0]?.count ?? 0);
+
+    return count >= 4; // All core tables exist
   } catch (error) {
     logger.debug(`Schema check failed: ${error}`);
     return false;
@@ -111,7 +111,12 @@ async function isSchemaSetup(db: any): Promise<boolean> {
 }
 
 /**
- * Run migrations on the MySQL database, skipping the ones already applied.
+ * Runs MySQL database migrations, applying only unapplied migrations.
+ * Checks if schema already exists and skips migration if fully set up.
+ * Creates migration tracking table (__drizzle_migrations) if needed.
+ * 
+ * @returns {Promise<void>}
+ * @throws {Error} If migration execution fails
  */
 export async function runMysqlDbMigrations(): Promise<void> {
   try {
@@ -121,22 +126,31 @@ export async function runMysqlDbMigrations(): Promise<void> {
     
     // First check if schema is already fully set up
     const schemaExists = await isSchemaSetup(db);
-    if (schemaExists) {      
+    if (schemaExists) {
+      logger.info('MySQL schema already exists, checking migration tracking...');
+      
       // Ensure migration tracking table exists
       await ensureMigrationTable(db);
       
       // Mark migration as applied if not already done
       try {
-        const [migrationRows] = await db.execute(`
-          SELECT COUNT(*) as count FROM \`__drizzle_migrations\`
-        `);
-        
-        if (migrationRows[0].count === 0) {
-          const migrationHash = '0000_sparkling_hulk_' + Date.now();
-          await db.execute(`
-            INSERT INTO \`__drizzle_migrations\` (\`hash\`, \`created_at\`) 
-            VALUES (?, ?)
-          `, [migrationHash, Date.now()]);
+        const migrationResult = await db.execute(
+          sql`SELECT COUNT(*) AS count FROM \`__drizzle_migrations\``,
+        );
+        const migrationCount = Number(migrationResult.rows?.[0]?.count ?? 0);
+
+        if (migrationCount === 0) {
+          logger.info('Marking existing schema as migrated...');
+          const migrationHash = '0000_sparkling_hulk';
+          const timestamp = Date.now();
+          
+          await db.execute(
+            sql`INSERT INTO \`__drizzle_migrations\` (\`hash\`, \`created_at\`)
+                VALUES (${migrationHash}, ${timestamp})`,
+          );
+          logger.info('MySQL database is ready (existing schema marked as migrated)');
+        } else {
+          logger.info('MySQL database is ready (migrations already tracked)');
         }
       } catch (error) {
         logger.debug(`Migration tracking setup failed: ${error}`);
@@ -157,11 +171,16 @@ export async function runMysqlDbMigrations(): Promise<void> {
       logger.info('MySQL database migrations completed successfully');
     } catch (error) {
       // If we get a "table exists" error, try to recover
-      if (error instanceof Error && error.message && error.message.includes('already exists')) {
-        logger.warn('Tables already exist during migration, attempting to mark migration as applied...');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorCause = (error as any)?.cause;
+      const causeMessage = errorCause instanceof Error ? errorCause.message : '';
+      
+      if (errorMessage.includes('already exists') || 
+          errorMessage.includes('ER_TABLE_EXISTS_ERROR') ||
+          causeMessage.includes('already exists') ||
+          (errorCause as any)?.code === 'ER_TABLE_EXISTS_ERROR') {
         await handleExistingTables(db);
-        logger.info('Migration state corrected. Database should now be ready.');
-      } else {
+        } else {
         throw error;
       }
     }

@@ -42,7 +42,7 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
     )
     .all();
 
-  return errorResults.map((r: any) => r.id);
+  return errorResults.map((r) => r.id);
 }
 
 /**

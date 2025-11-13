@@ -7,6 +7,9 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
 
+/**
+ * Custom log writer for Drizzle ORM that respects PROMPTFOO_ENABLE_DATABASE_LOGS setting.
+ */
 export class DrizzleLogWriter implements LogWriter {
   write(message: string) {
     if (getEnvBool('PROMPTFOO_ENABLE_DATABASE_LOGS', false)) {
@@ -18,6 +21,9 @@ export class DrizzleLogWriter implements LogWriter {
 let dbInstance: any = null;
 let mysqlPool: mysql.Pool | null = null;
 
+/**
+ * MySQL connection configuration interface.
+ */
 interface MysqlConnectionConfig {
   host: string;
   port: number;
@@ -35,6 +41,12 @@ interface MysqlConnectionConfig {
   };
 }
 
+/**
+ * Gets MySQL connection configuration from environment variables.
+ * Includes SSL configuration if PROMPTFOO_MYSQL_SSL is enabled.
+ * 
+ * @returns {MysqlConnectionConfig} MySQL connection configuration object
+ */
 export function getMysqlConnectionConfig(): MysqlConnectionConfig {
   const config: MysqlConnectionConfig = {
     host: process.env.PROMPTFOO_MYSQL_HOST || 'localhost',
@@ -63,15 +75,33 @@ export function getMysqlConnectionConfig(): MysqlConnectionConfig {
   return config;
 }
 
+/**
+ * Gets the file path for MySQL configuration storage.
+ * 
+ * @returns {string} Absolute path to mysql-config file in config directory
+ */
 export function getDbPath() {
-  // For MySQL, this will be used for config/state files
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'mysql-config');
 }
 
+/**
+ * Gets the file path for the evaluation signal file.
+ * Used to track when evaluations were last written.
+ * 
+ * @returns {string} Absolute path to evalLastWritten file in config directory
+ */
 export function getDbSignalPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
 }
 
+/**
+ * Gets or creates the MySQL database connection.
+ * Creates a connection pool with SSL support and automatic fallback for self-signed certificates.
+ * Falls back to in-memory SQLite during testing (IS_TESTING=true).
+ * 
+ * @returns {Promise<MySql2Database<Record<string, never>>>} Drizzle database instance
+ * @throws {Error} If MySQL connection fails after SSL fallback attempt
+ */
 export async function getDb() {
   if (!dbInstance) {
     const isMemoryDb = getEnvBool('IS_TESTING');
@@ -124,6 +154,12 @@ export async function getDb() {
   return dbInstance;
 }
 
+/**
+ * Closes the MySQL connection pool and resets the database instance.
+ * Gracefully handles errors during pool closure.
+ * 
+ * @returns {Promise<void>}
+ */
 export async function closeDb() {
   if (mysqlPool) {
     try {
@@ -137,10 +173,21 @@ export async function closeDb() {
   dbInstance = null;
 }
 
+/**
+ * Checks if the MySQL database connection is currently open.
+ * 
+ * @returns {boolean} True if database instance exists, false otherwise
+ */
 export function isDbOpen(): boolean {
   return dbInstance !== null;
 }
 
+/**
+ * Tests MySQL connectivity by creating a temporary connection.
+ * Includes SSL fallback for self-signed certificate errors.
+ * 
+ * @returns {Promise<boolean>} True if connection test succeeds, false otherwise
+ */
 export async function testMysqlConnection(): Promise<boolean> {
   try {
     const baseConfig = getMysqlConnectionConfig();

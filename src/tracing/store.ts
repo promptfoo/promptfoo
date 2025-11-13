@@ -40,19 +40,40 @@ export class TraceStore {
     return this.db;
   }
 
+  /**
+   * Helper to execute Drizzle queries for both SQLite and MySQL.
+   * SQLite uses .run()/.all(), MySQL uses .execute() or returns promises directly.
+   */
+  private async executeQuery(query: any): Promise<any> {
+    if (typeof query.run === 'function') {
+      // SQLite: synchronous execution with .run()
+      return query.run();
+    } else if (typeof query.all === 'function') {
+      // SQLite: synchronous execution with .all()
+      return query.all();
+    } else if (typeof query.execute === 'function') {
+      // MySQL: async execution with .execute()
+      return await query.execute();
+    } else {
+      // MySQL: query is already a promise
+      return await query;
+    }
+  }
+
   async createTrace(trace: StoreTraceData): Promise<void> {
     try {
       logger.debug(
         `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,
       );
       const db = this.getDatabase();
-      await db.insert(tracesTable).values({
+      const insertTrace = db.insert(tracesTable).values({
         id: randomUUID(),
         traceId: trace.traceId,
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
         metadata: trace.metadata,
       });
+      await this.executeQuery(insertTrace);
       logger.debug(`[TraceStore] Successfully created trace ${trace.traceId}`);
     } catch (error) {
       logger.error(`[TraceStore] Failed to create trace: ${error}`);
@@ -74,11 +95,12 @@ export class TraceStore {
         logger.debug(`[TraceStore] Skipping trace existence check for OTLP scenario`);
       } else {
         logger.debug(`[TraceStore] Verifying trace ${traceId} exists`);
-        const trace = await db
+        const traceQuery = db
           .select()
           .from(tracesTable)
           .where(eq(tracesTable.traceId, traceId))
           .limit(1);
+        const trace = await this.executeQuery(traceQuery);
 
         if (trace.length === 0) {
           logger.warn(`[TraceStore] Trace ${traceId} not found, skipping spans`);
@@ -104,7 +126,8 @@ export class TraceStore {
         };
       });
 
-      await db.insert(spansTable).values(spanRecords);
+      const insertSpans = db.insert(spansTable).values(spanRecords);
+      await this.executeQuery(insertSpans);
       logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
     } catch (error) {
       logger.error(`[TraceStore] Failed to add spans: ${error}`);
@@ -118,20 +141,22 @@ export class TraceStore {
       const db = this.getDatabase();
 
       // Get all traces for the evaluation
-      const traces = await db
+      const tracesQuery = db
         .select()
         .from(tracesTable)
         .where(eq(tracesTable.evaluationId, evaluationId));
+      const traces = await this.executeQuery(tracesQuery);
       logger.debug(`[TraceStore] Found ${traces.length} traces for evaluation ${evaluationId}`);
 
       // Get spans for each trace
       const tracesWithSpans = await Promise.all(
-        traces.map(async (trace) => {
+        traces.map(async (trace: any) => {
           logger.debug(`[TraceStore] Fetching spans for trace ${trace.traceId}`);
-          const spans = await db
+          const spansQuery = db
             .select()
             .from(spansTable)
             .where(eq(spansTable.traceId, trace.traceId));
+          const spans = await this.executeQuery(spansQuery);
           logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${trace.traceId}`);
 
           return {
@@ -154,11 +179,12 @@ export class TraceStore {
       logger.debug(`[TraceStore] Fetching trace ${traceId}`);
       const db = this.getDatabase();
 
-      const traces = await db
+      const tracesQuery = db
         .select()
         .from(tracesTable)
         .where(eq(tracesTable.traceId, traceId))
         .limit(1);
+      const traces = await this.executeQuery(tracesQuery);
 
       if (traces.length === 0) {
         logger.debug(`[TraceStore] Trace ${traceId} not found`);
@@ -167,7 +193,8 @@ export class TraceStore {
 
       const trace = traces[0];
       logger.debug(`[TraceStore] Found trace ${traceId}, fetching spans`);
-      const spans = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+      const spansQuery = db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+      const spans = await this.executeQuery(spansQuery);
       logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${traceId}`);
 
       return {
@@ -187,7 +214,8 @@ export class TraceStore {
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
 
       // Delete old traces (spans will be cascade deleted due to foreign key)
-      await db.delete(tracesTable).where(lt(tracesTable.createdAt, cutoffTime));
+      const deleteQuery = db.delete(tracesTable).where(lt(tracesTable.createdAt, cutoffTime));
+      await this.executeQuery(deleteQuery);
 
       logger.debug(`[TraceStore] Successfully deleted traces older than ${retentionDays} days`);
     } catch (error) {

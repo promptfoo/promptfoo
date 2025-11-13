@@ -129,32 +129,6 @@ export const evalResultsTable = mysqlTable(
       table.testIdx,
       table.success,
     ),
-
-    responseIdx: index('eval_result_response_idx').on(table.response),
-
-    gradingResultReasonIdx: index('eval_result_grading_result_reason_idx').on(
-      sql`(JSON_UNQUOTE(JSON_EXTRACT(${table.gradingResult}, '$.reason')))`,
-    ),
-    gradingResultCommentIdx: index('eval_result_grading_result_comment_idx').on(
-      sql`(JSON_UNQUOTE(JSON_EXTRACT(${table.gradingResult}, '$.comment')))`,
-    ),
-    testCaseVarsIdx: index('eval_result_test_case_vars_idx').on(
-      sql`(JSON_UNQUOTE(JSON_EXTRACT(${table.testCase}, '$.vars')))`,
-    ),
-    testCaseMetadataIdx: index('eval_result_test_case_metadata_idx').on(
-      sql`(JSON_UNQUOTE(JSON_EXTRACT(${table.metadata}, '$')))`,
-    ),
-    namedScoresIdx: index('eval_result_named_scores_idx').on(
-      sql`(JSON_UNQUOTE(JSON_EXTRACT(${table.namedScores}, '$')))`,
-    ),
-    metadataIdx: index('eval_result_metadata_idx').on(sql`(JSON_UNQUOTE(JSON_EXTRACT(${table.metadata}, '$')))`),
-
-    metadataPluginIdIdx: index('eval_result_metadata_plugin_id_idx').on(
-      sql`(JSON_UNQUOTE(JSON_EXTRACT(${table.metadata}, '$.pluginId')))`,
-    ),
-    metadataStrategyIdIdx: index('eval_result_metadata_strategy_id_idx').on(
-      sql`(JSON_UNQUOTE(JSON_EXTRACT(${table.metadata}, '$.strategyId')))`,
-    ),
   }),
 );
 
