@@ -964,6 +964,7 @@ const App = () => {
           <FrameworkCompliance
             evalId={evalId}
             categoryStats={categoryStatsForFrameworkCompliance}
+            config={evalData.config}
           />
         </Stack>
         <ToolsDialog
