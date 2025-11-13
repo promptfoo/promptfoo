@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- chore(ci): increase webui test timeout from 5 to 8 minutes
+- chore(ci): increase webui test timeout from 5 to 8 minutes (#6197)
 
 ## [0.119.6] - 2025-11-12
 
