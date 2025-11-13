@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- chore(ci): synchronize package-lock.json to resolve npm ci failures (#6195)
 - chore(ci): increase webui test timeout to 8 minutes in GitHub Actions workflow to prevent CI timeouts (#6201)
 
 ### Fixed
