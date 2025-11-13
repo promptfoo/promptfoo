@@ -26,7 +26,7 @@ Set up your first config file with a pre-built example by running this command w
     <TabItem value="npm" label="npm">
       ```bash
       npm install -g promptfoo 
-      promptfoo init --example getting-started`
+      promptfoo init --example getting-started
       ```
     </TabItem>
     <TabItem value="brew" label="brew">
