@@ -5,10 +5,7 @@ interface PageLoadingProps {
   size?: number;
 }
 
-export default function PageLoading({
-  message = 'Loading page...',
-  size = 40
-}: PageLoadingProps) {
+export default function PageLoading({ message = 'Loading page...', size = 40 }: PageLoadingProps) {
   return (
     <Box
       display="flex"
