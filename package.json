@@ -86,10 +86,7 @@
       "esbuild": "0.25.9"
     },
     "gaxios": "^6.0.0",
-    "https-proxy-agent": "^7.0.0",
-    "mongoose": {
-      "gcp-metadata": "^6.0.0"
-    }
+    "https-proxy-agent": "^7.0.0"
   },
   "devDependencies": {
     "@adaline/anthropic": "1.8.0",
