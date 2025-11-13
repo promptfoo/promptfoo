@@ -359,8 +359,7 @@ You can quickly set up this example by running:
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     ```bash
-    npx promptfoo@latest init --example 
-    openai-model-comparison
+    npx promptfoo@latest init --example openai-model-comparison
     ```
   </TabItem>
   <TabItem value="npm" label="npm">
