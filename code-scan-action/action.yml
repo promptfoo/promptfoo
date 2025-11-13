@@ -10,9 +10,7 @@ inputs:
   api-host:
     description: 'Promptfoo API host url'
     required: false
-    default: https://freddy-uninvestable-jenae.ngrok-free.dev
-    # TODO: switch default to production api when deployed
-    # default: https://api.promptfoo.dev
+    default: https://api.promptfoo.dev
   min-severity:
     description: 'Minimum severity level to report (low|medium|high|critical)'
     required: false
