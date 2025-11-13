@@ -10,6 +10,7 @@ import {
   useLocation,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
+import PageLoading from './components/PageLoading';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -91,7 +92,7 @@ function App() {
   return (
     <ToastProvider>
       <QueryClientProvider client={queryClient}>
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<PageLoading />}>
           <RouterProvider router={router} />
         </Suspense>
       </QueryClientProvider>
