@@ -11,7 +11,7 @@ export function hasHumanRating(output: EvaluateTableOutput | null | undefined): 
     return false;
   }
   return output.gradingResult.componentResults.some(
-    (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
+    (result) => result?.assertion?.type === HUMAN_ASSERTION_TYPE,
   );
 }
 
@@ -25,6 +25,6 @@ export function getHumanRating(output: EvaluateTableOutput | null | undefined) {
     return undefined;
   }
   return output.gradingResult.componentResults.find(
-    (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
+    (result) => result?.assertion?.type === HUMAN_ASSERTION_TYPE,
   );
 }
