@@ -20,8 +20,32 @@ import 'prismjs/components/prism-http';
 const originalConsoleError = console.error;
 
 const SUPPRESSED_ERROR_PATTERNS = [
-  // Expected parsing errors from test scenarios (49 occurrences across tests)
-  /Failed to parse prompt as JSON/,
+  // Expected parsing/configuration errors from test scenarios
+  /Failed to parse prompt as JSON/, // 49 occurrences
+  /Invalid JSON configuration:/, // 1 occurrence
+  /Error parsing file:/, // 2 occurrences
+
+  // Expected API/network errors from intentional test failures
+  /Error fetching cloud config:/, // 39 occurrences
+  /Failed to check share domain:/, // 6 occurrences
+  /Failed to generate share URL:/, // 1 occurrence
+  /Error during target purpose discovery:/, // 2 occurrences
+  /Error fetching user email:/, // 3 occurrences
+  /Error during logout:/, // 1 occurrence
+  /Logout failed/, // 1 occurrence
+
+  // Expected operation errors from intentional test failures
+  /Failed to submit test suite/, // 1 occurrence
+  /Failed to copy text:/, // 1 occurrence
+  /Failed to delete eval:/, // 2 occurrences
+  /Failed to fetch datasets:/, // From DatasetsPage test
+  /Error loading eval:/, // From Eval component test
+
+  // Expected context provider errors from tests (testing components outside providers)
+  /must be used within a.*Provider/, // 8 occurrences (ToastProvider, ShiftKeyProvider, etc.)
+  /Uncaught.*must be used within/, // Wrapped version of above
+
+  // Error boundary messages  /Consider adding an error boundary to your tree/, // React suggestion message
 ];
 
 console.error = (...args: any[]) => {

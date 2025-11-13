@@ -105,10 +105,14 @@ export default defineConfig({
           /Failed prop type: MUI/,
           /ReactDOM\.render is no longer supported/,
           /unmountComponentAtNode is deprecated/,
-          /A component is changing an uncontrolled input to be controlled/,
+          /A component is changing an? (?:uncontrolled|controlled) input to be (?:controlled|uncontrolled)/,
           /Function components cannot be given refs/,
           /React does not recognize the `.*` prop on a DOM element/,
           /No worst strategy found for plugin/,
+
+          // Test data issues
+          /Received NaN for the.*children/, // Test data setup issue in ResultsTable.test.tsx
+          /Encountered two children with the same key/, // Fixed in component, but may appear in old tests
         ];
 
         if (suppressPatterns.some((pattern) => pattern.test(log))) {
