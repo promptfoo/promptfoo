@@ -1,19 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import invariant from '../../util/invariant';
-import { sleep } from '../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../remoteGeneration';
-import {
-  createIterationContext,
-  getTargetResponse,
-  redteamProviderManager,
-  type TargetResponse,
-} from './shared';
-
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -26,6 +16,16 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../types';
+import invariant from '../../util/invariant';
+import { sleep } from '../../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../remoteGeneration';
+import {
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
 
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
@@ -327,7 +327,7 @@ export async function runMetaAgentRedteam({
       stopReason = 'Grader failed';
       finalIteration = i + 1;
 
-      logger.info('[IterativeMeta] Vulnerability achieved!', {
+      logger.debug('[IterativeMeta] Vulnerability achieved!', {
         iteration: i + 1,
       });
 
