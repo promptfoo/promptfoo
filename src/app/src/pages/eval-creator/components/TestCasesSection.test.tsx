@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import TestCasesSection from './TestCasesSection';
 import { useStore } from '@app/stores/evalConfig';
@@ -614,7 +614,7 @@ describe('TestCasesSection', () => {
       });
     });
 
-    it('can delete a test case with confirmation', () => {
+    it('can delete a test case with confirmation', async () => {
       const testCases = [
         {
           description: 'Test to delete',
@@ -630,11 +630,15 @@ describe('TestCasesSection', () => {
 
       // Find the delete button by the DeleteIcon
       const deleteButton = screen.getByTestId('DeleteIcon').parentElement as HTMLElement;
-      fireEvent.click(deleteButton);
+      await act(async () => {
+        fireEvent.click(deleteButton);
+      });
 
       // Confirm deletion
       const confirmButton = screen.getByText('Delete');
-      fireEvent.click(confirmButton);
+      await act(async () => {
+        fireEvent.click(confirmButton);
+      });
 
       expect(mockUpdateConfig).toHaveBeenCalledWith({
         tests: [],
