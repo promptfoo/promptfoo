@@ -56,8 +56,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   noShare: z.boolean().optional(),
   retryErrors: z.boolean().optional(),
   // Allow --resume or --resume <id>
-  // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
-  // resume: z.union([z.string(), z.boolean()]).optional(),
+  resume: z.union([z.string(), z.boolean()]).optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;

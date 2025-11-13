@@ -104,6 +104,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       write: true,
       filterProviders: options.filterProviders,
       filterTargets: options.filterTargets,
+      resume: options.resume,
     },
     defaultConfig,
     redteamPath,

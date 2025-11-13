@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(app): Metadata value autocomplete eval filter (#6176)
 - feat(webui): display both total and filtered metrics simultaneously when filters are active, showing "X/Y filtered, Z total" format in evaluation results table for better visibility into filtered vs unfiltered data (#5969)
 
+### Fixed
+
+- fix(cli): re-enable `--resume` flag for eval and redteam commands - resume functionality was temporarily disabled but is now working again for both `promptfoo eval --resume` and `promptfoo redteam run --resume`
+
 ## [0.119.6] - 2025-11-12
 
 ### Documentation

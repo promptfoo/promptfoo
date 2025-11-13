@@ -53,6 +53,10 @@ export function redteamRunCommand(program: Command) {
       'Only run tests with these providers (regex match)',
     )
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
+    .option(
+      '--resume [evalId]',
+      'Resume a paused/incomplete evaluation. Defaults to latest when omitted',
+    )
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
       telemetry.record('command_used', {
