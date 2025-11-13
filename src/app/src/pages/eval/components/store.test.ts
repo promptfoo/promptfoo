@@ -333,6 +333,7 @@ describe('useTableStore', () => {
       expect(state.userRatedResultsCount).toBe(totalOutputs);
     });
   });
+
   describe('filterMode', () => {
     it('should handle interaction between URL-based filterMode setting and direct calls to setFilterMode/resetFilterMode', () => {
       act(() => {
@@ -370,7 +371,6 @@ describe('useTableStore', () => {
       expect(state.filterMode).toBe('user-rated');
     });
   });
-
   describe('filterMode persistence', () => {
     it('should persist the existing filterMode when fetchEvalData is called without a filterMode option', async () => {
       const mockEvalId = 'test-eval-id';
@@ -647,6 +647,7 @@ describe('useTableStore', () => {
         sortIndex: 0,
       });
     });
+
     it('should not consider exists operator filters as applied when field is missing', () => {
       const mockFilterId = 'exists-test-filter-2';
       (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
@@ -724,7 +725,6 @@ describe('useTableStore', () => {
       expect(state.filters.options.plugin).toBeUndefined();
       expect(state.filters.options.severity).toBeUndefined();
     });
-
     it('should populate strategy options including basic when redteam config is present in fetchEvalData', async () => {
       const mockEvalId = 'redteam-eval-id';
       const mockStrategies = ['jailbreak', 'prompt-injection'];
@@ -1362,7 +1362,6 @@ describe('useTableStore', () => {
       expect(state.isFetching).toBe(false);
       expect(result).not.toBe(null);
     });
-
     it('should keep isFetching unchanged when fetchEvalData is called with skipLoadingState=true and the API call fails', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -1491,7 +1490,6 @@ describe('useTableStore', () => {
 
         expect(stateAfterFetch.shouldHighlightSearchText).toBe(true);
       });
-
       it('should update shouldHighlightSearchText based on the most recent completed request when multiple fetchEvalData calls are made in succession', async () => {
         const mockEvalId = 'test-eval-id';
         const mockCallApi = vi.mocked(callApi);
@@ -1689,7 +1687,6 @@ describe('useTableStore', () => {
 
       expect(useTableStore.getState().isStreaming).toBe(false);
     });
-
     it('should allow isStreaming and isFetching to be true simultaneously when fetchEvalData is called without skipLoadingState and isStreaming is already true', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -1811,7 +1808,6 @@ describe('useTableStore', () => {
         Severity.Low,
       ]);
     });
-
     it('should correctly populate severity options when handling a results file with version < 4 that contains redteam plugins with severities', () => {
       const mockResultsFile: ResultsFile = {
         version: 3,
@@ -2117,7 +2113,6 @@ describe('useTableStore', () => {
       const availableMetrics = useTableStore.getState().filters.options.metric;
       expect(availableMetrics).toEqual(['accuracy', 'bleu', 'rouge']);
     });
-
     it('should correctly handle unusual metric names, such as those containing special characters or very long strings', () => {
       const longMetricName = 'a'.repeat(200);
       const mockTable: EvaluateTable = {
@@ -2203,7 +2198,6 @@ describe('useTableStore', () => {
       expect(availableMetrics).toEqual([]);
     });
   });
-
   describe('computeAvailableSeverities', () => {
     beforeEach(() => {
       act(() => {
@@ -2511,7 +2505,6 @@ describe('useTableStore', () => {
       expect(state.filteredMetrics).toEqual(initialMetrics);
     });
   });
-
   describe('fetchMetadataKeys', () => {
     it('should handle an empty array of keys from the API response and return an empty array', async () => {
       const mockEvalId = 'test-eval-id';
@@ -2567,7 +2560,6 @@ describe('useTableStore', () => {
       expect(state.metadataKeys).toEqual(expectedVisibleKeys);
       expect(returnedKeys).toEqual(expectedVisibleKeys);
     });
-
     it('should set metadataKeysError to true and metadataKeysLoading to false when the API call fails with an error (not an abort)', async () => {
       const mockEvalId = 'test-eval-id';
       const mockError = new Error('API error');
