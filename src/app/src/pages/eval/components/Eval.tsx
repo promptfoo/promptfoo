@@ -8,11 +8,7 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import {
-  EvalResultsFilterMode,
-  type ResultLightweightWithLabel,
-  type ResultsFile,
-} from '@promptfoo/types';
+import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
@@ -30,7 +26,7 @@ interface EvalOptions {
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const {
     table,
@@ -130,6 +126,40 @@ export default function Eval({ fetchId }: EvalOptions) {
   // ================================
   // Effects
   // ================================
+
+  /**
+   * Listens for changes to the filters state. Updates the URL query string with the new filters.
+   */
+  useEffect(() => {
+    const unsubscribe = useTableStore.subscribe(
+      (state) => state.filters,
+      (_filters) => {
+        // Read the search params from the URL. Does not use the hook to avoid re-running when the search params change.
+        const _searchParams = new URLSearchParams(window.location.search);
+
+        // Do search params need to be removed?
+        if (_filters.appliedCount === 0) {
+          // clear the search params
+          setSearchParams((prev) => {
+            prev.delete('filter');
+            return prev;
+          });
+        } else if (_filters.appliedCount > 0) {
+          // Serialize the filters to a JSON string
+          const serializedFilters = JSON.stringify(Object.values(_filters.values));
+          // Check whether the serialized filters are already in the search params
+          if (_searchParams.get('filter') !== serializedFilters) {
+            // Add each filter to the search params
+            setSearchParams((prev) => {
+              prev.set('filter', serializedFilters);
+              return prev;
+            });
+          }
+        }
+      },
+    );
+    return () => unsubscribe();
+  }, [setSearchParams]);
 
   useEffect(() => {
     // Reset filters when navigating to a different eval; necessary because Zustand
