@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, Suspense } from 'react';
 
 import Navigation from '@app/components/Navigation';
+import PageLoading from '@app/components/PageLoading';
 import { PostHogProvider } from '@app/components/PostHogProvider';
 import UpdateBanner from '@app/components/UpdateBanner';
 import { red } from '@mui/material/colors';
@@ -366,7 +367,9 @@ export default function PageShell() {
         <Layout>
           <Navigation onToggleDarkMode={toggleDarkMode} />
           <UpdateBanner />
-          <Outlet />
+          <Suspense fallback={<PageLoading />}>
+            <Outlet />
+          </Suspense>
           <PostHogPageViewTracker />
         </Layout>
       </PostHogProvider>

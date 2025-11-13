@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect, lazy } from 'react';
 
 import {
   createBrowserRouter,
@@ -10,17 +10,20 @@ import {
   useLocation,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
-import PageLoading from './components/PageLoading';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// Lazy load pages for better code splitting
+// Eager load: Critical eval workflow pages only (instant navigation)
+// These are the core pages users navigate between constantly during eval sessions
+import EvalPage from './pages/eval/page';
+import EvalsIndexPage from './pages/evals/page';
+import EvalCreatorPage from './pages/eval-creator/page';
+
+// Lazy load: Everything else (acceptable brief loading state)
+// Includes heavy features + less frequently accessed pages
 const DatasetsPage = lazy(() => import('./pages/datasets/page'));
-const EvalPage = lazy(() => import('./pages/eval/page'));
-const EvalCreatorPage = lazy(() => import('./pages/eval-creator/page'));
-const EvalsIndexPage = lazy(() => import('./pages/evals/page'));
 const HistoryPage = lazy(() => import('./pages/history/page'));
 const LauncherPage = lazy(() => import('./pages/launcher/page'));
 const LoginPage = lazy(() => import('./pages/login'));
@@ -94,9 +97,7 @@ function App() {
     <ToastProvider>
       <QueryClientProvider client={queryClient}>
         <ErrorBoundary>
-          <Suspense fallback={<PageLoading />}>
-            <RouterProvider router={router} />
-          </Suspense>
+          <RouterProvider router={router} />
         </ErrorBoundary>
       </QueryClientProvider>
     </ToastProvider>
