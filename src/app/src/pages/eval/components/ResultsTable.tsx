@@ -39,6 +39,7 @@ import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import { useFilterMode } from './FilterModeProvider';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
@@ -243,9 +244,9 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
-    setFilterMode,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
+  const { setFilterMode } = useFilterMode();
 
   const { showToast } = useToast();
   const navigate = useNavigate();
