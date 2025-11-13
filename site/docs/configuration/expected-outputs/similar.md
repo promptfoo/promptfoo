@@ -34,7 +34,7 @@ assert:
 
 ## Similarity Metrics
 
-You can specify which metric to use for comparing embeddings with the `similarityMetric` parameter. The default is `cosine`.
+You can specify which metric to use by including it in the assertion type. The default is `similar` (cosine similarity).
 
 ### Cosine Similarity (default)
 
@@ -42,10 +42,15 @@ Measures the cosine of the angle between two vectors. Range: 0 to 1 (higher is m
 
 ```yaml
 assert:
+  # Default - uses cosine similarity
   - type: similar
     value: 'The expected output'
     threshold: 0.8
-    similarityMetric: cosine  # Optional, this is the default
+
+  # Explicit cosine
+  - type: similar:cosine
+    value: 'The expected output'
+    threshold: 0.8
 ```
 
 **When to use:** Best for semantic similarity where you care about the direction of the embedding vector, not its magnitude. This is the industry standard for embeddings.
@@ -56,10 +61,9 @@ Computes the dot product of two vectors. Range: unbounded, but typically 0 to 1 
 
 ```yaml
 assert:
-  - type: similar
+  - type: similar:dot
     value: 'The expected output'
     threshold: 0.8
-    similarityMetric: dot_product
 ```
 
 **When to use:** Useful when you want to match the metric used in your production vector database (many use dot product for performance). For normalized embeddings, dot product is nearly equivalent to cosine similarity.
@@ -70,10 +74,9 @@ Computes the straight-line distance between two vectors. Range: 0 to ∞ (lower 
 
 ```yaml
 assert:
-  - type: similar
+  - type: similar:euclidean
     value: 'The expected output'
     threshold: 0.5  # Maximum distance threshold
-    similarityMetric: euclidean
 ```
 
 **When to use:** When you care about both the angle and magnitude differences between vectors. Note that the threshold represents the _maximum_ distance (not minimum similarity), so lower values are stricter.

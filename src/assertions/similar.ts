@@ -15,7 +15,25 @@ export const handleSimilar = async ({
     'Similarity assertion type must have a string or array of strings value',
   );
   const threshold = assertion.threshold ?? 0.75;
-  const metric = assertion.similarityMetric ?? 'cosine';
+
+  // Parse metric from assertion type (e.g., 'similar:dot' -> 'dot_product')
+  let metric: 'cosine' | 'dot_product' | 'euclidean' = 'cosine';
+  if (assertion.type.includes(':')) {
+    const metricSuffix = assertion.type.split(':')[1];
+    switch (metricSuffix) {
+      case 'cosine':
+        metric = 'cosine';
+        break;
+      case 'dot':
+        metric = 'dot_product';
+        break;
+      case 'euclidean':
+        metric = 'euclidean';
+        break;
+      default:
+        throw new Error(`Unknown similarity metric: ${metricSuffix}`);
+    }
+  }
 
   if (Array.isArray(renderedValue)) {
     let minScore = Number.POSITIVE_INFINITY;

@@ -248,9 +248,8 @@ describe('handleSimilar', () => {
 
     await handleSimilar({
       assertion: {
-        type: 'similar',
+        type: 'similar:dot',
         value: 'hello world',
-        similarityMetric: 'dot_product',
       },
       baseType: 'similar' as any,
       renderedValue: 'hello world',
@@ -296,9 +295,8 @@ describe('handleSimilar', () => {
 
     await handleSimilar({
       assertion: {
-        type: 'similar',
+        type: 'similar:euclidean',
         value: 'hello world',
-        similarityMetric: 'euclidean',
       },
       baseType: 'similar' as any,
       renderedValue: 'hello world',
