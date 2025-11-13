@@ -10,6 +10,11 @@ import React from 'react';
 
 vi.mock('@app/hooks/usePageMeta');
 vi.mock('@app/utils/api');
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: vi.fn(),
+  }),
+}));
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(),
@@ -80,10 +85,11 @@ const baseMockTableStore = {
   addFilter: vi.fn(),
 };
 
-// Mock getState for the store
+// Mock getState and subscribe for the store
 (useTableStore as any).getState = vi.fn(() => ({
   filters: { values: {} },
 }));
+(useTableStore as any).subscribe = vi.fn(() => vi.fn());
 
 describe('Eval Page Metadata', () => {
   beforeEach(() => {
