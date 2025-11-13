@@ -216,9 +216,7 @@ const RiskCategoryDrawer = ({
               ]),
             );
 
-            const url = pluginId
-              ? `/eval/${evalId}?filter=${filterParam}`
-              : `/eval/${evalId}`;
+            const url = pluginId ? `/eval/${evalId}?filter=${filterParam}` : `/eval/${evalId}`;
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else {

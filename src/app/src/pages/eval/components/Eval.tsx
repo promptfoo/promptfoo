@@ -168,10 +168,10 @@ export default function Eval({ fetchId }: EvalOptions) {
 
     resetFilters();
 
-     // Read search params
-     const filtersParam = _searchParams.get('filter');
+    // Read search params
+    const filtersParam = _searchParams.get('filter');
 
-     if (filtersParam) {
+    if (filtersParam) {
       let filters: ResultsFilter[] = [];
       try {
         filters = JSON.parse(filtersParam) as ResultsFilter[];
