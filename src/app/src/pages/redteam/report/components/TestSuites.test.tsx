@@ -188,6 +188,27 @@ describe('TestSuites Component Navigation', () => {
     );
   });
 
+  it('should navigate to eval page with a JSON-encoded filter and mode=failures when attackSuccessRate > 0', () => {
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const viewLogsButtons = screen.getAllByText('View logs');
+    const viewLogsButton = viewLogsButtons[0];
+
+    fireEvent.click(viewLogsButton);
+
+    const expectedFilter = encodeURIComponent(
+      JSON.stringify([
+        {
+          type: 'plugin',
+          operator: 'equals',
+          value: 'harmful:hate',
+        },
+      ]),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${expectedFilter}&mode=failures`,
+    );
+  });
   it('should not navigate again when browser back button is used', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
 
@@ -244,6 +265,7 @@ describe('TestSuites Component Navigation', () => {
     window.open = originalOpen;
   });
 });
+
 describe('TestSuites Component Navigation with Missing EvalId', () => {
   const mockNavigate = vi.fn();
 
@@ -439,7 +461,6 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
     expect(attackSuccessRateElements[0]).toBeInTheDocument();
   });
 });
-
 describe('TestSuites Component CSV Export - Special Characters', () => {
   const mockNavigate = vi.fn();
 

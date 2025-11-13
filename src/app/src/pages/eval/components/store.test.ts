@@ -484,7 +484,7 @@ describe('useTableStore', () => {
             },
           },
         }),
-      });
+      } as any);
 
       await act(async () => {
         await useTableStore.getState().fetchEvalData(mockEvalId);
@@ -589,7 +589,6 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.values[mockFilterId3].logicOperator).toBe('or');
     });
-
     it("should fall back to the first filter's logicOperator when the filter with sortIndex 1 has an undefined logicOperator", () => {
       const mockFilterId1 = 'mock-uuid-1';
       const mockFilterId2 = 'mock-uuid-2';
@@ -631,6 +630,7 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.values[mockFilterId3].logicOperator).toBe('or');
     });
+
     it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has a null logicOperator', () => {
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
@@ -918,7 +918,7 @@ describe('useTableStore', () => {
         await useTableStore.getState().fetchEvalData(evalId, { filters: [filter] });
       });
 
-      expect(mockCallApi).toHaveBeenCalledTimes(1); // table endpoint only (metadata-keys fetched lazily)
+      expect(mockCallApi).toHaveBeenCalledTimes(1);
       const url = mockCallApi.mock.calls[0][0];
       const urlParams = new URL(url, 'http://example.com').searchParams;
       const rawFilterParam = urlParams.get('filter');
@@ -945,7 +945,6 @@ describe('useTableStore', () => {
       expect(state.isFetching).toBe(false);
       expect(result).toBe(null);
     });
-
     it("should handle a null strategies array in the API response by setting filters.options.strategy to ['basic']", async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -969,6 +968,7 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.options.strategy).toEqual(['basic']);
     });
+
     it('should not set isFetching to true when fetchEvalData is called with skipLoadingState=true, and should set isFetching to true when called with skipLoadingState=false (or omitted)', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -1607,6 +1607,7 @@ describe('useTableStore', () => {
       ]);
     });
   });
+
   describe('computeAvailableMetrics', () => {
     it('should return a sorted array of unique metric names when the EvaluateTable contains multiple prompts with different namedScores', () => {
       const mockTable: EvaluateTable = {
@@ -1676,7 +1677,6 @@ describe('useTableStore', () => {
       const availableMetrics = useTableStore.getState().filters.options.metric;
       expect(availableMetrics).toEqual(['accuracy', 'bleu', 'rouge']);
     });
-
     it('should return an empty array when the EvaluateTable contains prompts but none have metrics.namedScores defined', () => {
       const mockTable: EvaluateTable = {
         head: {
@@ -1962,6 +1962,7 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.options.severity).toContain(Severity.Critical);
     });
+
     it('should populate plugin options when redteam plugins are provided as string IDs (fetchEvalData)', async () => {
       (callApi as Mock).mockResolvedValue({
         ok: true,
@@ -2013,6 +2014,7 @@ describe('useTableStore', () => {
       act(() => {
         useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
+
       const state = useTableStore.getState();
 
       // Redteam-specific filter types should not be available
@@ -2040,7 +2042,6 @@ describe('useTableStore', () => {
       expect(metadataFilter?.value).toBe('my-custom-plugin');
     });
   });
-
   describe('filteredMetrics', () => {
     it('should set `filteredMetrics` to the value returned by the backend after a successful `fetchEvalData` call', async () => {
       const mockEvalId = 'test-eval-id';

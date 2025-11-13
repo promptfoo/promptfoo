@@ -6,6 +6,18 @@ import FilterModeProvider, { useFilterMode, DEFAULT_FILTER_MODE } from './Filter
 import type { EvalResultsFilterMode } from '@promptfoo/types';
 
 const TestConsumer = () => {
+  const { filterMode } = useFilterMode();
+  const location = useLocation();
+
+  return (
+    <div>
+      <p>Current mode: {filterMode}</p>
+      <p>Current search: {location.search}</p>
+    </div>
+  );
+};
+
+const TestConsumerWithSetter = () => {
   const { filterMode, setFilterMode } = useFilterMode();
   const location = useLocation();
 
@@ -23,27 +35,6 @@ const TestConsumer = () => {
 };
 
 describe('FilterModeProvider', () => {
-  it('should provide filterMode from URL and update URL on change', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <MemoryRouter initialEntries={['/?mode=failures']}>
-        <FilterModeProvider>
-          <TestConsumer />
-        </FilterModeProvider>
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText('Current mode: failures')).toBeInTheDocument();
-    expect(screen.getByText('Current search: ?mode=failures')).toBeInTheDocument();
-
-    const changeButton = screen.getByRole('button', { name: 'Change to passes' });
-    await user.click(changeButton);
-
-    expect(screen.getByText('Current mode: passes')).toBeInTheDocument();
-    expect(screen.getByText('Current search: ?mode=passes')).toBeInTheDocument();
-  });
-
   it('should provide DEFAULT_FILTER_MODE when mode query parameter is not present', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -67,5 +58,26 @@ describe('FilterModeProvider', () => {
 
     expect(screen.getByText(`Current mode: ${DEFAULT_FILTER_MODE}`)).toBeInTheDocument();
     expect(screen.getByText('Current search: ?mode=all')).toBeInTheDocument();
+  });
+
+  it('should provide filterMode from URL and update URL on change', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/?mode=failures']}>
+        <FilterModeProvider>
+          <TestConsumerWithSetter />
+        </FilterModeProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Current mode: failures')).toBeInTheDocument();
+    expect(screen.getByText('Current search: ?mode=failures')).toBeInTheDocument();
+
+    const changeButton = screen.getByRole('button', { name: 'Change to passes' });
+    await user.click(changeButton);
+
+    expect(screen.getByText('Current mode: passes')).toBeInTheDocument();
+    expect(screen.getByText('Current search: ?mode=passes')).toBeInTheDocument();
   });
 });

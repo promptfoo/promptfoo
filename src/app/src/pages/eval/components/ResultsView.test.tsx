@@ -154,6 +154,14 @@ const renderWithRouter = (component: React.ReactElement) => {
   return render(<MemoryRouter>{component}</MemoryRouter>);
 };
 
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useSearchParams: vi.fn().mockReturnValue([new URLSearchParams('filterMode=failures'), vi.fn()]),
+  };
+});
+
 describe('ResultsView Share Button', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
@@ -1433,14 +1441,6 @@ describe('ResultsView Size Warning', () => {
   });
 });
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
-  return {
-    ...actual,
-    useSearchParams: vi.fn().mockReturnValue([new URLSearchParams('filterMode=failures'), vi.fn()]),
-  };
-});
-
 describe('ResultsView Chart Visibility on Init from URL', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
@@ -1601,7 +1601,7 @@ describe('ResultsView Malformed URL Parameter', () => {
             id: 'filter1',
             type: 'metadata',
             operator: 'equals',
-            value: null, // Malformed value
+            value: null,
             field: 'metadata_field',
             logicOperator: 'and',
             sortIndex: 0,
@@ -1623,12 +1623,10 @@ describe('ResultsView Malformed URL Parameter', () => {
       />,
     );
 
-    // Wait for the component to render
     await waitFor(() => {
       expect(screen.getByTestId('results-table')).toBeInTheDocument();
     });
 
-    // Assert that the toast message is displayed
     expect(mockShowToast).toHaveBeenCalledWith(
       'URL contains invalid JSON-encoded filters',
       'error',
