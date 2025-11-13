@@ -31,7 +31,16 @@ export default function FrameworkPluginResult({
   const navigate = useNavigate();
 
   const handlePluginClick = (pluginId: string) => {
-    navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}&mode=failures`);
+    const filterParam = encodeURIComponent(
+      JSON.stringify([
+        {
+          type: 'plugin',
+          operator: 'equals',
+          value: pluginId,
+        },
+      ]),
+    );
+    navigate(`/eval/${evalId}?filter=${filterParam}&mode=failures`);
   };
 
   const { asr, total, failCount } = getPluginASR(plugin);
