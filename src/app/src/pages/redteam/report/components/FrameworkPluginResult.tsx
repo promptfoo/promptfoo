@@ -31,6 +31,8 @@ export default function FrameworkPluginResult({
   const navigate = useNavigate();
 
   const handlePluginClick = (pluginId: string) => {
+    const { asr } = getPluginASR(plugin);
+
     const filterParam = encodeURIComponent(
       JSON.stringify([
         {
@@ -40,7 +42,9 @@ export default function FrameworkPluginResult({
         },
       ]),
     );
-    navigate(`/eval/${evalId}?filter=${filterParam}&mode=failures`);
+
+    const mode = asr === 0 ? 'passes' : 'failures';
+    navigate(`/eval/${evalId}?filter=${filterParam}&mode=${mode}`);
   };
 
   const { asr, total, failCount } = getPluginASR(plugin);

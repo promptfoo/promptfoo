@@ -498,7 +498,9 @@ const TestSuites = ({
                 ]),
               );
 
-              navigate(`/eval/${evalId}?filter=${filterParam}&mode=failures`);
+              // If ASR is 0, show passes
+              const mode = params.row.attackSuccessRate === 0 ? 'passes' : 'failures';
+              navigate(`/eval/${evalId}?filter=${filterParam}&mode=${mode}`);
             }}
           >
             View logs
