@@ -631,7 +631,6 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.values[mockFilterId3].logicOperator).toBe('or');
     });
-
     it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has a null logicOperator', () => {
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
@@ -877,6 +876,57 @@ describe('useTableStore', () => {
       expect(actualFilterParam).toEqual(expectedFilterParam);
     });
 
+    it('should properly encode filters with special characters and unicode symbols in the URL', async () => {
+      const evalId = 'test-eval-id';
+      const filterValue =
+        'test value with !@#$%^&*()_+=-`~[]{}|;\':",./<>? special characters and unicode symbols like こんにちは';
+      const filter: ResultsFilter = {
+        id: 'test-filter-id',
+        type: 'metric',
+        operator: 'equals',
+        value: filterValue,
+        logicOperator: 'and',
+        sortIndex: 0,
+      };
+
+      const expectedEncodedFilterValue = JSON.stringify({
+        logicOperator: filter.logicOperator,
+        type: filter.type,
+        operator: filter.operator,
+        value: filter.value,
+        field: filter.field,
+      });
+
+      const mockCallApi = vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url.includes('metadata-keys')) {
+          return {
+            ok: true,
+            json: async () => ({ keys: [] }),
+          } as any;
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            table: { head: { prompts: [] }, body: [] },
+            totalCount: 0,
+            filteredCount: 0,
+          }),
+        } as any;
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(evalId, { filters: [filter] });
+      });
+
+      expect(mockCallApi).toHaveBeenCalledTimes(1); // table endpoint only (metadata-keys fetched lazily)
+      const url = mockCallApi.mock.calls[0][0];
+      const urlParams = new URL(url, 'http://example.com').searchParams;
+      const rawFilterParam = urlParams.get('filter');
+      const actualFilterParam = JSON.parse(rawFilterParam || '{}');
+      const expectedFilterParam = JSON.parse(expectedEncodedFilterValue);
+      expect(actualFilterParam).toEqual(expectedFilterParam);
+    });
+
     it('should handle non-200 response from API', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -919,7 +969,6 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.options.strategy).toEqual(['basic']);
     });
-
     it('should not set isFetching to true when fetchEvalData is called with skipLoadingState=true, and should set isFetching to true when called with skipLoadingState=false (or omitted)', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -1253,7 +1302,6 @@ describe('useTableStore', () => {
 
         expect(useTableStore.getState().shouldHighlightSearchText).toBe(false);
       });
-
       it('should update shouldHighlightSearchText from true to false when fetchEvalData is called with non-empty search text and then with empty search text', async () => {
         const mockEvalId = 'test-eval-id';
         (callApi as Mock).mockResolvedValue({
@@ -1559,7 +1607,6 @@ describe('useTableStore', () => {
       ]);
     });
   });
-
   describe('computeAvailableMetrics', () => {
     it('should return a sorted array of unique metric names when the EvaluateTable contains multiple prompts with different namedScores', () => {
       const mockTable: EvaluateTable = {
@@ -1915,7 +1962,6 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.options.severity).toContain(Severity.Critical);
     });
-
     it('should populate plugin options when redteam plugins are provided as string IDs (fetchEvalData)', async () => {
       (callApi as Mock).mockResolvedValue({
         ok: true,
@@ -1967,7 +2013,6 @@ describe('useTableStore', () => {
       act(() => {
         useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
-
       const state = useTableStore.getState();
 
       // Redteam-specific filter types should not be available

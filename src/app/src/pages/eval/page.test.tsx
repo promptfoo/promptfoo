@@ -9,6 +9,15 @@ vi.mock('@app/pages/eval/components/Eval', () => ({
   ),
 }));
 
+vi.mock('./components/FilterModeProvider', () => {
+  const MockFilterModeProvider = ({ children }: { children: React.ReactNode }) => {
+    return <div data-testid="mock-filter-mode-provider">{children}</div>;
+  };
+  return {
+    default: MockFilterModeProvider,
+  };
+});
+
 describe('EvalPage', () => {
   it('should pass the evalId from useParams as fetchId to the Eval component when evalId is present', () => {
     const routeEvalId = 'eval-from-route-params-123';
@@ -71,5 +80,20 @@ describe('EvalPage', () => {
     const mockEvalComponent = screen.getByTestId('mock-eval');
 
     expect(mockEvalComponent).toHaveAttribute('data-fetch-id', 'null');
+  });
+
+  it('should render the FilterModeProvider when a filter parameter is present in the URL', () => {
+    render(
+      <MemoryRouter
+        initialEntries={[`/eval?filter=[{"field":"test","type":"metadata","value":"test_value"}]`]}
+      >
+        <Routes>
+          <Route path="/eval" element={<EvalPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const mockFilterModeProvider = screen.getByTestId('mock-filter-mode-provider');
+    expect(mockFilterModeProvider).toBeInTheDocument();
   });
 });
