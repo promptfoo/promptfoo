@@ -81,10 +81,14 @@ tests:
 
 ## CSV Format
 
-CSV is ideal for bulk test data:
+CSV or Excel (XLSX) files are ideal for bulk test data:
 
 ```yaml title="promptfooconfig.yaml"
 tests: file://test_cases.csv
+```
+
+```yaml title="promptfooconfig.yaml"
+tests: file://test_cases.xlsx
 ```
 
 ### Basic CSV
@@ -97,6 +101,59 @@ question,expectedAnswer
 ```
 
 Variables are automatically mapped from column headers.
+
+### Excel (XLSX/XLS) Support
+
+Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel files:
+
+1. Install the `xlsx` package as a peer dependency:
+
+   ```bash
+   # Install latest version from npm (recommended)
+   npm install xlsx
+
+   # OR install specific version from SheetJS CDN
+   npm install https://cdn.sheetjs.com/xlsx-0.18.5/xlsx-0.18.5.tgz
+   ```
+
+   **Why two options?**
+   - **npm install xlsx**: Gets version 0.18.5 from npm registry (recommended for most users)
+   - **CDN URL**: Installs the same version from SheetJS CDN for environments that prefer CDN sources
+
+2. Use Excel files just like CSV files:
+   ```yaml title="promptfooconfig.yaml"
+   tests: file://test_cases.xlsx
+   ```
+
+**Multi-sheet support:** By default, only the first sheet is used. To specify a different sheet, use the `#` syntax:
+
+- `file://test_cases.xlsx#Sheet2` - Select sheet by name
+- `file://test_cases.xlsx#2` - Select sheet by 1-based index (2 = second sheet)
+
+```yaml title="promptfooconfig.yaml"
+# Use a specific sheet by name
+tests: file://test_cases.xlsx#DataSheet
+
+# Or by index (1-based)
+tests: file://test_cases.xlsx#2
+```
+
+### XLSX Example
+
+Your Excel file should have column headers in the first row, with each subsequent row representing a test case:
+
+| question                       | expectedAnswer |
+| ------------------------------ | -------------- |
+| What is 2+2?                   | 4              |
+| What is the capital of France? | Paris          |
+| Name a primary color           | blue           |
+
+**Tips for Excel files:**
+
+- First row must contain column headers
+- Column names become variable names in your prompts
+- Empty cells are treated as empty strings
+- Use `__expected` columns for assertions (same as CSV)
 
 ### CSV with Assertions
 

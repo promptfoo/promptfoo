@@ -1,4 +1,5 @@
 import { callApi } from '@app/utils/api';
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -17,6 +18,7 @@ import type {
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTable,
+  PromptMetrics,
   RedteamPluginObject,
   ResultsFile,
   UnifiedConfig,
@@ -198,6 +200,7 @@ export type ResultsFilterType =
 
 export type ResultsFilterOperator =
   | 'equals'
+  | 'not_equals'
   | 'contains'
   | 'not_contains'
   | 'exists'
@@ -253,6 +256,14 @@ interface TableState {
 
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
+
+  /**
+   * Filtered metrics calculated on the backend for the currently filtered dataset.
+   * null when no filters are active or when the feature is disabled.
+   * When present, components should use these metrics instead of prompt.metrics.
+   */
+  filteredMetrics: PromptMetrics[] | null;
+  setFilteredMetrics: (metrics: PromptMetrics[] | null) => void;
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
@@ -337,6 +348,12 @@ interface TableState {
   metadataKeysError: boolean;
   fetchMetadataKeys: (id: string) => Promise<string[]>;
   currentMetadataKeysRequest: AbortController | null;
+
+  metadataValues: Record<string, string[]>;
+  metadataValuesLoading: Record<string, boolean>;
+  metadataValuesError: Record<string, boolean>;
+  fetchMetadataValues: (id: string, key: string) => Promise<string[]>;
+  currentMetadataValuesRequests: Record<string, AbortController | null>;
 
   filterMode: EvalResultsFilterMode;
   setFilterMode: (filterMode: EvalResultsFilterMode) => void;
@@ -444,7 +461,7 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
 
 export const useTableStore = create<TableState>()((set, get) => ({
   evalId: null,
-  setEvalId: (evalId: string) => set(() => ({ evalId })),
+  setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
 
   author: null,
   setAuthor: (author: string | null) => set(() => ({ author })),
@@ -510,6 +527,10 @@ export const useTableStore = create<TableState>()((set, get) => ({
   totalResultsCount: 0,
   setTotalResultsCount: (count: number) => set(() => ({ totalResultsCount: count })),
 
+  filteredMetrics: null,
+  setFilteredMetrics: (metrics: PromptMetrics[] | null) =>
+    set(() => ({ filteredMetrics: metrics })),
+
   highlightedResultsCount: 0,
 
   isFetching: false,
@@ -546,6 +567,10 @@ export const useTableStore = create<TableState>()((set, get) => ({
       metadataKeysLoading: false,
       metadataKeysError: false,
       currentMetadataKeysRequest: null,
+      metadataValues: {},
+      metadataValuesLoading: {},
+      metadataValuesError: {},
+      currentMetadataValuesRequests: {},
     });
 
     try {
@@ -603,6 +628,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
           evalId: skipSettingEvalId ? get().evalId : id,
           isFetching: skipLoadingState ? prevState.isFetching : false,
           shouldHighlightSearchText: searchText !== '',
+          // Store filtered metrics from backend (null when no filters or feature disabled)
+          filteredMetrics: data.filteredMetrics || null,
           filters: {
             ...prevState.filters,
             options: {
@@ -777,6 +804,11 @@ export const useTableStore = create<TableState>()((set, get) => ({
   metadataKeysError: false,
   currentMetadataKeysRequest: null,
 
+  metadataValues: {},
+  metadataValuesLoading: {},
+  metadataValuesError: {},
+  currentMetadataValuesRequests: {},
+
   fetchMetadataKeys: async (id: string) => {
     // Cancel any existing request to prevent race conditions
     const currentState = get();
@@ -816,17 +848,18 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
       if (resp.ok) {
         const data = await resp.json();
+        const filteredKeys = data.keys.filter((key: string) => !HIDDEN_METADATA_KEYS.includes(key));
 
         // Check if this request is still current before updating state
         const latestState = get();
         if (latestState.currentMetadataKeysRequest === abortController) {
           set({
-            metadataKeys: data.keys,
+            metadataKeys: filteredKeys,
             metadataKeysLoading: false,
             currentMetadataKeysRequest: null,
           });
         }
-        return data.keys;
+        return filteredKeys;
       } else {
         throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
       }
@@ -857,6 +890,104 @@ export const useTableStore = create<TableState>()((set, get) => ({
       }
     }
     return [];
+  },
+
+  fetchMetadataValues: async (evalId: string, key: string) => {
+    const trimmedKey = key.trim();
+    if (!trimmedKey) {
+      return [];
+    }
+
+    const currentState = get();
+    const hasCachedValues = Object.prototype.hasOwnProperty.call(
+      currentState.metadataValues,
+      trimmedKey,
+    );
+    if (hasCachedValues) {
+      return currentState.metadataValues[trimmedKey];
+    }
+
+    const existingController = currentState.currentMetadataValuesRequests[trimmedKey];
+    if (existingController) {
+      existingController.abort();
+    }
+
+    const abortController = new AbortController();
+    set((prevState) => ({
+      currentMetadataValuesRequests: {
+        ...prevState.currentMetadataValuesRequests,
+        [trimmedKey]: abortController,
+      },
+      metadataValuesLoading: {
+        ...prevState.metadataValuesLoading,
+        [trimmedKey]: true,
+      },
+      metadataValuesError: {
+        ...prevState.metadataValuesError,
+        [trimmedKey]: false,
+      },
+    }));
+
+    try {
+      const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
+      const url = new URL(`/eval/${evalId}/metadata-values`, window.location.origin);
+      url.searchParams.set('key', trimmedKey);
+      comparisonEvalIds.forEach((compId) => {
+        url.searchParams.append('comparisonEvalIds', compId);
+      });
+
+      const resp = await callApi(url.toString().replace(window.location.origin, ''), {
+        signal: abortController.signal,
+      });
+
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      }
+
+      const data = await resp.json();
+      const values: string[] = Array.isArray(data.values) ? data.values : [];
+
+      set((prevState) => ({
+        metadataValues: {
+          ...prevState.metadataValues,
+          [trimmedKey]: values,
+        },
+        metadataValuesLoading: {
+          ...prevState.metadataValuesLoading,
+          [trimmedKey]: false,
+        },
+        metadataValuesError: {
+          ...prevState.metadataValuesError,
+          [trimmedKey]: false,
+        },
+        currentMetadataValuesRequests: {
+          ...prevState.currentMetadataValuesRequests,
+          [trimmedKey]: null,
+        },
+      }));
+
+      return values;
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        return get().metadataValues[trimmedKey] ?? [];
+      }
+
+      set((prevState) => ({
+        metadataValuesLoading: {
+          ...prevState.metadataValuesLoading,
+          [trimmedKey]: false,
+        },
+        metadataValuesError: {
+          ...prevState.metadataValuesError,
+          [trimmedKey]: true,
+        },
+        currentMetadataValuesRequests: {
+          ...prevState.currentMetadataValuesRequests,
+          [trimmedKey]: null,
+        },
+      }));
+      return [];
+    }
   },
 
   filterMode: 'all',

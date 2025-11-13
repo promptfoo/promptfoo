@@ -11,7 +11,12 @@ export function viewCommand(program: Command) {
   program
     .command('view [directory]')
     .description('Start browser UI')
-    .option('-p, --port <number>', 'Port number', getDefaultPort().toString())
+    .option(
+      '-p, --port <number>',
+      'Port number',
+      (val) => Number.parseInt(val, 10),
+      getDefaultPort(),
+    )
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
@@ -42,12 +47,13 @@ export function viewCommand(program: Command) {
         if (directory) {
           setConfigDirectoryPath(directory);
         }
-        // Block indefinitely on server
+        // Determine browser behavior
         const browserBehavior = cmdObj.yes
           ? BrowserBehavior.OPEN
           : cmdObj.no
             ? BrowserBehavior.SKIP
             : BrowserBehavior.ASK;
+
         await startServer(cmdObj.port, browserBehavior);
       },
     );

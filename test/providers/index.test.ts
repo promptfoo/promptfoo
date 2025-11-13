@@ -401,27 +401,17 @@ describe('call provider apis', () => {
         stderr: new Stream.Readable(),
       } as child_process.ChildProcess;
 
-      const execFileSpy = jest
-        .spyOn(child_process, 'execFile')
-        .mockImplementation(
-          (
-            _file: string,
-            _args: readonly string[] | null | undefined,
-            _options: child_process.ExecFileOptions | null | undefined,
-            callback?:
-              | null
-              | ((
-                  error: child_process.ExecFileException | null,
-                  stdout: string | NonSharedBuffer,
-                  stderr: string | NonSharedBuffer,
-                ) => void),
-          ) => {
-            process.nextTick(
-              () => callback && callback(null, Buffer.from(mockResponse), Buffer.from('')),
-            );
-            return mockChildProcess;
-          },
+      const execFileSpy = jest.spyOn(child_process, 'execFile').mockImplementation(((
+        _file: any,
+        _args: any,
+        _options: any,
+        callback: any,
+      ) => {
+        process.nextTick(
+          () => callback && callback(null, Buffer.from(mockResponse), Buffer.from('')),
         );
+        return mockChildProcess;
+      }) as any);
 
       const provider = new ScriptCompletionProvider(script, {
         config: {

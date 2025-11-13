@@ -17,6 +17,7 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
+import Autocomplete from '@mui/material/Autocomplete';
 import { useTheme } from '@mui/material/styles';
 import { displayNameOverrides, severityDisplayNames } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
@@ -35,6 +36,7 @@ const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
 
 const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
   equals: 'Equals',
+  not_equals: 'Not Equals',
   contains: 'Contains',
   not_contains: 'Not Contains',
   exists: 'Exists',
@@ -51,7 +53,7 @@ const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
  * Convenience predicate function to determine if a filter type solely has equals operator.
  */
 function solelyHasEqualsOperator(type: ResultsFilter['type']): boolean {
-  return ['plugin', 'strategy', 'severity', 'policy'].includes(type);
+  return ['strategy', 'severity', 'policy'].includes(type);
 }
 
 function Dropdown({
@@ -153,6 +155,8 @@ function Filter({
   onClose: () => void;
 }) {
   const theme = useTheme();
+  const [metadataAutocompleteOpen, setMetadataAutocompleteOpen] = useState(false);
+  const [metadataValueInput, setMetadataValueInput] = useState(value.value);
   const {
     filters,
     updateFilter,
@@ -163,6 +167,10 @@ function Filter({
     metadataKeysError,
     fetchMetadataKeys,
     evalId,
+    metadataValues,
+    metadataValuesLoading,
+    metadataValuesError,
+    fetchMetadataValues,
   } = useTableStore();
 
   // Get list of already selected metric values (excluding current filter)
@@ -189,6 +197,48 @@ function Filter({
   const selectedPolicyValues = Object.values(filters.values)
     .filter((filter) => filter.id !== value.id && filter.type === 'policy' && filter.value)
     .map((filter) => filter.value);
+
+  const metadataKey = value.field ?? '';
+  const metadataValueOptions = metadataKey ? (metadataValues[metadataKey] ?? []) : [];
+  const metadataValuesAreLoading = metadataKey
+    ? Boolean(metadataValuesLoading[metadataKey])
+    : false;
+  const metadataValuesHadError = metadataKey ? Boolean(metadataValuesError[metadataKey]) : false;
+  const hasMetadataValueCache = metadataKey
+    ? Object.prototype.hasOwnProperty.call(metadataValues, metadataKey)
+    : false;
+
+  useEffect(() => {
+    setMetadataValueInput(value.value);
+  }, [value.value]);
+
+  useEffect(() => {
+    if (!metadataKey) {
+      setMetadataAutocompleteOpen(false);
+      setMetadataValueInput('');
+    }
+  }, [metadataKey]);
+
+  useEffect(() => {
+    if (
+      !evalId ||
+      !metadataKey ||
+      hasMetadataValueCache ||
+      metadataValuesAreLoading ||
+      metadataValuesHadError
+    ) {
+      return;
+    }
+
+    fetchMetadataValues(evalId, metadataKey);
+  }, [
+    evalId,
+    metadataKey,
+    hasMetadataValueCache,
+    metadataValuesAreLoading,
+    metadataValuesHadError,
+    fetchMetadataValues,
+  ]);
 
   /**
    * Updates the metadata field.
@@ -219,6 +269,9 @@ function Filter({
       }
       // Reset operator to 'equals' when changing to types that only support 'equals'
       if (solelyHasEqualsOperator(filterType) && value.operator !== 'equals') {
+        updatedFilter.operator = 'equals';
+      }
+      if (filterType === 'plugin' && !['equals', 'not_equals'].includes(value.operator)) {
         updatedFilter.operator = 'equals';
       }
       // Reset operator to 'is_defined' when switching to metric type with an incompatible operator
@@ -457,14 +510,19 @@ function Filter({
                   { label: OPERATOR_LABELS_BY_OPERATOR.lt, value: 'lt' },
                   { label: OPERATOR_LABELS_BY_OPERATOR.lte, value: 'lte' },
                 ]
-              : solelyHasEqualsOperator(value.type)
-                ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
-                : [
+              : value.type === 'plugin'
+                ? [
                     { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
-                    { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
-                    { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
-                    { label: OPERATOR_LABELS_BY_OPERATOR.exists, value: 'exists' },
+                    { label: OPERATOR_LABELS_BY_OPERATOR.not_equals, value: 'not_equals' },
                   ]
+                : solelyHasEqualsOperator(value.type)
+                  ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
+                  : [
+                      { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.exists, value: 'exists' },
+                    ]
           }
           value={value.operator}
           onChange={(e) => handleOperatorChange(e as ResultsFilter['operator'])}
@@ -481,7 +539,7 @@ function Filter({
               minWidth: 250,
             }}
           >
-            {solelyHasEqualsOperator(value.type) ? (
+            {value.type === 'plugin' || solelyHasEqualsOperator(value.type) ? (
               <Dropdown
                 id={`${index}-value-select`}
                 label={TYPE_LABELS_BY_TYPE[value.type]}
@@ -534,12 +592,9 @@ function Filter({
                     }
                     return { label, value: optionValue, sortValue: displayName ?? optionValue };
                   })
-                  .sort((a, b) => {
-                    // Sort by the option value since label might be a React element
-                    return a.sortValue.localeCompare(b.sortValue);
-                  })} // Sort by value
+                  .sort((a, b) => a.sortValue.localeCompare(b.sortValue))}
                 value={value.value}
-                onChange={(e) => handleValueChange(e)}
+                onChange={(selected) => handleValueChange(selected)}
                 width="100%"
                 disabledValues={
                   value.type === 'metric'
@@ -566,7 +621,7 @@ function Filter({
                 onChange={(numericValue) => {
                   handleValueChange(numericValue === undefined ? '' : String(numericValue));
                 }}
-                allowDecimals={true}
+                allowDecimals
                 step={0.1}
                 fullWidth
                 slotProps={{
@@ -576,6 +631,81 @@ function Filter({
                     },
                   },
                 }}
+              />
+            ) : value.type === 'metadata' && value.operator === 'equals' ? (
+              <Autocomplete
+                freeSolo
+                id={`${index}-metadata-value-autocomplete`}
+                size="small"
+                value={value.value || null}
+                inputValue={metadataValueInput}
+                onInputChange={(_event, newInputValue, reason) => {
+                  if (reason === 'reset') {
+                    return;
+                  }
+
+                  setMetadataValueInput(newInputValue);
+
+                  if (reason === 'input') {
+                    handleValueChange(newInputValue);
+                  }
+
+                  if (reason === 'clear') {
+                    handleValueChange('');
+                  }
+                }}
+                onChange={(_event, newValue) => {
+                  const nextValue = typeof newValue === 'string' ? newValue : '';
+                  setMetadataValueInput(nextValue);
+                  handleValueChange(nextValue);
+                }}
+                open={metadataAutocompleteOpen}
+                onOpen={() => {
+                  if (!metadataKey || !evalId) {
+                    setMetadataAutocompleteOpen(false);
+                    return;
+                  }
+
+                  setMetadataAutocompleteOpen(true);
+                  fetchMetadataValues(evalId, metadataKey);
+                }}
+                onClose={() => setMetadataAutocompleteOpen(false)}
+                options={metadataValueOptions}
+                loading={metadataValuesAreLoading}
+                noOptionsText={metadataKey ? 'No values found' : 'Select a key to load values'}
+                loadingText="Loading values..."
+                disabled={!metadataKey || !evalId}
+                isOptionEqualToValue={(option, currentValue) => option === currentValue}
+                sx={{ width: '100%' }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Value"
+                    variant="outlined"
+                    size="small"
+                    error={metadataValuesHadError}
+                    helperText={
+                      metadataValuesHadError ? 'Failed to load metadata values' : undefined
+                    }
+                    placeholder={metadataKey ? 'Select or type a value' : 'Select a key first'}
+                    sx={{
+                      '& .MuiInputBase-input': {
+                        py: 1,
+                      },
+                    }}
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {metadataValuesAreLoading ? (
+                            <CircularProgress color="inherit" size={16} />
+                          ) : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
               />
             ) : (
               <DebouncedTextField
