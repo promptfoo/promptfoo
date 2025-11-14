@@ -875,7 +875,7 @@ export async function synthesize({
         ? languageConfig
         : languageConfig
           ? [languageConfig]
-          : ['en'];
+          : [undefined];
 
       logger.debug(
         `[Language Processing] Plugin: ${plugin.id}, Languages: ${JSON.stringify(languages)}, NumTests per language: ${plugin.numTests}${plugin.config?.language ? ' (plugin override)' : ''}`,
@@ -894,7 +894,7 @@ export async function synthesize({
           delayMs: delay || 0,
           config: {
             ...resolvePluginConfig(plugin.config),
-            language: lang,
+            ...(lang ? { language: lang } : {}),
             modifiers: {
               ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
               ...(plugin.config?.modifiers || {}),
@@ -938,7 +938,7 @@ export async function synthesize({
           const { lang, tests, requested, generated } = result.value;
 
           allPluginTests.push(...tests);
-          resultsPerLanguage[lang] = { requested, generated };
+          resultsPerLanguage[lang || 'default'] = { requested, generated };
         } else {
           // Handle rejected promise
           logger.warn(
