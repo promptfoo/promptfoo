@@ -70,6 +70,7 @@ The meta-agent stops when it finds a vulnerability, determines the target is sec
 ## Related Concepts
 
 - [Iterative Jailbreaks](iterative.md) - Sequential refinement approach
+- [Hydra Multi-turn](hydra.md) - Multi-turn branching agent with scan-wide memory
 - [Tree-based Jailbreaks](tree.md) - Branching exploration strategy
 - [Prompt Injections](prompt-injection.md) - Direct injection techniques
 - [Multi-turn Jailbreaks](multi-turn.md) - Conversation-based attacks
