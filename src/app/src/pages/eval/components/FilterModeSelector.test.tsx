@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FilterModeSelector } from './FilterModeSelector';
+import type { SelectChangeEvent } from '@mui/material/Select';
 
 const noop = () => {};
 
@@ -38,5 +39,51 @@ describe('FilterModeSelector', () => {
     await user.click(select);
 
     expect(screen.getByText('Show passes only')).toBeInTheDocument();
+  });
+
+  it('handles invalid filterMode value', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<FilterModeSelector filterMode="all" onChange={noop} />);
+
+    const select = screen.getByRole('combobox');
+
+    expect(select).toBeInTheDocument();
+
+    expect(select).not.toHaveValue('invalid-mode');
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles empty string filterMode', () => {
+    render(<FilterModeSelector filterMode="all" onChange={noop} />);
+    const select = screen.getByRole('combobox');
+    expect(select).toBeInTheDocument();
+  });
+
+  it('displays a valid filterMode value that is not in BASE_OPTIONS', async () => {
+    const user = userEvent.setup();
+    render(<FilterModeSelector filterMode="highlights" onChange={noop} />);
+
+    const select = screen.getByRole('combobox');
+    await user.click(select);
+
+    expect(screen.getByRole('option', { name: 'Show highlights only' })).toBeInTheDocument();
+  });
+
+  it('should call onChange when a different filter mode is selected', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<FilterModeSelector filterMode="all" onChange={onChange} />);
+
+    const select = screen.getByRole('combobox');
+    await user.click(select);
+
+    const failuresOption = screen.getByText('Show failures only');
+    await user.click(failuresOption);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const event = onChange.mock.calls[0][0] as SelectChangeEvent;
+    expect(event.target.value).toBe('failures');
   });
 });

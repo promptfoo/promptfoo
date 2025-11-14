@@ -92,7 +92,9 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test normal click - should use navigate
     fireEvent.click(viewAllLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?plugin=bola');
+    const expectedUrl =
+      '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
+    expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
     expect(window.open).not.toHaveBeenCalled();
   });
 
@@ -104,7 +106,9 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test Ctrl+click - should open new tab
     fireEvent.click(viewAllLogsButton, { ctrlKey: true });
 
-    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?plugin=bola', '_blank');
+    const expectedUrl =
+      '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
+    expect(window.open).toHaveBeenCalledWith(expectedUrl, '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
 
     // Reset mocks
@@ -113,7 +117,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test Cmd+click (Mac) - should also open new tab
     fireEvent.click(viewAllLogsButton, { metaKey: true });
 
-    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?plugin=bola', '_blank');
+    expect(window.open).toHaveBeenCalledWith(expectedUrl, '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
