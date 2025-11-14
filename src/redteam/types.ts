@@ -89,6 +89,12 @@ export const StrategyConfigSchema = z
 
 export type StrategyConfig = z.infer<typeof StrategyConfigSchema>;
 
+export const ConversationMessageSchema = z.object({
+  role: z.enum(['assistant', 'user']),
+  content: z.string(),
+});
+export type ConversationMessage = z.infer<typeof ConversationMessageSchema>;
+
 type ConfigurableObject = {
   id: string;
   config?: RedteamObjectConfig;

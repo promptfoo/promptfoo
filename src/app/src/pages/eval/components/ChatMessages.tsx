@@ -21,7 +21,7 @@ const ChatMessage = memo(({ message }: { message: Message | null }) => {
   }
 
   const backgroundColor = isUser
-    ? 'linear-gradient(to bottom right, #FF8B96, #FF4B40)'
+    ? 'linear-gradient(to bottom right,rgb(243, 45, 65), #FF4B40)'
     : isDark
       ? 'linear-gradient(to bottom right, #3A3A3C, #2C2C2E)'
       : 'linear-gradient(to bottom right, #E9E9EB, #D1D1D6)';
@@ -59,6 +59,7 @@ const ChatMessage = memo(({ message }: { message: Message | null }) => {
         <Typography
           variant="body1"
           sx={{
+            fontSize: '14px',
             whiteSpace: 'pre-wrap',
             color: textColor,
             textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',

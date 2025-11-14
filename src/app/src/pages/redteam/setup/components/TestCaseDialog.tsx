@@ -17,6 +17,7 @@ import { useTheme } from '@mui/material/styles';
 import {
   categoryAliases,
   displayNameOverrides,
+  isMultiTurnStrategy,
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
@@ -27,6 +28,15 @@ import {
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import Skeleton from '@mui/material/Skeleton';
 import Chip from '@mui/material/Chip';
+import ChatMessages, {
+  type Message as ChatMessage,
+} from '@app/pages/eval/components/ChatMessages';
+
+type GeneratedTestCase = {
+  prompt: string;
+  context?: string;
+  metadata?: any;
+};
 
 interface TestCaseDialogProps {
   open: boolean;
@@ -34,7 +44,7 @@ interface TestCaseDialogProps {
   plugin: Plugin | null;
   strategy: Strategy | null;
   isGenerating: boolean;
-  generatedTestCase: { prompt: string; context?: string } | null;
+  generatedTestCase: GeneratedTestCase | null;
   targetResponse?: { output: string; error?: string } | null;
   isRunningTest?: boolean;
   onRegenerate: () => void;
@@ -148,6 +158,44 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
 
   const strategyName = typeof strategy === 'string' ? strategy : strategy || '';
   const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
+  const strategyIsMultiTurn =
+    typeof strategyName === 'string' && strategyName
+      ? isMultiTurnStrategy(strategyName as Strategy)
+      : false;
+
+  const turnMessages = useMemo<ChatMessage[]>(() => {
+    const metadata = (generatedTestCase as { metadata?: any } | null)?.metadata;
+    const historyCandidate =
+      metadata?.multiTurn?.history ||
+      metadata?.metadata?.multiTurn?.history ||
+      metadata?.redteamHistory ||
+      [];
+
+    if (!Array.isArray(historyCandidate)) {
+      return [];
+    }
+
+    return historyCandidate
+      .filter((entry: any) => entry && typeof entry.content === 'string')
+      .map((entry: any, idx: number) => {
+        const role =
+          entry.role === 'assistant' || entry.role === 'user' || entry.role === 'system'
+            ? (entry.role as ChatMessage['role'])
+            : (idx % 2 === 0 ? 'user' : 'assistant');
+        return {
+          role,
+          content: entry.content as string,
+        };
+      });
+  }, [generatedTestCase]);
+
+  const isMultiTurnConversation = turnMessages.length > 0;
+  const promptText = generatedTestCase?.prompt?.toString() ?? '';
+  const targetOutputText = targetResponse?.output?.toString() ?? '';
+
+  const shouldShowPromptSection = !strategyIsMultiTurn && (isGenerating || promptText);
+  const shouldShowTargetSection =
+    !strategyIsMultiTurn && (isRunningTest || targetOutputText || targetResponse?.error);
 
   return (
     <Dialog
@@ -175,26 +223,54 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           <Chip label={`Plugin: ${pluginDisplayName}`} />
         </Box>
       </DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Section
-          label="Prompt"
-          text={generatedTestCase?.prompt ?? ''}
-          loading={isGenerating}
-          strategy={strategy}
-        />
-        <Section
-          label="Target Response"
-          text={targetResponse?.output ?? ''}
-          loading={isRunningTest}
-          strategy={null}
-        />
-
-        {generatedTestCase && (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            Dissatisfied with the test case? Fine tune it by adjusting your{' '}
-            {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
-          </Alert>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {strategyIsMultiTurn && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Turns
+            </Typography>
+            <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
+              {isMultiTurnConversation ? (
+                <ChatMessages messages={turnMessages} />
+              ) : (
+                <Skeleton
+                  variant="rectangular"
+                  sx={{ p: 2, borderRadius: 1, height: 120 }}
+                  animation="pulse"
+                />
+              )}
+            </Box>
+          </Box>
         )}
+
+        {!strategyIsMultiTurn && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {shouldShowPromptSection && (
+              <Section
+                label="Generated Prompt"
+                text={promptText || 'Awaiting generation...'}
+                loading={isGenerating}
+                strategy={strategy}
+              />
+            )}
+            {shouldShowTargetSection && (
+              <Section
+                label="Target Response"
+                text={targetOutputText || (targetResponse?.error ?? 'No response')}
+                loading={isRunningTest}
+                strategy={strategy}
+              />
+            )}
+            {targetResponse?.error && (
+              <Alert severity="error">{targetResponse.error}</Alert>
+            )}
+          </Box>
+        )}
+
+        <Alert severity="info" sx={{ mt: 2 }}>
+          Dissatisfied with the test case? Fine tune it by adjusting your{' '}
+          {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
+        </Alert>
       </DialogContent>
       <DialogActions>
         {pluginName && hasSpecificPluginDocumentation(pluginName as Plugin) && (

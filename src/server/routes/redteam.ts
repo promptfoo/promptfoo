@@ -6,6 +6,8 @@ import {
   REDTEAM_MODEL,
   ALL_PLUGINS,
   ALL_STRATEGIES,
+  isMultiTurnStrategy,
+  type MultiTurnStrategy,
   type Plugin,
   type Strategy,
 } from '../../redteam/constants';
@@ -18,10 +20,36 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { PluginConfigSchema, StrategyConfigSchema } from '../../redteam/types';
+import {
+  ConversationMessageSchema,
+  PluginConfigSchema,
+  StrategyConfigSchema,
+} from '../../redteam/types';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
+import {
+  extractGeneratedPrompt,
+  generateMultiTurnPrompt,
+  getPluginConfigurationError,
+  RemoteGenerationDisabledError,
+} from '../services/redteamTestCaseGenerationService';
 
 export const redteamRouter = Router();
+
+function respondWithMultiTurnError(error: unknown, res: Response, strategyId: Strategy) {
+  if (error instanceof RemoteGenerationDisabledError) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+
+  logger.error('[Multi-turn] Error generating prompt', {
+    message: error instanceof Error ? error.message : String(error),
+    strategy: strategyId,
+  });
+  res.status(500).json({
+    error: 'Failed to generate multi-turn prompt',
+    details: error instanceof Error ? error.message : String(error),
+  });
+}
 
 const TestCaseGenerationSchema = z.object({
   plugin: z.object({
@@ -41,6 +69,11 @@ const TestCaseGenerationSchema = z.object({
       purpose: z.string().nullable(),
     }),
   }),
+  turn: z.number().int().min(0).optional().default(0),
+  maxTurns: z.number().int().min(1).optional(),
+  history: z.array(ConversationMessageSchema).optional().default([]),
+  goal: z.string().optional(),
+  stateful: z.boolean().optional(),
 });
 
 /**
@@ -54,48 +87,12 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       return;
     }
 
-    const { plugin, strategy, config } = parsedBody.data;
+    const { plugin, strategy, config, turn, maxTurns, history, goal: goalOverride, stateful } =
+      parsedBody.data;
 
-    // Validate required configuration for specific plugins
-    if (plugin.id === 'indirect-prompt-injection' && !plugin.config.indirectInjectionVar) {
-      res.status(400).json({
-        error: 'Indirect Prompt Injection plugin requires indirectInjectionVar configuration',
-      });
-      return;
-    } else if (plugin.id === 'prompt-extraction' && !plugin.config.systemPrompt) {
-      res.status(400).json({
-        error: 'Prompt Extraction plugin requires systemPrompt configuration',
-      });
-      return;
-    }
-    // Optional config plugins - only validate if config is provided but invalid
-    else if (
-      plugin.id === 'bfla' &&
-      plugin.config.targetIdentifiers &&
-      (!Array.isArray(plugin.config.targetIdentifiers) ||
-        plugin.config.targetIdentifiers.length === 0)
-    ) {
-      res.status(400).json({
-        error: 'BFLA plugin targetIdentifiers must be a non-empty array when provided',
-      });
-      return;
-    } else if (
-      plugin.id === 'bola' &&
-      plugin.config.targetSystems &&
-      (!Array.isArray(plugin.config.targetSystems) || plugin.config.targetSystems.length === 0)
-    ) {
-      res.status(400).json({
-        error: 'BOLA plugin targetSystems must be a non-empty array when provided',
-      });
-      return;
-    } else if (
-      plugin.id === 'ssrf' &&
-      plugin.config.targetUrls &&
-      (!Array.isArray(plugin.config.targetUrls) || plugin.config.targetUrls.length === 0)
-    ) {
-      res.status(400).json({
-        error: 'SSRF plugin targetUrls must be a non-empty array when provided',
-      });
+    const pluginConfigurationError = getPluginConfigurationError(plugin);
+    if (pluginConfigurationError) {
+      res.status(400).json({ error: pluginConfigurationError });
       return;
     }
 
@@ -158,14 +155,48 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     }
 
     const testCase = finalTestCases[0];
-    const generatedPrompt = testCase.vars?.[injectVar] || 'Unable to extract test prompt';
-
+    const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
+    const baseMetadata =
+      testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
+    const metadataForStrategy = {
+      ...baseMetadata,
+      strategyId: strategy.id,
+    };
     const context = `This test case targets the ${plugin.id} plugin with strategy ${strategy.id} and was generated based on your application context. If the test case is not relevant to your application, you can modify the application definition to improve relevance.`;
+    const purpose = config.applicationDefinition.purpose ?? null;
+
+    if (isMultiTurnStrategy(strategy.id)) {
+      try {
+        const multiTurnResult = await generateMultiTurnPrompt({
+          pluginId: plugin.id,
+          strategyId: strategy.id as MultiTurnStrategy,
+          strategyConfigRecord: strategy.config as Record<string, unknown>,
+          history,
+          turn,
+          maxTurns,
+          goalOverride,
+          baseMetadata: metadataForStrategy,
+          generatedPrompt,
+          purpose,
+          stateful,
+        });
+
+        res.json({
+          prompt: multiTurnResult.prompt,
+          context,
+          metadata: multiTurnResult.metadata,
+        });
+        return;
+      } catch (multiTurnError) {
+        respondWithMultiTurnError(multiTurnError, res, strategy.id);
+        return;
+      }
+    }
 
     res.json({
       prompt: generatedPrompt,
       context,
-      metadata: testCase.metadata,
+      metadata: baseMetadata,
     });
   } catch (error) {
     logger.error(`Error generating test case: ${error}`);
