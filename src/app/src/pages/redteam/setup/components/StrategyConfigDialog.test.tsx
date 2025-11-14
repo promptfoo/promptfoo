@@ -520,6 +520,64 @@ describe('StrategyConfigDialog', () => {
     expect(goatStatefulSwitch).not.toBeChecked();
   });
 
+  it("should render Hydra configuration fields when strategy is 'jailbreak:hydra'", () => {
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:hydra"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:hydra',
+          name: 'Hydra',
+          description: 'Hydra multi-turn jailbreak',
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Configure Hydra')).toBeInTheDocument();
+    const maxTurnsInput = screen.getByLabelText('Max Turns');
+    expect(maxTurnsInput).toBeInTheDocument();
+    expect(maxTurnsInput).toHaveValue(10);
+
+    expect(screen.queryByLabelText('Max Backtracks')).not.toBeInTheDocument();
+    const statefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    expect(statefulSwitch).not.toBeChecked();
+  });
+
+  it("should save updated Hydra configuration when strategy is 'jailbreak:hydra'", () => {
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:hydra"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:hydra',
+          name: 'Hydra',
+          description: 'Hydra multi-turn jailbreak',
+        }}
+      />,
+    );
+
+    const maxTurnsInput = screen.getByLabelText('Max Turns');
+    fireEvent.change(maxTurnsInput, { target: { value: '15' } });
+
+    const statefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    fireEvent.click(statefulSwitch);
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(saveButton);
+
+    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:hydra', {
+      maxTurns: 15,
+      stateful: true,
+    });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
   it('should not persist localConfig changes when closing the dialog without saving for the jailbreak:meta strategy', () => {
     const initialConfig = { numIterations: 10 };
 
