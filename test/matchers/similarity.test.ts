@@ -34,7 +34,7 @@ describe('matchesSimilarity', () => {
 
     await expect(matchesSimilarity(expected, output, threshold)).resolves.toEqual({
       pass: true,
-      reason: 'Similarity 1.00 is greater than threshold 0.5',
+      reason: 'Similarity 1.00 is greater than or equal to threshold 0.5',
       score: 1,
       tokensUsed: {
         total: expect.any(Number),
@@ -76,7 +76,7 @@ describe('matchesSimilarity', () => {
       matchesSimilarity(expected, output, threshold, true /* invert */),
     ).resolves.toEqual({
       pass: false,
-      reason: 'Similarity 1.00 is greater than threshold 0.5',
+      reason: 'Similarity 1.00 is greater than or equal to threshold 0.5',
       score: 0,
       tokensUsed: {
         total: expect.any(Number),
@@ -137,7 +137,7 @@ describe('matchesSimilarity', () => {
 
     await expect(matchesSimilarity(expected, output, threshold, false, grading)).resolves.toEqual({
       pass: true,
-      reason: 'Similarity 1.00 is greater than threshold 0.5',
+      reason: 'Similarity 1.00 is greater than or equal to threshold 0.5',
       score: 1,
       tokensUsed: {
         total: expect.any(Number),
