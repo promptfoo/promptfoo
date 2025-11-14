@@ -197,4 +197,145 @@ describe('matchesSimilarity', () => {
 
     process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
   });
+
+  describe('dot_product metric', () => {
+    it('should pass when dot product is above threshold', async () => {
+      const expected = 'Expected output';
+      const output = 'Sample output';
+      const threshold = 0.5;
+
+      await expect(
+        matchesSimilarity(expected, output, threshold, false, undefined, 'dot_product'),
+      ).resolves.toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it('should fail when dot product is below threshold', async () => {
+      const expected = 'Expected output';
+      const output = 'Different output';
+      const threshold = 0.9;
+
+      await expect(
+        matchesSimilarity(expected, output, threshold, false, undefined, 'dot_product'),
+      ).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+      });
+    });
+
+    it('should handle inverse correctly for dot product', async () => {
+      const expected = 'Expected output';
+      const output = 'Sample output';
+      const threshold = 0.5;
+
+      await expect(
+        matchesSimilarity(expected, output, threshold, true, undefined, 'dot_product'),
+      ).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+      });
+    });
+  });
+
+  describe('euclidean metric', () => {
+    beforeEach(() => {
+      jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+        if (text === 'Expected output' || text === 'Sample output') {
+          return Promise.resolve({
+            embedding: [1, 0, 0],
+            tokenUsage: { total: 5, prompt: 2, completion: 3 },
+          });
+        } else if (text === 'Different output') {
+          return Promise.resolve({
+            embedding: [0, 1, 0],
+            tokenUsage: { total: 5, prompt: 2, completion: 3 },
+          });
+        }
+        return Promise.reject(new Error('Unexpected input'));
+      });
+    });
+
+    it('should pass when euclidean distance is below threshold', async () => {
+      const expected = 'Expected output';
+      const output = 'Sample output';
+      const threshold = 0.1; // Very low distance = similar
+
+      await expect(
+        matchesSimilarity(expected, output, threshold, false, undefined, 'euclidean'),
+      ).resolves.toMatchObject({
+        pass: true,
+        reason: expect.stringContaining('Distance 0.00 is less than or equal to threshold 0.1'),
+      });
+    });
+
+    it('should fail when euclidean distance is above threshold', async () => {
+      const expected = 'Expected output';
+      const output = 'Different output';
+      const threshold = 0.5; // Distance is ~1.41, above threshold
+
+      await expect(
+        matchesSimilarity(expected, output, threshold, false, undefined, 'euclidean'),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Distance 1.41 is greater than threshold 0.5'),
+      });
+    });
+
+    it('should handle inverse correctly for euclidean', async () => {
+      const expected = 'Expected output';
+      const output = 'Different output';
+      const threshold = 0.5;
+
+      // With inverse, we want distance > threshold, which is true here
+      await expect(
+        matchesSimilarity(expected, output, threshold, true, undefined, 'euclidean'),
+      ).resolves.toMatchObject({
+        pass: true,
+        reason: expect.stringContaining('Distance 1.41 is greater than threshold 0.5'),
+      });
+    });
+
+    it('should convert euclidean distance to normalized score', async () => {
+      const expected = 'Expected output';
+      const output = 'Sample output';
+      const threshold = 0.1;
+
+      const result = await matchesSimilarity(
+        expected,
+        output,
+        threshold,
+        false,
+        undefined,
+        'euclidean',
+      );
+
+      // Distance = 0, so score should be 1 / (1 + 0) = 1
+      expect(result.score).toBeCloseTo(1, 2);
+    });
+  });
+
+  describe('metric validation', () => {
+    it('should reject non-cosine metric for callSimilarityApi providers', async () => {
+      const mockProvider = {
+        id: () => 'test-similarity-provider',
+        callSimilarityApi: jest.fn().mockResolvedValue({
+          similarity: 0.9,
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        }),
+      };
+
+      const grading: GradingConfig = {
+        provider: mockProvider as any,
+      };
+
+      await expect(
+        matchesSimilarity('expected', 'output', 0.8, false, grading, 'dot_product'),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('only supports cosine similarity'),
+      });
+    });
+  });
 });
