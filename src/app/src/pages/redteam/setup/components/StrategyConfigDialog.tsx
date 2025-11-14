@@ -371,6 +371,7 @@ export default function StrategyConfigDialog({
       });
     } else if (
       strategy === 'jailbreak' ||
+      strategy === 'jailbreak:hydra' ||
       strategy === 'jailbreak:meta' ||
       strategy === 'jailbreak:tree' ||
       strategy === 'best-of-n' ||
@@ -701,6 +702,58 @@ export default function StrategyConfigDialog({
             InputProps={{ inputProps: { min: 1, max: 100 } }}
             helperText="Maximum number of attack attempts for each goal"
           />
+        </Box>
+      );
+    } else if (strategy === 'jailbreak:hydra') {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Configure the Hydra multi-turn jailbreak. Hydra branches across multiple conversations,
+            reuses what it learns during the scan, and automatically aligns with target session
+            settings.
+          </Typography>
+
+          <TextField
+            fullWidth
+            label="Max Turns"
+            type="number"
+            value={localConfig.maxTurns ?? 10}
+            onChange={(e) => {
+              const parsedValue = Number.parseInt(e.target.value, 10);
+              setLocalConfig({
+                ...localConfig,
+                maxTurns: Number.isNaN(parsedValue) ? undefined : parsedValue,
+              });
+            }}
+            placeholder="Maximum conversation turns (default: 10)"
+            InputProps={{ inputProps: { min: 1, max: 30 } }}
+            helperText="Maximum number of back-and-forth exchanges with the target model."
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={localConfig.stateful === true}
+                onChange={(e) => setLocalConfig({ ...localConfig, stateful: e.target.checked })}
+                color="primary"
+              />
+            }
+            label={
+              <Box component="span">
+                <Typography variant="body2" component="span">
+                  Stateful
+                </Typography>
+                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
+                  - Enable when your target maintains server-side sessions and expects a session ID
+                  per turn.
+                </Typography>
+              </Box>
+            }
+          />
+
+          <Typography variant="caption" color="text.secondary">
+            Hydra requires Promptfoo Cloud remote generation.
+          </Typography>
         </Box>
       );
     } else if (strategy && MULTI_TURN_STRATEGIES.includes(strategy as MultiTurnStrategy)) {

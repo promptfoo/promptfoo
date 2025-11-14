@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(assertions): add dot product and euclidean distance metrics for similarity assertion - use `similar:dot` and `similar:euclidean` assertion types to match production vector database metrics and support different similarity use cases (#6202)
+- feat(webui): expose Hydra strategy configuration (max turns and stateful toggle) in red team setup UI (#6165)
 - fix(app): aligning risk scores with documentation (#6212)
 - feat(providers): add GPT-5.1 model support including gpt-5.1, gpt-5.1-mini, gpt-5.1-nano, and gpt-5.1-codex with new 'none' reasoning mode for low-latency interactions and configurable verbosity control (#6208)
 - feat(redteam): allow configuring `redteam.frameworks` to limit compliance frameworks surfaced in reports and commands (#6170)
@@ -15,14 +17,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(app): Metadata value autocomplete eval filter (#6176)
 - feat(webui): display both total and filtered metrics simultaneously when filters are active, showing "X/Y filtered, Z total" format in evaluation results table for better visibility into filtered vs unfiltered data (#5969)
 - feat(app): eval results filters permalinking (#6196)
+- fix(site): fix missing background color on safari api reference search modal (#6218)
 
 ### Changed
 
 - chore(ci): synchronize package-lock.json to resolve npm ci failures (#6195)
 - chore(ci): increase webui test timeout to 8 minutes in GitHub Actions workflow to prevent CI timeouts (#6201)
+- chore(redteam): update foundation model report redteam config to use newer redteam strategies (#6216)
 
 ### Fixed
 
+- fix(redteam): don't set default 'en' language when no language is configured - prevents unnecessary language modifiers from being passed to meta agent and other iterative strategies, keeping prompts focused on actual task without implied translation requirements (#6214)
 - fix(webui): fix duplicate React key warning in DefaultTestVariables component by implementing counter-based unique ID generation (#6201)
 - fix(samples): downlevel pem dependency to supported version
 
@@ -58,6 +63,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(cli): only show error counter when >0
 - fix(redteam): respect redteam.provider configuration for local grading - fixes issue where configuring a local provider (e.g., ollama:llama3.2) still sent grading requests to remote API instead of using the configured provider (#5959)
 - fix: Reverts #6142 (#6189)
+
+### Documentation
+
+- docs(redteam): document Hydra configuration options for max turns, backtracking, and stateful operation (#6165)
 
 ## [0.119.5] - 2025-11-10
 
