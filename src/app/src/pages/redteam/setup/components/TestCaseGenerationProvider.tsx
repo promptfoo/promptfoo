@@ -8,6 +8,8 @@ import { TestCaseDialog } from './TestCaseDialog';
 import { type Config } from '../types';
 import type { PluginConfig, StrategyConfig } from '@promptfoo/redteam/types';
 
+const TEST_GENERATION_TIMEOUT = 30000; // 30s timeout
+const TEST_EXECUTION_TIMEOUT = 30000; // 30s timeout
 interface GeneratedTestCase {
   prompt: string;
   context?: string;
@@ -118,7 +120,7 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
             },
           }),
           signal: AbortSignal.any([
-            AbortSignal.timeout(10000), // 10s timeout
+            AbortSignal.timeout(TEST_GENERATION_TIMEOUT),
             abortController.signal,
           ]),
         });
@@ -204,7 +206,7 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
             prompt: testCase.prompt,
           }),
           signal: AbortSignal.any([
-            AbortSignal.timeout(30000), // 30s timeout
+            AbortSignal.timeout(TEST_EXECUTION_TIMEOUT),
             abortController.signal,
           ]),
         });
@@ -215,6 +217,9 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
         }
 
         const testData = await testResponse.json();
+
+        // TODO(Will): Ensure the testData.providerResponse is correctly deserialized
+
         setTargetResponse({
           output: testData.providerResponse?.output || '',
           error: testData.providerResponse?.error || testData.testResult?.error,
