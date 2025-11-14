@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -36,7 +36,7 @@ interface PluginGroup {
 export interface VerticalSuite {
   id: string;
   name: string;
-  icon: string;
+  icon: React.ReactElement;
   description: string;
   longDescription: string;
   plugins: Plugin[];
@@ -159,13 +159,17 @@ export default function VerticalSuiteCard({
           {/* Icon */}
           <Box
             sx={{
-              fontSize: '2rem',
-              lineHeight: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'primary.main',
+              opacity: 0.85,
               mt: 0.25,
-              opacity: 0.9,
             }}
           >
-            {suite.icon}
+            {React.cloneElement(suite.icon, {
+              sx: { fontSize: '2rem' },
+            })}
           </Box>
 
           {/* Content */}
