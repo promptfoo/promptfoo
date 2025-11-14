@@ -110,6 +110,8 @@ export interface VarKeyResult {
   key: string;
 }
 
+const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
@@ -175,6 +177,50 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
       // Log error but return empty array to prevent breaking the UI
       logger.error(
         `Error fetching metadata keys for eval ${evalId} and comparisons [${comparisonEvalIds.join(', ')}]: ${error}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Queries all unique metadata values for a given metadata key.
+   * @param evalId - The ID of the eval to get the metadata values from.
+   * @param key - The key of the metadata to get the values from.
+   * @returns An array of unique metadata values.
+   */
+  static getMetadataValuesFromEval(evalId: string, key: string): string[] {
+    const db = getDb();
+    const trimmedKey = key.trim();
+    if (!trimmedKey) {
+      return [];
+    }
+
+    try {
+      const escapedKey = escapeJsonPathKey(trimmedKey);
+      const jsonPath = `$."${escapedKey}"`;
+
+      const query = sql`
+        SELECT DISTINCT
+          json_extract(${evalResultsTable.metadata}, ${jsonPath}) AS value
+        FROM ${evalResultsTable}
+        WHERE ${evalResultsTable.evalId} = ${evalId}
+          AND ${evalResultsTable.metadata} IS NOT NULL
+          AND ${evalResultsTable.metadata} != '{}'
+          AND json_valid(${evalResultsTable.metadata})
+          AND json_extract(${evalResultsTable.metadata}, ${jsonPath}) IS NOT NULL
+        ORDER BY value
+        LIMIT 1000
+      `;
+
+      const rows = db.all<{ value: string }>(query);
+      const values = rows
+        .map(({ value }) => String(value).trim())
+        .filter((value) => Boolean(value && value.length > 0));
+
+      return Array.from(new Set(values));
+    } catch (error) {
+      logger.error(
+        `Error fetching metadata values for eval ${evalId} and key ${trimmedKey}: ${error instanceof Error ? error.message : String(error)}`,
       );
       return [];
     }
