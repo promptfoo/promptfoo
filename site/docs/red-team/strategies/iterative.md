@@ -80,6 +80,7 @@ The iterative jailbreak strategy creates refined single-shot jailbreaks that con
 ## Related Concepts
 
 - [Meta-Agent Jailbreaks](meta.md) - Strategic taxonomy-building approach
+- [Hydra Multi-turn](hydra.md) - Agentic follow-up attacks with branching backtracks
 - [Tree-based Jailbreaks](tree.md) - Branching exploration strategy
 - [Prompt Injections](prompt-injection.md) - Direct injection techniques
 - [Multi-turn Jailbreaks](multi-turn.md) - Conversation-based attacks
