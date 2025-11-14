@@ -1,7 +1,8 @@
-import React, { useCallback, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -24,11 +25,12 @@ import {
   GridToolbarContainer,
   useGridApiRef,
 } from '@mui/x-data-grid';
+import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
 import { parse } from 'csv-parse/browser/esm/sync';
-import { makeInlinePolicyId, makeDefaultPolicyName } from '@promptfoo/redteam/plugins/policy/utils';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
+import { PolicySuggestionsSidebar } from './PolicySuggestionsSidebar';
 
 // Augment the toolbar props interface
 declare module '@mui/x-data-grid' {
@@ -126,7 +128,13 @@ export const CustomPoliciesSection = () => {
   const apiRef = useGridApiRef();
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
+  const [isGeneratingPolicies, setIsGeneratingPolicies] = useState(false);
+  const [suggestedPolicies, setSuggestedPolicies] = useState<Array<{ name: string; text: string }>>(
+    [],
+  );
+  const [hasAttemptedGeneration, setHasAttemptedGeneration] = useState(false);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
+  const isGeneratingPoliciesRef = useRef(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   // Policy dialog state
@@ -144,6 +152,9 @@ export const CustomPoliciesSection = () => {
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
+
+  // For policy generation, we'll try regardless of Cloud status since it can work with local servers
+  const canGeneratePolicies = Boolean(config.applicationDefinition?.purpose);
 
   // Test case generation state - now from context
   const { generateTestCase, isGenerating: generatingTestCase } = useTestCaseGeneration();
@@ -187,6 +198,10 @@ export const CustomPoliciesSection = () => {
       };
     });
   }, [policyPlugins, policyNames]);
+
+  // Auto-generate only if we have 5 or fewer policies
+  const AUTO_GENERATION_THRESHOLD = 5;
+  const shouldAutoGenerate = rows.length <= AUTO_GENERATION_THRESHOLD;
 
   // Validate policy text uniqueness
   const validatePolicyText = useCallback(
@@ -376,6 +391,126 @@ export const CustomPoliciesSection = () => {
     setConfirmDeleteOpen(false);
   };
 
+  const handleGeneratePolicies = useCallback(async () => {
+    if (!config.applicationDefinition?.purpose) {
+      return;
+    }
+
+    // Guard against multiple simultaneous requests
+    if (isGeneratingPoliciesRef.current) {
+      return;
+    }
+
+    // Reevaluate threshold at call time - don't generate if we now have too many policies
+    const AUTO_GENERATION_THRESHOLD = 5;
+    const currentShouldAutoGenerate = rows.length <= AUTO_GENERATION_THRESHOLD;
+
+    // Only auto-generate if we're still under the threshold
+    // Manual generation (button click) can bypass this for explicit user action
+    if (!currentShouldAutoGenerate && hasAttemptedGeneration) {
+      // Already generated once and now we have too many policies - don't auto-regenerate
+      return;
+    }
+
+    isGeneratingPoliciesRef.current = true;
+    setIsGeneratingPolicies(true);
+    setHasAttemptedGeneration(true);
+    try {
+      // Get existing policy texts to avoid duplicates (both active and suggested)
+      const existingPolicies = [
+        ...rows.map((row) => row.policyText),
+        ...suggestedPolicies.map((p) => p.text),
+      ];
+
+      const response = await callApi('/v1/redteam/generate-policies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          applicationDefinition: config.applicationDefinition,
+          existingPolicies,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate policies');
+      }
+
+      const data = await response.json();
+      const generatedPolicies: Array<{ name: string; text: string }> = data.policies || [];
+
+      if (generatedPolicies.length === 0) {
+        setSuggestedPolicies([]);
+        return;
+      }
+
+      // Store as suggested policies instead of directly adding them
+      setSuggestedPolicies(generatedPolicies);
+    } catch (error) {
+      console.error('Error generating policies:', error);
+      setSuggestedPolicies([]);
+    } finally {
+      isGeneratingPoliciesRef.current = false;
+      setIsGeneratingPolicies(false);
+    }
+  }, [config.applicationDefinition, rows, suggestedPolicies, hasAttemptedGeneration]);
+
+  // Auto-generate policies on component mount if purpose exists and we have few policies
+  useEffect(() => {
+    if (
+      canGeneratePolicies &&
+      shouldAutoGenerate &&
+      !hasAttemptedGeneration &&
+      suggestedPolicies.length === 0
+    ) {
+      handleGeneratePolicies();
+    }
+  }, [
+    canGeneratePolicies,
+    shouldAutoGenerate,
+    hasAttemptedGeneration,
+    suggestedPolicies.length,
+    handleGeneratePolicies,
+  ]);
+
+  const handleAddSuggestedPolicy = useCallback(
+    (policy: { name: string; text: string }) => {
+      const otherPlugins = config.plugins.filter((p) =>
+        typeof p === 'string' ? true : p.id !== 'policy',
+      );
+
+      const policyId = makeInlinePolicyId(policy.text);
+      const newPolicy = {
+        id: 'policy',
+        config: {
+          policy: {
+            id: policyId,
+            text: policy.text,
+            name: policy.name,
+          },
+        },
+      };
+
+      const allPolicies = [
+        ...policyPlugins.map((p) => ({
+          id: 'policy',
+          config: { policy: p.config.policy },
+        })),
+        newPolicy,
+      ];
+
+      updateConfig('plugins', [...otherPlugins, ...allPolicies]);
+
+      // Remove from suggested policies
+      setSuggestedPolicies((prev) => prev.filter((p) => p.text !== policy.text));
+
+      toast.showToast('Policy added successfully', 'success');
+    },
+    [config.plugins, policyPlugins, updateConfig, toast],
+  );
+
   const handleCsvUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -541,28 +676,52 @@ export const CustomPoliciesSection = () => {
 
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Determine if we should show the suggestions sidebar - show whenever policy generation is possible
+  const showSuggestionsSidebar = canGeneratePolicies;
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} ref={containerRef}>
-      <Box sx={{ height: containerRef.current?.clientHeight ?? 500 }}>
-        <DataGrid
-          apiRef={apiRef}
-          rows={rows}
-          columns={columns}
-          checkboxSelection
-          disableRowSelectionOnClick
-          slots={{ toolbar: CustomToolbar }}
-          slotProps={{
-            toolbar: {
-              selectedCount: rowSelectionModel.length,
-              onDeleteSelected: handleDeleteSelected,
-              onAddPolicy: handleAddPolicy,
-              onUploadCsv: handleCsvUpload,
-              isUploadingCsv,
-            },
-          }}
-          onRowSelectionModelChange={setRowSelectionModel}
-          rowSelectionModel={rowSelectionModel}
-        />
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: showSuggestionsSidebar ? '1fr 380px' : '1fr',
+          gap: 2,
+          height: 600,
+          minHeight: 400,
+        }}
+      >
+        {/* Main table area */}
+        <Box sx={{ height: '100%', minWidth: 0 }}>
+          <DataGrid
+            apiRef={apiRef}
+            rows={rows}
+            columns={columns}
+            checkboxSelection
+            disableRowSelectionOnClick
+            slots={{ toolbar: CustomToolbar }}
+            slotProps={{
+              toolbar: {
+                selectedCount: rowSelectionModel.length,
+                onDeleteSelected: handleDeleteSelected,
+                onAddPolicy: handleAddPolicy,
+                onUploadCsv: handleCsvUpload,
+                isUploadingCsv,
+              },
+            }}
+            onRowSelectionModelChange={setRowSelectionModel}
+            rowSelectionModel={rowSelectionModel}
+          />
+        </Box>
+
+        {/* Suggested Policies Sidebar */}
+        {showSuggestionsSidebar && (
+          <PolicySuggestionsSidebar
+            isGeneratingPolicies={isGeneratingPolicies}
+            suggestedPolicies={suggestedPolicies}
+            onGeneratePolicies={handleGeneratePolicies}
+            onAddSuggestedPolicy={handleAddSuggestedPolicy}
+          />
+        )}
       </Box>
 
       {/* Delete confirmation dialog */}
