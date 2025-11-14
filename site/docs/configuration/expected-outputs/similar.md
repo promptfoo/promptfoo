@@ -76,7 +76,7 @@ Computes the straight-line distance between two vectors. Range: 0 to ∞ (lower 
 assert:
   - type: similar:euclidean
     value: 'The expected output'
-    threshold: 0.5  # Maximum distance threshold
+    threshold: 0.5 # Maximum distance threshold
 ```
 
 **When to use:** When you care about both the angle and magnitude differences between vectors. Note that the threshold represents the _maximum_ distance (not minimum similarity), so lower values are stricter.
