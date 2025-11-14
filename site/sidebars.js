@@ -411,6 +411,19 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Code scanning',
+      link: {
+        type: 'doc',
+        id: 'code-scanning/index',
+      },
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'code-scanning/github-action' },
+        { type: 'doc', id: 'code-scanning/cli' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Guides',
       link: {
         type: 'generated-index',

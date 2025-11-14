@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
@@ -80,26 +80,34 @@ describe('EvalOutputPromptDialog', () => {
     vi.clearAllMocks();
   });
 
-  it('renders with the correct title', () => {
+  it('renders with the correct title', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    expect(screen.getByText('Details: test-provider')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Details: test-provider')).toBeInTheDocument();
+    });
   });
 
-  it('displays prompt content', () => {
+  it('displays prompt content', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    expect(screen.getByText('Prompt')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Prompt')).toBeInTheDocument();
+    });
     expect(screen.getByText('Test prompt')).toBeInTheDocument();
   });
 
-  it('displays output when provided', () => {
+  it('displays output when provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    expect(screen.getByText('Original Output')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Original Output')).toBeInTheDocument();
+    });
     expect(screen.getByText('Test output')).toBeInTheDocument();
   });
 
   it('displays assertion results table with metrics when provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    });
     expect(screen.getByText('Metric')).toBeInTheDocument();
     expect(screen.getByText('contains')).toBeInTheDocument();
     expect(screen.getByText('✅')).toBeInTheDocument();
@@ -119,13 +127,17 @@ describe('EvalOutputPromptDialog', () => {
       ],
     };
     render(<EvalOutputPromptDialog {...propsWithoutMetrics} />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    });
     expect(screen.queryByText('Metric')).not.toBeInTheDocument();
   });
 
   it('displays metadata table when provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
     expect(screen.getByText('Metadata')).toBeInTheDocument();
     expect(screen.getByText('testKey')).toBeInTheDocument();
     expect(screen.getByText('testValue')).toBeInTheDocument();
@@ -169,7 +181,9 @@ describe('EvalOutputPromptDialog', () => {
 
     render(<EvalOutputPromptDialog {...defaultProps} />);
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    });
 
     // Trigger the hover event on the value cell to make the copy button visible
     const valueCell = screen.getByText('expected value').closest('td');
@@ -202,13 +216,15 @@ describe('EvalOutputPromptDialog', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithLongValue} />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    });
     const truncatedCell = screen.getByText(/^a+\.\.\.$/);
     await userEvent.click(truncatedCell);
     expect(screen.getByText(longValue)).toBeInTheDocument();
   });
 
-  it('displays the Citations component when citations are in metadata', () => {
+  it('displays the Citations component when citations are in metadata', async () => {
     const propsWithCitations = {
       ...defaultProps,
       metadata: {
@@ -226,7 +242,9 @@ describe('EvalOutputPromptDialog', () => {
       },
     };
 
-    render(<EvalOutputPromptDialog {...propsWithCitations} />);
+    await act(async () => {
+      render(<EvalOutputPromptDialog {...propsWithCitations} />);
+    });
 
     // Check if Citations component is rendered with correct props
     const citationsComponent = screen.getByTestId('citations-component');
@@ -237,8 +255,10 @@ describe('EvalOutputPromptDialog', () => {
     expect(passedCitations).toEqual(propsWithCitations.metadata.citations);
   });
 
-  it('does not display the Citations component when no citations in metadata', () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+  it('does not display the Citations component when no citations in metadata', async () => {
+    await act(async () => {
+      render(<EvalOutputPromptDialog {...defaultProps} />);
+    });
     expect(screen.queryByTestId('citations-component')).not.toBeInTheDocument();
   });
 
@@ -254,7 +274,9 @@ describe('EvalOutputPromptDialog', () => {
     render(<EvalOutputPromptDialog {...propsWithCitations} />);
 
     // Regular metadata should be in the table
-    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
     expect(screen.getByText('regularKey')).toBeInTheDocument();
     expect(screen.getByText('regular value')).toBeInTheDocument();
 
@@ -337,7 +359,9 @@ describe('EvalOutputPromptDialog', () => {
     });
 
     const tracesTab = screen.getByText('Traces');
-    await userEvent.click(tracesTab);
+    await act(async () => {
+      await userEvent.click(tracesTab);
+    });
 
     expect(MockDebuggingPanel).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -356,7 +380,9 @@ describe('EvalOutputPromptDialog', () => {
     });
 
     const tracesTab = screen.getByRole('tab', { name: /traces/i });
-    fireEvent.click(tracesTab);
+    await act(async () => {
+      fireEvent.click(tracesTab);
+    });
 
     const debuggingPanel = screen.getByTestId('mock-debugging-panel');
     expect(debuggingPanel.getAttribute('data-prompt-index')).toBeNull();
@@ -374,7 +400,9 @@ describe('EvalOutputPromptDialog', () => {
     });
 
     const tracesTab = screen.getByText('Traces');
-    fireEvent.click(tracesTab);
+    await act(async () => {
+      fireEvent.click(tracesTab);
+    });
 
     expect(MockDebuggingPanel).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -441,14 +469,18 @@ describe('EvalOutputPromptDialog', () => {
     expect(screen.getByText('Original Output')).toBeInTheDocument();
   });
 
-  it('should show Edit & Replay button when readOnly is false (default)', () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+  it('should show Edit & Replay button when readOnly is false (default)', async () => {
+    await act(async () => {
+      render(<EvalOutputPromptDialog {...defaultProps} />);
+    });
 
     expect(screen.getByLabelText('Edit & Replay')).toBeInTheDocument();
   });
 
-  it('should hide Edit & Replay button when readOnly is true', () => {
-    render(<EvalOutputPromptDialog {...defaultProps} readOnly={true} />);
+  it('should hide Edit & Replay button when readOnly is true', async () => {
+    await act(async () => {
+      render(<EvalOutputPromptDialog {...defaultProps} readOnly={true} />);
+    });
 
     expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
   });
@@ -465,7 +497,7 @@ describe('EvalOutputPromptDialog', () => {
     expect(screen.getByLabelText('Edit & Replay')).toBeInTheDocument();
   });
 
-  it('displays OutputsPanel and labels tab as "Prompt & Output" when metadata contains citations but no other output', () => {
+  it('displays OutputsPanel and labels tab as "Prompt & Output" when metadata contains citations but no other output', async () => {
     const propsWithCitations = {
       ...defaultProps,
       output: undefined,
@@ -484,7 +516,9 @@ describe('EvalOutputPromptDialog', () => {
       },
     };
 
-    render(<EvalOutputPromptDialog {...propsWithCitations} />);
+    await act(async () => {
+      render(<EvalOutputPromptDialog {...propsWithCitations} />);
+    });
 
     expect(screen.getByText('Prompt & Output')).toBeInTheDocument();
 
