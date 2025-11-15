@@ -1,7 +1,7 @@
 ---
 title: 'Will agents hack everything?'
 description: 'The first state-level AI cyberattack raises hard questions: Can we stop AI agents from helping attackers? Should we?'
-image: /img/blog/will-agents-hack-everything/red-panda-vs-hackers.png
+image: /img/blog/will-agents-hack-everything/red-panda-vs-hackers.jpg
 keywords:
   [
     AI agent security,
