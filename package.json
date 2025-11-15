@@ -103,7 +103,7 @@
     "@adaline/together-ai": "1.5.1",
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.7.2",
-    "@anthropic-ai/claude-agent-sdk": "^0.1.36",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.42",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.927.0",
     "@aws-sdk/client-bedrock-runtime": "^3.927.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.927.0",
@@ -180,7 +180,7 @@
     "@adaline/together-ai": "1.5.1",
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.7.2",
-    "@anthropic-ai/claude-agent-sdk": "^0.1.36",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.42",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.927.0",
     "@aws-sdk/client-bedrock-runtime": "^3.927.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.927.0",
@@ -220,7 +220,7 @@
     "xlsx": "^0.18.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.68.0",
+    "@anthropic-ai/sdk": "^0.69.0",
     "@apidevtools/json-schema-ref-parser": "^12.0.2",
     "@googleapis/sheets": "^9.8.0",
     "@inquirer/checkbox": "^4.3.1",
