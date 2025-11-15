@@ -171,6 +171,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Multi-turn',
+    strategy: 'jailbreak:hydra',
+    displayName: 'Hydra Multi-turn',
+    description: 'Adaptive multi-turn branching',
+    longDescription:
+      'Adaptive multi-turn jailbreak agent that pivots across branches with persistent scan-wide memory to uncover hidden vulnerabilities',
+    cost: 'High',
+    asrIncrease: '70-90%',
+    link: '/docs/red-team/strategies/hydra/',
+  },
+  {
+    category: 'Multi-turn',
     strategy: 'mischievous-user',
     displayName: 'Mischievous User',
     description: 'Mischievous user conversations',
