@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { callApi } from '@app/utils/api';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import EditIcon from '@mui/icons-material/Edit';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -392,8 +391,6 @@ export default function ProviderTypeSelector({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [isExpanded, setIsExpanded] = useState<boolean>(!selectedProviderType);
-  const [filterEnabled, setFilterEnabled] = useState<boolean>(false);
-  const [isLoadingFilter, setIsLoadingFilter] = useState<boolean>(true);
 
   // Sync internal state when providerType prop changes
   useEffect(() => {
@@ -422,43 +419,6 @@ export default function ProviderTypeSelector({
       tag: tag,
     });
   };
-
-  // Fetch custom config status from server to determine if provider filtering should be enabled
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchConfigStatus = async () => {
-      try {
-        const response = await callApi('/providers/config-status');
-        if (response.ok) {
-          const result = await response.json();
-          if (isMounted) {
-            setFilterEnabled(result.success ? result.data.hasCustomConfig : false);
-          }
-        } else {
-          console.error('Failed to fetch provider config status');
-          if (isMounted) {
-            setFilterEnabled(false);
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching provider config status:', err);
-        if (isMounted) {
-          setFilterEnabled(false);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoadingFilter(false);
-        }
-      }
-    };
-
-    fetchConfigStatus();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!provider?.id) {
@@ -966,30 +926,8 @@ export default function ProviderTypeSelector({
     });
   };
 
-  // Filter available options if availableProviderIds is provided, by search term, by tag, and by server config
+  // Filter available options if availableProviderIds is provided, by search term, and by tag
   const filteredProviderOptions = allProviderOptions.filter((option) => {
-    /**
-     * When custom provider config exists (ui-providers.yaml), restrict redteam setup to
-     * customizable provider types only: http, websocket, python, javascript.
-     *
-     * Rationale:
-     * - Custom config typically indicates a self-hosted deployment with internal LLM gateways
-     * - These organizations want to test their custom HTTP/WebSocket endpoints, not public APIs
-     * - HTTP/WebSocket providers are the most flexible for custom integrations
-     * - Python/JavaScript providers allow completely custom testing logic
-     * - Restricting to these types focuses the UI on testing custom implementations
-     * - Public API providers (OpenAI, Anthropic, etc.) are still available via HTTP provider
-     *
-     * This restriction is intentional per user requirements. If custom config exists,
-     * assume the admin wants to force teams to test internal systems, not external APIs.
-     */
-    if (filterEnabled) {
-      const allowedTypes = ['http', 'websocket', 'python', 'javascript'];
-      if (!allowedTypes.includes(option.value)) {
-        return false;
-      }
-    }
-
     // Filter by availableProviderIds if provided
     const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
 
@@ -1009,17 +947,6 @@ export default function ProviderTypeSelector({
   const selectedOption = selectedProviderType
     ? allProviderOptions.find((option) => option.value === selectedProviderType)
     : undefined;
-
-  // Show loading state while fetching filter status
-  if (isLoadingFilter) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-        <Typography variant="body2" color="text.secondary">
-          Loading provider options...
-        </Typography>
-      </Box>
-    );
-  }
 
   // Show collapsed view when a provider is selected and not in expanded mode
   if (selectedOption && !isExpanded) {

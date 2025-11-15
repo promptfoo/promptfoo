@@ -1,6 +1,8 @@
 import React from 'react';
 
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -150,6 +152,11 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
 
   return (
     <Box mt={2}>
+      {hasCustomConfig && (
+        <Alert severity="info" icon={<InfoOutlinedIcon fontSize="small" />} sx={{ mb: 2 }}>
+          Provider list customized by administrator. Only approved providers are shown.
+        </Alert>
+      )}
       <Box display="flex" gap={2} alignItems="flex-start">
         <Autocomplete
           sx={{

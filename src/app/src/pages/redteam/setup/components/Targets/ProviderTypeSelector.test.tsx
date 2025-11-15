@@ -1,21 +1,16 @@
 import React from 'react';
 
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ProviderTypeSelector from './ProviderTypeSelector';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 
 import type { ProviderOptions } from '../../types';
 
-const renderWithTheme = async (ui: React.ReactElement) => {
+const renderWithTheme = (ui: React.ReactElement) => {
   const theme = createTheme({ palette: { mode: 'light' } });
-  const result = render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
-  // Wait for the loading state to complete
-  await waitFor(() => {
-    expect(screen.queryByText('Loading provider options...')).not.toBeInTheDocument();
-  });
-  return result;
+  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
 };
 
 vi.mock('@app/hooks/useTelemetry', () => ({
@@ -25,7 +20,7 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
-  it('should update selectedProviderType and call setProvider with the correct provider configuration when a provider type card is selected', async () => {
+  it('should update selectedProviderType and call setProvider with the correct provider configuration when a provider type card is selected', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -33,7 +28,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -73,7 +68,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Custom Python provider for specialized integrations')).toBeVisible();
   });
 
-  it('should filter provider options by search term when the user enters text in the search box', async () => {
+  it('should filter provider options by search term when the user enters text in the search box', () => {
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
@@ -81,7 +76,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
@@ -94,7 +89,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
 
-  it('should filter provider options by selected category when a category chip is toggled on', async () => {
+  it('should filter provider options by selected category when a category chip is toggled on', () => {
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
@@ -102,7 +97,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
@@ -116,7 +111,7 @@ describe('ProviderTypeSelector', () => {
     expect(javascriptProvider).toBeNull();
   });
 
-  it('should only display provider options included in availableProviderIds when availableProviderIds prop is provided', async () => {
+  it('should only display provider options included in availableProviderIds when availableProviderIds prop is provided', () => {
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
@@ -126,7 +121,7 @@ describe('ProviderTypeSelector', () => {
 
     const availableProviderIds = ['http', 'python', 'openai'];
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -144,7 +139,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.queryByText('WebSocket Endpoint')).toBeNull();
   });
 
-  it("should default to 'http' provider and call setProvider with default HTTP config when mounted with no provider.id", async () => {
+  it("should default to 'http' provider and call setProvider with default HTTP config when mounted with no provider.id", () => {
     const mockSetProvider = vi.fn();
     const defaultHttpConfig = {
       id: 'http',
@@ -158,7 +153,7 @@ describe('ProviderTypeSelector', () => {
       },
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector provider={{ id: '', config: {} }} setProvider={mockSetProvider} />,
     );
 
@@ -170,7 +165,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
   });
 
-  it('should handle a provider with a malformed ID (empty string) and default to HTTP provider', async () => {
+  it('should handle a provider with a malformed ID (empty string) and default to HTTP provider', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: '',
@@ -178,7 +173,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
@@ -203,7 +198,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
   });
 
-  it('should maintain category filters when a search term is entered and then cleared', async () => {
+  it('should maintain category filters when a search term is entered and then cleared', () => {
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
@@ -211,7 +206,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
@@ -240,7 +235,7 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
-  it('should show collapsed view when provider is selected and expand when Change button is clicked', async () => {
+  it('should show collapsed view when provider is selected and expand when Change button is clicked', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'anthropic:messages:claude-sonnet-4-20250514',
@@ -248,7 +243,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -276,7 +271,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByRole('button', { name: 'All Tags' })).toBeVisible();
   });
 
-  it("should call setProvider with the correct Go provider configuration when the 'Go Provider' card is selected", async () => {
+  it("should call setProvider with the correct Go provider configuration when the 'Go Provider' card is selected", () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -284,7 +279,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -318,7 +313,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Custom Go provider for specialized integrations')).toBeVisible();
   });
 
-  it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', async () => {
+  it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'file:///path/to/your/script.go',
@@ -328,7 +323,7 @@ describe('ProviderTypeSelector', () => {
       },
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -340,7 +335,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Custom Go provider for specialized integrations')).toBeVisible();
   });
 
-  it('should initialize correctly when providerType is undefined but provider.id is set', async () => {
+  it('should initialize correctly when providerType is undefined but provider.id is set', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'openai:gpt-4.1',
@@ -348,7 +343,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -360,7 +355,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('GPT models including GPT-4.1 and reasoning models')).toBeVisible();
   });
 
-  it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {
+  it('should correctly update provider configuration when switching from Go provider to HTTP provider', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'file:///path/to/your/script.go',
@@ -368,7 +363,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -411,7 +406,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
   });
 
-  it('should update the UI when the providerType prop changes after initial render', async () => {
+  it('should update the UI when the providerType prop changes after initial render', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -419,7 +414,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    const { rerender } = await renderWithTheme(
+    const { rerender } = renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -431,32 +426,25 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
 
     rerender(
-      <ThemeProvider theme={createTheme({ palette: { mode: 'light' } })}>
-        <ProviderTypeSelector
-          provider={initialProvider}
-          setProvider={mockSetProvider}
-          providerType="python"
-        />
-      </ThemeProvider>,
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="python"
+      />,
     );
-
-    // Wait for loading to complete after rerender
-    await waitFor(() => {
-      expect(screen.queryByText('Loading provider options...')).not.toBeInTheDocument();
-    });
 
     expect(screen.getByText('Python Provider')).toBeVisible();
     expect(screen.getByText('Custom Python provider for specialized integrations')).toBeVisible();
   });
 
-  it('should handle the case where providerType is set to a value that does not exist in allProviderOptions array without crashing, and default to http', async () => {
+  it('should handle the case where providerType is set to a value that does not exist in allProviderOptions array without crashing, and default to http', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: '',
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -466,7 +454,7 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
   });
-  it('should call setProvider with the correct configuration when an agentic framework is selected', async () => {
+  it('should call setProvider with the correct configuration when an agentic framework is selected', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -474,7 +462,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -512,14 +500,14 @@ describe('ProviderTypeSelector', () => {
     ).toBeVisible();
   });
 
-  it('should filter provider options to show only agentic frameworks when the Agents category chip is selected', async () => {
+  it('should filter provider options to show only agentic frameworks when the Agents category chip is selected', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: '',
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
@@ -541,7 +529,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.queryByText('Amazon SageMaker')).toBeNull();
   });
 
-  it('should call recordEvent with the correct parameters when a category chip is selected or a provider type is selected', async () => {
+  it('should call recordEvent with the correct parameters when a category chip is selected or a provider type is selected', () => {
     const mockSetProvider = vi.fn();
     const mockRecordEvent = vi.fn();
 
@@ -554,7 +542,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
@@ -581,7 +569,7 @@ describe('ProviderTypeSelector', () => {
     });
   });
 
-  it('should call recordEvent with the correct parameters when the Change button is clicked', async () => {
+  it('should call recordEvent with the correct parameters when the Change button is clicked', () => {
     const mockSetProvider = vi.fn();
     const mockRecordEvent = vi.fn();
 
@@ -593,7 +581,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -611,7 +599,7 @@ describe('ProviderTypeSelector', () => {
     });
   });
 
-  it('should update selectedProviderType and call setProvider with the correct file path format when an agent provider is selected', async () => {
+  it('should update selectedProviderType and call setProvider with the correct file path format when an agent provider is selected', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -619,7 +607,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -657,7 +645,7 @@ describe('ProviderTypeSelector', () => {
     ).toBeVisible();
   });
 
-  it('should correctly transform provider configuration when switching from a non-agent provider to an agent provider, preserving the provider label', async () => {
+  it('should correctly transform provider configuration when switching from a non-agent provider to an agent provider, preserving the provider label', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -672,7 +660,7 @@ describe('ProviderTypeSelector', () => {
       },
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -710,7 +698,7 @@ describe('ProviderTypeSelector', () => {
     ).toBeVisible();
   });
 
-  it('should filter provider options by selected tag and call recordEvent with the correct tag when a tag chip is toggled on', async () => {
+  it('should filter provider options by selected tag and call recordEvent with the correct tag when a tag chip is toggled on', () => {
     const mockSetProvider = vi.fn();
     const mockRecordEvent = vi.fn();
 
@@ -723,7 +711,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
@@ -750,7 +738,7 @@ describe('ProviderTypeSelector', () => {
     });
   });
 
-  it('should call recordEvent with the correct provider_tag when a provider type is selected', async () => {
+  it('should call recordEvent with the correct provider_tag when a provider type is selected', () => {
     const mockSetProvider = vi.fn();
     const mockRecordEvent = vi.fn();
 
@@ -763,7 +751,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
@@ -782,14 +770,14 @@ describe('ProviderTypeSelector', () => {
     });
   });
 
-  it('should reset the tag filter and display all provider options when the "All Tags" chip is clicked', async () => {
+  it('should reset the tag filter and display all provider options when the "All Tags" chip is clicked', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: '',
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
@@ -804,7 +792,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
   });
 
-  it('should clear the selectedTag and show all provider options when the Change button is clicked', async () => {
+  it('should clear the selectedTag and show all provider options when the Change button is clicked', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -812,7 +800,7 @@ describe('ProviderTypeSelector', () => {
       config: {},
     };
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -837,7 +825,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
   });
 
-  it('should filter provider options correctly when availableProviderIds, search term, and tag are all provided', async () => {
+  it('should filter provider options correctly when availableProviderIds, search term, and tag are all provided', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: '',
@@ -846,7 +834,7 @@ describe('ProviderTypeSelector', () => {
 
     const availableProviderIds = ['langchain', 'autogen', 'http'];
 
-    await renderWithTheme(
+    renderWithTheme(
       <ProviderTypeSelector
         provider={initialProvider}
         setProvider={mockSetProvider}
@@ -863,113 +851,5 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('LangChain')).toBeVisible();
     expect(screen.queryByText('AutoGen')).toBeNull();
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
-  });
-
-  it('should display all provider options when /api/providers/config-status returns a 401 Unauthorized response', async () => {
-    const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
-
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-    });
-
-    vi.stubGlobal('fetch', mockFetch);
-
-    await renderWithTheme(
-      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-      expect(screen.getByText('WebSocket Endpoint')).toBeVisible();
-      expect(screen.getByText('Python Provider')).toBeVisible();
-      expect(screen.getByText('JavaScript Provider')).toBeVisible();
-    });
-  });
-
-  it('should display all provider options when fetching /api/providers/config-status fails or returns a non-OK response', async () => {
-    const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
-
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: false,
-      json: async () => ({ hasCustomConfig: false }),
-    });
-
-    vi.stubGlobal('fetch', mockFetch);
-
-    await renderWithTheme(
-      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
-    );
-
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Python Provider')).toBeVisible();
-    expect(screen.getByText('OpenAI')).toBeVisible();
-  });
-
-  it('should only display http, websocket, python, and javascript provider options when hasCustomConfig is true', async () => {
-    const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
-
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ hasCustomConfig: true }),
-    });
-
-    vi.stubGlobal('fetch', mockFetch);
-
-    await renderWithTheme(
-      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
-    );
-
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('WebSocket Endpoint')).toBeVisible();
-    expect(screen.getByText('Python Provider')).toBeVisible();
-    expect(screen.getByText('JavaScript Provider')).toBeVisible();
-
-    expect(screen.queryByText('OpenAI')).toBeNull();
-    expect(screen.queryByText('Anthropic')).toBeNull();
-    expect(screen.queryByText('Google AI Studio')).toBeNull();
-  });
-
-  it('should display a loading message while fetching provider config status', async () => {
-    const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
-
-    const mockFetch = vi.fn().mockImplementation(() => {
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({
-            ok: true,
-            json: async () => ({ hasCustomConfig: false }),
-          });
-        }, 50);
-      });
-    });
-
-    vi.stubGlobal('fetch', mockFetch);
-
-    renderWithTheme(
-      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
-    );
-
-    expect(screen.getByText('Loading provider options...')).toBeVisible();
-
-    await waitFor(() => {
-      expect(screen.queryByText('Loading provider options...')).toBeNull();
-    });
   });
 });
