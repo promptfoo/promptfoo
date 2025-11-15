@@ -28,7 +28,7 @@ _A Promptfoo engineer uses Claude Code to run agent-based attacks against a "CTF
 
 ## The first big attack
 
-Yesterday, Anthropic [published a report](https://www.anthropic.com/news/disrupting-AI-espionage) on the first known state-level cyberattack carried out autonomously using an AI agent.
+Yesterday, Anthropic [published a report](https://www.anthropic.com/news/disrupting-AI-espionage) on the first documented state-level cyberattack carried out largely autonomously by AI agents.
 
 To summarize: a threat actor (that Anthropic determined with "high confidence" to be a "Chinese state-sponsored group") used the AI programming tool [Claude Code](https://www.claude.com/product/claude-code) to conduct an espionage operation against a wide range of corporate and government systems. Anthropic states that the attacks were successful "in a small number of cases".
 
