@@ -68,6 +68,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | top_k           | -                     | Only sample from the top K options for each subsequent token      |
 | tools           | -                     | An array of tool or function definitions for the model to call    |
 | tool_choice     | -                     | An object specifying the tool to call                             |
+| output_format   | -                     | JSON schema configuration for structured outputs                  |
 | thinking        | -                     | Configuration for enabling Claude's extended thinking capability  |
 | showThinking    | -                     | Whether to include thinking content in the output (default: true) |
 | headers         | -                     | Additional headers to be sent with the API request                |
@@ -433,6 +434,150 @@ When using extended output:
 
 See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
 
+### Structured Outputs
+
+Structured outputs ensure Claude's responses follow a specific schema, guaranteeing valid, parseable output. Use **JSON outputs** (`output_format`) for structured data responses, or **strict tool use** (`strict: true`) for guaranteed schema validation on tool names and inputs.
+
+:::note
+Structured outputs are available for Claude Sonnet 4.5 and Claude Opus 4.1. The `structured-outputs-2025-11-13` beta header is automatically added when using these features.
+:::
+
+#### When to Use Structured Outputs
+
+Choose the right mode for your use case:
+
+| Use JSON outputs when                           | Use strict tool use when                                    |
+| ----------------------------------------------- | ----------------------------------------------------------- |
+| You need Claude's response in a specific format | You need validated parameters and tool names for tool calls |
+| Extracting data from images or text             | Building agentic workflows                                  |
+| Generating structured reports                   | Ensuring type-safe function calls                           |
+| Formatting API responses                        | Complex tools with many/nested properties                   |
+
+#### JSON Outputs
+
+Configure a JSON schema to constrain Claude's responses:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      max_tokens: 2048
+      output_format:
+        type: json_schema
+        schema:
+          type: object
+          properties:
+            customer_name:
+              type: string
+            customer_email:
+              type: string
+            plan_interest:
+              type: string
+            demo_requested:
+              type: boolean
+          required:
+            - customer_name
+            - customer_email
+          additionalProperties: false
+```
+
+**Advanced features:**
+
+- **External schemas**: Load schemas from files using `file://` prefix:
+
+  ```yaml
+  output_format:
+    type: json_schema
+    schema: file://path/to/schema.json
+  ```
+
+- **Variable rendering**: Use `{{variables}}` in schema values for dynamic configuration:
+  ```yaml
+  output_format:
+    type: json_schema
+    schema:
+      type: object
+      properties:
+        result:
+          type: string
+          description: 'Extract {{field_description}}'
+  ```
+
+**Benefits:**
+
+- Always valid JSON - no `JSON.parse()` errors
+- Guaranteed field types and required fields
+- No retries needed for schema violations
+
+#### Strict Tool Use
+
+Enable strict mode on tool definitions to ensure tool parameters exactly match your schema:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      max_tokens: 2048
+      tools:
+        - name: get_weather
+          description: Get the current weather in a given location
+          strict: true # Enable strict mode
+          input_schema:
+            type: object
+            properties:
+              location:
+                type: string
+                description: The city and state, e.g. San Francisco, CA
+              unit:
+                type: string
+                enum:
+                  - celsius
+                  - fahrenheit
+            required:
+              - location
+            additionalProperties: false
+```
+
+**Guarantees:**
+
+- Tool `input` strictly follows the `input_schema`
+- Tool `name` is always valid from provided tools
+- No type mismatches or missing required fields
+
+#### Schema Limitations
+
+Both modes share these JSON Schema limitations:
+
+**Supported:**
+
+- Basic types: object, array, string, integer, number, boolean, null
+- `enum` (primitives only)
+- `required` and `additionalProperties: false`
+- Array `minItems` (only 0 and 1)
+
+**Not supported:**
+
+- Recursive schemas
+- Numerical constraints (`minimum`, `maximum`)
+- String constraints (`minLength`, `maxLength`)
+- Complex `{n,m}` quantifiers in regex patterns
+
+#### Feature Compatibility
+
+**Works with:**
+
+- Batch processing
+- Token counting
+- Streaming
+- Combined usage (use both JSON outputs and strict tool use together)
+
+**Incompatible with:**
+
+- Citations (returns 400 error if citations enabled with `output_format`)
+- Message prefilling (incompatible with JSON outputs)
+
+See [Anthropic's Structured Outputs Guide](https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs) and the [structured outputs example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs) for more details.
+
 ## Model-Graded Tests
 
 [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` will automatically use Anthropic as the grading provider if `ANTHROPIC_API_KEY` is set and `OPENAI_API_KEY` is not set.
@@ -492,6 +637,7 @@ We provide several example implementations demonstrating Claude's capabilities:
 #### Core Features
 
 - [Tool Use Example](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use) - Shows how to use Claude's tool calling capabilities
+- [Structured Outputs Example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs) - Demonstrates JSON outputs and strict tool use for guaranteed schema compliance
 - [Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision) - Demonstrates using Claude's vision capabilities
 
 #### Model Comparisons & Evaluations
