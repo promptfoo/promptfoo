@@ -486,6 +486,7 @@ spec:
 - **DO NOT store API keys or credentials directly in ui-providers.yaml** - this file is not encrypted
 - Use environment variables for all sensitive credentials instead
 - In Kubernetes, use **Secrets** (not ConfigMaps) for sensitive data
+- Promptfoo supports environment variable substitution using **Nunjucks syntax**: `{{ env.VARIABLE_NAME }}`
 - Example secure approach:
 
 ```yaml
@@ -498,8 +499,8 @@ providers:
     config:
       method: POST
       headers:
-        # Reference env var, not literal value
-        Authorization: '${INTERNAL_API_KEY}'
+        # Use Nunjucks template syntax for env vars
+        Authorization: 'Bearer {{ env.INTERNAL_API_KEY }}'
 ```
 
 ```bash
