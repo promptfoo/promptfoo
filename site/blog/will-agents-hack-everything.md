@@ -24,7 +24,7 @@ tags: [security-vulnerability, ai-security, agents]
 
 ![A promptfoo engineer uses Claude Code to simulate attacks](/img/blog/will-agents-hack-everything/claude-code-ctf.gif)
 
-*A Promptfoo engineer uses Claude Code to run agent-based attacks against a "CTF"—a system made deliberately vulnerable for security training.*
+_A Promptfoo engineer uses Claude Code to run agent-based attacks against a "CTF"—a system made deliberately vulnerable for security training._
 
 ## The first big attack
 
@@ -36,9 +36,9 @@ Anthropic was later able to detect the activity, ban the associated accounts, an
 
 ## Everyone's a hacker now
 
-While yesterday's attack was (very probably) state-backed, part of what makes it so concerning is that it didn't have to be. While it's possible that Claude Code could have made this attack faster to execute or more effective, these groups have a long history of large, successful attacks that predate LLMs. AI might be helpful, but they don't *need* it to pull off attacks; they have plenty of resources and expertise.
+While yesterday's attack was (very probably) state-backed, part of what makes it so concerning is that it didn't have to be. While it's possible that Claude Code could have made this attack faster to execute or more effective, these groups have a long history of large, successful attacks that predate LLMs. AI might be helpful, but they don't _need_ it to pull off attacks; they have plenty of resources and expertise.
 
-But AI *fundamentally* changes the game for smaller groups of attackers (or even individuals) who don't have nation states or large organizations behind them. The expertise needed to penetrate the systems of critical institutions is lower than ever, and the threat landscape is far more decentralized and asymmetric.
+But AI _fundamentally_ changes the game for smaller groups of attackers (or even individuals) who don't have nation states or large organizations behind them. The expertise needed to penetrate the systems of critical institutions is lower than ever, and the threat landscape is far more decentralized and asymmetric.
 
 ## What can be done?
 
@@ -50,7 +50,7 @@ So why was the actual response so comparatively noncomittal? It isn't because An
 
 ## Offense and defense
 
-You might think the solution is kind of obvious: foundation model labs should train their models to refuse when the user's request is *offensive* in nature ("find a way into this private system"), and to assist when it's *defensive* ("strengthen this system's security").
+You might think the solution is kind of obvious: foundation model labs should train their models to refuse when the user's request is _offensive_ in nature ("find a way into this private system"), and to assist when it's _defensive_ ("strengthen this system's security").
 
 But the lines are just too blurry. Consider requests like:
 
@@ -68,7 +68,7 @@ From the prompt, it's not even possible for the model to know whether the task h
 
 ## Red teaming
 
-Example 2 in the previous section highlights another problem. In security, **defense requires offense**. The only way to know whether your defensive measures work is to test them against realistic attacks. This is often called "red teaming". It's a well-established practice in traditional cybersecurity, and is gaining popularity in the new sub-field of AI security. 
+Example 2 in the previous section highlights another problem. In security, **defense requires offense**. The only way to know whether your defensive measures work is to test them against realistic attacks. This is often called "red teaming". It's a well-established practice in traditional cybersecurity, and is gaining popularity in the new sub-field of AI security.
 
 (It just so happens that we build [red teaming software for AI](https://www.promptfoo.dev/red-teaming/) here at Promptfoo, and count many of the Fortune 500 among our customers.)
 
@@ -82,6 +82,6 @@ Perhaps now you can better appreciate the factors which are pulling Anthropic in
 
 ## AI hacking is inevitable
 
-We may just need to swallow a rather difficult pill: AI agents *will* continue to hack systems, and they'll keep getting better and better at it as the models improve.
+We may just need to swallow a rather difficult pill: AI agents _will_ continue to hack systems, and they'll keep getting better and better at it as the models improve.
 
 Being thoughtless or overzealous in our attempts to stop them from doing it could easily make the situation worse. Instead, security teams will need to stay one step ahead, using the exact same capabilities attackers do to find vulnerabilities before they're exploited.
