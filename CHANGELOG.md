@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
+- chore(deps): upgrade @googleapis/sheets from 9.8.0 to 12.0.0 and resolve gcp-metadata conflicts - fixes recurring npm ci failures in CI by updating mongoose override to use gcp-metadata ^8.1.0 (was ^6.0.0) and adding gcp-metadata as a direct dependency for consistent resolution across npm 10.x and 11.x; allows keeping google-auth-library at latest 10.5.0 with new features (X509 auth, Cloud Run Jobs detection) while safely overriding mongodb's peer dependency since we only use natural package for PorterStemmer/WordNet, not database operations (#6227)
 - chore(deps): bump openai from 6.8.1 to 6.9.0 (#6208)
 
 ## [0.119.6] - 2025-11-12
