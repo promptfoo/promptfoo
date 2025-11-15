@@ -44,6 +44,7 @@ providers:
 ```
 
 **Use JSON outputs when:**
+
 - Extracting data from images or text
 - Generating structured reports
 - Formatting API responses
@@ -59,7 +60,7 @@ providers:
     config:
       tools:
         - name: book_demo
-          strict: true  # Enable strict mode
+          strict: true # Enable strict mode
           input_schema:
             type: object
             properties:
@@ -73,6 +74,7 @@ providers:
 ```
 
 **Use strict tool use when:**
+
 - Building agentic workflows
 - Ensuring type-safe function calls
 - Complex tools with many/nested properties
@@ -90,12 +92,14 @@ providers:
 Both modes share these JSON Schema limitations:
 
 ✅ **Supported:**
+
 - Basic types: object, array, string, integer, number, boolean, null
 - `enum` (primitives only)
 - `required` and `additionalProperties: false`
 - Array `minItems` (only 0 and 1)
 
 ❌ **Not supported:**
+
 - Recursive schemas
 - Numerical constraints (`minimum`, `maximum`)
 - String constraints (`minLength`, `maxLength`)
@@ -114,6 +118,7 @@ The example includes comprehensive tests:
 ## Supported Models
 
 Structured outputs are available for:
+
 - Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
 - Claude Opus 4.1 (`claude-opus-4-1-20250805`)
 
