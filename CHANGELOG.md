@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(providers): add Anthropic structured outputs support with JSON schema outputs via `output_format` parameter and strict tool use via `strict: true` in tool definitions - ensures schema-compliant responses with automatic beta header handling, external file loading, variable rendering, and JSON parsing for Claude Sonnet 4.5 and Claude Opus 4.1
 - feat(assertions): add dot product and euclidean distance metrics for similarity assertion - use `similar:dot` and `similar:euclidean` assertion types to match production vector database metrics and support different similarity use cases (#6202)
 - feat(webui): expose Hydra strategy configuration (max turns and stateful toggle) in red team setup UI (#6165)
 - fix(app): aligning risk scores with documentation (#6212)
@@ -34,6 +35,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Tests
 
 - test(webui): suppress expected test error logs (109+ occurrences across parsing errors, API errors, context provider errors) and React/MUI warnings (act() warnings, DOM nesting, prop types) in setupTests.ts and vite.config.ts (#6201)
+
+### Documentation
+
+- docs(providers): add comprehensive Anthropic structured outputs documentation covering JSON outputs (`output_format`) and strict tool use (`strict: true`), including usage examples, schema limitations, and feature compatibility
+
+### Tests
+
+- test(examples): add structured outputs example demonstrating JSON schema-based responses and strict tool use for Anthropic provider
+- test(examples): update tool-use example to include strict mode configuration for Anthropic provider
+- test(examples): enhance structured-outputs-config example to demonstrate multi-provider structured outputs with OpenAI and Anthropic, showcasing syntax differences between providers
 
 ### Dependencies
 
