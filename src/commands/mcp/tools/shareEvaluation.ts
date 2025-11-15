@@ -46,7 +46,7 @@ export function registerShareEvaluationTool(server: McpServer) {
           dedent`
             Specific evaluation ID to share.
             If not provided, shares the most recent evaluation.
-            Example: "eval_abc123def456"
+            Example: "eval-8h1-2025-11-15T14:17:18"
           `,
         ),
       showAuth: z
