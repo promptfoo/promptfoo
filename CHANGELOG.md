@@ -30,7 +30,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(config): use safe YAML schema in ui-providers.yaml loader to prevent arbitrary code execution (#6124)
 - fix(webui): add effect cleanup to provider config status fetch to avoid setState warnings on unmounted components (#6124)
 - fix(providers): correct default provider labels - "o3" not "GPT-o3" (o-series are not GPT models), "Claude 4.5 Haiku" not "Claude 3.5 Haiku" (#6124)
 - fix(redteam): don't set default 'en' language when no language is configured - prevents unnecessary language modifiers from being passed to meta agent and other iterative strategies, keeping prompts focused on actual task without implied translation requirements (#6214)
