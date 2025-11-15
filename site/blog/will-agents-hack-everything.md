@@ -46,7 +46,7 @@ In response to the attack, Anthropic says that they'll strengthen their detectio
 
 Does that sound a bit vague to you? Given the large scope and obvious geopolitical implications of the attack, you might expect something more specific and forceful. Something like: "We have already updated our models, and under no circumstances will they assist in any tasks which in any way resemble offensive hacking operations. Everyone can now rest easy."
 
-So why was the actual response so comparatively noncomittal? It isn't because Anthropic wouldn't like to stop this kind of malicious usage; they certainly would. But there are fundamental tradeoffs involved: responding in such a heavy-handed way would also fundamentally weaken the capabilities of their models for many legitimate programming tasks (whether security-related or more general in nature).
+So why was the actual response so comparatively noncommittal? It isn't because Anthropic wouldn't like to stop this kind of malicious usage; they certainly would. But there are fundamental tradeoffs involved: responding in such a heavy-handed way would also fundamentally weaken the capabilities of their models for many legitimate programming tasks (whether security-related or more general in nature).
 
 ## Offense and defense
 
