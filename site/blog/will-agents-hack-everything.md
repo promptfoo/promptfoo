@@ -32,7 +32,7 @@ Yesterday, Anthropic [published a report](https://www.anthropic.com/news/disrupt
 
 To summarize: a threat actor (that Anthropic determined with "high confidence" to be a "Chinese state-sponsored group") used the AI programming tool [Claude Code](https://www.claude.com/product/claude-code) to conduct an espionage operation against a wide range of corporate and government systems. Anthropic states that the attacks were successful "in a small number of cases".
 
-Anthropic was later able to detect the activity, ban the associated accounts, and alert the victims, but apparently not before at least some amount of real damage was done.
+Anthropic was later able to detect the activity, ban the associated accounts, and alert the victims, but not before attackers had successfully compromised some targets and accessed internal data.
 
 ## Everyone's a hacker now
 
