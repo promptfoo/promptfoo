@@ -16,6 +16,12 @@ asmi:
   url: https://github.com/asmigulati
   image_url: /img/team/asmi.jpeg
 
+dane:
+  name: Dane Schneider
+  title: Staff Engineer
+  url: https://github.com/danenania
+  image_url: /img/team/dane.jpeg
+
 ben:
   name: Ben Shipley
   title: Enterprise GTM Lead
