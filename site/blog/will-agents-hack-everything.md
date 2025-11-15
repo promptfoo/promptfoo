@@ -85,3 +85,7 @@ Perhaps now you can better appreciate the factors which are pulling Anthropic in
 We may just need to swallow a rather difficult pill: AI agents _will_ continue to hack systems, and they'll keep getting better and better at it as the models improve.
 
 Being thoughtless or overzealous in our attempts to stop them from doing it could easily make the situation worse. Instead, security teams will need to stay one step ahead, using the exact same capabilities attackers do to find vulnerabilities before they're exploited.
+
+---
+
+_Questions or thoughts? Get in touch: dane@promptfoo.dev_
