@@ -24,7 +24,7 @@ tags: [security-vulnerability, ai-security, agents]
 
 ![A promptfoo engineer uses Claude Code to simulate attacks](/img/blog/will-agents-hack-everything/claude-code-ctf.gif)
 
-_A Promptfoo engineer uses Claude Code to run agent-based attacks against a "CTF"—a system made deliberately vulnerable for security training._
+_A Promptfoo engineer uses Claude Code to run agent-based attacks against a CTF—a system made deliberately vulnerable for security training._
 
 ## The first big attack
 
