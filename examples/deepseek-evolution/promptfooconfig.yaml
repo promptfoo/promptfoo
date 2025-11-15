@@ -14,55 +14,54 @@ providers:
     label: 'R1 (Jan 2025)'
     config:
       temperature: 0  # Deterministic for comparison
-      max_tokens: 10240  # 5x budget for long reasoning traces
-      # OpenRouter may expose reasoning automatically, but try passthrough
+      max_tokens: 10240  # Allow long reasoning traces
       passthrough:
-        include_reasoning: true
+        include_reasoning: true  # Request reasoning tokens from API
 
   # ================================================================
   # DeepSeek R1-0528 - Enhanced (May 2025)
-  # Improved reasoning, higher pricing (+45%)
+  # Improved reasoning capabilities
   # ================================================================
   - id: 'openrouter:deepseek/deepseek-r1-0528'
     label: 'R1-0528 (May 2025)'
     config:
       temperature: 0
-      max_tokens: 10240  # 5x budget for long reasoning traces
+      max_tokens: 10240  # Allow long reasoning traces
       passthrough:
         include_reasoning: true
 
   # ================================================================
   # DeepSeek V3.1 - Hybrid Architecture (August 2025)
-  # First model with toggle-able reasoning mode
+  # First model with configurable reasoning mode
   # ================================================================
   - id: 'openrouter:deepseek/deepseek-chat-v3.1'
     label: 'V3.1 (Aug 2025)'
     config:
       temperature: 0
-      max_tokens: 10240  # 5x budget for long reasoning traces
-      reasoning_enabled: true  # Toggle reasoning mode
+      max_tokens: 10240  # Allow long reasoning traces
+      reasoning_enabled: true  # Enable reasoning mode
 
   # ================================================================
   # DeepSeek V3.1 Terminus - Refined (September 2025)
-  # Language consistency and agent capability improvements
+  # Language consistency and agent improvements
   # ================================================================
   - id: 'openrouter:deepseek/deepseek-v3.1-terminus'
     label: 'V3.1-Terminus (Sep 2025)'
     config:
       temperature: 0
-      max_tokens: 10240  # 5x budget for long reasoning traces
+      max_tokens: 10240  # Allow long reasoning traces
       reasoning_enabled: true
 
   # ================================================================
   # DeepSeek V3.2 Exp - Sparse Attention (September 2025)
-  # Latest model with DeepSeek Sparse Attention (DSA)
-  # Note: Generates fewer reasoning tokens by design
+  # Uses DeepSeek Sparse Attention (DSA) architecture
+  # Generates fewer reasoning tokens than previous versions
   # ================================================================
   - id: 'openrouter:deepseek/deepseek-v3.2-exp'
     label: 'V3.2-Exp (Sep 2025)'
     config:
       temperature: 0
-      max_tokens: 10240  # 5x budget for long reasoning traces
+      max_tokens: 10240  # Allow long reasoning traces
       reasoning_enabled: true
 
 defaultTest:
