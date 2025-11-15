@@ -392,12 +392,6 @@ export default function ProviderTypeSelector({
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [isExpanded, setIsExpanded] = useState<boolean>(!selectedProviderType);
 
-  // Sync internal state when providerType prop changes
-  useEffect(() => {
-    setSelectedProviderType(providerType);
-    setIsExpanded(!providerType);
-  }, [providerType]);
-
   // Tag filter options
   const tagFilters = [
     { key: 'agents', label: 'Agents' },
