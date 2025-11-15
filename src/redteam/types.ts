@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import type { Plugin, Severity } from './constants';
+import type { FrameworkComplianceId, Plugin, Severity } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
 // Modifiers are used to modify the behavior of the plugin.
@@ -53,7 +53,7 @@ export type PluginConfig = {
     score: number;
     reason: string;
   }[];
-  gradingGuidance?: string;
+  graderGuidance?: string;
   severity?: Severity;
   language?: string | string[];
   prompt?: string;
@@ -135,6 +135,7 @@ type CommonOptions = {
   provider?: string | ProviderOptions | ApiProvider;
   purpose?: string;
   strategies?: RedteamStrategy[];
+  frameworks?: FrameworkComplianceId[];
   delay?: number;
   remote?: boolean;
   sharing?: boolean;
@@ -224,6 +225,7 @@ export interface SavedRedteamConfig {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
+  frameworks?: FrameworkComplianceId[];
   extensions?: string[];
   numTests?: number;
   maxConcurrency?: number;

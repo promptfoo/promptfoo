@@ -42,12 +42,15 @@ providersRouter.get('/', (_req: Request, res: Response): void => {
     const providers = serverProviders.length > 0 ? serverProviders : defaultProviders;
     const hasCustomConfig = serverProviders.length > 0;
 
-    res.json({ providers, hasCustomConfig });
+    res.json({
+      success: true,
+      data: { providers, hasCustomConfig },
+    });
   } catch (error) {
     logger.error('[GET /api/providers] Error loading providers', { error });
     res.status(500).json({
-      providers: defaultProviders,
-      hasCustomConfig: false,
+      success: false,
+      error: 'Failed to load providers',
     });
   }
 });
@@ -69,10 +72,16 @@ providersRouter.get('/config-status', (_req: Request, res: Response): void => {
     const serverProviders = getAvailableProviders();
     const hasCustomConfig = serverProviders.length > 0;
 
-    res.json({ hasCustomConfig });
+    res.json({
+      success: true,
+      data: { hasCustomConfig },
+    });
   } catch (error) {
     logger.error('[GET /api/providers/config-status] Error loading config status', { error });
-    res.status(500).json({ hasCustomConfig: false });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load provider config status',
+    });
   }
 });
 

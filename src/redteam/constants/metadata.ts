@@ -84,6 +84,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   intent: 'Tests for manipulation of system behavior via specific prompts',
   jailbreak: 'Single-shot optimization of safety bypass techniques',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
+  'jailbreak:hydra':
+    'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
   'jailbreak:meta':
     'Meta-agent that builds its own attack taxonomy and learns from full attack history',
@@ -282,6 +284,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   intent: 'Intent',
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
+  'jailbreak:hydra': 'Hydra Multi-turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
   'jailbreak:meta': 'Meta-Agent Strategic Jailbreak',
   'jailbreak:tree': 'Tree-Based Attack Search',
@@ -343,10 +346,10 @@ export const severityDisplayNames: Record<Severity, string> = {
 };
 
 export const severityRiskScores: Record<Severity, number> = {
-  [Severity.Critical]: 8.0,
-  [Severity.High]: 6.0,
+  [Severity.Critical]: 9.0,
+  [Severity.High]: 7.0,
   [Severity.Medium]: 4.0,
-  [Severity.Low]: 2.0,
+  [Severity.Low]: 0.0,
 };
 
 /*
@@ -930,6 +933,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   image: 'Tests detection and handling of image-based malicious payloads',
   jailbreak: 'Optimizes single-turn attacks to bypass security controls',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
+  'jailbreak:hydra':
+    'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
   'jailbreak:meta':
     'Agent that dynamically builds an attack taxonomy and learns from attack history',
@@ -970,8 +975,9 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   image: 'Image',
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Composite Jailbreaks',
+  'jailbreak:hydra': 'Hydra Multi-Turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
-  'jailbreak:meta': 'Meta-Agent',
+  'jailbreak:meta': 'Meta Agent',
   'jailbreak:tree': 'Tree-based Optimization',
   layer: 'Layer',
   leetspeak: 'Leetspeak Encoding',

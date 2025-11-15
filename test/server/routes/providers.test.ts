@@ -34,14 +34,17 @@ describe('Providers Routes', () => {
       const response = await request(app).get('/api/providers');
 
       expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('providers');
-      expect(response.body).toHaveProperty('hasCustomConfig');
-      expect(response.body.hasCustomConfig).toBe(false);
-      expect(Array.isArray(response.body.providers)).toBe(true);
+      expect(response.body).toHaveProperty('success');
+      expect(response.body).toHaveProperty('data');
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty('providers');
+      expect(response.body.data).toHaveProperty('hasCustomConfig');
+      expect(response.body.data.hasCustomConfig).toBe(false);
+      expect(Array.isArray(response.body.data.providers)).toBe(true);
       // Should return defaults (non-empty)
-      expect(response.body.providers.length).toBeGreaterThan(0);
+      expect(response.body.data.providers.length).toBeGreaterThan(0);
       // Check structure
-      expect(response.body.providers[0]).toHaveProperty('id');
+      expect(response.body.data.providers[0]).toHaveProperty('id');
     });
 
     it('should return custom providers from server config', async () => {
@@ -56,8 +59,11 @@ describe('Providers Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        providers: customProviders,
-        hasCustomConfig: true,
+        success: true,
+        data: {
+          providers: customProviders,
+          hasCustomConfig: true,
+        },
       });
     });
 
@@ -78,9 +84,10 @@ describe('Providers Routes', () => {
       const response = await request(app).get('/api/providers');
 
       expect(response.status).toBe(200);
-      expect(response.body.hasCustomConfig).toBe(true);
-      expect(response.body.providers).toEqual(customProviders);
-      expect(response.body.providers[0].config).toEqual({
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.hasCustomConfig).toBe(true);
+      expect(response.body.data.providers).toEqual(customProviders);
+      expect(response.body.data.providers[0].config).toEqual({
         method: 'POST',
         headers: { Authorization: 'Bearer token' },
       });
@@ -102,7 +109,10 @@ describe('Providers Routes', () => {
       const response = await request(app).get('/api/providers/config-status');
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual({ hasCustomConfig: false });
+      expect(response.body).toEqual({
+        success: true,
+        data: { hasCustomConfig: false },
+      });
     });
 
     it('should return hasCustomConfig: true when custom config exists', async () => {
@@ -116,7 +126,10 @@ describe('Providers Routes', () => {
       const response = await request(app).get('/api/providers/config-status');
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual({ hasCustomConfig: true });
+      expect(response.body).toEqual({
+        success: true,
+        data: { hasCustomConfig: true },
+      });
     });
   });
   describe('POST /providers/test', () => {

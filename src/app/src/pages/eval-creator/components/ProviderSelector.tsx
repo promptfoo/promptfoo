@@ -44,11 +44,11 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
         if (!response.ok) {
           throw new Error('Failed to load providers from server');
         }
-        const data = await response.json();
+        const result = await response.json();
 
-        if (isMounted) {
-          setServerProviders(data.providers);
-          setHasCustomConfig(data.hasCustomConfig || false);
+        if (isMounted && result.success) {
+          setServerProviders(result.data.providers);
+          setHasCustomConfig(result.data.hasCustomConfig || false);
         }
       } catch (err) {
         console.error('Failed to load providers from server:', err);

@@ -481,6 +481,36 @@ spec:
 - When custom config exists, the "Reference Local Provider" button and "Configure Environment" (API keys) section are hidden
 - Changes require server restart
 
+**⚠️ Security Warning - Credential Storage:**
+
+- **DO NOT store API keys or credentials directly in ui-providers.yaml** - this file is not encrypted
+- Use environment variables for all sensitive credentials instead
+- In Kubernetes, use **Secrets** (not ConfigMaps) for sensitive data
+- Example secure approach:
+
+```yaml
+# ui-providers.yaml - NO CREDENTIALS
+providers:
+  - id: openai:gpt-4o-mini
+  # API key comes from OPENAI_API_KEY environment variable
+
+  - id: http://internal-api.company.com/v1
+    config:
+      method: POST
+      headers:
+        # Reference env var, not literal value
+        Authorization: '${INTERNAL_API_KEY}'
+```
+
+```bash
+# Pass credentials via environment variables
+docker run -d \
+  -e OPENAI_API_KEY=sk-your-key \
+  -e INTERNAL_API_KEY=your-internal-key \
+  -v ./promptfoo_data:/home/promptfoo/.promptfoo \
+  ghcr.io/promptfoo/promptfoo:latest
+```
+
 ## Specifications
 
 ### Client Requirements (Running `promptfoo` CLI)

@@ -178,6 +178,9 @@ const ASSERTION_HANDLERS: Record<
   ruby: handleRuby,
   'rouge-n': handleRougeScore,
   similar: handleSimilar,
+  'similar:cosine': handleSimilar,
+  'similar:dot': handleSimilar,
+  'similar:euclidean': handleSimilar,
   'starts-with': handleStartsWith,
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
@@ -386,6 +389,17 @@ export async function runAssertion({
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
     const result = await handler(assertionParams);
+
+    // Store rendered assertion value in metadata if it differs from the original template
+    // This allows the UI to display substituted variable values instead of raw templates
+    if (
+      renderedValue !== undefined &&
+      renderedValue !== assertion.value &&
+      typeof renderedValue === 'string'
+    ) {
+      result.metadata = result.metadata || {};
+      result.metadata.renderedAssertionValue = renderedValue;
+    }
 
     // If weight is 0, treat this as a metric-only assertion that can't fail
     if (assertion.weight === 0) {

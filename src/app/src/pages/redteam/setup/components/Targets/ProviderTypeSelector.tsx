@@ -425,25 +425,39 @@ export default function ProviderTypeSelector({
 
   // Fetch custom config status from server to determine if provider filtering should be enabled
   useEffect(() => {
+    let isMounted = true;
+
     const fetchConfigStatus = async () => {
       try {
         const response = await callApi('/providers/config-status');
         if (response.ok) {
-          const data = await response.json();
-          setFilterEnabled(data.hasCustomConfig);
+          const result = await response.json();
+          if (isMounted) {
+            setFilterEnabled(result.success ? result.data.hasCustomConfig : false);
+          }
         } else {
           console.error('Failed to fetch provider config status');
-          setFilterEnabled(false);
+          if (isMounted) {
+            setFilterEnabled(false);
+          }
         }
       } catch (err) {
         console.error('Error fetching provider config status:', err);
-        setFilterEnabled(false);
+        if (isMounted) {
+          setFilterEnabled(false);
+        }
       } finally {
-        setIsLoadingFilter(false);
+        if (isMounted) {
+          setIsLoadingFilter(false);
+        }
       }
     };
 
     fetchConfigStatus();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {

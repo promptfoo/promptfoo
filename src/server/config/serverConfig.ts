@@ -61,7 +61,7 @@ export function loadServerConfig(): ServerConfig {
 
   try {
     const content = readFileSync(configPath, 'utf8');
-    const config = yaml.load(content) as ServerConfig;
+    const config = yaml.load(content, { schema: yaml.DEFAULT_SAFE_SCHEMA }) as ServerConfig;
 
     // Validate basic structure
     if (config && typeof config !== 'object') {
