@@ -359,6 +359,159 @@ docker run -d --name promptfoo_container -p 3000:3000 \
   ghcr.io/promptfoo/promptfoo:latest
 ```
 
+### Provider Customization
+
+Customize which LLM providers appear in the eval creator UI. This is useful for:
+
+- **Cost control** - Limit to cheaper models
+- **Compliance** - Only show approved models
+- **Internal gateways** - Route traffic through company proxies
+- **Multi-cloud** - Mix providers across different clouds
+
+Place a `ui-providers.yaml` file in your `.promptfoo` directory (the same directory where the database is stored).
+
+When this config file exists, the eval creator will show only the providers listed in the file.
+
+**Example configuration:**
+
+```yaml title="ui-providers.yaml"
+providers:
+  # Simple provider IDs
+  - openai:gpt-4o-mini
+  - anthropic:messages:claude-haiku-4-5-20251001
+
+  # With custom labels
+  - id: openai:gpt-4o
+    label: GPT-4o (Company Approved)
+
+  # With default configuration
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    label: Claude Sonnet 4.5
+    config:
+      temperature: 0.7
+      max_tokens: 4096
+
+  # Custom HTTP provider (internal gateway)
+  - id: http://llm-gateway.internal.company.com/v1
+    label: Internal LLM Gateway
+    config:
+      method: POST
+      headers:
+        Authorization: Bearer YOUR_TOKEN_HERE
+        Content-Type: application/json
+
+  # Cloud providers with regions
+  - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    label: Bedrock Claude (us-west-2)
+    config:
+      region: us-west-2
+```
+
+**Docker example:**
+
+```bash
+docker run -d \
+  --name promptfoo_container \
+  -p 3000:3000 \
+  -v ./promptfoo_data:/home/promptfoo/.promptfoo \
+  ghcr.io/promptfoo/promptfoo:latest
+
+# Place ui-providers.yaml in the mounted directory
+cp ui-providers.yaml ./promptfoo_data/
+```
+
+**Docker Compose example:**
+
+```yaml title="docker-compose.yml"
+services:
+  promptfoo_container:
+    image: ghcr.io/promptfoo/promptfoo:latest
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./promptfoo_data:/home/promptfoo/.promptfoo
+# Then place ui-providers.yaml in ./promptfoo_data/ directory
+```
+
+**Kubernetes ConfigMap example:**
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promptfoo-ui-providers
+data:
+  ui-providers.yaml: |
+    providers:
+      - openai:gpt-4o
+      - anthropic:messages:claude-sonnet-4-5-20250929
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: promptfoo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: promptfoo
+  template:
+    metadata:
+      labels:
+        app: promptfoo
+    spec:
+      containers:
+        - name: promptfoo
+          image: promptfoo/promptfoo:latest
+          volumeMounts:
+            - name: config
+              mountPath: /root/.promptfoo/ui-providers.yaml
+              subPath: ui-providers.yaml
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: promptfoo-ui-providers
+```
+
+**Notes:**
+
+- If no config file exists, all default providers are shown
+- If config exists with providers, ONLY those providers are shown
+- When custom config exists, the "Reference Local Provider" button and "Configure Environment" (API keys) section are hidden
+- Changes require server restart
+
+**⚠️ Security Warning - Credential Storage:**
+
+- **DO NOT store API keys or credentials directly in ui-providers.yaml** - this file is not encrypted
+- Use environment variables for all sensitive credentials instead
+- In Kubernetes, use **Secrets** (not ConfigMaps) for sensitive data
+- Promptfoo supports environment variable substitution using **Nunjucks syntax**: `{{ env.VARIABLE_NAME }}`
+- Example secure approach:
+
+```yaml
+# ui-providers.yaml - NO CREDENTIALS
+providers:
+  - id: openai:gpt-4o-mini
+  # API key comes from OPENAI_API_KEY environment variable
+
+  - id: http://internal-api.company.com/v1
+    config:
+      method: POST
+      headers:
+        # Use Nunjucks template syntax for env vars
+        Authorization: 'Bearer {{ env.INTERNAL_API_KEY }}'
+```
+
+```bash
+# Pass credentials via environment variables
+docker run -d \
+  -e OPENAI_API_KEY=sk-your-key \
+  -e INTERNAL_API_KEY=your-internal-key \
+  -v ./promptfoo_data:/home/promptfoo/.promptfoo \
+  ghcr.io/promptfoo/promptfoo:latest
+```
+
 ## Specifications
 
 ### Client Requirements (Running `promptfoo` CLI)

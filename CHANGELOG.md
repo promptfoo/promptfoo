@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(config): add server-side provider list customization via ui-providers.yaml in .promptfoo directory to control providers shown in the eval creator for self-hosted deployments (#6124)
+- feat(api): add /api/providers and /api/providers/config-status endpoints to serve configured providers and status to the UI (#6124)
+- feat(webui): conditionally render provider selectors based on server config; sort and group providers for clearer selection (#6124)
 - feat(assertions): add dot product and euclidean distance metrics for similarity assertion - use `similar:dot` and `similar:euclidean` assertion types to match production vector database metrics and support different similarity use cases (#6202)
 - feat(webui): expose Hydra strategy configuration (max turns and stateful toggle) in red team setup UI (#6165)
 - fix(app): aligning risk scores with documentation (#6212)
@@ -27,13 +30,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(webui): add effect cleanup to provider config status fetch to avoid setState warnings on unmounted components (#6124)
+- fix(providers): correct default provider labels - "o3" not "GPT-o3" (o-series are not GPT models), "Claude 4.5 Haiku" not "Claude 3.5 Haiku" (#6124)
 - fix(redteam): don't set default 'en' language when no language is configured - prevents unnecessary language modifiers from being passed to meta agent and other iterative strategies, keeping prompts focused on actual task without implied translation requirements (#6214)
 - fix(webui): fix duplicate React key warning in DefaultTestVariables component by implementing counter-based unique ID generation (#6201)
 - fix(samples): downlevel pem dependency to supported version
 
 ### Tests
 
+- test(server): add comprehensive test coverage for provider config status, list fetching, fallbacks, and UI hide/show behavior (#6124)
 - test(webui): suppress expected test error logs (109+ occurrences across parsing errors, API errors, context provider errors) and React/MUI warnings (act() warnings, DOM nesting, prop types) in setupTests.ts and vite.config.ts (#6201)
+
+### Documentation
+
+- docs(self-hosting): document ui-providers.yaml format, examples, and Docker/Compose/Kubernetes setup; clarify config map and security considerations for credential storage (#6124)
 
 ### Dependencies
 
