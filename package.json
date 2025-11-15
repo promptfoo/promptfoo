@@ -72,7 +72,7 @@
     "test": "jest",
     "tsc": "tsc",
     "mcp": "node dist/src/main.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy\" --ignore-dirs=\"dist,site,examples,node_modules\""
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata\" --ignore-dirs=\"dist,site,examples,node_modules\""
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
