@@ -2,7 +2,7 @@
 description: Tool use evaluation with function calling capabilities
 
 providers:
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-5-20250929
     config:
       tools:
         - name: get_weather
@@ -20,7 +20,7 @@ providers:
                   - fahrenheit
             required:
               - location
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-5-20250929
     label: With Strict Mode
     config:
       tools:
