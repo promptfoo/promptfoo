@@ -285,6 +285,13 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
     } else {
       // Standard Anthropic tool
       processedTools.push(tool as Anthropic.Tool);
+
+      // Check if tool uses strict mode (structured outputs for tools)
+      if ('strict' in tool && tool.strict === true) {
+        if (!requiredBetaFeatures.includes('structured-outputs-2025-11-13')) {
+          requiredBetaFeatures.push('structured-outputs-2025-11-13');
+        }
+      }
     }
   }
 
