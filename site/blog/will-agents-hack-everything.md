@@ -36,9 +36,11 @@ Anthropic was later able to detect the activity, ban the associated accounts, an
 
 ## Everyone's a hacker now
 
-While yesterday's attack was (very probably) state-backed, part of what makes it so concerning is that it didn't have to be. While it's possible that Claude Code could have made this attack faster to execute or more effective, these groups have a long history of large, successful attacks that predate LLMs. AI might be helpful, but they don't _need_ it to pull off attacks; they have plenty of resources and expertise.
+While the attack Anthropic reported yesterday was (very probably) state-backed, part of what makes it so concerning is that it didn't have to be.
 
-But AI _fundamentally_ changes the game for smaller groups of attackers (or even individuals) who don't have nation states or large organizations behind them. The expertise needed to penetrate the systems of critical institutions is lower than ever, and the threat landscape is far more decentralized and asymmetric.
+It's possible that Claude Code could have made this attack faster to execute or more effective, but state-linked groups have a long history of large, successful attacks that predate LLMs. AI might be helpful, but they don't _need_ it to pull off attacks; they have plenty of resources and expertise.
+
+Where AI _fundamentally_ changes the game is for smaller groups of attackers (or even individuals) who don't have nation states or large organizations behind them. The expertise needed to penetrate the systems of critical institutions is lower than ever, and the threat landscape is far more decentralized and asymmetric.
 
 ## What can be done?
 
