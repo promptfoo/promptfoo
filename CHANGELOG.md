@@ -39,6 +39,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - chore(deps): bump openai from 6.8.1 to 6.9.0 (#6208)
 
+### Changed
+
+- feat(webui): implement code splitting with lazy loading for all page components and vendor library separation to eliminate large chunk warnings and improve initial page load performance (#6194)
+
 ## [0.119.6] - 2025-11-12
 
 ### Documentation

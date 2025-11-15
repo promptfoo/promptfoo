@@ -74,6 +74,7 @@ export default defineConfig({
           'vendor-utils': ['js-yaml', 'diff', 'csv-parse', 'csv-stringify'],
           'vendor-syntax': ['prismjs'],
           'vendor-markdown': ['react-markdown', 'remark-gfm'],
+          'vendor-tanstack': ['@tanstack/react-query', '@tanstack/react-table'],
         },
       },
     },
