@@ -88,7 +88,7 @@
     "gaxios": "^6.0.0",
     "https-proxy-agent": "^7.0.0",
     "mongoose": {
-      "gcp-metadata": "^8.1.0"
+      "gcp-metadata": "^8.1.2"
     }
   },
   "devDependencies": {
