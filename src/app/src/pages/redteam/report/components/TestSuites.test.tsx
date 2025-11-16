@@ -17,7 +17,7 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 describe('TestSuites Component', () => {
   const mockNavigate = vi.fn();
 
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = { current: null } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
   const defaultProps = {
@@ -130,7 +130,7 @@ describe('TestSuites Component', () => {
 
 describe('TestSuites Component Navigation', () => {
   const mockNavigate = vi.fn();
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = { current: null } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
 
@@ -269,7 +269,7 @@ describe('TestSuites Component Navigation', () => {
 describe('TestSuites Component Navigation with Missing EvalId', () => {
   const mockNavigate = vi.fn();
 
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = { current: null } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
   const defaultProps = {
@@ -323,7 +323,7 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
 
 describe('TestSuites Component Filtering', () => {
   const mockNavigate = vi.fn();
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = { current: null } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
 
@@ -371,7 +371,7 @@ describe('TestSuites Component Filtering', () => {
 describe('TestSuites Component CSV Export', () => {
   const mockNavigate = vi.fn();
 
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = { current: null } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
   const defaultProps = {
@@ -413,7 +413,7 @@ describe('TestSuites Component CSV Export', () => {
 
 describe('TestSuites Component - Zero Attack Success Rate', () => {
   const mockNavigate = vi.fn();
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = { current: null } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
 
@@ -491,7 +491,7 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
       },
     };
 
-    const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+    const mockRef = { current: null } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
     const mockFilterModel = { items: [] } as any;
     const mockSetFilterModel = vi.fn();
 
@@ -527,7 +527,7 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
 
 describe('TestSuites Component - Large Filter Object', () => {
   const mockNavigate = vi.fn();
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = { current: null } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
 
@@ -589,7 +589,7 @@ describe('TestSuites Component - Large Filter Object', () => {
 
 describe('TestSuites Component Navigation with Special Characters in Plugin ID', () => {
   const mockNavigate = vi.fn();
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = { current: null } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
 
@@ -651,7 +651,7 @@ describe('TestSuites Component Navigation with Special Characters in Plugin ID',
 
 describe('TestSuites Component - Zero Attack Success Rate Navigation', () => {
   const mockNavigate = vi.fn();
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = { current: null } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
 
