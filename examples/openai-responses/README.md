@@ -49,6 +49,15 @@ Key differences from regular function calling:
 
 Example showing how to use reasoning models (o1, o3, etc.) with specific configurations.
 
+### GPT-5.1 (`promptfooconfig.gpt-5.1.yaml`)
+
+Example demonstrating GPT-5.1's key features including:
+
+- **`none` reasoning mode**: No reasoning tokens for fastest responses
+- **Verbosity control**: Adjustable output length (`low`, `medium`, `high`)
+- **Reasoning effort levels**: Compare `none`, `medium`, and `high` reasoning modes
+- **Coding tasks**: Optimized for coding and problem-solving workflows
+
 ### Image Processing (`promptfooconfig.image.yaml`)
 
 Example demonstrating image input capabilities with vision models.
@@ -94,6 +103,9 @@ npx promptfoo eval -c promptfooconfig.function-callback.yaml
 
 # Reasoning models example
 npx promptfoo eval -c promptfooconfig.reasoning.yaml
+
+# GPT-5.1 example
+npx promptfoo eval -c promptfooconfig.gpt-5.1.yaml
 ```
 
 ## Prerequisites

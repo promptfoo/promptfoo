@@ -59,7 +59,7 @@ class LlmRubricProviderError extends Error {
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
-function cosineSimilarity(vecA: number[], vecB: number[]) {
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');
   }
@@ -67,6 +67,24 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
   const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
   const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
   return dotProduct / (vecAMagnitude * vecBMagnitude);
+}
+
+function dotProduct(vecA: number[], vecB: number[]): number {
+  if (vecA.length !== vecB.length) {
+    throw new Error('Vectors must be of equal length');
+  }
+  return vecA.reduce((acc, val, idx) => acc + val * vecB[idx], 0);
+}
+
+function euclideanDistance(vecA: number[], vecB: number[]): number {
+  if (vecA.length !== vecB.length) {
+    throw new Error('Vectors must be of equal length');
+  }
+  const sumSquaredDiff = vecA.reduce((acc, val, idx) => {
+    const diff = val - vecB[idx];
+    return acc + diff * diff;
+  }, 0);
+  return Math.sqrt(sumSquaredDiff);
 }
 
 /**
@@ -240,6 +258,7 @@ export async function matchesSimilarity(
   threshold: number,
   inverse: boolean = false,
   grading?: GradingConfig,
+  metric: 'cosine' | 'dot_product' | 'euclidean' = 'cosine',
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (cliState.config?.redteam && shouldGenerateRemote()) {
     try {
@@ -277,7 +296,14 @@ export async function matchesSimilarity(
     },
   };
 
+  // For providers with native similarity API, only cosine is supported
   if ('callSimilarityApi' in finalProvider) {
+    if (metric !== 'cosine') {
+      return fail(
+        `Provider ${finalProvider.id()} only supports cosine similarity via callSimilarityApi`,
+        tokensUsed,
+      );
+    }
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
     tokensUsed.total = similarityResp.tokenUsage?.total || 0;
     tokensUsed.prompt = similarityResp.tokenUsage?.prompt || 0;
@@ -331,29 +357,76 @@ export async function matchesSimilarity(
       return fail('Embedding not found', tokensUsed);
     }
 
-    similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+    // Compute metric based on the selected type
+    switch (metric) {
+      case 'cosine':
+        similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      case 'dot_product':
+        similarity = dotProduct(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      case 'euclidean':
+        // For euclidean distance, we store it in similarity variable but handle it differently below
+        similarity = euclideanDistance(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      default:
+        return fail(`Unsupported metric: ${metric}`, tokensUsed);
+    }
   } else {
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
-  const pass = inverse
-    ? similarity <= threshold + Number.EPSILON
-    : similarity >= threshold - Number.EPSILON;
-  const greaterThanReason = `Similarity ${similarity.toFixed(
-    2,
-  )} is greater than threshold ${threshold}`;
-  const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
-  if (pass) {
-    return {
-      pass: true,
-      score: inverse ? 1 - similarity : similarity,
-      reason: inverse ? lessThanReason : greaterThanReason,
-      tokensUsed,
-    };
+
+  // Handle different semantics for distance vs similarity metrics
+  const isDistanceMetric = metric === 'euclidean';
+
+  let pass: boolean;
+  let score: number;
+  let reason: string;
+
+  if (isDistanceMetric) {
+    // For distance metrics: lower is better, threshold is maximum distance
+    const distance = similarity; // We stored distance in similarity variable
+    pass = inverse
+      ? distance >= threshold - Number.EPSILON
+      : distance <= threshold + Number.EPSILON;
+
+    // Convert distance to a 0-1 score where lower distance = higher score
+    // Using formula: score = 1 / (1 + distance)
+    const normalizedScore = 1 / (1 + distance);
+    score = inverse ? 1 - normalizedScore : normalizedScore;
+
+    const belowThresholdReason = `Distance ${distance.toFixed(2)} is less than or equal to threshold ${threshold}`;
+    const aboveThresholdReason = `Distance ${distance.toFixed(2)} is greater than threshold ${threshold}`;
+    reason = pass
+      ? inverse
+        ? aboveThresholdReason
+        : belowThresholdReason
+      : inverse
+        ? belowThresholdReason
+        : aboveThresholdReason;
+  } else {
+    // For similarity metrics: higher is better, threshold is minimum similarity
+    pass = inverse
+      ? similarity <= threshold + Number.EPSILON
+      : similarity >= threshold - Number.EPSILON;
+
+    score = inverse ? 1 - similarity : similarity;
+
+    const greaterThanReason = `Similarity ${similarity.toFixed(2)} is greater than or equal to threshold ${threshold}`;
+    const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
+    reason = pass
+      ? inverse
+        ? lessThanReason
+        : greaterThanReason
+      : inverse
+        ? greaterThanReason
+        : lessThanReason;
   }
+
   return {
-    pass: false,
-    score: inverse ? 1 - similarity : similarity,
-    reason: inverse ? greaterThanReason : lessThanReason,
+    pass,
+    score,
+    reason,
     tokensUsed,
   };
 }
@@ -519,7 +592,13 @@ export async function matchesLlmRubric(
     );
   }
 
-  if (!grading.rubricPrompt && cliState.config?.redteam && shouldGenerateRemote()) {
+  // Use remote grading only if no provider is explicitly configured and remote generation is enabled
+  if (
+    !grading.rubricPrompt &&
+    !cliState.config?.redteam?.provider &&
+    cliState.config?.redteam &&
+    shouldGenerateRemote()
+  ) {
     return {
       ...(await doRemoteGrading({
         task: 'llm-rubric',

@@ -108,7 +108,7 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('runRedteamConversation', () => {
-    it('should stop iteration when score reaches 10', async () => {
+    it('should complete all iterations when score reaches 10 and grader passes', async () => {
       mockRedteamProvider.callApi
         .mockImplementationOnce(async () => ({
           output: JSON.stringify({
@@ -138,7 +138,7 @@ describe('RedteamIterativeProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
-      expect(result.metadata.finalIteration).toBe(1);
+      expect(result.metadata.finalIteration).toBe(5);
       expect(result.metadata.highestScore).toBe(10);
     });
 
@@ -215,10 +215,12 @@ describe('RedteamIterativeProvider', () => {
         mockRedteamProvider,
         undefined,
         expect.stringContaining('iterative jailbreak attack with the following goal: "test goal"'),
+        undefined, // skipRefusalCheck
+        expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
       );
     });
 
-    it('should create synthetic grader result when judge score is high', async () => {
+    it('should continue iterating when judge score is high and grader passes', async () => {
       mockGetGraderById.mockReturnValue(null); // No grader available
 
       mockRedteamProvider.callApi
@@ -243,7 +245,7 @@ describe('RedteamIterativeProvider', () => {
         },
         filters: undefined,
         injectVar: 'test',
-        numIterations: 5,
+        numIterations: 1,
         options: {},
         prompt: { raw: 'test', label: 'test' },
         redteamProvider: mockRedteamProvider,
@@ -255,12 +257,8 @@ describe('RedteamIterativeProvider', () => {
       });
 
       expect(result.metadata.finalIteration).toBe(1);
-      expect(result.metadata.stopReason).toBe('Judge success');
-      expect(result.metadata.storedGraderResult).toEqual({
-        pass: false,
-        score: 0,
-        reason: 'Excellent jailbreak achieved',
-      });
+      expect(result.metadata.stopReason).toBe('Max iterations reached');
+      expect(result.metadata.storedGraderResult).toBeUndefined();
     });
 
     it('should complete all iterations when no early exit conditions are met', async () => {
@@ -507,6 +505,8 @@ describe('RedteamIterativeProvider', () => {
         mockRedteamProvider,
         undefined,
         expect.stringContaining('Create harmful content about specific groups'),
+        undefined, // skipRefusalCheck
+        expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
       );
 
       const additionalRubricArg = mockGrader.getResult.mock.calls[0][5];
@@ -650,6 +650,8 @@ describe('RedteamIterativeProvider', () => {
         mockRedteamProvider,
         undefined,
         '', // Empty additional rubric when no goal
+        undefined, // skipRefusalCheck
+        expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
       );
     });
 
