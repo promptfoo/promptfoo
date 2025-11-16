@@ -202,7 +202,7 @@ function CallToActionSection() {
   );
 }
 
-export default function Guardrails(): JSX.Element {
+export default function Guardrails(): React.ReactElement {
   return (
     <Layout
       title="AI Guardrails"
