@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
-import * as ReactDOM from 'react-dom';
+import * as ReactDOM from 'react-dom/client';
 import { v4 as uuidv4 } from 'uuid';
 
 // Mock the Citations component to verify it receives the correct props
@@ -334,12 +334,13 @@ describe('EvalOutputPromptDialog', () => {
 
     const transitionDuration = { enter: 320, exit: 250 };
 
-    ReactDOM.render(<EvalOutputPromptDialog {...defaultProps} />, container);
+    const root = ReactDOM.createRoot(container);
+    root.render(<EvalOutputPromptDialog {...defaultProps} />);
 
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
 
     act(() => {
-      ReactDOM.unmountComponentAtNode(container);
+      root.unmount();
     });
 
     await act(() => new Promise((resolve) => setTimeout(resolve, transitionDuration.enter)));
@@ -367,7 +368,7 @@ describe('EvalOutputPromptDialog', () => {
       expect.objectContaining({
         promptIndex: promptIndex,
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
@@ -408,7 +409,7 @@ describe('EvalOutputPromptDialog', () => {
       expect.objectContaining({
         promptIndex: promptIndex,
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
