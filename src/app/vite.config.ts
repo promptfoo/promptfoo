@@ -37,10 +37,13 @@ export default defineConfig({
       '@app': path.resolve(__dirname, './src'),
       '@promptfoo': path.resolve(__dirname, '../'),
       // Ensure tests use the same React 19 installation to avoid version conflicts
-      'react': path.resolve(__dirname, '../../node_modules/react'),
+      react: path.resolve(__dirname, '../../node_modules/react'),
       'react-dom': path.resolve(__dirname, '../../node_modules/react-dom'),
       'react/jsx-runtime': path.resolve(__dirname, '../../node_modules/react/jsx-runtime.js'),
-      'react/jsx-dev-runtime': path.resolve(__dirname, '../../node_modules/react/jsx-dev-runtime.js'),
+      'react/jsx-dev-runtime': path.resolve(
+        __dirname,
+        '../../node_modules/react/jsx-dev-runtime.js',
+      ),
     },
   },
   optimizeDeps: {
