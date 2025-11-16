@@ -6,8 +6,12 @@ interface ReactElementWithChildren extends React.ReactElement {
 }
 
 function isReactElementWithChildren(node: React.ReactNode): node is ReactElementWithChildren {
-  if (!React.isValidElement(node)) return false;
-  if (!node.props || typeof node.props !== 'object') return false;
+  if (!React.isValidElement(node)) {
+    return false;
+  }
+  if (!node.props || typeof node.props !== 'object') {
+    return false;
+  }
   return 'children' in node.props;
 }
 

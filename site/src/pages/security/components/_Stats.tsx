@@ -38,7 +38,7 @@ const stats = [
   },
 ];
 
-export default function Stats(): JSX.Element {
+export default function Stats(): React.ReactElement {
   return (
     <section className={`${styles.section} ${styles.statsSection}`}>
       <div className={styles.container}>
