@@ -368,7 +368,7 @@ describe('EvalOutputPromptDialog', () => {
       expect.objectContaining({
         promptIndex: promptIndex,
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
@@ -409,7 +409,7 @@ describe('EvalOutputPromptDialog', () => {
       expect.objectContaining({
         promptIndex: promptIndex,
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
