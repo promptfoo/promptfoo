@@ -72,7 +72,7 @@
     "test": "jest",
     "tsc": "tsc",
     "mcp": "node dist/src/main.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy\" --ignore-dirs=\"dist,site,examples,node_modules\""
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata\" --ignore-dirs=\"dist,site,examples,node_modules\""
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
@@ -88,7 +88,7 @@
     "gaxios": "^6.0.0",
     "https-proxy-agent": "^7.0.0",
     "mongoose": {
-      "gcp-metadata": "^6.0.0"
+      "gcp-metadata": "^8.1.2"
     }
   },
   "devDependencies": {
@@ -222,7 +222,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
     "@apidevtools/json-schema-ref-parser": "^12.0.2",
-    "@googleapis/sheets": "^9.8.0",
+    "@googleapis/sheets": "^12.0.0",
+    "gcp-metadata": "^8.1.2",
     "@inquirer/checkbox": "^4.3.1",
     "@inquirer/confirm": "^5.1.20",
     "@inquirer/core": "^10.3.1",

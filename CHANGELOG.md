@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - feat(plugins): organize domain-specific risks into vertical suites
+- feat(assertions): add dot product and euclidean distance metrics for similarity assertion - use `similar:dot` and `similar:euclidean` assertion types to match production vector database metrics and support different similarity use cases (#6202)
 - feat(webui): expose Hydra strategy configuration (max turns and stateful toggle) in red team setup UI (#6165)
 - fix(app): aligning risk scores with documentation (#6212)
 - feat(providers): add GPT-5.1 model support including gpt-5.1, gpt-5.1-mini, gpt-5.1-nano, and gpt-5.1-codex with new 'none' reasoning mode for low-latency interactions and configurable verbosity control (#6208)
@@ -17,11 +18,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(app): Metadata value autocomplete eval filter (#6176)
 - feat(webui): display both total and filtered metrics simultaneously when filters are active, showing "X/Y filtered, Z total" format in evaluation results table for better visibility into filtered vs unfiltered data (#5969)
 - feat(app): eval results filters permalinking (#6196)
+- fix(site): fix missing background color on safari api reference search modal (#6218)
 
 ### Changed
 
 - chore(ci): synchronize package-lock.json to resolve npm ci failures (#6195)
 - chore(ci): increase webui test timeout to 8 minutes in GitHub Actions workflow to prevent CI timeouts (#6201)
+- chore(redteam): update foundation model report redteam config to use newer redteam strategies (#6216)
 
 ### Fixed
 
@@ -35,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
+- chore(deps): upgrade @googleapis/sheets from 9.8.0 to 12.0.0 and resolve gcp-metadata dependency conflicts - fixes recurring npm ci failures by (1) updating the existing mongoose npm override from gcp-metadata ^6.0.0 to ^8.1.2, and (2) adding gcp-metadata ^8.1.2 as a direct dependency for consistent npm resolution across npm 10.x and 11.x (note: gcp-metadata is not directly imported in code but required for dependency resolution consistency, hence excluded from depcheck); this allows using google-auth-library 10.5.0 with X.509 certificate authentication and Cloud Run Jobs detection while ensuring single gcp-metadata version across the dependency tree; @googleapis/sheets v12 is a major version upgrade (v9→v12) that requires googleapis-common v8 and google-auth-library v10+, but maintains backwards-compatible API usage for spreadsheets.get() and spreadsheets.values.get() methods (#6227)
 - chore(deps): bump openai from 6.8.1 to 6.9.0 (#6208)
 
 ## [0.119.6] - 2025-11-12
