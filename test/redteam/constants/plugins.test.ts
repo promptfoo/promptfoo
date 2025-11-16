@@ -1,7 +1,7 @@
 import {
+  AGENTIC_EXEMPT_PLUGINS,
   ALL_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
-  AGENTIC_EXEMPT_PLUGINS,
   STRATEGY_EXEMPT_PLUGINS,
 } from '../../../src/redteam/constants/plugins';
 
