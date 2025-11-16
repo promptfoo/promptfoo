@@ -207,7 +207,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(redteam): enable layer strategy with multilingual language support; plugins now generate tests in multiple languages even when layer strategy is present (#6084)
 - fix(redteam): reduce multilingual deprecation logging noise by moving from warn to debug level (#6084)
->>>>>>> main
+  > > > > > > > main
 
 ## [0.119.1] - 2025-10-29
 
