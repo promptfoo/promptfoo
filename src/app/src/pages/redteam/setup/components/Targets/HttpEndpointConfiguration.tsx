@@ -91,7 +91,7 @@ const HttpEndpointConfiguration = ({
   setUrlError,
   onTargetTested,
   onSessionTested,
-}: HttpEndpointConfigurationProps): JSX.Element => {
+}: HttpEndpointConfigurationProps): React.ReactElement => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
