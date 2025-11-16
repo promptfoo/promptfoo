@@ -15,7 +15,6 @@ dist
 **/*.tsbuildinfo
 src/generated/
 task.md
-package-lock.json
 
 # pnpm-specific
 .pnpm-store/
