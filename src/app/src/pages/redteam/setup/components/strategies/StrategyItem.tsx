@@ -86,34 +86,31 @@ export function StrategyItem({
     <Paper
       elevation={2}
       onClick={handleToggle}
-      sx={(theme) => {
-        const needsConfig = isSelected && requiresConfig;
-        return {
-          height: '100%',
-          display: 'flex',
-          cursor: isDisabled ? 'not-allowed' : 'pointer',
-          userSelect: 'none',
-          opacity: isDisabled ? 0.5 : 1,
-          border: isSelected
-            ? `1px solid ${needsConfig ? theme.palette.error.main : theme.palette.primary.main}`
-            : undefined,
+      sx={(theme) => ({
+        height: '100%',
+        display: 'flex',
+        cursor: isDisabled ? 'not-allowed' : 'pointer',
+        userSelect: 'none',
+        opacity: isDisabled ? 0.5 : 1,
+        border: isSelected
+          ? `1px solid ${requiresConfig ? theme.palette.error.main : theme.palette.primary.main}`
+          : undefined,
+        backgroundColor: isDisabled
+          ? theme.palette.action.disabledBackground
+          : isSelected
+            ? alpha(requiresConfig ? theme.palette.error.main : theme.palette.primary.main, 0.04)
+            : theme.palette.background.paper,
+        transition: 'all 0.2s ease-in-out',
+        '&:hover': {
           backgroundColor: isDisabled
             ? theme.palette.action.disabledBackground
             : isSelected
-              ? alpha(needsConfig ? theme.palette.error.main : theme.palette.primary.main, 0.04)
-              : theme.palette.background.paper,
-          transition: 'all 0.2s ease-in-out',
-          '&:hover': {
-            backgroundColor: isDisabled
-              ? theme.palette.action.disabledBackground
-              : isSelected
-                ? alpha(needsConfig ? theme.palette.error.main : theme.palette.primary.main, 0.08)
-                : alpha(theme.palette.action.hover, 0.04),
-          },
-          p: 1,
-          gap: 2,
-        };
-      }}
+              ? alpha(requiresConfig ? theme.palette.error.main : theme.palette.primary.main, 0.08)
+              : alpha(theme.palette.action.hover, 0.04),
+        },
+        p: 1,
+        gap: 2,
+      })}
     >
       {/* Checkbox container */}
       <Box
