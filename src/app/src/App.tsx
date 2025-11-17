@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect } from 'react';
 
 import {
   createBrowserRouter,
@@ -10,25 +10,21 @@ import {
   useLocation,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
-import PageLoading from './components/PageLoading';
-import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
+import DatasetsPage from './pages/datasets/page';
+import EvalPage from './pages/eval/page';
+import EvalCreatorPage from './pages/eval-creator/page';
+import EvalsIndexPage from './pages/evals/page';
+import HistoryPage from './pages/history/page';
+import LauncherPage from './pages/launcher/page';
+import LoginPage from './pages/login';
+import ModelAuditPage from './pages/model-audit/page';
+import NotFoundPage from './pages/NotFoundPage';
+import PromptsPage from './pages/prompts/page';
+import ReportPage from './pages/redteam/report/page';
+import RedteamSetupPage from './pages/redteam/setup/page';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-
-// Lazy load pages for better code splitting
-const DatasetsPage = lazy(() => import('./pages/datasets/page'));
-const EvalPage = lazy(() => import('./pages/eval/page'));
-const EvalCreatorPage = lazy(() => import('./pages/eval-creator/page'));
-const EvalsIndexPage = lazy(() => import('./pages/evals/page'));
-const HistoryPage = lazy(() => import('./pages/history/page'));
-const LauncherPage = lazy(() => import('./pages/launcher/page'));
-const LoginPage = lazy(() => import('./pages/login'));
-const ModelAuditPage = lazy(() => import('./pages/model-audit/page'));
-const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
-const PromptsPage = lazy(() => import('./pages/prompts/page'));
-const ReportPage = lazy(() => import('./pages/redteam/report/page'));
-const RedteamSetupPage = lazy(() => import('./pages/redteam/setup/page'));
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
@@ -93,11 +89,7 @@ function App() {
   return (
     <ToastProvider>
       <QueryClientProvider client={queryClient}>
-        <ErrorBoundary>
-          <Suspense fallback={<PageLoading />}>
-            <RouterProvider router={router} />
-          </Suspense>
-        </ErrorBoundary>
+        <RouterProvider router={router} />
       </QueryClientProvider>
     </ToastProvider>
   );

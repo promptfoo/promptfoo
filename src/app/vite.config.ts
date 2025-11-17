@@ -64,17 +64,56 @@ export default defineConfig({
         warn(warning);
       },
       output: {
-        // Manual chunking to split vendor libraries
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-mui-core': ['@mui/material', '@mui/system'],
-          'vendor-mui-icons': ['@mui/icons-material'],
-          'vendor-mui-x': ['@mui/x-data-grid', '@mui/x-charts'],
-          'vendor-charts': ['recharts', 'chart.js'],
-          'vendor-utils': ['js-yaml', 'diff', 'csv-parse', 'csv-stringify'],
-          'vendor-syntax': ['prismjs'],
-          'vendor-markdown': ['react-markdown', 'remark-gfm'],
-          'vendor-tanstack': ['@tanstack/react-query', '@tanstack/react-table'],
+        // Manual chunking to split vendor libraries and pages
+        manualChunks: (id) => {
+          // Vendor library chunks
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+              return 'vendor-react';
+            }
+            if (id.includes('@mui/material') || id.includes('@mui/system')) {
+              return 'vendor-mui-core';
+            }
+            if (id.includes('@mui/icons-material')) {
+              return 'vendor-mui-icons';
+            }
+            if (id.includes('@mui/x-data-grid') || id.includes('@mui/x-charts')) {
+              return 'vendor-mui-x';
+            }
+            if (id.includes('recharts') || id.includes('chart.js')) {
+              return 'vendor-charts';
+            }
+            if (id.includes('js-yaml') || id.includes('diff') || id.includes('csv-parse') || id.includes('csv-stringify')) {
+              return 'vendor-utils';
+            }
+            if (id.includes('prismjs')) {
+              return 'vendor-syntax';
+            }
+            if (id.includes('react-markdown') || id.includes('remark-gfm')) {
+              return 'vendor-markdown';
+            }
+            if (id.includes('@tanstack/react-query') || id.includes('@tanstack/react-table')) {
+              return 'vendor-tanstack';
+            }
+          }
+
+          // Page chunks
+          if (id.includes('/pages/')) {
+            if (id.includes('/pages/datasets/')) return 'page-datasets';
+            if (id.includes('/pages/eval/')) return 'page-eval';
+            if (id.includes('/pages/eval-creator/')) return 'page-eval-creator';
+            if (id.includes('/pages/evals/')) return 'page-evals';
+            if (id.includes('/pages/history/')) return 'page-history';
+            if (id.includes('/pages/launcher/')) return 'page-launcher';
+            if (id.includes('/pages/login')) return 'page-login';
+            if (id.includes('/pages/model-audit/')) return 'page-model-audit';
+            if (id.includes('/pages/prompts/')) return 'page-prompts';
+            if (id.includes('/pages/redteam/')) return 'page-redteam';
+            if (id.includes('/pages/NotFoundPage')) return 'page-not-found';
+          }
+
+          // Fallback for other chunks
+          return undefined;
         },
       },
     },
