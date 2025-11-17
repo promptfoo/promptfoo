@@ -320,7 +320,7 @@ The overall attack pattern is known as the "[lethal trifecta](https://www.prompt
 
 If your system meets all three of these criteria, then it's worth re-thinking your approach.
 
-![Lethal trifecta diagram](/img/blog/lethal-trifecta-venn.png)
+![Lethal Trifecta Venn diagram](/img/blog/lethal-trifecta/lethal-trifecta-venn.png)
 
 You can band-aid over it, but at least for now there is no way to work around the fundamental insecurity of this system other than by adding deterministic limitations to what it can access and where the outputs can go.
 
