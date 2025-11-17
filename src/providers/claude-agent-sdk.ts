@@ -63,9 +63,8 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
   try {
     // Use a file path for createRequire to ensure proper module resolution
     // createRequire needs an absolute path, not a relative one
-    const basePath = cliState.basePath && path.isAbsolute(cliState.basePath)
-      ? cliState.basePath
-      : process.cwd();
+    const basePath =
+      cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
     const resolveFrom = path.join(basePath, 'package.json');
     const require = createRequire(resolveFrom);
     const claudeCodePath = require.resolve('@anthropic-ai/claude-agent-sdk');
