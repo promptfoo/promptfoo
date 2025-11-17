@@ -87,8 +87,16 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       return;
     }
 
-    const { plugin, strategy, config, turn, maxTurns, history, goal: goalOverride, stateful } =
-      parsedBody.data;
+    const {
+      plugin,
+      strategy,
+      config,
+      turn,
+      maxTurns,
+      history,
+      goal: goalOverride,
+      stateful,
+    } = parsedBody.data;
 
     const pluginConfigurationError = getPluginConfigurationError(plugin);
     if (pluginConfigurationError) {

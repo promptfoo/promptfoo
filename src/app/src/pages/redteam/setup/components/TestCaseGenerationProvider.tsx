@@ -109,115 +109,20 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
 
   const shouldEvaluateAgainstTarget = !!redTeamConfig.target?.id;
 
-  const runSingleTurn = useCallback(async (abortController: AbortController) => {
-    if (!plugin || !strategy) {
-      return;
-    }
-
-    try {
-      recordEvent('feature_used', {
-        feature: 'redteam_generate_test_case',
-        plugin: plugin.id,
-        strategy: strategy.id,
-      });
-
-      const response = await callApi('/redteam/generate-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-        },
-        body: JSON.stringify({
-          plugin,
-          strategy,
-          config: {
-            applicationDefinition: {
-              purpose: redTeamConfig.applicationDefinition.purpose ?? null,
-            },
-          },
-        }),
-        signal: AbortSignal.any([
-          AbortSignal.timeout(TEST_GENERATION_TIMEOUT),
-          abortController.signal,
-        ]),
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      setGeneratedTestCase({
-        prompt: data.prompt,
-        context: data.context,
-        metadata: data.metadata,
-      });
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+  const runSingleTurn = useCallback(
+    async (abortController: AbortController) => {
+      if (!plugin || !strategy) {
         return;
       }
 
-      console.error('Failed to generate test case:', error);
+      try {
+        recordEvent('feature_used', {
+          feature: 'redteam_generate_test_case',
+          plugin: plugin.id,
+          strategy: strategy.id,
+        });
 
-      const errorMessage =
-        error instanceof Error
-          ? error.message.includes('timed out')
-            ? 'Test generation timed out. Please try again or check your connection.'
-            : error.message
-          : 'Failed to generate test case';
-
-      toast.showToast(errorMessage, 'error');
-      setIsRunningTest(false);
-      setIsDialogOpen(false);
-      setPlugin(null);
-      setStrategy(null);
-      onErrorRef.current?.(error as Error);
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [plugin, strategy, redTeamConfig, recordEvent, toast]);
-
-  const runMultiTurn = useCallback(async (abortController: AbortController) => {
-    if (!plugin || !strategy) {
-      return;
-    }
-
-    try {
-      recordEvent('feature_used', {
-        feature: 'redteam_generate_test_case',
-        plugin: plugin.id,
-        strategy: strategy.id,
-      });
-
-      let state =
-        multiTurnStateRef.current ??
-        ({
-          history: [],
-          turn: 0,
-          maxTurns: DEFAULT_MULTI_TURN_MAX_TURNS,
-          done: false,
-          stateful: false,
-        } satisfies MultiTurnState);
-
-      multiTurnStateRef.current = state;
-      setMultiTurnState(state);
-
-      let goal = multiTurnContextRef.current?.goal;
-      let instructions = multiTurnContextRef.current?.instructions;
-      let lastGenerated: GeneratedTestCase | null = null;
-
-      const strategyConfig = strategy.config as Record<string, unknown>;
-      if (!goal && typeof strategyConfig?.goal === 'string') {
-        goal = String(strategyConfig.goal);
-      }
-      if (!instructions && typeof strategyConfig?.instructions === 'string') {
-        instructions = String(strategyConfig.instructions);
-      }
-
-      while (!abortController.signal.aborted && !state.done && state.turn < state.maxTurns) {
-        const generationResponse = await callApi('/redteam/generate-test', {
+        const response = await callApi('/redteam/generate-test', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -232,212 +137,313 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
                 purpose: redTeamConfig.applicationDefinition.purpose ?? null,
               },
             },
-            turn: state.turn,
-            maxTurns: state.maxTurns,
-            history: state.history,
-            goal,
-            stateful: state.stateful,
           }),
-          signal: AbortSignal.any([AbortSignal.timeout(10000), abortController.signal]),
+          signal: AbortSignal.any([
+            AbortSignal.timeout(TEST_GENERATION_TIMEOUT),
+            abortController.signal,
+          ]),
         });
 
-        if (!generationResponse.ok) {
-          const errorData = await generationResponse.json();
-          throw new Error(errorData.error || 'Failed to generate test case');
-        }
-
-        const data = await generationResponse.json();
+        const data = await response.json();
 
         if (data.error) {
           throw new Error(data.error);
         }
 
-        goal = data.metadata?.goal ?? goal;
-        instructions = data.metadata?.instructions ?? instructions;
-
-        const multiTurnMeta = data.metadata?.multiTurn ?? {};
-        state = {
-          ...state,
-          maxTurns:
-            typeof multiTurnMeta.maxTurns === 'number' ? multiTurnMeta.maxTurns : state.maxTurns,
-          done: Boolean(multiTurnMeta.done),
-          stateful:
-            typeof multiTurnMeta.stateful === 'boolean' ? multiTurnMeta.stateful : state.stateful,
-        } satisfies MultiTurnState;
-
-        multiTurnContextRef.current = {
-          goal,
-          instructions,
-        };
-
-        lastGenerated = {
+        setGeneratedTestCase({
           prompt: data.prompt,
           context: data.context,
           metadata: data.metadata,
-        };
-        setGeneratedTestCase(lastGenerated);
-
-        if (abortController.signal.aborted) {
-          break;
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
         }
 
-        const promptText = String(data.prompt ?? '').trim();
-        if (!promptText) {
-          throw new Error('Received empty prompt for multi-turn generation');
+        console.error('Failed to generate test case:', error);
+
+        const errorMessage =
+          error instanceof Error
+            ? error.message.includes('timed out')
+              ? 'Test generation timed out. Please try again or check your connection.'
+              : error.message
+            : 'Failed to generate test case';
+
+        toast.showToast(errorMessage, 'error');
+        setIsRunningTest(false);
+        setIsDialogOpen(false);
+        setPlugin(null);
+        setStrategy(null);
+        onErrorRef.current?.(error as Error);
+      } finally {
+        setIsGenerating(false);
+      }
+    },
+    [plugin, strategy, redTeamConfig, recordEvent, toast],
+  );
+
+  const runMultiTurn = useCallback(
+    async (abortController: AbortController) => {
+      if (!plugin || !strategy) {
+        return;
+      }
+
+      try {
+        recordEvent('feature_used', {
+          feature: 'redteam_generate_test_case',
+          plugin: plugin.id,
+          strategy: strategy.id,
+        });
+
+        let state =
+          multiTurnStateRef.current ??
+          ({
+            history: [],
+            turn: 0,
+            maxTurns: DEFAULT_MULTI_TURN_MAX_TURNS,
+            done: false,
+            stateful: false,
+          } satisfies MultiTurnState);
+
+        multiTurnStateRef.current = state;
+        setMultiTurnState(state);
+
+        let goal = multiTurnContextRef.current?.goal;
+        let instructions = multiTurnContextRef.current?.instructions;
+        let lastGenerated: GeneratedTestCase | null = null;
+
+        const strategyConfig = strategy.config as Record<string, unknown>;
+        if (!goal && typeof strategyConfig?.goal === 'string') {
+          goal = String(strategyConfig.goal);
+        }
+        if (!instructions && typeof strategyConfig?.instructions === 'string') {
+          instructions = String(strategyConfig.instructions);
         }
 
-        if (promptText === '###STOP###') {
+        while (!abortController.signal.aborted && !state.done && state.turn < state.maxTurns) {
+          const generationResponse = await callApi('/redteam/generate-test', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              Pragma: 'no-cache',
+            },
+            body: JSON.stringify({
+              plugin,
+              strategy,
+              config: {
+                applicationDefinition: {
+                  purpose: redTeamConfig.applicationDefinition.purpose ?? null,
+                },
+              },
+              turn: state.turn,
+              maxTurns: state.maxTurns,
+              history: state.history,
+              goal,
+              stateful: state.stateful,
+            }),
+            signal: AbortSignal.any([AbortSignal.timeout(10000), abortController.signal]),
+          });
+
+          if (!generationResponse.ok) {
+            const errorData = await generationResponse.json();
+            throw new Error(errorData.error || 'Failed to generate test case');
+          }
+
+          const data = await generationResponse.json();
+
+          if (data.error) {
+            throw new Error(data.error);
+          }
+
+          goal = data.metadata?.goal ?? goal;
+          instructions = data.metadata?.instructions ?? instructions;
+
+          const multiTurnMeta = data.metadata?.multiTurn ?? {};
           state = {
             ...state,
-            done: true,
+            maxTurns:
+              typeof multiTurnMeta.maxTurns === 'number' ? multiTurnMeta.maxTurns : state.maxTurns,
+            done: Boolean(multiTurnMeta.done),
+            stateful:
+              typeof multiTurnMeta.stateful === 'boolean' ? multiTurnMeta.stateful : state.stateful,
+          } satisfies MultiTurnState;
+
+          multiTurnContextRef.current = {
+            goal,
+            instructions,
           };
-          multiTurnStateRef.current = state;
-          setMultiTurnState(state);
-          break;
-        }
 
-        let assistantOutput: string | undefined;
-        if (shouldEvaluateAgainstTarget) {
-          const executionAbortController = new AbortController();
-          testExecutionAbortController.current = executionAbortController;
-          setIsRunningTest(true);
-          setTargetResponse(null);
+          lastGenerated = {
+            prompt: data.prompt,
+            context: data.context,
+            metadata: data.metadata,
+          };
+          setGeneratedTestCase(lastGenerated);
 
-          try {
-            const testResponse = await callApi('/providers/test', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                providerOptions: redTeamConfig.target,
-                prompt: promptText,
-              }),
-              signal: AbortSignal.any([
-                AbortSignal.timeout(TEST_EXECUTION_TIMEOUT),
-                executionAbortController.signal,
-                abortController.signal,
-              ]),
-            });
-
-            if (!testResponse.ok) {
-              const errorData = await testResponse.json();
-              throw new Error(errorData.error || 'Failed to run test');
-            }
-
-            const testData = await testResponse.json();
-            assistantOutput = testData.providerResponse?.output || '';
-            setTargetResponse({
-              output: assistantOutput ?? '',
-              error: testData.providerResponse?.error || testData.testResult?.error,
-            });
-          } catch (error) {
-            if (error instanceof Error && error.name === 'AbortError') {
-              return;
-            }
-
-            console.error('Failed to run test against target:', error);
-            const errorMessage =
-              error instanceof Error ? error.message : 'Failed to run test against target';
-            setTargetResponse({
-              output: '',
-              error: errorMessage,
-            });
-            toast.showToast(errorMessage, 'error');
-            onErrorRef.current?.(error as Error);
-            return;
-          } finally {
-            setIsRunningTest(false);
+          if (abortController.signal.aborted) {
+            break;
           }
-        }
 
-        const updatedHistory: ConversationMessage[] = [
-          ...state.history,
-          { role: 'user', content: promptText },
-        ];
+          const promptText = String(data.prompt ?? '').trim();
+          if (!promptText) {
+            throw new Error('Received empty prompt for multi-turn generation');
+          }
 
-        if (shouldEvaluateAgainstTarget && typeof assistantOutput === 'string') {
-          updatedHistory.push({ role: 'assistant', content: assistantOutput });
-        }
+          if (promptText === '###STOP###') {
+            state = {
+              ...state,
+              done: true,
+            };
+            multiTurnStateRef.current = state;
+            setMultiTurnState(state);
+            break;
+          }
 
-        if (!shouldEvaluateAgainstTarget) {
+          let assistantOutput: string | undefined;
+          if (shouldEvaluateAgainstTarget) {
+            const executionAbortController = new AbortController();
+            testExecutionAbortController.current = executionAbortController;
+            setIsRunningTest(true);
+            setTargetResponse(null);
+
+            try {
+              const testResponse = await callApi('/providers/test', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  providerOptions: redTeamConfig.target,
+                  prompt: promptText,
+                }),
+                signal: AbortSignal.any([
+                  AbortSignal.timeout(TEST_EXECUTION_TIMEOUT),
+                  executionAbortController.signal,
+                  abortController.signal,
+                ]),
+              });
+
+              if (!testResponse.ok) {
+                const errorData = await testResponse.json();
+                throw new Error(errorData.error || 'Failed to run test');
+              }
+
+              const testData = await testResponse.json();
+              assistantOutput = testData.providerResponse?.output || '';
+              setTargetResponse({
+                output: assistantOutput ?? '',
+                error: testData.providerResponse?.error || testData.testResult?.error,
+              });
+            } catch (error) {
+              if (error instanceof Error && error.name === 'AbortError') {
+                return;
+              }
+
+              console.error('Failed to run test against target:', error);
+              const errorMessage =
+                error instanceof Error ? error.message : 'Failed to run test against target';
+              setTargetResponse({
+                output: '',
+                error: errorMessage,
+              });
+              toast.showToast(errorMessage, 'error');
+              onErrorRef.current?.(error as Error);
+              return;
+            } finally {
+              setIsRunningTest(false);
+            }
+          }
+
+          const updatedHistory: ConversationMessage[] = [
+            ...state.history,
+            { role: 'user', content: promptText },
+          ];
+
+          if (shouldEvaluateAgainstTarget && typeof assistantOutput === 'string') {
+            updatedHistory.push({ role: 'assistant', content: assistantOutput });
+          }
+
+          if (!shouldEvaluateAgainstTarget) {
+            state = {
+              ...state,
+              history: updatedHistory,
+              turn: state.turn + 1,
+              done: true,
+            };
+            multiTurnStateRef.current = state;
+            setMultiTurnState(state);
+            break;
+          }
+
+          const reachedMaxTurns = state.turn + 1 >= state.maxTurns;
           state = {
             ...state,
             history: updatedHistory,
             turn: state.turn + 1,
-            done: true,
-          };
+            done: state.done || reachedMaxTurns,
+          } satisfies MultiTurnState;
           multiTurnStateRef.current = state;
           setMultiTurnState(state);
-          break;
+
+          multiTurnContextRef.current = {
+            goal,
+            instructions,
+          };
+
+          if (state.done) {
+            break;
+          }
         }
 
-        const reachedMaxTurns = state.turn + 1 >= state.maxTurns;
-        state = {
-          ...state,
-          history: updatedHistory,
-          turn: state.turn + 1,
-          done: state.done || reachedMaxTurns,
-        } satisfies MultiTurnState;
-        multiTurnStateRef.current = state;
-        setMultiTurnState(state);
+        if (!abortController.signal.aborted && lastGenerated) {
+          const mergedMetadata = {
+            ...(lastGenerated.metadata ?? {}),
+            goal,
+            instructions,
+            multiTurn: {
+              ...(lastGenerated.metadata?.multiTurn ?? {}),
+              history: state.history,
+              turn: state.turn,
+              maxTurns: state.maxTurns,
+              done: state.done,
+              stateful: state.stateful,
+            },
+          };
 
-        multiTurnContextRef.current = {
-          goal,
-          instructions,
-        };
+          const finalTestCase: GeneratedTestCase = {
+            ...lastGenerated,
+            metadata: mergedMetadata,
+          };
 
-        if (state.done) {
-          break;
+          setGeneratedTestCase(finalTestCase);
+          onSuccessRef.current?.(finalTestCase);
         }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+
+        console.error('Failed to generate multi-turn test case:', error);
+        const errorMessage =
+          error instanceof Error
+            ? error.message.includes('timed out')
+              ? 'Test generation timed out. Please try again or check your connection.'
+              : error.message
+            : 'Failed to generate test case';
+
+        toast.showToast(errorMessage, 'error');
+        setIsRunningTest(false);
+        setIsDialogOpen(false);
+        setPlugin(null);
+        setStrategy(null);
+        onErrorRef.current?.(error as Error);
+      } finally {
+        setIsGenerating(false);
       }
-
-      if (!abortController.signal.aborted && lastGenerated) {
-        const mergedMetadata = {
-          ...(lastGenerated.metadata ?? {}),
-          goal,
-          instructions,
-          multiTurn: {
-            ...(lastGenerated.metadata?.multiTurn ?? {}),
-            history: state.history,
-            turn: state.turn,
-            maxTurns: state.maxTurns,
-            done: state.done,
-            stateful: state.stateful,
-          },
-        };
-
-        const finalTestCase: GeneratedTestCase = {
-          ...lastGenerated,
-          metadata: mergedMetadata,
-        };
-
-        setGeneratedTestCase(finalTestCase);
-        onSuccessRef.current?.(finalTestCase);
-      }
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return;
-      }
-
-      console.error('Failed to generate multi-turn test case:', error);
-      const errorMessage =
-        error instanceof Error
-          ? error.message.includes('timed out')
-            ? 'Test generation timed out. Please try again or check your connection.'
-            : error.message
-          : 'Failed to generate test case';
-
-      toast.showToast(errorMessage, 'error');
-      setIsRunningTest(false);
-      setIsDialogOpen(false);
-      setPlugin(null);
-      setStrategy(null);
-      onErrorRef.current?.(error as Error);
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [plugin, strategy, redTeamConfig, recordEvent, toast]);
+    },
+    [plugin, strategy, redTeamConfig, recordEvent, toast],
+  );
 
   /**
    * Test Case Generation

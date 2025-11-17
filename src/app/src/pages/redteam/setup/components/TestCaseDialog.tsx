@@ -28,9 +28,7 @@ import {
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import Skeleton from '@mui/material/Skeleton';
 import Chip from '@mui/material/Chip';
-import ChatMessages, {
-  type Message as ChatMessage,
-} from '@app/pages/eval/components/ChatMessages';
+import ChatMessages, { type Message as ChatMessage } from '@app/pages/eval/components/ChatMessages';
 
 type GeneratedTestCase = {
   prompt: string;
@@ -181,7 +179,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
         const role =
           entry.role === 'assistant' || entry.role === 'user' || entry.role === 'system'
             ? (entry.role as ChatMessage['role'])
-            : (idx % 2 === 0 ? 'user' : 'assistant');
+            : idx % 2 === 0
+              ? 'user'
+              : 'assistant';
         return {
           role,
           content: entry.content as string,
@@ -261,9 +261,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                 strategy={strategy}
               />
             )}
-            {targetResponse?.error && (
-              <Alert severity="error">{targetResponse.error}</Alert>
-            )}
+            {targetResponse?.error && <Alert severity="error">{targetResponse.error}</Alert>}
           </Box>
         )}
 

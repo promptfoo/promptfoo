@@ -30,10 +30,11 @@ export const MULTI_TURN_STRATEGY_SET: ReadonlySet<MultiTurnStrategy> = new Set(
   MULTI_TURN_STRATEGIES,
 );
 
-export const isMultiTurnStrategy = (strategyId: string | undefined): strategyId is MultiTurnStrategy => {
+export const isMultiTurnStrategy = (
+  strategyId: string | undefined,
+): strategyId is MultiTurnStrategy => {
   return strategyId ? MULTI_TURN_STRATEGY_SET.has(strategyId as MultiTurnStrategy) : false;
 };
-
 
 // Helper function to check if a strategy is a custom variant
 export const isCustomStrategy = (strategyId: string): boolean => {
