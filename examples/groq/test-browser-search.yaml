@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Browser search with GPT-OSS
+
+prompts:
+  - |
+    {{question}}
+
+providers:
+  - id: groq:openai/gpt-oss-120b
+    config:
+      temperature: 0.6
+      max_completion_tokens: 3000
+      reasoning_effort: low
+      tools:
+        - type: browser_search
+      tool_choice: required
+
+tests:
+  - description: Search for current information
+    vars:
+      question: What is the current population of Seattle?
+    assert:
+      - type: javascript
+        value: output.length > 50
