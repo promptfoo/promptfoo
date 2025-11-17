@@ -80,6 +80,19 @@ html:not(.docs-wrapper) .DocSearch {
   display: none !important;
 }
 
+/* Scalar API Reference search modal - Safari fixes */
+#app div.scalar-modal.scalar-modal-search.bg-b-1,
+#app div.scalar-modal-body {
+  background-color: white !important;
+  background: white !important;
+}
+
+[data-theme='dark'] #app div.scalar-modal.scalar-modal-search.bg-b-1,
+[data-theme='dark'] #app div.scalar-modal-body {
+  background-color: #1a1a1a !important;
+  background: #1a1a1a !important;
+}
+
 /* Mobile navbar adjustments */
 @media (max-width: 996px) {
   /* Hide search box on mobile to prevent overlap */

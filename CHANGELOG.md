@@ -6,9 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(assertions): add dot product and euclidean distance metrics for similarity assertion - use `similar:dot` and `similar:euclidean` assertion types to match production vector database metrics and support different similarity use cases (#6202)
+- feat(webui): expose Hydra strategy configuration (max turns and stateful toggle) in red team setup UI (#6165)
+- fix(app): aligning risk scores with documentation (#6212)
+- feat(providers): add GPT-5.1 model support including gpt-5.1, gpt-5.1-mini, gpt-5.1-nano, and gpt-5.1-codex with new 'none' reasoning mode for low-latency interactions and configurable verbosity control (#6208)
+- feat(redteam): allow configuring `redteam.frameworks` to limit compliance frameworks surfaced in reports and commands (#6170)
+- feat(webui): add layer strategy configuration UI in red team setup with per-step plugin targeting (#6180)
+- feat(app): Metadata value autocomplete eval filter (#6176)
+- feat(webui): display both total and filtered metrics simultaneously when filters are active, showing "X/Y filtered, Z total" format in evaluation results table for better visibility into filtered vs unfiltered data (#5969)
+- feat(app): eval results filters permalinking (#6196)
+- fix(site): fix missing background color on safari api reference search modal (#6218)
+
+### Changed
+
+- chore(ci): synchronize package-lock.json to resolve npm ci failures (#6195)
+- chore(ci): increase webui test timeout to 8 minutes in GitHub Actions workflow to prevent CI timeouts (#6201)
+- chore(redteam): update foundation model report redteam config to use newer redteam strategies (#6216)
+
 ### Fixed
 
-- fix(providers): support function providers in defaultTest.options.provider and assertions (#3784)
+- fix(providers): support function providers in defaultTest.options.provider and assertion-level providers; prevents crashes when resolving function providers (#6174)
+- fix(providers): correctly handle reasoning field in OpenAI-compatible models like gpt-oss-20b, extracting both reasoning and content instead of only reasoning (#6062)
+- fix(redteam): exclude cyberseceval and beavertails static dataset plugins from iterative strategies to prevent wasted compute and silent grading failures during Hydra/Meta/Tree iterations (#6230)
+- fix(mcp): allow colons in eval ID validation for get_evaluation_details tool - fixes rejection of valid eval IDs returned by list_evaluations (e.g., eval-8h1-2025-11-15T14:17:18) by updating regex to accept ISO timestamp format (#6222)
+- fix(redteam): don't set default 'en' language when no language is configured - prevents unnecessary language modifiers from being passed to meta agent and other iterative strategies, keeping prompts focused on actual task without implied translation requirements (#6214)
+- fix(webui): fix duplicate React key warning in DefaultTestVariables component by implementing counter-based unique ID generation (#6201)
+- fix(samples): downlevel pem dependency to supported version
+- fix(deps): remove unused dependency on @libsql/client
+
+### Tests
+
+- test(webui): suppress expected test error logs (109+ occurrences across parsing errors, API errors, context provider errors) and React/MUI warnings (act() warnings, DOM nesting, prop types) in setupTests.ts and vite.config.ts (#6201)
+
+### Dependencies
+
+- chore(deps)!: upgrade to React 19 - upgrade react and react-dom from 18.3.1 to 19.2.0; migrate deprecated ReactDOM.render to createRoot API; replace JSX.Element with React.ReactElement for React 19 namespace removal; fix RefObject types for stricter React 19 typing (useRef(null) now correctly typed as RefObject<T | null>); add Vite path aliases and npm overrides to enforce single React 19 instance across monorepo workspaces (prevents duplicate installations that caused test failures); all third-party dependencies verified compatible (Emotion 11.14.0+, MUI v7, React Router v7, TanStack Query v5, Recharts 2.15.4); test results: 1,970/1,972 passing (100%, 2 skipped); BREAKING CHANGE: React 19 is a major version upgrade that removes deprecated APIs (ReactDOM.render, unmountComponentAtNode) and the global JSX namespace (#6229)
+- chore(deps): upgrade @googleapis/sheets from 9.8.0 to 12.0.0 and resolve gcp-metadata dependency conflicts - fixes recurring npm ci failures by (1) updating the existing mongoose npm override from gcp-metadata ^6.0.0 to ^8.1.2, and (2) adding gcp-metadata ^8.1.2 as a direct dependency for consistent npm resolution across npm 10.x and 11.x (note: gcp-metadata is not directly imported in code but required for dependency resolution consistency, hence excluded from depcheck); this allows using google-auth-library 10.5.0 with X.509 certificate authentication and Cloud Run Jobs detection while ensuring single gcp-metadata version across the dependency tree; @googleapis/sheets v12 is a major version upgrade (v9→v12) that requires googleapis-common v8 and google-auth-library v10+, but maintains backwards-compatible API usage for spreadsheets.get() and spreadsheets.values.get() methods (#6227)
+- chore(deps): bump openai from 6.8.1 to 6.9.0 (#6208)
+
+## [0.119.6] - 2025-11-12
 
 ### Documentation
 
@@ -17,6 +55,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - chore(site): remove Koala analytics and migrate Google tracking to Docusaurus built-in gtag configuration with multiple tracking IDs (G-3TS8QLZQ93, G-3YM29CN26E, AW-17347444171) (#6169)
+- chore(webui): order 'plugins' before 'steps' in layer strategy YAML to match documentation examples (#6180)
+
+### Fixed
+
+- fix(webui): prevent infinite loop in StrategyConfigDialog useEffect - fixes vitest tests hanging by using stable empty array references for default parameters (#6203)
+- fix(webui): require configuration for layer strategy before allowing navigation in red team setup - layer strategy now shows red border and blocks Next button until steps array is configured, similar to plugins requiring configuration
+- fix(webui): filter hidden metadata keys from metadata filter dropdown - ensures consistent filtering of 'citations' and '\_promptfooFileMetadata' keys across MetadataPanel, EvalOutputPromptDialog, and metadata filter dropdown (#6177)
+- fix(cli): format object and array variables with pretty-printed JSON in console table and HTML outputs for improved readability (#6175)
+- fix(cli): only show error counter when >0
+- fix(redteam): respect redteam.provider configuration for local grading - fixes issue where configuring a local provider (e.g., ollama:llama3.2) still sent grading requests to remote API instead of using the configured provider (#5959)
+- fix: Reverts #6142 (#6189)
+
+### Documentation
+
+- docs(redteam): document Hydra configuration options for max turns, backtracking, and stateful operation (#6165)
 
 ## [0.119.5] - 2025-11-10
 
@@ -61,6 +114,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
+- test(webui): fix act() warnings and clean up test output by wrapping 16 tests in act(), removing 22 unnecessary console suppression patterns, and reducing setupTests.ts from 95 to 37 lines (#6199)
 - test(providers): add test coverage for auto-detection of reasoning models by deployment name in Azure provider (#6154)
 - test(assertions): add comprehensive test coverage for rendered assertion value metadata including variable substitution, loops, static text handling, and UI display fallback priority (#6145)
 
@@ -72,6 +126,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(cli): add `code-scans run` command for scanning code changes for LLM security vulnerabilities including prompt injection, PII exposure, and excessive agency - uses AI agents to trace data flows, analyze vulnerabilities across batches, and suggest fixes with configurable severity thresholds (see https://promptfoo.com/docs/code-scanning/ for more details) (#6121)
+- feat(github-action): add Code Scan GitHub Action for automated PR security scanning with GitHub App OIDC authentication or manual API token setup; automatically posts review comments with severity levels and suggested fixes (see https://promptfoo.com/docs/code-scanning/ for more details) (#6121)
 - feat(webui): add confirmation dialog and smart navigation for delete eval with improved UX (Material-UI dialog, next→previous→home navigation, loading states, toast notifications) (#6113)
 - feat(redteam): pass policy text to intent extraction for custom policy tests, enabling more accurate and self-contained testing objectives that include specific policy requirements (#6116)
 - feat(redteam): add timestamp context to all grading rubrics for time-aware evaluation and temporal context in security assessments (#6110)
@@ -80,6 +136,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(redteam): dynamically update crescendo system prompt with currentRound and successFlag each iteration instead of rendering once with stale values (#6133)
 - fix(examples): change Zod schema from `.optional()` to `.default('')` for OpenAI Agents SDK compatibility (#6114)
 - fix(redteam): pass all gradingContext properties to rubric templates to fix categoryGuidance rendering errors in BeavertailsGrader (#6111)
 - fix(webui): custom policy name consistency (#6123)
@@ -153,6 +210,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(redteam): enable layer strategy with multilingual language support; plugins now generate tests in multiple languages even when layer strategy is present (#6084)
 - fix(redteam): reduce multilingual deprecation logging noise by moving from warn to debug level (#6084)
+  > > > > > > > main
 
 ## [0.119.1] - 2025-10-29
 

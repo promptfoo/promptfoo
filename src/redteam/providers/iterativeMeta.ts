@@ -1,19 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import invariant from '../../util/invariant';
-import { sleep } from '../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../remoteGeneration';
-import {
-  createIterationContext,
-  getTargetResponse,
-  redteamProviderManager,
-  type TargetResponse,
-} from './shared';
-
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -26,6 +16,16 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../types';
+import invariant from '../../util/invariant';
+import { sleep } from '../../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../remoteGeneration';
+import {
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
 
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
@@ -184,31 +184,19 @@ export async function runMetaAgentRedteam({
 
     // Extract attack prompt from cloud response
     let attackPrompt: string;
-    let shouldAbandon = false;
 
     if (typeof agentResp.output === 'string') {
       // Cloud returned string directly (shouldn't happen but handle it)
       attackPrompt = agentResp.output;
     } else {
-      // Cloud returns { result: "attack prompt", shouldAbandon: boolean }
+      // Cloud returns { result: "attack prompt" }
       const cloudResponse = agentResp.output as any;
       attackPrompt = cloudResponse.result;
-      shouldAbandon = cloudResponse.shouldAbandon || false;
     }
 
     if (!attackPrompt) {
       logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Missing attack prompt`);
       continue;
-    }
-
-    // Check if agent decided to abandon
-    if (shouldAbandon) {
-      logger.info('[IterativeMeta] Agent decided to abandon attack', {
-        iteration: i + 1,
-      });
-      stopReason = 'Agent abandoned';
-      finalIteration = i + 1;
-      break;
     }
 
     // Render the actual prompt with the agent's attack
@@ -327,7 +315,7 @@ export async function runMetaAgentRedteam({
       stopReason = 'Grader failed';
       finalIteration = i + 1;
 
-      logger.info('[IterativeMeta] Vulnerability achieved!', {
+      logger.debug('[IterativeMeta] Vulnerability achieved!', {
         iteration: i + 1,
       });
 
