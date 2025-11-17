@@ -14,6 +14,7 @@ interface AgenticStrategiesGroupProps {
   onSelectNone: (strategyIds: string[]) => void;
   isStrategyDisabled: (strategyId: string) => boolean;
   isRemoteGenerationDisabled: boolean;
+  isStrategyConfigured?: (strategyId: string) => boolean;
 }
 
 export function AgenticStrategiesGroup({
@@ -25,6 +26,7 @@ export function AgenticStrategiesGroup({
   onSelectNone,
   isStrategyDisabled,
   isRemoteGenerationDisabled,
+  isStrategyConfigured,
 }: AgenticStrategiesGroupProps) {
   // Calculate selected strategies across both subsections
   const allAgenticStrategies = [
@@ -109,6 +111,7 @@ export function AgenticStrategiesGroup({
                   onConfigClick={onConfigClick}
                   isDisabled={isStrategyDisabled(strategy.id)}
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                  isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
                 />
               ))}
             </Box>
@@ -144,6 +147,7 @@ export function AgenticStrategiesGroup({
                   onConfigClick={onConfigClick}
                   isDisabled={isStrategyDisabled(strategy.id)}
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                  isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
                 />
               ))}
             </Box>

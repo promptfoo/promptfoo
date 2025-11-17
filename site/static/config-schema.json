@@ -605,6 +605,9 @@
                                               "rouge-n",
                                               "ruby",
                                               "similar",
+                                              "similar:cosine",
+                                              "similar:dot",
+                                              "similar:euclidean",
                                               "starts-with",
                                               "trace-error-spans",
                                               "trace-span-count",
@@ -1116,6 +1119,24 @@
                 }
               ],
               "description": "Language(s) of tests to generate for this plugin"
+            },
+            "frameworks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mitre:atlas",
+                  "nist:ai:measure",
+                  "owasp:api",
+                  "owasp:llm",
+                  "owasp:agentic",
+                  "eu:ai-act",
+                  "iso:42001",
+                  "gdpr"
+                ]
+              },
+              "minItems": 1,
+              "description": "Compliance frameworks to include across reports and commands"
             },
             "entities": {
               "type": "array",

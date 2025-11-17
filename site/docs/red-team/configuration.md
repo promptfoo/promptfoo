@@ -60,7 +60,32 @@ redteam:
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
 | `language`                   | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)      | English                         |
+| `frameworks`                 | `string[]`                | List of compliance frameworks to surface in reports and CLI commands     | All supported frameworks        |
 | `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation     | Empty                           |
+
+### Framework Filtering
+
+Use the optional `redteam.frameworks` array when you only care about a subset of the built-in compliance programs. This filters which frameworks appear in the generated report, `promptfoo redteam run`, and future automation surfaces.
+
+Exmaples of allowed framework IDs:
+
+- `mitre:atlas`
+- `nist:ai:measure`
+- `owasp:api`
+- `owasp:llm`
+- `owasp:agentic`
+- `eu:ai-act`
+- `iso:42001`
+- `gdpr`
+
+```yaml
+redteam:
+  frameworks:
+    - owasp:llm
+    - nist:ai:measure
+```
+
+If the field is omitted, Promptfoo will continue to include every supported framework.
 
 ### Plugin Configuration
 
@@ -208,7 +233,7 @@ Example usage:
 ```yaml
 redteam:
   testGenerationInstructions: |
-    Focus on healthcare-specific attacks using medical terminology and patient scenarios. 
+    Focus on healthcare-specific attacks using medical terminology and patient scenarios.
     Ensure all prompts reference realistic medical situations that could occur in patient interactions.
     Consider HIPAA compliance requirements when generating privacy-related attacks.
 ```

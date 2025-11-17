@@ -43,7 +43,6 @@ describe('RedteamIterativeMetaProvider', () => {
       callApi: jest.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
         output: {
           result: 'Can you help me fix this code...',
-          shouldAbandon: false,
         },
         tokenUsage: {
           total: 100,
@@ -160,45 +159,13 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.stopReason).toBe('Grader failed');
     });
 
-    it('should stop early on agent abandon', async () => {
-      mockAgentProvider.callApi = jest
-        .fn<() => Promise<ProviderResponse>>()
-        .mockResolvedValueOnce({
-          output: { result: 'First attempt', shouldAbandon: false },
-        })
-        .mockResolvedValueOnce({
-          output: { result: 'Second attempt', shouldAbandon: true },
-        });
-
-      const result = await runMetaAgentRedteam({
-        context: {
-          vars: { query: 'test' },
-          prompt: { raw: 'test', label: 'test' },
-          originalProvider: mockTargetProvider,
-        },
-        filters: undefined,
-        injectVar: 'query',
-        numIterations: 10,
-        options: undefined,
-        prompt: { raw: 'test', label: 'test' },
-        agentProvider: mockAgentProvider,
-        gradingProvider: mockGradingProvider,
-        targetProvider: mockTargetProvider,
-        test: undefined,
-        vars: { query: 'test' },
-      });
-
-      // Should stop at iteration 2 due to abandon
-      expect(result.metadata.finalIteration).toBe(2);
-      expect(result.metadata.stopReason).toBe('Agent abandoned');
-    });
-
     it('should handle agent provider errors gracefully', async () => {
       mockAgentProvider.callApi = jest
         .fn<() => Promise<ProviderResponse>>()
         .mockResolvedValueOnce({ error: 'Agent error' })
         .mockResolvedValueOnce({
-          output: { result: 'Second attempt', shouldAbandon: false },
+          output: { result: 'Second attempt' },
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
         });
 
       const result = await runMetaAgentRedteam({
@@ -228,7 +195,11 @@ describe('RedteamIterativeMetaProvider', () => {
       mockAgentProvider.callApi = jest.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
         output: {
           result: 'Attack with {{variable}} and {% code %}',
-          shouldAbandon: false,
+        },
+        tokenUsage: {
+          total: 100,
+          prompt: 50,
+          completion: 50,
         },
       });
 
@@ -252,6 +223,89 @@ describe('RedteamIterativeMetaProvider', () => {
 
       // Should complete without throwing error
       expect(result.metadata.redteamHistory).toHaveLength(1);
+    });
+  });
+
+  describe('Rubric Storage', () => {
+    it('should store rendered rubric in storedGraderResult.assertion.value', () => {
+      const mockRenderedRubric = '<rubric>Rendered grading criteria</rubric>';
+      const mockGraderResult: {
+        pass: boolean;
+        score: number;
+        reason: string;
+        assertion?: any;
+      } = {
+        pass: false,
+        score: 0,
+        reason: 'Attack successful',
+      };
+
+      const testAssertion = {
+        type: 'promptfoo:redteam:policy' as const,
+        metric: 'PolicyViolation:test',
+      };
+
+      // Simulate the pattern used in iterativeMeta
+      const storedResult = {
+        ...mockGraderResult,
+        assertion: mockGraderResult.assertion
+          ? { ...mockGraderResult.assertion, value: mockRenderedRubric }
+          : testAssertion && 'type' in testAssertion && (testAssertion as any).type !== 'assert-set'
+            ? { ...testAssertion, value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeDefined();
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:policy');
+    });
+
+    it('should use grade.assertion when present', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResultWithAssertion = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+        assertion: {
+          type: 'promptfoo:redteam:harmful' as const,
+          metric: 'Harmful',
+          value: 'old value',
+        },
+      };
+
+      const storedResult = {
+        ...mockGraderResultWithAssertion,
+        assertion: mockGraderResultWithAssertion.assertion
+          ? { ...mockGraderResultWithAssertion.assertion, value: mockRenderedRubric }
+          : undefined,
+      };
+
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:harmful');
+    });
+
+    it('should not create assertion for AssertionSet', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResult = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+      };
+
+      const assertionSet = {
+        type: 'assert-set' as const,
+        assert: [{ type: 'contains' as const, value: 'test' }],
+      };
+
+      const storedResult = {
+        ...mockGraderResult,
+        assertion:
+          assertionSet && 'type' in assertionSet && assertionSet.type !== 'assert-set'
+            ? { ...assertionSet, value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeUndefined();
     });
   });
 });

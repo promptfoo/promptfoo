@@ -46,6 +46,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5-mini-2025-08-07',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
+    // GPT-5.1 models
+    'gpt-5.1',
+    'gpt-5.1-mini',
+    'gpt-5.1-nano',
+    'gpt-5.1-codex',
     // Audio models
     'gpt-audio',
     'gpt-audio-2025-08-28',
@@ -196,6 +201,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     } else {
       textFormat = { format: { type: 'text' } };
+    }
+
+    // Add verbosity for GPT-5.1 models if configured
+    if (this.modelName.startsWith('gpt-5') && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
     }
 
     const body = {

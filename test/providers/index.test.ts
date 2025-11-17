@@ -1,3 +1,4 @@
+import type { NonSharedBuffer } from 'buffer';
 import child_process from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';

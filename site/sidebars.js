@@ -191,6 +191,7 @@ const redTeamSidebar = [
         items: [
           'red-team/strategies/iterative',
           'red-team/strategies/meta',
+          'red-team/strategies/hydra',
           'red-team/strategies/tree',
           'red-team/strategies/composite-jailbreaks',
         ],
@@ -407,6 +408,19 @@ const sidebars = {
         type: 'generated-index',
       },
       items: [...redTeamSidebar, { type: 'doc', id: 'guides/llm-redteaming' }],
+    },
+    {
+      type: 'category',
+      label: 'Code scanning',
+      link: {
+        type: 'doc',
+        id: 'code-scanning/index',
+      },
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'code-scanning/github-action' },
+        { type: 'doc', id: 'code-scanning/cli' },
+      ],
     },
     {
       type: 'category',

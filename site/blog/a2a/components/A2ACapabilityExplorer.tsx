@@ -140,7 +140,7 @@ const sampleAgentCard = {
 };
 
 const JsonPreview = ({ data }: { data: Record<string, any> }) => {
-  const formatJson = (obj: Record<string, any> | any[], indent = 0): JSX.Element[] => {
+  const formatJson = (obj: Record<string, any> | any[], indent = 0): React.ReactElement[] => {
     return Object.entries(obj).map(([key, value], index) => {
       const isLast = index === Object.entries(obj).length - 1;
       const comma = isLast ? '' : ',';

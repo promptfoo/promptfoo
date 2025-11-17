@@ -24,6 +24,7 @@ jobs:
   test-action:
     name: Tusk Test Runner
     runs-on: ubuntu-latest
+    timeout-minutes: 8
 
     strategy:
       matrix:

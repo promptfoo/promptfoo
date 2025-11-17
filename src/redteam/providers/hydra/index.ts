@@ -455,7 +455,7 @@ export class HydraProvider implements ApiProvider {
         });
         stopReason = 'Grader failed';
 
-        logger.info('[Hydra] Vulnerability achieved!', { turn });
+        logger.debug('[Hydra] Vulnerability achieved!', { turn });
         break;
       }
     }

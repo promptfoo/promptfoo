@@ -80,7 +80,7 @@ describe('RunTestSuiteButton', () => {
     expect(button).not.toBeDisabled();
 
     await act(async () => {
-      userEvent.click(button);
+      await userEvent.click(button);
     });
 
     await new Promise((resolve) => setTimeout(resolve, 2000));

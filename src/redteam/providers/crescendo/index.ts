@@ -460,7 +460,7 @@ export class CrescendoProvider implements ApiProvider {
               ? (response.traceSummary ??
                 (response.traceContext ? formatTraceSummary(response.traceContext) : undefined))
               : undefined;
-            const { grade } = await grader.getResult(
+            const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
               test,
@@ -477,7 +477,14 @@ export class CrescendoProvider implements ApiProvider {
             );
 
             graderPassed = grade.pass;
-            storedGraderResult = grade;
+            storedGraderResult = {
+              ...grade,
+              assertion: grade.assertion
+                ? { ...grade.assertion, value: rubric }
+                : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
+                  ? { ...assertToUse, value: rubric }
+                  : undefined,
+            };
           }
         }
 

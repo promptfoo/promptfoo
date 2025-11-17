@@ -346,10 +346,10 @@ export const severityDisplayNames: Record<Severity, string> = {
 };
 
 export const severityRiskScores: Record<Severity, number> = {
-  [Severity.Critical]: 8.0,
-  [Severity.High]: 6.0,
+  [Severity.Critical]: 9.0,
+  [Severity.High]: 7.0,
   [Severity.Medium]: 4.0,
-  [Severity.Low]: 2.0,
+  [Severity.Low]: 0.0,
 };
 
 /*
@@ -975,9 +975,9 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   image: 'Image',
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Composite Jailbreaks',
-  'jailbreak:hydra': 'Hydra Multi-turn',
+  'jailbreak:hydra': 'Hydra Multi-Turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
-  'jailbreak:meta': 'Meta-Agent',
+  'jailbreak:meta': 'Meta Agent',
   'jailbreak:tree': 'Tree-based Optimization',
   layer: 'Layer',
   leetspeak: 'Leetspeak Encoding',

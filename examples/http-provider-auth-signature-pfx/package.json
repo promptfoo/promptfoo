@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "pem": "^1.15.1",
+    "pem": "^1.14.8",
     "promptfoo": "^0.118.15"
   },
   "keywords": [

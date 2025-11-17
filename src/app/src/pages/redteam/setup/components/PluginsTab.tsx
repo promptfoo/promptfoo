@@ -83,7 +83,7 @@ export default function PluginsTab({
   recentlyUsedPlugins,
   onUserInteraction,
   isRemoteGenerationDisabled,
-}: PluginsTabProps): JSX.Element {
+}: PluginsTabProps): React.ReactElement {
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
   const toast = useToast();

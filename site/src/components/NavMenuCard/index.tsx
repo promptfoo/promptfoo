@@ -22,7 +22,7 @@ export default function NavMenuCard({
   label,
   items,
   position = 'left',
-}: NavMenuCardProps): JSX.Element {
+}: NavMenuCardProps): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 

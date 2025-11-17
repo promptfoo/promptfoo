@@ -39,6 +39,7 @@ import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import { useFilterMode } from './FilterModeProvider';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
@@ -158,7 +159,7 @@ function ResultsTableHeader({
   tableWidth: number;
   maxTextLength: number;
   wordBreak: 'break-word' | 'break-all';
-  theadRef: React.RefObject<HTMLTableSectionElement>;
+  theadRef: React.RefObject<HTMLTableSectionElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
   zoom: number;
@@ -243,9 +244,9 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
-    setFilterMode,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
+  const { setFilterMode } = useFilterMode();
 
   const { showToast } = useToast();
   const navigate = useNavigate();
