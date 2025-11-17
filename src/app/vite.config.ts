@@ -99,17 +99,17 @@ export default defineConfig({
 
           // Page chunks
           if (id.includes('/pages/')) {
-            if (id.includes('/pages/datasets/')) return 'page-datasets';
-            if (id.includes('/pages/eval/')) return 'page-eval';
-            if (id.includes('/pages/eval-creator/')) return 'page-eval-creator';
-            if (id.includes('/pages/evals/')) return 'page-evals';
-            if (id.includes('/pages/history/')) return 'page-history';
-            if (id.includes('/pages/launcher/')) return 'page-launcher';
-            if (id.includes('/pages/login')) return 'page-login';
-            if (id.includes('/pages/model-audit/')) return 'page-model-audit';
-            if (id.includes('/pages/prompts/')) return 'page-prompts';
-            if (id.includes('/pages/redteam/')) return 'page-redteam';
-            if (id.includes('/pages/NotFoundPage')) return 'page-not-found';
+            if (id.includes('/pages/datasets/')) { return 'page-datasets'; }
+            if (id.includes('/pages/eval/')) { return 'page-eval'; }
+            if (id.includes('/pages/eval-creator/')) { return 'page-eval-creator'; }
+            if (id.includes('/pages/evals/')) { return 'page-evals'; }
+            if (id.includes('/pages/history/')) { return 'page-history'; }
+            if (id.includes('/pages/launcher/')) { return 'page-launcher'; }
+            if (id.includes('/pages/login')) { return 'page-login'; }
+            if (id.includes('/pages/model-audit/')) { return 'page-model-audit'; }
+            if (id.includes('/pages/prompts/')) { return 'page-prompts'; }
+            if (id.includes('/pages/redteam/')) { return 'page-redteam'; }
+            if (id.includes('/pages/NotFoundPage')) { return 'page-not-found'; }
           }
 
           // Fallback for other chunks
