@@ -180,7 +180,7 @@
     "@adaline/together-ai": "1.5.1",
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.7.2",
-    "@anthropic-ai/claude-agent-sdk": "^0.1.36",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.42",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.927.0",
     "@aws-sdk/client-bedrock-runtime": "^3.927.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.927.0",
