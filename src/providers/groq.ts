@@ -6,7 +6,21 @@ import type { OpenAiCompletionOptions } from './openai/types';
 type GroqCompletionOptions = OpenAiCompletionOptions & {
   systemPrompt?: string;
   parallel_tool_calls?: boolean | null;
-  reasoning_format?: string | null;
+  reasoning_format?: 'parsed' | 'raw' | 'hidden' | null;
+  include_reasoning?: boolean;
+  compound_custom?: {
+    tools?: {
+      enabled_tools?: string[];
+      wolfram_settings?: {
+        authorization?: string;
+      };
+    };
+  };
+  search_settings?: {
+    exclude_domains?: string[];
+    include_domains?: string[];
+    country?: string;
+  };
 };
 
 type GroqProviderOptions = ProviderOptions & {
@@ -19,13 +33,17 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
   }
 
   protected isReasoningModel(): boolean {
-    // Groq's reasoning models include deepseek-r1 models and any others they may add
-    return this.modelName.includes('deepseek-r1') || super.isReasoningModel();
+    // Groq's reasoning models include deepseek-r1 and gpt-oss models
+    return (
+      this.modelName.includes('deepseek-r1') ||
+      this.modelName.includes('gpt-oss') ||
+      super.isReasoningModel()
+    );
   }
 
   protected supportsTemperature(): boolean {
-    // Groq's deepseek models support temperature, even though they're reasoning models
-    if (this.modelName.includes('deepseek-r1')) {
+    // Groq's deepseek and gpt-oss models support temperature, even though they're reasoning models
+    if (this.modelName.includes('deepseek-r1') || this.modelName.includes('gpt-oss')) {
       return true;
     }
     return super.supportsTemperature();
@@ -40,6 +58,33 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
         apiBaseUrl: 'https://api.groq.com/openai/v1',
       },
     });
+  }
+
+  override getOpenAiBody(
+    prompt: string,
+    context?: import('../types').CallApiContextParams,
+    callApiOptions?: import('../types').CallApiOptionsParams,
+  ) {
+    const { body, config } = super.getOpenAiBody(prompt, context, callApiOptions);
+    const groqConfig = this.config as GroqCompletionOptions;
+
+    // Add Groq-specific reasoning parameters
+    if (groqConfig.reasoning_format !== undefined) {
+      body.reasoning_format = groqConfig.reasoning_format;
+    }
+    if (groqConfig.include_reasoning !== undefined) {
+      body.include_reasoning = groqConfig.include_reasoning;
+    }
+
+    // Add Compound model parameters
+    if (groqConfig.compound_custom) {
+      body.compound_custom = groqConfig.compound_custom;
+    }
+    if (groqConfig.search_settings) {
+      body.search_settings = groqConfig.search_settings;
+    }
+
+    return { body, config };
   }
 
   id(): string {
