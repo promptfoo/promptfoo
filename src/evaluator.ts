@@ -368,7 +368,13 @@ export async function runEval({
         vars,
 
         // Part of these may be removed in python and script providers, but every Javascript provider gets them
-        prompt,
+        prompt: {
+          ...prompt,
+          config: {
+            ...prompt.config,
+            ...(test.options || {}), // Merge test-level options into prompt config
+          },
+        },
         filters,
         originalProvider: provider,
         test,
