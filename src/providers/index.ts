@@ -185,7 +185,7 @@ export async function resolveProvider(
   } else if (typeof provider === 'function') {
     // Handle function providers directly instead of passing to loadApiProvider
     return {
-      id: provider.label ? () => provider.label! : () => 'custom-function',
+      id: () => provider.label ?? 'custom-function',
       callApi: provider,
     };
   } else {
@@ -272,7 +272,7 @@ export async function loadApiProviders(
         if (typeof provider === 'function') {
           return [
             {
-              id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
+              id: () => provider.label ?? `custom-function-${idx}`,
               callApi: provider,
             },
           ];
