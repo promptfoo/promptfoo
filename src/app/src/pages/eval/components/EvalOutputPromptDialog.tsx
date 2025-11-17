@@ -427,8 +427,8 @@ export default function EvalOutputPromptDialog({
       slotProps={drawerSlotProps}
       sx={{
         '& .MuiDrawer-paper': {
-          width: { xs: '100%', sm: '75%', md: '65%', lg: '65%' },
-          maxWidth: '1200px',
+          width: { xs: '100%', sm: '85%', md: '85%', lg: '85%' },
+          //maxWidth: '1200px',
           boxSizing: 'border-box',
         },
       }}
