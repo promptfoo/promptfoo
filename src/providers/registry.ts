@@ -48,6 +48,7 @@ import { GoogleImageProvider } from './google/image';
 import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
+import { GroqResponsesProvider } from './groq-responses';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
 import {
@@ -584,6 +585,17 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => createGitHubProvider(providerPath, providerOptions, context),
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('groq-responses:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new GroqResponsesProvider(modelName, providerOptions);
+    },
   },
   {
     test: (providerPath: string) => providerPath.startsWith('groq:'),
