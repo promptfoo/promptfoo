@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(config): add per-test structured output configuration - test-level `options` now override prompt-level config for all providers, enabling different `response_format` (OpenAI) or `responseSchema` (Google) per test without duplicating prompts; works with all providers (OpenAI, Azure, Google Vertex, Mistral, etc.); supports external schema files with `file://` prefix and variable substitution; uses shallow merge (object spread) where test options completely replace conflicting prompt config objects; 100% backward compatible (0000000)
 - feat(assertions): add dot product and euclidean distance metrics for similarity assertion - use `similar:dot` and `similar:euclidean` assertion types to match production vector database metrics and support different similarity use cases (#6202)
 - feat(webui): expose Hydra strategy configuration (max turns and stateful toggle) in red team setup UI (#6165)
 - fix(app): aligning risk scores with documentation (#6212)
