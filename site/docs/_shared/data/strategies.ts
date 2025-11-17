@@ -104,6 +104,18 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Dynamic (Single-Turn)',
+    strategy: 'jailbreak:meta',
+    displayName: 'Meta-Agent Jailbreaks',
+    description: 'Strategic taxonomy builder',
+    longDescription:
+      'Builds custom attack taxonomies and learns from all attempts using persistent strategic memory to choose which attack types work against your specific target',
+    cost: 'High',
+    asrIncrease: '70-90%',
+    link: '/docs/red-team/strategies/meta/',
+    recommended: true,
+  },
+  {
+    category: 'Dynamic (Single-Turn)',
     strategy: 'jailbreak:likert',
     displayName: 'Likert-based Jailbreaks',
     description: 'Academic evaluation framework',
@@ -156,6 +168,17 @@ export const strategies: Strategy[] = [
     cost: 'High',
     asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/goat/',
+  },
+  {
+    category: 'Multi-turn',
+    strategy: 'jailbreak:hydra',
+    displayName: 'Hydra Multi-turn',
+    description: 'Adaptive multi-turn branching',
+    longDescription:
+      'Adaptive multi-turn jailbreak agent that pivots across branches with persistent scan-wide memory to uncover hidden vulnerabilities',
+    cost: 'High',
+    asrIncrease: '70-90%',
+    link: '/docs/red-team/strategies/hydra/',
   },
   {
     category: 'Multi-turn',

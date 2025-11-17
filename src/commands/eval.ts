@@ -544,8 +544,15 @@ export async function doEval(
       ? false
       : cmdObj.share || config.sharing || cloudConfig.isEnabled();
 
-    const shareableUrl =
-      wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
+    const canShareEval = isSharingEnabled(evalRecord);
+
+    logger.debug(`Wants to share: ${wantsToShare}`);
+    logger.debug(`Can share eval: ${canShareEval}`);
+
+    const shareableUrl = wantsToShare && canShareEval ? await createShareableUrl(evalRecord) : null;
+
+    logger.debug(`Shareable URL: ${shareableUrl}`);
+
     if (shareableUrl) {
       evalRecord.shared = true;
     }

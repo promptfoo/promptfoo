@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { isValidPolicyId } from './plugins/policy/validators';
 
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import { type Plugin, Severity } from './constants';
+import { type FrameworkComplianceId, type Plugin, Severity } from './constants';
+import { isValidPolicyId } from './plugins/policy/validators';
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
@@ -33,6 +33,20 @@ export type PoliciesById = Map<
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
 
+export interface TracingConfig {
+  enabled?: boolean;
+  includeInAttack?: boolean;
+  includeInGrading?: boolean;
+  includeInternalSpans?: boolean;
+  maxSpans?: number;
+  maxDepth?: number;
+  maxRetries?: number;
+  retryDelayMs?: number;
+  spanFilter?: string[];
+  sanitizeAttributes?: boolean;
+  strategies?: Record<string, TracingConfig>;
+}
+
 export const PluginConfigSchema = z.object({
   examples: z.array(z.string()).optional(),
   graderExamples: z
@@ -45,8 +59,9 @@ export const PluginConfigSchema = z.object({
       }),
     )
     .optional(),
+  graderGuidance: z.string().optional(),
   severity: z.nativeEnum(Severity).optional(),
-  language: z.string().optional(),
+  language: z.union([z.string(), z.array(z.string())]).optional(),
   prompt: z.string().optional(),
   purpose: z.string().optional(),
   // TODO: should be z.record(Modifier, z.unknown())
@@ -145,12 +160,14 @@ type CommonOptions = {
   provider?: string | ProviderOptions | ApiProvider;
   purpose?: string;
   strategies?: RedteamStrategy[];
+  frameworks?: FrameworkComplianceId[];
   delay?: number;
   remote?: boolean;
   sharing?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   testGenerationInstructions?: string;
   maxConcurrency?: number;
+  tracing?: TracingConfig;
 };
 
 // NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
@@ -233,6 +250,7 @@ export interface SavedRedteamConfig {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
+  frameworks?: FrameworkComplianceId[];
   extensions?: string[];
   numTests?: number;
   maxConcurrency?: number;

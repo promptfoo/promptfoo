@@ -2491,6 +2491,11 @@ describe('OpenAiResponsesProvider', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini-2025-01-31');
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('codex-mini-latest');
+    // GPT-5.1 models
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-nano');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-codex');
     // Deep research models
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-deep-research');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
@@ -2600,6 +2605,44 @@ describe('OpenAiResponsesProvider', () => {
         config: {
           apiKey: 'test-key',
           tools: [{ type: 'web_search_preview' } as any],
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      // Check that fetchWithCache was called with 10-minute timeout
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        600000, // 10 minutes
+        'json',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should use longer timeout for gpt-5-pro models', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response complete' }],
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 200 },
+      };
+
+      (cache.fetchWithCache as jest.Mock).mockResolvedValueOnce({
+        data: mockData,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-5-pro', {
+        config: {
+          apiKey: 'test-key',
         },
       });
 
@@ -4388,7 +4431,7 @@ describe('OpenAiResponsesProvider', () => {
         config: {
           apiKey: 'test-key',
           functionToolCallbacks: {
-            greetUser: async (args: string) => {
+            greetUser: async (_args: string) => {
               return 'Hello!';
             },
           },

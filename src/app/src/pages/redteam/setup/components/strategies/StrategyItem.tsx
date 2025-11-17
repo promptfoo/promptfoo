@@ -50,6 +50,7 @@ interface StrategyItemProps {
   onConfigClick: (id: string) => void;
   isDisabled: boolean;
   isRemoteGenerationDisabled: boolean;
+  isConfigured?: boolean;
 }
 
 export function StrategyItem({
@@ -59,6 +60,7 @@ export function StrategyItem({
   onConfigClick,
   isDisabled,
   isRemoteGenerationDisabled,
+  isConfigured = true,
 }: StrategyItemProps) {
   const { config } = useRedTeamConfig();
 
