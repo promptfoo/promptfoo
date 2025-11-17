@@ -20,9 +20,6 @@ reviews:
     auto_incremental_review: false
     drafts: false
 
-ignore_draft_pr: true
-focus_on_security_issues: true
-
 # Chat configuration - minimal interaction
 chat:
   auto_reply: false

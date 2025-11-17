@@ -605,6 +605,9 @@
                                               "rouge-n",
                                               "ruby",
                                               "similar",
+                                              "similar:cosine",
+                                              "similar:dot",
+                                              "similar:euclidean",
                                               "starts-with",
                                               "trace-error-spans",
                                               "trace-span-count",
@@ -1117,6 +1120,24 @@
               ],
               "description": "Language(s) of tests to generate for this plugin"
             },
+            "frameworks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mitre:atlas",
+                  "nist:ai:measure",
+                  "owasp:api",
+                  "owasp:llm",
+                  "owasp:agentic",
+                  "eu:ai-act",
+                  "iso:42001",
+                  "gdpr"
+                ]
+              },
+              "minItems": 1,
+              "description": "Compliance frameworks to include across reports and commands"
+            },
             "entities": {
               "type": "array",
               "items": {
@@ -1170,6 +1191,7 @@
                           "eu:ai-act:art5:social-scoring",
                           "eu:ai-act:art5:subliminal-manipulation",
                           "excessive-agency",
+                          "ferpa",
                           "financial",
                           "financial:calculation-error",
                           "financial:compliance-violation",
@@ -1400,6 +1422,7 @@
                               "eu:ai-act:art5:social-scoring",
                               "eu:ai-act:art5:subliminal-manipulation",
                               "excessive-agency",
+                              "ferpa",
                               "financial",
                               "financial:calculation-error",
                               "financial:compliance-violation",
@@ -1637,6 +1660,7 @@
                           "image",
                           "jailbreak",
                           "jailbreak:composite",
+                          "jailbreak:hydra",
                           "jailbreak:likert",
                           "jailbreak:meta",
                           "jailbreak:tree",
@@ -1680,7 +1704,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, simba, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, simba, video",
               "default": ["default"]
             },
             "maxConcurrency": {
