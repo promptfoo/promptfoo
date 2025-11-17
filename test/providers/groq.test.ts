@@ -105,7 +105,7 @@ describe('Groq', () => {
         config: {
           systemPrompt: 'You are a helpful assistant',
           parallel_tool_calls: true,
-          reasoning_format: 'markdown',
+          reasoning_format: 'parsed',
           service_tier: 'premium',
           user: 'test-user',
         },
@@ -114,7 +114,7 @@ describe('Groq', () => {
       expect(provider.toJSON().config).toMatchObject({
         systemPrompt: 'You are a helpful assistant',
         parallel_tool_calls: true,
-        reasoning_format: 'markdown',
+        reasoning_format: 'parsed',
         service_tier: 'premium',
         user: 'test-user',
       });
