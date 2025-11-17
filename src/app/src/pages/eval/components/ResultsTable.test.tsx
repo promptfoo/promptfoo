@@ -590,7 +590,7 @@ describe('ResultsTable Row Navigation', () => {
 });
 
 describe('ResultsTable handleRating - highlight toggle fix', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
+  let mockSetTable: ReturnType<typeof vi.fn<(table: any) => void>>;
   let mockCallApi: any;
 
   const createMockTableWithComponentResults = (componentResults?: any) => ({
@@ -652,7 +652,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockSetTable = vi.fn();
+    mockSetTable = vi.fn<(table: any) => void>();
     // Dynamically import and mock callApi
     const apiModule = await import('@app/utils/api');
     mockCallApi = vi.mocked(apiModule.callApi);
@@ -909,7 +909,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
 });
 
 describe('ResultsTable handleRating', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
+  let mockSetTable: ReturnType<typeof vi.fn<(table: any) => void>>;
 
   const createMockTable = () => ({
     body: [
@@ -960,7 +960,7 @@ describe('ResultsTable handleRating', () => {
   };
 
   beforeEach(() => {
-    mockSetTable = vi.fn();
+    mockSetTable = vi.fn<(table: any) => void>();
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
@@ -1004,7 +1004,7 @@ describe('ResultsTable handleRating', () => {
 });
 
 describe('ResultsTable handleRating - Fallback to output values', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
+  let mockSetTable: ReturnType<typeof vi.fn<(table: any) => void>>;
 
   const createMockTableWithMissingGradingResultFields = () => ({
     body: [
@@ -1063,7 +1063,7 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSetTable = vi.fn();
+    mockSetTable = vi.fn<(table: any) => void>();
   });
 
   it('should fallback to output pass and score when gradingResult is missing those fields', async () => {
@@ -1110,7 +1110,7 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
 });
 
 describe('ResultsTable handleRating - Updating existing human rating', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
+  let mockSetTable: ReturnType<typeof vi.fn<(table: any) => void>>;
 
   const createMockTableWithComponentResults = (componentResults: any[]) => ({
     body: [
@@ -1171,7 +1171,7 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSetTable = vi.fn();
+    mockSetTable = vi.fn<(table: any) => void>();
   });
 
   it('should update existing human rating in componentResults', async () => {

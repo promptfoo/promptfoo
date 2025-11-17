@@ -17,7 +17,7 @@ vi.mock('@mui/x-data-grid', () => ({
     slots = {},
     slotProps = {},
     getRowClassName,
-    rowSelectionModel = [],
+    rowSelectionModel = { type: 'include', ids: new Set() },
     onRowSelectionModelChange,
   }: any) => {
     if (loading && slots?.loadingOverlay) {
@@ -40,7 +40,7 @@ vi.mock('@mui/x-data-grid', () => ({
           {!loading &&
             rows.map((row: any) => {
               const className = getRowClassName ? getRowClassName({ id: row.evalId }) : '';
-              const checked = rowSelectionModel.includes(row.evalId);
+              const checked = rowSelectionModel.ids.has(row.evalId);
               return (
                 <div key={row.evalId}>
                   <input
@@ -48,10 +48,13 @@ vi.mock('@mui/x-data-grid', () => ({
                     data-testid={`checkbox-${row.evalId}`}
                     checked={checked}
                     onChange={(e) => {
-                      const newSelection = e.target.checked
-                        ? [...rowSelectionModel, row.evalId]
-                        : rowSelectionModel.filter((id: string) => id !== row.evalId);
-                      onRowSelectionModelChange?.(newSelection);
+                      const newIds = new Set(rowSelectionModel.ids);
+                      if (e.target.checked) {
+                        newIds.add(row.evalId);
+                      } else {
+                        newIds.delete(row.evalId);
+                      }
+                      onRowSelectionModelChange?.({ type: 'include', ids: newIds });
                     }}
                   />
                   <div data-testid={`eval-${row.evalId}`} className={className}>

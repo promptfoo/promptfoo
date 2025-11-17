@@ -18,11 +18,11 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('DigitalSignatureAuthTab', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: ReturnType<typeof vi.fn<(field: string, value: any) => void>>;
   let selectedTarget: ProviderOptions;
 
   beforeEach(() => {
-    mockUpdateCustomTarget = vi.fn();
+    mockUpdateCustomTarget = vi.fn<(field: string, value: any) => void>();
     selectedTarget = {
       id: 'http-provider',
       config: {

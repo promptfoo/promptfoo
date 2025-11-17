@@ -165,7 +165,7 @@ describe('useEvalOperations', () => {
       expect(traces).toEqual([]);
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(callApi).toHaveBeenCalledWith('/traces/evaluation/eval-123', {
-        signal: new AbortController().signal,
+        signal: expect.any(AbortSignal),
       });
     });
 
@@ -185,7 +185,7 @@ describe('useEvalOperations', () => {
       ).rejects.toThrowError(`HTTP error! status: ${mockStatus}`);
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(callApi).toHaveBeenCalledWith('/traces/evaluation/eval-id', {
-        signal: new AbortController().signal,
+        signal: expect.any(AbortSignal),
       });
     });
 

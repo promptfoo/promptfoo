@@ -354,14 +354,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
               <GridToolbarFilterButton />
             </Box>
             <Box sx={{ flexGrow: 1 }} />
-            <GridToolbarQuickFilter
-              sx={{
-                '& .MuiInputBase-root': {
-                  borderRadius: 2,
-                  backgroundColor: theme.palette.background.paper,
-                },
-              }}
-            />
+            <GridToolbarQuickFilter />
           </GridToolbarContainer>
         ),
       }}

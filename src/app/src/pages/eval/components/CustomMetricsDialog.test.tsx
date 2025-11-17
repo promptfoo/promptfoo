@@ -1,6 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import type { ReactNode } from 'react';
 
 import CustomMetricsDialog from './CustomMetricsDialog';
 import { useTableStore } from './store';
@@ -10,28 +12,14 @@ vi.mock('./store', () => ({
   useTableStore: vi.fn(),
 }));
 
-vi.mock('@mui/material/styles', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@mui/material/styles')>();
-  return {
-    ...original,
-    useTheme: vi.fn(() => ({
-      palette: {
-        mode: 'light',
-        primary: { main: '#1976d2' },
-        background: { paper: '#fff' },
-        divider: '#ccc',
-        action: { hover: 'rgba(0, 0, 0, 0.04)' },
-        success: { contrastText: '#fff', main: '#2e7d32' },
-        warning: { contrastText: '#fff', main: '#ed6c02' },
-        error: { contrastText: '#fff', main: '#d32f2f' },
-      },
-    })),
-  };
-});
-
 vi.mock('@app/hooks/useCustomPoliciesMap', () => ({
   useCustomPoliciesMap: vi.fn(),
 }));
+
+const renderWithTheme = (component: ReactNode) => {
+  const theme = createTheme();
+  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
+};
 
 const mockAddFilter = vi.fn();
 const mockOnClose = vi.fn();
@@ -92,7 +80,7 @@ describe('MetricsTable', () => {
   });
 
   it('should apply the correct metric filter and close the dialog when the filter icon is clicked for a non-policy metric row', async () => {
-    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+    renderWithTheme(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
     const user = userEvent.setup();
 
     const metricText = await screen.findByText('accuracy');
@@ -133,13 +121,13 @@ describe('MetricsTable', () => {
       },
     } as any);
 
-    const { container } = render(<CustomMetricsDialog open={true} onClose={vi.fn()} />);
+    const { container } = renderWithTheme(<CustomMetricsDialog open={true} onClose={vi.fn()} />);
 
     expect(container.firstChild).toBeNull();
   });
 
   it('should render the DataGrid with metric columns and rows when table data and promptMetricNames are available', async () => {
-    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+    renderWithTheme(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
     const dataGrid = await screen.findByRole('grid');
 
@@ -171,7 +159,7 @@ describe('MetricsTable', () => {
       },
     } as any);
 
-    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+    renderWithTheme(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
     const dataGrid = screen.queryByRole('grid');
 
@@ -193,7 +181,7 @@ describe('MetricsTable', () => {
       },
     } as any);
 
-    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+    renderWithTheme(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
     expect(screen.getByRole('grid')).toBeInTheDocument();
   });
@@ -247,7 +235,7 @@ describe('MetricsTable', () => {
       },
     } as any);
 
-    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+    renderWithTheme(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
     const metricElement = await screen.findByText(policyMetric);
     expect(metricElement).toBeInTheDocument();
@@ -327,7 +315,7 @@ describe('MetricsTable', () => {
       },
     } as any);
 
-    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+    renderWithTheme(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
     const dataGridElement = screen.getByRole('grid');
     expect(dataGridElement).toBeInTheDocument();

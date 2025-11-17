@@ -44,10 +44,10 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('HttpAdvancedConfiguration', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: ReturnType<typeof vi.fn<(field: string, value: any) => void>>;
 
   beforeEach(() => {
-    mockUpdateCustomTarget = vi.fn();
+    mockUpdateCustomTarget = vi.fn<(field: string, value: any) => void>();
   });
 
   describe('Token Estimation Accordion Initial State', () => {

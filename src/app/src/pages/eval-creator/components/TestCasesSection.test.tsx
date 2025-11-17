@@ -84,7 +84,7 @@ describe('TestCasesSection', () => {
         onload: null as any,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = vi.fn(function() { return mockFileReader; }) as any;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -152,7 +152,7 @@ describe('TestCasesSection', () => {
         onload: null as any,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = vi.fn(function() { return mockFileReader; }) as any;
 
       fireEvent.change(fileInput, { target: { files: [file] } });
 
@@ -198,7 +198,7 @@ describe('TestCasesSection', () => {
         onload: null as any,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = vi.fn(function() { return mockFileReader; }) as any;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -260,7 +260,7 @@ describe('TestCasesSection', () => {
         onload: null as any,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = vi.fn(function() { return mockFileReader; }) as any;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -314,7 +314,7 @@ describe('TestCasesSection', () => {
         onload: null as any,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = vi.fn(function() { return mockFileReader; }) as any;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -380,7 +380,7 @@ describe('TestCasesSection', () => {
         onload: null as any,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = vi.fn(function() { return mockFileReader; }) as any;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -440,7 +440,7 @@ describe('TestCasesSection', () => {
         onload: null as any,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = vi.fn(function() { return mockFileReader; }) as any;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -480,7 +480,7 @@ describe('TestCasesSection', () => {
         onload: null as any,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = vi.fn(function() { return mockFileReader; }) as any;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -516,7 +516,7 @@ describe('TestCasesSection', () => {
         onload: null as any,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = vi.fn(function() { return mockFileReader; }) as any;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -555,7 +555,7 @@ describe('TestCasesSection', () => {
         onload: null as any,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = vi.fn(function() { return mockFileReader; }) as any;
 
       render(<TestCasesSection varsList={[]} />);
 

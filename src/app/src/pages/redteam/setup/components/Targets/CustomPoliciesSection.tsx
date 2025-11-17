@@ -126,7 +126,10 @@ export const CustomPoliciesSection = () => {
   const apiRef = useGridApiRef();
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
-  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>({
+    type: 'include',
+    ids: new Set(),
+  });
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   // Policy dialog state
@@ -335,7 +338,7 @@ export const CustomPoliciesSection = () => {
   };
 
   const handleDeleteSelected = () => {
-    if (rowSelectionModel.length === 0) {
+    if (rowSelectionModel.ids.size === 0) {
       return;
     }
     setConfirmDeleteOpen(true);
@@ -346,7 +349,7 @@ export const CustomPoliciesSection = () => {
       typeof p === 'string' ? true : p.id !== 'policy',
     );
 
-    const selectedIds = new Set(rowSelectionModel as string[]);
+    const selectedIds = rowSelectionModel.ids;
     const remainingPolicies = policyPlugins
       .filter((p) => {
         const policyId =
@@ -368,7 +371,7 @@ export const CustomPoliciesSection = () => {
 
     setPolicyNames(newPolicyNames);
     updateConfig('plugins', [...otherPlugins, ...remainingPolicies]);
-    setRowSelectionModel([]);
+    setRowSelectionModel({ type: 'include', ids: new Set() });
     setConfirmDeleteOpen(false);
   };
 
@@ -553,7 +556,7 @@ export const CustomPoliciesSection = () => {
           slots={{ toolbar: CustomToolbar }}
           slotProps={{
             toolbar: {
-              selectedCount: rowSelectionModel.length,
+              selectedCount: rowSelectionModel.ids.size,
               onDeleteSelected: handleDeleteSelected,
               onAddPolicy: handleAddPolicy,
               onUploadCsv: handleCsvUpload,
@@ -568,12 +571,12 @@ export const CustomPoliciesSection = () => {
       {/* Delete confirmation dialog */}
       <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
         <DialogTitle>
-          Delete {rowSelectionModel.length} polic{rowSelectionModel.length === 1 ? 'y' : 'ies'}?
+          Delete {rowSelectionModel.ids.size} polic{rowSelectionModel.ids.size === 1 ? 'y' : 'ies'}?
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
             Are you sure you want to delete the selected polic
-            {rowSelectionModel.length === 1 ? 'y' : 'ies'}? This action cannot be undone.
+            {rowSelectionModel.ids.size === 1 ? 'y' : 'ies'}? This action cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>

@@ -378,7 +378,7 @@ describe('EvalOutputCell', () => {
         set: vi.fn(),
       },
     };
-    global.URL = vi.fn(() => mockUrl) as any;
+    global.URL = vi.fn(function() { return mockUrl; }) as any;
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
@@ -417,7 +417,7 @@ describe('EvalOutputCell', () => {
       },
     };
     const originalURL = global.URL;
-    global.URL = vi.fn(() => mockUrl) as any;
+    global.URL = vi.fn(function() { return mockUrl; }) as any;
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 

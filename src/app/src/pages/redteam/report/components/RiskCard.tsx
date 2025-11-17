@@ -106,14 +106,11 @@ const RiskCard = ({
             >
               <Gauge
                 value={progressValue}
-                // @ts-ignore
-                max={100}
-                thickness={10}
-                arc={{
-                  startAngle: -90,
-                  endAngle: 90,
-                  color: 'primary.main',
-                }}
+                valueMax={100}
+                innerRadius="90%"
+                outerRadius="100%"
+                startAngle={-90}
+                endAngle={90}
                 text={Number.isNaN(progressValue) ? '-' : `${Math.round(progressValue)}%`}
                 sx={{
                   width: '100%',

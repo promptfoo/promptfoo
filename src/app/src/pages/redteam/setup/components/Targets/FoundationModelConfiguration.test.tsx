@@ -13,7 +13,7 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('FoundationModelConfiguration', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: ReturnType<typeof vi.fn<(field: string, value: any) => void>>;
 
   const initialTarget: ProviderOptions = {
     id: 'openai:gpt-4o',
@@ -26,7 +26,7 @@ describe('FoundationModelConfiguration', () => {
   };
 
   beforeEach(() => {
-    mockUpdateCustomTarget = vi.fn();
+    mockUpdateCustomTarget = vi.fn<(field: string, value: any) => void>();
   });
 
   it('should display advanced configuration fields with values from selectedTarget.config and call updateCustomTarget with the correct field and value when changed', () => {

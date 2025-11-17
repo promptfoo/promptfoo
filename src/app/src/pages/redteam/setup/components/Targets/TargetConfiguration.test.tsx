@@ -60,13 +60,13 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('TargetConfiguration', () => {
-  let onNextMock: ReturnType<typeof vi.fn>;
-  let onBackMock: ReturnType<typeof vi.fn>;
+  let onNextMock: ReturnType<typeof vi.fn<() => void>>;
+  let onBackMock: ReturnType<typeof vi.fn<() => void>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    onNextMock = vi.fn();
-    onBackMock = vi.fn();
+    onNextMock = vi.fn<() => void>();
+    onBackMock = vi.fn<() => void>();
 
     mockUseRedTeamConfig.mockReturnValue({
       config: {

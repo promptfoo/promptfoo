@@ -1,11 +1,22 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import type { ReactNode } from 'react';
 import type { EvalSummary } from '@promptfoo/types';
 
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import ReportIndex from './ReportIndex';
+
+const renderWithProviders = (component: ReactNode) => {
+  const theme = createTheme();
+  return render(
+    <ThemeProvider theme={theme}>
+      <MemoryRouter>{component}</MemoryRouter>
+    </ThemeProvider>,
+  );
+};
 
 vi.mock('@app/utils/api');
 
@@ -56,11 +67,7 @@ describe('ReportIndex', () => {
         json: async () => ({ data: mockData }),
       } as Response);
 
-      render(
-        <MemoryRouter>
-          <ReportIndex />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<ReportIndex />);
 
       await waitFor(() => {
         expect(screen.getByRole('link', { name: 'My First Redteam Report' })).toBeInTheDocument();
@@ -88,11 +95,7 @@ describe('ReportIndex', () => {
         json: async () => ({ data: mockData }),
       } as Response);
 
-      render(
-        <MemoryRouter>
-          <ReportIndex />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<ReportIndex />);
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: 'Select columns' })).toBeInTheDocument();
@@ -120,11 +123,7 @@ describe('ReportIndex', () => {
         json: async () => ({ data: mockData }),
       } as Response);
 
-      render(
-        <MemoryRouter>
-          <ReportIndex />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<ReportIndex />);
 
       await waitFor(() => {
         expect(screen.getByText('No target')).toBeInTheDocument();
@@ -151,11 +150,7 @@ describe('ReportIndex', () => {
         json: async () => ({ data: mockData }),
       } as Response);
 
-      render(
-        <MemoryRouter>
-          <ReportIndex />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<ReportIndex />);
 
       await waitFor(() => {
         expect(screen.getByRole('link', { name: 'Untitled Evaluation' })).toBeInTheDocument();
@@ -173,11 +168,7 @@ describe('ReportIndex', () => {
       const navigate = vi.fn();
       vi.mocked(useNavigate).mockReturnValue(navigate);
 
-      render(
-        <MemoryRouter>
-          <ReportIndex />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<ReportIndex />);
 
       await waitFor(() => {
         expect(screen.getByRole('link', { name: 'My First Redteam Report' })).toBeInTheDocument();

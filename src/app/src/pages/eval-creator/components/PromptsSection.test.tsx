@@ -208,7 +208,7 @@ describe('PromptsSection', () => {
       }),
     };
 
-    const MockFileReader = vi.fn(() => mockFileReader) as any;
+    const MockFileReader = vi.fn(function() { return mockFileReader; }) as any;
     MockFileReader.EMPTY = 0;
     MockFileReader.LOADING = 1;
     MockFileReader.DONE = 2;

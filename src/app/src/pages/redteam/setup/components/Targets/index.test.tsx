@@ -49,8 +49,8 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('CustomTargetConfiguration - Config Field Handling', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
-  let mockSetRawConfigJson: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: ReturnType<typeof vi.fn<(field: string, value: any) => void>>;
+  let mockSetRawConfigJson: ReturnType<typeof vi.fn<(value: string) => void>>;
 
   const defaultProps = {
     selectedTarget: {
@@ -63,8 +63,8 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
   };
 
   beforeEach(() => {
-    mockUpdateCustomTarget = vi.fn();
-    mockSetRawConfigJson = vi.fn();
+    mockUpdateCustomTarget = vi.fn<(field: string, value: any) => void>();
+    mockSetRawConfigJson = vi.fn<(value: string) => void>();
   });
 
   it('should call updateCustomTarget with "config" field when JSON is edited', () => {
@@ -185,18 +185,18 @@ describe('updateCustomTarget function behavior', () => {
 });
 
 describe('Targets Component', () => {
-  let mockUpdateConfig: ReturnType<typeof vi.fn>;
-  let mockRecordEvent: ReturnType<typeof vi.fn>;
-  let mockOnNext: ReturnType<typeof vi.fn>;
-  let mockOnBack: ReturnType<typeof vi.fn>;
-  let mockCallApi: ReturnType<typeof vi.fn>;
+  let mockUpdateConfig: ReturnType<typeof vi.fn<(field: string, value: any) => void>>;
+  let mockRecordEvent: ReturnType<typeof vi.fn<(event: string, properties?: any) => void>>;
+  let mockOnNext: ReturnType<typeof vi.fn<() => void>>;
+  let mockOnBack: ReturnType<typeof vi.fn<() => void>>;
+  let mockCallApi: ReturnType<typeof vi.fn<(...args: any[]) => Promise<any>>>;
 
   beforeEach(() => {
-    mockUpdateConfig = vi.fn();
-    mockRecordEvent = vi.fn();
-    mockOnNext = vi.fn();
-    mockOnBack = vi.fn();
-    mockCallApi = vi.fn();
+    mockUpdateConfig = vi.fn<(field: string, value: any) => void>();
+    mockRecordEvent = vi.fn<(event: string, properties?: any) => void>();
+    mockOnNext = vi.fn<() => void>();
+    mockOnBack = vi.fn<() => void>();
+    mockCallApi = vi.fn<(...args: any[]) => Promise<any>>();
 
     (useTelemetry as any).mockReturnValue({
       recordEvent: mockRecordEvent,

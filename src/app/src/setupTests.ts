@@ -11,6 +11,55 @@ import 'prismjs/components/prism-http';
 // process.env.PROMPTFOO_VERSION = '1.0.0';
 
 /**
+ * Patch jsdom's CSSStyleDeclaration to handle CSS custom properties (var()) in border shorthand.
+ * MUI X v8 DataGrid uses inline styles like `borderTop: '1px solid var(--rowBorderColor)'`
+ * which cssstyle (used by jsdom) cannot parse, causing TypeErrors in tests.
+ */
+if (typeof window !== 'undefined' && window.CSSStyleDeclaration) {
+  const originalSetProperty = window.CSSStyleDeclaration.prototype.setProperty;
+  const originalSetAttribute = Element.prototype.setAttribute;
+
+  // Patch CSSStyleDeclaration.setProperty to catch errors with CSS custom properties
+  window.CSSStyleDeclaration.prototype.setProperty = function (
+    property: string,
+    value: string | null,
+    priority?: string,
+  ) {
+    try {
+      return originalSetProperty.call(this, property, value, priority);
+    } catch (error) {
+      // Silently ignore CSS parsing errors for properties with var()
+      if (value && typeof value === 'string' && value.includes('var(')) {
+        return;
+      }
+      // Also catch cssstyle border parsing errors (e.g., "Cannot create property 'border-width'")
+      if (
+        error instanceof TypeError &&
+        error.message.includes('border') &&
+        value &&
+        typeof value === 'string'
+      ) {
+        return;
+      }
+      throw error;
+    }
+  };
+
+  // Patch Element.setAttribute to catch errors when setting style attribute with CSS custom properties
+  Element.prototype.setAttribute = function (name: string, value: string) {
+    if (name === 'style' && value && value.includes('var(')) {
+      try {
+        return originalSetAttribute.call(this, name, value);
+      } catch (error) {
+        // Silently ignore CSS parsing errors in style attributes with var()
+        return;
+      }
+    }
+    return originalSetAttribute.call(this, name, value);
+  };
+}
+
+/**
  * Global console.error suppression for known test noise patterns.
  * This filters out expected errors that flood the test output but preserves
  * actual unexpected errors that indicate real problems.
@@ -44,6 +93,10 @@ const SUPPRESSED_ERROR_PATTERNS = [
   // Expected context provider errors from tests (testing components outside providers)
   /must be used within a.*Provider/, // 8 occurrences (ToastProvider, ShiftKeyProvider, etc.)
   /Uncaught.*must be used within/, // Wrapped version of above
+
+  // CSS parsing errors from cssstyle/jsdom - MUI X v8 uses CSS custom properties
+  /Cannot create property 'border-width' on string/, // cssstyle can't parse var() in border shorthand
+  /TypeError: Cannot create property/, // General cssstyle parsing errors
 
   // Error boundary messages  /Consider adding an error boundary to your tree/, // React suggestion message
 ];

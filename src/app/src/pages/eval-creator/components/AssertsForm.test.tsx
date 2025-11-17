@@ -12,11 +12,11 @@ const renderWithTheme = (component: React.ReactNode) => {
 };
 
 describe('AssertsForm', () => {
-  let onAdd: ReturnType<typeof vi.fn>;
+  let onAdd: ReturnType<typeof vi.fn<(asserts: Assertion[]) => void>>;
   let initialValues: Assertion[];
 
   beforeEach(() => {
-    onAdd = vi.fn();
+    onAdd = vi.fn<(asserts: Assertion[]) => void>();
     initialValues = [];
   });
 
