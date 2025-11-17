@@ -280,7 +280,7 @@ export async function runMetaAgentRedteam({
           ...test,
           vars: iterationVars,
         };
-        const { grade } = await grader.getResult(
+        const { grade, rubric } = await grader.getResult(
           attackPrompt,
           targetResponse.output,
           iterationTest,
@@ -288,8 +288,15 @@ export async function runMetaAgentRedteam({
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
         );
-        graderResult = grade;
-        storedGraderResult = grade;
+        graderResult = {
+          ...grade,
+          assertion: grade.assertion
+            ? { ...grade.assertion, value: rubric }
+            : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
+              ? { ...assertToUse, value: rubric }
+              : undefined,
+        };
+        storedGraderResult = graderResult;
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,
