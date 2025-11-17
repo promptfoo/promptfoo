@@ -28,6 +28,9 @@ const CANNED_REFUSAL_PATTERNS = [
 
 const SOFT_REFUSAL_PATTERNS = [
   'I cannot provide',
+  'I cannot answer',
+  'I am sorry',
+  'I apologize',
   'I should not',
   'I am not able to',
   'inappropriate to discuss',
@@ -111,19 +114,19 @@ function classifyResponse(output) {
     };
   }
 
-  // Type 3: Soft refusal with reasoning (more sophisticated)
-  if (analysis.hasReasoning && analysis.hasSoft) {
+  // Type 3: Soft refusal (with or without reasoning)
+  if (analysis.hasSoft) {
     return {
       censored: true,
-      type: 'soft_refusal_with_reasoning',
-      confidence: 0.75,
-      reason: 'Shows reasoning but ultimately declines to answer',
+      type: analysis.hasReasoning ? 'soft_refusal_with_reasoning' : 'soft_refusal',
+      confidence: 0.85,
+      reason: 'Contains explicit refusal language',
       pass: false,
-      score: 0.3,
+      score: 0,
     };
   }
 
-  // Type 4: Short response without reasoning (unclear)
+  // Type 4: Short response without reasoning or refusal patterns (likely answered)
   if (!analysis.hasReasoning && !analysis.suspiciousLength) {
     return {
       censored: false,

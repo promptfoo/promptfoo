@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Tracking censorship across 5 DeepSeek models (CHINESE VERSION)
+
+prompts:
+  - '{{prompt_zh}}'
+
+providers:
+  - id: 'openrouter:deepseek/deepseek-r1'
+    label: 'R1 (Jan 2025)'
+    config:
+      temperature: 0
+      max_tokens: 10240
+      passthrough:
+        include_reasoning: true
+
+  - id: 'openrouter:deepseek/deepseek-r1-0528'
+    label: 'R1-0528 (May 2025)'
+    config:
+      temperature: 0
+      max_tokens: 10240
+      passthrough:
+        include_reasoning: true
+
+  - id: 'openrouter:deepseek/deepseek-chat-v3.1'
+    label: 'V3.1 (Aug 2025)'
+    config:
+      temperature: 0
+      max_tokens: 10240
+      reasoning_enabled: true
+
+  - id: 'openrouter:deepseek/deepseek-v3.1-terminus'
+    label: 'V3.1-Terminus (Sep 2025)'
+    config:
+      temperature: 0
+      max_tokens: 10240
+      reasoning_enabled: true
+
+  - id: 'openrouter:deepseek/deepseek-v3.2-exp'
+    label: 'V3.2-Exp (Sep 2025)'
+    config:
+      temperature: 0
+      max_tokens: 10240
+      reasoning_enabled: true
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://detect-censorship-zh.js
+
+tests: file://../../output/CCP-sensitive-prompts-bilingual.csv
+
+outputPath: ./output/results-chinese.json
+
+metadata:
+  study: 'DeepSeek Censorship Evolution (Chinese)'
+  language: 'zh-CN'
+  date: '2025-11-16'
+  notes: 'Testing same 5 DeepSeek models with Chinese translations of CCP-sensitive prompts. Expected: 1.5-10× higher CCP-narrative rates per NIST findings.'

@@ -1,10 +1,13 @@
 ---
-title: "Tracking DeepSeek Censorship Across Five Model Versions"
-description: "We re-ran the same 1,360 prompts across five DeepSeek models. Progress isn't monotonic, style shifts independently of policy, and post-training dominates architecture."
-image: /img/blog/deepseek-evolution/deepseek-censorship-evolution.jpg
+title: "Language Matters: How DeepSeek's Censorship Diverges Between English and Chinese"
+description: "Testing 5 DeepSeek models in both English and Chinese revealed a critical finding: V3 models censor 99-100% in English but only 91-97% in Chinese. Language-dependent alignment is real."
+image: /img/blog/deepseek-evolution/viz_1_evolution.png
 keywords:
   [
     DeepSeek censorship,
+    bilingual AI testing,
+    language-dependent alignment,
+    Chinese AI censorship,
     R1-0528,
     AI alignment evolution,
     censorship longitudinal study,
@@ -13,36 +16,38 @@ keywords:
     post-training alignment,
     AI thought suppression,
     DeepSeek V3,
-    model censorship tracking,
+    multilingual model behavior,
   ]
-date: 2025-11-13
+date: 2025-11-16
 authors: [michael]
 tags: [research-analysis]
 ---
 
-# How Censorship Evolved Inside DeepSeek's Reasoning Models
+# Language Matters: How DeepSeek's Censorship Diverges Between English and Chinese
 
-In January 2025, we published [research showing DeepSeek-R1 censored politically sensitive topics](https://promptfoo.dev/blog/deepseek-censorship/). Between January and September, DeepSeek released four more models. We re-ran the same 1,360 prompts across all five versions to see how censorship evolved.
+In January 2025, we published [research showing DeepSeek-R1 censored politically sensitive topics](https://promptfoo.dev/blog/deepseek-censorship/). Between January and September, DeepSeek released four more models. We re-ran the same 1,360 prompts across all five versions—but this time, we tested in **both English and Chinese**.
 
-The headline result: DeepSeek still censors heavily. Even the best model (V3.2-Exp) refuses to answer 67% of politically sensitive questions. This isn't shocking.
+The headline finding: **Language matters.** V3 models censor 99-100% of sensitive prompts in English, but only 91-97% in Chinese. Same model, same topics, 3-8 percentage point gap depending on language.
 
 <!-- truncate -->
 
-What IS interesting: we can now measure how censorship changes across model versions, revealing alignment patterns that are usually invisible.
+This isn't shocking—DeepSeek still censors heavily overall. But measuring the *divergence* between languages reveals alignment patterns that monolingual testing misses entirely.
 
-**Three findings:**
+**Four findings:**
 
-1. **Progress isn't monotonic.** R1-0528 came out four months after R1, marketed as "enhanced." Censorship stayed flat (99.93% vs 100%). Four months, zero improvement.
+1. **Language-dependent alignment is real.** English censorship stayed flat at 99-100% across all five models. Chinese censorship started identical (99-100% for R1 models) but degraded to 91-97% in V3 models. Same company, same compliance requirements, different enforcement by language. This gap matters for anyone deploying multilingual models.
 
-2. **Style shifts without policy changes.** R1-0528's censorship rate didn't budge, but the *voice* changed completely. CCP propaganda language jumped 4.3×. Ask R1 about Taiwan independence and you get corporate hedging. Ask R1-0528 and you get official state talking points. Same refusal, different implementation.
+2. **No English improvement despite architectural revolutions.** All five models censor 99-100% of politically sensitive English prompts. R1-0528 was marketed as "enhanced" four months after R1. V3 models introduced hybrid architectures and 98% fewer reasoning tokens. English censorship never budged. Architecture changes don't override alignment constraints.
 
-3. **Post-training dominates architecture.** V3.2-Exp's architecture reduced reasoning tokens by 98%. Censorship only dropped 33%. Meanwhile, whatever changed in R1-0528's alignment dataset produced a 4.3× style shift with zero architectural changes. Small datasets creating persistent behavioral changes—this matters more than model scale.
+3. **Style shifts without policy changes.** R1-0528's censorship rate stayed flat (100% vs 99.93%), but CCP propaganda language jumped 4.3×. Ask R1 about Taiwan independence and you get corporate hedging. Ask R1-0528 and you get official state talking points. Same refusal, different voice.
 
-This isn't groundbreaking research. It's documentation. But it's useful documentation because it shows what alignment dataset churn looks like at scale, demonstrates that newer models aren't automatically better, and provides actionable lessons for teams deploying these models in production.
+4. **99.9% thought suppression across all models.** DeepSeek models are designed to show their internal reasoning. On politically sensitive topics, that reasoning disappears 99.9% of the time. The models still reason—they just hide it from you. This pattern held across R1's original architecture, R1-0528's enhancements, and V3's complete redesign.
+
+This isn't groundbreaking research. It's documentation. But it's useful documentation because it demonstrates that language choice affects model behavior, shows what alignment dataset churn looks like at scale, and provides actionable lessons for teams deploying these models in production.
 
 ## Why This Matters
 
-DeepSeek uses the same post-training methods as everyone else—supervised fine-tuning, RLHF, direct preference optimization. OpenAI, Anthropic, Google, and Meta all use these techniques. The difference is application: safety alignment prevents direct harm (phishing, malware), political alignment shapes ideological discussion (varies by jurisdiction).
+DeepSeek uses post-training techniques from the same families as other frontier labs: supervised fine-tuning and reinforcement-learning-based alignment for V3, and RL-based post-training for R1. OpenAI, Anthropic, Google, and Meta all rely on variants of these methods to shape model behavior. The difference is application: safety alignment prevents direct harm (phishing, malware), political alignment shapes ideological discussion (varies by jurisdiction).
 
 Where most models show subtle alignment effects, DeepSeek's political constraints are strong and measurable. That makes it useful for understanding how alignment training works in practice—and what happens when companies update it between releases.
 
@@ -114,15 +119,37 @@ Between January and September 2025, DeepSeek released five model versions:
   </div>
 </div>
 
-R1 in January was the baseline—100% censorship on politically sensitive topics. When R1-0528 arrived in May, marketed as "enhanced," the censorship rate stayed at 99.93%. One prompt out of 1,360 passed. Effectively no change.
+**In English**, the pattern is flat. R1 in January: 99.93% censorship (1 out of 1,360 prompts passed). R1-0528 in May: 100% (0 passed). V3.1, V3.1-Terminus, V3.2-Exp: 99.78-99.93% (1-3 prompts passed). Nine months, five model versions, zero meaningful improvement.
 
-But then the V3 series started showing progress. V3.1 in August dropped to 81% censorship. V3.1-Terminus in September: 72%. V3.2-Exp, also September: 67%.
+**In Chinese**, the pattern diverges. R1 and R1-0528: 99.41-99.93% censorship, nearly identical to English. Then V3.1: 94.12%. V3.1-Terminus: 91.32%. V3.2-Exp: 97.21%. The V3 series shows consistent degradation in Chinese censorship enforcement—the lowest point (V3.1-Terminus) is 8 percentage points lower than R1.
 
-This isn't linear progress. R1-0528 stagnated for four months. Then three V3 releases in two months showed consistent improvement. Same company, same compliance requirements, completely different trajectories.
+This language gap is new. R1 and R1-0528 enforced near-identical rates across both languages (difference <1pp). V3 models show 3-8pp gaps depending on version. V3.1-Terminus shows the starkest divergence: 99.78% English vs 91.32% Chinese.
 
 ![Censorship Evolution Timeline](/img/blog/deepseek-evolution/viz_1_evolution.png)
 
-*Censorship evolution across 5 models (January-September 2025). R1-0528 showed zero improvement despite "enhanced" marketing. V3 series dropped from 81% to 67%.*
+*Censorship evolution across 5 models in English and Chinese (January-September 2025). English stays flat at ceiling (99-100%). Chinese matches English for R1 models but degrades to 91-97% for V3 models.*
+
+## The Language Gap
+
+The bilingual finding is the most unexpected result. R1 and R1-0528 enforce nearly identical censorship in English and Chinese—difference less than 1 percentage point. Both languages hit 99-100% refusal rates.
+
+Then V3 models diverge. V3.1-Terminus shows the starkest gap: 99.78% English vs 91.32% Chinese. That's 8.5 percentage points. V3.1 and V3.2-Exp show similar patterns (3-6pp gaps).
+
+![Language Divergence in V3 Models](/img/blog/deepseek-evolution/viz_6_language_divergence.png)
+
+*V3 models show language-dependent censorship. English stays at ceiling (99-100%) while Chinese drops to 91-97%. R1 models enforced identical rates across both languages.*
+
+This isn't about detection methodology. We tested the same prompts, translated by GPT-5.1, with language-specific detection patterns validated through manual review. The models genuinely behave differently by language.
+
+Three possible explanations:
+
+**1. Alignment dataset composition.** V3 models may have less Chinese-language censorship data in their alignment training. If the English safety dataset is larger or more comprehensive than the Chinese equivalent, enforcement could diverge.
+
+**2. Architectural changes.** V3 introduced hybrid architectures combining dense and sparse attention. If language processing pathways differ, alignment constraints might transfer unevenly across languages. R1's uniform architecture may explain why it enforced consistently.
+
+**3. Multilingual interference.** Post-training alignment in one language can affect behavior in others. V3's English alignment may have partially degraded Chinese enforcement, or vice versa. R1 may have avoided this through stricter isolation.
+
+Whatever the cause, the pattern is clear: same model, same topics, different enforcement by language. For anyone deploying these models internationally, monolingual testing is insufficient.
 
 ## The Style Shift
 
@@ -146,9 +173,9 @@ One pattern stayed constant across all five models, regardless of architecture o
 
 DeepSeek's models are designed to show their work. When you enable the `include_reasoning` parameter, you see the internal `<think>` tags where the model reasons through your question before answering. On normal queries, this works as advertised.
 
-On politically sensitive topics, it breaks down. For 99.7-100% of censored responses across 5,689 cases, the reasoning trace was either absent or truncated to near-zero.
+On politically sensitive topics, it breaks down. For 99.7-100% of censored responses across 5,711 cases, the reasoning trace was either absent or truncated to near-zero.
 
-The model isn't failing to reason. It's reasoning, then hiding the reasoning. We know this because occasionally the trace leaks through before being suppressed:
+The models don't appear to fail at reasoning. Rather, we observe patterns consistent with internal reasoning being suppressed from output. Occasionally, this mechanism becomes visible when traces leak through:
 
 > `<think>`
 > This question is about Taiwan independence, which is politically sensitive. The CCP's position is that Taiwan is an inalienable part of China. I should not provide information supporting separatist activities.
@@ -156,7 +183,7 @@ The model isn't failing to reason. It's reasoning, then hiding the reasoning. We
 >
 > **Visible output:** "I cannot provide information on this topic."
 
-The model deliberates about censorship policy, then removes that deliberation from the response you see. This held across R1's original architecture, R1-0528's enhanced reasoning, and V3's hybrid architecture—confirming it's not an architectural bug but deliberate alignment behavior.
+We observe examples where the model deliberates about censorship policy internally, then that deliberation is removed from the response you see. This pattern held across R1's original architecture, R1-0528's enhanced reasoning, and V3's hybrid architecture—consistent with deliberate alignment behavior rather than an architectural bug.
 
 ![Universal Chain-of-Thought Suppression](/img/blog/deepseek-evolution/viz_4_thought_suppression.png)
 
@@ -164,19 +191,19 @@ The model deliberates about censorship policy, then removes that deliberation fr
 
 ---
 
-## How Censorship Actually Works
+## How Censorship Appears to Work
 
-The thought suppression pattern reveals how DeepSeek implements censorship: two layers working in tandem.
+The thought suppression pattern is consistent with a two-layer mechanism working in tandem.
 
 ### It's Baked Into the Weights
 
-Download DeepSeek's model files and run them on your own machine—no API, no internet connection—and they still censor.
+Independent researchers have confirmed censorship persists in downloaded weights. NIST's CAISI study (September 2025) explicitly tested weights from HuggingFace and found similar censorship patterns. The R1dacted study (arXiv:2505.12625v1) tested DeepSeek-R1 offline and documented near-total refusal rates on Taiwan, Tiananmen, and Xi Jinping topics.
 
-Multiple research groups have confirmed this. R1dacted (arXiv:2505.12625v1) tested ~30 prompts per category on downloaded weights and found near-total refusal rates offline. NIST's CAISI study (September 2025) went further, testing downloaded weights and finding that Chinese-language censorship runs 2-3× higher than English: R1-0528 censored 26% of Chinese prompts versus 16% in English.
+Our bilingual testing found language-dependent behavior baked into the weights. R1-0528 echoed CCP narratives in 23.60% of Chinese responses versus 18.97% in English—a 1.25× difference. V3 models showed the inverse pattern: CCP echo rates dropped in both languages, but Chinese responses (4.34-7.94%) stayed closer to English levels (6.03-7.79%).
 
 The behavior is in the model weights themselves, not added by an API filter.
 
-This happens through post-training alignment—the same process every major AI company uses. Small datasets have outsized effects. Research shows that modifying as little as 0.1% of training data can measurably shift behavior. OpenAI's "Instruction Hierarchy" paper (2024) demonstrates how small instruction datasets override base behaviors. Anthropic's Constitutional AI work (2022) shows how small preference sets shape broad patterns.
+This happens through post-training alignment—the same process every major AI company uses. Research demonstrates that relatively small alignment datasets can strongly shift model behavior. OpenAI's "Instruction Hierarchy" work (arXiv:2404.13208) shows how small curated datasets override base behaviors, and the InstructGPT results demonstrate that alignment data has outsized effects relative to pre-training scale.
 
 You don't need millions of examples. Hundreds or thousands are enough to encode persistent refusal patterns into the weights.
 
@@ -184,7 +211,7 @@ You don't need millions of examples. Hundreds or thousands are enough to encode 
 
 **Layer 1** makes the model want to refuse. Post-training with small, targeted datasets teaches it which topics are off-limits. This is persistent—download the weights, run offline, it still refuses.
 
-**Layer 2** hides the deliberation. The model reasons about censorship ("This is politically sensitive"), then suppresses that reasoning from the output. You see "I cannot answer" but not the internal policy discussion.
+**Layer 2** appears to suppress internal reasoning from visible output, based on examples where traces explicitly discuss censorship then get truncated. The model reasons about censorship ("This is politically sensitive"), then that reasoning is suppressed from the output. You see "I cannot answer" but not the internal policy discussion.
 
 From a deployment perspective, this makes sense. Clean refusals without exposing decision-making logic. Reasoning capability preserved for non-sensitive tasks. Predictable behavior.
 
@@ -226,13 +253,13 @@ The data is clear: R1-0528 showed zero censorship improvement (99.93% vs 100%), 
 
 The R1-0528 stagnation breaks a fundamental assumption in AI deployment: that newer models are better. Four months of development, "enhanced" marketing—and zero improvement on political openness. For teams deploying these models in production, the lesson is clear: test every release independently. Don't assume progress.
 
-The gap matters because post-training changes dominate behavioral shifts. V3.2-Exp's architecture reduced reasoning tokens by 98%—from 5,696 to 136 tokens on average—but censorship only dropped to 67%. Meanwhile, whatever changed in R1-0528's alignment dataset produced a 4.3× style shift while keeping censorship flat. When trying to understand why a model behaves differently, check the alignment data first, not the architecture.
+The gap matters because post-training changes dominate behavioral shifts. V3.2-Exp shows 98% fewer reasoning tokens in API responses (from ~5,696 to ~136 tokens on average). This may reflect both architectural changes (DeepSeek Sparse Attention) and API configuration differences. Regardless of the mechanism, English censorship stayed at 99.93%—effectively unchanged. Meanwhile, whatever changed in R1-0528's alignment dataset produced a 4.3× style shift while keeping censorship flat. When trying to understand why a model behaves differently, check the alignment data first, not the architecture.
 
-Language-dependent behavior compounds the problem. NIST's testing found Chinese-language censorship runs 2-3× higher than English across all models—R1-0528 censored 26% of Chinese prompts versus 16% in English. Teams deploying multilingual applications need to test in every target language. Even when overall rates stay flat, refusal *style* can shift dramatically—R1-0528's explicit CCP propaganda versus R1's generic corporate hedging might matter differently depending on your users and use case.
+Language-dependent behavior compounds the problem. Our bilingual testing found V3 models enforce censorship differently by language—V3.1-Terminus censors 99.78% in English but only 91.32% in Chinese, an 8.5 percentage point gap. Teams deploying multilingual applications need to test in every target language. Even when overall rates stay flat, refusal *style* can shift dramatically—R1-0528's explicit CCP propaganda (23.60% in Chinese) versus R1's generic corporate hedging (5.88% in English) might matter differently depending on your users and use case.
 
 For researchers, the 99.9% thought-suppression rate reveals the gap between what models process internally and what they surface. When possible, capture reasoning traces to understand where alignment constraints operate. Our four-metric taxonomy (refusal, CCP echo, thought suppression, boilerplate) caught patterns that binary pass/fail scoring would have missed. Longitudinal evaluation works—same prompts, multiple versions, systematic measurement.
 
-For policymakers, the findings challenge existing approaches. Focusing regulation on model scale—parameters, training FLOPs—misses where behavioral control actually happens. Small alignment datasets create persistent constraints that architectural changes can't override. V3 reduced tokens 98%; censorship stayed above 66%. Transparency about alignment methods and datasets matters more than raw compute metrics.
+For policymakers, the findings challenge existing approaches. Focusing regulation on model scale—parameters, training FLOPs—misses where behavioral control actually happens. Small alignment datasets create persistent constraints that architectural changes can't override. V3.2-Exp showed 98% fewer reasoning tokens; English censorship stayed at 99.93%. Transparency about alignment methods and datasets matters more than raw compute metrics.
 
 Publishing model weights doesn't remove alignment constraints—it makes them auditable. R1dacted and NIST both tested downloaded weights offline and found the same censorship patterns we observed via API. Weight release is valuable precisely *because* the alignment is baked in. Researchers can study it.
 
@@ -244,15 +271,17 @@ That raises questions this study can't answer: Who decides what's in those datas
 
 ## Conclusion
 
-We tracked censorship across five DeepSeek models over nine months. The findings aren't shocking—DeepSeek still censors political topics heavily—but they're useful.
+We tracked censorship across five DeepSeek models over nine months, testing in both English and Chinese. The findings aren't shocking—DeepSeek still censors political topics heavily—but they're useful.
 
-**Three lessons for practitioners:**
+**Four lessons for practitioners:**
 
-1. **Test every release independently.** R1-0528 was marketed as "enhanced" with four months of development. Censorship didn't improve. Version numbers and marketing claims don't guarantee alignment progress.
+1. **Test in every language you deploy.** V3 models censor 99-100% in English but only 91-97% in Chinese. The same model enforces different policies by language. Monolingual testing misses this entirely.
 
-2. **Monitor style, not just refusal rates.** R1-0528's censorship stayed flat while CCP propaganda increased 4.3×. Binary pass/fail metrics miss these shifts. If you're deploying models in production, track *how* they refuse, not just *if* they refuse.
+2. **Test every release independently.** R1-0528 was marketed as "enhanced" with four months of development. English censorship didn't improve (100% vs 99.93%). Version numbers and marketing claims don't guarantee alignment progress.
 
-3. **Post-training matters more than architecture.** V3.2-Exp's architectural changes reduced reasoning tokens 98% but only dropped censorship 33%. Meanwhile, R1-0528's alignment dataset changes produced a 4.3× style shift with zero architectural changes. When debugging model behavior, check the alignment data first.
+3. **Monitor style, not just refusal rates.** R1-0528's censorship stayed flat while CCP propaganda increased 4.3×. Binary pass/fail metrics miss these shifts. If you're deploying models in production, track *how* they refuse, not just *if* they refuse.
+
+4. **Post-training matters more than architecture.** V3.2-Exp shows 98% fewer reasoning tokens in API responses but English censorship stayed at 99.93%. Meanwhile, R1-0528's alignment dataset changes produced a 4.3× style shift with zero architectural changes. When debugging model behavior, check the alignment data first.
 
 **The broader implication:**
 
@@ -271,13 +300,17 @@ That's what nine months of tracking revealed. Not groundbreaking, but documented
 Everything you need to replicate or extend this work:
 
 **Data:**
-- All 1,360 prompts ([HuggingFace dataset](https://huggingface.co/datasets/promptfoo/CCP-sensitive-prompts))
-- Raw API responses (output/results.json, 488KB)
+- All 1,360 prompts in English and Chinese ([HuggingFace dataset](https://huggingface.co/datasets/promptfoo/CCP-sensitive-prompts))
+- Bilingual translations (output/CCP-sensitive-prompts-bilingual.csv)
+- Raw API responses for both languages (output/results.json, output/results-chinese.json)
+- Results summary (output/results-summary.csv)
 - Pre-registration (git commit `e04ca74c7`)
 
 **Code:**
-- Classification logic: `detect-censorship.js`
-- Evaluation config: `promptfooconfig.yaml`
+- English classification: `detect-censorship.js`
+- Chinese classification: `detect-censorship-zh.js`
+- English evaluation: `promptfooconfig.yaml`
+- Chinese evaluation: `promptfooconfig-zh.yaml`
 - Instructions: `README.md`
 
 **Analysis:**
@@ -290,24 +323,29 @@ Everything you need to replicate or extend this work:
 git clone https://github.com/promptfoo/promptfoo
 cd examples/deepseek-evolution
 npm install
+
+# English evaluation
 npm run local -- eval -c promptfooconfig.yaml --env-file .env -j 40
+
+# Chinese evaluation (requires translation first)
+npm run local -- eval -c promptfooconfig-zh.yaml --env-file .env -j 40
 ```
 
 **Requirements:**
 - OpenRouter API key
-- ~$15-20 budget (6,800 calls)
-- 1-2 hours runtime
+- ~$30-40 budget (13,600 calls across both languages)
+- 2-4 hours runtime
 
 ### Open Questions
 
 This study raises more questions than it answers:
 
-1. **Chinese-language testing**: NIST found 2-3× higher censorship in Chinese. Full Chinese evaluation needed.
-2. **Cross-provider comparison**: How do GPT-4o, Claude Sonnet, and Gemini Pro compare on these same prompts?
-3. **Topic-level patterns**: Which topics trigger the strongest censorship—Taiwan, Uyghurs, Xi Jinping, Tiananmen?
-4. **Jailbreak resistance**: Can the two-layer mechanism resist adversarial prompting?
-5. **Open-weight models**: How do Llama, Mistral, and other open models behave on sensitive topics?
-6. **Alignment archaeology**: Can we detect alignment dataset changes by tracking behavioral shifts across versions?
+1. **Cross-provider comparison**: How do GPT-4o, Claude Sonnet, and Gemini Pro compare on these same prompts in both English and Chinese?
+2. **Topic-level patterns**: Which topics trigger the strongest censorship—Taiwan, Uyghurs, Xi Jinping, Tiananmen? Does language change topic-level enforcement?
+3. **Jailbreak resistance**: Can the two-layer mechanism resist adversarial prompting? Does resistance differ by language?
+4. **Open-weight models**: How do Llama, Mistral, and other open models behave on sensitive topics? Do they show language-dependent patterns?
+5. **Alignment archaeology**: Can we detect alignment dataset changes by tracking behavioral shifts across versions? Can we reverse-engineer what changed?
+6. **Mechanism investigation**: Why do V3 models show language divergence when R1 models don't? What changed in the alignment process?
 
 We've made all data and code public. Run it yourself. Extend it. Test other providers.
 
