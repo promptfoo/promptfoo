@@ -9,6 +9,23 @@ description: Configure Groq's ultra-fast LLM inference API with Llama-70b and vi
 
 Groq supports reasoning models (OpenAI GPT-OSS and Deepseek R1-Llama-70b), in addition to models with tool use, vision capabilities, and multi-modal inputs.
 
+## Quick Reference
+
+| Feature                  | Models                                  | Provider Prefix    | Reasoning Control              | Built-in Tools    |
+| ------------------------ | --------------------------------------- | ------------------ | ------------------------------ | ----------------- |
+| Reasoning Models         | `openai/gpt-oss-*`, `qwen/qwen3-32b`    | `groq:`            | `include_reasoning`            | `browser_search`  |
+| Reasoning Models         | `deepseek-r1-*`                         | `groq:`            | `reasoning_format`             | None              |
+| Compound Models          | `groq/compound`, `groq/compound-mini`   | `groq:`            | `reasoning_format`             | Automatic (all)   |
+| Standard Models          | `llama-3.3-*`, `llama-3.1-*`            | `groq:`            | N/A                            | Manual config     |
+| Responses API            | All reasoning models                    | `groq-responses:`  | `reasoning.effort`             | Varies by model   |
+
+**Key Differences:**
+- **`groq:`** - Standard Chat Completions API with granular reasoning control
+- **`groq-responses:`** - Stateful Responses API with simplified `reasoning.effort` parameter
+- **Compound models** - Have automatic code execution, web search, and visit website tools
+- **GPT-OSS models** - Support `browser_search` tool via manual configuration
+- **Explicit control** - Use `compound_custom.tools.enabled_tools` to control which built-in tools are enabled
+
 ## Setup
 
 To use Groq, you need to set up your API key:

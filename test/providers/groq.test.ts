@@ -37,20 +37,24 @@ describe('Groq', () => {
     it('should identify reasoning models correctly', () => {
       const regularProvider = new GroqProvider('mixtral-8x7b-32768', {});
       const deepseekProvider = new GroqProvider('deepseek-r1-distill-llama-70b', {});
+      const gptOssProvider = new GroqProvider('openai/gpt-oss-120b', {});
       const o1Provider = new GroqProvider('o1-mini', {});
 
       expect(regularProvider['isReasoningModel']()).toBe(false);
       expect(deepseekProvider['isReasoningModel']()).toBe(true);
+      expect(gptOssProvider['isReasoningModel']()).toBe(true);
       expect(o1Provider['isReasoningModel']()).toBe(true);
     });
 
     it('should handle temperature support correctly', () => {
       const regularProvider = new GroqProvider('mixtral-8x7b-32768', {});
       const deepseekProvider = new GroqProvider('deepseek-r1-distill-llama-70b', {});
+      const gptOssProvider = new GroqProvider('openai/gpt-oss-120b', {});
       const o1Provider = new GroqProvider('o1-mini', {});
 
       expect(regularProvider['supportsTemperature']()).toBe(true);
       expect(deepseekProvider['supportsTemperature']()).toBe(true);
+      expect(gptOssProvider['supportsTemperature']()).toBe(true);
       expect(o1Provider['supportsTemperature']()).toBe(false);
     });
 
@@ -114,6 +118,95 @@ describe('Groq', () => {
         service_tier: 'premium',
         user: 'test-user',
       });
+    });
+
+    it('should include reasoning_format in request body', () => {
+      const provider = new GroqProvider('openai/gpt-oss-120b', {
+        config: {
+          reasoning_format: 'parsed',
+        },
+      });
+
+      const { body } = provider['getOpenAiBody']('Test prompt');
+      expect(body.reasoning_format).toBe('parsed');
+    });
+
+    it('should include include_reasoning in request body', () => {
+      const provider = new GroqProvider('openai/gpt-oss-120b', {
+        config: {
+          include_reasoning: false,
+        },
+      });
+
+      const { body } = provider['getOpenAiBody']('Test prompt');
+      expect(body.include_reasoning).toBe(false);
+    });
+
+    it('should include compound_custom in request body', () => {
+      const provider = new GroqProvider('groq/compound', {
+        config: {
+          compound_custom: {
+            tools: {
+              enabled_tools: ['code_interpreter', 'web_search'],
+              wolfram_settings: {
+                authorization: 'test-key',
+              },
+            },
+          },
+        },
+      });
+
+      const { body } = provider['getOpenAiBody']('Test prompt');
+      expect(body.compound_custom).toEqual({
+        tools: {
+          enabled_tools: ['code_interpreter', 'web_search'],
+          wolfram_settings: {
+            authorization: 'test-key',
+          },
+        },
+      });
+    });
+
+    it('should include search_settings in request body', () => {
+      const provider = new GroqProvider('groq/compound', {
+        config: {
+          search_settings: {
+            exclude_domains: ['example.com'],
+            include_domains: ['trusted.com'],
+            country: 'US',
+          },
+        },
+      });
+
+      const { body } = provider['getOpenAiBody']('Test prompt');
+      expect(body.search_settings).toEqual({
+        exclude_domains: ['example.com'],
+        include_domains: ['trusted.com'],
+        country: 'US',
+      });
+    });
+
+    it('should handle all reasoning parameters together', () => {
+      const provider = new GroqProvider('openai/gpt-oss-120b', {
+        config: {
+          reasoning_format: 'hidden',
+          include_reasoning: false,
+          compound_custom: {
+            tools: {
+              enabled_tools: ['browser_automation'],
+            },
+          },
+          search_settings: {
+            exclude_domains: ['spam.com'],
+          },
+        },
+      });
+
+      const { body } = provider['getOpenAiBody']('Test prompt');
+      expect(body.reasoning_format).toBe('hidden');
+      expect(body.include_reasoning).toBe(false);
+      expect(body.compound_custom).toBeDefined();
+      expect(body.search_settings).toBeDefined();
     });
 
     describe('callApi', () => {
