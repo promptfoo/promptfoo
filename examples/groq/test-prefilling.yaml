@@ -19,13 +19,13 @@ providers:
     config:
       temperature: 0.7
       max_completion_tokens: 500
-      stop: "```"
+      stop: '```'
 
 tests:
   - description: Prefill for concise code
     vars:
       task: Write a Python function to calculate the factorial of a number.
-      prefill: "```python"
+      prefill: '```python'
     assert:
       - type: javascript
         value: output.includes('def ') && output.includes('factorial')
@@ -38,7 +38,7 @@ tests:
         Extract the title, author, published date, and description from the following book as a JSON object:
 
         "The Great Gatsby" is a novel by F. Scott Fitzgerald, published in 1925, which takes place during the Jazz Age on Long Island.
-      prefill: "```json"
+      prefill: '```json'
     assert:
       - type: javascript
         value: output.includes('"title"') && output.includes('"author"')

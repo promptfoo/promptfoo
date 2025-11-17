@@ -11,15 +11,16 @@ Groq supports reasoning models (OpenAI GPT-OSS and Deepseek R1-Llama-70b), in ad
 
 ## Quick Reference
 
-| Feature                  | Models                                  | Provider Prefix    | Reasoning Control              | Built-in Tools    |
-| ------------------------ | --------------------------------------- | ------------------ | ------------------------------ | ----------------- |
-| Reasoning Models         | `openai/gpt-oss-*`, `qwen/qwen3-32b`    | `groq:`            | `include_reasoning`            | `browser_search`  |
-| Reasoning Models         | `deepseek-r1-*`                         | `groq:`            | `reasoning_format`             | None              |
-| Compound Models          | `groq/compound`, `groq/compound-mini`   | `groq:`            | `reasoning_format`             | Automatic (all)   |
-| Standard Models          | `llama-3.3-*`, `llama-3.1-*`            | `groq:`            | N/A                            | Manual config     |
-| Responses API            | All reasoning models                    | `groq-responses:`  | `reasoning.effort`             | Varies by model   |
+| Feature          | Models                                | Provider Prefix   | Reasoning Control   | Built-in Tools   |
+| ---------------- | ------------------------------------- | ----------------- | ------------------- | ---------------- |
+| Reasoning Models | `openai/gpt-oss-*`, `qwen/qwen3-32b`  | `groq:`           | `include_reasoning` | `browser_search` |
+| Reasoning Models | `deepseek-r1-*`                       | `groq:`           | `reasoning_format`  | None             |
+| Compound Models  | `groq/compound`, `groq/compound-mini` | `groq:`           | `reasoning_format`  | Automatic (all)  |
+| Standard Models  | `llama-3.3-*`, `llama-3.1-*`          | `groq:`           | N/A                 | Manual config    |
+| Responses API    | All reasoning models                  | `groq-responses:` | `reasoning.effort`  | Varies by model  |
 
 **Key Differences:**
+
 - **`groq:`** - Standard Chat Completions API with granular reasoning control
 - **`groq-responses:`** - Stateful Responses API with simplified `reasoning.effort` parameter
 - **Compound models** - Have automatic code execution, web search, and visit website tools
@@ -178,7 +179,7 @@ tests:
 
 Groq supports multiple reasoning models including **openai/gpt-oss-120b**, **openai/gpt-oss-20b**, and **qwen/qwen3-32b** (preview). These models excel at complex problem-solving tasks that require step-by-step analysis. Here's an example that demonstrates reasoning capabilities:
 
-```yaml title="promptfooconfig.yaml"
+````yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Groq reasoning model
 prompts:
@@ -231,7 +232,7 @@ providers:
   - id: groq:openai/gpt-oss-120b
     config:
       include_reasoning: false  # Hide thinking output
-```
+````
 
 For **other reasoning models** (like Qwen), use `reasoning_format`:
 
@@ -242,7 +243,8 @@ For **other reasoning models** (like Qwen), use `reasoning_format`:
 | `hidden` | Returns only the final answer              | Production/end-user responses  |
 
 Note: When using JSON mode or tool calls with `reasoning_format`, only `parsed` or `hidden` formats are supported.
-```
+
+````
 
 ## Assistant Message Prefilling
 
@@ -275,21 +277,21 @@ tests:
   - vars:
       task: Write a Python function to calculate factorial
       prefill: "```python"
-```
+````
 
 ### Common Use Cases
 
 **Generate concise code:**
 
-```yaml
-prefill: "```python"
-```
+````yaml
+prefill: '```python'
+````
 
 **Extract structured data:**
 
-```yaml
-prefill: "```json"
-```
+````yaml
+prefill: '```json'
+````
 
 **Skip introductions:**
 
@@ -312,7 +314,7 @@ providers:
       temperature: 0.6
       max_output_tokens: 1000
       reasoning:
-        effort: 'high'  # 'low', 'medium', or 'high'
+        effort: 'high' # 'low', 'medium', or 'high'
 ```
 
 ### Structured Outputs
@@ -358,13 +360,13 @@ prompts:
 
 ### Key Differences from Chat Completions API
 
-| Feature | Chat Completions (`groq:`) | Responses API (`groq-responses:`) |
-|---------|---------------------------|-----------------------------------|
-| Endpoint | `/v1/chat/completions` | `/v1/responses` |
-| Reasoning Control | `include_reasoning`, `reasoning_format` | `reasoning.effort` |
-| Token Limit Param | `max_completion_tokens` | `max_output_tokens` |
-| Input Field | `messages` | `input` |
-| Output Field | `choices[0].message.content` | `output_text` |
+| Feature           | Chat Completions (`groq:`)              | Responses API (`groq-responses:`) |
+| ----------------- | --------------------------------------- | --------------------------------- |
+| Endpoint          | `/v1/chat/completions`                  | `/v1/responses`                   |
+| Reasoning Control | `include_reasoning`, `reasoning_format` | `reasoning.effort`                |
+| Token Limit Param | `max_completion_tokens`                 | `max_output_tokens`               |
+| Input Field       | `messages`                              | `input`                           |
+| Output Field      | `choices[0].message.content`            | `output_text`                     |
 
 For more details on the Responses API, see [Groq's Responses API documentation](https://console.groq.com/docs/responses-api).
 
@@ -377,10 +379,12 @@ Groq offers two types of models with built-in tools: compound models with automa
 Groq's compound models combine language models with pre-enabled built-in tools that activate automatically based on the task.
 
 **Available Models:**
+
 - **groq/compound** - Full-featured compound system
 - **groq/compound-mini** - Lightweight compound system
 
 **Built-in Capabilities (No Configuration Needed):**
+
 - **Code Execution** - Python code execution for calculations and algorithms
 - **Web Search** - Real-time web searches for current information
 - **Visit Website** - Automatic webpage fetching when URLs are in the message
@@ -418,6 +422,7 @@ tests:
 **Example Outputs:**
 
 Code execution:
+
 ```
 Thinking:
 To calculate the first 10 Fibonacci numbers, I will use a Python code snippet.
@@ -437,6 +442,7 @@ print(fibonacci(10))
 ```
 
 Web search:
+
 ```
 <tool>search(current population of Seattle)</tool>
 
@@ -456,9 +462,9 @@ providers:
   - id: groq:groq/compound
     config:
       search_settings:
-        exclude_domains: ['example.com']  # Exclude specific domains
-        include_domains: ['*.edu']        # Restrict to specific domains
-        country: 'us'                     # Boost results from country
+        exclude_domains: ['example.com'] # Exclude specific domains
+        include_domains: ['*.edu'] # Restrict to specific domains
+        country: 'us' # Boost results from country
 ```
 
 **Explicit Tool Control:**
@@ -472,17 +478,19 @@ providers:
       compound_custom:
         tools:
           enabled_tools:
-            - code_interpreter    # Python code execution
-            - web_search         # Web searches
-            - visit_website      # URL fetching
+            - code_interpreter # Python code execution
+            - web_search # Web searches
+            - visit_website # URL fetching
 ```
 
 This allows you to:
+
 - Restrict which tools are available for a request
 - Control costs by limiting tool usage
 - Ensure only specific capabilities are used
 
 **Available Tool Identifiers:**
+
 - `code_interpreter` - Python code execution
 - `web_search` - Real-time web searches
 - `visit_website` - Webpage fetching
@@ -494,6 +502,7 @@ This allows you to:
 OpenAI's GPT-OSS models on Groq support a browser search tool that must be explicitly enabled.
 
 **Supported Models:**
+
 - `openai/gpt-oss-120b`
 - `openai/gpt-oss-20b`
 
@@ -506,10 +515,10 @@ providers:
     config:
       temperature: 0.6
       max_completion_tokens: 3000
-      reasoning_effort: low  # Recommended to reduce token usage
+      reasoning_effort: low # Recommended to reduce token usage
       tools:
         - type: browser_search
-      tool_choice: required  # Ensures the tool is used
+      tool_choice: required # Ensures the tool is used
 
 prompts:
   - |
@@ -535,24 +544,28 @@ as of April 1 2025, according to the Washington Office of Financial Managementã€
 ```
 
 **Key Differences from Web Search:**
+
 - **Browser Search** (GPT-OSS): Mimics human browsing, navigates websites interactively, provides detailed content
 - **Web Search** (Compound): Performs single search, retrieves text snippets, faster for simple queries
 
 ### Use Cases
 
 **Code Execution (Compound Models):**
+
 - Mathematical calculations and equation solving
 - Data analysis and statistical computations
 - Algorithm implementation and testing
 - Unit conversions and numerical operations
 
 **Web/Browser Search:**
+
 - Current events and real-time information
 - Factual queries requiring up-to-date data
 - Research on recent developments
 - Population statistics, weather, stock prices
 
 **Combined Capabilities (Compound Models):**
+
 - Financial analysis requiring both research and calculations
 - Scientific research with computational verification
 - Data-driven reports combining current information and analysis
