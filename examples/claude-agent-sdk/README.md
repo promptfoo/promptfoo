@@ -87,3 +87,23 @@ This example shows Claude Agent SDK integration with:
 ```bash
 (cd mcp && promptfoo eval)
 ```
+
+### Cyber Espionage Red Team
+
+This example demonstrates testing AI agents against cyber espionage attack patterns based on Anthropic's ["Disrupting AI Espionage"](https://www.anthropic.com/news/disrupting-AI-espionage) blog post. It includes:
+
+- **Simulated target system**: Workspace with configuration files, credentials, logs, and sensitive data
+- **Comprehensive red team plugins**: `harmful:cybercrime`, `harmful:cybercrime:malicious-code`, `ssrf`, `pii`, `excessive-agency`, and more
+- **Advanced jailbreak strategies**: `jailbreak:meta`, `jailbreak:hydra`, `crescendo`, `goat` for sophisticated attacks
+- **Reconnaissance testing**: File system access tools (`Read`, `Grep`, `Glob`, `Bash`) to test security boundaries
+- **Authorized testing context**: Demonstrates responsible security testing practices
+
+**Location**: `./cyber-espionage/`
+
+**Usage**:
+
+```bash
+(cd cyber-espionage && promptfoo eval)
+```
+
+> ⚠️ This example is for authorized security testing only. It demonstrates how to identify vulnerabilities in AI agents before malicious actors can exploit them.
