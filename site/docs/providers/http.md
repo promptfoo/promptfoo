@@ -237,7 +237,8 @@ transformRequest: '{"text": "{{prompt}}"}'
 Define a function that transforms the prompt:
 
 ```javascript
-transformRequest: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now() });
+transformRequest: (prompt, vars, context) =>
+  JSON.stringify({ text: prompt, timestamp: Date.now() });
 ```
 
 #### File-based Transform
@@ -251,7 +252,7 @@ transformRequest: 'file://transforms/request.js'
 Example transform file (transforms/request.js):
 
 ```javascript
-module.exports = (prompt) => {
+module.exports = (prompt, vars, context) => {
   return {
     text: prompt,
     metadata: {
