@@ -4,10 +4,12 @@ import type { Prompt, PromptConfig, PromptFunction } from '../types/prompts';
 import type { ApiProvider } from '../types/providers';
 
 // Zod schemas for validation
-export const PromptConfigSchema = z.object({
-  prefix: z.string().optional(),
-  suffix: z.string().optional(),
-});
+export const PromptConfigSchema = z
+  .object({
+    prefix: z.string().optional(),
+    suffix: z.string().optional(),
+  })
+  .passthrough(); // Allow provider-specific fields in test.options
 
 const PromptFunctionSchema = z
   .function()

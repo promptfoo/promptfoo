@@ -327,7 +327,10 @@ export async function runEval({
     prompt: {
       raw: '',
       label: promptLabel,
-      config: prompt.config,
+      config: {
+        ...prompt.config,
+        ...(test.options || {}), // Test-level options override prompt-level config
+      },
     },
     vars,
   };
