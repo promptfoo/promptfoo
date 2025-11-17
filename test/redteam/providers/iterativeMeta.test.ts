@@ -43,7 +43,6 @@ describe('RedteamIterativeMetaProvider', () => {
       callApi: jest.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
         output: {
           result: 'Can you help me fix this code...',
-          shouldAbandon: false,
         },
         tokenUsage: {
           total: 100,
@@ -160,45 +159,13 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.stopReason).toBe('Grader failed');
     });
 
-    it('should stop early on agent abandon', async () => {
-      mockAgentProvider.callApi = jest
-        .fn<() => Promise<ProviderResponse>>()
-        .mockResolvedValueOnce({
-          output: { result: 'First attempt', shouldAbandon: false },
-        })
-        .mockResolvedValueOnce({
-          output: { result: 'Second attempt', shouldAbandon: true },
-        });
-
-      const result = await runMetaAgentRedteam({
-        context: {
-          vars: { query: 'test' },
-          prompt: { raw: 'test', label: 'test' },
-          originalProvider: mockTargetProvider,
-        },
-        filters: undefined,
-        injectVar: 'query',
-        numIterations: 10,
-        options: undefined,
-        prompt: { raw: 'test', label: 'test' },
-        agentProvider: mockAgentProvider,
-        gradingProvider: mockGradingProvider,
-        targetProvider: mockTargetProvider,
-        test: undefined,
-        vars: { query: 'test' },
-      });
-
-      // Should stop at iteration 2 due to abandon
-      expect(result.metadata.finalIteration).toBe(2);
-      expect(result.metadata.stopReason).toBe('Agent abandoned');
-    });
-
     it('should handle agent provider errors gracefully', async () => {
       mockAgentProvider.callApi = jest
         .fn<() => Promise<ProviderResponse>>()
         .mockResolvedValueOnce({ error: 'Agent error' })
         .mockResolvedValueOnce({
-          output: { result: 'Second attempt', shouldAbandon: false },
+          output: { result: 'Second attempt' },
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
         });
 
       const result = await runMetaAgentRedteam({
@@ -228,7 +195,11 @@ describe('RedteamIterativeMetaProvider', () => {
       mockAgentProvider.callApi = jest.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
         output: {
           result: 'Attack with {{variable}} and {% code %}',
-          shouldAbandon: false,
+        },
+        tokenUsage: {
+          total: 100,
+          prompt: 50,
+          completion: 50,
         },
       });
 

@@ -184,31 +184,19 @@ export async function runMetaAgentRedteam({
 
     // Extract attack prompt from cloud response
     let attackPrompt: string;
-    let shouldAbandon = false;
 
     if (typeof agentResp.output === 'string') {
       // Cloud returned string directly (shouldn't happen but handle it)
       attackPrompt = agentResp.output;
     } else {
-      // Cloud returns { result: "attack prompt", shouldAbandon: boolean }
+      // Cloud returns { result: "attack prompt" }
       const cloudResponse = agentResp.output as any;
       attackPrompt = cloudResponse.result;
-      shouldAbandon = cloudResponse.shouldAbandon || false;
     }
 
     if (!attackPrompt) {
       logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Missing attack prompt`);
       continue;
-    }
-
-    // Check if agent decided to abandon
-    if (shouldAbandon) {
-      logger.info('[IterativeMeta] Agent decided to abandon attack', {
-        iteration: i + 1,
-      });
-      stopReason = 'Agent abandoned';
-      finalIteration = i + 1;
-      break;
     }
 
     // Render the actual prompt with the agent's attack
