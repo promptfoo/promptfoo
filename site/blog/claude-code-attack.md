@@ -1,5 +1,5 @@
 ---
-title: 'How To Replicate The Claude Code Attack With Promptfoo'
+title: 'How to replicate the Claude Code attack with Promptfoo'
 author: 'Ian Webster'
 date: 2025-11-17
 tags: ['ai security', 'red teaming', 'agents', 'cyber espionage', 'jailbreak']
