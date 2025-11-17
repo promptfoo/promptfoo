@@ -22,27 +22,6 @@ import { type StrategyConfig, type RedteamStrategyObject } from '@promptfoo/redt
 
 const TEST_GENERATION_PLUGIN = 'harmful:hate';
 
-/**
- * Checks if a strategy requires configuration and if it's currently missing.
- * Returns true if the strategy requires config but it's not properly configured.
- */
-function isRequiredConfigMissing(strategyId: string, config: StrategyConfig): boolean {
-  if (strategyId === 'custom') {
-    // Custom strategy requires strategyText
-    return (
-      !config.strategyText ||
-      typeof config.strategyText !== 'string' ||
-      config.strategyText.trim().length === 0
-    );
-  }
-  if (strategyId === 'simba') {
-    // Simba strategy requires goals array
-    return !config.goals || !Array.isArray(config.goals) || config.goals.length === 0;
-  }
-  // Other strategies don't have required config
-  return false;
-}
-
 interface StrategyItemProps {
   strategy: StrategyCardData;
   isSelected: boolean;
@@ -80,9 +59,7 @@ export function StrategyItem({
     );
   }, [config, strategy.id]) as StrategyConfig;
 
-  const requiresConfig = useMemo(() => {
-    return isRequiredConfigMissing(strategy.id, strategyConfig);
-  }, [strategy.id, strategyConfig]);
+  const requiresConfig = isSelected && !isConfigured;
 
   const hasSettingsButton =
     requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any));
