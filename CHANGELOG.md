@@ -28,9 +28,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(redteam): exclude cyberseceval and beavertails static dataset plugins from iterative strategies to prevent wasted compute and silent grading failures during Hydra/Meta/Tree iterations (#6230)
+- fix(mcp): allow colons in eval ID validation for get_evaluation_details tool - fixes rejection of valid eval IDs returned by list_evaluations (e.g., eval-8h1-2025-11-15T14:17:18) by updating regex to accept ISO timestamp format (#6222)
 - fix(redteam): don't set default 'en' language when no language is configured - prevents unnecessary language modifiers from being passed to meta agent and other iterative strategies, keeping prompts focused on actual task without implied translation requirements (#6214)
 - fix(webui): fix duplicate React key warning in DefaultTestVariables component by implementing counter-based unique ID generation (#6201)
 - fix(samples): downlevel pem dependency to supported version
+- fix(deps): remove unused dependency on @libsql/client
 
 ### Tests
 
@@ -38,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
+- chore(deps)!: upgrade to React 19 - upgrade react and react-dom from 18.3.1 to 19.2.0; migrate deprecated ReactDOM.render to createRoot API; replace JSX.Element with React.ReactElement for React 19 namespace removal; fix RefObject types for stricter React 19 typing (useRef(null) now correctly typed as RefObject<T | null>); add Vite path aliases and npm overrides to enforce single React 19 instance across monorepo workspaces (prevents duplicate installations that caused test failures); all third-party dependencies verified compatible (Emotion 11.14.0+, MUI v7, React Router v7, TanStack Query v5, Recharts 2.15.4); test results: 1,970/1,972 passing (100%, 2 skipped); BREAKING CHANGE: React 19 is a major version upgrade that removes deprecated APIs (ReactDOM.render, unmountComponentAtNode) and the global JSX namespace (#6229)
 - chore(deps): upgrade @googleapis/sheets from 9.8.0 to 12.0.0 and resolve gcp-metadata dependency conflicts - fixes recurring npm ci failures by (1) updating the existing mongoose npm override from gcp-metadata ^6.0.0 to ^8.1.2, and (2) adding gcp-metadata ^8.1.2 as a direct dependency for consistent npm resolution across npm 10.x and 11.x (note: gcp-metadata is not directly imported in code but required for dependency resolution consistency, hence excluded from depcheck); this allows using google-auth-library 10.5.0 with X.509 certificate authentication and Cloud Run Jobs detection while ensuring single gcp-metadata version across the dependency tree; @googleapis/sheets v12 is a major version upgrade (v9→v12) that requires googleapis-common v8 and google-auth-library v10+, but maintains backwards-compatible API usage for spreadsheets.get() and spreadsheets.values.get() methods (#6227)
 - chore(deps): bump openai from 6.8.1 to 6.9.0 (#6208)
 

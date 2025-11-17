@@ -25,7 +25,7 @@ const reasons = [
   },
 ];
 
-export default function WhyPromptfoo(): JSX.Element {
+export default function WhyPromptfoo(): React.ReactElement {
   return (
     <section className={`${styles.section} ${styles.whyPromptfooSection}`}>
       <div className={styles.container}>
