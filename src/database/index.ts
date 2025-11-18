@@ -16,16 +16,47 @@ export class DrizzleLogWriter implements LogWriter {
 
 let dbInstance: ReturnType<typeof drizzle> | null = null;
 let sqliteInstance: Database.Database | null = null;
+let injectedDb: any | null = null;
 
 export function getDbPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
+}
+
+/**
+ * Inject an external database connection (e.g., PostgreSQL from server)
+ *
+ * This enables dual-mode database operation:
+ * - Standalone promptfoo usage: setDb() is never called, uses SQLite (default behavior)
+ * - Cloud server usage: Server calls setDb() with PostgreSQL connection
+ *
+ * When db is set, getDb() returns the injected connection instead of creating SQLite.
+ * Pass null to reset back to SQLite mode.
+ */
+export function setDb(db: any | null) {
+  injectedDb = db;
+  // Clear existing instances when injecting a new database
+  if (db && dbInstance) {
+    dbInstance = null;
+    sqliteInstance = null;
+  }
 }
 
 export function getDbSignalPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
 }
 
+/**
+ * Get database connection
+ *
+ * Returns injected database (PostgreSQL from server) if set via setDb(),
+ * otherwise creates/returns SQLite database for standalone usage.
+ */
 export function getDb() {
+  // If an external database was injected (e.g., PostgreSQL from server), use it
+  if (injectedDb) {
+    return injectedDb;
+  }
+
   if (!dbInstance) {
     const isMemoryDb = getEnvBool('IS_TESTING');
     const dbPath = isMemoryDb ? ':memory:' : getDbPath();

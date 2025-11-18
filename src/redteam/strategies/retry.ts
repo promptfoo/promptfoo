@@ -23,40 +23,37 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
   const db = getDb();
 
   try {
-    const targetResults = await db
-      .select()
-      .from(evalResultsTable)
-      .where(
-        and(
-          eq(evalResultsTable.success, 0 as any),
-          sql`json_valid(provider)`,
-          sql`json_extract(provider, '$.label') = ${targetLabel}`,
-        ),
-      )
-      .orderBy(evalResultsTable.createdAt)
-      .limit(1);
-
-    if (targetResults.length === 0) {
-      logger.debug(`No failed test cases found for target '${targetLabel}'`);
-      return [];
-    }
-
+    // Query for failed test cases (database-agnostic approach)
+    // Filter by targetLabel and pluginId in JavaScript after fetching
     const results = await db
       .select()
       .from(evalResultsTable)
-      .where(
-        and(
-          eq(evalResultsTable.success, 0 as any),
-          sql`json_valid(provider)`,
-          sql`json_extract(provider, '$.label') = ${targetLabel}`,
-          sql`json_valid(test_case)`,
-          sql`json_extract(test_case, '$.metadata.pluginId') = ${pluginId}`,
-        ),
-      )
+      .where(eq(evalResultsTable.success, false))
       .orderBy(evalResultsTable.createdAt)
-      .limit(100);
+      .limit(1000); // Get more results to filter in JS
 
+    // Filter and parse results in JavaScript (works with both SQLite and PostgreSQL)
     const testCases = results
+      .filter((r) => {
+        try {
+          // Parse provider to check label
+          const provider = typeof r.provider === 'string' ? JSON.parse(r.provider) : r.provider;
+          if (provider?.label !== targetLabel) {
+            return false;
+          }
+
+          // Parse testCase to check pluginId
+          const testCase = typeof r.testCase === 'string' ? JSON.parse(r.testCase) : r.testCase;
+          if (testCase?.metadata?.pluginId !== pluginId) {
+            return false;
+          }
+
+          return true;
+        } catch (e) {
+          return false;
+        }
+      })
+      .slice(0, 100) // Limit to 100 after filtering
       .map((r) => {
         try {
           const testCase: TestCase =
@@ -87,7 +84,7 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
 
     const unique = deduplicateTests(testCases);
     logger.debug(
-      `Found ${results.length} failed test cases for plugin '${pluginId}' and target '${targetLabel}', ${unique.length} unique`,
+      `Found ${testCases.length} failed test cases for plugin '${pluginId}' and target '${targetLabel}', ${unique.length} unique`,
     );
     return unique;
   } catch (error) {
