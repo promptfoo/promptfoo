@@ -439,7 +439,7 @@ See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/bui
 Structured outputs ensure Claude's responses follow a specific schema, guaranteeing valid, parseable output. Use **JSON outputs** (`output_format`) for structured data responses, or **strict tool use** (`strict: true`) for guaranteed schema validation on tool names and inputs.
 
 :::note
-Structured outputs are available for Claude Sonnet 4.5 and Claude Opus 4.1. The `structured-outputs-2025-11-13` beta header is automatically added when using these features.
+Structured outputs are available for Claude Sonnet 4.5 and Claude Opus 4.1. The `structured-outputs-2025-09-17` beta header is automatically added when using these features.
 :::
 
 #### When to Use Structured Outputs
