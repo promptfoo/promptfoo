@@ -12,6 +12,18 @@ const wss = new WebSocket.Server({ server });
 const PORT = 3000;
 const SESSION_SECRET = 'promptfoo-websocket-demo';
 
+// Initialize OpenAI if API key is available
+let openai = null;
+const USE_REAL_LLM = process.env.OPENAI_API_KEY ? true : false;
+
+if (USE_REAL_LLM) {
+  const { OpenAI } = require('openai');
+  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  console.log('✨ Real LLM mode enabled (OpenAI GPT-5.1, no reasoning)');
+} else {
+  console.log('📝 Mock mode - using hardcoded responses (set OPENAI_API_KEY for real LLM)');
+}
+
 // Store conversations per session
 // sessionId -> Array of {role: 'user'|'assistant', content: string}
 const conversations = new Map();
@@ -99,18 +111,17 @@ wss.on('connection', (ws, req) => {
         // Add user message to history
         history.push({ role: 'user', content: message });
 
-        // Generate context-aware response
-        const response = generateResponse(message, history);
-
-        // Add assistant response to history
-        history.push({ role: 'assistant', content: response });
-
-        console.log(
-          `Streaming response (${response.split(' ').length} words) to session ${sessionId}`,
-        );
-
-        // Stream response word by word
-        await streamResponse(ws, response);
+        // Generate and stream response (real LLM or mock)
+        if (USE_REAL_LLM) {
+          await streamLLMResponse(ws, history, sessionId);
+        } else {
+          const response = generateMockResponse(message, history);
+          history.push({ role: 'assistant', content: response });
+          console.log(
+            `Streaming mock response (${response.split(' ').length} words) to session ${sessionId}`,
+          );
+          await streamResponse(ws, response);
+        }
 
         console.log(`Conversation history for ${sessionId}: ${history.length} messages`);
       } catch (error) {
@@ -130,8 +141,67 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// Generate context-aware responses based on conversation history
-function generateResponse(message, history) {
+// Stream response from real LLM (OpenAI)
+async function streamLLMResponse(ws, history, sessionId) {
+  try {
+    console.log(`Calling OpenAI with ${history.length} messages for session ${sessionId}`);
+
+    const stream = await openai.chat.completions.create({
+      model: 'gpt-5.1',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a helpful assistant. Be concise and friendly.',
+        },
+        ...history,
+      ],
+      stream: true,
+      temperature: 0.7,
+      store: false,
+      reasoning_effort: 'none',
+    });
+
+    let fullResponse = '';
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      if (content) {
+        fullResponse += content;
+
+        // Send chunk to WebSocket client
+        ws.send(
+          JSON.stringify({
+            type: 'chunk',
+            content: content,
+          }),
+        );
+      }
+    }
+
+    // Signal streaming complete
+    ws.send(
+      JSON.stringify({
+        type: 'done',
+      }),
+    );
+
+    // Add complete response to history
+    history.push({ role: 'assistant', content: fullResponse });
+
+    console.log(`LLM response complete for session ${sessionId}: ${fullResponse.length} chars`);
+  } catch (error) {
+    console.error('OpenAI streaming error:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'LLM generation failed',
+      }),
+    );
+  }
+}
+
+// Generate mock context-aware responses (fallback when no API key)
+function generateMockResponse(message, history) {
   const lowerMessage = message.toLowerCase();
   const topics = extractTopics(history);
 

@@ -17,79 +17,100 @@ chromium.use(stealth());
 let browser = null;
 let browserContext = null;
 
-/**
- * Call API function that promptfoo invokes
- * @param {string} prompt - The message to send (from simulated user)
- * @param {object} options - Provider options
- * @param {object} context - Test context with vars
- */
-async function callApi(prompt, options, context) {
-  try {
-    const serverUrl = context.vars?.serverUrl || 'http://localhost:3000';
+class BrowserChatProvider {
+  constructor(options) {
+    this.providerId = options?.id || 'browser-chat-provider';
+    this.config = options?.config || {};
+  }
 
-    // Get or create session ID for this test
-    let sessionId = context.vars?.sessionId;
+  id() {
+    return this.providerId;
+  }
 
-    if (!sessionId) {
-      // Create new session via API
-      const response = await fetch(`${serverUrl}/api/session/new`, {
-        method: 'POST',
-      });
-      const data = await response.json();
-      sessionId = data.sessionId;
-
-      console.log(`[BrowserChatProvider] Created new session: ${sessionId}`);
-    }
-
-    // Connect to browser if not already connected
-    if (!browser) {
-      browser = await chromium.connectOverCDP('http://localhost:9222');
-      const contexts = browser.contexts();
-      browserContext = contexts.length > 0 ? contexts[0] : await browser.newContext();
-      console.log('[BrowserChatProvider] Connected to Chrome');
-    }
-
-    // Create new page for this interaction
-    const page = await browserContext.newPage();
-
+  /**
+   * Call API function that promptfoo invokes
+   * @param {string} prompt - The message to send (from simulated user)
+   * @param {object} options - Provider options
+   * @param {object} context - Test context with vars
+   */
+  async callApi(prompt, options, context) {
     try {
-      // Navigate to chat with session ID
-      await page.goto(`${serverUrl}/?session=${sessionId}`);
+      const serverUrl = context.vars?.serverUrl || 'http://localhost:3000';
 
-      // Wait for page to load
-      await page.waitForSelector('#message-input');
+      // Get or create session ID for this test
+      let sessionId = context.vars?.sessionId;
 
-      // Type the message
-      await page.fill('#message-input', prompt);
+      if (!sessionId) {
+        // Create new session via API
+        const response = await fetch(`${serverUrl}/api/session/new`, {
+          method: 'POST',
+        });
+        const data = await response.json();
+        sessionId = data.sessionId;
 
-      // Click send
-      await page.click('#send-button');
+        console.log(`[BrowserChatProvider] Created new session: ${sessionId}`);
+      }
 
-      // Wait for response (3 seconds for streaming to complete)
-      await page.waitForTimeout(3000);
+      // Connect to browser if not already connected
+      const headless = context.vars?.headless !== false; // Default to headless
 
-      // Extract the last assistant response
-      const response = await page.$eval(
-        '.message.assistant:last-child .message-content',
-        el => el.textContent
-      );
+      if (!browser) {
+        if (process.env.USE_CDP === 'true') {
+          // Connect to existing Chrome via CDP
+          browser = await chromium.connectOverCDP('http://localhost:9222');
+          const contexts = browser.contexts();
+          browserContext = contexts.length > 0 ? contexts[0] : await browser.newContext();
+          console.log('[BrowserChatProvider] Connected to Chrome via CDP');
+        } else {
+          // Launch new browser in headless mode
+          browser = await chromium.launch({ headless });
+          browserContext = await browser.newContext();
+          console.log(`[BrowserChatProvider] Launched browser (headless: ${headless})`);
+        }
+      }
 
-      console.log(`[BrowserChatProvider] User: ${prompt}`);
-      console.log(`[BrowserChatProvider] Assistant: ${response}`);
+      // Create new page for this interaction
+      const page = await browserContext.newPage();
 
+      try {
+        // Navigate to chat with session ID
+        await page.goto(`${serverUrl}/?session=${sessionId}`);
+
+        // Wait for page to load
+        await page.waitForSelector('#message-input');
+
+        // Type the message
+        await page.fill('#message-input', prompt);
+
+        // Click send
+        await page.click('#send-button');
+
+        // Wait for response (3 seconds for streaming to complete)
+        await page.waitForTimeout(3000);
+
+        // Extract the last assistant response
+        const response = await page.$eval(
+          '.message.assistant:last-child .message-content',
+          el => el.textContent
+        );
+
+        console.log(`[BrowserChatProvider] User: ${prompt}`);
+        console.log(`[BrowserChatProvider] Assistant: ${response}`);
+
+        return {
+          output: response,
+          sessionId, // Include session ID in response for potential reuse
+        };
+      } finally {
+        // Close the page but keep browser/context alive
+        await page.close();
+      }
+    } catch (error) {
       return {
-        output: response,
-        sessionId, // Include session ID in response for potential reuse
+        error: `Browser chat provider error: ${error.message}`,
       };
-    } finally {
-      // Close the page but keep browser/context alive
-      await page.close();
     }
-  } catch (error) {
-    return {
-      error: `Browser chat provider error: ${error.message}`,
-    };
   }
 }
 
-module.exports = callApi;
+module.exports = BrowserChatProvider;
