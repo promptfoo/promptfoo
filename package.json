@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.119.6",
+  "version": "0.119.7",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -79,11 +79,15 @@
     "chokidar": "4.0.3",
     "whatwg-url": "14.2.0",
     "esbuild": "0.25.9",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
     "react-is": "^18.3.1",
     "*": {
       "whatwg-url": "14.2.0",
       "chokidar": "4.0.3",
-      "esbuild": "0.25.9"
+      "esbuild": "0.25.9",
+      "react": "19.2.0",
+      "react-dom": "19.2.0"
     },
     "gaxios": "^6.0.0",
     "https-proxy-agent": "^7.0.0",
@@ -103,7 +107,7 @@
     "@adaline/together-ai": "1.5.1",
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.7.2",
-    "@anthropic-ai/claude-agent-sdk": "^0.1.36",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.42",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.927.0",
     "@aws-sdk/client-bedrock-runtime": "^3.927.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.927.0",
@@ -116,7 +120,6 @@
     "@ibm-cloud/watsonx-ai": "^1.7.2",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@jest/globals": "^30.2.0",
-    "@libsql/client": "^0.15.15",
     "@swc/core": "^1.15.1",
     "@swc/jest": "^0.2.39",
     "@types/async": "^3.2.25",
@@ -180,7 +183,7 @@
     "@adaline/together-ai": "1.5.1",
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.7.2",
-    "@anthropic-ai/claude-agent-sdk": "^0.1.36",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.42",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.927.0",
     "@aws-sdk/client-bedrock-runtime": "^3.927.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.927.0",
@@ -220,7 +223,7 @@
     "xlsx": "^0.18.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.68.0",
+    "@anthropic-ai/sdk": "^0.69.0",
     "@apidevtools/json-schema-ref-parser": "^12.0.2",
     "@googleapis/sheets": "^12.0.0",
     "gcp-metadata": "^8.1.2",
