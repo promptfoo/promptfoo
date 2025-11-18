@@ -327,7 +327,9 @@ async function applyStrategies(
           ...t,
           metadata: {
             ...(t?.metadata || {}),
-            strategyId: t?.metadata?.strategyId || strategy.id,
+            // For retry strategy, preserve original strategyId (even if undefined), never use 'retry'
+            ...(strategy.id !== 'retry' && { strategyId: t?.metadata?.strategyId || strategy.id }),
+            ...(strategy.id === 'retry' && t?.metadata?.strategyId && { strategyId: t.metadata.strategyId }),
             ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
             ...(t?.metadata?.pluginConfig && {
               pluginConfig: t.metadata.pluginConfig,
