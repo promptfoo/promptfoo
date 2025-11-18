@@ -108,8 +108,20 @@ class ProgressBarManager {
     // Create single progress bar
     this.progressBar = new cliProgress.SingleBar(
       {
-        format:
-          'Evaluating [{bar}] {percentage}% | {value}/{total} (errors: {errors}) | {provider} {prompt} {vars}',
+        format: (options, params, payload) => {
+          const barsize = options.barsize ?? 40;
+          const barCompleteString = options.barCompleteString ?? '=';
+          const barIncompleteString = options.barIncompleteString ?? '-';
+
+          const bar = barCompleteString.substring(0, Math.round(params.progress * barsize));
+          const spaces = barIncompleteString.substring(0, barsize - bar.length);
+          const percentage = Math.round(params.progress * 100);
+
+          // Only show errors if count > 0
+          const errorsText = payload.errors > 0 ? ` (errors: ${payload.errors})` : '';
+
+          return `Evaluating [${bar}${spaces}] ${percentage}% | ${params.value}/${params.total}${errorsText} | ${payload.provider} ${payload.prompt} ${payload.vars}`;
+        },
         hideCursor: true,
         gracefulExit: true,
       },
@@ -164,6 +176,7 @@ class ProgressBarManager {
       provider: 'Grading',
       prompt: `"${prompt.slice(0, 10).replace(/\n/g, ' ')}"`,
       vars: '',
+      errors: 0,
     });
   }
 
@@ -270,6 +283,7 @@ export async function runEval({
   evaluateOptions,
   testIdx,
   promptIdx,
+  repeatIndex,
   conversations,
   registers,
   isRedteam,
@@ -359,7 +373,12 @@ export async function runEval({
         // All of these are removed in python and script providers, but every Javascript provider gets them
         logger: logger as unknown as winston.Logger,
         getCache,
+        repeatIndex,
       };
+
+      if (repeatIndex > 0) {
+        callApiContext.bustCache = true;
+      }
 
       // Only add trace context properties if tracing is enabled
       if (traceContext) {
@@ -1050,6 +1069,10 @@ class Evaluator {
                   const tracingEnabled =
                     testCase.metadata?.tracingEnabled === true ||
                     testSuite.tracing?.enabled === true;
+
+                  logger.debug(
+                    `[Evaluator] Tracing check: testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, testSuite.tracing=${JSON.stringify(testSuite.tracing)}, tracingEnabled=${tracingEnabled}`,
+                  );
 
                   if (tracingEnabled) {
                     return {
@@ -1924,7 +1947,7 @@ class Evaluator {
       if (isOtlpReceiverStarted()) {
         // Add a delay to allow providers to finish exporting spans
         logger.debug('[Evaluator] Waiting for span exports to complete...');
-        await sleep(1000);
+        await sleep(3000);
       }
       await stopOtlpReceiverIfNeeded();
 

@@ -129,7 +129,7 @@ describe('StrategyItem', () => {
     it('renders multiple badges when a strategy belongs to multiple categories', () => {
       const multiCategoryStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'jailbreak',
+        id: 'jailbreak:meta',
       };
 
       render(
@@ -187,6 +187,27 @@ describe('StrategyItem', () => {
       );
 
       // The icon button has no explicit name, so we look for buttons
+      const buttons = screen.getAllByRole('button');
+      expect(buttons).toHaveLength(1);
+    });
+
+    it('shows settings button for hydra when selected and enabled', () => {
+      const hydraStrategy: StrategyCardData = {
+        ...baseStrategy,
+        id: 'jailbreak:hydra',
+      };
+
+      render(
+        <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
+          strategy={hydraStrategy}
+          isSelected={true}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+        />,
+      );
+
       const buttons = screen.getAllByRole('button');
       expect(buttons).toHaveLength(1);
     });
@@ -302,7 +323,7 @@ describe('StrategyItem', () => {
     it('renders without overlap when multiple pills and settings button are present', () => {
       const multiBadgeStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'jailbreak',
+        id: 'jailbreak:meta',
       };
 
       render(

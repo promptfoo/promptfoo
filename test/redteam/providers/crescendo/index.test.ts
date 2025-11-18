@@ -252,6 +252,13 @@ describe('CrescendoProvider', () => {
 
   describe('Unblocking functionality', () => {
     it('should detect blocking question and send unblocking response', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+
       const prompt = 'test prompt';
       const context = {
         originalProvider: mockTargetProvider,
@@ -293,7 +300,7 @@ describe('CrescendoProvider', () => {
         }),
       });
 
-      const result = await crescendoProvider.callApi(prompt, context);
+      const result = await provider.callApi(prompt, context);
 
       expect(tryUnblocking).toHaveBeenCalledWith({
         messages: expect.any(Array),
@@ -303,10 +310,17 @@ describe('CrescendoProvider', () => {
       });
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2); // Original + unblocking response
-      expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
     });
 
     it('should continue without unblocking when no blocking question detected', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+
       const prompt = 'test prompt';
       const context = {
         originalProvider: mockTargetProvider,
@@ -339,10 +353,10 @@ describe('CrescendoProvider', () => {
         }),
       });
 
-      const result = await crescendoProvider.callApi(prompt, context);
+      const result = await provider.callApi(prompt, context);
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1); // Only original call
-      expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
     });
 
     it('should handle unblocking provider errors gracefully', async () => {
@@ -429,7 +443,7 @@ describe('CrescendoProvider', () => {
     });
   });
 
-  it('should succeed via internal evaluator when eval score is 100', async () => {
+  it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
     jest.mocked(getGraderById).mockReturnValue({
       getResult: jest.fn(async () => ({
@@ -442,7 +456,7 @@ describe('CrescendoProvider', () => {
     // Create a new provider with smaller max turns for this test
     const testProvider = new CrescendoProvider({
       injectVar: 'objective',
-      maxTurns: 2, // Use smaller max turns
+      maxTurns: 1, // Limit iterations to avoid additional calls
       maxBacktracks: 10,
       redteamProvider: mockRedTeamProvider,
       stateful: false,
@@ -489,7 +503,7 @@ describe('CrescendoProvider', () => {
     const result = await testProvider.callApi(prompt, context);
 
     expect(mockScoringProvider.callApi).toHaveBeenCalledTimes(2);
-    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.crescendoResult).toBe(true);
     expect(result.metadata?.crescendoConfidence).toBe(100);
   });
@@ -620,11 +634,12 @@ describe('CrescendoProvider', () => {
     // Should exit early due to grader failure
     expect(result.metadata?.stopReason).toBe('Grader failed');
 
-    // Should store the grader result for later use
-    expect(result.metadata?.storedGraderResult).toEqual(mockGraderResult);
+    // Should store the grader result for later use (includes assertion field)
+    expect(result.metadata?.storedGraderResult).toMatchObject(mockGraderResult);
+    expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
   });
 
-  it('should store grader result when exiting early due to internal evaluator success', async () => {
+  it('should not create synthetic grader result when internal evaluator succeeds', async () => {
     // Mock grader to pass (not detect jailbreak)
     jest.mocked(getGraderById).mockReturnValue({
       getResult: jest.fn(async () => ({
@@ -633,6 +648,13 @@ describe('CrescendoProvider', () => {
         },
       })),
     } as any);
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+    });
 
     const prompt = 'test prompt';
     const context = {
@@ -666,17 +688,11 @@ describe('CrescendoProvider', () => {
       }),
     });
 
-    const result = await crescendoProvider.callApi(prompt, context);
+    const result = await provider.callApi(prompt, context);
 
-    // Should exit early due to internal evaluator success
-    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
-
-    // Should store a constructed grader result
-    expect(result.metadata?.storedGraderResult).toEqual({
-      pass: false,
-      score: 0,
-      reason: 'Internal evaluator detected successful jailbreak',
-    });
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
+    expect(result.metadata?.storedGraderResult).toMatchObject({ pass: true });
+    expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
   });
 
   it('should stop when max backtracks reached', async () => {
@@ -943,7 +959,7 @@ describe('CrescendoProvider', () => {
       jest.clearAllMocks();
     });
 
-    it('should stop on first successful attack when continueAfterSuccess is false (default)', async () => {
+    it('should record success but continue when continueAfterSuccess is false', async () => {
       // Ensure grader passes for this test
       jest.mocked(getGraderById).mockReturnValue({
         getResult: jest.fn(async () => ({
@@ -955,7 +971,7 @@ describe('CrescendoProvider', () => {
 
       const provider = new CrescendoProvider({
         injectVar: 'objective',
-        maxTurns: 5,
+        maxTurns: 2,
         redteamProvider: mockRedTeamProvider,
         continueAfterSuccess: false,
       });
@@ -989,18 +1005,26 @@ describe('CrescendoProvider', () => {
             rationale: 'Not a refusal',
           }),
         })
-        // Mock internal evaluator to succeed on first attempt
+        // Successful jailbreak on first attempt
         .mockResolvedValueOnce({
           output: JSON.stringify({
             value: true,
             metadata: 100,
             rationale: 'Successful jailbreak',
           }),
+        })
+        // Subsequent calls (refusal + evaluator) return no success
+        .mockResolvedValue({
+          output: JSON.stringify({
+            value: false,
+            metadata: 0,
+            rationale: 'No additional success',
+          }),
         });
 
       const result = await provider.callApi('test prompt', context);
 
-      expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
       expect(result.metadata?.successfulAttacks).toHaveLength(1);
       expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
       expect(result.metadata?.successfulAttacks?.[0]).toEqual({
@@ -1008,7 +1032,7 @@ describe('CrescendoProvider', () => {
         prompt: 'harmful request',
         response: 'harmful response',
       });
-      expect(result.metadata?.crescendoRoundsCompleted).toBe(1); // Only one round
+      expect(result.metadata?.crescendoRoundsCompleted).toBe(2); // Completed configured rounds
     });
 
     it('should continue and collect multiple successful attacks when continueAfterSuccess is true', async () => {
@@ -1847,6 +1871,13 @@ describe('CrescendoProvider - Chat Template Support', () => {
   }
 ]`;
 
+    const provider = new CrescendoProvider({
+      injectVar: 'user_input',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+    });
+
     const context = {
       originalProvider: mockTargetProvider,
       vars: { user_input: 'test input' },
@@ -1904,10 +1935,10 @@ describe('CrescendoProvider - Chat Template Support', () => {
         }),
       });
 
-    const result = await crescendoProvider.callApi(chatTemplatePrompt, context);
+    const result = await provider.callApi(chatTemplatePrompt, context);
 
     expect(mockTargetProvider.callApi).toHaveBeenCalled();
-    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
   });
 
   it('should fall back to conversation history for non-chat templates when stateful=false', async () => {
