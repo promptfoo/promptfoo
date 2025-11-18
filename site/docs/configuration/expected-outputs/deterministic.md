@@ -1032,7 +1032,15 @@ METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most
 
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
-> **Note:** METEOR requires the `natural` package. If you want to use METEOR assertions, install it using: `npm install natural@latest`
+:::info Installation Required
+METEOR requires the optional `natural` package. Install it before using METEOR assertions:
+
+```bash
+npm install natural@^8.1.0
+```
+
+If the package is not installed, you'll receive an error message with installation instructions when attempting to use METEOR assertions.
+:::
 
 #### How METEOR Works
 

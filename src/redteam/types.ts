@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import type { Plugin, Severity } from './constants';
+import type { FrameworkComplianceId, Plugin, Severity } from './constants';
+import { isValidPolicyId } from './plugins/policy/validators';
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
@@ -11,7 +12,9 @@ export type Intent = string | string[];
 
 // Policy Types
 export const PolicyObjectSchema = z.object({
-  id: z.string().uuid(),
+  id: z
+    .string()
+    .refine(isValidPolicyId, { message: 'ID must be either a UUID or a 12-character hex string' }),
   text: z.string().optional(),
   name: z.string().optional(),
 });
@@ -29,6 +32,19 @@ export type PoliciesById = Map<
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
+export interface TracingConfig {
+  enabled?: boolean;
+  includeInAttack?: boolean;
+  includeInGrading?: boolean;
+  includeInternalSpans?: boolean;
+  maxSpans?: number;
+  maxDepth?: number;
+  maxRetries?: number;
+  retryDelayMs?: number;
+  spanFilter?: string[];
+  sanitizeAttributes?: boolean;
+  strategies?: Record<string, TracingConfig>;
+}
 export type PluginConfig = {
   examples?: string[];
   graderExamples?: {
@@ -37,8 +53,9 @@ export type PluginConfig = {
     score: number;
     reason: string;
   }[];
+  graderGuidance?: string;
   severity?: Severity;
-  language?: string;
+  language?: string | string[];
   prompt?: string;
   purpose?: string;
   modifiers?: Partial<Record<Modifier, unknown>>;
@@ -114,18 +131,20 @@ export interface PluginActionParams {
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
-  language?: string;
+  language?: string | string[];
   numTests?: number;
   plugins?: RedteamPluginObject[];
   provider?: string | ProviderOptions | ApiProvider;
   purpose?: string;
   strategies?: RedteamStrategy[];
+  frameworks?: FrameworkComplianceId[];
   delay?: number;
   remote?: boolean;
   sharing?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   testGenerationInstructions?: string;
   maxConcurrency?: number;
+  tracing?: TracingConfig;
 };
 
 // NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
@@ -158,7 +177,7 @@ export interface RedteamFileConfig extends CommonOptions {
 export interface SynthesizeOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   entities?: string[];
-  language: string;
+  language?: string | string[];
   maxConcurrency?: number;
   numTests: number;
   plugins: (RedteamPluginObject & { id: string; numTests: number })[];
@@ -208,9 +227,11 @@ export interface SavedRedteamConfig {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
+  frameworks?: FrameworkComplianceId[];
   extensions?: string[];
   numTests?: number;
   maxConcurrency?: number;
+  language?: string | string[];
   applicationDefinition: {
     purpose?: string;
     features?: string;
@@ -246,6 +267,8 @@ export interface BaseRedteamMetadata {
   messages: Record<string, any>[];
   stopReason: string;
   redteamHistory?: { prompt: string; output: string }[];
+  sessionIds?: string[];
+  sessionId?: string;
 }
 
 /**

@@ -19,11 +19,7 @@ import Container from '@mui/material/Container';
 import FormControl from '@mui/material/FormControl';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
-import Modal from '@mui/material/Modal';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Paper from '@mui/material/Paper';
 import Select, { type SelectChangeEvent } from '@mui/material/Select';
@@ -55,13 +51,13 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
+import { type TestResultStats, type CategoryStats } from './FrameworkComplianceUtils';
 
 const App = () => {
   const navigate = useNavigate();
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
-  const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
   const { recordEvent } = useTelemetry();
 
@@ -148,11 +144,22 @@ const App = () => {
       return {};
     }
 
+    const prompts =
+      (evalData.version >= 4
+        ? evalData.prompts
+        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+    const selectedPrompt = prompts[selectedPromptIndex];
+
     const failures: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
     evalData?.results.results.forEach((result) => {
+      // Filter by selected target/provider if multiple targets exist
+      if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
+        return;
+      }
+
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
         console.warn(`Could not get failures for plugin ${pluginId}`);
@@ -160,6 +167,8 @@ const App = () => {
       }
 
       // Exclude results with errors from being counted as failures
+      // TODO: Errors which arise while grading may be mis-classified as ResultFailureReason.ASSERT
+      // and leak past this check. Check `result.gradingResult.reason` for errors e.g. "API call error: *".
       if (result.error && result.failureReason === ResultFailureReason.ERROR) {
         return;
       }
@@ -181,18 +190,29 @@ const App = () => {
       }
     });
     return failures;
-  }, [evalData]);
+  }, [evalData, selectedPromptIndex]);
 
   const passesByPlugin = React.useMemo(() => {
     if (!evalData) {
       return {};
     }
 
+    const prompts =
+      (evalData.version >= 4
+        ? evalData.prompts
+        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+    const selectedPrompt = prompts[selectedPromptIndex];
+
     const passes: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
     evalData?.results.results.forEach((result) => {
+      // Filter by selected target/provider if multiple targets exist
+      if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
+        return;
+      }
+
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
         console.warn(`Could not get passes for plugin ${pluginId}`);
@@ -218,15 +238,26 @@ const App = () => {
       }
     });
     return passes;
-  }, [evalData]);
+  }, [evalData, selectedPromptIndex]);
 
   const categoryStats = React.useMemo(() => {
     if (!evalData) {
       return {};
     }
 
+    const prompts =
+      (evalData.version >= 4
+        ? evalData.prompts
+        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+    const selectedPrompt = prompts[selectedPromptIndex];
+
     return evalData.results.results.reduce(
       (acc, row) => {
+        // Filter by selected target/provider if multiple targets exist
+        if (prompts.length > 1 && selectedPrompt && row.promptIdx !== selectedPromptIndex) {
+          return acc;
+        }
+
         const pluginId = getPluginIdFromResult(row);
         if (!pluginId) {
           return acc;
@@ -237,7 +268,7 @@ const App = () => {
           return acc;
         }
 
-        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
         acc[pluginId].total++;
 
         // Check if moderation tests failed but other tests passed - this indicates content was
@@ -252,43 +283,48 @@ const App = () => {
         } else if (moderationPassed) {
           acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
         }
+
+        // Increment for grader-originated failures
+        if (row.failureReason === ResultFailureReason.ASSERT) {
+          acc[pluginId].failCount++;
+        }
+
         return acc;
       },
-      {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
+      {} as Record<string, Required<TestResultStats>>,
     );
-  }, [evalData]);
+  }, [evalData, selectedPromptIndex]);
 
   const strategyStats = React.useMemo(() => {
     if (!failuresByPlugin || !passesByPlugin) {
       return {};
     }
 
-    const stats: Record<string, { pass: number; total: number }> = {};
+    const stats: CategoryStats = {};
 
-    // Process tests in failuresByPlugin (attack successes)
     Object.values(failuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const strategyId = getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
-        stats[strategyId].pass += 1;
         stats[strategyId].total += 1;
+        stats[strategyId].failCount += 1;
       });
     });
 
-    // Process tests in passesByPlugin (attack failures)
     Object.values(passesByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const strategyId = getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
         stats[strategyId].total += 1;
+        stats[strategyId].pass += 1;
       });
     });
 
@@ -393,16 +429,22 @@ const App = () => {
     return filtered;
   }, [passesByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
 
+  /**
+   * Recalculates category (plugin) stats given the filtered failures and passes.
+   */
   const filteredCategoryStats = React.useMemo(() => {
-    const stats: Record<string, { pass: number; total: number; passWithFilter: number }> = {};
+    const stats: Record<string, Required<TestResultStats>> = {};
 
     Object.entries(filteredFailuresByPlugin).forEach(([pluginId, tests]) => {
-      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+      // Initialize the stats for the plugin
+      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
       stats[pluginId].total += tests.length;
+      stats[pluginId].failCount += tests.length;
     });
 
     Object.entries(filteredPassesByPlugin).forEach(([pluginId, tests]) => {
-      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+      // Initialize the stats for the plugin if it doesn't already exist
+      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
       stats[pluginId].pass += tests.length;
       stats[pluginId].passWithFilter += tests.length;
       stats[pluginId].total += tests.length;
@@ -412,7 +454,7 @@ const App = () => {
   }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
 
   const filteredStrategyStats = React.useMemo(() => {
-    const stats: Record<string, { pass: number; total: number }> = {};
+    const stats: CategoryStats = {};
 
     Object.values(filteredFailuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
@@ -420,10 +462,10 @@ const App = () => {
           test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
-        stats[strategyId].pass += 1;
+        stats[strategyId].failCount += 1;
         stats[strategyId].total += 1;
       });
     });
@@ -434,10 +476,11 @@ const App = () => {
           test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
         stats[strategyId].total += 1;
+        stats[strategyId].pass += 1;
       });
     });
 
@@ -554,15 +597,6 @@ const App = () => {
     tools = providerTools ? (Array.isArray(providerTools) ? providerTools : [providerTools]) : [];
   }
 
-  const handlePromptChipClick = () => {
-    setIsPromptModalOpen(true);
-  };
-
-  const handlePromptSelect = (index: number) => {
-    setSelectedPromptIndex(index);
-    setIsPromptModalOpen(false);
-  };
-
   const clearAllFilters = () => {
     setSelectedCategories([]);
     setSelectedStrategies([]);
@@ -657,8 +691,7 @@ const App = () => {
                 pr: 2,
               }}
             >
-              LLM Risk Assessment
-              {evalData.config.description && `: ${evalData.config.description}`}
+              {evalData.config.description || 'Risk Assessment'}
             </Typography>
             <Box sx={{ display: 'flex', flexShrink: 0 }}>
               <ActionButtons />
@@ -677,14 +710,73 @@ const App = () => {
               <ActionButtons />
             </Box>
             <Typography variant="h4">
-              <strong>LLM Risk Assessment</strong>
-              {evalData.config.description && `: ${evalData.config.description}`}
+              <strong>{evalData.config.description || 'Risk Assessment'}</strong>
             </Typography>
             <Typography variant="subtitle1" mb={2}>
               {formatDataGridDate(evalData.createdAt)}
             </Typography>
-            <Box className="report-details">
-              {selectedPrompt && (
+            <Box className="report-details" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {selectedPrompt && prompts.length > 1 ? (
+                <Select
+                  value={selectedPromptIndex}
+                  onChange={(e) => setSelectedPromptIndex(Number(e.target.value))}
+                  displayEmpty
+                  size="small"
+                  variant="outlined"
+                  sx={(theme) => ({
+                    height: '24px',
+                    fontSize: '0.8125rem',
+                    lineHeight: 1.43,
+                    borderRadius: '16px',
+                    backgroundColor:
+                      theme.palette.mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.08)'
+                        : 'rgba(0, 0, 0, 0.08)',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      backgroundColor:
+                        theme.palette.mode === 'dark'
+                          ? 'rgba(255, 255, 255, 0.13)'
+                          : 'rgba(0, 0, 0, 0.13)',
+                    },
+                    '&.Mui-focused': {
+                      backgroundColor:
+                        theme.palette.mode === 'dark'
+                          ? 'rgba(255, 255, 255, 0.16)'
+                          : 'rgba(0, 0, 0, 0.16)',
+                    },
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      border: 'none',
+                    },
+                    '& .MuiSelect-select': {
+                      paddingTop: '3px',
+                      paddingBottom: '3px',
+                      paddingLeft: '12px',
+                      paddingRight: '32px !important',
+                      display: 'flex',
+                      alignItems: 'center',
+                      minHeight: 'auto',
+                    },
+                    '& .MuiSelect-icon': {
+                      color: 'inherit',
+                      opacity: 0.7,
+                      right: '4px',
+                      fontSize: '1.2rem',
+                    },
+                  })}
+                  renderValue={(value) => (
+                    <Box component="span" sx={{ fontSize: '0.8125rem' }}>
+                      <strong>Target:</strong> {prompts[value].provider}
+                    </Box>
+                  )}
+                >
+                  {prompts.map((prompt, idx) => (
+                    <MenuItem key={idx} value={idx}>
+                      {prompt.provider}
+                    </MenuItem>
+                  ))}
+                </Select>
+              ) : selectedPrompt ? (
                 <Chip
                   size="small"
                   label={
@@ -692,10 +784,8 @@ const App = () => {
                       <strong>Target:</strong> {selectedPrompt.provider}
                     </>
                   }
-                  onClick={handlePromptChipClick}
-                  style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
                 />
-              )}
+              ) : null}
               <Tooltip
                 title={
                   selectedPrompt?.metrics?.tokenUsage?.total
@@ -728,8 +818,6 @@ const App = () => {
                       &quot;
                     </>
                   }
-                  onClick={handlePromptChipClick}
-                  style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
                 />
               )}
               {tools.length > 0 && (
@@ -855,6 +943,7 @@ const App = () => {
             strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
             failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
             passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
+            plugins={evalData.config.redteam.plugins || []}
           />
           <RiskCategories
             categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
@@ -875,65 +964,9 @@ const App = () => {
           <FrameworkCompliance
             evalId={evalId}
             categoryStats={categoryStatsForFrameworkCompliance}
+            config={evalData.config}
           />
         </Stack>
-        <Modal
-          open={isPromptModalOpen}
-          onClose={() => setIsPromptModalOpen(false)}
-          aria-labelledby="prompt-modal-title"
-          sx={{
-            '& .MuiModal-root': {
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            },
-            '& .MuiBox-root': {
-              width: '80%',
-              maxWidth: 800,
-              maxHeight: '90vh',
-              overflowY: 'auto',
-            },
-          }}
-        >
-          <Box
-            sx={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: 400,
-              bgcolor: 'background.paper',
-              boxShadow: 24,
-              p: 4,
-            }}
-          >
-            <Typography id="prompt-modal-title" variant="h6" component="h6" gutterBottom>
-              View results for...
-            </Typography>
-            <List>
-              {prompts.map((prompt, index) => (
-                // @ts-ignore
-                <ListItem
-                  key={index}
-                  button
-                  onClick={() => handlePromptSelect(index)}
-                  selected={index === selectedPromptIndex}
-                >
-                  <ListItemText
-                    primary={`${prompt.provider}`}
-                    secondary={
-                      <pre>
-                        {prompt.raw.length > 100 && prompts.length > 1
-                          ? `${prompt.raw.substring(0, 100)}...`
-                          : prompt.raw}
-                      </pre>
-                    }
-                  />
-                </ListItem>
-              ))}
-            </List>
-          </Box>
-        </Modal>
         <ToolsDialog
           open={isToolsDialogOpen}
           onClose={() => setIsToolsDialogOpen(false)}

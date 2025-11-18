@@ -4,7 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import LauncherPage from './page';
-import { useApiHealth } from '../../hooks/useApiHealth';
+import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -42,13 +43,12 @@ const renderLauncher = () => {
   );
 };
 
-vi.mock('../../hooks/useApiHealth', () => ({
+vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: vi.fn().mockReturnValue({
-    status: 'unknown',
-    message: null,
-    checkHealth: vi.fn(),
-    isChecking: false,
-  }),
+    data: { status: 'unknown', message: null },
+    refetch: vi.fn(),
+    isLoading: false,
+  } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>),
 }));
 
 describe('LauncherPage', () => {
@@ -169,11 +169,10 @@ describe('LauncherPage', () => {
 
     const checkHealthMock = vi.fn();
     (useApiHealth as Mock).mockReturnValue({
-      status: 'unknown',
-      message: null,
-      checkHealth: checkHealthMock,
-      isChecking: false,
-    });
+      data: { status: 'unknown', message: null },
+      refetch: checkHealthMock,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
     renderLauncher();
 

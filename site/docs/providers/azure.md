@@ -99,7 +99,7 @@ providers:
   - id: openai:responses:gpt-4.1
     config:
       apiHost: 'your-resource.openai.azure.com'
-      apiKey: '${AZURE_API_KEY}'
+      apiKey: '{{ env.AZURE_API_KEY }}' # or set OPENAI_API_KEY env var
       temperature: 0.7
       instructions: 'You are a helpful assistant.'
 ```
@@ -180,7 +180,7 @@ config:
       server_url: https://example.com/mcp-server
       require_approval: never
       headers:
-        Authorization: 'Bearer ${MCP_API_KEY}'
+        Authorization: 'Bearer {{ env.MCP_API_KEY }}'
 ```
 
 **Code Interpreter**: Enable code execution capabilities:
@@ -414,7 +414,7 @@ All other [OpenAI provider](/docs/providers/openai) environment variables and co
 
 ## Using Client Credentials
 
-To use client credentials for authentication with Azure, first install the peer dependency:
+Install the `@azure/identity` package:
 
 ```sh
 npm i @azure/identity
@@ -774,7 +774,7 @@ To evaluate an OpenAI assistant on Azure:
 
 1. Create a deployment for the assistant in the Azure portal
 2. Create an assistant in the Azure web UI
-3. Install the peer dependency:
+3. Install the `@azure/openai-assistants` package:
 
 ```sh
 npm i @azure/openai-assistants

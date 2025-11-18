@@ -18,6 +18,7 @@ import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { parseXlsxFile } from './xlsx';
 
 import type {
   CsvRow,
@@ -26,6 +27,7 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types/index';
+import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -135,6 +137,11 @@ export async function readStandaloneTestsFile(
       feature: 'csv tests file - google sheet',
     });
     rows = await fetchCsvFromGoogleSheet(varsPath);
+  } else if (/https:\/\/[^/]+\.sharepoint\.com\//i.test(varsPath)) {
+    telemetry.record('feature_used', {
+      feature: 'csv tests file - sharepoint',
+    });
+    rows = await fetchCsvFromSharepoint(varsPath);
   } else if (fileExtension === 'csv') {
     telemetry.record('feature_used', {
       feature: 'csv tests file - local',
@@ -179,6 +186,11 @@ export async function readStandaloneTestsFile(
       }
       throw e;
     }
+  } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+    telemetry.record('feature_used', {
+      feature: 'xlsx tests file - local',
+    });
+    rows = await parseXlsxFile(resolvedVarsPath);
   } else if (fileExtension === 'json') {
     telemetry.record('feature_used', {
       feature: 'json tests file',

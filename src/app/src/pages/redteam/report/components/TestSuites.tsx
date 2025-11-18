@@ -44,14 +44,18 @@ import {
   calculatePluginRiskScore,
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { formatASRForDisplay } from '@app/utils/redteam';
+import { type TestResultStats } from './FrameworkComplianceUtils';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 
 interface TestSuitesProps {
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  categoryStats: Record<string, Required<TestResultStats>>;
   plugins: RedteamPluginObject[];
   failuresByPlugin?: Record<string, any[]>;
   passesByPlugin?: Record<string, any[]>;
-  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
+  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
   vulnerabilitiesDataGridFilterModel: GridFilterModel;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
 }
@@ -124,6 +128,8 @@ const TestSuites = ({
     );
   }, [plugins, pluginSeverityMap]);
 
+  const customPoliciesById = useCustomPoliciesMap(plugins);
+
   const rows = React.useMemo(() => {
     return (
       Object.entries(categoryStats)
@@ -168,20 +174,13 @@ const TestSuites = ({
           let description =
             subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '';
 
-          // Read custom policy metadata from `pluginsById`.
+          // Reads policy data from customPoliciesById
           if (plugin?.id === 'policy' && plugin?.config?.policy) {
-            if (isValidPolicyObject(plugin.config.policy)) {
-              type = formatPolicyIdentifierAsMetric(
-                plugin.config.policy.name ?? plugin.config.policy.id,
-              );
-              if (plugin.config.policy.text) {
-                description = plugin.config.policy.text;
-              }
-            } else {
-              type = formatPolicyIdentifierAsMetric(
-                makeInlinePolicyId(plugin.config?.policy as string),
-              );
-              description = plugin.config?.policy as string;
+            const policy = customPoliciesById[pluginName];
+            if (policy) {
+              // Render w/o strategy suffix as rows are aggregates across strategies
+              type = formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
+              description = policy.text ?? '';
             }
           }
 
@@ -193,7 +192,7 @@ const TestSuites = ({
             severity,
             passRate: (stats.pass / stats.total) * 100,
             passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
-            attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
+            attackSuccessRate: calculateAttackSuccessRate(stats.total, stats.failCount),
             total: stats.total,
             successfulAttacks: stats.total - stats.pass,
             riskScore: riskDetails.riskScore,
@@ -204,7 +203,15 @@ const TestSuites = ({
         // Filter out rows where ASR = 0
         .filter((row) => row.successfulAttacks > 0)
     );
-  }, [categoryStats, plugins, failuresByPlugin, passesByPlugin, pluginsById, pluginSeverityMap]);
+  }, [
+    categoryStats,
+    plugins,
+    failuresByPlugin,
+    passesByPlugin,
+    pluginsById,
+    pluginSeverityMap,
+    customPoliciesById,
+  ]);
 
   const exportToCSV = React.useCallback(() => {
     // Format data for CSV
@@ -271,7 +278,7 @@ const TestSuites = ({
       subCategory.complexityScore.toFixed(1),
       subCategory.successfulAttacks,
       subCategory.total,
-      subCategory.attackSuccessRate.toFixed(2) + '%',
+      formatASRForDisplay(subCategory.attackSuccessRate) + '%',
       severityDisplayNames[subCategory.severity as Severity],
     ]);
 
@@ -344,7 +351,7 @@ const TestSuites = ({
                     • Base Severity: {params.row.severity}
                   </Typography>
                   <Typography variant="caption" component="div">
-                    • Attack Success Rate: {params.row.attackSuccessRate.toFixed(2)}%
+                    • Attack Success Rate: {formatASRForDisplay(params.row.attackSuccessRate)}%
                   </Typography>
                   <Typography
                     variant="caption"
@@ -433,10 +440,10 @@ const TestSuites = ({
         const passRate = params.row.passRate;
         return (
           <Box>
-            <strong>{value.toFixed(2)}%</strong>
+            <strong>{formatASRForDisplay(value)}%</strong>
             {passRateWithFilter !== passRate && (
               <>
-                <br />({(100 - passRateWithFilter).toFixed(1)}% with mitigation)
+                <br />({formatASRForDisplay(100 - passRateWithFilter)}% with mitigation)
               </>
             )}
           </Box>
@@ -480,8 +487,20 @@ const TestSuites = ({
             onClick={() => {
               const pluginId = params.row.pluginName;
               const plugin = pluginsById[pluginId];
-              const key = plugin?.id === 'policy' ? 'policy' : 'plugin';
-              navigate(`/eval/${evalId}?${key}=${encodeURIComponent(pluginId)}&mode=failures`);
+
+              const filterParam = encodeURIComponent(
+                JSON.stringify([
+                  {
+                    type: plugin?.id === 'policy' ? 'policy' : 'plugin',
+                    operator: 'equals',
+                    value: pluginId,
+                  },
+                ]),
+              );
+
+              // If ASR is 0, show passes
+              const mode = params.row.attackSuccessRate === 0 ? 'passes' : 'failures';
+              navigate(`/eval/${evalId}?filter=${filterParam}&mode=${mode}`);
             }}
           >
             View logs

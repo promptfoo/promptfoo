@@ -8,11 +8,12 @@ import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import SeverityCard from './SeverityCard';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
+import { type TestResultStats } from './FrameworkComplianceUtils';
 
 interface OverviewProps {
-  categoryStats: Record<PluginType, { pass: number; total: number }>;
+  categoryStats: Record<PluginType, TestResultStats>;
   plugins: RedteamPluginObject[];
-  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
+  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
 }
 
