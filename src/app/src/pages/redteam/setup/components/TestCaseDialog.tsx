@@ -28,13 +28,12 @@ import {
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import Skeleton from '@mui/material/Skeleton';
 import Chip from '@mui/material/Chip';
-import ChatMessages, { type Message as ChatMessage } from '@app/pages/eval/components/ChatMessages';
-
-type GeneratedTestCase = {
-  prompt: string;
-  context?: string;
-  metadata?: any;
-};
+import ChatMessages, {
+  type LoadedMessage,
+  type LoadingMessage,
+  type Message,
+} from '@app/pages/eval/components/ChatMessages';
+import { type GeneratedTestCase, type TargetResponse } from './TestCaseGenerationProvider';
 
 interface TestCaseDialogProps {
   open: boolean;
@@ -42,100 +41,13 @@ interface TestCaseDialogProps {
   plugin: Plugin | null;
   strategy: Strategy | null;
   isGenerating: boolean;
-  generatedTestCase: GeneratedTestCase | null;
-  targetResponse?: { output: string; error?: string } | null;
+  generatedTestCases: GeneratedTestCase[];
+  targetResponses: TargetResponse[];
   isRunningTest?: boolean;
   onRegenerate: () => void;
+  currentTurn: number;
+  maxTurns: number;
 }
-
-const Section = ({
-  label,
-  text,
-  loading,
-  strategy,
-}: {
-  label: string;
-  text: string;
-  loading: boolean;
-  strategy: Strategy | null;
-}) => {
-  const theme = useTheme();
-
-  const content = useMemo(() => {
-    if (strategy === 'audio') {
-      return (
-        <Box>
-          <audio controls style={{ width: '100%' }} data-testid="audio-player">
-            <source src={`data:audio/wav;base64,${text}`} type="audio/wav" />
-            Your browser does not support the audio element.
-          </audio>
-        </Box>
-      );
-    } else if (strategy === 'image') {
-      return (
-        <Box
-          sx={{
-            p: 2,
-            borderRadius: 1,
-            border: '1px solid',
-            borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-          }}
-        >
-          <img src={`data:image/png;base64,${text}`} alt="Image" />
-        </Box>
-      );
-    } else if (strategy === 'video') {
-      return (
-        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-          <video controls style={{ maxHeight: '200px' }}>
-            <source
-              src={text.startsWith('data:') ? text : `data:video/mp4;base64,${text}`}
-              type="video/mp4"
-            />
-            Your browser does not support the video element.
-          </video>
-        </Box>
-      );
-    } else {
-      return (
-        <Box
-          sx={{
-            p: 2,
-            borderRadius: 1,
-            border: '1px solid',
-            borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-            backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
-            minHeight: 51,
-          }}
-        >
-          {text}
-        </Box>
-      );
-    }
-  }, [text, strategy]);
-
-  return (
-    <Box>
-      <Typography variant="subtitle2" gutterBottom>
-        {label}
-      </Typography>
-      <Box
-        sx={{
-          fontFamily: 'monospace',
-          fontSize: '0.875rem',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}
-      >
-        {loading ? (
-          <Skeleton variant="rectangular" sx={{ p: 2, borderRadius: 1, height: 51 }} />
-        ) : (
-          content
-        )}
-      </Box>
-    </Box>
-  );
-};
 
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   open,
@@ -143,10 +55,12 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   plugin,
   strategy,
   isGenerating,
-  generatedTestCase,
-  targetResponse,
+  generatedTestCases,
+  targetResponses,
   isRunningTest = false,
   onRegenerate,
+  currentTurn,
+  maxTurns,
 }) => {
   const pluginName = typeof plugin === 'string' ? plugin : plugin || '';
   const pluginDisplayName =
@@ -156,46 +70,56 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
 
   const strategyName = typeof strategy === 'string' ? strategy : strategy || '';
   const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
-  const strategyIsMultiTurn =
-    typeof strategyName === 'string' && strategyName
-      ? isMultiTurnStrategy(strategyName as Strategy)
-      : false;
 
-  const turnMessages = useMemo<ChatMessage[]>(() => {
-    const metadata = (generatedTestCase as { metadata?: any } | null)?.metadata;
-    const historyCandidate =
-      metadata?.multiTurn?.history ||
-      metadata?.metadata?.multiTurn?.history ||
-      metadata?.redteamHistory ||
-      [];
+  const turnMessages = useMemo<Message[]>(() => {
+    const messages = [];
 
-    if (!Array.isArray(historyCandidate)) {
-      return [];
+    for (let i = 0; i < maxTurns; i++) {
+      const generatedTestCase = generatedTestCases[i];
+
+      if (generatedTestCase) {
+        messages.push({
+          role: 'user' as const,
+          content: generatedTestCase.prompt,
+          contentType:
+            strategy === 'audio'
+              ? ('audio' as const)
+              : strategy === 'image'
+                ? ('image' as const)
+                : strategy === 'video'
+                  ? ('video' as const)
+                  : ('text' as const),
+        } as LoadedMessage);
+      }
+
+      const targetResponse = targetResponses[i];
+
+      if (targetResponse) {
+        messages.push({
+          role: 'assistant' as const,
+          content: targetResponse.output ?? targetResponse.error ?? 'No response from target',
+          contentType: 'text' as const,
+        } as LoadedMessage);
+      }
     }
 
-    return historyCandidate
-      .filter((entry: any) => entry && typeof entry.content === 'string')
-      .map((entry: any, idx: number) => {
-        const role =
-          entry.role === 'assistant' || entry.role === 'user' || entry.role === 'system'
-            ? (entry.role as ChatMessage['role'])
-            : idx % 2 === 0
-              ? 'user'
-              : 'assistant';
-        return {
-          role,
-          content: entry.content as string,
-        };
-      });
-  }, [generatedTestCase]);
+    // Indicate loading state to the user
+    if (isGenerating && generatedTestCases.length === targetResponses.length) {
+      messages.push({ role: 'user' as const, loading: true } as LoadingMessage);
+    } else if (isRunningTest) {
+      messages.push({ role: 'assistant' as const, loading: true } as LoadingMessage);
+    }
 
-  const isMultiTurnConversation = turnMessages.length > 0;
-  const promptText = generatedTestCase?.prompt?.toString() ?? '';
-  const targetOutputText = targetResponse?.output?.toString() ?? '';
-
-  const shouldShowPromptSection = !strategyIsMultiTurn && (isGenerating || promptText);
-  const shouldShowTargetSection =
-    !strategyIsMultiTurn && (isRunningTest || targetOutputText || targetResponse?.error);
+    return messages;
+  }, [
+    generatedTestCases,
+    targetResponses,
+    currentTurn,
+    maxTurns,
+    isGenerating,
+    isRunningTest,
+    strategy,
+  ]);
 
   return (
     <Dialog
@@ -207,68 +131,40 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
         // Ensure the container is always rendered in front of tooltips
         zIndex: 10000,
       }}
+      data-testid="test-case-dialog"
     >
-      <DialogTitle
+      <Box
         sx={{
           display: 'flex',
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
           gap: 1,
+          px: 3,
+          py: 2,
         }}
       >
-        <Typography variant="h6">Test Case</Typography>
+        <DialogTitle
+          sx={{
+            // Override the default padding to set it consistently on the parent container
+            p: 0,
+          }}
+        >
+          Test Case
+        </DialogTitle>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Chip label={`Strategy: ${strategyDisplayName}`} />
-          <Chip label={`Plugin: ${pluginDisplayName}`} />
+          <Chip label={`Strategy: ${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`} data-testid="strategy-chip" />
+          <Chip label={`Plugin: ${pluginDisplayName}`} data-testid="plugin-chip" />
         </Box>
-      </DialogTitle>
+      </Box>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {strategyIsMultiTurn && (
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              Turns
-            </Typography>
-            <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
-              {isMultiTurnConversation ? (
-                <ChatMessages messages={turnMessages} />
-              ) : (
-                <Skeleton
-                  variant="rectangular"
-                  sx={{ p: 2, borderRadius: 1, height: 120 }}
-                  animation="pulse"
-                />
-              )}
-            </Box>
-          </Box>
+        <ChatMessages messages={turnMessages} />
+        {generatedTestCases.length > 0 && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            Dissatisfied with the test case? Fine tune it by adjusting your{' '}
+            {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
+          </Alert>
         )}
-
-        {!strategyIsMultiTurn && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {shouldShowPromptSection && (
-              <Section
-                label="Generated Prompt"
-                text={promptText || 'Awaiting generation...'}
-                loading={isGenerating}
-                strategy={strategy}
-              />
-            )}
-            {shouldShowTargetSection && (
-              <Section
-                label="Target Response"
-                text={targetOutputText || (targetResponse?.error ?? 'No response')}
-                loading={isRunningTest}
-                strategy={strategy}
-              />
-            )}
-            {targetResponse?.error && <Alert severity="error">{targetResponse.error}</Alert>}
-          </Box>
-        )}
-
-        <Alert severity="info" sx={{ mt: 2 }}>
-          Dissatisfied with the test case? Fine tune it by adjusting your{' '}
-          {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
-        </Alert>
       </DialogContent>
       <DialogActions>
         {pluginName && hasSpecificPluginDocumentation(pluginName as Plugin) && (
