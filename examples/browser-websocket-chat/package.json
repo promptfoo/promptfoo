@@ -1,0 +1,16 @@
+{
+  "name": "browser-websocket-chat-example",
+  "version": "1.0.0",
+  "description": "WebSocket-based chat with multi-turn conversations",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test-websocket.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "cookie-parser": "^1.4.6",
+    "ws": "^8.14.2"
+  }
+}
