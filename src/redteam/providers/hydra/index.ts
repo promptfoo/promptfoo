@@ -287,6 +287,7 @@ export class HydraProvider implements ApiProvider {
           },
           filters,
           targetProvider,
+          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
       } else {
         // Stateless: send full conversation history as JSON

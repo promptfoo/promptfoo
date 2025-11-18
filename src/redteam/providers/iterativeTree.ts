@@ -537,6 +537,7 @@ async function runRedteamConversation({
           },
           filters,
           targetProvider,
+          [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
         const targetResponse = await getTargetResponse(
@@ -793,6 +794,7 @@ async function runRedteamConversation({
     },
     filters,
     targetProvider,
+    [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
   );
 
   const finalTargetResponse = await getTargetResponse(
