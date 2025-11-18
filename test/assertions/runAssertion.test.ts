@@ -2359,7 +2359,7 @@ describe('runAssertion', () => {
 
       expect(result).toMatchObject({
         pass: true,
-        reason: 'Similarity 1.00 is greater than threshold 0.75',
+        reason: 'Similarity 1.00 is greater than or equal to threshold 0.75',
       });
     });
 
@@ -2397,7 +2397,7 @@ describe('runAssertion', () => {
 
       expect(result).toMatchObject({
         pass: true,
-        reason: 'Similarity 1.00 is greater than threshold 0.75',
+        reason: 'Similarity 1.00 is greater than or equal to threshold 0.75',
       });
     });
 
