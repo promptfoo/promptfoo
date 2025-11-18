@@ -306,9 +306,22 @@ async function applyStrategies(
     }
 
     const targetPlugins = strategy.config?.plugins;
-    const applicableTestCases = testCases.filter((t) =>
-      pluginMatchesStrategyTargets(t, strategy.id, targetPlugins),
-    );
+    const applicableTestCases = testCases.filter((t) => {
+      // Check plugin matching first
+      if (!pluginMatchesStrategyTargets(t, strategy.id, targetPlugins)) {
+        return false;
+      }
+
+      // Skip retry tests - they shouldn't be transformed by strategies
+      if (t.metadata?.retry) {
+        logger.debug(
+          `Skipping ${strategy.id} for retry test (plugin: ${t.metadata?.pluginId}) - retry tests are not transformed`,
+        );
+        return false;
+      }
+
+      return true;
+    });
 
     const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
       applicableTestCases,
