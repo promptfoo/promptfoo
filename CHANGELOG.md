@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.119.7] - 2025-11-17
+
 ### Added
 
 - feat(assertions): add dot product and euclidean distance metrics for similarity assertion - use `similar:dot` and `similar:euclidean` assertion types to match production vector database metrics and support different similarity use cases (#6202)
@@ -27,7 +29,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(providers): support function providers in defaultTest.options.provider and assertion-level providers; prevents crashes when resolving function providers (#6174)
 - fix(providers): correctly handle reasoning field in OpenAI-compatible models like gpt-oss-20b, extracting both reasoning and content instead of only reasoning (#6062)
 - fix(redteam): exclude cyberseceval and beavertails static dataset plugins from iterative strategies to prevent wasted compute and silent grading failures during Hydra/Meta/Tree iterations (#6230)
 - fix(mcp): allow colons in eval ID validation for get_evaluation_details tool - fixes rejection of valid eval IDs returned by list_evaluations (e.g., eval-8h1-2025-11-15T14:17:18) by updating regex to accept ISO timestamp format (#6222)
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(webui): fix duplicate React key warning in DefaultTestVariables component by implementing counter-based unique ID generation (#6201)
 - fix(samples): downlevel pem dependency to supported version
 - fix(deps): remove unused dependency on @libsql/client
+- fix(redteam): store rendered grading rubric in assertion.value for agentic strategies to display in UI Value column (#6125)
 
 ### Tests
 
@@ -42,8 +44,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
-- chore(deps)!: upgrade to React 19 - upgrade react and react-dom from 18.3.1 to 19.2.0; migrate deprecated ReactDOM.render to createRoot API; replace JSX.Element with React.ReactElement for React 19 namespace removal; fix RefObject types for stricter React 19 typing (useRef(null) now correctly typed as RefObject<T | null>); add Vite path aliases and npm overrides to enforce single React 19 instance across monorepo workspaces (prevents duplicate installations that caused test failures); all third-party dependencies verified compatible (Emotion 11.14.0+, MUI v7, React Router v7, TanStack Query v5, Recharts 2.15.4); test results: 1,970/1,972 passing (100%, 2 skipped); BREAKING CHANGE: React 19 is a major version upgrade that removes deprecated APIs (ReactDOM.render, unmountComponentAtNode) and the global JSX namespace (#6229)
-- chore(deps): upgrade @googleapis/sheets from 9.8.0 to 12.0.0 and resolve gcp-metadata dependency conflicts - fixes recurring npm ci failures by (1) updating the existing mongoose npm override from gcp-metadata ^6.0.0 to ^8.1.2, and (2) adding gcp-metadata ^8.1.2 as a direct dependency for consistent npm resolution across npm 10.x and 11.x (note: gcp-metadata is not directly imported in code but required for dependency resolution consistency, hence excluded from depcheck); this allows using google-auth-library 10.5.0 with X.509 certificate authentication and Cloud Run Jobs detection while ensuring single gcp-metadata version across the dependency tree; @googleapis/sheets v12 is a major version upgrade (v9→v12) that requires googleapis-common v8 and google-auth-library v10+, but maintains backwards-compatible API usage for spreadsheets.get() and spreadsheets.values.get() methods (#6227)
+- chore(deps): upgrade to React 19 (#6229)
+- chore(deps): upgrade @googleapis/sheets from 9.8.0 to 12.0.0 (#6227)
 - chore(deps): bump openai from 6.8.1 to 6.9.0 (#6208)
 
 ## [0.119.6] - 2025-11-12
@@ -65,6 +67,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(cli): format object and array variables with pretty-printed JSON in console table and HTML outputs for improved readability (#6175)
 - fix(cli): only show error counter when >0
 - fix(redteam): respect redteam.provider configuration for local grading - fixes issue where configuring a local provider (e.g., ollama:llama3.2) still sent grading requests to remote API instead of using the configured provider (#5959)
+- fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
 - fix: Reverts #6142 (#6189)
 
 ### Documentation
@@ -210,7 +213,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(redteam): enable layer strategy with multilingual language support; plugins now generate tests in multiple languages even when layer strategy is present (#6084)
 - fix(redteam): reduce multilingual deprecation logging noise by moving from warn to debug level (#6084)
-  > > > > > > > main
 
 ## [0.119.1] - 2025-10-29
 
