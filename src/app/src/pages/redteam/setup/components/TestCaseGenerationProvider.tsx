@@ -62,6 +62,7 @@ interface TestGenerationContext {
     onSuccess?: OnGenerationSuccess,
     onError?: OnGenerationError,
   ) => Promise<void>;
+  continueGeneration: (additionalTurns: number) => void;
 }
 
 const TestCaseGenerationContext = createContext<TestGenerationContext>({
@@ -69,6 +70,7 @@ const TestCaseGenerationContext = createContext<TestGenerationContext>({
   plugin: null,
   strategy: null,
   generateTestCase: async () => {},
+  continueGeneration: () => {},
 });
 
 // ===================================================================
@@ -428,6 +430,12 @@ export const TestCaseGenerationProvider: React.FC<{
     handleStart(plugin!, strategy!);
   }, [handleStart, plugin, strategy]);
 
+  const handleContinue = useCallback((additionalTurns: number) => {
+    setMaxTurns((prev) => prev + additionalTurns);
+    setCurrentTurn((prev) => prev + 1);
+    setIsGenerating(true);
+  }, []);
+
   // ===================================================================
   // Effects
   // ===================================================================
@@ -517,6 +525,7 @@ export const TestCaseGenerationProvider: React.FC<{
           plugin: plugin?.id ?? null,
           strategy: strategy?.id ?? null,
           generateTestCase: handleStart,
+          continueGeneration: handleContinue,
         } as TestGenerationContext
       }
     >
@@ -525,6 +534,7 @@ export const TestCaseGenerationProvider: React.FC<{
         open={isDialogOpen}
         onClose={handleCloseDialog}
         onRegenerate={handleRegenerate}
+        onContinue={handleContinue}
         plugin={plugin?.id ?? null}
         strategy={strategy?.id ?? null}
         isGenerating={isGenerating}

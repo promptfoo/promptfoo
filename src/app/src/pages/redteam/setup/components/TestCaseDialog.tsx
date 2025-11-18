@@ -12,8 +12,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
+import Divider from '@mui/material/Divider';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -21,6 +20,7 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
@@ -45,6 +45,7 @@ interface TestCaseDialogProps {
   targetResponses: TargetResponse[];
   isRunningTest?: boolean;
   onRegenerate: () => void;
+  onContinue: (additionalTurns: number) => void;
   currentTurn: number;
   maxTurns: number;
 }
@@ -59,6 +60,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   targetResponses,
   isRunningTest = false,
   onRegenerate,
+  onContinue,
   currentTurn,
   maxTurns,
 }) => {
@@ -121,6 +123,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     strategy,
   ]);
 
+  const canAddAdditionalTurns =
+    !isGenerating && !isRunningTest && isMultiTurnStrategy(strategy as Strategy);
+
   return (
     <Dialog
       open={open}
@@ -162,6 +167,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
       </Box>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <ChatMessages messages={turnMessages} displayTurnCount={maxTurns > 1} maxTurns={maxTurns} />
+
+        <div />
+
         {generatedTestCases.length > 0 && (
           <Alert severity="info" sx={{ mt: 2 }}>
             Dissatisfied with the test case? Fine tune it by adjusting your{' '}
@@ -169,9 +177,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           </Alert>
         )}
       </DialogContent>
-      <DialogActions>
-        {pluginName && hasSpecificPluginDocumentation(pluginName as Plugin) && (
-          <Box sx={{ flex: 1, mr: 2 }}>
+      <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {pluginName && hasSpecificPluginDocumentation(pluginName as Plugin) && (
             <Link
               href={getPluginDocumentationUrl(pluginName as Plugin)}
               target="_blank"
@@ -185,7 +193,6 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                 '&:hover': {
                   textDecoration: 'underline',
                 },
-                paddingLeft: 2,
               }}
             >
               Learn more about {pluginDisplayName}
@@ -193,14 +200,26 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                 ↗
               </Box>
             </Link>
-          </Box>
-        )}
-        <Button onClick={onRegenerate} variant="contained" loading={isGenerating || isRunningTest}>
-          Regenerate
-        </Button>
-        <Button onClick={onClose} variant="outlined">
-          Close
-        </Button>
+          )}
+        </Box>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          {canAddAdditionalTurns && (
+            <>
+              <MultiTurnExtensionControl onContinue={onContinue} />{' '}
+              <Divider orientation="vertical" flexItem />
+            </>
+          )}
+          <Button
+            onClick={onRegenerate}
+            variant={canAddAdditionalTurns ? 'outlined' : 'contained'}
+            loading={isGenerating || isRunningTest}
+          >
+            {canAddAdditionalTurns ? 'Start Over' : 'Regenerate'}
+          </Button>
+          <Button onClick={onClose} variant="outlined" color="error">
+            Close
+          </Button>
+        </Box>
       </DialogActions>
     </Dialog>
   );
@@ -243,5 +262,32 @@ export const TestCaseGenerateButton: React.FC<{
         </IconButton>
       </span>
     </Tooltip>
+  );
+};
+
+const MultiTurnExtensionControl: React.FC<{
+  onContinue: (additionalTurns: number) => void;
+}> = ({ onContinue }) => {
+  const [additionalTurns, setAdditionalTurns] = React.useState<number>(5);
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <BaseNumberInput
+        size="small"
+        value={additionalTurns}
+        onChange={(value) => {
+          if (value !== undefined) {
+            setAdditionalTurns(Math.max(1, Math.min(100, value)));
+          }
+        }}
+        sx={{ width: 125 }}
+        label="Additional Turns"
+        min={1}
+        max={100}
+      />
+      <Button onClick={() => onContinue(additionalTurns)} variant="contained" color="primary">
+        Continue
+      </Button>
+    </Box>
   );
 };
