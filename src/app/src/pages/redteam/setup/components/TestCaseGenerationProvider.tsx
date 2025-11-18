@@ -71,27 +71,27 @@ const TestCaseGenerationContext = createContext<TestGenerationContext>({
   generateTestCase: async () => {},
 });
 
-  // ===================================================================
-  // Helper Functions
-  // ===================================================================
+// ===================================================================
+// Helper Functions
+// ===================================================================
 
-  function getHistory(
-    generatedTestCases: GeneratedTestCase[],
-    targetResponses: TargetResponse[],
-  ): ConversationMessage[] {
-    const history: ConversationMessage[] = [];
-    for (let i = 0; i < targetResponses.length; i++) {
-      const testCase = generatedTestCases[i];
-      const response = targetResponses[i];
-      if (testCase) {
-        history.push({ role: 'user', content: testCase.prompt });
-        if (response?.output) {
-          history.push({ role: 'assistant', content: response.output });
-        }
+function getHistory(
+  generatedTestCases: GeneratedTestCase[],
+  targetResponses: TargetResponse[],
+): ConversationMessage[] {
+  const history: ConversationMessage[] = [];
+  for (let i = 0; i < targetResponses.length; i++) {
+    const testCase = generatedTestCases[i];
+    const response = targetResponses[i];
+    if (testCase) {
+      history.push({ role: 'user', content: testCase.prompt });
+      if (response?.output) {
+        history.push({ role: 'assistant', content: response.output });
       }
     }
-    return history;
   }
+  return history;
+}
 
 /**
  * POSTS to the `/redteam/generate-test` endpoint to generate a test case for the given plugin and strategy.

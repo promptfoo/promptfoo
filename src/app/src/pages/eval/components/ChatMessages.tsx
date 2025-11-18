@@ -170,7 +170,6 @@ export default function ChatMessages({
     !displayTurnCount || maxTurns !== undefined,
     'maxTurns must be defined when displayTurnCount is true',
   );
-  
 
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';

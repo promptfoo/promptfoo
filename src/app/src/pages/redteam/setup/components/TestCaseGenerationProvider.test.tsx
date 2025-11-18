@@ -46,13 +46,13 @@ const createJsonResponse = <T,>(data: T): Response =>
   });
 
 callApiMock.mockImplementation((path, options) => {
-    if (path === '/redteam/generate-test') {
+  if (path === '/redteam/generate-test') {
     let prompt = 'Generated test prompt';
-    
+
     if (options?.body) {
       const body = JSON.parse(options.body as string);
       const strategyId = body.strategy?.id;
-      
+
       if (body.turn !== undefined && body.turn > 0) {
         prompt = `Generated test prompt (turn ${body.turn})`;
       }
@@ -75,10 +75,10 @@ callApiMock.mockImplementation((path, options) => {
     );
   }
 
-    if (path === '/providers/test') {
+  if (path === '/providers/test') {
     const body = options?.body ? JSON.parse(options.body as string) : {};
     const prompt = body.prompt || '';
-    
+
     let output = 'Simulated target output';
     if (prompt.includes('turn 1')) {
       output = 'Simulated target output (turn 1)';
@@ -356,8 +356,7 @@ describe('TestCaseGenerationProvider', () => {
       expect(generatedPromptComponent).toHaveTextContent('Generated test prompt');
 
       // The provider response should be displayed in the dialog
-      const targetResponseComponent =
-        within(testCaseDialogComponent).getByTestId('chat-message-1');
+      const targetResponseComponent = within(testCaseDialogComponent).getByTestId('chat-message-1');
       expect(targetResponseComponent).toBeInTheDocument();
 
       // Wait for the target response to be displayed

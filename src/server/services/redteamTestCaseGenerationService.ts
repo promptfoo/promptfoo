@@ -383,15 +383,15 @@ async function handleHydraStrategy(
   const hydraScanId =
     typeof ctx.baseMetadata['hydraScanId'] === 'string'
       ? (ctx.baseMetadata['hydraScanId'] as string)
-      : (typeof ctx.baseMetadata['scanId'] === 'string'
-          ? (ctx.baseMetadata['scanId'] as string)
-          : hydraTestRunId);
+      : typeof ctx.baseMetadata['scanId'] === 'string'
+        ? (ctx.baseMetadata['scanId'] as string)
+        : hydraTestRunId;
 
   let modifiers: Record<string, string> | undefined;
   if (ctx.baseMetadata['modifiers'] && typeof ctx.baseMetadata['modifiers'] === 'object') {
-    const entries = Object.entries(
-      ctx.baseMetadata['modifiers'] as Record<string, unknown>,
-    ).filter(([, value]) => typeof value === 'string') as Array<[string, string]>;
+    const entries = Object.entries(ctx.baseMetadata['modifiers'] as Record<string, unknown>).filter(
+      ([, value]) => typeof value === 'string',
+    ) as Array<[string, string]>;
     if (entries.length > 0) {
       modifiers = Object.fromEntries(entries);
     }
