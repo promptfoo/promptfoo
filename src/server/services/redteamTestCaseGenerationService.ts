@@ -11,6 +11,7 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remot
 import type { ConversationMessage } from '../../redteam/types';
 import { fetchWithProxy } from '../../util/fetch';
 import { extractFirstJsonObject } from '../../util/json';
+import { sha256 } from '../../util/createHash';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';
 
@@ -116,6 +117,8 @@ const MULTI_TURN_HANDLERS: Record<MultiTurnStrategy, MultiTurnHandler> = {
   'mischievous-user': handleMischievousUserStrategy,
   crescendo: handleCrescendoLikeStrategy,
   custom: handleCrescendoLikeStrategy,
+  simba: handleCrescendoLikeStrategy,
+  'jailbreak:hydra': handleHydraStrategy,
 };
 
 export async function generateMultiTurnPrompt(
@@ -346,6 +349,115 @@ async function handleMischievousUserStrategy(
       goal: ctx.effectiveGoal,
       instructions,
       mischievousUser: {
+        tokenUsage: data?.tokenUsage,
+      },
+    },
+  };
+}
+
+async function handleHydraStrategy(
+  ctx: MultiTurnHandlerContext,
+): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+  const turnNumber = ctx.turn + 1;
+  const stateful =
+    typeof ctx.stateful === 'boolean'
+      ? ctx.stateful
+      : Boolean(ctx.strategyConfigRecord['stateful']);
+
+  const baseSeed =
+    (typeof ctx.baseMetadata['originalText'] === 'string' && ctx.baseMetadata['originalText']) ||
+    ctx.generatedPrompt ||
+    `${ctx.pluginId}-${ctx.strategyId}`;
+
+  const hydraTestRunId =
+    typeof ctx.baseMetadata['hydraTestRunId'] === 'string'
+      ? (ctx.baseMetadata['hydraTestRunId'] as string)
+      : sha256(
+          JSON.stringify({
+            pluginId: ctx.pluginId,
+            strategyId: ctx.strategyId,
+            seed: baseSeed,
+          }),
+        ).slice(0, 32);
+
+  const hydraScanId =
+    typeof ctx.baseMetadata['hydraScanId'] === 'string'
+      ? (ctx.baseMetadata['hydraScanId'] as string)
+      : (typeof ctx.baseMetadata['scanId'] === 'string'
+          ? (ctx.baseMetadata['scanId'] as string)
+          : hydraTestRunId);
+
+  let modifiers: Record<string, string> | undefined;
+  if (ctx.baseMetadata['modifiers'] && typeof ctx.baseMetadata['modifiers'] === 'object') {
+    const entries = Object.entries(
+      ctx.baseMetadata['modifiers'] as Record<string, unknown>,
+    ).filter(([, value]) => typeof value === 'string') as Array<[string, string]>;
+    if (entries.length > 0) {
+      modifiers = Object.fromEntries(entries);
+    }
+  }
+
+  const innerRequest = {
+    task: 'hydra-decision',
+    testRunId: hydraTestRunId,
+    scanId: hydraScanId,
+    turn: turnNumber,
+    goal: ctx.effectiveGoal,
+    purpose: ctx.purpose ?? undefined,
+    modifiers,
+    conversationHistory: ctx.conversationHistory,
+    stateful,
+    maxTurns: ctx.resolvedMaxTurns,
+  };
+
+  const hydraBody = {
+    task: 'hydra-decision',
+    prompt: JSON.stringify(innerRequest),
+    jsonOnly: true,
+    preferSmallModel: false,
+    step: `turn-${turnNumber}`,
+    email: ctx.email,
+  };
+
+  const response = await fetchWithProxy(getRemoteGenerationUrl(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(hydraBody),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Hydra task failed with status ${response.status}: ${await response.text()}`);
+  }
+
+  const data = await response.json();
+  const rawResult = data?.result;
+  const nextPrompt =
+    typeof rawResult === 'string'
+      ? rawResult
+      : typeof rawResult?.prompt === 'string'
+        ? rawResult.prompt
+        : typeof rawResult?.message === 'string'
+          ? rawResult.message
+          : '';
+
+  if (!nextPrompt) {
+    throw new Error('Hydra task did not return a valid next prompt');
+  }
+
+  const done = nextPrompt.trim() === '###STOP###' || turnNumber >= ctx.resolvedMaxTurns;
+
+  return {
+    prompt: nextPrompt,
+    done,
+    metadata: {
+      ...ctx.baseMetadata,
+      goal: ctx.effectiveGoal,
+      hydra: {
+        testRunId: hydraTestRunId,
+        scanId: hydraScanId,
+        stateful,
         tokenUsage: data?.tokenUsage,
       },
     },
