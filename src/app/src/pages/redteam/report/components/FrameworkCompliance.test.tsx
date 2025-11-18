@@ -120,7 +120,7 @@ describe('FrameworkCompliance', () => {
         categoryStats: categoryStats,
         pluginPassRateThreshold: pluginPassRateThreshold,
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
@@ -219,7 +219,7 @@ describe('FrameworkCompliance', () => {
       expect.objectContaining({
         frameworksToShow: ['owasp:llm'],
       }),
-      expect.anything(),
+      undefined,
     );
   });
 });
