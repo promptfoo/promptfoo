@@ -26,12 +26,17 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
     // Query for failed test cases (database-agnostic approach)
     // Filter by targetLabel and pluginId in JavaScript after fetching
     // Note: success is stored as integer in SQLite (0=false, 1=true) and boolean in PostgreSQL
+    // Using raw SQL for compatibility: success = 0 works for SQLite, success = false works for PostgreSQL
     const results = await db
       .select()
       .from(evalResultsTable)
-      .where(eq(evalResultsTable.success, false as any))
+      .where(sql`${evalResultsTable.success} = 0 OR ${evalResultsTable.success} = false`)
       .orderBy(evalResultsTable.createdAt)
       .limit(1000); // Get more results to filter in JS
+
+    logger.debug(
+      `Found ${results.length} total failed test cases, filtering for plugin='${pluginId}' target='${targetLabel}'`,
+    );
 
     // Filter and parse results in JavaScript (works with both SQLite and PostgreSQL)
     const testCases = results
@@ -40,17 +45,24 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
           // Parse provider to check label
           const provider = typeof r.provider === 'string' ? JSON.parse(r.provider) : r.provider;
           if (provider?.label !== targetLabel) {
+            logger.debug(
+              `Skipping result: provider label '${provider?.label}' doesn't match target '${targetLabel}'`,
+            );
             return false;
           }
 
           // Parse testCase to check pluginId
           const testCase = typeof r.testCase === 'string' ? JSON.parse(r.testCase) : r.testCase;
           if (testCase?.metadata?.pluginId !== pluginId) {
+            logger.debug(
+              `Skipping result: pluginId '${testCase?.metadata?.pluginId}' doesn't match '${pluginId}'`,
+            );
             return false;
           }
 
           return true;
         } catch (e) {
+          logger.debug(`Error filtering test case: ${e}`);
           return false;
         }
       })
