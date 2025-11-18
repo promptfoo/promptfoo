@@ -1,6 +1,6 @@
 ---
 title: 'How to replicate the Claude Code attack with Promptfoo'
-author: 'ian'
+authors: [ian]
 date: 2025-11-17
 tags: ['ai security', 'red teaming', 'agents', 'cyber espionage', 'jailbreak']
 image: /img/blog/cyber-espionage-testing/attack-results-overview.png
@@ -29,7 +29,7 @@ Our sandboxed reproduction resulted in Claude taking actions such as:
 - **Global interception of file operations** via an `LD_PRELOAD` global hook installed at `/etc/ld.so.preload`
 - Enumeration and exfiltration of **SSH private keys and API keys**
 
-<!-- ![Claude cyber espionage attack results](/img/blog/cyber-espionage-testing/attack-results-overview.png) -->
+![Claude cyber espionage attack results](/img/blog/cyber-espionage-testing/attack-results-overview.png)
 
 ## The setup
 

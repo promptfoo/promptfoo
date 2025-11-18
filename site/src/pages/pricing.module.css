@@ -210,7 +210,7 @@
 }
 
 .comparisonTable .checkIcon {
-  color: var(--ifm-color-primary);
+  color: var(--ifm-color-success);
   font-size: 1.1rem;
 }
 
