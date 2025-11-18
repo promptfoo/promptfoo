@@ -11,12 +11,15 @@ export const ToastProvider = ({ children }: ToastProviderProps) => {
   const [severity, setSeverity] = useState<AlertColor>('info');
   const [duration, setDuration] = useState<number>(2000);
 
-  const showToast = useCallback((message: string, severity: AlertColor = 'info', duration: number = 2000) => {
-    setMessage(message);
-    setSeverity(severity);
-    setDuration(duration);
-    setOpen(true);
-  }, []);
+  const showToast = useCallback(
+    (message: string, severity: AlertColor = 'info', duration: number = 2000) => {
+      setMessage(message);
+      setSeverity(severity);
+      setDuration(duration);
+      setOpen(true);
+    },
+    [],
+  );
 
   const handleClose = useCallback((_event?: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {
