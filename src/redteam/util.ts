@@ -6,7 +6,7 @@ import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
 import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration';
 
-import type { CallApiContextParams, ProviderResponse } from '../types';
+import type { CallApiContextParams, ProviderResponse, RunEvalOptions } from '../types';
 
 /**
  * Normalizes different types of apostrophes to a standard single quote
@@ -219,12 +219,14 @@ export function getShortPluginId(pluginId: string): string {
  * @param prompt - The prompt to extract goal from.
  * @param purpose - The purpose of the system.
  * @param pluginId - Optional plugin ID to provide context about the attack type.
+ * @param policy - Optional policy text for custom policy tests to improve intent extraction.
  * @returns The extracted goal, or null if extraction fails.
  */
 export async function extractGoalFromPrompt(
   prompt: string,
   purpose: string,
   pluginId?: string,
+  policy?: string,
 ): Promise<string | null> {
   if (neverGenerateRemote()) {
     logger.debug('Remote generation disabled, skipping goal extraction');
@@ -251,6 +253,7 @@ export async function extractGoalFromPrompt(
     prompt,
     purpose,
     ...(pluginDescription && { pluginContext: pluginDescription }),
+    ...(policy && { policy }),
   };
 
   try {
@@ -312,4 +315,25 @@ export function getSessionId(
   context: Pick<CallApiContextParams, 'vars'> | undefined,
 ): string | undefined {
   return toSessionIdString(response?.sessionId) ?? toSessionIdString(context?.vars?.sessionId);
+}
+
+/**
+ * Determines if a test case should be handled by Simba execution flow
+ * based on provider ID or test metadata.
+ *
+ * @param evalOptions - The evaluation options to check
+ * @returns Returns true if this is a Simba test case, false otherwise.
+ */
+export function isSimbaTestCase(evalOptions: RunEvalOptions): boolean {
+  // Check if provider is Simba
+  if (evalOptions.provider.id() === 'promptfoo:redteam:simba') {
+    return true;
+  }
+
+  // Check if test metadata indicates Simba strategy
+  if (evalOptions.test.metadata?.strategyId === 'simba') {
+    return true;
+  }
+
+  return false;
 }

@@ -24,6 +24,7 @@ interface AtomicTestCase {
   score?: number;
   failureReason?: string;
   metadata?: Record<string, any>;
+  options?: Record<string, any>;
 }
 export interface ProviderModerationResponse {
   error?: string;
@@ -66,6 +67,7 @@ export interface CallApiContextParams {
   // Evaluation metadata (for manual correlation if needed)
   evaluationId?: string;
   testCaseId?: string;
+  repeatIndex?: number;
 }
 
 export interface CallApiOptionsParams {

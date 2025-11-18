@@ -42,16 +42,29 @@ import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
+import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 
 import type { EvalResultsFilterMode } from '../types/index';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 
+/**
+ * Database query result type interfaces
+ * These types ensure type safety for raw SQL queries that don't use Drizzle's query builder
+ */
+
+/** Result from COUNT queries using db.get() - count may be null if query fails */
 interface FilteredCountRow {
   count: number | null;
 }
 
+/** Result from queries selecting test_idx column */
 interface TestIndexRow {
   test_idx: number;
+}
+
+/** Result from queries selecting distinct metadata or variable keys */
+interface MetadataKeyResult {
+  key: string;
 }
 
 /**
@@ -86,6 +99,19 @@ export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
+/** Result from queries extracting variable keys with eval IDs */
+export interface VarKeyWithEvalIdResult {
+  key: string;
+  eval_id: string;
+}
+
+/** Result from queries extracting variable keys */
+export interface VarKeyResult {
+  key: string;
+}
+
+const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
@@ -93,8 +119,7 @@ export class EvalQueries {
       `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
 FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string; eval_id: string }[] = await db.all(query);
+    const results = await db.all<VarKeyWithEvalIdResult>(query);
     const vars = results.reduce((acc: Record<string, string[]>, r) => {
       acc[r.eval_id] = acc[r.eval_id] || [];
       acc[r.eval_id].push(r.key);
@@ -109,8 +134,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
       `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
     FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string }[] = await db.all(query);
+    const results = await db.all<VarKeyResult>(query);
     const vars = results.map((r) => r.key);
 
     return vars;
@@ -119,7 +143,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
   static async setVars(evalId: string, vars: string[]) {
     const db = getDb();
     try {
-      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+      db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
     } catch (e) {
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
     }
@@ -129,10 +153,6 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
     evalId: string,
     comparisonEvalIds: string[] = [],
   ): Promise<string[]> {
-    interface MetadataKeyResult {
-      key: string;
-    }
-
     const db = getDb();
     try {
       // Combine primary eval ID with comparison eval IDs
@@ -151,12 +171,56 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
         ORDER BY j.key
         LIMIT 1000
       `;
-      const results: MetadataKeyResult[] = await db.all(query);
+      const results = await db.all<MetadataKeyResult>(query);
       return results.map((r) => r.key);
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
       logger.error(
         `Error fetching metadata keys for eval ${evalId} and comparisons [${comparisonEvalIds.join(', ')}]: ${error}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Queries all unique metadata values for a given metadata key.
+   * @param evalId - The ID of the eval to get the metadata values from.
+   * @param key - The key of the metadata to get the values from.
+   * @returns An array of unique metadata values.
+   */
+  static getMetadataValuesFromEval(evalId: string, key: string): string[] {
+    const db = getDb();
+    const trimmedKey = key.trim();
+    if (!trimmedKey) {
+      return [];
+    }
+
+    try {
+      const escapedKey = escapeJsonPathKey(trimmedKey);
+      const jsonPath = `$."${escapedKey}"`;
+
+      const query = sql`
+        SELECT DISTINCT
+          json_extract(${evalResultsTable.metadata}, ${jsonPath}) AS value
+        FROM ${evalResultsTable}
+        WHERE ${evalResultsTable.evalId} = ${evalId}
+          AND ${evalResultsTable.metadata} IS NOT NULL
+          AND ${evalResultsTable.metadata} != '{}'
+          AND json_valid(${evalResultsTable.metadata})
+          AND json_extract(${evalResultsTable.metadata}, ${jsonPath}) IS NOT NULL
+        ORDER BY value
+        LIMIT 1000
+      `;
+
+      const rows = db.all<{ value: string }>(query);
+      const values = rows
+        .map(({ value }) => String(value).trim())
+        .filter((value) => Boolean(value && value.length > 0));
+
+      return Array.from(new Set(values));
+    } catch (error) {
+      logger.error(
+        `Error fetching metadata values for eval ${evalId} and key ${trimmedKey}: ${error instanceof Error ? error.message : String(error)}`,
       );
       return [];
     }
@@ -446,7 +510,7 @@ export default class Eval {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
   }
 
@@ -504,18 +568,20 @@ export default class Eval {
   }
 
   /**
-   * Private helper method to build filter conditions and query for test indices
+   * CRITICAL: Builds the WHERE SQL clause for filtering results.
+   * This is the single source of truth for all filtering logic.
+   * Used by both queryTestIndices() (pagination) and getFilteredMetrics().
+   *
+   * Any changes to filter logic MUST be made here to ensure consistency
+   * between displayed rows and calculated metrics.
+   *
+   * @returns SQL WHERE clause string (without "WHERE" keyword)
    */
-  private async queryTestIndices(opts: {
-    offset?: number;
-    limit?: number;
+  private buildFilterWhereSql(opts: {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
-  }): Promise<{ testIndices: number[]; filteredCount: number }> {
-    const db = getDb();
-    const offset = opts.offset ?? 0;
-    const limit = opts.limit ?? 50;
+  }): string {
     const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
     // Build filter conditions
@@ -543,11 +609,47 @@ export default class Eval {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
-        if (type === 'metric' && operator === 'equals') {
-          const escapedValue = escapeJsonPathKey(value);
-          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
-          // in double quotes.
-          condition = `json_extract(named_scores, '$."${escapedValue}"') IS NOT NULL`;
+        if (type === 'metric') {
+          // For backward compatibility: old filters use 'value' for metric name with 'equals' operator
+          // New filters use 'field' for metric name with comparison operators
+          const metricKey = field || value;
+          if (!metricKey) {
+            // Skip invalid metric filters
+            return;
+          }
+
+          const escapedField = escapeJsonPathKey(metricKey);
+
+          // Value must be a number
+          const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
+
+          if (operator === 'is_defined' || (operator === 'equals' && !field)) {
+            // 'is_defined': new operator that checks if metric exists
+            // 'equals' without field: old format for backward compatibility
+            condition = `json_extract(named_scores, '$."${escapedField}"') IS NOT NULL`;
+          }
+          // For the numeric operators, validate that the value is a number
+          else if (Number.isFinite(numericValue)) {
+            if (operator === 'eq') {
+              // Numeric equality
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) = ${numericValue}`;
+            } else if (operator === 'neq') {
+              // Numeric inequality
+              condition = `(json_extract(named_scores, '$."${escapedField}"') IS NOT NULL AND CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) != ${numericValue})`;
+            } else if (operator === 'gt') {
+              // Greater than
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) > ${numericValue}`;
+            } else if (operator === 'gte') {
+              // Greater than or equal
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) >= ${numericValue}`;
+            } else if (operator === 'lt') {
+              // Less than
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) < ${numericValue}`;
+            } else if (operator === 'lte') {
+              // Less than or equal
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) <= ${numericValue}`;
+            }
+          }
         } else if (type === 'metadata' && field) {
           const sanitizedValue = sanitizeValue(value);
           const escapedField = escapeJsonPathKey(field);
@@ -563,17 +665,24 @@ export default class Eval {
             // Use a single json_extract call with LENGTH(TRIM()) for better performance
             condition = `LENGTH(TRIM(COALESCE(json_extract(metadata, '$."${escapedField}"'), ''))) > 0`;
           }
-        } else if (type === 'plugin' && operator === 'equals') {
+        } else if (type === 'plugin') {
           const sanitizedValue = sanitizeValue(value);
-          // Is the value a category? e.g. `harmful` or `bias`
-          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
           const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
 
-          // Plugin ID is stored in metadata.pluginId
-          if (isCategory) {
-            condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
-          } else {
-            condition = `${pluginIdPath} = '${sanitizedValue}'`;
+          if (operator === 'equals') {
+            // Plugin ID is stored in metadata.pluginId
+            if (isCategory) {
+              condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
+            } else {
+              condition = `${pluginIdPath} = '${sanitizedValue}'`;
+            }
+          } else if (operator === 'not_equals') {
+            if (isCategory) {
+              condition = `(${pluginIdPath} IS NULL OR (${pluginIdPath} != '${sanitizedValue}' AND ${pluginIdPath} NOT LIKE '${sanitizedValue}:%'))`;
+            } else {
+              condition = `(${pluginIdPath} IS NULL OR ${pluginIdPath} != '${sanitizedValue}')`;
+            }
           }
         } else if (type === 'strategy' && operator === 'equals') {
           const sanitizedValue = sanitizeValue(value);
@@ -658,7 +767,29 @@ export default class Eval {
       conditions.push(`(${searchConditions.join(' OR ')})`);
     }
 
-    const whereSql = conditions.join(' AND ');
+    return conditions.join(' AND ');
+  }
+
+  /**
+   * Private helper method to build filter conditions and query for test indices
+   */
+  private async queryTestIndices(opts: {
+    offset?: number;
+    limit?: number;
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<{ testIndices: number[]; filteredCount: number }> {
+    const db = getDb();
+    const offset = opts.offset ?? 0;
+    const limit = opts.limit ?? 50;
+
+    // CRITICAL: Use single source of truth for WHERE clause
+    const whereSql = this.buildFilterWhereSql({
+      filterMode: opts.filterMode,
+      searchQuery: opts.searchQuery,
+      filters: opts.filters,
+    });
 
     // Get filtered count
     const filteredCountQuery = sql.raw(
@@ -683,6 +814,31 @@ export default class Eval {
     const testIndices = rows.map((row) => row.test_idx);
 
     return { testIndices, filteredCount };
+  }
+
+  /**
+   * CRITICAL: Calculates metrics for filtered results.
+   * Uses the SAME WHERE clause as queryTestIndices() to ensure consistency.
+   *
+   * This method is called from the API route when filters are active to provide
+   * metrics that accurately reflect the filtered dataset.
+   *
+   * @returns Array of PromptMetrics, one per prompt
+   */
+  async getFilteredMetrics(opts: {
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<import('../types').PromptMetrics[]> {
+    // CRITICAL: Use the SAME WHERE clause as queryTestIndices
+    const whereSql = this.buildFilterWhereSql(opts);
+
+    return calculateFilteredMetrics({
+      evalId: this.id,
+      numPrompts: this.prompts.length,
+      whereSql,
+      whereParams: [], // SQLite uses string interpolation in this codebase
+    });
   }
 
   async getTablePage(opts: {
@@ -794,7 +950,7 @@ export default class Eval {
     this.prompts = prompts;
     if (this.persisted) {
       const db = getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
     }
   }
 
@@ -903,6 +1059,172 @@ export default class Eval {
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+  }
+
+  /**
+   * Creates a deep copy of this eval including all results.
+   * Uses batching to avoid memory exhaustion on large evals.
+   * @param description - Optional description for the new eval
+   * @param distinctTestCount - Optional pre-computed test count to avoid duplicate query
+   */
+  async copy(description?: string, distinctTestCount?: number): Promise<Eval> {
+    const newEvalId = createEvalId(new Date());
+    const copyDescription = description || `${this.description || 'Evaluation'} (Copy)`;
+
+    // Get distinct test count for logging and progress tracking
+    const testCount = distinctTestCount ?? (await this.getResultsCount());
+
+    logger.info('Starting eval copy', {
+      sourceEvalId: this.id,
+      targetEvalId: newEvalId,
+      distinctTestCount: testCount,
+    });
+
+    // Deep clone to prevent mutation issues
+    const newConfig = structuredClone(this.config);
+    newConfig.description = copyDescription;
+
+    const newPrompts = structuredClone(this.prompts);
+    const newVars = this.vars ? structuredClone(this.vars) : [];
+    const author = getUserEmail();
+
+    const db = getDb();
+
+    // Copy eval, results, and relationships within transaction for atomicity
+    let copiedCount = 0;
+    db.transaction(() => {
+      // Create the new eval record first
+      db.insert(evalsTable)
+        .values({
+          id: newEvalId,
+          createdAt: Date.now(),
+          author,
+          description: copyDescription,
+          config: newConfig,
+          results: {},
+          prompts: newPrompts,
+          vars: newVars,
+          runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+          isRedteam: Boolean(newConfig.redteam),
+        })
+        .run();
+
+      // Copy prompts relationships
+      // Note: prompts already exist in promptsTable from when the source eval was created
+      // We just need to create new relationships pointing to those same prompts
+      const promptRels = db
+        .select()
+        .from(evalsToPromptsTable)
+        .where(eq(evalsToPromptsTable.evalId, this.id))
+        .all();
+
+      if (promptRels.length > 0) {
+        db.insert(evalsToPromptsTable)
+          .values(
+            promptRels.map((rel) => ({
+              evalId: newEvalId,
+              promptId: rel.promptId,
+            })),
+          )
+          .onConflictDoNothing()
+          .run();
+      }
+
+      // Copy tags relationships (from config.tags)
+      if (this.config.tags) {
+        for (const [tagKey, tagValue] of Object.entries(this.config.tags)) {
+          const tagId = sha256(`${tagKey}:${tagValue}`);
+
+          db.insert(tagsTable)
+            .values({
+              id: tagId,
+              name: tagKey,
+              value: tagValue,
+            })
+            .onConflictDoNothing()
+            .run();
+
+          db.insert(evalsToTagsTable)
+            .values({
+              evalId: newEvalId,
+              tagId,
+            })
+            .onConflictDoNothing()
+            .run();
+        }
+      }
+
+      // Copy dataset relationship
+      const datasetRel = db
+        .select()
+        .from(evalsToDatasetsTable)
+        .where(eq(evalsToDatasetsTable.evalId, this.id))
+        .limit(1)
+        .all();
+
+      if (datasetRel.length > 0) {
+        db.insert(evalsToDatasetsTable)
+          .values({
+            evalId: newEvalId,
+            datasetId: datasetRel[0].datasetId,
+          })
+          .onConflictDoNothing()
+          .run();
+      }
+
+      // Copy results in batches to avoid memory exhaustion
+      const BATCH_SIZE = 1000;
+      let offset = 0;
+
+      while (true) {
+        // Fetch batch from source eval
+        const batch = db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, this.id))
+          .orderBy(evalResultsTable.id)
+          .limit(BATCH_SIZE)
+          .offset(offset)
+          .all();
+
+        if (batch.length === 0) {
+          break;
+        }
+
+        // Map to new eval with new IDs and timestamps
+        const now = Date.now();
+        const copiedResults = batch.map((result) => ({
+          ...result,
+          id: randomUUID(),
+          evalId: newEvalId,
+          createdAt: now,
+          updatedAt: now,
+        }));
+
+        // Insert batch
+        db.insert(evalResultsTable).values(copiedResults).run();
+
+        copiedCount += batch.length;
+        offset += BATCH_SIZE;
+
+        logger.debug('Copied batch of eval results', {
+          sourceEvalId: this.id,
+          targetEvalId: newEvalId,
+          batchSize: batch.length,
+          rowsCopied: copiedCount,
+          distinctTestCount: testCount,
+        });
+      }
+    });
+
+    logger.info('Eval copy completed successfully', {
+      sourceEvalId: this.id,
+      targetEvalId: newEvalId,
+      rowsCopied: copiedCount,
+      distinctTestCount: testCount,
+    });
+
+    return (await Eval.findById(newEvalId)) as Eval;
   }
 
   get shared() {

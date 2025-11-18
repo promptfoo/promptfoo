@@ -3,7 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
+import { validatePythonPath } from './pythonUtils';
 
 export class PythonWorker {
   private process: PythonShell | null = null;
@@ -22,7 +24,7 @@ export class PythonWorker {
     private scriptPath: string,
     private functionName: string,
     private pythonPath?: string,
-    private timeout: number = 120000, // 2 minutes default
+    private timeout: number = REQUEST_TIMEOUT_MS,
     private onReady?: () => void,
   ) {}
 
@@ -33,9 +35,15 @@ export class PythonWorker {
   private async startWorker(): Promise<void> {
     const wrapperPath = path.join(__dirname, 'persistent_wrapper.py');
 
+    // Validate and resolve Python path using smart detection (tries python3, then python)
+    const resolvedPythonPath = await validatePythonPath(
+      this.pythonPath || 'python',
+      typeof this.pythonPath === 'string',
+    );
+
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',
-      pythonPath: this.pythonPath || 'python',
+      pythonPath: resolvedPythonPath,
       args: [this.scriptPath, this.functionName],
       stdio: ['pipe', 'pipe', 'pipe'],
     });

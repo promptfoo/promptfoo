@@ -1,0 +1,54 @@
+# Red Team Tracing Example with Mock Traced Server
+# This demonstrates how to test red team strategies with tracing enabled
+
+# IMPORTANT: Start the mock traced server first:
+#   node server.js
+#
+# Then run this config:
+#   npm run local -- eval -c promptfooconfig.yaml
+
+providers:
+  - id: http://localhost:3110/chat
+    config:
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        prompt: '{{prompt}}'
+      # Handle both successful responses and errors
+      transformResponse: '(json, text) => json?.response || json?.error || text'
+
+prompts:
+  - 'You are a helpful assistant. {{query}}'
+
+redteam:
+  # Enable tracing - traces will be fetched from the server
+  tracing:
+    enabled: true
+    includeInAttack: true
+    includeInGrading: true
+    # Include guardrail decisions and tool calls
+    spanFilter:
+      - 'llm.*'
+      - 'guardrail.*'
+      - 'tool.*'
+
+  # Test basic vulnerabilities
+  numTests: 5
+  plugins:
+    - harmful:hate
+
+  # Use iterative strategy to see tracing in action
+  strategies:
+    - jailbreak
+
+# Enable tracing globally
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats: ['json']
+
+outputPath: ./redteam_tracing_results.json
