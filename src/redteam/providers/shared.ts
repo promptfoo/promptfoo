@@ -16,6 +16,7 @@ import {
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types';
+import type { TraceContextData } from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
@@ -171,6 +172,8 @@ export type TargetResponse = {
   sessionId?: string;
   tokenUsage?: TokenUsage;
   guardrails?: GuardrailResponse;
+  traceContext?: TraceContextData | null;
+  traceSummary?: string;
 };
 
 /**

@@ -137,10 +137,11 @@ Initialize a new project with dummy files.
 
 Start a browser UI for visualization of results.
 
-| Option                | Description                             |
-| --------------------- | --------------------------------------- |
-| `-p, --port <number>` | Port number for the local server        |
-| `-y, --yes`           | Skip confirmation and auto-open the URL |
+| Option                | Description                               |
+| --------------------- | ----------------------------------------- |
+| `-p, --port <number>` | Port number for the local server          |
+| `-y, --yes`           | Skip confirmation and auto-open the URL   |
+| `-n, --no`            | Skip confirmation and do not open the URL |
 
 If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory, run `promptfoo view [directory]`.
 

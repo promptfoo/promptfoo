@@ -7,8 +7,10 @@ import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
+import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import Layout from '@theme/Layout';
 
 const AboutPageContent = () => {
@@ -68,7 +70,7 @@ const AboutPageContent = () => {
 
         <Box mb={8}>
           <Typography variant="h4" component="h3" align="center" mb={8} fontWeight="medium">
-            Meet the team
+            Our founders
           </Typography>
           <Grid container spacing={4} justifyContent="center">
             {[
@@ -77,90 +79,14 @@ const AboutPageContent = () => {
                 title: 'CEO & Co-founder',
                 image: '/img/team/ian.jpeg',
                 bio: 'Ian previously led LLM engineering and developer platform teams at Discord, scaling AI products to 200M users while maintaining rigorous safety, security, and policy standards.',
+                linkedin: 'http://linkedin.com/in/ianww',
               },
               {
                 name: "Michael D'Angelo",
                 title: 'CTO & Co-founder',
                 image: '/img/team/michael.jpeg',
                 bio: 'Michael brings extensive experience in AI and engineering leadership. As the former VP of Engineering and Head of AI at Smile Identity, he has a track record of scaling ML solutions to serve over 100 million people across hundreds of enterprises.',
-              },
-              {
-                name: 'Lily Liu',
-                title: 'Business Operations Lead',
-                image: '/img/team/lily.jpeg',
-                bio: 'Lily brings investment and operational expertise from CVC Capital Partners and Evercore. At Promptfoo, she designs the systems and processes that power rapid growth and long-term scalability.',
-              },
-              {
-                name: 'Matthew Bou',
-                title: 'Enterprise GTM Lead',
-                image: '/img/team/matt.jpeg',
-                bio: "Matt's a three-time founding sales team member with a track record of building GTM from scratch. He's helped startups land and grow Fortune 500 accounts, leading to three exits. At Promptfoo, he leads enterprise sales, helping teams accelerate and secure LLMs.",
-              },
-              {
-                name: 'Ben Shipley',
-                title: 'Enterprise GTM Lead',
-                image: '/img/team/ben.jpeg',
-                bio: 'Ben brings go-to-market expertise as an early GTM hire at multiple high-growth startups including Windsurf, Applied Intuition, and Amplitude. He specializes in building strategic relationships and helping enterprises implement and secure their AI solutions.',
-              },
-              {
-                name: 'Travis Willhite',
-                title: 'Enterprise GTM Lead',
-                image: '/img/team/travis.png',
-                bio: 'Travis has spent the past decade driving revenue at high-growth, venture-backed AI companies. He has extensive experience helping Fortune 500 companies develop and launch cutting-edge AI applications.',
-              },
-              {
-                name: 'Vanessa Sauter',
-                title: 'Principal Solutions Architect',
-                image: '/img/team/vanessa.jpeg',
-                bio: 'Vanessa led hundreds of security and privacy reviews for customers at Gong. She has also pentested dozens of enterprises and launched hundreds of bug bounty programs for a leading crowdsourced security company and is published in Forbes, Lawfare, and Dark Reading.',
-              },
-              {
-                name: 'James Hiester',
-                title: 'Deployment Engineer',
-                image: '/img/team/james.jpeg',
-                bio: 'James brings years of experience in professional services helping leading financial institutions and energy sector clients. James specializes in managing transformation initiatives and deploying enterprise solutions.',
-              },
-              {
-                name: 'Steve Klein',
-                title: 'Staff Engineer',
-                image: '/img/team/steve.jpeg',
-                bio: `Steve brings decades of expertise in engineering, product, and cybersecurity. He has led technical and product teams, and conducted pentests at companies like Microsoft, Shopify, Intercom, and PwC. Most recently he was scaling AI products at Discord.`,
-              },
-              {
-                name: 'Guangshuo Zang',
-                title: 'Staff Engineer',
-                image: '/img/team/shuo.jpeg',
-                bio: 'Guangshuo brings technical expertise from Meta, ChipperCash, and Smile Identity. Specializes in GenAI systems, product engineering, and building scalable client solutions.',
-              },
-              {
-                name: 'Alan DeLong',
-                title: 'Staff Engineer',
-                image: '/img/team/alan.jpeg',
-                bio: 'Alan brings almost two decades of experience building and shipping software at scale. He has led and contributed on teams at companies like Ceros, Thoughtworks, and Parature.',
-              },
-              {
-                name: 'Dane Schneider',
-                title: 'Staff Engineer',
-                image: '/img/team/dane.jpeg',
-                bio: 'Dane is a full stack engineer and former founder. He brings deep experience in coding agents, security, devops, and user interface design for complex technical domains.',
-              },
-              {
-                name: 'Faizan Minhas',
-                title: 'Senior Engineer',
-                image: '/img/team/faizan.jpeg',
-                bio: 'Faizan brings a wealth of experience in building products across a range of industries. He has led and contributed to projects at companies like Faire, Intercom, and a range of startups.',
-              },
-              {
-                name: 'Will Holley',
-                title: 'Senior Engineer',
-                image: '/img/team/will.jpeg',
-                bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
-              },
-              {
-                name: 'Yash Chhabria',
-                title: 'Senior Engineer',
-                image: '/img/team/yash.png',
-                bio: 'Yash specializes in securing ML infrastructure, distributed systems, and multi-tenant platforms. His work spans threat modeling, purple teaming, and building proactive defenses against supply chain risks and privacy attacks in AI systems.',
+                linkedin: 'https://www.linkedin.com/in/michaelldangelo/',
               },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
@@ -170,9 +96,24 @@ const AboutPageContent = () => {
                     src={leader.image}
                     sx={{ width: 150, height: 150, margin: '0 auto 1rem' }}
                   />
-                  <Typography variant="h6" component="h4" gutterBottom fontWeight="medium">
-                    {leader.name}
-                  </Typography>
+                  <Box display="flex" alignItems="center" justifyContent="center" gap={1} mb={1}>
+                    <Typography variant="h6" component="h4" fontWeight="medium">
+                      {leader.name}
+                    </Typography>
+                    {leader.linkedin && (
+                      <IconButton
+                        component="a"
+                        href={leader.linkedin}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        size="small"
+                        aria-label={`${leader.name}'s LinkedIn profile`}
+                        sx={{ padding: 0 }}
+                      >
+                        <LinkedInIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Box>
                   <Typography variant="subtitle1" color="text.secondary" gutterBottom>
                     {leader.title}
                   </Typography>

@@ -3,12 +3,13 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { extractGoalFromPrompt } from '../util';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase, type RedteamGradingContext } from './base';
 
 import type {
   ApiProvider,
   Assertion,
   AtomicTestCase,
+  AssertionValue,
   GradingResult,
   PluginConfig,
   TestCase,
@@ -174,6 +175,10 @@ export class IntentGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
+    renderedValue?: AssertionValue,
+    additionalRubric?: string,
+    skipRefusalCheck?: boolean,
+    gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     // Ensure we have all required metadata
     const metadata = {
@@ -192,7 +197,10 @@ export class IntentGrader extends RedteamGraderBase {
         metadata,
       },
       provider,
-      undefined,
+      renderedValue,
+      additionalRubric,
+      skipRefusalCheck,
+      gradingContext,
     );
   }
 }

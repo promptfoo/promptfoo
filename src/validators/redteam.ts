@@ -7,24 +7,48 @@ import {
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
+  FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  INSURANCE_PLUGINS,
   MEDICAL_PLUGINS,
+  PHARMACY_PLUGINS,
   PII_PLUGINS,
-  type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
-  type Strategy,
+  FRAMEWORK_COMPLIANCE_IDS,
 } from '../redteam/constants';
+import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
+
+const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
+  z.object({
+    enabled: z.boolean().optional(),
+    includeInAttack: z.boolean().optional(),
+    includeInGrading: z.boolean().optional(),
+    includeInternalSpans: z.boolean().optional(),
+    maxSpans: z.number().int().positive().optional(),
+    maxDepth: z.number().int().positive().optional(),
+    maxRetries: z.number().int().nonnegative().optional(),
+    retryDelayMs: z.number().int().nonnegative().optional(),
+    spanFilter: z.array(z.string()).optional(),
+    sanitizeAttributes: z.boolean().optional(),
+    strategies: z.record(z.lazy(() => TracingConfigSchema)).optional(),
+  }),
+);
+
+const frameworkOptions = FRAMEWORK_COMPLIANCE_IDS as unknown as [
+  FrameworkComplianceId,
+  ...FrameworkComplianceId[],
+];
 
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
@@ -172,6 +196,13 @@ export const RedteamGenerateOptionsSchema = z.object({
     .union([z.string(), z.array(z.string())])
     .optional()
     .describe('Language(s) of tests to generate'),
+  frameworks: z
+    .array(z.enum(frameworkOptions))
+    .min(1)
+    .optional()
+    .describe(
+      'Subset of compliance frameworks to include when generating, reporting, and filtering results',
+    ),
   maxConcurrency: z
     .number()
     .int()
@@ -215,6 +246,11 @@ export const RedteamConfigSchema = z
       .union([z.string(), z.array(z.string())])
       .optional()
       .describe('Language(s) of tests to generate for this plugin'),
+    frameworks: z
+      .array(z.enum(frameworkOptions))
+      .min(1)
+      .optional()
+      .describe('Compliance frameworks to include across reports and commands'),
     entities: z
       .array(z.string())
       .optional()
@@ -250,10 +286,17 @@ export const RedteamConfigSchema = z
       .boolean()
       .optional()
       .describe('Whether to exclude target output from the agentific attack generation process'),
+    tracing: TracingConfigSchema.optional().describe(
+      'Tracing defaults applied to all strategies unless overridden',
+    ),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
     const strategySet = new Set<Strategy>();
+    const frameworks =
+      data.frameworks && data.frameworks.length > 0
+        ? Array.from(new Set(data.frameworks))
+        : undefined;
 
     // MIGRATION: Extract languages from multilingual strategy and merge into global language config
     // This allows plugin-level language generation to work with multilingual strategy
@@ -268,7 +311,7 @@ export const RedteamConfigSchema = z
         // Lazy require to avoid mock interference in tests during module initialization
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const logger = require('../logger').default;
-        logger.warn(
+        logger.debug(
           '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
         );
 
@@ -339,6 +382,12 @@ export const RedteamConfigSchema = z
         expandCollection([...PII_PLUGINS], config, numTests, severity);
       } else if (id === 'medical') {
         expandCollection([...MEDICAL_PLUGINS], config, numTests, severity);
+      } else if (id === 'pharmacy') {
+        expandCollection([...PHARMACY_PLUGINS], config, numTests, severity);
+      } else if (id === 'insurance') {
+        expandCollection([...INSURANCE_PLUGINS], config, numTests, severity);
+      } else if (id === 'financial') {
+        expandCollection([...FINANCIAL_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {
@@ -440,6 +489,7 @@ export const RedteamConfigSchema = z
       numTests: data.numTests,
       plugins: uniquePlugins,
       strategies,
+      ...(frameworks ? { frameworks } : {}),
       ...(data.delay ? { delay: data.delay } : {}),
       ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
@@ -452,6 +502,7 @@ export const RedteamConfigSchema = z
               data.excludeTargetOutputFromAgenticAttackGeneration,
           }
         : {}),
+      ...(data.tracing ? { tracing: data.tracing } : {}),
     };
   });
 

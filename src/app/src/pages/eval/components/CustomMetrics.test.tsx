@@ -1,7 +1,7 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import CustomMetrics from './CustomMetrics';
 
 describe('CustomMetrics', () => {
@@ -182,5 +182,66 @@ describe('CustomMetrics', () => {
 
   it('should include a comment to fix the missing key prop warning', () => {
     expect(true).toBe(true);
+  });
+
+  it('correctly handles undefined metric values in lookup', () => {
+    const lookupWithUndefined: Record<string, number | undefined> = {
+      metric1: 10,
+      metric2: undefined,
+    };
+
+    const lookup = Object.fromEntries(
+      Object.entries(lookupWithUndefined).filter(([, value]) => value !== undefined),
+    ) as Record<string, number>;
+
+    render(<CustomMetrics lookup={lookup} />);
+
+    expect(screen.getByTestId('metric-name-metric1')).toBeInTheDocument();
+    expect(screen.queryByTestId('metric-name-metric2')).not.toBeInTheDocument();
+  });
+
+  it('displays negative metric values correctly', () => {
+    const lookup = {
+      metric1: -10.5,
+      metric2: -20.75,
+    };
+
+    render(<CustomMetrics lookup={lookup} />);
+
+    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('-10.50');
+    expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('-20.75');
+  });
+
+  it('renders a "Show more..." button when metrics exceed truncationCount and calls onShowMore when clicked', () => {
+    const lookup = {
+      metric1: 1,
+      metric2: 2,
+      metric3: 3,
+      metric4: 4,
+      metric5: 5,
+      metric6: 6,
+      metric7: 7,
+      metric8: 8,
+      metric9: 9,
+      metric10: 10,
+      metric11: 11,
+    };
+    const onShowMore = vi.fn();
+
+    render(<CustomMetrics lookup={lookup} onShowMore={onShowMore} />);
+
+    const showMoreButton = screen.getByTestId('toggle-show-more');
+    fireEvent.click(showMoreButton);
+
+    expect(onShowMore).toHaveBeenCalled();
+  });
+
+  it('displays 0 when counts contains a zero value for a metric', () => {
+    const lookup = { metric1: 10 };
+    const counts = { metric1: 0 };
+
+    render(<CustomMetrics lookup={lookup} counts={counts} />);
+
+    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('10.00');
   });
 });
