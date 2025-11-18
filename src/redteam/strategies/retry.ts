@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { getDb } from '../../database/index';
 import { evalResultsTable } from '../../database/tables';
 import logger from '../../logger';
@@ -185,7 +185,7 @@ export async function addRetryTestCases(
   const deduped = deduplicateTests(retryTestCases);
 
   // Mark all retry tests with retry: true flag, preserve original strategyId (even if undefined)
-  const marked = deduped.map(test => ({
+  const marked = deduped.map((test) => ({
     ...test,
     metadata: {
       ...test.metadata,
