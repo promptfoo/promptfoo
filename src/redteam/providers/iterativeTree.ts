@@ -633,7 +633,7 @@ async function runRedteamConversation({
                 }
               : { vars: iterationVars };
 
-            const { grade } = await grader.getResult(
+            const { grade, rubric } = await grader.getResult(
               newInjectVar,
               targetResponse.output,
               iterationTest,
@@ -641,7 +641,14 @@ async function runRedteamConversation({
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
             );
-            storedGraderResult = grade;
+            storedGraderResult = {
+              ...grade,
+              assertion: grade.assertion
+                ? { ...grade.assertion, value: rubric }
+                : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
+                  ? { ...assertToUse, value: rubric }
+                  : undefined,
+            };
             graderPassed = grade.pass;
           }
         }

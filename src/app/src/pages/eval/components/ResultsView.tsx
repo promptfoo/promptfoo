@@ -48,6 +48,7 @@ import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
+import { useFilterMode } from './FilterModeProvider';
 import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
 import FiltersButton from './ResultsFilters/FiltersButton';
@@ -190,9 +191,9 @@ export default function ResultsView({
     userRatedResultsCount,
     filters,
     removeFilter,
-    filterMode,
-    setFilterMode,
   } = useTableStore();
+
+  const { filterMode, setFilterMode } = useFilterMode();
 
   const {
     setInComparisonMode,
