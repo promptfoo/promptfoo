@@ -173,6 +173,16 @@ export async function addRetryTestCases(
   }
 
   const deduped = deduplicateTests(retryTestCases);
-  logger.debug(`Added ${deduped.length} unique retry test cases`);
-  return deduped;
+
+  // Mark all retry tests with retry: true flag, preserve original strategyId (even if undefined)
+  const marked = deduped.map(test => ({
+    ...test,
+    metadata: {
+      ...test.metadata,
+      retry: true,
+    },
+  }));
+
+  logger.debug(`Added ${marked.length} unique retry test cases`);
+  return marked;
 }
