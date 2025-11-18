@@ -262,7 +262,7 @@ function FeatureComparisonTable() {
   ];
 
   return (
-    <section className={styles.comparisonSection}>
+    <section id="feature-comparison" className={styles.comparisonSection}>
       <h2>Feature Comparison</h2>
       <div className={styles.tableWrapper}>
         <table className={styles.comparisonTable}>
