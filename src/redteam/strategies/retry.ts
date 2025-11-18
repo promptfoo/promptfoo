@@ -25,10 +25,11 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
   try {
     // Query for failed test cases (database-agnostic approach)
     // Filter by targetLabel and pluginId in JavaScript after fetching
+    // Note: success is stored as integer in SQLite (0=false, 1=true) and boolean in PostgreSQL
     const results = await db
       .select()
       .from(evalResultsTable)
-      .where(eq(evalResultsTable.success, false))
+      .where(eq(evalResultsTable.success, false as any))
       .orderBy(evalResultsTable.createdAt)
       .limit(1000); // Get more results to filter in JS
 
