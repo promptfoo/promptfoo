@@ -46,7 +46,7 @@ tests:
         json_schema: file://./schemas/comparison-schema.json
     assert:
       - type: javascript
-        value: ['item1', 'item2', 'tie'].includes(output.winner)
+        value: output.winner === 'item1' || output.winner === 'item2' || output.winner === 'tie'
       - type: javascript
         value: output.reasoning.length > 20
 
@@ -59,4 +59,4 @@ tests:
         json_schema: file://./schemas/comparison-schema.json
     assert:
       - type: javascript
-        value: ['item1', 'item2', 'tie'].includes(output.winner)
+        value: output.winner === 'item1' || output.winner === 'item2' || output.winner === 'tie'
