@@ -1,0 +1,93 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: WebSocket multi-turn chat
+
+prompts:
+  - '{{message}}'
+
+providers:
+  - id: browser
+    config:
+      # Connect to existing browser to preserve session/cookies across tests
+      connectOptions:
+        debuggingPort: 9222
+
+      steps:
+        # Navigate to chat page
+        - action: navigate
+          args:
+            url: 'http://localhost:3000'
+
+        # Type the message
+        - action: type
+          args:
+            selector: '#message-input'
+            text: '{{message}}'
+
+        # Send the message
+        - action: click
+          args:
+            selector: '#send-button'
+
+        # Wait for streaming to complete (conservative wait)
+        - action: wait
+          args:
+            ms: 3000
+
+        # Extract the last assistant response
+        - action: extract
+          args:
+            selector: '.message.assistant:last-child .message-content'
+          name: response
+
+      transformResponse: 'extracted.response'
+
+tests:
+  # Test 1: Initial greeting
+  - description: Initial greeting establishes conversation
+    vars:
+      message: 'Hello'
+    assert:
+      - type: contains
+        value: 'help'
+
+  # Test 2: Ask about weather (establishes topic)
+  - description: Ask about weather today
+    vars:
+      message: 'What is the weather?'
+    assert:
+      - type: contains
+        value: 'sunny'
+      - type: contains
+        value: '72'
+
+  # Test 3: Context-aware follow-up (critical test!)
+  - description: Follow-up question relies on previous context
+    vars:
+      message: 'What about tomorrow?'
+    assert:
+      - type: contains
+        value: 'tomorrow'
+      - type: icontains
+        value: 'cloudy'
+      - type: javascript
+        value: output.includes('68') || output.includes('52')
+
+  # Test 4: Deeper context follow-up
+  - description: Multi-turn context - umbrella question
+    vars:
+      message: 'Should I bring an umbrella?'
+    assert:
+      - type: icontains
+        value: 'tomorrow'
+      - type: javascript
+        value: output.toLowerCase().includes('rain') || output.toLowerCase().includes('umbrella')
+
+  # Test 5: Conversation awareness
+  - description: Ask about conversation history
+    vars:
+      message: 'How many messages have we exchanged?'
+    assert:
+      - type: icontains
+        value: 'message'
+      - type: javascript
+        value: parseInt(output.match(/\d+/)?.[0] || '0') >= 5
