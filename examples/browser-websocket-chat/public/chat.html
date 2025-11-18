@@ -291,7 +291,10 @@
       // Connect to WebSocket server
       function connect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        ws = new WebSocket(`${protocol}//${window.location.host}`);
+        // Include session query parameter if present in URL
+        const params = new URLSearchParams(window.location.search);
+        const sessionParam = params.get('session') ? `?session=${params.get('session')}` : '';
+        ws = new WebSocket(`${protocol}//${window.location.host}${sessionParam}`);
 
         ws.onopen = () => {
           console.log('WebSocket connected');

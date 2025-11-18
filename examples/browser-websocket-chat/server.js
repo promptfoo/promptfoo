@@ -28,6 +28,7 @@ const sessionParser = session({
 });
 
 app.use(cookieParser());
+app.use(express.json());
 app.use(sessionParser);
 app.use(express.static('public'));
 
@@ -41,13 +42,34 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', conversations: conversations.size });
 });
 
+// API endpoint for creating new sessions (for simulated-user provider)
+app.post('/api/session/new', (req, res) => {
+  // Create a new unique session ID
+  const newSessionId = `sim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // Initialize empty conversation for this session
+  conversations.set(newSessionId, []);
+
+  console.log(`Created new session: ${newSessionId}`);
+
+  res.json({
+    sessionId: newSessionId,
+    url: `http://localhost:${PORT}/?session=${newSessionId}`
+  });
+});
+
 // WebSocket connection handling
 wss.on('connection', (ws, req) => {
   console.log('WebSocket client connected');
 
-  // Parse session from cookie
+  // Parse session from cookie OR query parameter
   sessionParser(req, {}, () => {
-    const sessionId = req.session.id;
+    // Check for session ID in query parameter (for simulated-user provider)
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const querySessionId = url.searchParams.get('session');
+
+    // Use query parameter session if provided, otherwise use cookie session
+    const sessionId = querySessionId || req.session.id;
     console.log(`Session ID: ${sessionId}`);
 
     // Initialize conversation history if needed

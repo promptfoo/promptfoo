@@ -177,11 +177,44 @@ Test context preservation with follow-up questions:
       value: output.includes('partly cloudy')
 ```
 
+## Testing with Simulated Users
+
+This example also supports the [simulated-user provider](/docs/providers/simulated-user) for realistic multi-turn conversation testing. Each simulated conversation gets its own isolated session.
+
+### Run Simulated User Tests
+
+```bash
+npx promptfoo eval -c promptfooconfig-simulated.yaml
+```
+
+The simulated-user provider will:
+1. Create independent sessions for each test
+2. Conduct natural multi-turn conversations
+3. Validate context preservation automatically
+4. Test various customer personas and scenarios
+
+Example test:
+
+```yaml
+tests:
+  - vars:
+      instructions: |
+        You want to know tomorrow's weather.
+        Ask about today's weather first, then ask about tomorrow.
+    assert:
+      - type: llm-rubric
+        value: Assistant provides context-aware forecast for tomorrow
+```
+
+See `promptfooconfig-simulated.yaml` for complete examples.
+
 ## Files
 
 - `server.js` - Express + WebSocket server with session management
 - `public/chat.html` - Copilot-inspired chat UI with streaming support
-- `promptfooconfig.yaml` - Multi-turn conversation tests
+- `promptfooconfig.yaml` - Multi-turn browser automation tests
+- `promptfooconfig-simulated.yaml` - Simulated user conversation tests
+- `browser-chat-provider.js` - Custom provider for simulated-user integration
 - `package.json` - Server dependencies
 
 ## Server Features

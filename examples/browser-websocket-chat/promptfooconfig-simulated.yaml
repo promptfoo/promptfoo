@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: WebSocket chat with simulated users
+
+# The custom provider acts as our chat agent
+providers:
+  - file://./browser-chat-provider.js
+
+# Use simulated-user to test multi-turn conversations
+defaultTest:
+  provider:
+    id: 'promptfoo:simulated-user'
+    config:
+      maxTurns: 5
+
+tests:
+  # Test 1: Weather inquiry
+  - vars:
+      instructions: |
+        You want to know the weather. Ask about today's weather.
+        When you get a response, ask about tomorrow.
+        You are satisfied after getting tomorrow's forecast.
+    assert:
+      - type: llm-rubric
+        value: |
+          The conversation should show:
+          1. User asks about today's weather
+          2. Gets response about sunny/72°F
+          3. Asks about tomorrow
+          4. Gets forecast for tomorrow
+
+  # Test 2: Conversation tracking
+  - vars:
+      instructions: |
+        You are curious about the conversation.
+        First say hello, then ask how many messages have been exchanged.
+        You expect the assistant to track the conversation count.
+    assert:
+      - type: llm-rubric
+        value: |
+          The assistant should correctly count messages exchanged in the conversation.
+          Pass if the count is mentioned and seems accurate.
+
+  # Test 3: Context retention
+  - vars:
+      instructions: |
+        You want to plan outdoor activities.
+        Ask about the weather, then ask if you should bring an umbrella tomorrow.
+        The assistant should remember you already discussed weather.
+    assert:
+      - type: llm-rubric
+        value: |
+          The assistant should:
+          1. Provide weather information
+          2. Reference previous weather discussion when answering umbrella question
+          3. Show context awareness by not asking for weather again
