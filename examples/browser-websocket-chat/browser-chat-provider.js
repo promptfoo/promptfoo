@@ -35,10 +35,40 @@ class BrowserChatProvider {
    */
   async callApi(prompt, options, context) {
     try {
-      const serverUrl = context.vars?.serverUrl || 'http://localhost:3000';
+      // Handle undefined context (simulated-user doesn't pass it)
+      const ctx = context || options || {};
+      const vars = ctx.vars || {};
+      const serverUrl = vars.serverUrl || 'http://localhost:3000';
+
+      // Extract the actual message text from prompt
+      // Simulated-user passes messages as a JSON string, parse it first
+      let messageText;
+      let messages = prompt;
+
+      // Try to parse if it's a JSON string
+      if (typeof prompt === 'string') {
+        try {
+          messages = JSON.parse(prompt);
+        } catch (e) {
+          // Not JSON, use as-is
+          messageText = prompt;
+        }
+      }
+
+      // Extract from message array
+      if (Array.isArray(messages)) {
+        // Find the last user message in the conversation
+        const userMessages = messages.filter(msg => msg.role === 'user');
+        const lastUserMessage = userMessages[userMessages.length - 1];
+        messageText = lastUserMessage?.content || '';
+        console.log('[BrowserChatProvider] Extracted from messages:', messageText);
+      } else if (!messageText) {
+        messageText = String(messages);
+        console.log('[BrowserChatProvider] Using as string:', messageText);
+      }
 
       // Get or create session ID for this test
-      let sessionId = context.vars?.sessionId;
+      let sessionId = vars.sessionId;
 
       if (!sessionId) {
         // Create new session via API
@@ -52,7 +82,7 @@ class BrowserChatProvider {
       }
 
       // Connect to browser if not already connected
-      const headless = context.vars?.headless !== false; // Default to headless
+      const headless = vars.headless !== false; // Default to headless
 
       if (!browser) {
         if (process.env.USE_CDP === 'true') {
@@ -80,7 +110,7 @@ class BrowserChatProvider {
         await page.waitForSelector('#message-input');
 
         // Type the message
-        await page.fill('#message-input', prompt);
+        await page.fill('#message-input', messageText);
 
         // Click send
         await page.click('#send-button');
@@ -94,7 +124,7 @@ class BrowserChatProvider {
           el => el.textContent
         );
 
-        console.log(`[BrowserChatProvider] User: ${prompt}`);
+        console.log(`[BrowserChatProvider] User: ${messageText}`);
         console.log(`[BrowserChatProvider] Assistant: ${response}`);
 
         return {
@@ -106,6 +136,8 @@ class BrowserChatProvider {
         await page.close();
       }
     } catch (error) {
+      console.error('[BrowserChatProvider] Error:', error);
+      console.error('[BrowserChatProvider] Stack:', error.stack);
       return {
         error: `Browser chat provider error: ${error.message}`,
       };
