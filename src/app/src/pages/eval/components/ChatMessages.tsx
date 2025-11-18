@@ -6,7 +6,7 @@ import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
 import { red, grey } from '@mui/material/colors';
-
+import invariant from 'tiny-invariant';
 interface BaseMessage {
   role: 'user' | 'assistant' | 'system';
 }
@@ -24,7 +24,7 @@ export interface LoadingMessage extends BaseMessage {
 
 export type Message = LoadedMessage | LoadingMessage;
 
-const ChatMessage = ({ message, index }: { message: Message, index: number }) => {
+const ChatMessage = ({ message, index }: { message: Message; index: number }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const isUser = message?.role === 'user';
@@ -119,8 +119,9 @@ const ChatMessage = ({ message, index }: { message: Message, index: number }) =>
   }, [(message as LoadedMessage)?.contentType, message?.content]);
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: alignSelf, mb: 1, }}
-    data-testid={`chat-message-${index}`}
+    <Box
+      sx={{ display: 'flex', justifyContent: alignSelf, mb: 1 }}
+      data-testid={`chat-message-${index}`}
     >
       {message.loading ? (
         <Skeleton
@@ -152,12 +153,27 @@ const ChatMessage = ({ message, index }: { message: Message, index: number }) =>
 
 interface ChatMessagesProps {
   messages: Message[];
+  displayTurnCount?: boolean;
+  maxTurns?: number;
 }
 
-export default function ChatMessages({ messages }: ChatMessagesProps) {
+export default function ChatMessages({
+  messages,
+  displayTurnCount = false,
+  maxTurns = 1,
+}: ChatMessagesProps) {
   if (!messages || messages.length === 0) {
     return null;
   }
+
+  invariant(
+    !displayTurnCount || maxTurns !== undefined,
+    'maxTurns must be defined when displayTurnCount is true',
+  );
+  
+
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
 
   return (
     <Box
@@ -168,9 +184,46 @@ export default function ChatMessages({ messages }: ChatMessagesProps) {
         p: 2,
       }}
     >
-      {messages.map((message, index) => (
-        <ChatMessage key={index} message={message} index={index}/>
-      ))}
+      {messages.map((message, index) => {
+        const msg = <ChatMessage key={index} message={message} index={index} />;
+        const shouldDisplayTurnCount = displayTurnCount && index % 2 === 0;
+
+        return shouldDisplayTurnCount ? (
+          <>
+            <Typography
+              sx={{
+                color: isDark ? grey[800] : grey[400],
+                width: '100%',
+                textAlign: 'center',
+                my: 2,
+                fontWeight: 600,
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                '&::before': {
+                  content: '""',
+                  flex: 1,
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                  marginRight: 2,
+                },
+                '&::after': {
+                  content: '""',
+                  flex: 1,
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                  marginLeft: 2,
+                },
+              }}
+            >
+              {index / 2 + 1}/{maxTurns}
+            </Typography>
+            {msg}
+          </>
+        ) : (
+          msg
+        );
+      })}
     </Box>
   );
 }

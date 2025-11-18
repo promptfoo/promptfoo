@@ -153,12 +153,15 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           Test Case
         </DialogTitle>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Chip label={`Strategy: ${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`} data-testid="strategy-chip" />
+          <Chip
+            label={`Strategy: ${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`}
+            data-testid="strategy-chip"
+          />
           <Chip label={`Plugin: ${pluginDisplayName}`} data-testid="plugin-chip" />
         </Box>
       </Box>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <ChatMessages messages={turnMessages} />
+        <ChatMessages messages={turnMessages} displayTurnCount={maxTurns > 1} maxTurns={maxTurns} />
         {generatedTestCases.length > 0 && (
           <Alert severity="info" sx={{ mt: 2 }}>
             Dissatisfied with the test case? Fine tune it by adjusting your{' '}
