@@ -206,9 +206,17 @@ const RiskCategoryDrawer = ({
             const testWithPluginId = firstFailure || firstPass;
             const pluginId = testWithPluginId?.result?.metadata?.pluginId;
 
-            const url = pluginId
-              ? `/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`
-              : `/eval/${evalId}`;
+            const filterParam = encodeURIComponent(
+              JSON.stringify([
+                {
+                  type: 'plugin',
+                  operator: 'equals',
+                  value: pluginId,
+                },
+              ]),
+            );
+
+            const url = pluginId ? `/eval/${evalId}?filter=${filterParam}` : `/eval/${evalId}`;
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else {
