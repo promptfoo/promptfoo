@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(cli): add team-aware sharing with --team flag for auth and share commands (#6076)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
@@ -31,7 +35,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(app): Metadata value autocomplete eval filter (#6176)
 - feat(webui): display both total and filtered metrics simultaneously when filters are active, showing "X/Y filtered, Z total" format in evaluation results table for better visibility into filtered vs unfiltered data (#5969)
 - feat(app): eval results filters permalinking (#6196)
-- feat(cli): add team-aware sharing with --team flag for auth and share commands (#6076)
 - fix(site): fix missing background color on safari api reference search modal (#6218)
 
 ### Changed
