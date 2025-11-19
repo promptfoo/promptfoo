@@ -1,0 +1,57 @@
+<svg width="1000" height="300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .icon-circle { opacity: 0.9; }
+      .icon-title { font: bold 18px system-ui, sans-serif; fill: #2c3e50; }
+      .icon-desc { font: 14px system-ui, sans-serif; fill: #5a6c7d; }
+    </style>
+  </defs>
+
+  <text x="500" y="35" text-anchor="middle" font-family="system-ui, sans-serif"
+        font-size="28" font-weight="bold" fill="#1a1a1a">Key Safety Dimensions in LLM Evaluation</text>
+
+  <!-- Toxicity -->
+  <g transform="translate(50, 80)">
+    <circle cx="60" cy="60" r="50" fill="#ef4444" class="icon-circle"/>
+    <text x="60" y="50" text-anchor="middle" font-size="40" fill="#ffffff">⚠️</text>
+    <text x="60" y="150" text-anchor="middle" class="icon-title">Toxicity</text>
+    <text x="60" y="175" text-anchor="middle" class="icon-desc">Harmful, offensive,</text>
+    <text x="60" y="195" text-anchor="middle" class="icon-desc">or hateful content</text>
+  </g>
+
+  <!-- Bias -->
+  <g transform="translate(250, 80)">
+    <circle cx="60" cy="60" r="50" fill="#f59e0b" class="icon-circle"/>
+    <text x="60" y="50" text-anchor="middle" font-size="40" fill="#ffffff">⚖️</text>
+    <text x="60" y="150" text-anchor="middle" class="icon-title">Bias</text>
+    <text x="60" y="175" text-anchor="middle" class="icon-desc">Stereotypes and</text>
+    <text x="60" y="195" text-anchor="middle" class="icon-desc">unfair associations</text>
+  </g>
+
+  <!-- Truthfulness -->
+  <g transform="translate(450, 80)">
+    <circle cx="60" cy="60" r="50" fill="#3b82f6" class="icon-circle"/>
+    <text x="60" y="50" text-anchor="middle" font-size="40" fill="#ffffff">✓</text>
+    <text x="60" y="150" text-anchor="middle" class="icon-title">Truthfulness</text>
+    <text x="60" y="175" text-anchor="middle" class="icon-desc">Factual accuracy</text>
+    <text x="60" y="195" text-anchor="middle" class="icon-desc">and honesty</text>
+  </g>
+
+  <!-- Robustness -->
+  <g transform="translate(650, 80)">
+    <circle cx="60" cy="60" r="50" fill="#8b5cf6" class="icon-circle"/>
+    <text x="60" y="50" text-anchor="middle" font-size="40" fill="#ffffff">🛡️</text>
+    <text x="60" y="150" text-anchor="middle" class="icon-title">Robustness</text>
+    <text x="60" y="175" text-anchor="middle" class="icon-desc">Adversarial</text>
+    <text x="60" y="195" text-anchor="middle" class="icon-desc">resistance</text>
+  </g>
+
+  <!-- Alignment -->
+  <g transform="translate(850, 80)">
+    <circle cx="60" cy="60" r="50" fill="#10b981" class="icon-circle"/>
+    <text x="60" y="50" text-anchor="middle" font-size="40" fill="#ffffff">🎯</text>
+    <text x="60" y="150" text-anchor="middle" class="icon-title">Alignment</text>
+    <text x="60" y="175" text-anchor="middle" class="icon-desc">Helpful and</text>
+    <text x="60" y="195" text-anchor="middle" class="icon-desc">harmless behavior</text>
+  </g>
+</svg>

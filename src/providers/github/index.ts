@@ -4,7 +4,7 @@ import { OpenAiChatCompletionProvider } from '../openai/chat';
 export function createGitHubProvider(
   providerPath: string,
   providerOptions: ProviderOptions,
-  context: LoadApiProviderContext,
+  _context: LoadApiProviderContext,
 ) {
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':') || 'openai/gpt-4.1';

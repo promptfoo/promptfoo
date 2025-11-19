@@ -19,7 +19,7 @@ describe('handleGuardrail', () => {
   const defaultParams: AssertionParams = {
     assertion: baseAssertion,
     baseType: 'guardrails',
-    context: defaultContext,
+    assertionValueContext: defaultContext,
     inverse: false,
     output: '',
     outputString: '',

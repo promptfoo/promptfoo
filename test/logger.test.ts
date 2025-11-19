@@ -1,11 +1,30 @@
+import path from 'path';
 import chalk from 'chalk';
 import type { Logger } from 'winston';
 import type Transport from 'winston-transport';
 
+const mockGetEnvString = jest.fn((_: string, defaultValue: any) => defaultValue);
+const mockGetEnvBool = jest.fn((_: string, defaultValue: any) => defaultValue);
+const mockGetConfigDirectoryPath = jest.fn(() => '/mock/config');
+const fsMock = {
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  readdirSync: jest.fn(),
+  statSync: jest.fn(),
+  unlinkSync: jest.fn(),
+};
+
 jest.unmock('../src/logger');
 jest.mock('../src/envars', () => ({
-  getEnvString: jest.fn((key, defaultValue) => defaultValue),
+  getEnvString: mockGetEnvString,
+  getEnvBool: mockGetEnvBool,
 }));
+
+jest.mock('../src/util/config/manage', () => ({
+  getConfigDirectoryPath: mockGetConfigDirectoryPath,
+}));
+
+jest.mock('fs', () => fsMock);
 
 interface MockLogger extends Omit<Logger, 'transports'> {
   error: jest.Mock;
@@ -65,6 +84,18 @@ describe('logger', () => {
     originalError = global.Error;
     mockStdout = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
     jest.clearAllMocks();
+    mockGetEnvString.mockReset();
+    mockGetEnvBool.mockReset();
+    mockGetEnvString.mockImplementation((_, defaultValue) => defaultValue);
+    mockGetEnvBool.mockImplementation((_, defaultValue) => defaultValue);
+    mockGetConfigDirectoryPath.mockReset();
+    mockGetConfigDirectoryPath.mockReturnValue('/mock/config');
+    for (const fn of Object.values(fsMock)) {
+      (fn as jest.Mock).mockReset();
+    }
+    (fsMock.existsSync as jest.Mock).mockReturnValue(true);
+    (fsMock.readdirSync as jest.Mock).mockReturnValue([]);
+    (fsMock.statSync as jest.Mock).mockReturnValue({ mtime: new Date() });
     logger = await import('../src/logger');
     mockLogger.transports[0].level = 'info';
   });
@@ -325,6 +356,126 @@ describe('logger', () => {
     });
   });
 
+  describe('initializeRunLogging', () => {
+    let cliState: { debugLogFile?: string; errorLogFile?: string };
+    let winston: any;
+    let expectedDebugFile: string;
+    let expectedErrorFile: string;
+
+    beforeEach(async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2025-03-01T12:00:00.000Z'));
+      expectedDebugFile = path.join(
+        '/mock/config',
+        'logs',
+        'promptfoo-debug-2025-03-01_12-00-00-000Z.log',
+      );
+      expectedErrorFile = path.join(
+        '/mock/config',
+        'logs',
+        'promptfoo-error-2025-03-01_12-00-00-000Z.log',
+      );
+      cliState = (await import('../src/cliState')).default;
+      winston = jest.requireMock('winston');
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should create debug and error log files when enabled', () => {
+      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+      (fsMock.readdirSync as jest.Mock).mockReturnValue([]);
+
+      logger.initializeRunLogging();
+
+      expect(mockGetConfigDirectoryPath).toHaveBeenCalledWith(true);
+      expect(fsMock.mkdirSync).toHaveBeenCalledWith(path.join('/mock/config', 'logs'), {
+        recursive: true,
+      });
+      expect(cliState.debugLogFile).toBe(expectedDebugFile);
+      expect(cliState.errorLogFile).toBe(expectedErrorFile);
+
+      const debugCall = winston.transports.File.mock.calls.find(
+        ([config]: any[]) => config.level === 'debug',
+      );
+      const errorCall = winston.transports.File.mock.calls.find(
+        ([config]: any[]) => config.level === 'error',
+      );
+
+      expect(debugCall?.[0]).toEqual(
+        expect.objectContaining({
+          level: 'debug',
+          filename: cliState.debugLogFile,
+        }),
+      );
+      expect(errorCall?.[0]).toEqual(
+        expect.objectContaining({
+          level: 'error',
+          filename: cliState.errorLogFile,
+        }),
+      );
+
+      expect(mockLogger.add).toHaveBeenCalledTimes(2);
+      expect(winston.transports.File).toHaveBeenCalledTimes(2);
+    });
+
+    it('should respect PROMPTFOO_DISABLE_DEBUG_LOG', () => {
+      mockGetEnvBool.mockImplementation((key, defaultValue) =>
+        key === 'PROMPTFOO_DISABLE_DEBUG_LOG' ? true : defaultValue,
+      );
+      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+
+      logger.initializeRunLogging();
+
+      expect(cliState.debugLogFile).toBeUndefined();
+      expect(cliState.errorLogFile).toBe(expectedErrorFile);
+
+      expect(winston.transports.File).toHaveBeenCalledTimes(1);
+      const errorConfig = winston.transports.File.mock.calls[0][0];
+      expect(errorConfig.level).toBe('error');
+      expect(mockLogger.add).toHaveBeenCalledTimes(1);
+    });
+
+    it('should respect PROMPTFOO_DISABLE_ERROR_LOG', () => {
+      mockGetEnvBool.mockImplementation((key, defaultValue) =>
+        key === 'PROMPTFOO_DISABLE_ERROR_LOG' ? true : defaultValue,
+      );
+      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+
+      logger.initializeRunLogging();
+
+      expect(cliState.debugLogFile).toBe(expectedDebugFile);
+      expect(cliState.errorLogFile).toBeUndefined();
+
+      expect(winston.transports.File).toHaveBeenCalledTimes(1);
+      const debugConfig = winston.transports.File.mock.calls[0][0];
+      expect(debugConfig.level).toBe('debug');
+      expect(mockLogger.add).toHaveBeenCalledTimes(1);
+    });
+
+    it('should warn when creating file transports fails', () => {
+      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+
+      const winstonMock = jest.requireMock('winston');
+      winstonMock.transports.File.mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+
+      logger.initializeRunLogging();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Error creating run log file: Error: boom'),
+        }),
+      );
+      expect(cliState.debugLogFile).toBe(expectedDebugFile);
+      expect(cliState.errorLogFile).toBeUndefined();
+      expect(mockLogger.add).not.toHaveBeenCalled();
+      expect(winston.transports.File).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('initializeSourceMapSupport', () => {
     let mockInstall: jest.Mock;
 
@@ -373,44 +524,6 @@ describe('logger', () => {
 
       // Should not throw error
       await expect(logger.initializeSourceMapSupport()).resolves.toBeUndefined();
-    });
-  });
-
-  describe('error log file', () => {
-    let originalEnv: NodeJS.ProcessEnv;
-
-    beforeEach(() => {
-      originalEnv = process.env;
-      process.env = { ...originalEnv };
-      process.env.PROMPTFOO_LOG_DIR = '.';
-    });
-
-    afterEach(() => {
-      process.env = originalEnv;
-    });
-
-    it('should create error log file on error', () => {
-      const mockFileTransport = { write: jest.fn() };
-      const winston = jest.requireMock('winston');
-      winston.transports.File.mockReturnValue(mockFileTransport);
-
-      const errorChunk = { level: 'error', message: 'test error' };
-      mockLogger.on.mock.calls.find((call: any[]) => call[0] === 'data')?.[1](errorChunk);
-
-      expect(winston.transports.File).toHaveBeenCalledWith(
-        expect.objectContaining({
-          level: 'error',
-        }),
-      );
-      expect(mockLogger.add).toHaveBeenCalledWith(mockFileTransport);
-      expect(mockFileTransport.write).toHaveBeenCalledWith(errorChunk);
-    });
-
-    it('should not create error log file when disabled', () => {
-      process.env.PROMPTFOO_DISABLE_ERROR_LOG = 'true';
-      logger.default.error('test error');
-      const winston = jest.requireMock('winston');
-      expect(winston.transports.File).not.toHaveBeenCalled();
     });
   });
 

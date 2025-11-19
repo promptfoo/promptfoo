@@ -31,6 +31,7 @@ The `anthropic` provider supports the following models via the messages API:
 | `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Latest Claude 4 Opus model       |
 | `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Latest Claude 4.5 Sonnet model   |
 | `anthropic:messages:claude-sonnet-4-20250514` (claude-sonnet-4-latest)     | Latest Claude 4 Sonnet model     |
+| `anthropic:messages:claude-haiku-4-5-20251001` (claude-haiku-4-5-latest)   | Latest Claude 4.5 Haiku model    |
 | `anthropic:messages:claude-3-7-sonnet-20250219` (claude-3-7-sonnet-latest) | Latest Claude 3.7 Sonnet model   |
 | `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Latest Claude 3.5 Sonnet model   |
 | `anthropic:messages:claude-3-5-sonnet-20240620`                            | Previous Claude 3.5 Sonnet model |
@@ -48,6 +49,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | Claude 4 Opus     | claude-opus-4-20250514 (claude-opus-4-latest)         | anthropic.claude-opus-4-20250514-v1:0                      | claude-opus-4@20250514                                  |
 | Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5-latest) | anthropic.claude-sonnet-4-5-20250929-v1:0                  | claude-sonnet-4-5@20250929                              |
 | Claude 4 Sonnet   | claude-sonnet-4-20250514 (claude-sonnet-4-latest)     | anthropic.claude-sonnet-4-20250514-v1:0                    | claude-sonnet-4@20250514                                |
+| Claude 4.5 Haiku  | claude-haiku-4-5-20251001 (claude-haiku-4-5-latest)   | anthropic.claude-haiku-4-5-20251001-v1:0                   | claude-haiku-4-5@20251001                               |
 | Claude 3.7 Sonnet | claude-3-7-sonnet-20250219 (claude-3-7-sonnet-latest) | anthropic.claude-3-7-sonnet-20250219-v1:0                  | claude-3-7-sonnet@20250219                              |
 | Claude 3.5 Sonnet | claude-3-5-sonnet-20241022 (claude-3-5-sonnet-latest) | anthropic.claude-3-5-sonnet-20241022-v2:0                  | claude-3-5-sonnet-v2@20241022                           |
 | Claude 3.5 Haiku  | claude-3-5-haiku-20241022 (claude-3-5-haiku-latest)   | anthropic.claude-3-5-haiku-20241022-v1:0                   | claude-3-5-haiku@20241022                               |

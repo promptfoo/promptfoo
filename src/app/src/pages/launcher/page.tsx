@@ -16,7 +16,7 @@ import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useNavigate } from 'react-router-dom';
 import DarkModeToggle from '../../components/DarkMode';
-import { useApiHealth } from '../../hooks/useApiHealth';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 
 const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
 
@@ -95,7 +95,10 @@ export default function LauncherPage() {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const isLargeScreen = useMediaQuery('(min-width:1200px)');
-  const { status: healthStatus, checkHealth } = useApiHealth();
+  const {
+    data: { status: healthStatus },
+    refetch: checkHealth,
+  } = useApiHealth();
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
   usePageMeta({ title: 'Launcher', description: 'Connect to your API server' });
 

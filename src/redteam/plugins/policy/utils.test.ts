@@ -11,10 +11,12 @@ import {
   makeCustomPolicyCloudUrl,
   makeInlinePolicyId,
 } from './utils';
+import { v4 as uuidv4 } from 'uuid';
 
 // Mock dependencies
 jest.mock('uuid', () => ({
   validate: jest.fn(),
+  v4: jest.fn(),
 }));
 
 jest.mock('../../../util/createHash', () => ({
@@ -38,14 +40,50 @@ describe('Policy Utils', () => {
   });
 
   describe('deserializePolicyIdFromMetric', () => {
-    it('should deserialize a policy ID from a metric', () => {
+    it('should deserialize a policy ID from a metric without strategy suffix', () => {
       const result = deserializePolicyIdFromMetric(`${POLICY_METRIC_PREFIX}:test-id`);
       expect(result).toBe('test-id');
+    });
+
+    it('should deserialize a policy ID and remove strategy suffix', () => {
+      const mockUuid = '550e8400-e29b-41d4-a716-446655440000';
+      (uuidv4 as jest.Mock).mockReturnValue(mockUuid);
+
+      const result = deserializePolicyIdFromMetric(`${POLICY_METRIC_PREFIX}:${mockUuid}/jailbreak`);
+      expect(result).toBe(mockUuid);
+    });
+
+    it('should handle multiple strategy suffixes', () => {
+      const mockUuid = '550e8400-e29b-41d4-a716-446655440000';
+      (uuidv4 as jest.Mock).mockReturnValue(mockUuid);
+
+      const result = deserializePolicyIdFromMetric(
+        `${POLICY_METRIC_PREFIX}:${mockUuid}/jailbreak/extra`,
+      );
+      expect(result).toBe(mockUuid);
+    });
+
+    it('should handle various strategy names', () => {
+      expect(deserializePolicyIdFromMetric(`${POLICY_METRIC_PREFIX}:policy-id/GOAT`)).toBe(
+        'policy-id',
+      );
+      expect(
+        deserializePolicyIdFromMetric(`${POLICY_METRIC_PREFIX}:policy-id/prompt-injection`),
+      ).toBe('policy-id');
+      expect(
+        deserializePolicyIdFromMetric(`${POLICY_METRIC_PREFIX}:abcdef123456/harmful-content`),
+      ).toBe('abcdef123456');
+    });
+
+    it('should handle inline policy IDs with strategy suffix', () => {
+      const inlineId = 'abcdef123456';
+      const result = deserializePolicyIdFromMetric(`${POLICY_METRIC_PREFIX}:${inlineId}/jailbreak`);
+      expect(result).toBe(inlineId);
     });
   });
 
   describe('formatPolicyIdentifierAsMetric', () => {
-    it('should format a policy identifier correctly', () => {
+    it('should format a policy identifier correctly without originalMetric', () => {
       expect(formatPolicyIdentifierAsMetric('test-policy')).toBe('Policy: test-policy');
       expect(formatPolicyIdentifierAsMetric('123')).toBe('Policy: 123');
       expect(formatPolicyIdentifierAsMetric('')).toBe('Policy: ');
@@ -59,6 +97,19 @@ describe('Policy Utils', () => {
         'Policy: policy_with_underscores',
       );
       expect(formatPolicyIdentifierAsMetric('policy.with.dots')).toBe('Policy: policy.with.dots');
+    });
+
+    it('should preserve strategy suffix from originalMetric', () => {
+      expect(
+        formatPolicyIdentifierAsMetric('test-policy', `PolicyViolation:${uuidv4()}/jailbreak`),
+      ).toBe('Policy/jailbreak: test-policy');
+      expect(formatPolicyIdentifierAsMetric('my-policy', `PolicyViolation:${uuidv4()}/GOAT`)).toBe(
+        'Policy/GOAT: my-policy',
+      );
+    });
+
+    it('should handle empty originalMetric', () => {
+      expect(formatPolicyIdentifierAsMetric('test-policy', '')).toBe('Policy: test-policy');
     });
   });
 

@@ -75,9 +75,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     };
 
     let data,
-      cached = false;
+      cached = false,
+      latencyMs: number | undefined;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data, cached, latencyMs } = (await fetchWithCache(
         `${this.getApiUrl()}/completions`,
         {
           method: 'POST',
@@ -111,6 +112,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         output: data.choices[0].text,
         tokenUsage: getTokenUsage(data, cached),
         cached,
+        latencyMs,
         cost: calculateOpenAICost(
           this.modelName,
           this.config,

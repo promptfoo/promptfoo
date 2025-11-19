@@ -116,7 +116,7 @@ const PromptDialog = ({
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              Prompt Details
+              {selectedPrompt.prompt.label || selectedPrompt.prompt.display || 'Prompt Details'}
             </Typography>
             <Box
               sx={(theme) => ({

@@ -153,7 +153,7 @@ results = orchestrator.run(attacker, target)
 
 ### Promptfoo
 
-- 125,000+ users since 2023
+- 200,000+ users since 2023
 - Used by 44 Fortune 500 companies
 - Featured in OpenAI, Anthropic, AWS course materials
 - Regular updates for new attack techniques
