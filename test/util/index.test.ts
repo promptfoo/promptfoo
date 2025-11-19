@@ -131,6 +131,118 @@ describe('maybeLoadToolsFromExternalFile', () => {
     expect(fs.existsSync).toHaveBeenCalledTimes(2);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
+
+  describe('validation', () => {
+    it('should throw error for Python file with function name', () => {
+      // file://tool.py:get_tools is preserved as a string by maybeLoadFromExternalFile
+      // because it has a function name, and our validation should catch it
+      const tools = 'file://tools.py:get_tools';
+
+      // Mock the file loading to preserve the string (simulating function name behavior)
+      jest.mocked(fs.existsSync).mockReturnValue(false);
+
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(
+        /Loading tool definitions from Python\/JavaScript files is not currently supported/,
+      );
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(/tools\.py:get_tools/);
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(/file:\/\/tools\.yaml/);
+    });
+
+    it('should throw error for JavaScript file with function name', () => {
+      const tools = 'file://tools.js:getTools';
+
+      jest.mocked(fs.existsSync).mockReturnValue(false);
+
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(
+        /Loading tool definitions from Python\/JavaScript files is not currently supported/,
+      );
+    });
+
+    it('should throw error for TypeScript file with function name', () => {
+      const tools = 'file://tools.ts:getTools';
+
+      jest.mocked(fs.existsSync).mockReturnValue(false);
+
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(
+        /Loading tool definitions from Python\/JavaScript files is not currently supported/,
+      );
+    });
+
+    it('should throw error when file content looks like Python code', () => {
+      // Simulate a .py file being loaded as raw text
+      const pythonCode = 'def get_tools():\n    return []\n\nimport json';
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockReturnValue(pythonCode);
+
+      const tools = 'file://tools.py';
+
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(
+        /file appears to contain Python code/,
+      );
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(
+        /Loading tool definitions from Python files is not currently supported/,
+      );
+    });
+
+    it('should throw error for invalid string content', () => {
+      // Simulate a text file being loaded
+      const textContent = 'this is not valid JSON or YAML';
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockReturnValue(textContent);
+
+      const tools = 'file://tools.txt';
+
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(
+        /expected an array or object, but got a string/,
+      );
+    });
+
+    it('should accept valid YAML tools', () => {
+      const yamlContent = `- type: function
+  function:
+    name: test
+    parameters:
+      type: object`;
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
+
+      const tools = 'file://tools.yaml';
+      const result = maybeLoadToolsFromExternalFile(tools);
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result[0].type).toBe('function');
+    });
+
+    it('should accept valid JSON tools', () => {
+      const jsonContent = JSON.stringify([
+        { type: 'function', function: { name: 'test', parameters: { type: 'object' } } },
+      ]);
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockReturnValue(jsonContent);
+
+      const tools = 'file://tools.json';
+      const result = maybeLoadToolsFromExternalFile(tools);
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result[0].type).toBe('function');
+    });
+
+    it('should accept inline tool objects', () => {
+      const tools = [{ type: 'function', function: { name: 'test' } }];
+      const result = maybeLoadToolsFromExternalFile(tools);
+      expect(result).toEqual(tools);
+    });
+
+    it('should return undefined for undefined input', () => {
+      const result = maybeLoadToolsFromExternalFile(undefined);
+      expect(result).toBeUndefined();
+    });
+
+    it('should return null for null input', () => {
+      const result = maybeLoadToolsFromExternalFile(null);
+      expect(result).toBeNull();
+    });
+  });
 });
 
 describe('util', () => {
