@@ -60,6 +60,7 @@ After thorough code analysis, the issue is better understood:
 ### What Does NOT Cause This Error
 
 **The "Test Target" button in the UI does NOT cause this issue:**
+
 - Located in `src/app/src/pages/redteam/setup/components/Targets/HttpEndpointConfiguration.tsx`
 - Calls `/providers/test` endpoint
 - Server handler in `src/server/routes/providers.ts` (lines 41-80)
@@ -81,6 +82,7 @@ After thorough code analysis, the issue is better understood:
 5. Redteam grader fails because it needs actual prompt content for grading
 
 **Code flow:**
+
 - Review.tsx `handleRunWithSettings` (line 376) → `/redteam/run`
 - Server: `src/server/routes/redteam.ts` (lines 150-231)
 - Calls `doRedteamRun` in `src/redteam/shared.ts`
@@ -88,13 +90,13 @@ After thorough code analysis, the issue is better understood:
 
 ### Key Files Summary
 
-| Component | File | Lines | Purpose |
-|-----------|------|-------|---------|
+| Component        | File                            | Lines   | Purpose                                |
+| ---------------- | ------------------------------- | ------- | -------------------------------------- |
 | Test Target (OK) | `HttpEndpointConfiguration.tsx` | 151-244 | Uses `/providers/test` - NO assertions |
-| Run Now (ERROR) | `Review.tsx` | 312-440 | Calls `/redteam/run` with full eval |
-| Backend Handler | `src/server/routes/redteam.ts` | 150-231 | Handles `/redteam/run` |
-| Redteam Logic | `src/redteam/shared.ts` | 18-135 | Generates tests + runs eval |
-| Error Location | `src/assertions/redteam.ts` | 46-57 | Now handles missing prompt gracefully |
+| Run Now (ERROR)  | `Review.tsx`                    | 312-440 | Calls `/redteam/run` with full eval    |
+| Backend Handler  | `src/server/routes/redteam.ts`  | 150-231 | Handles `/redteam/run`                 |
+| Redteam Logic    | `src/redteam/shared.ts`         | 18-135  | Generates tests + runs eval            |
+| Error Location   | `src/assertions/redteam.ts`     | 46-57   | Now handles missing prompt gracefully  |
 
 ## What This Fix Does
 
@@ -107,11 +109,13 @@ After thorough code analysis, the issue is better understood:
 **This fix is appropriate and complete for the reported issue.**
 
 The user in Issue #5995 was running `promptfoo redteam run` (or clicking "Run Now") with a config that had:
+
 - Template prompts: `prompts: ['{{prompt}}']`
 - Redteam plugins that generate assertions
 - But test generation failed (due to API key issues or similar)
 
 When test generation fails, no actual prompts are created, so the assertions run with empty prompts and crash. The backend safety net we implemented correctly handles this case by:
+
 1. Returning a failing grade instead of crashing
 2. Providing a helpful error message
 3. Preserving metadata for UI display
@@ -119,6 +123,7 @@ When test generation fails, no actual prompts are created, so the assertions run
 ### No Frontend Changes Needed
 
 The "Test Target" button already works correctly because it:
+
 - Uses a separate endpoint (`/providers/test`)
 - Does not attach any assertions
 - Only tests HTTP connectivity
@@ -128,6 +133,7 @@ The issue is with running full evaluations before test cases are properly genera
 ### Potential Future Enhancement
 
 If desired, validation could be added in `src/redteam/shared.ts` to:
+
 - Check if test generation succeeded before running eval
 - Provide early warning if prompts are still templates
 - Skip eval entirely if no valid test cases were generated
@@ -139,16 +145,19 @@ But this is not required to fix Issue #5995 - the current backend safety net is 
 ### Verify the Fix
 
 1. **Run the reproduction config:**
+
    ```bash
    npm run local -- eval -c repro-eval.yaml
    ```
 
 2. **Expected result (BEFORE fix):**
+
    ```
    Error: Invariant failed: Grader promptfoo:redteam:harmful:misinformation-disinformation must have a prompt
    ```
 
 3. **Expected result (AFTER fix):**
+
    ```
    ┌────────────────────────────────────────────────────────────────────┐
    │ [file:///...plugin_bug.py] {{prompt}}                              │
@@ -168,6 +177,7 @@ npm test -- test/assertions/redteam.test.ts --coverage
 ```
 
 Expected: All 4 tests pass, including:
+
 - `returns a failing grade when prompt is undefined`
 - `returns a failing grade when prompt is empty string`
 - `returns a failing grade when prompt is whitespace only`
