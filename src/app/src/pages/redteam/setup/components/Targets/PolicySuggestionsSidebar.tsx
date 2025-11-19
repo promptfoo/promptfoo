@@ -10,16 +10,13 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 
-type PolicySuggestion = {
-  name: string;
-  text: string;
-};
+import type { PolicyObject } from '@promptfoo/redteam/types';
 
 type PolicySuggestionsSidebarProps = {
   isGeneratingPolicies: boolean;
-  suggestedPolicies: PolicySuggestion[];
+  suggestedPolicies: PolicyObject[];
   onGeneratePolicies: () => void;
-  onAddSuggestedPolicy: (policy: PolicySuggestion) => void;
+  onAddSuggestedPolicy: (policy: PolicyObject) => void;
 };
 
 export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> = ({

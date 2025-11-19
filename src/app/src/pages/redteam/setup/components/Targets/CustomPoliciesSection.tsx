@@ -26,6 +26,7 @@ import {
   useGridApiRef,
 } from '@mui/x-data-grid';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
+import type { PolicyObject } from '@promptfoo/redteam/types';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
@@ -129,9 +130,7 @@ export const CustomPoliciesSection = () => {
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
   const [isGeneratingPolicies, setIsGeneratingPolicies] = useState(false);
-  const [suggestedPolicies, setSuggestedPolicies] = useState<Array<{ name: string; text: string }>>(
-    [],
-  );
+  const [suggestedPolicies, setSuggestedPolicies] = useState<PolicyObject[]>([]);
   const [hasAttemptedGeneration, setHasAttemptedGeneration] = useState(false);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
   const isGeneratingPoliciesRef = useRef(false);
@@ -419,7 +418,7 @@ export const CustomPoliciesSection = () => {
       // Get existing policy texts to avoid duplicates (both active and suggested)
       const existingPolicies = [
         ...rows.map((row) => row.policyText),
-        ...suggestedPolicies.map((p) => p.text),
+        ...suggestedPolicies.map((p) => p.text || ''),
       ];
 
       const response = await callApi('/v1/redteam/generate-policies', {
@@ -446,8 +445,15 @@ export const CustomPoliciesSection = () => {
         return;
       }
 
+      // Map to PolicyObject with generated IDs
+      const policyObjects: PolicyObject[] = generatedPolicies.map((p) => ({
+        id: makeInlinePolicyId(p.text),
+        text: p.text,
+        name: p.name,
+      }));
+
       // Store as suggested policies instead of directly adding them
-      setSuggestedPolicies(generatedPolicies);
+      setSuggestedPolicies(policyObjects);
     } catch (error) {
       console.error('Error generating policies:', error);
       setSuggestedPolicies([]);
@@ -476,12 +482,12 @@ export const CustomPoliciesSection = () => {
   ]);
 
   const handleAddSuggestedPolicy = useCallback(
-    (policy: { name: string; text: string }) => {
+    (policy: PolicyObject) => {
       const otherPlugins = config.plugins.filter((p) =>
         typeof p === 'string' ? true : p.id !== 'policy',
       );
 
-      const policyId = makeInlinePolicyId(policy.text);
+      const policyId = policy.id || makeInlinePolicyId(policy.text || '');
       const newPolicy = {
         id: 'policy',
         config: {
@@ -504,7 +510,7 @@ export const CustomPoliciesSection = () => {
       updateConfig('plugins', [...otherPlugins, ...allPolicies]);
 
       // Remove from suggested policies
-      setSuggestedPolicies((prev) => prev.filter((p) => p.text !== policy.text));
+      setSuggestedPolicies((prev) => prev.filter((p) => p.id !== policy.id));
 
       toast.showToast('Policy added successfully', 'success');
     },
