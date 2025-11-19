@@ -70,6 +70,7 @@ jobs:
                   echo "Expected format: - feat(scope): description (#$PR_NUMBER)"
                   echo ""
                   echo "Entries missing PR numbers:"
+                  # shellcheck disable=SC2001
                   echo "$MISSING_PR_NUM" | sed 's/^+/  /'
                   exit 1
                 fi
@@ -82,6 +83,7 @@ jobs:
                   echo "Use PR numbers (#1234) instead of commit hashes (abc1234)."
                   echo ""
                   echo "Entries with commit hashes:"
+                  # shellcheck disable=SC2001
                   echo "$HAS_COMMIT_HASH" | sed 's/^+/  /'
                   exit 1
                 fi
