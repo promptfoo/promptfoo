@@ -20,7 +20,7 @@ export function runCommand(program: Command): void {
     .option('--base <ref>', 'Base branch or commit to compare against')
     .option('--compare <ref>', 'Compare branch or commit')
     .option('-c, --config <path>', 'Path to config file')
-    .option('--api-host <url>', 'Promptfoo API host URL (default: https://api.promptfoo.dev)')
+    .option('--api-host <url>', 'Promptfoo API host URL (default: https://api.promptfoo.app)')
     .option('--diffs-only', 'Scan only PR diffs, skip filesystem exploration')
     .option('--json', 'Output results as JSON')
     .option('--github-pr <owner/repo#number>', 'GitHub PR to post comments to')
