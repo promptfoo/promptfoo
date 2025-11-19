@@ -258,7 +258,10 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     );
 
     // Determine API version based on model
-    const apiVersion = this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
+    const apiVersion =
+      this.modelName === 'gemini-2.0-flash-thinking-exp' || this.modelName.startsWith('gemini-3-')
+        ? 'v1alpha'
+        : 'v1beta';
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];

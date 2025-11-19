@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(plugins): organize domain-specific risks into vertical suites
+- feat(providers): add Gemini 3 Pro support with thinking configuration (#6241)
+
+## [0.119.7] - 2025-11-17
+
+### Added
+
 - feat(assertions): add dot product and euclidean distance metrics for similarity assertion - use `similar:dot` and `similar:euclidean` assertion types to match production vector database metrics and support different similarity use cases (#6202)
 - feat(webui): expose Hydra strategy configuration (max turns and stateful toggle) in red team setup UI (#6165)
 - fix(app): aligning risk scores with documentation (#6212)
@@ -17,17 +24,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(app): Metadata value autocomplete eval filter (#6176)
 - feat(webui): display both total and filtered metrics simultaneously when filters are active, showing "X/Y filtered, Z total" format in evaluation results table for better visibility into filtered vs unfiltered data (#5969)
 - feat(app): eval results filters permalinking (#6196)
+- fix(site): fix missing background color on safari api reference search modal (#6218)
 
 ### Changed
 
 - chore(ci): synchronize package-lock.json to resolve npm ci failures (#6195)
 - chore(ci): increase webui test timeout to 8 minutes in GitHub Actions workflow to prevent CI timeouts (#6201)
+- chore(redteam): update foundation model report redteam config to use newer redteam strategies (#6216)
 
 ### Fixed
 
+- fix(providers): correctly handle reasoning field in OpenAI-compatible models like gpt-oss-20b, extracting both reasoning and content instead of only reasoning (#6062)
+- fix(redteam): exclude cyberseceval and beavertails static dataset plugins from iterative strategies to prevent wasted compute and silent grading failures during Hydra/Meta/Tree iterations (#6230)
+- fix(mcp): allow colons in eval ID validation for get_evaluation_details tool - fixes rejection of valid eval IDs returned by list_evaluations (e.g., eval-8h1-2025-11-15T14:17:18) by updating regex to accept ISO timestamp format (#6222)
 - fix(redteam): don't set default 'en' language when no language is configured - prevents unnecessary language modifiers from being passed to meta agent and other iterative strategies, keeping prompts focused on actual task without implied translation requirements (#6214)
 - fix(webui): fix duplicate React key warning in DefaultTestVariables component by implementing counter-based unique ID generation (#6201)
 - fix(samples): downlevel pem dependency to supported version
+- fix(deps): remove unused dependency on @libsql/client
+- fix(redteam): store rendered grading rubric in assertion.value for agentic strategies to display in UI Value column (#6125)
 
 ### Tests
 
@@ -35,6 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
+- chore(deps): upgrade to React 19 (#6229)
+- chore(deps): upgrade @googleapis/sheets from 9.8.0 to 12.0.0 (#6227)
 - chore(deps): bump openai from 6.8.1 to 6.9.0 (#6208)
 
 ## [0.119.6] - 2025-11-12
