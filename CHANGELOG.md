@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.119.8] - 2025-11-18
+
 ### Added
 
 - feat(config): add per-test structured output configuration - test-level `options` now override prompt-level config for all providers, enabling different `response_format` (OpenAI) or `responseSchema` (Google) per test without duplicating prompts; works with all providers (OpenAI, Azure, Google Vertex, Mistral, etc.); supports external schema files with `file://` prefix and variable substitution; uses shallow merge (object spread) where test options completely replace conflicting prompt config objects; 100% backward compatible (0000000)
