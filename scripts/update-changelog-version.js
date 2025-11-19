@@ -31,7 +31,7 @@ const EMPTY_UNRELEASED = `## [Unreleased]
 function updateChangelog() {
   // Read package.json to get new version
   const packageJson = JSON.parse(
-    fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')
+    fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'),
   );
   const version = packageJson.version;
 
@@ -64,7 +64,7 @@ function updateChangelog() {
   // Replace Unreleased content with empty template and insert new version
   const updatedChangelog = changelog.replace(
     /## \[Unreleased\]\n[\s\S]*?(?=\n## \[\d)/,
-    `${EMPTY_UNRELEASED}\n\n${newVersionSection}\n\n`
+    `${EMPTY_UNRELEASED}\n\n${newVersionSection}\n\n`,
   );
 
   // Clean up any triple+ newlines
