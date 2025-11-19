@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- feat(vlguard): update VLGuard plugin to use original dataset for improved accuracy (#5809)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
