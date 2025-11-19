@@ -180,6 +180,42 @@ defaultTest:
           apiHost: xxx.openai.azure.com
 ```
 
+## Invalid tools configuration error
+
+If you see errors like `Invalid tools configuration: file appears to contain Python code` or `Loading tool definitions from Python files is not currently supported`, your tools configuration is using an unsupported file format.
+
+### Supported formats
+
+Tool definitions must be in **JSON** or **YAML** format. Python (`.py`) and JavaScript (`.js`, `.ts`) files are not supported for tool definitions.
+
+### Solution
+
+Convert your tool definitions to YAML or JSON format:
+
+```yaml title="tools.yaml"
+- type: function
+  function:
+    name: get_current_weather
+    description: Get the current weather in a given location
+    parameters:
+      type: object
+      properties:
+        location:
+          type: string
+          description: 'The city and state, e.g. San Francisco, CA'
+      required:
+        - location
+```
+
+Then reference it in your config:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-4.1-mini
+    config:
+      tools: file://./tools.yaml
+```
+
 ## How to triage stuck evals
 
 When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. Here's how to fix them:

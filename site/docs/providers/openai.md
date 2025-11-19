@@ -372,6 +372,22 @@ To set `tools` on an OpenAI provider, use the provider's `config` key. The model
 
 Tools can be defined inline or loaded from an external file:
 
+:::info Supported file formats
+
+When loading tools from external files, only **JSON** and **YAML** formats are supported. Python and JavaScript files cannot be used for tool definitions.
+
+```yaml
+# Supported formats
+tools: file://./tools.yaml
+tools: file://./tools.json
+
+# NOT supported - will cause errors
+tools: file://./tools.py
+tools: file://./tools.js
+```
+
+:::
+
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
@@ -563,6 +579,12 @@ tests:
 ### Loading tools/functions from a file
 
 Instead of duplicating function definitions across multiple configurations, you can reference an external YAML (or JSON) file that contains your functions. This allows you to maintain a single source of truth for your functions, which is particularly useful if you have multiple versions or regular changes to definitions.
+
+:::warning
+
+Only **JSON** and **YAML** files are supported for tool/function definitions. Python (`.py`) and JavaScript (`.js`, `.ts`) files cannot be used for this purpose.
+
+:::
 
 To load your functions from a file, specify the file path in your provider configuration like so:
 
