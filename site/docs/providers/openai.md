@@ -374,17 +374,20 @@ Tools can be defined inline or loaded from an external file:
 
 :::info Supported file formats
 
-When loading tools from external files, only **JSON** and **YAML** formats are supported. Python and JavaScript files cannot be used for tool definitions.
+Tools can be loaded from external files in multiple formats:
 
 ```yaml
-# Supported formats
+# Static data files
 tools: file://./tools.yaml
 tools: file://./tools.json
 
-# NOT supported - will cause errors
-tools: file://./tools.py
-tools: file://./tools.js
+# Dynamic tool definitions from code (requires function name)
+tools: file://./tools.py:get_tools
+tools: file://./tools.js:getTools
+tools: file://./tools.ts:getTools
 ```
+
+Python and JavaScript files must export a function that returns the tool definitions array. The function is called synchronously during config loading.
 
 :::
 
@@ -580,9 +583,9 @@ tests:
 
 Instead of duplicating function definitions across multiple configurations, you can reference an external YAML (or JSON) file that contains your functions. This allows you to maintain a single source of truth for your functions, which is particularly useful if you have multiple versions or regular changes to definitions.
 
-:::warning
+:::tip
 
-Only **JSON** and **YAML** files are supported for tool/function definitions. Python (`.py`) and JavaScript (`.js`, `.ts`) files cannot be used for this purpose.
+Tool definitions can be loaded from JSON, YAML, Python, or JavaScript files. For Python/JS files, specify a function name that returns the tool definitions: `file://tools.py:get_tools`
 
 :::
 

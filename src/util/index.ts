@@ -29,8 +29,10 @@ import {
 import invariant from '../util/invariant';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { convertTestResultsToTableRow } from './exportToFile/index';
-import { maybeLoadFromExternalFile } from './file';
+import { runPythonSync } from '../python/pythonUtils';
+import { loadJavaScriptFunctionSync, maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
 
@@ -625,53 +627,97 @@ export function isRunningUnderNpx(): boolean {
  * This function combines renderVarsInObject and maybeLoadFromExternalFile into a single step
  * specifically for handling tools configurations.
  *
+ * Supports loading from JSON, YAML, Python, and JavaScript files.
+ *
  * @param tools - The tools configuration object or array to process.
  * @param vars - Variables to use for rendering.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
- * @throws {Error} If the loaded tools are in an invalid format (e.g., Python/JS files)
+ * @throws {Error} If the loaded tools are in an invalid format
  */
 export function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, string | object>,
 ): any {
-  const loaded = maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
+  const rendered = renderVarsInObject(tools, vars);
+
+  // Check if this is a Python/JS file reference with function name
+  // These need special handling to execute the function and get the result
+  if (typeof rendered === 'string' && rendered.startsWith('file://')) {
+    const { filePath, functionName } = parseFileUrl(rendered);
+
+    if (functionName && (filePath.endsWith('.py') || isJavascriptFile(filePath))) {
+      // Execute the function to get tool definitions
+      try {
+        let toolDefinitions: any;
+
+        if (filePath.endsWith('.py')) {
+          // Use synchronous Python execution
+          toolDefinitions = runPythonSync(filePath, functionName);
+        } else {
+          // Use synchronous JavaScript execution
+          toolDefinitions = loadJavaScriptFunctionSync(filePath, functionName);
+        }
+
+        // Validate the result
+        if (
+          toolDefinitions === undefined ||
+          toolDefinitions === null ||
+          typeof toolDefinitions === 'string'
+        ) {
+          throw new Error(
+            `Function "${functionName}" must return an array or object of tool definitions, ` +
+              `but returned: ${typeof toolDefinitions}`,
+          );
+        }
+
+        return toolDefinitions;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `Failed to load tools from ${rendered}:\n${errorMessage}\n\n` +
+            `Make sure the function "${functionName}" exists and returns a valid tool definition array.`,
+        );
+      }
+    }
+
+    // Python/JS file without function name - provide helpful error
+    if (filePath.endsWith('.py') || isJavascriptFile(filePath)) {
+      const ext = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
+      throw new Error(
+        `Cannot load tools from ${rendered}\n` +
+          `${ext} files require a function name. Use this format:\n` +
+          `  tools: file://${filePath}:get_tools\n\n` +
+          `Your ${ext} file should export a function that returns tool definitions:\n` +
+          (filePath.endsWith('.py')
+            ? `  def get_tools():\n      return [{"type": "function", "function": {...}}]`
+            : `  module.exports.get_tools = () => [{ type: "function", function: {...} }];`),
+      );
+    }
+  }
+
+  // Standard loading for JSON/YAML files
+  const loaded = maybeLoadFromExternalFile(rendered);
 
   // Validate the loaded result - tools must be an array or object, not a string
   if (loaded !== undefined && loaded !== null && typeof loaded === 'string') {
-    // Case 1: Unresolved file:// reference with function name
-    // (e.g., 'file://tool.py:get_tools' preserved unchanged by maybeLoadFromExternalFile)
+    // Unresolved file:// reference
     if (loaded.startsWith('file://')) {
-      const filePath = loaded;
-      // Check for Python/JS extensions
-      if (/\.(py|js|ts|mjs|cjs)(?::|$)/.test(filePath)) {
-        throw new Error(
-          `Cannot load tools from ${filePath}\n` +
-            `Loading tool definitions from Python/JavaScript files is not currently supported. ` +
-            `Please use JSON or YAML format instead:\n` +
-            `  tools: file://tools.yaml\n` +
-            `  tools: file://tools.json`,
-        );
-      }
-      // Other unresolved file:// reference
       throw new Error(
-        `Failed to load tools from ${filePath}\n` +
-          `If using file://, ensure the file exists and contains valid JSON or YAML tool definitions.`,
+        `Failed to load tools from ${loaded}\n` +
+          `Ensure the file exists and contains valid JSON or YAML tool definitions.`,
       );
     }
 
-    // Case 2: Raw file content loaded (e.g., Python code read as text)
-    // Heuristic: looks like Python code
+    // Raw file content loaded (e.g., Python code read as text without function name)
     if (loaded.includes('def ') || loaded.includes('import ')) {
       throw new Error(
         `Invalid tools configuration: file appears to contain Python code.\n` +
-          `Loading tool definitions from Python files is not currently supported. ` +
-          `Please use JSON or YAML format instead:\n` +
-          `  tools: file://tools.yaml\n` +
-          `  tools: file://tools.json`,
+          `Python files require a function name. Use this format:\n` +
+          `  tools: file://tools.py:get_tools`,
       );
     }
 
-    // Case 3: Some other invalid string content
+    // Some other invalid string content
     throw new Error(
       `Invalid tools configuration: expected an array or object, but got a string.\n` +
         `If using file://, ensure the file contains valid JSON or YAML tool definitions.`,

@@ -4515,7 +4515,8 @@ describe('OpenAiResponsesProvider', () => {
         },
       });
 
-      const { body, config } = provider.getOpenAiBody('test prompt', {});
+      const context = { prompt: { raw: 'test', label: 'test' }, vars: {} };
+      const { body, config } = provider.getOpenAiBody('test prompt', context);
 
       // Verify tools are returned in both body and config
       expect(body.tools).toEqual([{ type: 'web_search_preview' }]);
@@ -4530,7 +4531,8 @@ describe('OpenAiResponsesProvider', () => {
         },
       });
 
-      const { body, config } = provider.getOpenAiBody('test prompt', {});
+      const context = { prompt: { raw: 'test', label: 'test' }, vars: {} };
+      const { body, config } = provider.getOpenAiBody('test prompt', context);
 
       expect(body.tools).toBeUndefined();
       expect(config.tools).toBeUndefined();
@@ -4540,13 +4542,12 @@ describe('OpenAiResponsesProvider', () => {
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
           apiKey: 'test-key',
-          tools: 'file://tools.py:get_tools',
+          tools: 'file://tools.py:get_tools' as any,
         },
       });
 
-      expect(() => provider.getOpenAiBody('test prompt', {})).toThrow(
-        /Loading tool definitions from Python\/JavaScript files is not currently supported/,
-      );
+      const context = { prompt: { raw: 'test', label: 'test' }, vars: {} };
+      expect(() => provider.getOpenAiBody('test prompt', context)).toThrow(/Failed to load tools/);
     });
 
     it('should allow deep-research validation to work with loaded tools', async () => {
@@ -4586,7 +4587,12 @@ describe('OpenAiResponsesProvider', () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
-          tools: [{ type: 'function', function: { name: 'test' } }],
+          tools: [
+            {
+              type: 'function',
+              function: { name: 'test', parameters: { type: 'object', properties: {} } },
+            },
+          ],
         },
       });
 

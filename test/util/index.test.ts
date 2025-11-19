@@ -133,54 +133,47 @@ describe('maybeLoadToolsFromExternalFile', () => {
   });
 
   describe('validation', () => {
-    it('should throw error for Python file with function name', () => {
-      // file://tool.py:get_tools is preserved as a string by maybeLoadFromExternalFile
-      // because it has a function name, and our validation should catch it
+    it('should throw error for Python file with function name when execution fails', () => {
+      // Python file with function name will try to execute
       const tools = 'file://tools.py:get_tools';
 
-      // Mock the file loading to preserve the string (simulating function name behavior)
-      jest.mocked(fs.existsSync).mockReturnValue(false);
-
-      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(
-        /Loading tool definitions from Python\/JavaScript files is not currently supported/,
-      );
+      // File doesn't exist, so execution will fail
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(/Failed to load tools/);
       expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(/tools\.py:get_tools/);
-      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(/file:\/\/tools\.yaml/);
     });
 
-    it('should throw error for JavaScript file with function name', () => {
+    it('should throw error for JavaScript file when file not found', () => {
       const tools = 'file://tools.js:getTools';
 
-      jest.mocked(fs.existsSync).mockReturnValue(false);
-
-      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(
-        /Loading tool definitions from Python\/JavaScript files is not currently supported/,
-      );
+      // File doesn't exist - require() throws "Cannot find module"
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(/Failed to load tools/);
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(/Cannot find module/);
     });
 
-    it('should throw error for TypeScript file with function name', () => {
+    it('should throw error for TypeScript file when file not found', () => {
       const tools = 'file://tools.ts:getTools';
 
-      jest.mocked(fs.existsSync).mockReturnValue(false);
-
-      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(
-        /Loading tool definitions from Python\/JavaScript files is not currently supported/,
-      );
+      // File doesn't exist - require() throws "Cannot find module"
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(/Failed to load tools/);
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(/Cannot find module/);
     });
 
-    it('should throw error when file content looks like Python code', () => {
-      // Simulate a .py file being loaded as raw text
-      const pythonCode = 'def get_tools():\n    return []\n\nimport json';
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.readFileSync).mockReturnValue(pythonCode);
-
+    it('should throw error for Python file without function name', () => {
+      // Python file without function name requires a function name
       const tools = 'file://tools.py';
 
       expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(
-        /file appears to contain Python code/,
+        /Python files require a function name/,
       );
+      expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(/file:\/\/tools\.py:get_tools/);
+    });
+
+    it('should throw error for JavaScript file without function name', () => {
+      // JavaScript file without function name requires a function name
+      const tools = 'file://tools.js';
+
       expect(() => maybeLoadToolsFromExternalFile(tools)).toThrow(
-        /Loading tool definitions from Python files is not currently supported/,
+        /JavaScript files require a function name/,
       );
     });
 

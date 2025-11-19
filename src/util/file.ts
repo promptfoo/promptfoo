@@ -248,3 +248,64 @@ export function maybeLoadConfigFromExternalFile(
   }
   return maybeLoadFromExternalFile(config, context);
 }
+
+/**
+ * Synchronously loads and executes a JavaScript/TypeScript function.
+ * Used for loading tool definitions from JS/TS files.
+ *
+ * @param scriptPath - The path to the JavaScript/TypeScript file.
+ * @param functionName - The name of the function to call.
+ * @returns The result of the function (must return a JSON-serializable value).
+ * @throws An error if the file doesn't exist, function isn't found, or returns a Promise.
+ */
+export function loadJavaScriptFunctionSync(scriptPath: string, functionName: string): any {
+  const absPath = path.resolve(cliState.basePath || '', scriptPath);
+
+  if (!fs.existsSync(absPath)) {
+    throw new Error(`File does not exist: ${absPath}`);
+  }
+
+  // Clear require cache to get fresh module
+  try {
+    delete require.cache[require.resolve(absPath)];
+  } catch {
+    // File might not be in cache yet, ignore
+  }
+
+  let module: any;
+  try {
+    module = require(absPath);
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to load JavaScript module ${absPath}: ${errorMessage}`);
+  }
+
+  // Look for the function in exports or default export
+  const fn = module[functionName] || module.default?.[functionName];
+
+  if (typeof fn !== 'function') {
+    const availableExports = Object.keys(module).join(', ') || 'none';
+    throw new Error(
+      `Function "${functionName}" not found in ${scriptPath}. ` +
+        `Available exports: ${availableExports}`,
+    );
+  }
+
+  let result: any;
+  try {
+    result = fn();
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    throw new Error(`Error executing function "${functionName}" in ${scriptPath}: ${errorMessage}`);
+  }
+
+  // Check for async function (returns Promise)
+  if (result && typeof result.then === 'function') {
+    throw new Error(
+      `Function "${functionName}" in ${scriptPath} returned a Promise. ` +
+        `Tool definition functions must be synchronous.`,
+    );
+  }
+
+  return result;
+}

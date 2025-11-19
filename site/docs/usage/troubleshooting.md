@@ -180,40 +180,73 @@ defaultTest:
           apiHost: xxx.openai.azure.com
 ```
 
-## Invalid tools configuration error
+## Python/JavaScript tool files require function name
 
-If you see errors like `Invalid tools configuration: file appears to contain Python code` or `Loading tool definitions from Python files is not currently supported`, your tools configuration is using an unsupported file format.
-
-### Supported formats
-
-Tool definitions must be in **JSON** or **YAML** format. Python (`.py`) and JavaScript (`.js`, `.ts`) files are not supported for tool definitions.
+If you see errors like `Python files require a function name` when loading tools from Python or JavaScript files, you need to specify the function name that returns the tool definitions.
 
 ### Solution
 
-Convert your tool definitions to YAML or JSON format:
-
-```yaml title="tools.yaml"
-- type: function
-  function:
-    name: get_current_weather
-    description: Get the current weather in a given location
-    parameters:
-      type: object
-      properties:
-        location:
-          type: string
-          description: 'The city and state, e.g. San Francisco, CA'
-      required:
-        - location
-```
-
-Then reference it in your config:
+Python and JavaScript tool files must specify a function name using the `file://path:function_name` format:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:chat:gpt-4.1-mini
     config:
-      tools: file://./tools.yaml
+      # Correct - specifies function name
+      tools: file://./tools.py:get_tools
+      # or for JavaScript/TypeScript
+      tools: file://./tools.js:getTools
+```
+
+The function must return a tool definitions array synchronously:
+
+```python title="tools.py"
+def get_tools():
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_current_weather",
+                "description": "Get the current weather in a given location",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The city and state, e.g. San Francisco, CA"
+                        }
+                    },
+                    "required": ["location"]
+                }
+            }
+        }
+    ]
+```
+
+```javascript title="tools.js"
+function getTools() {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'get_current_weather',
+        description: 'Get the current weather in a given location',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: {
+              type: 'string',
+              description: 'The city and state, e.g. San Francisco, CA',
+            },
+          },
+          required: ['location'],
+        },
+      },
+    },
+  ];
+}
+
+module.exports = { getTools };
 ```
 
 ## How to triage stuck evals
