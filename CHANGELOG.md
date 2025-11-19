@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- fix(cli): make export logs command respect PROMPTFOO_LOG_DIR environment variable (#6179)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
@@ -78,7 +82,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(webui): require configuration for layer strategy before allowing navigation in red team setup - layer strategy now shows red border and blocks Next button until steps array is configured, similar to plugins requiring configuration
 - fix(webui): filter hidden metadata keys from metadata filter dropdown - ensures consistent filtering of 'citations' and '\_promptfooFileMetadata' keys across MetadataPanel, EvalOutputPromptDialog, and metadata filter dropdown (#6177)
 - fix(cli): format object and array variables with pretty-printed JSON in console table and HTML outputs for improved readability (#6175)
-- fix(cli): make export logs command respect PROMPTFOO_LOG_DIR environment variable (#6179)
 - fix(cli): only show error counter when >0
 - fix(redteam): respect redteam.provider configuration for local grading - fixes issue where configuring a local provider (e.g., ollama:llama3.2) still sent grading requests to remote API instead of using the configured provider (#5959)
 - fix: Reverts #6142 (#6189)
