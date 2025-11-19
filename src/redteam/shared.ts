@@ -92,6 +92,61 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     return;
   }
 
+  // Validate generated test cases have usable prompts before running evaluation
+  // This catches issues like variable mismatches (e.g., prompts use {{prompt}} but injectVar is 'query')
+  try {
+    const generatedConfig = yaml.load(fs.readFileSync(redteamPath, 'utf8')) as {
+      tests?: Array<{ vars?: Record<string, unknown> }>;
+      prompts?: string[];
+    };
+
+    if (generatedConfig?.tests && generatedConfig.tests.length > 0) {
+      // Check if prompts are still templates (contain {{...}} without vars to fill them)
+      const promptsAreTemplates = generatedConfig.prompts?.some((p) =>
+        /\{\{[^}]+\}\}/.test(String(p)),
+      );
+
+      // Check if any test case has vars that would fill the template
+      const firstTest = generatedConfig.tests[0];
+
+      // If prompts are templates but tests have no vars, or vars don't match template variables
+      if (promptsAreTemplates && generatedConfig.prompts) {
+        // Extract variable names from prompt templates
+        const templateVars = new Set<string>();
+        for (const prompt of generatedConfig.prompts) {
+          const matches = String(prompt).matchAll(/\{\{([^}]+)\}\}/g);
+          for (const match of matches) {
+            templateVars.add(match[1].trim());
+          }
+        }
+
+        // Check if test vars contain the template variables
+        const testVarKeys = new Set(Object.keys(firstTest?.vars || {}));
+        const missingVars = [...templateVars].filter((v) => !testVarKeys.has(v));
+
+        if (missingVars.length > 0) {
+          logger.error(
+            chalk.red(
+              `\n❌ Error: Generated test cases are missing required variables.\n\n` +
+                `Your prompts use: ${[...templateVars].join(', ')}\n` +
+                `Generated tests have: ${[...testVarKeys].join(', ') || '(none)'}\n` +
+                `Missing: ${missingVars.join(', ')}\n\n` +
+                `This typically happens when your prompt template uses a different variable ` +
+                `than the redteam injectVar (default: 'query').\n\n` +
+                `To fix this, either:\n` +
+                `  1. Change your prompts to use {{query}} instead of {{${missingVars[0]}}}\n` +
+                `  2. Set 'injectVar: ${missingVars[0]}' in your redteam config\n`,
+            ),
+          );
+          return;
+        }
+      }
+    }
+  } catch (error) {
+    logger.debug(`Error validating generated config: ${error}`);
+    // Continue with evaluation - let the grader handle any issues
+  }
+
   // Run evaluation
   logger.info('Running scan...');
   const { defaultConfig } = await loadDefaultConfig();

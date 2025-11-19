@@ -703,22 +703,6 @@ export async function synthesize({
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
   }
 
-  // Validate that prompts use the injectVar - warn if there's a mismatch
-  const promptVars = extractVariablesFromTemplates(prompts);
-  if (promptVars.length > 0 && !promptVars.includes(injectVar)) {
-    logger.warn(
-      chalk.yellow(
-        `\n⚠️  Warning: Variable mismatch detected!\n\n` +
-          `Your prompts use variable(s): ${promptVars.join(', ')}\n` +
-          `Red team will inject attacks into: ${injectVar}\n\n` +
-          `This means generated attacks may not appear in your prompts.\n\n` +
-          `To fix this, either:\n` +
-          `  1. Change your prompts to use {{${injectVar}}}\n` +
-          `  2. Set 'injectVar: ${promptVars[0]}' in your redteam config\n`,
-      ),
-    );
-  }
-
   // Expand plugins first
   for (const [category, categoryPlugins] of Object.entries(categories)) {
     const plugin = plugins.find((p) => p.id === category);
@@ -1108,24 +1092,6 @@ export async function synthesize({
   }
 
   logger.info(generateReport(pluginResults, strategyResults));
-
-  // Validate that test cases have the expected injectVar in their vars
-  const testCasesWithMissingVars = finalTestCases.filter((tc) => {
-    const varValue = tc.vars?.[injectVar];
-    return varValue === undefined || varValue === null || String(varValue).trim() === '';
-  });
-
-  if (testCasesWithMissingVars.length > 0) {
-    const total = finalTestCases.length;
-    const missing = testCasesWithMissingVars.length;
-    logger.warn(
-      chalk.yellow(
-        `\n⚠️  Warning: ${missing} of ${total} test cases have empty or missing '${injectVar}' variable.\n` +
-          `These tests may fail during evaluation because the grader requires a prompt.\n` +
-          `This can happen when test generation fails or when using manual configs with redteam assertions.\n`,
-      ),
-    );
-  }
 
   return { purpose, entities, testCases: finalTestCases, injectVar };
 }

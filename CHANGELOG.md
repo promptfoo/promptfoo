@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(redteam): add validation for variable mismatch between prompt templates and injectVar - warns users when prompts use different variables than redteam will inject attacks into, and provides clear guidance on how to fix the configuration (#5995)
+- fix(redteam): add server-side validation in doRedteamRun to detect variable mismatch between prompt templates and generated test vars - aborts with clear error before evaluation runs when prompts use different variables than the test cases provide (#5995)
 
 ## [0.119.8] - 2025-11-18
 
