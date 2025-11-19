@@ -143,6 +143,9 @@ describe('maybeLoadToolsFromExternalFile', () => {
     });
 
     it('should throw error for JavaScript file when file not found', async () => {
+      const { importModule } = jest.requireMock('../../src/esm');
+      importModule.mockRejectedValue(new Error("Cannot find module '/path/to/tools.js'"));
+
       const tools = 'file://tools.js:getTools';
 
       // File doesn't exist - require() throws "Cannot find module"
@@ -151,6 +154,9 @@ describe('maybeLoadToolsFromExternalFile', () => {
     });
 
     it('should throw error for TypeScript file when file not found', async () => {
+      const { importModule } = jest.requireMock('../../src/esm');
+      importModule.mockRejectedValue(new Error("Cannot find module '/path/to/tools.ts'"));
+
       const tools = 'file://tools.ts:getTools';
 
       // File doesn't exist - require() throws "Cannot find module"
@@ -236,6 +242,55 @@ describe('maybeLoadToolsFromExternalFile', () => {
     it('should return null for null input', async () => {
       const result = await maybeLoadToolsFromExternalFile(null);
       expect(result).toBeNull();
+    });
+
+    it('should reject number return types from functions', async () => {
+      const { importModule } = jest.requireMock('../../src/esm');
+      importModule.mockResolvedValue({
+        getTools: () => 42,
+      });
+
+      const tools = 'file://tools.js:getTools';
+      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(
+        /must return an array or object/,
+      );
+    });
+
+    it('should reject boolean return types from functions', async () => {
+      const { importModule } = jest.requireMock('../../src/esm');
+      importModule.mockResolvedValue({
+        getTools: () => true,
+      });
+
+      const tools = 'file://tools.js:getTools';
+      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(
+        /must return an array or object/,
+      );
+    });
+
+    it('should handle async function exports from JS files', async () => {
+      const { importModule } = jest.requireMock('../../src/esm');
+      const expectedTools = [{ type: 'function', function: { name: 'asyncTool' } }];
+      importModule.mockResolvedValue({
+        getTools: async () => expectedTools,
+      });
+
+      const tools = 'file://tools.js:getTools';
+      const result = await maybeLoadToolsFromExternalFile(tools);
+
+      expect(result).toEqual(expectedTools);
+    });
+
+    it('should show empty exports message when no functions available', async () => {
+      const { importModule } = jest.requireMock('../../src/esm');
+      importModule.mockResolvedValue({
+        default: {},
+      });
+
+      const tools = 'file://tools.js:getTools';
+      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(
+        /Available exports: \(none\)/,
+      );
     });
   });
 });

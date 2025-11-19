@@ -648,6 +648,11 @@ export async function maybeLoadToolsFromExternalFile(
 
     if (functionName && (filePath.endsWith('.py') || isJavascriptFile(filePath))) {
       // Execute the function to get tool definitions
+      const fileType = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
+      logger.debug(
+        `[maybeLoadToolsFromExternalFile] Loading tools from ${fileType} file: ${filePath}:${functionName}`,
+      );
+
       try {
         let toolDefinitions: any;
 
@@ -655,15 +660,18 @@ export async function maybeLoadToolsFromExternalFile(
           // Use existing async Python execution
           toolDefinitions = await runPython(filePath, functionName, []);
         } else {
-          // Use dynamic import for JavaScript/TypeScript files
-          const absPath = path.resolve(cliState.basePath || '', filePath);
+          // Use safeResolve for security (prevents path traversal)
+          const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
+          logger.debug(`[maybeLoadToolsFromExternalFile] Resolved path: ${absPath}`);
+
           const module = await importModule(absPath);
           const fn = module[functionName] || module.default?.[functionName];
 
           if (typeof fn !== 'function') {
+            const availableExports = Object.keys(module).filter((k) => k !== 'default');
             throw new Error(
               `Function "${functionName}" not found in ${filePath}. ` +
-                `Available exports: ${Object.keys(module).join(', ')}`,
+                `Available exports: ${availableExports.length > 0 ? availableExports.join(', ') : '(none)'}`,
             );
           }
 
@@ -671,18 +679,22 @@ export async function maybeLoadToolsFromExternalFile(
           toolDefinitions = await Promise.resolve(fn());
         }
 
-        // Validate the result
+        // Validate the result - must be array or object, not primitive
         if (
-          toolDefinitions === undefined ||
-          toolDefinitions === null ||
-          typeof toolDefinitions === 'string'
+          !toolDefinitions ||
+          typeof toolDefinitions === 'string' ||
+          typeof toolDefinitions === 'number' ||
+          typeof toolDefinitions === 'boolean'
         ) {
           throw new Error(
             `Function "${functionName}" must return an array or object of tool definitions, ` +
-              `but returned: ${typeof toolDefinitions}`,
+              `but returned: ${toolDefinitions === null ? 'null' : typeof toolDefinitions}`,
           );
         }
 
+        logger.debug(
+          `[maybeLoadToolsFromExternalFile] Successfully loaded ${Array.isArray(toolDefinitions) ? toolDefinitions.length : 'object'} tools`,
+        );
         return toolDefinitions;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
