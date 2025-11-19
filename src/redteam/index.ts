@@ -313,7 +313,7 @@ async function applyStrategies(
       }
 
       // Skip retry tests - they shouldn't be transformed by strategies
-      if (t.metadata?.retry) {
+      if (t.metadata?.retry === true) {
         logger.debug(
           `Skipping ${strategy.id} for retry test (plugin: ${t.metadata?.pluginId}) - retry tests are not transformed`,
         );
