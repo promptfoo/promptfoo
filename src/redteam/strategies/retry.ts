@@ -1,10 +1,20 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from '../../database/index';
 import { evalResultsTable } from '../../database/tables';
+import { getEnvString } from '../../envars';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
+import { makeRequest } from '../../util/cloud';
 import invariant from '../../util/invariant';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+
+/**
+ * Check if we should use cloud mode for fetching failed test cases
+ */
+function isCloudMode(): boolean {
+  return !!getEnvString('PROMPTFOO_REMOTE_GENERATION_URL') || cloudConfig.isEnabled();
+}
 
 export function deduplicateTests(tests: TestCase[]): TestCase[] {
   const seen = new Set<string>();
@@ -19,10 +29,48 @@ export function deduplicateTests(tests: TestCase[]): TestCase[] {
 }
 
 async function getFailedTestCases(pluginId: string, targetLabel: string): Promise<TestCase[]> {
-  logger.debug(`Searching for failed test cases: plugin='${pluginId}', target='${targetLabel}'`);
-  const db = getDb();
+  logger.debug(
+    `Searching for failed test cases: plugin='${pluginId}', target='${targetLabel}', cloudMode=${isCloudMode()}`,
+  );
 
   try {
+    // Check if we should use cloud API
+    if (isCloudMode()) {
+      logger.debug(
+        `Using cloud API to fetch failed test cases: plugin='${pluginId}', target='${targetLabel}'`,
+      );
+
+      // makeRequest already prepends the apiHost and /api/v1/, so just pass the path
+      const response = await makeRequest('results/failed-tests', 'POST', {
+        pluginId,
+        targetLabel,
+        limit: 100,
+      });
+
+      if (!response.ok) {
+        logger.error(
+          `Failed to fetch failed test cases from cloud API: ${response.status} ${response.statusText}`,
+        );
+        return [];
+      }
+
+      const data = await response.json();
+      const testCases = data.testCases || [];
+
+      logger.debug(
+        `Retrieved ${testCases.length} failed test cases from cloud for plugin '${pluginId}' and target '${targetLabel}'`,
+      );
+
+      return deduplicateTests(testCases);
+    }
+
+    // Use local SQLite database
+    logger.debug(
+      `Using local SQLite database to fetch failed test cases: plugin='${pluginId}', target='${targetLabel}'`,
+    );
+
+    const db = getDb();
+
     const targetResults = await db
       .select()
       .from(evalResultsTable)
@@ -91,7 +139,7 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
     );
     return unique;
   } catch (error) {
-    logger.debug(`Error retrieving failed test cases: ${error}`);
+    logger.error(`Error retrieving failed test cases: ${error}`);
     return [];
   }
 }
