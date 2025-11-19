@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(redteam): add role-confusion plugin for testing LLM role boundary vulnerabilities (#5427)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
