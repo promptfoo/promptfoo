@@ -58,9 +58,15 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
       model: this.modelName,
     };
 
-    let data;
+    let data,
+      _cached = false,
+      latencyMs: number | undefined;
     try {
-      ({ data } = (await fetchWithCache(
+      ({
+        data,
+        cached: _cached,
+        latencyMs,
+      } = (await fetchWithCache(
         `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
@@ -85,6 +91,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
       }
       return {
         embedding,
+        latencyMs,
         tokenUsage: {
           total: data.usage.total_tokens,
         },

@@ -28,7 +28,7 @@ const EvalSelectorDialog = ({
   onOpenFocusSearch = false,
 }: Props) => {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       {title ? <DialogTitle>{title}</DialogTitle> : null}
       <DialogContent>
         {description ? <Box sx={{ mb: 4 }}>{description}</Box> : null}

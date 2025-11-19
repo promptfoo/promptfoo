@@ -135,18 +135,15 @@ function TabPanel({ children, value, index }: TabPanelProps) {
 }
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
-  const { config } = useRedTeamConfig();
+  const { config, updatePlugins } = useRedTeamConfig();
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
-
-  useEffect(() => {
-    // API health check
-    checkHealth();
-  }, [checkHealth]);
 
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
@@ -204,6 +201,37 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       }
     }
   }, [config.plugins, hasUserInteracted, selectedPlugins]);
+
+  // Sync selectedPlugins to config after user interaction
+  useEffect(() => {
+    if (hasUserInteracted) {
+      // Get policy and intent plugins from existing config
+      const policyPlugins = config.plugins.filter(
+        (p) => typeof p === 'object' && p.id === 'policy',
+      );
+      const intentPlugins = config.plugins.filter(
+        (p) => typeof p === 'object' && p.id === 'intent',
+      );
+
+      // Convert selected plugins to config format with their configs
+      const regularPlugins = Array.from(selectedPlugins).map((plugin) => {
+        const existingConfig = pluginConfig[plugin];
+        if (existingConfig && Object.keys(existingConfig).length > 0) {
+          return {
+            id: plugin,
+            config: existingConfig,
+          };
+        }
+        return plugin;
+      });
+
+      // Combine all plugins
+      const allPlugins = [...regularPlugins, ...policyPlugins, ...intentPlugins];
+
+      // Update the global config
+      updatePlugins(allPlugins as Array<string | { id: string; config: any }>);
+    }
+  }, [selectedPlugins, pluginConfig, hasUserInteracted, config.plugins, updatePlugins]);
 
   const handlePluginToggle = useCallback(
     (plugin: Plugin) => {

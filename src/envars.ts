@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
-
 import cliState from './cliState';
+
 import type { EnvOverrides } from './types/env';
 
 dotenv.config({ quiet: true });
@@ -22,6 +22,7 @@ type EnvVars = {
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
+  PROMPTFOO_DISABLE_DEBUG_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
   PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64?: boolean;
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
@@ -315,6 +316,12 @@ type EnvVars = {
   REPLICATE_TEMPERATURE?: number;
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
+
+  // SharePoint
+  SHAREPOINT_BASE_URL?: string;
+  SHAREPOINT_CERT_PATH?: string;
+  SHAREPOINT_CLIENT_ID?: string;
+  SHAREPOINT_TENANT_ID?: string;
 
   // Slack
   SLACK_BOT_TOKEN?: string;

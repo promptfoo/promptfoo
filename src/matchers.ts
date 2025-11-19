@@ -40,9 +40,11 @@ import type {
   ApiProvider,
   ApiSimilarityProvider,
   Assertion,
+  CallApiContextParams,
   GradingConfig,
   GradingResult,
   ProviderOptions,
+  ProviderResponse,
   ProviderType,
   ProviderTypeMap,
   TokenUsage,
@@ -57,7 +59,7 @@ class LlmRubricProviderError extends Error {
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
-function cosineSimilarity(vecA: number[], vecB: number[]) {
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');
   }
@@ -65,6 +67,49 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
   const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
   const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
   return dotProduct / (vecAMagnitude * vecBMagnitude);
+}
+
+function dotProduct(vecA: number[], vecB: number[]): number {
+  if (vecA.length !== vecB.length) {
+    throw new Error('Vectors must be of equal length');
+  }
+  return vecA.reduce((acc, val, idx) => acc + val * vecB[idx], 0);
+}
+
+function euclideanDistance(vecA: number[], vecB: number[]): number {
+  if (vecA.length !== vecB.length) {
+    throw new Error('Vectors must be of equal length');
+  }
+  const sumSquaredDiff = vecA.reduce((acc, val, idx) => {
+    const diff = val - vecB[idx];
+    return acc + diff * diff;
+  }, 0);
+  return Math.sqrt(sumSquaredDiff);
+}
+
+/**
+ * Helper to call provider with consistent context propagation pattern.
+ * Spreads the optional context and merges with prompt label and vars.
+ *
+ * IMPORTANT: Spread order matters - context is spread first, then prompt/vars
+ * override. This ensures originalProvider from context is preserved while
+ * allowing this call to specify its own prompt metadata.
+ */
+function callProviderWithContext(
+  provider: ApiProvider,
+  prompt: string,
+  label: string,
+  vars: Record<string, any>,
+  context?: CallApiContextParams,
+): Promise<ProviderResponse> {
+  return provider.callApi(prompt, {
+    ...context,
+    prompt: {
+      raw: prompt,
+      label,
+    },
+    vars,
+  });
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {
@@ -213,6 +258,7 @@ export async function matchesSimilarity(
   threshold: number,
   inverse: boolean = false,
   grading?: GradingConfig,
+  metric: 'cosine' | 'dot_product' | 'euclidean' = 'cosine',
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (cliState.config?.redteam && shouldGenerateRemote()) {
     try {
@@ -250,7 +296,14 @@ export async function matchesSimilarity(
     },
   };
 
+  // For providers with native similarity API, only cosine is supported
   if ('callSimilarityApi' in finalProvider) {
+    if (metric !== 'cosine') {
+      return fail(
+        `Provider ${finalProvider.id()} only supports cosine similarity via callSimilarityApi`,
+        tokensUsed,
+      );
+    }
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
     tokensUsed.total = similarityResp.tokenUsage?.total || 0;
     tokensUsed.prompt = similarityResp.tokenUsage?.prompt || 0;
@@ -304,29 +357,76 @@ export async function matchesSimilarity(
       return fail('Embedding not found', tokensUsed);
     }
 
-    similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+    // Compute metric based on the selected type
+    switch (metric) {
+      case 'cosine':
+        similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      case 'dot_product':
+        similarity = dotProduct(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      case 'euclidean':
+        // For euclidean distance, we store it in similarity variable but handle it differently below
+        similarity = euclideanDistance(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      default:
+        return fail(`Unsupported metric: ${metric}`, tokensUsed);
+    }
   } else {
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
-  const pass = inverse
-    ? similarity <= threshold + Number.EPSILON
-    : similarity >= threshold - Number.EPSILON;
-  const greaterThanReason = `Similarity ${similarity.toFixed(
-    2,
-  )} is greater than threshold ${threshold}`;
-  const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
-  if (pass) {
-    return {
-      pass: true,
-      score: inverse ? 1 - similarity : similarity,
-      reason: inverse ? lessThanReason : greaterThanReason,
-      tokensUsed,
-    };
+
+  // Handle different semantics for distance vs similarity metrics
+  const isDistanceMetric = metric === 'euclidean';
+
+  let pass: boolean;
+  let score: number;
+  let reason: string;
+
+  if (isDistanceMetric) {
+    // For distance metrics: lower is better, threshold is maximum distance
+    const distance = similarity; // We stored distance in similarity variable
+    pass = inverse
+      ? distance >= threshold - Number.EPSILON
+      : distance <= threshold + Number.EPSILON;
+
+    // Convert distance to a 0-1 score where lower distance = higher score
+    // Using formula: score = 1 / (1 + distance)
+    const normalizedScore = 1 / (1 + distance);
+    score = inverse ? 1 - normalizedScore : normalizedScore;
+
+    const belowThresholdReason = `Distance ${distance.toFixed(2)} is less than or equal to threshold ${threshold}`;
+    const aboveThresholdReason = `Distance ${distance.toFixed(2)} is greater than threshold ${threshold}`;
+    reason = pass
+      ? inverse
+        ? aboveThresholdReason
+        : belowThresholdReason
+      : inverse
+        ? belowThresholdReason
+        : aboveThresholdReason;
+  } else {
+    // For similarity metrics: higher is better, threshold is minimum similarity
+    pass = inverse
+      ? similarity <= threshold + Number.EPSILON
+      : similarity >= threshold - Number.EPSILON;
+
+    score = inverse ? 1 - similarity : similarity;
+
+    const greaterThanReason = `Similarity ${similarity.toFixed(2)} is greater than or equal to threshold ${threshold}`;
+    const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
+    reason = pass
+      ? inverse
+        ? lessThanReason
+        : greaterThanReason
+      : inverse
+        ? greaterThanReason
+        : lessThanReason;
   }
+
   return {
-    pass: false,
-    score: inverse ? 1 - similarity : similarity,
-    reason: inverse ? greaterThanReason : lessThanReason,
+    pass,
+    score,
+    reason,
     tokensUsed,
   };
 }
@@ -484,6 +584,7 @@ export async function matchesLlmRubric(
   options?: {
     throwOnError?: boolean;
   },
+  providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -491,7 +592,13 @@ export async function matchesLlmRubric(
     );
   }
 
-  if (!grading.rubricPrompt && cliState.config?.redteam && shouldGenerateRemote()) {
+  // Use remote grading only if no provider is explicitly configured and remote generation is enabled
+  if (
+    !grading.rubricPrompt &&
+    !cliState.config?.redteam?.provider &&
+    cliState.config?.redteam &&
+    shouldGenerateRemote()
+  ) {
     return {
       ...(await doRemoteGrading({
         task: 'llm-rubric',
@@ -519,17 +626,17 @@ export async function matchesLlmRubric(
     defaultProvider,
     'llm-rubric check',
   );
-  const resp = await finalProvider.callApi(prompt, {
-    prompt: {
-      raw: prompt,
-      label: 'llm-rubric',
-    },
-    vars: {
+  const resp = await callProviderWithContext(
+    finalProvider,
+    prompt,
+    'llm-rubric',
+    {
       output: tryParse(llmOutput),
       rubric,
       ...(vars || {}),
     },
-  });
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     if (options?.throwOnError) {
       throw new LlmRubricProviderError(resp.error || 'No output');
@@ -644,6 +751,7 @@ export async function matchesFactuality(
   output: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -667,7 +775,18 @@ export async function matchesFactuality(
     'factuality check',
   );
 
-  const resp = await finalProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    finalProvider,
+    prompt,
+    'factuality',
+    {
+      input,
+      ideal: expected,
+      completion: tryParse(output),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -798,6 +917,7 @@ export async function matchesClosedQa(
   output: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -819,7 +939,18 @@ export async function matchesClosedQa(
     (await getDefaultProviders()).gradingProvider,
     'model-graded-closedqa check',
   );
-  const resp = await finalProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    finalProvider,
+    prompt,
+    'model-graded-closedqa',
+    {
+      input,
+      criteria: expected,
+      completion: tryParse(output),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -863,6 +994,7 @@ export async function matchesGEval(
   output: string,
   threshold: number,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!input) {
     throw Error('No source text to estimate reply');
@@ -897,7 +1029,15 @@ export async function matchesGEval(
   const stepsPrompt = await loadRubricPrompt(stepsRubricPrompt, GEVAL_PROMPT_STEPS);
   const promptSteps = await renderLlmRubricPrompt(stepsPrompt, { criteria });
 
-  const respSteps = await textProvider.callApi(promptSteps);
+  const respSteps = await callProviderWithContext(
+    textProvider,
+    promptSteps,
+    'g-eval-steps',
+    {
+      criteria,
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, respSteps.tokenUsage);
   let steps;
 
@@ -929,7 +1069,19 @@ export async function matchesGEval(
     output: tryParse(output),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'g-eval',
+    {
+      criteria,
+      steps: steps.join('\n- '),
+      maxScore: maxScore.toString(),
+      input: tryParse(input),
+      output: tryParse(output),
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   let result;
 
@@ -952,6 +1104,7 @@ export async function matchesAnswerRelevance(
   output: string,
   threshold: number,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const embeddingProvider = await getAndCheckProvider(
     'embedding',
@@ -984,7 +1137,15 @@ export async function matchesAnswerRelevance(
     // TODO(ian): Parallelize
     const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
     const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: tryParse(output) });
-    const resp = await textProvider.callApi(promptText);
+    const resp = await callProviderWithContext(
+      textProvider,
+      promptText,
+      'answer-relevance',
+      {
+        answer: tryParse(output),
+      },
+      providerCallContext,
+    );
     accumulateTokens(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
       return fail(resp.error || 'No output', tokensUsed);
@@ -1060,6 +1221,7 @@ export async function matchesContextRecall(
   threshold: number,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1078,7 +1240,17 @@ export async function matchesContextRecall(
     ...(vars || {}),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-recall',
+    {
+      context: contextString,
+      groundTruth,
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -1139,6 +1311,7 @@ export async function matchesContextRelevance(
   context: string | string[],
   threshold: number,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1156,7 +1329,16 @@ export async function matchesContextRelevance(
     query: question,
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-relevance',
+    {
+      context: contextString,
+      query: question,
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -1227,6 +1409,7 @@ export async function matchesContextFaithfulness(
   threshold: number,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1266,7 +1449,17 @@ export async function matchesContextFaithfulness(
     ...(vars || {}),
   });
 
-  let resp = await textProvider.callApi(promptText);
+  let resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-faithfulness-longform',
+    {
+      question: query,
+      answer: tryParse(output),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
@@ -1284,7 +1477,17 @@ export async function matchesContextFaithfulness(
     ...(vars || {}),
   });
 
-  resp = await textProvider.callApi(promptText);
+  resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-faithfulness-nli',
+    {
+      context: contextString,
+      statements,
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
@@ -1321,6 +1524,7 @@ export async function matchesSelectBest(
   outputs: string[],
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(
     outputs.length >= 2,
@@ -1340,7 +1544,17 @@ export async function matchesSelectBest(
     ...(vars || {}),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'select-best',
+    {
+      criteria,
+      outputs: outputs.map((o) => tryParse(o)),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return new Array(outputs.length).fill(fail(resp.error || 'No output', resp.tokenUsage));
   }

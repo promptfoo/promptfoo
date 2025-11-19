@@ -26,3 +26,9 @@
 .starCount {
   font-variant-numeric: tabular-nums;
 }
+
+@media screen and (max-width: 768px) {
+  .githubStars {
+    display: none;
+  }
+}

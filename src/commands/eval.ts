@@ -9,7 +9,8 @@ import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
-import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
+import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { evaluate } from '../evaluator';
 import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
@@ -543,8 +544,15 @@ export async function doEval(
       ? false
       : cmdObj.share || config.sharing || cloudConfig.isEnabled();
 
-    const shareableUrl =
-      wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
+    const canShareEval = isSharingEnabled(evalRecord);
+
+    logger.debug(`Wants to share: ${wantsToShare}`);
+    logger.debug(`Can share eval: ${canShareEval}`);
+
+    const shareableUrl = wantsToShare && canShareEval ? await createShareableUrl(evalRecord) : null;
+
+    logger.debug(`Shareable URL: ${shareableUrl}`);
+
     if (shareableUrl) {
       evalRecord.shared = true;
     }
