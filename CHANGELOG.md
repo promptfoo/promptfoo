@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
@@ -15,7 +19,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(providers): support function providers in defaultTest.options.provider and assertions (#3784)
 - fix(code-scan): in `code-scans run`, don't log anything to stdout except json results when --json is used—fixes GitHub action (#6248)
 - fix(code-scan): update default API host to https://api.promptfoo.app to fix websocket connection issues (#6247)
 
