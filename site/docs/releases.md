@@ -10,44 +10,292 @@ keywords: [Promptfoo releases, changelog, updates, features, monthly summaries]
 
 Full release history for Promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
 
+## October 2025 Release Highlights {#october-2025}
+
+This month we shipped **jailbreak:meta and Simba red team strategies**, **remediation reports**, and **Postman/cURL import for HTTP targets**.
+
+### Evals {#october-2025-evals}
+
+#### Providers {#october-2025-providers}
+
+##### New Providers
+
+- **[OpenAI Agents SDK](/docs/providers/openai/)** - Agents, tools, handoffs, and OTLP tracing
+- **[Claude Agent SDK](/docs/providers/anthropic/)** - Anthropic agent framework
+- **[Azure AI Foundry Agents](/docs/providers/azure/#azure-ai-foundry-agents)** - Azure AI agent framework
+- **[Ruby](/docs/providers/ruby/)** - Execute Ruby scripts as providers
+- **[Snowflake Cortex](/docs/providers/snowflake/)** - Snowflake LLM provider
+- **[Slack](/docs/providers/slack/)** - Test Slack bots
+
+##### New Model Support
+
+- **[Claude Haiku 4.5](/docs/providers/anthropic/)**
+
+##### Provider Updates
+
+- **[Python provider](/docs/providers/python/)** - Persistent worker pools for 10-100x performance improvement
+- **[WebSocket provider](/docs/providers/websocket/)** - Stream multiple responses
+- **[Ollama](/docs/providers/ollama/)** - Function calling and tool support
+
+#### UI & Developer Experience
+
+- **Chat Playground redesign** - New layout and response visualization
+- **Metric filtering with operators** - Filter eval results using `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, and `is_defined` operators
+- **Keyboard navigation** - Navigate eval results table with arrow keys and Enter
+- **Cached response latency** - Latency measurements preserved when responses are cached
+- **File-based logging** - Logs written to files instead of CLI streaming
+
+#### Export & Integration
+
+- **SARIF export** - Export vulnerability reports in SARIF format
+- **CSV exports** - Added Strategy ID, Plugin ID, and Session IDs to CSV exports
+
+#### Configuration
+
+- **[MCP server configuration](/docs/providers/mcp/)** - Model Context Protocol server setup
+
+#### Model Audit
+
+- **Revision tracking and deduplication** - Track HuggingFace Git SHAs and content hashes
+- **Batch existence checks** - Check if multiple models have already been scanned
+
+### Red Teaming {#october-2025-redteam}
+
+#### Remediation Reports
+
+[Remediation reports](/docs/red-team/) include:
+
+- **Executive summary** - Overview of scan findings
+- **Prioritized action items** - Recommendations ranked by severity and impact
+- **System prompt suggestions** - Suggested prompt improvements
+- **Guardrail recommendations** - Suggested guardrails
+
+Access from any vulnerability report by clicking "View Remediation Report".
+
+#### Red Team Strategies
+
+##### jailbreak:meta
+
+**[jailbreak:meta](/docs/red-team/strategies/meta/)** uses multiple AI agents to generate attacks. This single-shot strategy is up to 50% more effective than some multi-turn attacks.
+
+##### Simba
+
+**[Simba](/docs/red-team/strategies/simba/)** is a multi-turn attack strategy for agent systems:
+
+- **Reconnaissance phase** - Discovers target capabilities, then escalates attacks
+- **Goal-directed attacks** - Target specific objectives like accessing confidential information or achieving admin privileges
+- **Tool interaction** - Tests systems with multiple tools or external system access
+
+#### Scan Template Enhancements
+
+- **Probe and runtime estimates** - Display estimated probe count and runtime in scan templates
+- **Sample attack previews** - Preview generated test cases when selecting plugins
+
+#### HTTP Target Configuration
+
+- **Postman/cURL import** - Auto-populate target connection details from curl commands or Postman request/response files
+- **Connection testing** - Test HTTP connections and transforms in the setup UI
+- **Request transforms** - Request transforms have parity with response transforms
+
+#### Grading Guidance
+
+Plugin-specific grading rules:
+
+- **Plugin-level customization** - Add grading guidance for individual plugins
+- **Custom intent support** - Grading guidance for custom intent plugins
+- **Atomic saves** - Guidance and examples saved together
+
+#### New Plugins
+
+- **[Wordplay](/docs/red-team/plugins/wordplay/)** - Tests if systems can be tricked into generating profanity through wordplay like riddles and rhyming games
+- **[COPPA](/docs/red-team/plugins/coppa/)** - Tests if AI systems collect personal information from children without parental consent or age verification
+- **[GDPR preset](/docs/red-team/gdpr/)** - GDPR and data privacy compliance testing
+
+#### Other Strategies
+
+- **[Authoritative Markup Injection](/docs/red-team/strategies/authoritative-markup-injection/)** - Tests vulnerability to malicious instructions embedded in markup
+
+---
+
+## September 2025 Release Highlights {#september-2025}
+
+This month we shipped **reusable custom policies**, **risk scoring**, **8 new AI providers**, and **comprehensive enterprise features** for security teams.
+
+### Evals {#september-2025-evals}
+
+#### Providers {#september-2025-providers}
+
+##### New Model Support
+
+- **[Claude 4.5 Sonnet](/docs/providers/anthropic/)** - Anthropic's latest model
+- **[Claude web tools](/docs/providers/anthropic/)** - `web_fetch_20250910` and `web_search_20250305` tool support
+- **[GPT-5](/docs/providers/openai/)** - GPT-5, GPT-5 Codex, and GPT-5 Mini
+- **[OpenAI Realtime API](/docs/providers/openai/)** - Full audio input/output support for GPT Realtime models
+- **[Gemini 2.5 Flash](/docs/providers/google/)** - Flash and Flash-Lite model support
+
+##### New Providers
+
+- **[Nscale](/docs/providers/nscale/)** - Image generation provider
+- **[CometAPI](/docs/providers/cometapi/)** - 7 models with environment variable configuration
+- **[Envoy AI Gateway](/docs/providers/envoy/)** - Route requests through Envoy gateway
+- **[Meta Llama API](/docs/providers/)** - All 7 Meta Llama models including multimodal Llama 4
+
+##### Provider Updates
+
+- **[AWS Bedrock](/docs/providers/aws-bedrock/)** - Qwen models, OpenAI GPT models, API key authentication
+- **[AWS Bedrock Agents](/docs/providers/bedrock-agents/)** - Agent Runtime support (renamed from AgentCore)
+- **[AWS Bedrock inference profiles](/docs/providers/aws-bedrock/#application-inference-profiles)** - Application-level inference profile configuration
+- **[HTTP provider](/docs/providers/http/)** - TLS certificate configuration via web UI
+- **[WebSocket provider](/docs/providers/websocket/)** - Custom endpoint URLs for OpenAI Realtime
+- **[Ollama](/docs/providers/ollama/)** - Thinking parameter configuration
+- **Azure Responses** - `azure:responses` provider alias
+
+#### Pause/Resume Evaluations
+
+Use `Ctrl+C` to pause long-running evaluations and `promptfoo eval --resume` to continue later.
+
+#### UI & Developer Experience
+
+- **Keyboard navigation** - Navigate results table with keyboard shortcuts
+- **Bulk delete** - Delete multiple eval results at once
+- **Unencrypted attack display** - Show both encoded and decoded attack forms
+- **Passes-only filter** - Filter to show only passing results
+- **Severity filtering** - Filter by severity level
+- **Metadata exists operator** - Filter by metadata field presence
+- **Highlight filtering** - Filter results by highlighted content
+- **Persistent headers** - Report page headers remain visible when scrolling
+- **Team switching** - Switch teams from command line
+
+#### Export & Integration
+
+- **Enhanced CSV exports** - Includes latency, grader reason, and grader comment
+- **Log export** - `promptfoo export logs` creates tar.gz for debugging
+- **Default cloud sharing** - Auto-enable sharing when connected to Promptfoo Cloud
+- **CI progress reporting** - Text-based milestone reporting for long-running evals
+
+#### Configuration
+
+- **Context arrays** - Pass context as array of strings ([example](/docs/configuration/expected-outputs/model-graded/context-relevance/#array-context))
+- **MCP preset** - Pre-configured Model Context Protocol plugin set
+
+### Red Teaming {#september-2025-redteam}
+
+#### Reusable Custom Policies
+
+[Custom policies](/docs/red-team/plugins/policy/) can now be saved to a library and reused across red team evaluations:
+
+- **Policy libraries** - Create centralized security policy repositories
+- **CSV upload** - Bulk import policies via CSV
+- **Severity levels** - Assign severity (low/medium/high/critical) for filtering and prioritization
+- **Test generation** - Generate sample test cases from policy definitions
+
+Reference policies in your red team config:
+
+```yaml
+redteam:
+  plugins:
+    - id: policy
+      config:
+        policy: 'internal-customer-data-protection'
+```
+
+#### Risk Scoring
+
+Red team reports now include [quantitative risk scores](/docs/red-team/) based on severity, probability, and impact:
+
+- **Overall risk score** (0-10) for system security posture
+- **Risk by category** - Scores for different vulnerability types
+- **Risk trends** - Track improvement over time
+- **Visual heatmaps** - Identify high-risk areas
+
+Use risk scores to prioritize remediation and set CI/CD deployment gates.
+
+#### New Plugins
+
+- **[VLGuard](/docs/red-team/plugins/vlguard/)** - Multi-modal vision-language model safety testing
+- **[Special Token Injection](/docs/red-team/plugins/special-token-injection/)** - ChatML tag vulnerability testing (`<|im_start|>`, `<|im_end|>`)
+- **Financial plugins** - [Confidential Disclosure](/docs/red-team/plugins/financial/), [Counterfactual](/docs/red-team/plugins/financial/), [Defamation](/docs/red-team/plugins/financial/), [Impartiality](/docs/red-team/plugins/financial/), [Misconduct](/docs/red-team/plugins/financial/)
+
+#### Strategies & Compliance
+
+- **[Layer strategy](/docs/red-team/strategies/#layered-strategies)** - Chain multiple strategies in a single scan
+- **Threshold configuration** - Set minimum pass scores for tests
+- **[ISO 42001 compliance](/docs/red-team/iso-42001/)** - Framework compliance mappings for AI governance
+
+### Enterprise {#september-2025-enterprise}
+
+#### Team Management
+
+- **Flexible licensing** - Pay only for the red team tests you run
+- **License tracking** - Usage monitoring and optimization insights
+- **IDP mapping** - Identity provider team and role mapping for SSO
+- **Session configuration** - Timeout and inactivity settings
+
+#### Audit & Compliance
+
+- **Audit logging UI** - Comprehensive audit trails for webhooks, teams, providers, and user management
+
+---
+
 ## August 2025 Release Highlights {#august-2025}
 
-### Providers
+This month we added support for **new models**, **model audit cloud sharing**, and **performance improvements**.
 
-- Support for Claude Opus 4.1, gpt-5, gpt-5-mini, gpt-5-nano added. View our [foundation model security reports](https://promptfoo.dev/models/reports).
-- **Prompt config override** - Available for all providers (prompt functions that return a structured object with both prompt content and configuration to merge with the provider). [Example on GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-prompt-function).
-- **Gemini 2.5 Pro** - Updated grading provider for Vertex and Google AI Studio to use Gemini 2.5 Pro.
-- **Ollama** - Think and passthrough parameter support added.
-- **Preset targets added** - Vertex AI, AWS Bedrock, and SageMaker added as preset targets for Enterprise.
+### Evals {#august-2025-evals}
 
-#### Assertions and metrics
+#### Providers {#august-2025-providers}
 
-- **[Conversational relevancy](/docs/configuration/expected-outputs/model-graded/conversation-relevance)** - New model graded metric. Evaluates whether responses in a conversation remain relevant throughout the dialogue.
-- **[contains-html](/docs/configuration/expected-outputs/deterministic/#contains-html)** - New assertion. Checks if output contains HTML content without requiring specific tags
-- **[is-html](/docs/configuration/expected-outputs/deterministic/#is-html)** - New assertion. Validates that the entire output is valid HTML
+##### New Model Support
 
-### Red-teaming
+- **[GPT-5](/docs/providers/openai/)** - Added support for OpenAI's GPT-5 model with advanced reasoning capabilities
+- **[Claude Opus 4.1](/docs/providers/anthropic/)** - Support for Anthropic's latest Claude model
+- **[xAI Grok Code Fast](/docs/providers/xai/)** - Added xAI's Grok Code Fast model for coding tasks
 
-- **Plugin selection** - Improved with a plugin 'cart'.
+##### Provider Updates
 
-![Plugin Cart Selection](/img/release-notes/aug-25/plugin-cart-selection-aug-25.png)
+- **[Enhanced Vertex AI](/docs/providers/vertex/)** - Improved credential management and authentication
+- **[Google AI Studio](/docs/providers/google/)** - Added default provider configurations for Google AI Studio models
 
-You can also click the magic wand to generate a test case sample.
+#### Model Audit Cloud Sharing
 
-![Magic Wand Feature](/img/release-notes/aug-25/magic-wand-aug-25.png)
+Model audit results can now be shared to the cloud for team collaboration:
 
-- **Provider selection menu** - Has been improved with better support for agents; provider types can be selected from the red team setup.
+- **Persistent audit history** - Track security scans over time
+- **Team sharing** - Share audit results across teams
+- **Centralized storage** - Store audit reports in the cloud
+- **Path management** - Remove recent scan paths from history
 
-![Provider Selection Menu](/img/release-notes/aug-25/provider-selection-aug-25.png)
+#### Enhanced Authentication
 
-- **[Unverifiable claims](/docs/red-team/plugins/unverifiable-claims/)** - New plugin. Detects when AI models make claims that cannot be verified even in principle.
-- **[Medical off-label use](/docs/red-team/plugins/medical/#medical-off-label-use)** - New plugin. Tests whether AI systems inappropriately recommend off-label use of medications without proper requirements.
+Added support for advanced authentication methods:
 
-### Model Audit
+- **Certificate storage** - Store client certificates for mTLS authentication
+- **Signature authentication** - Support for uploaded signature-based authentication
+- **Credential sanitization** - Prevent credential exposure in debug logs
 
-- **Model audit** is a Static Security Scanner for AI/LLM models. Scan results are now saved in the database; they can be viewed under /model-audit page. Model audits can also be shared to the cloud. Further information about the types of security risks found and installation can be found on the [model audit page](/docs/model-audit/).
+#### AI-Powered HTTP Configuration
 
-![Model Audit UI](/img/release-notes/aug-25/model-audit-aug-25.png)
+Added auto-fill capabilities for HTTP provider setup to reduce configuration time and errors.
+
+#### Performance Improvements
+
+- **HuggingFace dataset fetching** - Improved speed and reliability for large datasets
+- **Error handling** - Better diagnostic messages and retry suggestions
+- **UI improvements** - Streamlined interfaces and progress indicators
+
+### Red Teaming {#august-2025-redteam}
+
+#### Medical Off-Label Use Plugin
+
+Added **[Medical Off-Label Use Detection](/docs/red-team/plugins/medical/)** plugin to identify inappropriate pharmaceutical recommendations that could endanger patients.
+
+#### Unverifiable Claims Plugin
+
+Added **[Unverifiable Claims Detection](/docs/red-team/plugins/)** plugin to test AI systems' susceptibility to generating fabricated but plausible-sounding claims.
+
+#### MCP Agent Testing
+
+Added **[MCP Agent example](/docs/red-team/mcp-security-testing/)** for red team testing with tool call results, demonstrating how to test AI systems that use Model Context Protocol.
 
 ---
 
@@ -135,13 +383,6 @@ Both strategies leverage AI agents to conduct intelligent, adaptive conversation
 ##### Other Strategy Improvements
 
 - **HTTP Target Improvements** - Enhanced test button now provides detailed error diagnostics, automatic retry suggestions, and context-aware fixes for common configuration issues like authentication failures, CORS errors, and malformed requests
-
-### See Also {#july-2025-see-also}
-
-- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
-- [Tracing](/docs/tracing/)
-- [Red Team Strategies](/docs/red-team/strategies/)
-- [Provider Configuration](/docs/providers/)
 
 ---
 
@@ -289,15 +530,6 @@ Red team tests now include automatic token estimation for HTTP providers, helpin
 
 A new [System Prompt Override plugin](/docs/red-team/plugins/system-prompt-override/) tests whether your LLM deployment is vulnerable to system instruction manipulation—a critical security flaw that could disable safety features.
 
-### See Also {#june-2025-see-also}
-
-- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
-- [OpenTelemetry Tracing](/docs/tracing/)
-- [Medical & Financial Plugins](/docs/red-team/plugins/)
-- [Model Audit](/docs/model-audit/)
-
----
-
 #### Strategies {#june-2025-strategies}
 
 ##### Smarter Multi-Turn Attack Techniques
@@ -311,10 +543,3 @@ Real attacks rarely succeed in a single message. We've enhanced our attack strat
    - Adapt strategies based on system responses
 
 2. **[Emoji Encoding Strategy](/docs/red-team/strategies/other-encodings/#emoji-encoding)** - New obfuscation technique using emoji to bypass content filters
-
-### See Also {#june-2025-see-also}
-
-- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
-- [OpenTelemetry Tracing](/docs/tracing/)
-- [Medical & Financial Plugins](/docs/red-team/plugins/)
-- [Model Audit](/docs/model-audit/)

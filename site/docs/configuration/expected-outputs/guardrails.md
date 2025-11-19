@@ -116,7 +116,7 @@ providers:
       url: https://your-azure-openai-endpoint/openai/deployments/<model>/chat/completions?api-version=2024-02-15-preview
       method: POST
       headers:
-        api-key: ${AZURE_OPENAI_API_KEY}
+        api-key: '{{ env.AZURE_OPENAI_API_KEY }}'
         content-type: application/json
       body: |
         {
@@ -184,7 +184,7 @@ providers:
       url: https://your-azure-openai-endpoint/openai/deployments/<model>/chat/completions?api-version=2024-02-15-preview
       method: POST
       headers:
-        api-key: ${AZURE_OPENAI_API_KEY}
+        api-key: '{{ env.AZURE_OPENAI_API_KEY }}'
         content-type: application/json
       body: |
         {

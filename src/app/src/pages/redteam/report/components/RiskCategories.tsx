@@ -4,15 +4,15 @@ import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constan
 import RiskCard from './RiskCard';
 import type { TopLevelCategory } from '@promptfoo/redteam/constants';
 import type { GradingResult } from '@promptfoo/types';
+import { type CategoryStats } from './FrameworkComplianceUtils';
 
 const RiskCategories = ({
   categoryStats,
   evalId,
   failuresByPlugin,
   passesByPlugin,
-  strategyStats,
 }: {
-  categoryStats: Record<string, { pass: number; total: number }>;
+  categoryStats: CategoryStats;
   evalId: string;
   failuresByPlugin: Record<
     string,
@@ -22,7 +22,6 @@ const RiskCategories = ({
     string,
     { prompt: string; output: string; gradingResult?: GradingResult }[]
   >;
-  strategyStats: Record<string, { pass: number; total: number }>;
 }) => {
   const categories = Object.keys(riskCategories).map((category) => ({
     name: category,
@@ -71,7 +70,6 @@ const RiskCategories = ({
             evalId={evalId}
             failuresByPlugin={failuresByPlugin}
             passesByPlugin={passesByPlugin}
-            strategyStats={strategyStats}
           />
         );
       })}

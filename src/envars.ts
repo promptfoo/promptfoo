@@ -1,8 +1,9 @@
 import dotenv from 'dotenv';
-dotenv.config({ quiet: true });
-
 import cliState from './cliState';
+
 import type { EnvOverrides } from './types/env';
+
+dotenv.config({ quiet: true });
 
 // Define the supported environment variables and their types
 type EnvVars = {
@@ -21,11 +22,22 @@ type EnvVars = {
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
+  PROMPTFOO_DISABLE_DEBUG_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
   PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64?: boolean;
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
   PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
+  /**
+   * Disable ALL remote generation (superset of PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION).
+   * Affects: SimulatedUser, red team features, all promptfoo-hosted inference.
+   */
+  PROMPTFOO_DISABLE_REMOTE_GENERATION?: boolean;
+  /**
+   * Disable remote generation for red team features only (subset of PROMPTFOO_DISABLE_REMOTE_GENERATION).
+   * Affects: Harmful content generation, red team strategies, red team simulated users.
+   * Does NOT affect: Regular (non-redteam) SimulatedUser usage.
+   */
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;
@@ -54,7 +66,7 @@ type EnvVars = {
   PROMPTFOO_STRIP_TEST_VARS?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_TRACING_ENABLED?: boolean;
-  PROMPTFOO_DISABLE_UNBLOCKING?: boolean;
+  PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
 
   //=========================================================================
   // promptfoo configuration options
@@ -80,6 +92,7 @@ type EnvVars = {
   PROMPTFOO_PASS_RATE_THRESHOLD?: number;
   PROMPTFOO_PROMPT_SEPARATOR?: string;
   PROMPTFOO_PYTHON?: string;
+  PROMPTFOO_RUBY?: string;
   PROMPTFOO_REMOTE_API_BASE_URL?: string;
   PROMPTFOO_REMOTE_APP_BASE_URL?: string;
   PROMPTFOO_REMOTE_GENERATION_URL?: string;
@@ -220,6 +233,9 @@ type EnvVars = {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_KEY?: string;
 
+  // CometAPI
+  COMETAPI_KEY?: string;
+
   // CDP
   CDP_DOMAIN?: string;
 
@@ -264,6 +280,10 @@ type EnvVars = {
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
 
+  // Nscale
+  NSCALE_SERVICE_TOKEN?: string;
+  NSCALE_API_KEY?: string;
+
   // Ollama
   OLLAMA_API_KEY?: string;
   OLLAMA_BASE_URL?: string;
@@ -297,8 +317,24 @@ type EnvVars = {
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
 
+  // SharePoint
+  SHAREPOINT_BASE_URL?: string;
+  SHAREPOINT_CERT_PATH?: string;
+  SHAREPOINT_CLIENT_ID?: string;
+  SHAREPOINT_TENANT_ID?: string;
+
+  // Slack
+  SLACK_BOT_TOKEN?: string;
+
+  // Snowflake
+  SNOWFLAKE_ACCOUNT_IDENTIFIER?: string;
+  SNOWFLAKE_API_KEY?: string;
+
   // Together AI
   TOGETHER_API_KEY?: string;
+
+  // TrueFoundry
+  TRUEFOUNDRY_API_KEY?: string;
 
   // Vertex AI
   VERTEX_API_VERSION?: string;
@@ -450,4 +486,13 @@ export function isCI() {
     getEnvBool('BUILDKITE') ||
     getEnvBool('TEAMCITY_VERSION')
   );
+}
+
+/**
+ * Check if the application is running in a non-interactive environment.
+ * This includes CI environments, cron jobs, SSH scripts without TTY, etc.
+ * @returns True if running in a non-interactive environment, false otherwise.
+ */
+export function isNonInteractive() {
+  return isCI() || !process.stdin.isTTY || !process.stdout.isTTY;
 }

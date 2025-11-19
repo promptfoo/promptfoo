@@ -6,7 +6,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, formatOpenAiError } from './util';
+import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
 import { ResponsesProcessor } from '../responses';
 
 import type {
@@ -44,6 +44,18 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5-nano-2025-08-07',
     'gpt-5-mini',
     'gpt-5-mini-2025-08-07',
+    'gpt-5-pro',
+    'gpt-5-pro-2025-10-06',
+    // GPT-5.1 models
+    'gpt-5.1',
+    'gpt-5.1-mini',
+    'gpt-5.1-nano',
+    'gpt-5.1-codex',
+    // Audio models
+    'gpt-audio',
+    'gpt-audio-2025-08-28',
+    'gpt-audio-mini',
+    'gpt-audio-mini-2025-10-06',
     // Computer use model
     'computer-use-preview',
     // Image generation model
@@ -68,6 +80,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o3-mini-2025-01-31',
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
     'codex-mini-latest',
+    'gpt-5-codex',
     // Deep research models
     'o3-deep-research',
     'o3-deep-research-2025-06-26',
@@ -114,7 +127,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ) {
     const config = {
       ...this.config,
@@ -188,6 +201,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     } else {
       textFormat = { format: { type: 'text' } };
+    }
+
+    // Add verbosity for GPT-5.1 models if configured
+    if (this.modelName.startsWith('gpt-5') && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
     }
 
     const body = {
@@ -271,18 +289,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     }
 
-    // Calculate timeout for deep research models
+    // Calculate timeout for long-running models (deep research and gpt-5-pro)
     let timeout = REQUEST_TIMEOUT_MS;
-    if (isDeepResearchModel) {
-      // For deep research models, use PROMPTFOO_EVAL_TIMEOUT_MS if set,
+    const isLongRunningModel = isDeepResearchModel || this.modelName.includes('gpt-5-pro');
+    if (isLongRunningModel) {
+      // For long-running models, use PROMPTFOO_EVAL_TIMEOUT_MS if set,
       // otherwise default to 10 minutes (600,000ms)
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
       if (evalTimeout > 0) {
         timeout = evalTimeout;
       } else {
-        timeout = 600_000; // 10 minutes default for deep research
+        timeout = 600_000; // 10 minutes default for long-running models
       }
-      logger.debug(`Using timeout of ${timeout}ms for deep research model ${this.modelName}`);
+      logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
     }
 
     let data, status, statusText;
@@ -307,10 +326,21 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ));
 
       if (status < 200 || status >= 300) {
+        const errorMessage = `API error: ${status} ${statusText}\n${
+          typeof data === 'string' ? data : JSON.stringify(data)
+        }`;
+
+        // Check if this is an invalid_prompt error code (indicates refusal)
+        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+          return {
+            output: errorMessage,
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            isRefusal: true,
+          };
+        }
+
         return {
-          error: `API error: ${status} ${statusText}\n${
-            typeof data === 'string' ? data : JSON.stringify(data)
-          }`,
+          error: errorMessage,
         };
       }
     } catch (err) {

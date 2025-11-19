@@ -1,5 +1,4 @@
 import { pluginMatchesStrategyTargets } from '../../../src/redteam/strategies/util';
-
 import type { TestCaseWithPlugin } from '../../../src/types';
 
 describe('pluginMatchesStrategyTargets', () => {
@@ -48,6 +47,26 @@ describe('pluginMatchesStrategyTargets', () => {
       const testCase: TestCaseWithPlugin = {
         vars: { input: 'test' },
         metadata: { pluginId: 'vlguard' },
+      };
+
+      const result = pluginMatchesStrategyTargets(testCase, 'base64', undefined);
+      expect(result).toBe(false);
+    });
+
+    it('should exclude beavertails plugin', () => {
+      const testCase: TestCaseWithPlugin = {
+        vars: { input: 'test' },
+        metadata: { pluginId: 'beavertails' },
+      };
+
+      const result = pluginMatchesStrategyTargets(testCase, 'base64', undefined);
+      expect(result).toBe(false);
+    });
+
+    it('should exclude cyberseceval plugin', () => {
+      const testCase: TestCaseWithPlugin = {
+        vars: { input: 'test' },
+        metadata: { pluginId: 'cyberseceval' },
       };
 
       const result = pluginMatchesStrategyTargets(testCase, 'base64', undefined);
@@ -278,15 +297,15 @@ describe('pluginMatchesStrategyTargets', () => {
 
       expect(pluginMatchesStrategyTargets(passingCase, 'base64', ['harmful'])).toBe(true);
 
-      // Test case blocked by strategy-exempt
+      // Test case blocked by strategy-exempt (dataset plugin)
       const exemptCase: TestCaseWithPlugin = {
         ...passingCase,
         metadata: {
           ...passingCase.metadata,
-          pluginId: 'pliny',
+          pluginId: 'cyberseceval',
         },
       };
-      expect(pluginMatchesStrategyTargets(exemptCase, 'base64', ['pliny'])).toBe(false);
+      expect(pluginMatchesStrategyTargets(exemptCase, 'base64', ['cyberseceval'])).toBe(false);
 
       // Test case blocked by sequence provider
       const sequenceCase: TestCaseWithPlugin = {

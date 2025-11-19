@@ -11,7 +11,6 @@ import {
   riskCategories,
   riskCategorySeverityMap,
   Severity,
-  severityDisplayNames,
   strategyDescriptions,
   strategyDisplayNames,
   subCategoryDescriptions,
@@ -30,25 +29,11 @@ import type { Plugin } from '../../../src/redteam/constants/plugins';
 import type { Strategy } from '../../../src/redteam/constants/strategies';
 
 describe('metadata constants', () => {
-  describe('Severity enum and display names', () => {
-    it('should have matching severity levels and display names', () => {
-      expect(Object.keys(severityDisplayNames)).toEqual(Object.values(Severity));
-      expect(severityDisplayNames[Severity.Critical]).toBe('Critical');
-      expect(severityDisplayNames[Severity.High]).toBe('High');
-      expect(severityDisplayNames[Severity.Medium]).toBe('Medium');
-      expect(severityDisplayNames[Severity.Low]).toBe('Low');
-    });
-  });
-
   describe('Risk category severity map', () => {
     it('should have valid severity levels', () => {
       Object.values(riskCategorySeverityMap).forEach((severity) => {
         expect(Object.values(Severity)).toContain(severity);
       });
-    });
-
-    it('should include memory poisoning plugin with high severity', () => {
-      expect(riskCategorySeverityMap['agentic:memory-poisoning']).toBe(Severity.High);
     });
   });
 
@@ -126,7 +111,7 @@ describe('metadata constants', () => {
       );
 
       if (missingPlugins.length > 0) {
-        fail(
+        throw new Error(
           `The following plugins are defined but missing from risk categories: ${missingPlugins.join(
             ', ',
           )}. Please add them to the appropriate category in riskCategories object in metadata.ts`,

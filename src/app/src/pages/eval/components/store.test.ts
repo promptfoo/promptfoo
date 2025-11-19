@@ -1,10 +1,11 @@
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { act } from '@testing-library/react';
 import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
-import type { EvaluateTable, PromptMetrics, ResultsFile } from '@promptfoo/types';
+import type { EvaluateTable, PromptMetrics, ResultsFile, EvalTableDTO } from '@promptfoo/types';
 
 vi.mock('uuid', () => ({
   v4: vi.fn(),
@@ -66,83 +67,46 @@ describe('useTableStore', () => {
         },
         shouldHighlightSearchText: false,
         isStreaming: false,
+        filteredMetrics: null,
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        currentMetadataKeysRequest: null,
       });
     });
     vi.clearAllMocks();
   });
 
-  it('should set `filterMode` to the provided value when `setFilterMode` is called', () => {
-    const newFilterMode = 'failures';
+  it('should reset filteredMetrics to null when setEvalId is called', () => {
+    const initialMetrics: PromptMetrics[] = [
+      {
+        cost: 0.1,
+        score: 0.9,
+        testPassCount: 10,
+        testFailCount: 2,
+        testErrorCount: 0,
+        assertPassCount: 5,
+        assertFailCount: 1,
+        totalLatencyMs: 500,
+        tokenUsage: { prompt: 100, completion: 50, total: 150 },
+        namedScores: { accuracy: 0.85, fluency: 0.92 },
+        namedScoresCount: { accuracy: 12, fluency: 12 },
+      },
+    ];
 
     act(() => {
-      useTableStore.getState().setFilterMode(newFilterMode);
+      useTableStore.setState({ filteredMetrics: initialMetrics });
+    });
+
+    const newEvalId = 'new-eval-id';
+
+    act(() => {
+      useTableStore.getState().setEvalId(newEvalId);
     });
 
     const state = useTableStore.getState();
-    expect(state.filterMode).toBe(newFilterMode);
-  });
-
-  it('should reset filterMode to "all" when resetFilterMode is called', () => {
-    act(() => {
-      useTableStore.getState().setFilterMode('failures');
-    });
-
-    act(() => {
-      useTableStore.getState().resetFilterMode();
-    });
-
-    const state = useTableStore.getState();
-    expect(state.filterMode).toBe('all');
-  });
-
-  describe('filterMode', () => {
-    it('should handle interaction between URL-based filterMode setting and direct calls to setFilterMode/resetFilterMode', () => {
-      act(() => {
-        useTableStore.setState({ filterMode: 'failures' });
-      });
-
-      let state = useTableStore.getState();
-      expect(state.filterMode).toBe('failures');
-
-      act(() => {
-        useTableStore.getState().setFilterMode('all');
-      });
-
-      state = useTableStore.getState();
-      expect(state.filterMode).toBe('all');
-
-      act(() => {
-        useTableStore.getState().resetFilterMode();
-      });
-
-      state = useTableStore.getState();
-      expect(state.filterMode).toBe('all');
-    });
-  });
-
-  describe('filterMode persistence', () => {
-    it('should persist the existing filterMode when fetchEvalData is called without a filterMode option', async () => {
-      const mockEvalId = 'test-eval-id';
-      (callApi as Mock).mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          table: { head: { prompts: [] }, body: [] },
-          totalCount: 0,
-          filteredCount: 0,
-        }),
-      });
-
-      act(() => {
-        useTableStore.getState().setFilterMode('failures');
-      });
-
-      await act(async () => {
-        await useTableStore.getState().fetchEvalData(mockEvalId);
-      });
-
-      const state = useTableStore.getState();
-      expect(state.filterMode).toBe('failures');
-    });
+    expect(state.filteredMetrics).toBeNull();
+    expect(state.evalId).toBe(newEvalId);
   });
 
   describe('extractUniqueStrategyIds', () => {
@@ -188,6 +152,7 @@ describe('useTableStore', () => {
         type: 'metric' as const,
         operator: 'equals' as const,
         value: 'test-metric-value',
+        field: 'test-metric',
       };
 
       act(() => {
@@ -207,6 +172,7 @@ describe('useTableStore', () => {
         id: mockFilterId,
         logicOperator: 'and',
         sortIndex: 0,
+        field: 'test-metric',
       });
     });
 
@@ -296,6 +262,7 @@ describe('useTableStore', () => {
         type: 'metric' as const,
         operator: 'equals' as const,
         value: 'test-metric-value',
+        field: 'test-metric',
         logicOperator: 'and' as const,
         sortIndex: 0,
       };
@@ -326,7 +293,6 @@ describe('useTableStore', () => {
       expect(state.filters.appliedCount).toBe(0);
       expect(state.filters.values[mockFilterId].value).toBe('');
     });
-
     it('should decrement `filters.appliedCount` when `updateFilter` is called with a severity filter that changes from having a value to having an empty value', () => {
       const mockFilterId = 'mock-uuid-1';
       (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
@@ -365,6 +331,55 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.appliedCount).toBe(0);
       expect(state.filters.values[mockFilterId].value).toBe('');
+    });
+
+    it('should consider exists operator filters as applied when field is present (even with empty value)', () => {
+      const mockFilterId = 'exists-test-filter';
+      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+
+      // Add metadata filter with exists operator
+      const existsFilter = {
+        type: 'metadata' as const,
+        operator: 'exists' as const,
+        field: 'testField',
+        value: '', // Empty value is OK for exists operator
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(existsFilter);
+      });
+
+      const state = useTableStore.getState();
+
+      // Should be considered applied since field is present and operator is exists
+      expect(state.filters.appliedCount).toBe(1);
+      expect(state.filters.values[mockFilterId]).toEqual({
+        ...existsFilter,
+        id: mockFilterId,
+        logicOperator: 'and',
+        sortIndex: 0,
+      });
+    });
+
+    it('should not consider exists operator filters as applied when field is missing', () => {
+      const mockFilterId = 'exists-test-filter-2';
+      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+
+      // Add metadata filter with exists operator but no field
+      const existsFilter = {
+        type: 'metadata' as const,
+        operator: 'exists' as const,
+        value: '', // Empty value and no field
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(existsFilter);
+      });
+
+      const state = useTableStore.getState();
+
+      // Should NOT be considered applied since field is missing
+      expect(state.filters.appliedCount).toBe(0);
     });
 
     it("should update `filters.options.strategy` with unique strategy IDs and include 'basic' when `fetchEvalData` receives redteam config with strategies", async () => {
@@ -469,7 +484,7 @@ describe('useTableStore', () => {
             },
           },
         }),
-      });
+      } as any);
 
       await act(async () => {
         await useTableStore.getState().fetchEvalData(mockEvalId);
@@ -532,6 +547,283 @@ describe('useTableStore', () => {
       expect(state.filters.options.strategy).toEqual(['multilingual', 'retry', 'basic']);
       expect(state.filters.options.plugin).toEqual(['pii', 'bias']);
     });
+
+    it("should fall back to the first filter's logicOperator when the filter with sortIndex 1 has a null logicOperator", () => {
+      const mockFilterId1 = 'mock-uuid-1';
+      const mockFilterId2 = 'mock-uuid-2';
+      const mockFilterId3 = 'mock-uuid-3';
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId1)
+        .mockImplementationOnce(() => mockFilterId2)
+        .mockImplementationOnce(() => mockFilterId3);
+
+      const newFilter1 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-1',
+        logicOperator: 'or' as const,
+        field: 'test-metric',
+      };
+
+      const newFilter2 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-2',
+        logicOperator: null as any,
+        field: 'test-metric',
+      };
+
+      const newFilter3 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-3',
+        field: 'test-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter1);
+        useTableStore.getState().addFilter(newFilter2);
+        useTableStore.getState().addFilter(newFilter3);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.values[mockFilterId3].logicOperator).toBe('or');
+    });
+    it("should fall back to the first filter's logicOperator when the filter with sortIndex 1 has an undefined logicOperator", () => {
+      const mockFilterId1 = 'mock-uuid-1';
+      const mockFilterId2 = 'mock-uuid-2';
+      const mockFilterId3 = 'mock-uuid-3';
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId1)
+        .mockImplementationOnce(() => mockFilterId2)
+        .mockImplementationOnce(() => mockFilterId3);
+
+      const newFilter1 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-1',
+        logicOperator: 'or' as const,
+        field: 'test-metric',
+      };
+
+      const newFilter2 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-2',
+        logicOperator: undefined,
+        field: 'test-metric',
+      };
+
+      const newFilter3 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-3',
+        field: 'test-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter1);
+        useTableStore.getState().addFilter(newFilter2);
+        useTableStore.getState().addFilter(newFilter3);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.values[mockFilterId3].logicOperator).toBe('or');
+    });
+
+    it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has a null logicOperator', () => {
+      const mockFilterId2 = 'mock-uuid-2';
+      const mockFilterId3 = 'mock-uuid-3';
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId2)
+        .mockImplementationOnce(() => mockFilterId3);
+
+      const newFilter2 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-2',
+        logicOperator: null as any,
+        field: 'test-metric',
+      };
+
+      const newFilter3 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-3',
+        field: 'test-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter2);
+        useTableStore.getState().addFilter(newFilter3);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.values[mockFilterId3].logicOperator).toBe('and');
+    });
+    it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has an undefined logicOperator', () => {
+      const mockFilterId2 = 'mock-uuid-2';
+      const mockFilterId3 = 'mock-uuid-3';
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId2)
+        .mockImplementationOnce(() => mockFilterId3);
+
+      const newFilter2 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-2',
+        logicOperator: undefined,
+        field: 'test-metric',
+      };
+
+      const newFilter3 = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-3',
+        field: 'test-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter2);
+        useTableStore.getState().addFilter(newFilter3);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.values[mockFilterId3].logicOperator).toBe('and');
+    });
+    it('should inherit logicOperator from the filter with sortIndex 1 when adding a new filter and multiple filters with different logicOperators exist', () => {
+      const mockFilterId0 = 'mock-uuid-0';
+      const mockFilterId1 = 'mock-uuid-1';
+      const mockFilterId2 = 'mock-uuid-2';
+      const mockFilterIdNew = 'mock-uuid-new';
+
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId0)
+        .mockImplementationOnce(() => mockFilterId1)
+        .mockImplementationOnce(() => mockFilterId2)
+        .mockImplementationOnce(() => mockFilterIdNew);
+
+      act(() => {
+        useTableStore.getState().addFilter({
+          type: 'metric',
+          operator: 'equals',
+          value: 'test-metric-value-0',
+          logicOperator: 'or',
+        });
+        useTableStore.getState().addFilter({
+          type: 'metric',
+          operator: 'equals',
+          value: 'test-metric-value-1',
+          logicOperator: 'and',
+        });
+        useTableStore.getState().addFilter({
+          type: 'metric',
+          operator: 'equals',
+          value: 'test-metric-value-2',
+          logicOperator: 'or',
+        });
+      });
+
+      const newFilter = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value-new',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter);
+      });
+
+      const state = useTableStore.getState();
+      const addedFilter = state.filters.values[mockFilterIdNew];
+      expect(addedFilter).toBeDefined();
+      expect(addedFilter.logicOperator).toBe('and');
+    });
+
+    it('should inherit the updated logicOperator when a new filter is added after updating an existing filter', () => {
+      const mockFilterId1 = 'mock-uuid-1';
+      const mockFilterId2 = 'mock-uuid-2';
+      (uuidv4 as Mock<() => string>)
+        .mockImplementationOnce(() => mockFilterId1)
+        .mockImplementationOnce(() => mockFilterId2);
+
+      const initialFilter = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value',
+        field: 'test-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(initialFilter);
+      });
+
+      const updatedFilter: ResultsFilter = {
+        id: mockFilterId1,
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'test-metric-value',
+        field: 'test-metric',
+        logicOperator: 'or',
+        sortIndex: 0,
+      };
+
+      act(() => {
+        useTableStore.getState().updateFilter(updatedFilter);
+      });
+
+      const newFilter = {
+        type: 'metadata' as const,
+        operator: 'contains' as const,
+        value: 'test-metadata-value',
+        field: 'test-metadata',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter);
+      });
+
+      const state = useTableStore.getState();
+      const addedFilter = Object.values(state.filters.values).find(
+        (filter) => filter.id === mockFilterId2,
+      );
+
+      expect(addedFilter).toBeDefined();
+      expect(addedFilter?.logicOperator).toBe('or');
+    });
+
+    it('should use the provided logicOperator for a new filter when logicOperator is explicitly set in the filter argument, regardless of existing filters', () => {
+      const mockFilterId = 'mock-uuid-1';
+      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+
+      const existingFilter = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: 'existing-metric-value',
+        field: 'existing-metric',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(existingFilter);
+      });
+
+      const newFilter = {
+        type: 'metadata' as const,
+        operator: 'contains' as const,
+        value: 'test-metadata-value',
+        field: 'test-metadata',
+        logicOperator: 'or' as const,
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter);
+      });
+
+      const state = useTableStore.getState();
+      const addedFilter = state.filters.values[mockFilterId];
+      expect(addedFilter).toBeDefined();
+      expect(addedFilter.logicOperator).toBe('or');
+    });
   });
 
   describe('fetchEvalData', () => {
@@ -584,6 +876,57 @@ describe('useTableStore', () => {
       expect(actualFilterParam).toEqual(expectedFilterParam);
     });
 
+    it('should properly encode filters with special characters and unicode symbols in the URL', async () => {
+      const evalId = 'test-eval-id';
+      const filterValue =
+        'test value with !@#$%^&*()_+=-`~[]{}|;\':",./<>? special characters and unicode symbols like こんにちは';
+      const filter: ResultsFilter = {
+        id: 'test-filter-id',
+        type: 'metric',
+        operator: 'equals',
+        value: filterValue,
+        logicOperator: 'and',
+        sortIndex: 0,
+      };
+
+      const expectedEncodedFilterValue = JSON.stringify({
+        logicOperator: filter.logicOperator,
+        type: filter.type,
+        operator: filter.operator,
+        value: filter.value,
+        field: filter.field,
+      });
+
+      const mockCallApi = vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url.includes('metadata-keys')) {
+          return {
+            ok: true,
+            json: async () => ({ keys: [] }),
+          } as any;
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            table: { head: { prompts: [] }, body: [] },
+            totalCount: 0,
+            filteredCount: 0,
+          }),
+        } as any;
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(evalId, { filters: [filter] });
+      });
+
+      expect(mockCallApi).toHaveBeenCalledTimes(1);
+      const url = mockCallApi.mock.calls[0][0];
+      const urlParams = new URL(url, 'http://example.com').searchParams;
+      const rawFilterParam = urlParams.get('filter');
+      const actualFilterParam = JSON.parse(rawFilterParam || '{}');
+      const expectedFilterParam = JSON.parse(expectedEncodedFilterValue);
+      expect(actualFilterParam).toEqual(expectedFilterParam);
+    });
+
     it('should handle non-200 response from API', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -602,7 +945,6 @@ describe('useTableStore', () => {
       expect(state.isFetching).toBe(false);
       expect(result).toBe(null);
     });
-
     it("should handle a null strategies array in the API response by setting filters.options.strategy to ['basic']", async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -754,7 +1096,6 @@ describe('useTableStore', () => {
       expect(isFetchingDuringFetch).toBe(true);
       expect(state.isFetching).toBe(false);
     });
-
     it('should complete successfully without showing loading indicators when skipLoadingState=true and isStreaming=false', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -763,6 +1104,10 @@ describe('useTableStore', () => {
           table: { head: { prompts: [] }, body: [] },
           totalCount: 0,
           filteredCount: 0,
+          config: {},
+          author: null,
+          version: 1,
+          id: mockEvalId,
         }),
       });
 
@@ -780,7 +1125,6 @@ describe('useTableStore', () => {
       expect(state.isFetching).toBe(false);
       expect(result).not.toBe(null);
     });
-
     it('should keep isFetching unchanged when fetchEvalData is called with skipLoadingState=true and the API call fails', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -958,7 +1302,6 @@ describe('useTableStore', () => {
 
         expect(useTableStore.getState().shouldHighlightSearchText).toBe(false);
       });
-
       it('should update shouldHighlightSearchText from true to false when fetchEvalData is called with non-empty search text and then with empty search text', async () => {
         const mockEvalId = 'test-eval-id';
         (callApi as Mock).mockResolvedValue({
@@ -967,6 +1310,10 @@ describe('useTableStore', () => {
             table: { head: { prompts: [] }, body: [] },
             totalCount: 0,
             filteredCount: 0,
+            config: {},
+            author: null,
+            version: 1,
+            id: mockEvalId,
           }),
         });
 
@@ -995,12 +1342,16 @@ describe('useTableStore', () => {
           resolvePromise = resolve;
         });
 
-        (callApi as Mock).mockReturnValue({
+        (callApi as Mock).mockResolvedValue({
           ok: true,
           json: async () => ({
             table: { head: { prompts: [] }, body: [] },
             totalCount: 0,
             filteredCount: 0,
+            config: {},
+            author: null,
+            version: 1,
+            id: mockEvalId,
           }),
         });
 
@@ -1026,6 +1377,10 @@ describe('useTableStore', () => {
             table: { head: { prompts: [] }, body: [] },
             totalCount: 0,
             filteredCount: 0,
+            config: {},
+            author: null,
+            version: 1,
+            id: mockEvalId,
           });
         });
 
@@ -1095,7 +1450,6 @@ describe('useTableStore', () => {
 
       expect(useTableStore.getState().isStreaming).toBe(false);
     });
-
     it('should allow isStreaming and isFetching to be true simultaneously when fetchEvalData is called without skipLoadingState and isStreaming is already true', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -1323,7 +1677,6 @@ describe('useTableStore', () => {
       const availableMetrics = useTableStore.getState().filters.options.metric;
       expect(availableMetrics).toEqual(['accuracy', 'bleu', 'rouge']);
     });
-
     it('should return an empty array when the EvaluateTable contains prompts but none have metrics.namedScores defined', () => {
       const mockTable: EvaluateTable = {
         head: {
@@ -1435,7 +1788,6 @@ describe('useTableStore', () => {
       const availableMetrics = useTableStore.getState().filters.options.metric;
       expect(availableMetrics).toEqual(['accuracy', 'bleu', 'rouge']);
     });
-
     it('should correctly handle unusual metric names, such as those containing special characters or very long strings', () => {
       const longMetricName = 'a'.repeat(200);
       const mockTable: EvaluateTable = {
@@ -1688,6 +2040,221 @@ describe('useTableStore', () => {
       expect(metadataFilter?.type).toBe('metadata');
       expect(metadataFilter?.field).toBe('plugin');
       expect(metadataFilter?.value).toBe('my-custom-plugin');
+    });
+  });
+  describe('filteredMetrics', () => {
+    it('should set `filteredMetrics` to the value returned by the backend after a successful `fetchEvalData` call', async () => {
+      const mockEvalId = 'test-eval-id';
+      const mockFilteredMetrics: PromptMetrics[] = [
+        {
+          cost: 1,
+          score: 0.5,
+          testPassCount: 5,
+          testFailCount: 5,
+          testErrorCount: 0,
+          assertPassCount: 0,
+          assertFailCount: 0,
+          totalLatencyMs: 100,
+          tokenUsage: { prompt: 10, completion: 20, total: 30 },
+          namedScores: { accuracy: 0.9 },
+          namedScoresCount: { accuracy: 10 },
+        },
+      ];
+
+      const mockEvalTableDTO: EvalTableDTO = {
+        table: { head: { prompts: [], vars: [] }, body: [] },
+        totalCount: 100,
+        filteredCount: 50,
+        filteredMetrics: mockFilteredMetrics,
+        config: {},
+        version: 4,
+        author: 'test',
+        id: mockEvalId,
+      };
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => mockEvalTableDTO,
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filteredMetrics).toEqual(mockFilteredMetrics);
+    });
+
+    it('should set `filteredMetrics` to null after a successful `fetchEvalData` call when no filters are active', async () => {
+      const mockEvalId = 'test-eval-id';
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          filteredMetrics: null,
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filteredMetrics).toBe(null);
+    });
+
+    it('should update `filteredMetrics` when `setFilteredMetrics` is called with a valid array of metrics, and reset to null when called with null', () => {
+      const mockMetrics: PromptMetrics[] = [
+        {
+          ...baseMetrics,
+          namedScores: { accuracy: 0.9 },
+        },
+        {
+          ...baseMetrics,
+          namedScores: { latency: 0.5 },
+        },
+      ];
+
+      act(() => {
+        useTableStore.getState().setFilteredMetrics(mockMetrics);
+      });
+
+      let state = useTableStore.getState();
+      expect(state.filteredMetrics).toEqual(mockMetrics);
+
+      act(() => {
+        useTableStore.getState().setFilteredMetrics(null);
+      });
+
+      state = useTableStore.getState();
+      expect(state.filteredMetrics).toBeNull();
+    });
+
+    it('should not affect `filteredMetrics` when `setTable` is called', () => {
+      const initialMetrics: any[] = [{ score: 0.8, cost: 1, testPassCount: 1 }];
+      act(() => {
+        useTableStore.getState().setFilteredMetrics(initialMetrics);
+      });
+
+      const newTable: EvaluateTable = {
+        head: { prompts: [], vars: [] },
+        body: [],
+      };
+
+      act(() => {
+        useTableStore.getState().setTable(newTable);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filteredMetrics).toEqual(initialMetrics);
+    });
+  });
+
+  describe('fetchMetadataKeys', () => {
+    it('should handle an empty array of keys from the API response and return an empty array', async () => {
+      const mockEvalId = 'test-eval-id';
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ keys: [] }),
+      });
+
+      let metadataKeys: string[] = [];
+      await act(async () => {
+        metadataKeys = await useTableStore.getState().fetchMetadataKeys(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.metadataKeys).toEqual([]);
+      expect(metadataKeys).toEqual([]);
+    });
+
+    it('should return an empty array and update the store with an empty array when fetchMetadataKeys receives a response where all keys are in the HIDDEN_METADATA_KEYS list', async () => {
+      const mockEvalId = 'test-eval-id';
+      const hiddenKeys = [...HIDDEN_METADATA_KEYS];
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ keys: hiddenKeys }),
+      });
+
+      let result: string[] = [];
+      await act(async () => {
+        result = await useTableStore.getState().fetchMetadataKeys(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(result).toEqual([]);
+      expect(state.metadataKeys).toEqual([]);
+    });
+
+    it('should store and return only non-hidden metadata keys when the API response includes both hidden and non-hidden keys', async () => {
+      const mockEvalId = 'test-eval-id';
+      const allKeys = ['visibleKey1', '_promptfooFileMetadata', 'visibleKey2', 'citations'];
+      const expectedVisibleKeys = allKeys.filter((key) => !HIDDEN_METADATA_KEYS.includes(key));
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ keys: allKeys }),
+      });
+
+      let returnedKeys: string[] = [];
+      await act(async () => {
+        returnedKeys = await useTableStore.getState().fetchMetadataKeys(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.metadataKeys).toEqual(expectedVisibleKeys);
+      expect(returnedKeys).toEqual(expectedVisibleKeys);
+    });
+    it('should set metadataKeysError to true and metadataKeysLoading to false when the API call fails with an error (not an abort)', async () => {
+      const mockEvalId = 'test-eval-id';
+      const mockError = new Error('API error');
+      vi.mocked(callApi).mockRejectedValue(mockError);
+
+      await act(async () => {
+        await useTableStore.getState().fetchMetadataKeys(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.metadataKeysError).toBe(true);
+      expect(state.metadataKeysLoading).toBe(false);
+    });
+
+    it('should abort the request after 30 seconds if fetchMetadataKeys API call does not complete', async () => {
+      vi.useFakeTimers();
+      const mockEvalId = 'test-eval-id';
+
+      vi.mocked(callApi).mockImplementation((_url: string, options?: any) => {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => {
+            const abortError = new Error('The operation was aborted');
+            abortError.name = 'AbortError';
+            reject(abortError);
+          });
+        });
+      });
+
+      act(() => {
+        useTableStore.setState({ currentMetadataKeysRequest: null });
+      });
+
+      act(() => {
+        useTableStore.getState().fetchMetadataKeys(mockEvalId);
+      });
+
+      expect(useTableStore.getState().metadataKeysLoading).toBe(true);
+
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+
+      const state = useTableStore.getState();
+      expect(state.metadataKeysLoading).toBe(false);
+      expect(state.metadataKeysError).toBe(false);
+      expect(state.currentMetadataKeysRequest).toBeNull();
+
+      vi.useRealTimers();
     });
   });
 });

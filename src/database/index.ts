@@ -32,6 +32,9 @@ export function getDb() {
 
     sqliteInstance = new Database(dbPath);
 
+    // Enable foreign key constraints (required for referential integrity)
+    sqliteInstance.pragma('foreign_keys = ON');
+
     // Configure WAL mode unless explicitly disabled or using in-memory database
     if (!isMemoryDb && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
       try {

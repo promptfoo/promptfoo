@@ -11,7 +11,7 @@ This guide will walk you through the process of benchmarking [Llama2 Uncensored]
 
 By the end of this guide, you'll be able to produce a side-by-side comparison of these models using your own data. You can substitute your own test cases and choose the model that's best for you.
 
-View the final example code [here](https://github.com/promptfoo/promptfoo/tree/main/examples/ollama-comparison).
+View the final example code [here](https://github.com/promptfoo/promptfoo/tree/main/examples/ollama).
 
 ![llama2 uncensored and gpt comparison](/img/docs/llama-uncensored-comparison.png)
 

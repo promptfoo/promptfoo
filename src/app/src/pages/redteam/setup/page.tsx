@@ -33,7 +33,6 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import type { RedteamStrategy } from '@promptfoo/types';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -45,14 +44,18 @@ import Setup from './components/Setup';
 import Strategies from './components/Strategies';
 import TargetConfiguration from './components/Targets/TargetConfiguration';
 import TargetTypeSelection from './components/Targets/TargetTypeSelection';
+import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvider';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import { generateOrderedYaml } from './utils/yamlHelpers';
+import type { RedteamStrategy } from '@promptfoo/types';
 
 import './page.css';
+
 import type { Config, RedteamUITarget } from './types';
 
 export const SIDEBAR_WIDTH = 240;
+const NAVBAR_HEIGHT = 64;
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
   '& .MuiTabs-indicator': {
@@ -168,8 +171,8 @@ const OuterSidebarContainer = styled(Box)(({ theme }) => ({
 
 const InnerSidebarContainer = styled(Box)({
   position: 'sticky',
-  top: 64, // Account for navbar
-  height: 'calc(100vh - 64px)',
+  top: `calc(${NAVBAR_HEIGHT}px + var(--update-banner-height, 0px))`,
+  height: `calc(100vh - ${NAVBAR_HEIGHT}px - var(--update-banner-height, 0px))`,
   display: 'flex',
   flexDirection: 'column',
 });
@@ -353,7 +356,7 @@ export default function RedTeamSetupPage() {
     });
   };
 
-  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
     updateHash(newValue);
     setValue(newValue);
     window.scrollTo({ top: 0 });
@@ -472,6 +475,8 @@ export default function RedTeamSetupPage() {
 
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
+      // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
+      window.location.reload();
     } catch (error) {
       console.error('Failed to load configuration', error);
       toast.showToast(
@@ -706,16 +711,12 @@ export default function RedTeamSetupPage() {
           <TabContent>
             <CustomTabPanel value={value} index={0}>
               <ErrorBoundary name="Target Type Selection Page">
-                <TargetTypeSelection onNext={handleNext} setupModalOpen={setupModalOpen} />
+                <TargetTypeSelection onNext={handleNext} />
               </ErrorBoundary>
             </CustomTabPanel>
             <CustomTabPanel value={value} index={1}>
               <ErrorBoundary name="Target Configuration Page">
-                <TargetConfiguration
-                  onNext={handleNext}
-                  onBack={handleBack}
-                  setupModalOpen={setupModalOpen}
-                />
+                <TargetConfiguration onNext={handleNext} onBack={handleBack} />
               </ErrorBoundary>
             </CustomTabPanel>
             <CustomTabPanel value={value} index={2}>
@@ -725,7 +726,9 @@ export default function RedTeamSetupPage() {
             </CustomTabPanel>
             <CustomTabPanel value={value} index={3}>
               <ErrorBoundary name="Plugins Page">
-                <Plugins onNext={handleNext} onBack={handleBack} />
+                <TestCaseGenerationProvider redTeamConfig={config}>
+                  <Plugins onNext={handleNext} onBack={handleBack} />
+                </TestCaseGenerationProvider>
               </ErrorBoundary>
             </CustomTabPanel>
             <CustomTabPanel value={value} index={4}>

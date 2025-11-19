@@ -24,28 +24,38 @@ import {
   displayNameOverrides,
   type Plugin,
   Severity,
+  severityDisplayNames,
   severityRiskScores,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useNavigate } from 'react-router-dom';
-import { getSeverityColor } from './FrameworkComplianceUtils';
+import { getSeverityColor } from '../utils/color';
 import { getStrategyIdFromTest } from './shared';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
 import {
+  formatPolicyIdentifierAsMetric,
+  isValidPolicyObject,
+  makeInlinePolicyId,
+} from '@promptfoo/redteam/plugins/policy/utils';
+import {
   calculatePluginRiskScore,
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { formatASRForDisplay } from '@app/utils/redteam';
+import { type TestResultStats } from './FrameworkComplianceUtils';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 
 interface TestSuitesProps {
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  categoryStats: Record<string, Required<TestResultStats>>;
   plugins: RedteamPluginObject[];
   failuresByPlugin?: Record<string, any[]>;
   passesByPlugin?: Record<string, any[]>;
-  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
+  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
   vulnerabilitiesDataGridFilterModel: GridFilterModel;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
 }
@@ -90,12 +100,47 @@ const TestSuites = ({
     { field: 'riskScore', sort: 'desc' },
   ]);
 
+  const pluginSeverityMap = React.useMemo(() => getRiskCategorySeverityMap(plugins), [plugins]);
+
+  const pluginsById = React.useMemo(() => {
+    return plugins.reduce(
+      (acc, plugin) => {
+        let pluginId: string;
+        if (plugin.id === 'policy' && plugin.config?.policy) {
+          // Use the policy id as the plugin id in order to differentiate custom policies from each other.
+          // Either get the policy id from the metadata or construct it by hashing the policy text.
+          pluginId = isValidPolicyObject(plugin.config.policy)
+            ? plugin.config.policy.id
+            : makeInlinePolicyId(plugin.config.policy as string);
+        } else {
+          pluginId = plugin.id;
+        }
+
+        acc[pluginId] = {
+          ...plugin,
+          // If the plugin does not have a severity defined, assign it here. Use original `plugin.id`
+          // for `pluginSeverityMap` lookups.
+          severity: plugin.severity ?? pluginSeverityMap[plugin.id as Plugin],
+        };
+        return acc;
+      },
+      {} as Record<string, RedteamPluginObject>,
+    );
+  }, [plugins, pluginSeverityMap]);
+
+  const customPoliciesById = useCustomPoliciesMap(plugins);
+
   const rows = React.useMemo(() => {
     return (
       Object.entries(categoryStats)
         .filter(([_, stats]) => stats.total > 0)
         .map(([pluginName, stats]) => {
-          const severity = getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown';
+          const plugin = pluginsById[pluginName];
+
+          // Handle case where plugin is not found (e.g., when plugins array is empty)
+          // Use the severity map directly or default to 'Unknown'
+          const severity =
+            plugin?.severity || pluginSeverityMap[pluginName as Plugin] || ('Unknown' as Severity);
 
           // Calculate risk score with details
           const riskDetails = (() => {
@@ -125,16 +170,29 @@ const TestSuites = ({
             };
           })();
 
+          let type = categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName;
+          let description =
+            subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '';
+
+          // Reads policy data from customPoliciesById
+          if (plugin?.id === 'policy' && plugin?.config?.policy) {
+            const policy = customPoliciesById[pluginName];
+            if (policy) {
+              // Render w/o strategy suffix as rows are aggregates across strategies
+              type = formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
+              description = policy.text ?? '';
+            }
+          }
+
           return {
             id: pluginName,
             pluginName,
-            type: categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName,
-            description:
-              subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '',
+            type,
+            description,
             severity,
             passRate: (stats.pass / stats.total) * 100,
             passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
-            attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
+            attackSuccessRate: calculateAttackSuccessRate(stats.total, stats.failCount),
             total: stats.total,
             successfulAttacks: stats.total - stats.pass,
             riskScore: riskDetails.riskScore,
@@ -145,7 +203,15 @@ const TestSuites = ({
         // Filter out rows where ASR = 0
         .filter((row) => row.successfulAttacks > 0)
     );
-  }, [categoryStats, plugins, failuresByPlugin, passesByPlugin]);
+  }, [
+    categoryStats,
+    plugins,
+    failuresByPlugin,
+    passesByPlugin,
+    pluginsById,
+    pluginSeverityMap,
+    customPoliciesById,
+  ]);
 
   const exportToCSV = React.useCallback(() => {
     // Format data for CSV
@@ -176,8 +242,8 @@ const TestSuites = ({
         } as const;
 
         return sortModel[0].sort === 'asc'
-          ? severityOrder[a.severity] - severityOrder[b.severity]
-          : severityOrder[b.severity] - severityOrder[a.severity];
+          ? severityOrder[a.severity as Severity] - severityOrder[b.severity as Severity]
+          : severityOrder[b.severity as Severity] - severityOrder[a.severity as Severity];
       }
 
       if (sortModel.length > 0 && sortModel[0].field === 'riskScore') {
@@ -212,8 +278,8 @@ const TestSuites = ({
       subCategory.complexityScore.toFixed(1),
       subCategory.successfulAttacks,
       subCategory.total,
-      subCategory.attackSuccessRate.toFixed(2) + '%',
-      subCategory.severity,
+      formatASRForDisplay(subCategory.attackSuccessRate) + '%',
+      severityDisplayNames[subCategory.severity as Severity],
     ]);
 
     // Combine headers and data with proper escaping for CSV
@@ -285,7 +351,7 @@ const TestSuites = ({
                     • Base Severity: {params.row.severity}
                   </Typography>
                   <Typography variant="caption" component="div">
-                    • Attack Success Rate: {params.row.attackSuccessRate.toFixed(2)}%
+                    • Attack Success Rate: {formatASRForDisplay(params.row.attackSuccessRate)}%
                   </Typography>
                   <Typography
                     variant="caption"
@@ -374,10 +440,10 @@ const TestSuites = ({
         const passRate = params.row.passRate;
         return (
           <Box>
-            <strong>{value.toFixed(2)}%</strong>
+            <strong>{formatASRForDisplay(value)}%</strong>
             {passRateWithFilter !== passRate && (
               <>
-                <br />({(100 - passRateWithFilter).toFixed(1)}% with mitigation)
+                <br />({formatASRForDisplay(100 - passRateWithFilter)}% with mitigation)
               </>
             )}
           </Box>
@@ -389,8 +455,13 @@ const TestSuites = ({
       headerName: 'Severity',
       type: 'singleSelect',
       flex: 0.5,
-      valueOptions: Object.values(Severity),
-      renderCell: (params: GridRenderCellParams) => <Box>{params.value}</Box>,
+      valueFormatter: (value: Severity) => severityDisplayNames[value],
+      valueOptions: [
+        ...Object.values(Severity).map((severity) => ({
+          value: severity,
+          label: severityDisplayNames[severity],
+        })),
+      ],
       sortComparator: (v1: Severity, v2: Severity) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,
@@ -415,7 +486,21 @@ const TestSuites = ({
             size="small"
             onClick={() => {
               const pluginId = params.row.pluginName;
-              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}&mode=failures`);
+              const plugin = pluginsById[pluginId];
+
+              const filterParam = encodeURIComponent(
+                JSON.stringify([
+                  {
+                    type: plugin?.id === 'policy' ? 'policy' : 'plugin',
+                    operator: 'equals',
+                    value: pluginId,
+                  },
+                ]),
+              );
+
+              // If ASR is 0, show passes
+              const mode = params.row.attackSuccessRate === 0 ? 'passes' : 'failures';
+              navigate(`/eval/${evalId}?filter=${filterParam}&mode=${mode}`);
             }}
           >
             View logs
