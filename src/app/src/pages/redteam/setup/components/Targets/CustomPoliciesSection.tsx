@@ -438,7 +438,10 @@ export const CustomPoliciesSection = () => {
       const generatedPolicies: Array<{ name: string; text: string }> = data.policies || [];
 
       if (generatedPolicies.length === 0) {
-        toast.showToast('No policies were generated. Try adjusting your application definition.', 'warning');
+        toast.showToast(
+          'No policies were generated. Try adjusting your application definition.',
+          'warning',
+        );
         setSuggestedPolicies([]);
         return;
       }
@@ -455,7 +458,7 @@ export const CustomPoliciesSection = () => {
     } catch (error) {
       console.error('Error generating policies:', error);
       let errorMessage = 'Failed to generate policies';
-      
+
       if (error instanceof Error) {
         // Handle network errors
         if (error.message.includes('fetch') || error.message.includes('network')) {
@@ -468,7 +471,7 @@ export const CustomPoliciesSection = () => {
       } else {
         errorMessage = 'An unexpected error occurred while generating policies.';
       }
-      
+
       toast.showToast(errorMessage, 'error');
       setSuggestedPolicies([]);
     } finally {
