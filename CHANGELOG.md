@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- chore(cli): improve eval summary output with compact layout and better UX (#5967)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
@@ -38,7 +42,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix: exclude source maps from npm package to reduce bundle size by ~22MB (#6235)
 - chore(ci): synchronize package-lock.json to resolve npm ci failures (#6195)
 - chore(ci): increase webui test timeout to 8 minutes in GitHub Actions workflow to prevent CI timeouts (#6201)
-- chore(cli): improve eval summary output with compact layout and better UX (#5967)
 - chore(redteam): update foundation model report redteam config to use newer redteam strategies (#6216)
 
 ### Fixed
