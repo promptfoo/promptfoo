@@ -273,4 +273,101 @@ describe('Script value resolution', () => {
       ).rejects.toThrow(/Script for "equals" assertion returned a function/);
     });
   });
+
+  // REGRESSION TESTS: Ensure javascript/python/ruby assertions still work correctly
+  describe('javascript assertion regression', () => {
+    it('should use script return value as assertion result (NOT as comparison)', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      // The gradingFunction returns { pass: true, score: 1, reason: '...' } when output contains 'expected'
+      const result = await runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'file://rubric-generator.js:gradingFunction',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'this contains expected word',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toContain('expected');
+    });
+
+    it('should fail when javascript grading function returns false', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'file://rubric-generator.js:gradingFunction',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'does not contain the magic word',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(false);
+    });
+
+    it('should work with inline javascript code', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'output.includes("hello")',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'hello world',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should handle empty string from script', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'equals',
+          value: 'file://rubric-generator.js:emptyValue',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: '',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle array from script for contains-all', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'contains-all',
+          value: 'file://rubric-generator.js:referenceArray',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'This has reference one and also reference two in it',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+  });
 });
