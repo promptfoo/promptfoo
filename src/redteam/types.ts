@@ -181,7 +181,7 @@ export interface SynthesizeOptions extends CommonOptions {
   plugins: (RedteamPluginObject & { id: string; numTests: number })[];
   prompts: [string, ...string[]];
   strategies: RedteamStrategyObject[];
-  targetLabels: string[];
+  targetIds: string[];
   showProgressBar?: boolean;
 }
 

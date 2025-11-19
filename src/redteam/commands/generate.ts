@@ -393,8 +393,8 @@ export async function doGenerateRedteam(
     throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
   }
 
-  const targetLabels = testSuite.providers
-    .map((provider: ApiProvider) => provider?.label)
+  const targetIds = testSuite.providers
+    .map((provider: ApiProvider) => provider?.id)
     .filter(Boolean);
 
   // Extract MCP tools information and add to purpose
@@ -428,7 +428,7 @@ export async function doGenerateRedteam(
     maxConcurrency: config.maxConcurrency,
     delay: config.delay,
     abortSignal: options.abortSignal,
-    targetLabels,
+    targetIds,
     showProgressBar: options.progressBar !== false,
     testGenerationInstructions: augmentedTestGenerationInstructions,
   } as SynthesizeOptions);
