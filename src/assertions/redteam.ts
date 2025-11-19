@@ -40,21 +40,13 @@ export const handleRedteam = async ({
 
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
-
-  // Handle missing prompt gracefully instead of throwing
-  // This can happen when preview/test runs occur before attack generation
-  if (!prompt || prompt.trim() === '') {
-    return {
-      pass: false,
-      score: 0,
-      reason: `No prompt available for grader ${baseType}. Ensure attack generation ran before testing. If using the UI, wait for test case generation to complete.`,
-      assertion,
-      metadata: {
-        // Preserve test metadata so downstream reporting and UI filtering still work
-        ...test.metadata,
-      },
-    };
-  }
+  invariant(
+    prompt,
+    `Grader ${baseType} requires a prompt but received empty/undefined. ` +
+      `This usually means there's a mismatch between your prompt template variable (e.g., {{prompt}}) ` +
+      `and the injectVar used by redteam (default: 'query'). ` +
+      `Either update your prompts to use {{query}} or set 'injectVar: prompt' in your redteam config.`,
+  );
 
   const { grade, rubric, suggestions } = await grader.getResult(
     prompt,

@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(assertions): handle missing prompt gracefully in redteam grader - prevents crash when preview/test runs occur before attack generation in UI setup flow (#5995)
+- fix(redteam): add validation for variable mismatch between prompt templates and injectVar - warns users when prompts use different variables than redteam will inject attacks into, and provides clear guidance on how to fix the configuration (#5995)
 
 ## [0.119.8] - 2025-11-18
 
