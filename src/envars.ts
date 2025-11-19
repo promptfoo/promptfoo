@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
-
 import cliState from './cliState';
+
 import type { EnvOverrides } from './types/env';
 
 dotenv.config({ quiet: true });
@@ -22,6 +22,7 @@ type EnvVars = {
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
+  PROMPTFOO_DISABLE_DEBUG_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
   PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64?: boolean;
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
@@ -91,6 +92,7 @@ type EnvVars = {
   PROMPTFOO_PASS_RATE_THRESHOLD?: number;
   PROMPTFOO_PROMPT_SEPARATOR?: string;
   PROMPTFOO_PYTHON?: string;
+  PROMPTFOO_RUBY?: string;
   PROMPTFOO_REMOTE_API_BASE_URL?: string;
   PROMPTFOO_REMOTE_APP_BASE_URL?: string;
   PROMPTFOO_REMOTE_GENERATION_URL?: string;
@@ -315,11 +317,24 @@ type EnvVars = {
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
 
+  // SharePoint
+  SHAREPOINT_BASE_URL?: string;
+  SHAREPOINT_CERT_PATH?: string;
+  SHAREPOINT_CLIENT_ID?: string;
+  SHAREPOINT_TENANT_ID?: string;
+
   // Slack
   SLACK_BOT_TOKEN?: string;
 
+  // Snowflake
+  SNOWFLAKE_ACCOUNT_IDENTIFIER?: string;
+  SNOWFLAKE_API_KEY?: string;
+
   // Together AI
   TOGETHER_API_KEY?: string;
+
+  // TrueFoundry
+  TRUEFOUNDRY_API_KEY?: string;
 
   // Vertex AI
   VERTEX_API_VERSION?: string;

@@ -1,6 +1,9 @@
-import { AssertionsResult, DEFAULT_TOKENS_USED } from '../../src/assertions/assertionsResult';
+import {
+  AssertionsResult,
+  DEFAULT_TOKENS_USED,
+  GUARDRAIL_BLOCKED_REASON,
+} from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
-
 import type { AssertionSet, GradingResult } from '../../src/types/index';
 
 jest.mock('../../src/envars');
@@ -185,7 +188,7 @@ describe('AssertionsResult', () => {
       const result = await assertionsResult.testResult();
 
       expect(result.pass).toBe(true);
-      expect(result.reason).toBe('Content failed guardrail safety checks');
+      expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
     });
   });
 

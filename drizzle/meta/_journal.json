@@ -148,6 +148,13 @@
       "when": 1757650210456,
       "tag": "0020_skinny_maverick",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1761694564206,
+      "tag": "0021_mysterious_madelyne_pryor",
+      "breakpoints": true
     }
   ]
 }

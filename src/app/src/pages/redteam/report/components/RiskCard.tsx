@@ -181,9 +181,9 @@ const RiskCard = ({
                             {`${Math.round(percentage * 100)}%`}
                           </Typography>
                         ) : percentage >= pluginPassRateThreshold ? (
-                          <CheckCircleIcon className="risk-card-icon-passed" />
+                          <CheckCircleIcon className="risk-card-icon-passed" color="success" />
                         ) : (
-                          <CancelIcon className="risk-card-icon-failed" />
+                          <CancelIcon className="risk-card-icon-failed" color="error" />
                         )}
                         <ArrowForwardIosIcon
                           className="risk-card-expand-icon print-hide"
