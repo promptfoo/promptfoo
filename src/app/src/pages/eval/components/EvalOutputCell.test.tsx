@@ -500,6 +500,50 @@ describe('EvalOutputCell', () => {
 
     expect(screen.getByText('Test output text')).toBeInTheDocument();
   });
+
+  it('displays latency without "(cached)" when output.response.cached is not set or is false', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 123,
+        response: {},
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    const latencyElement = screen.getByText('123 ms');
+    expect(latencyElement).toBeInTheDocument();
+
+    const props2 = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 456,
+        response: { cached: false },
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props2} />);
+    const latencyElement2 = screen.getByText('456 ms');
+    expect(latencyElement2).toBeInTheDocument();
+  });
+
+  it('displays small cached latency values correctly', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 0.1,
+        response: {
+          cached: true,
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const latencyElement = screen.getByText('0 ms (cached)');
+    expect(latencyElement).toBeInTheDocument();
+  });
 });
 
 describe('EvalOutputCell search highlighting boundary conditions', () => {

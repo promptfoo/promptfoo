@@ -11,7 +11,7 @@ import SearchMetadata from '@theme/SearchMetadata';
 import clsx from 'clsx';
 import styles from './styles.module.css';
 
-function BlogListPageMetadata(props: Props): JSX.Element {
+function BlogListPageMetadata(props: Props): React.ReactElement {
   const { metadata } = props;
   const {
     siteConfig: { title: siteTitle },
@@ -29,7 +29,7 @@ function BlogListPageMetadata(props: Props): JSX.Element {
   );
 }
 
-function BlogListPageContent(props: Props): JSX.Element {
+function BlogListPageContent(props: Props): React.ReactElement {
   const { metadata, items, sidebar } = props;
 
   // Determine appropriate title based on pagination
@@ -65,7 +65,7 @@ function BlogListPageContent(props: Props): JSX.Element {
   );
 }
 
-export default function BlogListPage(props: Props): JSX.Element {
+export default function BlogListPage(props: Props): React.ReactElement {
   return (
     <HtmlClassNameProvider
       className={clsx(ThemeClassNames.wrapper.blogPages, ThemeClassNames.page.blogListPage)}

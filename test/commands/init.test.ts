@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 
 import { Command } from 'commander';
+import confirm from '@inquirer/confirm';
 import * as init from '../../src/commands/init';
 import logger from '../../src/logger';
 import { fetchWithProxy } from '../../src/util/fetch/index';
@@ -195,6 +196,79 @@ describe('init command', () => {
 
       expect(examples).toEqual([]);
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Network error'));
+    });
+  });
+
+  describe('handleExampleDownload', () => {
+    describe('when download fails', () => {
+      it('should not show success message when user declines retry', async () => {
+        // Download failed
+        mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+        // User selects not to download another example
+        jest.mocked(confirm).mockResolvedValue(false);
+
+        const loggerSpy = jest.spyOn(logger, 'info');
+
+        const result = await init.handleExampleDownload('.', 'nonexistent-example');
+
+        expect(result).toEqual('nonexistent-example');
+
+        expect(loggerSpy).not.toHaveBeenCalledWith(
+          expect.stringContaining('cd nonexistent-example && promptfoo eval'),
+        );
+      });
+
+      it('should show helpful message when user declines retry', async () => {
+        // Download failed
+        mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+        // User selects not to download another example
+        jest.mocked(confirm).mockResolvedValue(false);
+
+        const loggerSpy = jest.spyOn(logger, 'info');
+
+        const result = await init.handleExampleDownload('.', 'nonexistent-example');
+
+        expect(result).toEqual('nonexistent-example');
+
+        expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('No example downloaded'));
+      });
+
+      it('should not clean up directory when it existed before', async () => {
+        // Download failed
+        mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+        // User selects not to download another example
+        jest.mocked(confirm).mockResolvedValue(false);
+
+        // Directory exists before download
+        jest.spyOn(fs, 'access').mockResolvedValue(undefined);
+        // Mock successful cleanup
+        const rmSpy = jest.spyOn(fs, 'rm').mockResolvedValue(undefined);
+
+        await init.handleExampleDownload('.', 'nonexistent-example');
+
+        // Should not clean up the directory
+        expect(rmSpy).not.toHaveBeenCalledWith('nonexistent-example', {
+          recursive: true,
+          force: true,
+        });
+      });
+
+      it('should clean up directory when it did not exist before', async () => {
+        // Download failed
+        mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+        // User selects not to download another example
+        jest.mocked(confirm).mockResolvedValue(false);
+
+        // Directory doesn't exist before download (fs.access throws)
+        jest.spyOn(fs, 'access').mockRejectedValue(new Error('ENOENT: no such file or directory'));
+        // Mock successful cleanup
+        const rmSpy = jest.spyOn(fs, 'rm').mockResolvedValue(undefined);
+
+        await init.handleExampleDownload('.', 'nonexistent-example');
+
+        // Should clean up the directory
+        expect(rmSpy).toHaveBeenCalledWith('nonexistent-example', { recursive: true, force: true });
+      });
     });
   });
 

@@ -11,7 +11,7 @@ import {
 } from './assertions/index';
 import { getCache } from './cache';
 import cliState from './cliState';
-import { FILE_METADATA_KEY } from './constants';
+import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
@@ -20,8 +20,10 @@ import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { getSessionId } from './redteam/util';
+import { strategyDisplayNames } from './redteam/constants';
+import { getSessionId, isSimbaTestCase } from './redteam/util';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -106,8 +108,20 @@ class ProgressBarManager {
     // Create single progress bar
     this.progressBar = new cliProgress.SingleBar(
       {
-        format:
-          'Evaluating [{bar}] {percentage}% | {value}/{total} (errors: {errors}) | {provider} {prompt} {vars}',
+        format: (options, params, payload) => {
+          const barsize = options.barsize ?? 40;
+          const barCompleteString = options.barCompleteString ?? '=';
+          const barIncompleteString = options.barIncompleteString ?? '-';
+
+          const bar = barCompleteString.substring(0, Math.round(params.progress * barsize));
+          const spaces = barIncompleteString.substring(0, barsize - bar.length);
+          const percentage = Math.round(params.progress * 100);
+
+          // Only show errors if count > 0
+          const errorsText = payload.errors > 0 ? ` (errors: ${payload.errors})` : '';
+
+          return `Evaluating [${bar}${spaces}] ${percentage}% | ${params.value}/${params.total}${errorsText} | ${payload.provider} ${payload.prompt} ${payload.vars}`;
+        },
         hideCursor: true,
         gracefulExit: true,
       },
@@ -162,6 +176,7 @@ class ProgressBarManager {
       provider: 'Grading',
       prompt: `"${prompt.slice(0, 10).replace(/\n/g, ' ')}"`,
       vars: '',
+      errors: 0,
     });
   }
 
@@ -198,8 +213,6 @@ class ProgressBarManager {
     }
   }
 }
-
-export const DEFAULT_MAX_CONCURRENCY = 4;
 
 /**
  * Update token usage metrics with assertion token usage
@@ -270,6 +283,7 @@ export async function runEval({
   evaluateOptions,
   testIdx,
   promptIdx,
+  repeatIndex,
   conversations,
   registers,
   isRedteam,
@@ -359,7 +373,12 @@ export async function runEval({
         // All of these are removed in python and script providers, but every Javascript provider gets them
         logger: logger as unknown as winston.Logger,
         getCache,
+        repeatIndex,
       };
+
+      if (repeatIndex > 0) {
+        callApiContext.bustCache = true;
+      }
 
       // Only add trace context properties if tracing is enabled
       if (traceContext) {
@@ -368,11 +387,35 @@ export async function runEval({
         callApiContext.testCaseId = traceContext.testCaseId;
       }
 
-      response = await activeProvider.callApi(
-        renderedPrompt,
-        callApiContext,
-        abortSignal ? { abortSignal } : undefined,
-      );
+      // Handle Simba providers specially - they use runSimba instead of callApi
+      if (activeProvider.id() === 'promptfoo:redteam:simba') {
+        const simbaProvider = activeProvider as any;
+        if (simbaProvider.runSimba) {
+          // Simba returns EvaluateResult[] directly, so we need to return early
+          const simbaResults: EvaluateResult[] = await simbaProvider.runSimba({
+            prompt: renderedPrompt,
+            context: callApiContext,
+            options: abortSignal ? { abortSignal } : undefined,
+            concurrency: evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
+          });
+
+          // Update results with proper indices for Simba
+          for (const result of simbaResults) {
+            result.promptIdx = promptIdx;
+            result.testIdx = testIdx++;
+          }
+
+          return simbaResults;
+        } else {
+          throw new Error('Simba provider does not have runSimba method');
+        }
+      } else {
+        response = await activeProvider.callApi(
+          renderedPrompt,
+          callApiContext,
+          abortSignal ? { abortSignal } : undefined,
+        );
+      }
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -505,7 +548,7 @@ export async function runEval({
           providerTransformedOutput,
         },
         test,
-        latencyMs: response.cached ? undefined : latencyMs,
+        latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
       });
@@ -1027,6 +1070,10 @@ class Evaluator {
                     testCase.metadata?.tracingEnabled === true ||
                     testSuite.tracing?.enabled === true;
 
+                  logger.debug(
+                    `[Evaluator] Tracing check: testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, testSuite.tracing=${JSON.stringify(testSuite.tracing)}, tracingEnabled=${tracingEnabled}`,
+                  );
+
                   if (tracingEnabled) {
                     return {
                       ...baseTest,
@@ -1047,7 +1094,6 @@ class Evaluator {
                 conversations: this.conversations,
                 registers: this.registers,
                 isRedteam: testSuite.redteam != null,
-                allTests: runEvalOptions,
                 concurrency,
                 abortSignal: options.abortSignal,
               });
@@ -1181,6 +1227,11 @@ class Evaluator {
 
         for (const writer of this.fileWriters) {
           await writer.write(row);
+        }
+
+        if (row.metadata?.simbaSessionId) {
+          this.evalRecord.config.metadata ??= {};
+          this.evalRecord.config.metadata.simbaSessionId = row.metadata.simbaSessionId;
         }
 
         const { promptIdx } = row;
@@ -1409,12 +1460,15 @@ class Evaluator {
       }
     };
 
-    // Separate serial and concurrent eval options
+    // Separate serial, concurrent, and Simba eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
     const concurrentRunEvalOptions: RunEvalOptions[] = [];
+    const simbaRunEvalOptions: RunEvalOptions[] = [];
 
     for (const evalOption of runEvalOptions) {
-      if (evalOption.test.options?.runSerially) {
+      if (isSimbaTestCase(evalOption)) {
+        simbaRunEvalOptions.push(evalOption);
+      } else if (evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
       } else {
         concurrentRunEvalOptions.push(evalOption);
@@ -1444,7 +1498,7 @@ class Evaluator {
             const provider = evalStep.provider.label || evalStep.provider.id();
             const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
             logger.info(
-              `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
+              `[${numComplete}/${runEvalOptions.length}] Running ${provider} with vars: ${vars}`,
             );
           }
           const idx = runEvalOptions.indexOf(evalStep);
@@ -1463,6 +1517,28 @@ class Evaluator {
         processedIndices.add(idx);
         await this.evalRecord.addPrompts(prompts);
       });
+
+      // Finally run Simba evaluations sequentially (they have their own internal concurrency)
+      if (simbaRunEvalOptions.length > 0) {
+        if (progressBarManager) {
+          progressBarManager.complete();
+          progressBarManager.stop();
+        }
+
+        for (const evalStep of simbaRunEvalOptions) {
+          if (isWebUI) {
+            const provider = evalStep.provider.label || evalStep.provider.id();
+            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
+            logger.info(
+              `[${numComplete}/${runEvalOptions.length}] Running ${strategyDisplayNames.simba} ${provider} with vars: ${vars}`,
+            );
+          }
+          checkAbort();
+          const idx = runEvalOptions.indexOf(evalStep);
+          await processEvalStepWithTimeout(evalStep, idx);
+          processedIndices.add(idx);
+        }
+      }
     } catch (err) {
       if (options.abortSignal?.aborted) {
         // User interruption or max duration timeout
@@ -1514,10 +1590,25 @@ class Evaluator {
       ) as Assertion;
       if (compareAssertion) {
         const outputs = resultsToCompare.map((r) => r.response?.output || '');
+
+        // Provide context for grading providers that need originalProvider.
+        // For example, simulated-user requires originalProvider to access the target provider's configuration.
+        const firstResult = resultsToCompare[0];
+        const providerId = firstResult.provider.id;
+        const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
+        const callApiContext = originalProvider
+          ? {
+              originalProvider,
+              prompt: firstResult.prompt,
+              vars: firstResult.testCase.vars || {},
+            }
+          : undefined;
+
         const gradingResults = await runCompareAssertion(
           resultsToCompare[0].testCase,
           compareAssertion,
           outputs,
+          callApiContext,
         );
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];
@@ -1856,9 +1947,12 @@ class Evaluator {
       if (isOtlpReceiverStarted()) {
         // Add a delay to allow providers to finish exporting spans
         logger.debug('[Evaluator] Waiting for span exports to complete...');
-        await sleep(1000);
+        await sleep(3000);
       }
       await stopOtlpReceiverIfNeeded();
+
+      // Clean up Python worker pools to prevent resource leaks
+      await providerRegistry.shutdownAll();
     }
   }
 }

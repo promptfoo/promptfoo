@@ -23,6 +23,7 @@ interface StrategyItemProps {
   onConfigClick: (id: string) => void;
   isDisabled: boolean;
   isRemoteGenerationDisabled: boolean;
+  isConfigured?: boolean;
 }
 
 export function StrategyItem({
@@ -32,33 +33,57 @@ export function StrategyItem({
   onConfigClick,
   isDisabled,
   isRemoteGenerationDisabled,
+  isConfigured = true,
 }: StrategyItemProps) {
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
+  const hasError = isSelected && !isConfigured;
+
+  const handleToggle = () => {
+    // If selecting simba for the first time, auto-open config dialog
+    if (strategy.id === 'simba' && !isSelected && !isDisabled) {
+      onToggle(strategy.id);
+      // Use setTimeout to ensure the toggle completes before opening config
+      setTimeout(() => onConfigClick(strategy.id), 0);
+    } else {
+      onToggle(strategy.id);
+    }
+  };
 
   return (
     <Paper
       elevation={2}
-      onClick={() => onToggle(strategy.id)}
+      onClick={handleToggle}
       sx={(theme) => ({
         height: '100%',
         display: 'flex',
         cursor: isDisabled ? 'not-allowed' : 'pointer',
         userSelect: 'none',
         opacity: isDisabled ? 0.5 : 1,
-        border: isSelected ? `1px solid ${theme.palette.primary.main}` : undefined,
+        border: hasError
+          ? `2px solid ${theme.palette.error.main}`
+          : isSelected
+            ? `1px solid ${theme.palette.primary.main}`
+            : undefined,
         backgroundColor: isDisabled
           ? theme.palette.action.disabledBackground
-          : isSelected
-            ? alpha(theme.palette.primary.main, 0.04)
-            : theme.palette.background.paper,
+          : hasError
+            ? alpha(theme.palette.error.main, 0.08)
+            : isSelected
+              ? alpha(theme.palette.primary.main, 0.04)
+              : theme.palette.background.paper,
         transition: 'all 0.2s ease-in-out',
         '&:hover': {
           backgroundColor: isDisabled
             ? theme.palette.action.disabledBackground
-            : isSelected
-              ? alpha(theme.palette.primary.main, 0.08)
-              : alpha(theme.palette.action.hover, 0.04),
+            : hasError
+              ? alpha(theme.palette.error.main, 0.12)
+              : isSelected
+                ? alpha(theme.palette.primary.main, 0.08)
+                : alpha(theme.palette.action.hover, 0.04),
         },
+        ...(hasError && {
+          boxShadow: `0 2px 8px ${alpha(theme.palette.error.main, 0.15)}`,
+        }),
       })}
     >
       {/* Checkbox container */}
@@ -74,7 +99,7 @@ export function StrategyItem({
           disabled={isDisabled}
           onChange={(e) => {
             e.stopPropagation();
-            onToggle(strategy.id);
+            handleToggle();
           }}
           onClick={(e) => e.stopPropagation()}
           color="primary"
@@ -96,9 +121,13 @@ export function StrategyItem({
               top: 8,
               right: 8,
               opacity: 0.6,
+              color: hasError ? 'error.main' : undefined,
               '&:hover': {
                 opacity: 1,
-                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                backgroundColor: (theme) =>
+                  hasError
+                    ? alpha(theme.palette.error.main, 0.08)
+                    : alpha(theme.palette.primary.main, 0.08),
               },
             }}
           >

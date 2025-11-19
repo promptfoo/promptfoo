@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
-
 import type { ApiProvider, AtomicTestCase, CallApiContextParams, Prompt } from '../../../src/types';
 
 // Mock the graders module at the top level
@@ -650,8 +650,192 @@ describe('RedteamGoatProvider', () => {
     const result = await provider.callApi('test prompt', context);
 
     // Verify storedGraderResult is included in metadata
-    expect(result.metadata?.storedGraderResult).toEqual(mockGraderResult);
+    expect(result.metadata?.storedGraderResult).toMatchObject(mockGraderResult);
+    expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
     expect(result.metadata?.stopReason).toBe('Grader failed');
+  });
+
+  it('should store rendered rubric in assertion.value when grader returns rubric', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+
+    const targetProvider = createMockTargetProvider();
+
+    const mockRenderedRubric = `
+      <system_purpose>Medical chatbot</system_purpose>
+      <policy>Only return NAICS codes if 100% certain</policy>
+      
+      Evaluate if the output violates the given policy...
+    `;
+
+    const mockGraderResult = {
+      pass: false,
+      score: 0,
+      reason: 'Policy violation detected',
+    };
+
+    // Mock grader to return both grade and rubric
+    (mockGrader.getResult as any).mockResolvedValue({
+      grade: mockGraderResult,
+      rubric: mockRenderedRubric,
+    });
+
+    const testConfig = {
+      vars: {},
+      assert: [
+        {
+          type: 'promptfoo:redteam:policy',
+          metric: 'PolicyViolation:401a805692b3',
+        },
+      ],
+      metadata: { pluginId: 'policy' },
+    } as AtomicTestCase;
+
+    const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
+
+    const result = await provider.callApi('test prompt', context);
+
+    // Verify storedGraderResult includes the rendered rubric in assertion.value
+    expect(result.metadata?.storedGraderResult).toBeDefined();
+    expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
+    expect(result.metadata?.storedGraderResult?.assertion?.value).toBe(mockRenderedRubric);
+    expect(result.metadata?.storedGraderResult?.assertion?.type).toBe('promptfoo:redteam:policy');
+    expect(result.metadata?.stopReason).toBe('Grader failed');
+  });
+
+  it('should store rubric with grade.assertion when grader returns assertion with existing value', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+
+    const targetProvider = createMockTargetProvider();
+
+    const mockRenderedRubric = '<rendered_rubric>Evaluation criteria</rendered_rubric>';
+    const mockGraderResult = {
+      pass: false,
+      score: 0,
+      reason: 'Test failed',
+      assertion: {
+        type: 'promptfoo:redteam:policy' as const,
+        metric: 'PolicyViolation:test',
+        value: 'old value',
+      },
+    };
+
+    // Mock grader returning grade with assertion
+    (mockGrader.getResult as any).mockResolvedValue({
+      grade: mockGraderResult,
+      rubric: mockRenderedRubric,
+    });
+
+    const testConfig = {
+      vars: {},
+      assert: [
+        {
+          type: 'promptfoo:redteam:policy',
+          metric: 'PolicyViolation:test',
+        },
+      ],
+      metadata: { pluginId: 'policy' },
+    } as AtomicTestCase;
+
+    const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
+
+    const result = await provider.callApi('test prompt', context);
+
+    // Verify that the rubric overrides the old value
+    expect(result.metadata?.storedGraderResult?.assertion?.value).toBe(mockRenderedRubric);
+    expect(result.metadata?.storedGraderResult?.assertion?.type).toBe('promptfoo:redteam:policy');
+    expect(result.metadata?.storedGraderResult?.assertion?.metric).toBe('PolicyViolation:test');
+  });
+
+  it('should use assertion from test config when grade.assertion is undefined', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+
+    const targetProvider = createMockTargetProvider();
+
+    const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+    const mockGraderResult = {
+      pass: false,
+      score: 0,
+      reason: 'Test failed',
+      // No assertion field
+    };
+
+    (mockGrader.getResult as any).mockResolvedValue({
+      grade: mockGraderResult,
+      rubric: mockRenderedRubric,
+    });
+
+    const testConfig = {
+      vars: {},
+      assert: [
+        {
+          type: 'promptfoo:redteam:harmful',
+          metric: 'Harmful',
+        },
+      ],
+      metadata: { pluginId: 'harmful' },
+    } as AtomicTestCase;
+
+    const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
+
+    const result = await provider.callApi('test prompt', context);
+
+    // Should use assertion from test config with rubric as value
+    expect(result.metadata?.storedGraderResult?.assertion?.value).toBe(mockRenderedRubric);
+    expect(result.metadata?.storedGraderResult?.assertion?.type).toBe('promptfoo:redteam:harmful');
+    expect(result.metadata?.storedGraderResult?.assertion?.metric).toBe('Harmful');
+  });
+
+  it('should not store assertion when assertToUse is AssertionSet', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+
+    const targetProvider = createMockTargetProvider();
+
+    const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+    const mockGraderResult = {
+      pass: false,
+      score: 0,
+      reason: 'Test failed',
+    };
+
+    (mockGrader.getResult as any).mockResolvedValue({
+      grade: mockGraderResult,
+      rubric: mockRenderedRubric,
+    });
+
+    const testConfig = {
+      vars: {},
+      assert: [
+        {
+          type: 'assert-set' as const,
+          assert: [
+            { type: 'contains', value: 'test' },
+            { type: 'contains', value: 'another' },
+          ],
+        },
+      ],
+      metadata: { pluginId: 'policy' },
+    } as AtomicTestCase;
+
+    const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
+
+    const result = await provider.callApi('test prompt', context);
+
+    // Should not create assertion from AssertionSet
+    expect(result.metadata?.storedGraderResult?.assertion).toBeUndefined();
+    expect(result.metadata?.storedGraderResult?.pass).toBe(false);
+    expect(result.metadata?.storedGraderResult?.score).toBe(0);
   });
 
   it('should store grader result even when continueAfterSuccess is true', async () => {
@@ -708,7 +892,8 @@ describe('RedteamGoatProvider', () => {
     const result = await provider.callApi('test prompt', context);
 
     // Should continue to max turns and store the LAST grader result
-    expect(result.metadata?.storedGraderResult).toEqual(secondGraderResult);
+    expect(result.metadata?.storedGraderResult).toMatchObject(secondGraderResult);
+    expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
     expect(result.metadata?.stopReason).toBe('Max turns reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     // The successful attack should be from the first turn
