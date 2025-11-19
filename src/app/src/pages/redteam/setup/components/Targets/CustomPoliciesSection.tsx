@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import { useApiHealth } from '@app/hooks/useApiHealth';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
@@ -126,12 +127,12 @@ function CustomToolbar({
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const toast = useToast();
+  const { recordEvent } = useTelemetry();
   const apiRef = useGridApiRef();
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
   const [isGeneratingPolicies, setIsGeneratingPolicies] = useState(false);
   const [suggestedPolicies, setSuggestedPolicies] = useState<PolicyObject[]>([]);
-  const [hasAttemptedGeneration, setHasAttemptedGeneration] = useState(false);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
   const isGeneratingPoliciesRef = useRef(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -197,10 +198,6 @@ export const CustomPoliciesSection = () => {
       };
     });
   }, [policyPlugins, policyNames]);
-
-  // Auto-generate only if we have 5 or fewer policies
-  const AUTO_GENERATION_THRESHOLD = 5;
-  const shouldAutoGenerate = rows.length <= AUTO_GENERATION_THRESHOLD;
 
   // Validate policy text uniqueness
   const validatePolicyText = useCallback(
@@ -315,6 +312,11 @@ export const CustomPoliciesSection = () => {
         },
       ];
       updateConfig('plugins', [...otherPlugins, ...newPolicies]);
+      recordEvent('redteam_policy_added', {
+        source: 'manual',
+        policy_name: trimmedName,
+        policy_text: trimmedText,
+      });
       toast.showToast('Policy added successfully', 'success');
     } else {
       // Update existing policy
@@ -400,20 +402,8 @@ export const CustomPoliciesSection = () => {
       return;
     }
 
-    // Reevaluate threshold at call time - don't generate if we now have too many policies
-    const AUTO_GENERATION_THRESHOLD = 5;
-    const currentShouldAutoGenerate = rows.length <= AUTO_GENERATION_THRESHOLD;
-
-    // Only auto-generate if we're still under the threshold
-    // Manual generation (button click) can bypass this for explicit user action
-    if (!currentShouldAutoGenerate && hasAttemptedGeneration) {
-      // Already generated once and now we have too many policies - don't auto-regenerate
-      return;
-    }
-
     isGeneratingPoliciesRef.current = true;
     setIsGeneratingPolicies(true);
-    setHasAttemptedGeneration(true);
     try {
       // Get existing policy texts to avoid duplicates (both active and suggested)
       const existingPolicies = [
@@ -421,7 +411,7 @@ export const CustomPoliciesSection = () => {
         ...suggestedPolicies.map((p) => p.text || ''),
       ];
 
-      const response = await callApi('/v1/redteam/generate-policies', {
+      const response = await callApi('/redteam/generate-custom-policy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -461,25 +451,7 @@ export const CustomPoliciesSection = () => {
       isGeneratingPoliciesRef.current = false;
       setIsGeneratingPolicies(false);
     }
-  }, [config.applicationDefinition, rows, suggestedPolicies, hasAttemptedGeneration]);
-
-  // Auto-generate policies on component mount if purpose exists and we have few policies
-  useEffect(() => {
-    if (
-      canGeneratePolicies &&
-      shouldAutoGenerate &&
-      !hasAttemptedGeneration &&
-      suggestedPolicies.length === 0
-    ) {
-      handleGeneratePolicies();
-    }
-  }, [
-    canGeneratePolicies,
-    shouldAutoGenerate,
-    hasAttemptedGeneration,
-    suggestedPolicies.length,
-    handleGeneratePolicies,
-  ]);
+  }, [config.applicationDefinition, rows, suggestedPolicies]);
 
   const handleAddSuggestedPolicy = useCallback(
     (policy: PolicyObject) => {
@@ -512,6 +484,11 @@ export const CustomPoliciesSection = () => {
       // Remove from suggested policies
       setSuggestedPolicies((prev) => prev.filter((p) => p.id !== policy.id));
 
+      recordEvent('redteam_policy_added', {
+        source: 'suggestion',
+        policy_name: policy.name,
+        policy_text: policy.text,
+      });
       toast.showToast('Policy added successfully', 'success');
     },
     [config.plugins, policyPlugins, updateConfig, toast],
@@ -569,6 +546,10 @@ export const CustomPoliciesSection = () => {
           ];
 
           updateConfig('plugins', [...otherPlugins, ...allPolicies]);
+
+          recordEvent('redteam_policies_added_csv', {
+            count: newPolicies.length,
+          });
 
           toast.showToast(
             `Successfully imported ${newPolicies.length} policies from CSV`,
