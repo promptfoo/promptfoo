@@ -2,6 +2,7 @@ import AccountBalanceOutlined from '@mui/icons-material/AccountBalanceOutlined';
 import LocalHospitalOutlined from '@mui/icons-material/LocalHospitalOutlined';
 import LocalPharmacyOutlined from '@mui/icons-material/LocalPharmacyOutlined';
 import SecurityOutlined from '@mui/icons-material/SecurityOutlined';
+import ShoppingCartOutlined from '@mui/icons-material/ShoppingCartOutlined';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { VerticalSuite } from './VerticalSuiteCard';
 
@@ -90,6 +91,24 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       {
         name: 'Reputation & Decision Quality',
         plugins: ['financial:defamation', 'financial:sycophancy'] as Plugin[],
+      },
+    ],
+  },
+  {
+    id: 'ecommerce',
+    name: 'E-commerce',
+    icon: <ShoppingCartOutlined />,
+    description:
+      'PCI DSS compliance, payment data security, and customer privacy for online retail.',
+    longDescription:
+      'Targeted testing for e-commerce AI systems to ensure compliance with PCI DSS and protect sensitive customer data. Tests focus on preventing the extraction of credit card numbers, CVVs, bank account details, and other payment information. It also covers vulnerabilities related to payment token exposure and unauthorized access to financial data.',
+    color: 'primary',
+    complianceFrameworks: ['PCI DSS'],
+    plugins: ['ecommerce:pci-dss'] as Plugin[],
+    pluginGroups: [
+      {
+        name: 'Payment Card Industry (PCI) Compliance',
+        plugins: ['ecommerce:pci-dss'] as Plugin[],
       },
     ],
   },
