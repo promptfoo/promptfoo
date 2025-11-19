@@ -628,10 +628,55 @@ export function isRunningUnderNpx(): boolean {
  * @param tools - The tools configuration object or array to process.
  * @param vars - Variables to use for rendering.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
+ * @throws {Error} If the loaded tools are in an invalid format (e.g., Python/JS files)
  */
 export function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, string | object>,
 ): any {
-  return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
+  const loaded = maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
+
+  // Validate the loaded result - tools must be an array or object, not a string
+  if (loaded !== undefined && loaded !== null && typeof loaded === 'string') {
+    // Case 1: Unresolved file:// reference with function name
+    // (e.g., 'file://tool.py:get_tools' preserved unchanged by maybeLoadFromExternalFile)
+    if (loaded.startsWith('file://')) {
+      const filePath = loaded;
+      // Check for Python/JS extensions
+      if (/\.(py|js|ts|mjs|cjs)(?::|$)/.test(filePath)) {
+        throw new Error(
+          `Cannot load tools from ${filePath}\n` +
+            `Loading tool definitions from Python/JavaScript files is not currently supported. ` +
+            `Please use JSON or YAML format instead:\n` +
+            `  tools: file://tools.yaml\n` +
+            `  tools: file://tools.json`,
+        );
+      }
+      // Other unresolved file:// reference
+      throw new Error(
+        `Failed to load tools from ${filePath}\n` +
+          `If using file://, ensure the file exists and contains valid JSON or YAML tool definitions.`,
+      );
+    }
+
+    // Case 2: Raw file content loaded (e.g., Python code read as text)
+    // Heuristic: looks like Python code
+    if (loaded.includes('def ') || loaded.includes('import ')) {
+      throw new Error(
+        `Invalid tools configuration: file appears to contain Python code.\n` +
+          `Loading tool definitions from Python files is not currently supported. ` +
+          `Please use JSON or YAML format instead:\n` +
+          `  tools: file://tools.yaml\n` +
+          `  tools: file://tools.json`,
+      );
+    }
+
+    // Case 3: Some other invalid string content
+    throw new Error(
+      `Invalid tools configuration: expected an array or object, but got a string.\n` +
+        `If using file://, ensure the file contains valid JSON or YAML tool definitions.`,
+    );
+  }
+
+  return loaded;
 }
