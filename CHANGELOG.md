@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- fix(redteam)!: require explicit basic strategy selection - empty strategies array now generates 0 tests instead of defaulting to basic tests, fixing confusing UI behavior where unchecking all strategies still ran tests
+
 ## [0.119.7] - 2025-11-17
 
 ### Added

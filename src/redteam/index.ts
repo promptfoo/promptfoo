@@ -490,9 +490,9 @@ export function calculateTotalTests(
   ) {
     return {
       effectiveStrategyCount: 0,
-      includeBasicTests: strategies.length === 0 ? true : includeBasicTests,
+      includeBasicTests: strategies.length === 0 ? false : includeBasicTests,
       totalPluginTests,
-      totalTests: includeBasicTests ? totalPluginTests : 0,
+      totalTests: strategies.length === 0 ? 0 : includeBasicTests ? totalPluginTests : 0,
     };
   }
 

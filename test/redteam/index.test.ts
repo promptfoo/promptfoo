@@ -211,7 +211,7 @@ describe('synthesize', () => {
           { id: 'plugin2', numTests: 3 },
         ],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'basic' }],
         targetLabels: ['test-provider'],
       });
 
@@ -733,7 +733,7 @@ describe('synthesize', () => {
         numTests: 1,
         plugins: [failingPlugin, passingPlugin],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'basic' }],
         targetLabels: ['test-provider'],
       });
 
@@ -818,7 +818,7 @@ describe('synthesize', () => {
         prompts: ['Test prompt'],
         provider: mockProvider,
         purpose: 'Test purpose',
-        strategies: [],
+        strategies: [{ id: 'basic' }],
         injectVar: 'prompt',
         language: 'en',
         numTests: 5,
@@ -1024,7 +1024,7 @@ describe('synthesize', () => {
         numTests: 2,
         plugins: [{ id: 'bias:gender', numTests: 2 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'basic' }],
         targetLabels: ['test-provider'],
       });
 
@@ -1187,10 +1187,10 @@ describe('calculateTotalTests', () => {
   it('should calculate basic test counts with no strategies', () => {
     const result = calculateTotalTests(mockPlugins, []);
     expect(result).toEqual({
-      totalTests: 5,
+      totalTests: 0,
       totalPluginTests: 5,
       effectiveStrategyCount: 0,
-      includeBasicTests: true,
+      includeBasicTests: false,
     });
   });
 
@@ -1395,11 +1395,11 @@ describe('Language configuration', () => {
         { id: 'plugin1', numTests: 2 },
         { id: 'plugin2', numTests: 3 },
       ];
-      const result = calculateTotalTests(plugins, [], 'en');
+      const result = calculateTotalTests(plugins, [{ id: 'basic' }], 'en');
       expect(result).toEqual({
         totalTests: 5,
         totalPluginTests: 5,
-        effectiveStrategyCount: 0,
+        effectiveStrategyCount: 1,
         includeBasicTests: true,
       });
     });
@@ -1410,11 +1410,11 @@ describe('Language configuration', () => {
         { id: 'plugin2', numTests: 3 },
       ];
       // With 3 languages, we expect 5 tests * 3 = 15 tests
-      const result = calculateTotalTests(plugins, [], ['en', 'fr', 'de']);
+      const result = calculateTotalTests(plugins, [{ id: 'basic' }], ['en', 'fr', 'de']);
       expect(result).toEqual({
         totalTests: 15,
         totalPluginTests: 15,
-        effectiveStrategyCount: 0,
+        effectiveStrategyCount: 1,
         includeBasicTests: true,
       });
     });
@@ -1480,7 +1480,7 @@ describe('Language configuration', () => {
         numTests: 2,
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'basic' }],
         targetLabels: ['test-provider'],
       });
 
@@ -1494,7 +1494,7 @@ describe('Language configuration', () => {
         numTests: 2,
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'basic' }],
         targetLabels: ['test-provider'],
       });
 
@@ -1564,7 +1564,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'basic' }],
         targetLabels: ['test-provider'],
       });
 
@@ -1591,7 +1591,7 @@ describe('Language configuration', () => {
           },
         ],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'basic' }],
         targetLabels: ['test-provider'],
       });
 
@@ -1609,7 +1609,7 @@ describe('Language configuration', () => {
         numTests: 2,
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'basic' }],
         targetLabels: ['test-provider'],
       });
 
