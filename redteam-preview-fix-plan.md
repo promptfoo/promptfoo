@@ -53,34 +53,86 @@
 - `src/assertions/redteam.ts` - Backend safety net implementation with metadata preservation
 - `test/assertions/redteam.test.ts` - Unit tests for the fix (5 tests total)
 
-## Limitations & Future Work
+## Root Cause Analysis (Updated)
 
-### What This Fix Does
+After thorough code analysis, the issue is better understood:
+
+### What Does NOT Cause This Error
+
+**The "Test Target" button in the UI does NOT cause this issue:**
+- Located in `src/app/src/pages/redteam/setup/components/Targets/HttpEndpointConfiguration.tsx`
+- Calls `/providers/test` endpoint
+- Server handler in `src/server/routes/providers.ts` (lines 41-80)
+- Uses `testHTTPProviderConnectivity` which creates a TestSuite with **NO assertions**
+- This flow works correctly and is not the source of Issue #5995
+
+### What DOES Cause This Error
+
+**Running a full redteam evaluation with misconfigured prompts:**
+
+1. User creates config with `prompts: ['{{prompt}}']` and redteam assertions
+2. User runs evaluation via:
+   - CLI: `promptfoo eval -c config.yaml`
+   - UI: "Run Now" button in Review.tsx (calls `/redteam/run`)
+3. The `{{prompt}}` template variable is never filled in because:
+   - No test case generation occurred, OR
+   - The `vars` don't contain a value for `prompt`
+4. Evaluation runs with empty/undefined prompt
+5. Redteam grader fails because it needs actual prompt content for grading
+
+**Code flow:**
+- Review.tsx `handleRunWithSettings` (line 376) → `/redteam/run`
+- Server: `src/server/routes/redteam.ts` (lines 150-231)
+- Calls `doRedteamRun` in `src/redteam/shared.ts`
+- Eventually reaches `handleRedteam` in `src/assertions/redteam.ts`
+
+### Key Files Summary
+
+| Component | File | Lines | Purpose |
+|-----------|------|-------|---------|
+| Test Target (OK) | `HttpEndpointConfiguration.tsx` | 151-244 | Uses `/providers/test` - NO assertions |
+| Run Now (ERROR) | `Review.tsx` | 312-440 | Calls `/redteam/run` with full eval |
+| Backend Handler | `src/server/routes/redteam.ts` | 150-231 | Handles `/redteam/run` |
+| Redteam Logic | `src/redteam/shared.ts` | 18-135 | Generates tests + runs eval |
+| Error Location | `src/assertions/redteam.ts` | 46-57 | Now handles missing prompt gracefully |
+
+## What This Fix Does
 
 - **Prevents crash**: The invariant error no longer crashes the evaluation
 - **Provides helpful message**: Users see a clear explanation of what went wrong
 - **Preserves metadata**: Plugin/strategy info is retained for reporting and UI filtering
 
-### What This Fix Does NOT Do
+## Assessment
 
-1. **Does not allow target preview to succeed**: The UI's "Test Target" flow still sees a failed test (pass=false), so the target cannot be marked as "tested" and the user may not be able to proceed in the setup workflow.
+**This fix is appropriate and complete for the reported issue.**
 
-2. **Does not solve the root cause**: The original expectation was to validate HTTP connectivity before attack generation. This fix is a safety net, not a complete solution.
+The user in Issue #5995 was running `promptfoo redteam run` (or clicking "Run Now") with a config that had:
+- Template prompts: `prompts: ['{{prompt}}']`
+- Redteam plugins that generate assertions
+- But test generation failed (due to API key issues or similar)
 
-### Recommended Future Work
+When test generation fails, no actual prompts are created, so the assertions run with empty prompts and crash. The backend safety net we implemented correctly handles this case by:
+1. Returning a failing grade instead of crashing
+2. Providing a helpful error message
+3. Preserving metadata for UI display
 
-To fully resolve Issue #5995, the frontend needs changes to either:
+### No Frontend Changes Needed
 
-**(a) Avoid scheduling redteam assertions during preview calls:**
-- Detect when prompts are only templates (match `/\{\{.*\}\}/`)
-- Use `/providers/test` endpoint for connectivity testing without assertions
-- Only attach assertions after actual test case generation
+The "Test Target" button already works correctly because it:
+- Uses a separate endpoint (`/providers/test`)
+- Does not attach any assertions
+- Only tests HTTP connectivity
 
-**(b) Inject a placeholder prompt for preview runs:**
-- When preview is requested with template prompts, inject a static placeholder like `'Preview probe for target validation'`
-- This allows the assertion to run and potentially pass (if the target responds reasonably)
+The issue is with running full evaluations before test cases are properly generated - which is now handled gracefully by the backend fix.
 
-**Implementation location**: `src/app/src/pages/redteam/setup/components/` - specifically wherever the test/preview button triggers an evaluation
+### Potential Future Enhancement
+
+If desired, validation could be added in `src/redteam/shared.ts` to:
+- Check if test generation succeeded before running eval
+- Provide early warning if prompts are still templates
+- Skip eval entirely if no valid test cases were generated
+
+But this is not required to fix Issue #5995 - the current backend safety net is sufficient.
 
 ## Demo Path
 
