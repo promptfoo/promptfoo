@@ -20,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(code-scan): in `code-scans run`, don't log anything to stdout except json results when --json is used—fixes GitHub action (#6248)
 - fix(code-scan): update default API host to https://api.promptfoo.app to fix websocket connection issues (#6247)
 
+### Changed
+
+- chore(deps): replace node-cache with lru-cache for standalone eval caching to reduce dependencies and add memory protection with max size limits
+
 ## [0.119.7] - 2025-11-17
 
 ### Added
