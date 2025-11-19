@@ -491,7 +491,22 @@ export const CustomPoliciesSection = () => {
       });
       toast.showToast('Policy added successfully', 'success');
     },
-    [config.plugins, policyPlugins, updateConfig, toast],
+    [config.plugins, policyPlugins, updateConfig, toast, recordEvent],
+  );
+
+  const handleRemoveSuggestedPolicy = useCallback(
+    (policy: PolicyObject) => {
+      // Remove from suggested policies
+      setSuggestedPolicies((prev) => prev.filter((p) => p.id !== policy.id));
+
+      // Log to PostHog
+      recordEvent('redteam_policy_dismissed', {
+        policy_name: policy.name,
+        policy_text: policy.text,
+        application_description: JSON.stringify(config.applicationDefinition || {}),
+      });
+    },
+    [recordEvent, config.applicationDefinition],
   );
 
   const handleCsvUpload = useCallback(
@@ -707,6 +722,7 @@ export const CustomPoliciesSection = () => {
             suggestedPolicies={suggestedPolicies}
             onGeneratePolicies={handleGeneratePolicies}
             onAddSuggestedPolicy={handleAddSuggestedPolicy}
+            onRemoveSuggestedPolicy={handleRemoveSuggestedPolicy}
           />
         )}
       </Box>

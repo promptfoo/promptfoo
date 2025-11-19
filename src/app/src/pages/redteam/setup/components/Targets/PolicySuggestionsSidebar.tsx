@@ -2,12 +2,15 @@ import React from 'react';
 
 import AddIcon from '@mui/icons-material/Add';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import ThumbDownIcon from '@mui/icons-material/ThumbDown';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 import type { PolicyObject } from '@promptfoo/redteam/types';
@@ -17,6 +20,7 @@ type PolicySuggestionsSidebarProps = {
   suggestedPolicies: PolicyObject[];
   onGeneratePolicies: () => void;
   onAddSuggestedPolicy: (policy: PolicyObject) => void;
+  onRemoveSuggestedPolicy: (policy: PolicyObject) => void;
 };
 
 export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> = ({
@@ -24,6 +28,7 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
   suggestedPolicies,
   onGeneratePolicies,
   onAddSuggestedPolicy,
+  onRemoveSuggestedPolicy,
 }) => {
   return (
     <Paper
@@ -106,10 +111,8 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
               <Card
                 key={index}
                 variant="outlined"
-                onClick={() => onAddSuggestedPolicy(policy)}
                 sx={{
                   backgroundColor: 'background.default',
-                  cursor: 'pointer',
                   '&:hover': {
                     boxShadow: 2,
                     borderColor: 'primary.main',
@@ -127,9 +130,17 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
                       sx={{
                         mt: 0.25,
                         flexShrink: 0,
+                        cursor: 'pointer',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddSuggestedPolicy(policy);
                       }}
                     />
-                    <Box sx={{ flex: 1 }}>
+                    <Box
+                      sx={{ flex: 1, cursor: 'pointer' }}
+                      onClick={() => onAddSuggestedPolicy(policy)}
+                    >
                       <Typography
                         variant="subtitle2"
                         fontWeight={600}
@@ -142,6 +153,25 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
                         {policy.text}
                       </Typography>
                     </Box>
+                    <Tooltip title="Dismiss suggestion">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveSuggestedPolicy(policy);
+                        }}
+                        sx={{
+                          flexShrink: 0,
+                          color: 'text.secondary',
+                          '&:hover': {
+                            color: 'error.main',
+                            backgroundColor: 'error.50',
+                          },
+                        }}
+                      >
+                        <ThumbDownIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
                 </CardContent>
               </Card>
