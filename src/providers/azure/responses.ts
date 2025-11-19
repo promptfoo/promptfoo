@@ -54,11 +54,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     return !this.isReasoningModel();
   }
 
-  getAzureResponsesBody(
+  async getAzureResponsesBody(
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
-  ): Record<string, any> {
+  ): Promise<Record<string, any>> {
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -138,7 +138,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(config.tools
-        ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
+        ? { tools: await maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
@@ -201,7 +201,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       }
     }
 
-    const body = this.getAzureResponsesBody(prompt, context, callApiOptions);
+    const body = await this.getAzureResponsesBody(prompt, context, callApiOptions);
 
     // Calculate timeout for deep research models
     const isDeepResearchModel = this.deploymentName.includes('deep-research');

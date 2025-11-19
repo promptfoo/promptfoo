@@ -5,12 +5,12 @@ import invariant from '../util/invariant';
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import type { AssertionParams, GradingResult } from '../types/index';
 
-export const handleIsValidOpenAiToolsCall = ({
+export const handleIsValidOpenAiToolsCall = async ({
   assertion,
   output,
   provider,
   test,
-}: AssertionParams): GradingResult => {
+}: AssertionParams): Promise<GradingResult> => {
   // Handle MCP tool outputs from Responses API
   const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
 
@@ -66,7 +66,7 @@ export const handleIsValidOpenAiToolsCall = ({
 
   let tools = (provider as OpenAiChatCompletionProvider).config.tools;
   if (tools) {
-    tools = maybeLoadToolsFromExternalFile(tools, test.vars);
+    tools = await maybeLoadToolsFromExternalFile(tools, test.vars);
   }
   invariant(
     tools,

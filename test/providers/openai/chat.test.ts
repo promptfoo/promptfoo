@@ -1434,7 +1434,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       enableCache();
     });
 
-    it('should identify reasoning models correctly', () => {
+    it('should identify reasoning models correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
@@ -1450,7 +1450,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o4MiniProvider['isReasoningModel']()).toBe(true);
     });
 
-    it('should handle temperature support correctly', () => {
+    it('should handle temperature support correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
@@ -1595,7 +1595,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         } as any,
       });
 
-      const { body: o4Body } = o4Provider.getOpenAiBody('Test prompt');
+      const { body: o4Body } = await o4Provider.getOpenAiBody('Test prompt');
       expect(o4Body.reasoning_effort).toBe('medium');
       expect(o4Body.service_tier).toBe('premium');
     });
@@ -1623,7 +1623,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         } as any,
       });
 
-      const { body } = provider.getOpenAiBody('Test prompt');
+      const { body } = await provider.getOpenAiBody('Test prompt');
       expect(body.user).toBe('user-123');
       expect(body.metadata).toEqual({
         project: 'test-project',
@@ -1653,7 +1653,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         } as any,
       });
 
-      const { body } = o1Provider.getOpenAiBody('Test prompt');
+      const { body } = await o1Provider.getOpenAiBody('Test prompt');
       expect(body.reasoning).toEqual({
         effort: 'high',
         summary: 'detailed',
@@ -2093,19 +2093,19 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       await provider.callApi('Test prompt');
     });
 
-    it('should log generic message for unknown chat models', () => {
+    it('should log generic message for unknown chat models', async () => {
       new OpenAiChatCompletionProvider('unknown-model');
 
       expect(mockLogger.debug).toHaveBeenCalledWith('Using unknown chat model: unknown-model');
     });
 
-    it('should not log unknown model message for known OpenAI models', () => {
+    it('should not log unknown model message for known OpenAI models', async () => {
       new OpenAiChatCompletionProvider('gpt-4o-mini');
 
       expect(mockLogger.debug).not.toHaveBeenCalledWith(expect.stringContaining('unknown'));
     });
 
-    it('should support legacy model IDs', () => {
+    it('should support legacy model IDs', async () => {
       // Test legacy GPT-4 models
       const gpt4LegacyProvider = new OpenAiChatCompletionProvider('gpt-4-0314');
       expect(gpt4LegacyProvider.modelName).toBe('gpt-4-0314');

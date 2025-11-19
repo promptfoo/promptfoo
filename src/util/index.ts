@@ -29,10 +29,11 @@ import {
 import invariant from '../util/invariant';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { convertTestResultsToTableRow } from './exportToFile/index';
-import { runPythonSync } from '../python/pythonUtils';
-import { loadJavaScriptFunctionSync, maybeLoadFromExternalFile } from './file';
+import { runPython } from '../python/pythonUtils';
+import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
+import cliState from '../cliState';
 import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
 
@@ -634,10 +635,10 @@ export function isRunningUnderNpx(): boolean {
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
  * @throws {Error} If the loaded tools are in an invalid format
  */
-export function maybeLoadToolsFromExternalFile(
+export async function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, string | object>,
-): any {
+): Promise<any> {
   const rendered = renderVarsInObject(tools, vars);
 
   // Check if this is a Python/JS file reference with function name
@@ -651,11 +652,23 @@ export function maybeLoadToolsFromExternalFile(
         let toolDefinitions: any;
 
         if (filePath.endsWith('.py')) {
-          // Use synchronous Python execution
-          toolDefinitions = runPythonSync(filePath, functionName);
+          // Use existing async Python execution
+          toolDefinitions = await runPython(filePath, functionName, []);
         } else {
-          // Use synchronous JavaScript execution
-          toolDefinitions = loadJavaScriptFunctionSync(filePath, functionName);
+          // Use dynamic import for JavaScript/TypeScript files
+          const absPath = path.resolve(cliState.basePath || '', filePath);
+          const module = await importModule(absPath);
+          const fn = module[functionName] || module.default?.[functionName];
+
+          if (typeof fn !== 'function') {
+            throw new Error(
+              `Function "${functionName}" not found in ${filePath}. ` +
+                `Available exports: ${Object.keys(module).join(', ')}`,
+            );
+          }
+
+          // Call the function - handle both sync and async functions
+          toolDefinitions = await Promise.resolve(fn());
         }
 
         // Validate the result
