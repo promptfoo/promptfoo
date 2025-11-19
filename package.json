@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.119.6",
+  "version": "0.119.7",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -26,7 +26,8 @@
   "files": [
     "dist",
     "!dist/test",
-    "!dist/src/__mocks__"
+    "!dist/src/__mocks__",
+    "!dist/**/*.map"
   ],
   "engines": {
     "node": ">=20.0.0"
@@ -107,7 +108,7 @@
     "@adaline/together-ai": "1.5.1",
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.7.2",
-    "@anthropic-ai/claude-agent-sdk": "^0.1.36",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.42",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.927.0",
     "@aws-sdk/client-bedrock-runtime": "^3.927.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.927.0",
@@ -183,7 +184,7 @@
     "@adaline/together-ai": "1.5.1",
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.7.2",
-    "@anthropic-ai/claude-agent-sdk": "^0.1.36",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.42",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.927.0",
     "@aws-sdk/client-bedrock-runtime": "^3.927.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.927.0",
@@ -223,7 +224,7 @@
     "xlsx": "^0.18.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.68.0",
+    "@anthropic-ai/sdk": "^0.69.0",
     "@apidevtools/json-schema-ref-parser": "^12.0.2",
     "@googleapis/sheets": "^12.0.0",
     "gcp-metadata": "^8.1.2",
