@@ -273,7 +273,6 @@
     "lru-cache": "^11.2.2",
     "mathjs": "^14.9.1",
     "minimatch": "^10.1.1",
-    "node-cache": "^5.1.2",
     "nunjucks": "^3.2.4",
     "openai": "^6.9.0",
     "opener": "^1.5.2",
