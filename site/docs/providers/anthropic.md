@@ -436,147 +436,63 @@ See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/bui
 
 ### Structured Outputs
 
-Structured outputs ensure Claude's responses follow a specific schema, guaranteeing valid, parseable output. Use **JSON outputs** (`output_format`) for structured data responses, or **strict tool use** (`strict: true`) for guaranteed schema validation on tool names and inputs.
-
-:::note
-Structured outputs are available for Claude Sonnet 4.5 and Claude Opus 4.1. The `structured-outputs-2025-09-17` beta header is automatically added when using these features.
-:::
-
-#### When to Use Structured Outputs
-
-Choose the right mode for your use case:
-
-| Use JSON outputs when                           | Use strict tool use when                                    |
-| ----------------------------------------------- | ----------------------------------------------------------- |
-| You need Claude's response in a specific format | You need validated parameters and tool names for tool calls |
-| Extracting data from images or text             | Building agentic workflows                                  |
-| Generating structured reports                   | Ensuring type-safe function calls                           |
-| Formatting API responses                        | Complex tools with many/nested properties                   |
+Structured outputs constrain Claude's responses to a JSON schema. Available for Claude Sonnet 4.5 and Claude Opus 4.1.
 
 #### JSON Outputs
 
-Configure a JSON schema to constrain Claude's responses:
+Add `output_format` to get structured responses:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
-      max_tokens: 2048
       output_format:
         type: json_schema
         schema:
           type: object
           properties:
-            customer_name:
+            name:
               type: string
-            customer_email:
+            email:
               type: string
-            plan_interest:
-              type: string
-            demo_requested:
-              type: boolean
           required:
-            - customer_name
-            - customer_email
+            - name
+            - email
           additionalProperties: false
 ```
 
-**Advanced features:**
-
-- **External schemas**: Load schemas from files using `file://` prefix:
-
-  ```yaml
-  output_format:
-    type: json_schema
-    schema: file://path/to/schema.json
-  ```
-
-- **Variable rendering**: Use `{{variables}}` in schema values for dynamic configuration:
-  ```yaml
-  output_format:
-    type: json_schema
-    schema:
-      type: object
-      properties:
-        result:
-          type: string
-          description: 'Extract {{field_description}}'
-  ```
-
-**Benefits:**
-
-- Always valid JSON - no `JSON.parse()` errors
-- Guaranteed field types and required fields
-- No retries needed for schema violations
+Load schemas from files with `schema: file://path/to/schema.json`.
 
 #### Strict Tool Use
 
-Enable strict mode on tool definitions to ensure tool parameters exactly match your schema:
+Add `strict: true` to tool definitions for schema-validated parameters:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
-      max_tokens: 2048
       tools:
         - name: get_weather
-          description: Get the current weather in a given location
-          strict: true # Enable strict mode
+          strict: true
           input_schema:
             type: object
             properties:
               location:
                 type: string
-                description: The city and state, e.g. San Francisco, CA
-              unit:
-                type: string
-                enum:
-                  - celsius
-                  - fahrenheit
             required:
               - location
             additionalProperties: false
 ```
 
-**Guarantees:**
+#### Limitations
 
-- Tool `input` strictly follows the `input_schema`
-- Tool `name` is always valid from provided tools
-- No type mismatches or missing required fields
+**Supported:** object, array, string, integer, number, boolean, null, `enum`, `required`, `additionalProperties: false`
 
-#### Schema Limitations
+**Not supported:** recursive schemas, `minimum`/`maximum`, `minLength`/`maxLength`
 
-Both modes share these JSON Schema limitations:
+**Incompatible with:** citations, message prefilling
 
-**Supported:**
-
-- Basic types: object, array, string, integer, number, boolean, null
-- `enum` (primitives only)
-- `required` and `additionalProperties: false`
-- Array `minItems` (only 0 and 1)
-
-**Not supported:**
-
-- Recursive schemas
-- Numerical constraints (`minimum`, `maximum`)
-- String constraints (`minLength`, `maxLength`)
-- Complex `{n,m}` quantifiers in regex patterns
-
-#### Feature Compatibility
-
-**Works with:**
-
-- Batch processing
-- Token counting
-- Streaming
-- Combined usage (use both JSON outputs and strict tool use together)
-
-**Incompatible with:**
-
-- Citations (returns 400 error if citations enabled with `output_format`)
-- Message prefilling (incompatible with JSON outputs)
-
-See [Anthropic's Structured Outputs Guide](https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs) and the [structured outputs example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs) for more details.
+See [Anthropic's guide](https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs) and the [structured outputs example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs).
 
 ## Model-Graded Tests
 
