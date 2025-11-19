@@ -40,7 +40,18 @@ export const handleRedteam = async ({
 
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
-  invariant(prompt, `Grader ${baseType} must have a prompt`);
+
+  // Handle missing prompt gracefully instead of throwing
+  // This can happen when preview/test runs occur before attack generation
+  if (!prompt || prompt.trim() === '') {
+    return {
+      pass: false,
+      score: 0,
+      reason: `No prompt available for grader ${baseType}. Ensure attack generation ran before testing. If using the UI, wait for test case generation to complete.`,
+      assertion,
+    };
+  }
+
   const { grade, rubric, suggestions } = await grader.getResult(
     prompt,
     outputString,
