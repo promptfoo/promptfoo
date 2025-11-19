@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(plugins): organize domain-specific risks into vertical suites
+- feat(providers): add Gemini 3 Pro support with thinking configuration (#6241)
+
+### Fixed
+
+- fix(code-scan): in `code-scans run`, don't log anything to stdout except json results when --json is used—fixes GitHub action (#6248)
+- fix(code-scan): update default API host to https://api.promptfoo.app to fix websocket connection issues (#6247)
+
 ## [0.119.7] - 2025-11-17
 
 ### Added
@@ -23,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- fix: exclude source maps from npm package to reduce bundle size by ~22MB (#6235)
 - chore(ci): synchronize package-lock.json to resolve npm ci failures (#6195)
 - chore(ci): increase webui test timeout to 8 minutes in GitHub Actions workflow to prevent CI timeouts (#6201)
 - chore(redteam): update foundation model report redteam config to use newer redteam strategies (#6216)
