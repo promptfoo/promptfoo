@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(providers): add Groq reasoning model support (GPT-OSS, DeepSeek R1, Qwen3), Responses API provider (`groq-responses:` prefix), compound model tool control (`compound_custom.tools.enabled_tools`), and built-in tools (browser_search, code execution, web search) (#6231)
+
+### Changed
+
+- chore(providers)!: remove deprecated Groq gemma2-9b-it model - model no longer supported by Groq API. Use llama-3.3-70b-versatile or llama-3.1-8b-instant instead (#6231)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
@@ -22,11 +30,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(providers): add Groq reasoning model support (GPT-OSS, DeepSeek R1, Qwen3), Responses API provider (`groq-responses:` prefix), compound model tool control (`compound_custom.tools.enabled_tools`), and built-in tools (browser_search, code execution, web search)
-
-### Changed
-
-- chore(providers)!: remove deprecated Groq gemma2-9b-it model - model no longer supported by Groq API. Use llama-3.3-70b-versatile or llama-3.1-8b-instant instead
 - feat(assertions): add dot product and euclidean distance metrics for similarity assertion - use `similar:dot` and `similar:euclidean` assertion types to match production vector database metrics and support different similarity use cases (#6202)
 - feat(webui): expose Hydra strategy configuration (max turns and stateful toggle) in red team setup UI (#6165)
 - fix(app): aligning risk scores with documentation (#6212)
@@ -230,7 +233,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(redteam): enable layer strategy with multilingual language support; plugins now generate tests in multiple languages even when layer strategy is present (#6084)
 - fix(redteam): reduce multilingual deprecation logging noise by moving from warn to debug level (#6084)
-  > > > > > > > main
 
 ## [0.119.1] - 2025-10-29
 
