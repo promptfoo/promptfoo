@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(providers): add ElevenLabs provider for text-to-speech and conversational AI (#6022)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
@@ -26,7 +30,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(webui): expose Hydra strategy configuration (max turns and stateful toggle) in red team setup UI (#6165)
 - fix(app): aligning risk scores with documentation (#6212)
 - feat(providers): add GPT-5.1 model support including gpt-5.1, gpt-5.1-mini, gpt-5.1-nano, and gpt-5.1-codex with new 'none' reasoning mode for low-latency interactions and configurable verbosity control (#6208)
-- feat(providers): add ElevenLabs provider for text-to-speech and conversational AI (#6022)
 - feat(redteam): allow configuring `redteam.frameworks` to limit compliance frameworks surfaced in reports and commands (#6170)
 - feat(webui): add layer strategy configuration UI in red team setup with per-step plugin targeting (#6180)
 - feat(app): Metadata value autocomplete eval filter (#6176)
