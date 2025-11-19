@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../../database/index';
 import { evalResultsTable } from '../../database/tables';
 import { cloudConfig } from '../../globalConfig/cloud';
@@ -86,7 +86,7 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
           sql`json_extract(provider, '$.label') = ${targetLabel}`,
         ),
       )
-      .orderBy(evalResultsTable.createdAt)
+      .orderBy(desc(evalResultsTable.updatedAt))
       .limit(1);
 
     if (targetResults.length === 0) {
@@ -106,7 +106,7 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
           sql`json_extract(test_case, '$.metadata.pluginId') = ${pluginId}`,
         ),
       )
-      .orderBy(evalResultsTable.createdAt)
+      .orderBy(desc(evalResultsTable.updatedAt))
       .limit(100);
 
     const localTestCases = results
