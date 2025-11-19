@@ -3,29 +3,29 @@ providers:
   - id: echo
 
 prompts:
-  - "{{prompt}}"
+  - '{{prompt}}'
 
 tests:
   # Test 1: equals failure - should show script output in error
-  - description: "equals failure shows script output in error message"
+  - description: 'equals failure shows script output in error message'
     vars:
-      prompt: "wrong value"
+      prompt: 'wrong value'
     assert:
       - type: equals
         value: file://rubric-generator.js:knownValue
 
   # Test 2: contains failure - should show script output in error
-  - description: "contains failure shows script output in error message"
+  - description: 'contains failure shows script output in error message'
     vars:
-      prompt: "no match here"
+      prompt: 'no match here'
     assert:
       - type: contains
         value: file://rubric-generator.js:knownValue
 
   # Test 3: starts-with failure
-  - description: "starts-with failure shows script output"
+  - description: 'starts-with failure shows script output'
     vars:
-      prompt: "different start"
+      prompt: 'different start'
     assert:
       - type: starts-with
         value: file://rubric-generator.js:knownValue

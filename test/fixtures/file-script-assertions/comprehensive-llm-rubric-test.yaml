@@ -5,7 +5,7 @@ providers:
   - id: echo
 
 prompts:
-  - "{{prompt}}"
+  - '{{prompt}}'
 
 defaultTest:
   options:
@@ -17,66 +17,66 @@ tests:
   # ===========================================
 
   # Test 1: Standard llm-rubric with direct string value
-  - description: "llm-rubric with direct string value (standard usage)"
+  - description: 'llm-rubric with direct string value (standard usage)'
     vars:
-      prompt: "The capital of France is Paris"
+      prompt: 'The capital of France is Paris'
     assert:
       - type: llm-rubric
-        value: "Check that the response correctly identifies Paris as the capital of France"
+        value: 'Check that the response correctly identifies Paris as the capital of France'
 
   # Test 2: Standard llm-rubric with simple criteria
-  - description: "llm-rubric with simple criteria"
+  - description: 'llm-rubric with simple criteria'
     vars:
-      prompt: "Python is a programming language"
+      prompt: 'Python is a programming language'
     assert:
       - type: llm-rubric
-        value: "The response should mention Python"
+        value: 'The response should mention Python'
 
   # Test 3: Standard contains with direct value
-  - description: "contains with direct string (standard usage)"
+  - description: 'contains with direct string (standard usage)'
     vars:
-      prompt: "Hello world"
+      prompt: 'Hello world'
     assert:
       - type: contains
-        value: "Hello"
+        value: 'Hello'
 
   # Test 4: Standard equals with direct value
-  - description: "equals with direct string (standard usage)"
+  - description: 'equals with direct string (standard usage)'
     vars:
-      prompt: "exact match"
+      prompt: 'exact match'
     assert:
       - type: equals
-        value: "exact match"
+        value: 'exact match'
 
   # Test 5: Standard regex with direct pattern
-  - description: "regex with direct pattern (standard usage)"
+  - description: 'regex with direct pattern (standard usage)'
     vars:
-      prompt: "Order #12345"
+      prompt: 'Order #12345'
     assert:
       - type: regex
         value: "Order #\\d+"
 
   # Test 6: Standard similar with direct value
-  - description: "similar with direct value (standard usage)"
+  - description: 'similar with direct value (standard usage)'
     vars:
-      prompt: "The weather is nice today"
+      prompt: 'The weather is nice today'
     assert:
       - type: similar
-        value: "The weather is nice today"
+        value: 'The weather is nice today'
         threshold: 0.9
 
   # Test 7: Standard starts-with
-  - description: "starts-with with direct value"
+  - description: 'starts-with with direct value'
     vars:
-      prompt: "Hello, how are you?"
+      prompt: 'Hello, how are you?'
     assert:
       - type: starts-with
-        value: "Hello"
+        value: 'Hello'
 
   # Test 8: Standard contains-all with array
-  - description: "contains-all with direct array (standard usage)"
+  - description: 'contains-all with direct array (standard usage)'
     vars:
-      prompt: "I love apples and bananas"
+      prompt: 'I love apples and bananas'
     assert:
       - type: contains-all
         value:
@@ -84,9 +84,9 @@ tests:
           - bananas
 
   # Test 9: Standard contains-any
-  - description: "contains-any with direct array"
+  - description: 'contains-any with direct array'
     vars:
-      prompt: "I prefer oranges"
+      prompt: 'I prefer oranges'
     assert:
       - type: contains-any
         value:
@@ -99,44 +99,44 @@ tests:
   # ===========================================
 
   # Test 10: llm-rubric with JS file:// - simple
-  - description: "llm-rubric with JS script returning simple string"
+  - description: 'llm-rubric with JS script returning simple string'
     vars:
-      prompt: "SCRIPT_OUTPUT_12345"
+      prompt: 'SCRIPT_OUTPUT_12345'
     assert:
       - type: llm-rubric
         value: file://rubric-generator.js:knownValue
 
   # Test 11: llm-rubric with JS file:// - dynamic based on context
-  - description: "llm-rubric with JS script using context vars"
+  - description: 'llm-rubric with JS script using context vars'
     vars:
-      prompt: "Machine learning is a subset of AI"
-      topic: "machine learning"
+      prompt: 'Machine learning is a subset of AI'
+      topic: 'machine learning'
     assert:
       - type: llm-rubric
         value: file://rubric-generator.js:rubric
 
   # Test 12: llm-rubric with JS file:// - object return
-  - description: "llm-rubric with JS script returning object"
+  - description: 'llm-rubric with JS script returning object'
     vars:
-      prompt: "Test response"
+      prompt: 'Test response'
     assert:
       - type: llm-rubric
         value: file://rubric-generator.js:rubricObject
 
   # Test 13: llm-rubric with Python file://
-  - description: "llm-rubric with Python script"
+  - description: 'llm-rubric with Python script'
     vars:
-      prompt: "Neural networks explanation"
-      topic: "neural networks"
+      prompt: 'Neural networks explanation'
+      topic: 'neural networks'
     assert:
       - type: llm-rubric
         value: file://rubric-generator.py:rubric
 
   # Test 14: llm-rubric with Ruby file://
-  - description: "llm-rubric with Ruby script"
+  - description: 'llm-rubric with Ruby script'
     vars:
-      prompt: "Deep learning concepts"
-      topic: "deep learning"
+      prompt: 'Deep learning concepts'
+      topic: 'deep learning'
     assert:
       - type: llm-rubric
         value: file://rubric-generator.rb:rubric
@@ -146,26 +146,26 @@ tests:
   # ===========================================
 
   # Test 15: Multiple assertions - mix of file:// and direct
-  - description: "Mixed assertions - file:// and direct values"
+  - description: 'Mixed assertions - file:// and direct values'
     vars:
-      prompt: "SCRIPT_OUTPUT_12345 is the answer"
+      prompt: 'SCRIPT_OUTPUT_12345 is the answer'
     assert:
       - type: contains
         value: file://rubric-generator.js:knownValue
       - type: contains
-        value: "answer"
+        value: 'answer'
       - type: starts-with
         value: file://rubric-generator.js:knownValue
 
   # Test 16: llm-rubric alongside other assertions
-  - description: "llm-rubric with other assertion types"
+  - description: 'llm-rubric with other assertion types'
     vars:
-      prompt: "The result is SCRIPT_OUTPUT_12345"
+      prompt: 'The result is SCRIPT_OUTPUT_12345'
     assert:
       - type: llm-rubric
         value: file://rubric-generator.js:knownValue
       - type: contains
-        value: "result"
+        value: 'result'
       - type: regex
         value: "SCRIPT_OUTPUT_\\d+"
 
@@ -174,66 +174,66 @@ tests:
   # ===========================================
 
   # Test 17: equals with file://
-  - description: "equals with JS file:// script"
+  - description: 'equals with JS file:// script'
     vars:
-      prompt: "SCRIPT_OUTPUT_12345"
+      prompt: 'SCRIPT_OUTPUT_12345'
     assert:
       - type: equals
         value: file://rubric-generator.js:knownValue
 
   # Test 18: contains with file://
-  - description: "contains with JS file:// script"
+  - description: 'contains with JS file:// script'
     vars:
-      prompt: "Result: SCRIPT_OUTPUT_12345"
+      prompt: 'Result: SCRIPT_OUTPUT_12345'
     assert:
       - type: contains
         value: file://rubric-generator.js:knownValue
 
   # Test 19: regex with file:// (dynamic pattern)
-  - description: "regex with file:// script generating pattern"
+  - description: 'regex with file:// script generating pattern'
     vars:
-      prompt: "Code: 99999"
+      prompt: 'Code: 99999'
       pattern: "\\d{5}"
     assert:
       - type: regex
         value: file://rubric-generator.js:getPattern
 
   # Test 20: starts-with with file://
-  - description: "starts-with with file:// script"
+  - description: 'starts-with with file:// script'
     vars:
-      prompt: "SCRIPT_OUTPUT_12345 begins here"
+      prompt: 'SCRIPT_OUTPUT_12345 begins here'
     assert:
       - type: starts-with
         value: file://rubric-generator.js:knownValue
 
   # Test 21: icontains with file://
-  - description: "icontains (case insensitive) with file:// script"
+  - description: 'icontains (case insensitive) with file:// script'
     vars:
-      prompt: "script_output_12345 lowercase"
+      prompt: 'script_output_12345 lowercase'
     assert:
       - type: icontains
         value: file://rubric-generator.js:knownValue
 
   # Test 22: not-contains with file://
-  - description: "not-contains with file:// script"
+  - description: 'not-contains with file:// script'
     vars:
-      prompt: "This has something else"
+      prompt: 'This has something else'
     assert:
       - type: not-contains
         value: file://rubric-generator.js:knownValue
 
   # Test 23: contains-all with file:// returning array
-  - description: "contains-all with file:// array return"
+  - description: 'contains-all with file:// array return'
     vars:
-      prompt: "Has reference one and reference two"
+      prompt: 'Has reference one and reference two'
     assert:
       - type: contains-all
         value: file://rubric-generator.js:referenceArray
 
   # Test 24: contains with file:// numeric return
-  - description: "contains with file:// numeric return"
+  - description: 'contains with file:// numeric return'
     vars:
-      prompt: "The answer is 42"
+      prompt: 'The answer is 42'
     assert:
       - type: contains
         value: file://rubric-generator.js:numericValue
@@ -243,56 +243,56 @@ tests:
   # ===========================================
 
   # Test 25: Empty string from script
-  - description: "equals empty string from file:// script"
+  - description: 'equals empty string from file:// script'
     vars:
-      prompt: ""
+      prompt: ''
     assert:
       - type: equals
         value: file://rubric-generator.js:emptyValue
 
   # Test 26: Nunjucks template in direct value
-  - description: "llm-rubric with nunjucks template"
+  - description: 'llm-rubric with nunjucks template'
     vars:
-      prompt: "Answer about Paris"
-      city: "Paris"
+      prompt: 'Answer about Paris'
+      city: 'Paris'
     assert:
       - type: llm-rubric
-        value: "Check that the response mentions {{city}}"
+        value: 'Check that the response mentions {{city}}'
 
   # Test 27: Multiple llm-rubric assertions
-  - description: "Multiple llm-rubric assertions"
+  - description: 'Multiple llm-rubric assertions'
     vars:
-      prompt: "Comprehensive answer about AI"
+      prompt: 'Comprehensive answer about AI'
     assert:
       - type: llm-rubric
-        value: "The response should be about AI"
+        value: 'The response should be about AI'
       - type: llm-rubric
-        value: "The response should be clear and concise"
+        value: 'The response should be clear and concise'
 
   # ===========================================
   # JAVASCRIPT ASSERTION REGRESSION
   # ===========================================
 
   # Test 28: javascript assertion with file:// (uses return as result)
-  - description: "javascript assertion file:// (regression test)"
+  - description: 'javascript assertion file:// (regression test)'
     vars:
-      prompt: "contains expected keyword"
+      prompt: 'contains expected keyword'
     assert:
       - type: javascript
         value: file://rubric-generator.js:gradingFunction
 
   # Test 29: javascript assertion inline (regression test)
-  - description: "javascript assertion inline (regression test)"
+  - description: 'javascript assertion inline (regression test)'
     vars:
-      prompt: "hello world"
+      prompt: 'hello world'
     assert:
       - type: javascript
         value: output.includes("hello")
 
   # Test 30: javascript assertion with complex logic
-  - description: "javascript assertion with complex inline logic"
+  - description: 'javascript assertion with complex inline logic'
     vars:
-      prompt: "The answer is 42"
+      prompt: 'The answer is 42'
     assert:
       - type: javascript
         value: |

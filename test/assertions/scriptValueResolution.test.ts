@@ -1,10 +1,9 @@
-import * as fs from 'fs';
 import * as path from 'path';
 
 import cliState from '../../src/cliState';
 import * as matchers from '../../src/matchers';
 
-import type { Assertion, ProviderResponse } from '../../src/types/index';
+import type { ProviderResponse } from '../../src/types/index';
 
 // Mock dependencies
 jest.mock('../../src/redteam/remoteGeneration', () => ({

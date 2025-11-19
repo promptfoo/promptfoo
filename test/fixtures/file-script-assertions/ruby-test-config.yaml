@@ -3,19 +3,19 @@ providers:
   - id: echo
 
 prompts:
-  - "{{prompt}}"
+  - '{{prompt}}'
 
 tests:
-  - description: "contains should use Ruby script output"
+  - description: 'contains should use Ruby script output'
     vars:
-      prompt: "The answer is SCRIPT_OUTPUT_12345 here"
+      prompt: 'The answer is SCRIPT_OUTPUT_12345 here'
     assert:
       - type: contains
         value: file://rubric-generator.rb:known_value
 
-  - description: "equals should use Ruby script output"
+  - description: 'equals should use Ruby script output'
     vars:
-      prompt: "SCRIPT_OUTPUT_12345"
+      prompt: 'SCRIPT_OUTPUT_12345'
     assert:
       - type: equals
         value: file://rubric-generator.rb:known_value
