@@ -56,7 +56,7 @@ redteam:
 | `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                           | 5                               |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
-| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-5                   |
+| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-5`                  |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
 | `language`                   | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)      | English                         |
@@ -869,7 +869,7 @@ You can set up the provider in several ways:
 
    ```yaml
    redteam:
-     provider: 'gpt-5'
+     provider: 'openai:gpt-5'
    ```
 
 2. As an object with additional configuration:
@@ -877,7 +877,7 @@ You can set up the provider in several ways:
    ```yaml
    redteam:
      provider:
-       id: 'gpt-5'
+       id: 'openai:gpt-5'
        config:
          temperature: 0.7
          max_tokens: 150
@@ -949,7 +949,7 @@ redteam:
 redteam:
   injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
-  provider: 'openai:chat:gpt-5.1'
+  provider: 'openai:chat:gpt-5'
   language: ['en', 'fr', 'es', 'de'] # Test in multiple languages
   numTests: 20
   testGenerationInstructions: |

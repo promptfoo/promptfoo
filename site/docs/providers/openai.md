@@ -186,9 +186,9 @@ Specific snapshot versions are also available:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5 # Standard
-  - id: openai:chat:gpt-5-mini-2025-04-14 # Mini
-  - id: openai:chat:gpt-5-nano-2025-04-14 # Nano
+  - id: openai:chat:gpt-5-2025-08-07 # Standard
+  - id: openai:chat:gpt-5-mini-2025-08-07 # Mini
+  - id: openai:chat:gpt-5-nano-2025-08-07 # Nano
 ```
 
 ### GPT-5.1

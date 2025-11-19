@@ -76,7 +76,7 @@ If you're running a LiteLLM proxy server:
 
 ```yaml
 providers:
-  - id: litellm:gpt-5.1-mini # Uses LITELLM_API_KEY env var
+  - id: litellm:gpt-5-mini # Uses LITELLM_API_KEY env var
     config:
       apiBaseUrl: http://localhost:4000
       # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, auto-detected
@@ -88,7 +88,7 @@ Since LiteLLM uses the OpenAI format, you can use the OpenAI provider:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5.1-mini # Uses LITELLM_API_KEY env var
+  - id: openai:chat:gpt-5-mini # Uses LITELLM_API_KEY env var
     config:
       apiBaseUrl: http://localhost:4000
       # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, auto-detected
@@ -178,7 +178,7 @@ description: LiteLLM evaluation example
 
 providers:
   # Chat models
-  - id: litellm:gpt-5.1-mini
+  - id: litellm:gpt-5-mini
   - id: litellm:claude-sonnet-4-5 # Uses ANTHROPIC_API_KEY env var
     # config:
     # apiKey: "{{ env.ANTHROPIC_API_KEY }}"  # optional, auto-detected
