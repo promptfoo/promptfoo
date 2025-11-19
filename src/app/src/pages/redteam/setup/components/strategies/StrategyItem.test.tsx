@@ -191,6 +191,27 @@ describe('StrategyItem', () => {
       expect(buttons).toHaveLength(1);
     });
 
+    it('shows settings button for hydra when selected and enabled', () => {
+      const hydraStrategy: StrategyCardData = {
+        ...baseStrategy,
+        id: 'jailbreak:hydra',
+      };
+
+      render(
+        <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
+          strategy={hydraStrategy}
+          isSelected={true}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      expect(buttons).toHaveLength(1);
+    });
+
     it('does not show settings button for non-configurable strategies even when selected', () => {
       const nonConfigurableStrategy: StrategyCardData = {
         ...baseStrategy,

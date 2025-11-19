@@ -357,6 +357,7 @@ export type EvalTableDTO = {
   table: EvaluateTable;
   totalCount: number;
   filteredCount: number;
+  filteredMetrics: PromptMetrics[] | null;
   config: Partial<UnifiedConfig>;
   author: string | null;
   version: number;
@@ -477,6 +478,9 @@ export const BaseAssertionTypesSchema = z.enum([
   'rouge-n',
   'ruby',
   'similar',
+  'similar:cosine',
+  'similar:dot',
+  'similar:euclidean',
   'starts-with',
   'trace-error-spans',
   'trace-span-count',
