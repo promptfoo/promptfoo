@@ -44,10 +44,43 @@
    - Added 3 unit tests covering undefined, empty, and whitespace-only prompts
    - All tests verify the helpful error message is included
 
+3. `fix(assertions): preserve metadata when returning early for missing prompt`
+   - Ensure test.metadata (pluginId, strategyId, severity) is included in the grading result
+   - Add test to verify metadata preservation
+
 ### Files Modified
 
-- `src/assertions/redteam.ts` - Backend safety net implementation
-- `test/assertions/redteam.test.ts` - Unit tests for the fix
+- `src/assertions/redteam.ts` - Backend safety net implementation with metadata preservation
+- `test/assertions/redteam.test.ts` - Unit tests for the fix (5 tests total)
+
+## Limitations & Future Work
+
+### What This Fix Does
+
+- **Prevents crash**: The invariant error no longer crashes the evaluation
+- **Provides helpful message**: Users see a clear explanation of what went wrong
+- **Preserves metadata**: Plugin/strategy info is retained for reporting and UI filtering
+
+### What This Fix Does NOT Do
+
+1. **Does not allow target preview to succeed**: The UI's "Test Target" flow still sees a failed test (pass=false), so the target cannot be marked as "tested" and the user may not be able to proceed in the setup workflow.
+
+2. **Does not solve the root cause**: The original expectation was to validate HTTP connectivity before attack generation. This fix is a safety net, not a complete solution.
+
+### Recommended Future Work
+
+To fully resolve Issue #5995, the frontend needs changes to either:
+
+**(a) Avoid scheduling redteam assertions during preview calls:**
+- Detect when prompts are only templates (match `/\{\{.*\}\}/`)
+- Use `/providers/test` endpoint for connectivity testing without assertions
+- Only attach assertions after actual test case generation
+
+**(b) Inject a placeholder prompt for preview runs:**
+- When preview is requested with template prompts, inject a static placeholder like `'Preview probe for target validation'`
+- This allows the assertion to run and potentially pass (if the target responds reasonably)
+
+**Implementation location**: `src/app/src/pages/redteam/setup/components/` - specifically wherever the test/preview button triggers an evaluation
 
 ## Demo Path
 
