@@ -423,14 +423,22 @@ export const CustomPoliciesSection = () => {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to generate policies');
+        let errorMessage = 'Failed to generate policies';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.details || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = `Failed to generate policies: ${response.statusText || response.status}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
       const generatedPolicies: Array<{ name: string; text: string }> = data.policies || [];
 
       if (generatedPolicies.length === 0) {
+        toast.showToast('No policies were generated. Try adjusting your application definition.', 'warning');
         setSuggestedPolicies([]);
         return;
       }
@@ -446,12 +454,28 @@ export const CustomPoliciesSection = () => {
       setSuggestedPolicies(policyObjects);
     } catch (error) {
       console.error('Error generating policies:', error);
+      let errorMessage = 'Failed to generate policies';
+      
+      if (error instanceof Error) {
+        // Handle network errors
+        if (error.message.includes('fetch') || error.message.includes('network')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Request timed out. Please try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      } else {
+        errorMessage = 'An unexpected error occurred while generating policies.';
+      }
+      
+      toast.showToast(errorMessage, 'error');
       setSuggestedPolicies([]);
     } finally {
       isGeneratingPoliciesRef.current = false;
       setIsGeneratingPolicies(false);
     }
-  }, [config.applicationDefinition, rows, suggestedPolicies]);
+  }, [config.applicationDefinition, rows, suggestedPolicies, toast]);
 
   const handleAddSuggestedPolicy = useCallback(
     (policy: PolicyObject) => {
