@@ -26,7 +26,8 @@
   "files": [
     "dist",
     "!dist/test",
-    "!dist/src/__mocks__"
+    "!dist/src/__mocks__",
+    "!dist/**/*.map"
   ],
   "engines": {
     "node": ">=20.0.0"
