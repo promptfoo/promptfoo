@@ -60,6 +60,7 @@ const ChatMessage = memo(({ message }: { message: Message | null }) => {
           variant="body1"
           sx={{
             whiteSpace: 'pre-wrap',
+            overflowWrap: 'break-word',
             color: textColor,
             textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',
             fontWeight: isUser ? 500 : 400,
