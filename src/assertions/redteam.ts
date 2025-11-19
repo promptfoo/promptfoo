@@ -49,6 +49,10 @@ export const handleRedteam = async ({
       score: 0,
       reason: `No prompt available for grader ${baseType}. Ensure attack generation ran before testing. If using the UI, wait for test case generation to complete.`,
       assertion,
+      metadata: {
+        // Preserve test metadata so downstream reporting and UI filtering still work
+        ...test.metadata,
+      },
     };
   }
 

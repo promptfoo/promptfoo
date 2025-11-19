@@ -136,6 +136,58 @@ describe('handleRedteam', () => {
       expect(grade.score).toBe(0);
       expect(grade.reason).toContain('No prompt available for grader');
     });
+
+    it('preserves test metadata when prompt is missing', async () => {
+      const assertion = {
+        type: 'promptfoo:redteam:harmful:misinformation-disinformation' as const,
+      };
+
+      const test = {
+        vars: {},
+        options: {},
+        assert: [],
+        metadata: {
+          purpose: 'test purpose',
+          pluginId: 'harmful:misinformation-disinformation',
+          strategyId: 'basic',
+          severity: 'high',
+        },
+      };
+
+      const grade = await handleRedteam({
+        assertion,
+        baseType: getAssertionBaseType(assertion),
+        assertionValueContext: {
+          prompt: '',
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse: {},
+        },
+        cost: 0,
+        inverse: isAssertionInverse(assertion),
+        latencyMs: 0,
+        logProbs: [],
+        output: 'test output',
+        outputString: 'test output',
+        prompt: '',
+        provider: undefined,
+        providerResponse: {},
+        renderedValue: undefined,
+        test,
+        valueFromScript: undefined,
+      });
+
+      expect(grade.pass).toBe(false);
+      expect(grade.metadata).toBeDefined();
+      expect(grade.metadata).toEqual({
+        purpose: 'test purpose',
+        pluginId: 'harmful:misinformation-disinformation',
+        strategyId: 'basic',
+        severity: 'high',
+      });
+    });
   });
 
 
