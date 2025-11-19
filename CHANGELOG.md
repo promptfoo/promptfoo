@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documentation
+
+- docs(examples): add TypeScript configuration with dynamic schema generation example showing how to reuse Zod schemas from application code, including automatic schema conversion for different providers (OpenAI/Gemini) (#6171)
+- docs(config): add comprehensive TypeScript configuration documentation to modular-configs guide with examples of sharing code between application and tests (#6171)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
@@ -65,8 +70,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
-- docs(examples): add TypeScript configuration with dynamic schema generation example showing how to reuse Zod schemas from application code, including automatic schema conversion for different providers (OpenAI/Gemini) (#4851)
-- docs(config): add comprehensive TypeScript configuration documentation to modular-configs guide with examples of sharing code between application and tests (#4851)
 - docs(providers): update Vertex AI documentation - removed deprecated models (PaLM/Bison, Claude 3 Opus, Claude 3.5 Sonnet v2), added Claude Sonnet 4.5, added missing Gemini 2.0 models, reorganized model listings by generation (Gemini 2.5/2.0/1.5, Claude 4/3, Llama 4/3.3/3.2/3.1), marked Preview/Experimental models, removed temporal language to make docs evergreen (#3169)
 
 ### Changed
