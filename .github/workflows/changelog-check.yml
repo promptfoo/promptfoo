@@ -101,7 +101,7 @@ jobs:
               # Check each added line to see if it's in a versioned section
               # Use git diff with line numbers to track positions
               ADDITIONS_IN_VERSIONED=$(git diff origin/"$BASE_REF"...HEAD -- CHANGELOG.md | \
-                awk -v unreleased_end="$UNRELEASED_END" '
+                gawk -v unreleased_end="$UNRELEASED_END" '
                   /^@@/ {
                     # Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
                     match($0, /\+([0-9]+)/, arr)

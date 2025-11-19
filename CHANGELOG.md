@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(cli): add automatic changelog update on version bump (#6252)
+- feat(ci): add enhanced changelog validation rules requiring PR numbers and Unreleased section (#6252)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
