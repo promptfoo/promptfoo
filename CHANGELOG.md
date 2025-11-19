@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(plugins): organize domain-specific risks into vertical suites
 - feat(providers): add Gemini 3 Pro support with thinking configuration (#6241)
 
 ## [0.119.7] - 2025-11-17
