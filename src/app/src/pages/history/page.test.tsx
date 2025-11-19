@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HistoryPage from './page';
@@ -53,14 +53,16 @@ describe('HistoryPage', () => {
     document.title = originalTitle;
   });
 
-  it("should set the page title to 'History' and description to 'Evaluation history' when rendered", () => {
+  it("should set the page title to 'History' and description to 'Evaluation history' when rendered", async () => {
     render(
       <MemoryRouter>
         <HistoryPage />
       </MemoryRouter>,
     );
 
-    expect(document.title).toBe('History | promptfoo');
+    await waitFor(() => {
+      expect(document.title).toBe('History | promptfoo');
+    });
 
     const descriptionMetaTag = document.querySelector('meta[name="description"]');
     expect(descriptionMetaTag).not.toBeNull();
@@ -73,22 +75,29 @@ describe('HistoryPage', () => {
     expect(ogDescriptionTag?.getAttribute('content')).toBe('Evaluation history');
   });
 
-  it('should render its children within the ErrorBoundary without triggering an error state', () => {
+  it('should render its children within the ErrorBoundary without triggering an error state', async () => {
     render(
       <MemoryRouter>
         <HistoryPage />
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('history-component-mock')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('history-component-mock')).toBeInTheDocument();
+    });
   });
 
-  it('should restore the original title and description when unmounted', () => {
+  it('should restore the original title and description when unmounted', async () => {
     const { unmount } = render(
       <MemoryRouter>
         <HistoryPage />
       </MemoryRouter>,
     );
+
+    // Wait for initial render to complete
+    await waitFor(() => {
+      expect(document.title).toBe('History | promptfoo');
+    });
 
     unmount();
 

@@ -10,6 +10,141 @@ describe('StrategyConfigDialog', () => {
     vi.clearAllMocks();
   });
 
+  it('should correctly filter layerPlugins when using the stable empty array for selectedPlugins', () => {
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="layer"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        selectedPlugins={[]}
+      />,
+    );
+
+    const specificPluginsButton = screen.getByText('Specific plugins only');
+    fireEvent.click(specificPluginsButton);
+
+    const addStepInput = screen.getByLabelText('Add Strategy Step');
+    fireEvent.change(addStepInput, { target: { value: 'base64' } });
+    fireEvent.keyDown(addStepInput, { key: 'Enter' });
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(saveButton);
+
+    expect(mockOnSave).toHaveBeenCalledTimes(1);
+    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('should compute availableStrategies correctly with stable empty array for allStrategies', () => {
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="layer"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        allStrategies={[]}
+      />,
+    );
+
+    const autocomplete = screen.getByLabelText('Add Strategy Step');
+    expect(autocomplete).toBeInTheDocument();
+  });
+
+  it('should use stable empty arrays when selectedPlugins and allStrategies are not provided', () => {
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="basic"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'basic', name: 'Basic', description: 'Basic strategy' }}
+      />,
+    );
+
+    expect(screen.getByText('Configure Basic')).toBeInTheDocument();
+  });
+
+  it('should not trigger infinite re-renders when using default empty array parameters', () => {
+    let renderCount = 0;
+
+    const TestComponent = () => {
+      renderCount++;
+
+      return (
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />
+      );
+    };
+
+    render(<TestComponent />);
+
+    expect(renderCount).toBeLessThan(5);
+  });
+
+  it('should not mutate the default empty arrays, which could affect other component instances', () => {
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="layer"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+      />,
+    );
+
+    const addStrategyStepInput = screen.getByLabelText('Add Strategy Step');
+    fireEvent.change(addStrategyStepInput, { target: { value: 'base64' } });
+    fireEvent.keyDown(addStrategyStepInput, { key: 'Enter' });
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(saveButton);
+
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="layer"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+      />,
+    );
+
+    expect(mockOnSave).toHaveBeenCalledTimes(1);
+    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
+  });
+
+  it('should handle null or undefined values for selectedPlugins and allStrategies without crashing', () => {
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="basic"
+        config={{}}
+        onClose={() => {}}
+        onSave={() => {}}
+        strategyData={{ id: 'basic', name: 'Basic', description: 'Basic strategy' }}
+        selectedPlugins={undefined}
+        allStrategies={undefined}
+      />,
+    );
+
+    const titleElement = screen.getByText('Configure Basic');
+    expect(titleElement).toBeInTheDocument();
+  });
+
   it("should render the correct title and switch when open is true and strategy is 'basic'", () => {
     render(
       <StrategyConfigDialog
@@ -385,6 +520,64 @@ describe('StrategyConfigDialog', () => {
     expect(goatStatefulSwitch).not.toBeChecked();
   });
 
+  it("should render Hydra configuration fields when strategy is 'jailbreak:hydra'", () => {
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:hydra"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:hydra',
+          name: 'Hydra',
+          description: 'Hydra multi-turn jailbreak',
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Configure Hydra')).toBeInTheDocument();
+    const maxTurnsInput = screen.getByLabelText('Max Turns');
+    expect(maxTurnsInput).toBeInTheDocument();
+    expect(maxTurnsInput).toHaveValue(10);
+
+    expect(screen.queryByLabelText('Max Backtracks')).not.toBeInTheDocument();
+    const statefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    expect(statefulSwitch).not.toBeChecked();
+  });
+
+  it("should save updated Hydra configuration when strategy is 'jailbreak:hydra'", () => {
+    render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:hydra"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:hydra',
+          name: 'Hydra',
+          description: 'Hydra multi-turn jailbreak',
+        }}
+      />,
+    );
+
+    const maxTurnsInput = screen.getByLabelText('Max Turns');
+    fireEvent.change(maxTurnsInput, { target: { value: '15' } });
+
+    const statefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    fireEvent.click(statefulSwitch);
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(saveButton);
+
+    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:hydra', {
+      maxTurns: 15,
+      stateful: true,
+    });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
   it('should not persist localConfig changes when closing the dialog without saving for the jailbreak:meta strategy', () => {
     const initialConfig = { numIterations: 10 };
 
@@ -696,5 +889,103 @@ describe('StrategyConfigDialog', () => {
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
     expect(numIterationsInput).toBeInTheDocument();
     expect(numIterationsInput).toHaveValue(10);
+  });
+
+  describe('layer strategy', () => {
+    it('should render layer strategy configuration correctly', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(screen.getByText('Target Plugins')).toBeInTheDocument();
+      expect(screen.getByText('Steps (in order)')).toBeInTheDocument();
+      expect(screen.getByLabelText('Add Strategy Step')).toBeInTheDocument();
+    });
+
+    it('should save layer strategy with all plugins by default', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['base64'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      fireEvent.click(saveButton);
+
+      expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
+    });
+
+    it('should save layer strategy with specific plugins when selected', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['base64'], plugins: ['harmful', 'pii'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          selectedPlugins={['harmful', 'pii', 'contracts']}
+        />,
+      );
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      fireEvent.click(saveButton);
+
+      expect(mockOnSave).toHaveBeenCalledWith('layer', {
+        plugins: ['harmful', 'pii'],
+        steps: ['base64'],
+      });
+    });
+
+    it('should disable save button when no steps are configured', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should normalize steps with id and config to strings', () => {
+      const config = {
+        steps: [{ id: 'base64', config: { plugins: ['harmful'] } }, 'rot13'],
+      };
+
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={config}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      // Steps should be displayed as strings
+      expect(screen.getByText(/1\./)).toBeInTheDocument();
+      expect(screen.getByText('base64')).toBeInTheDocument();
+      expect(screen.getByText(/2\./)).toBeInTheDocument();
+      expect(screen.getByText('rot13')).toBeInTheDocument();
+    });
   });
 });
