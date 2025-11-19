@@ -289,7 +289,7 @@ const config: Config = {
             },
             {
               label: 'Status',
-              href: 'https://status.promptfoo.dev',
+              href: 'https://status.promptfoo.app/',
             },
           ],
         },

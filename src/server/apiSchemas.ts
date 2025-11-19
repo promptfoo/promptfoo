@@ -62,6 +62,17 @@ export const ApiSchemas = {
         keys: z.array(z.string()),
       }),
     },
+    MetadataValues: {
+      Params: z.object({
+        id: z.string().min(3).max(128),
+      }),
+      Query: z.object({
+        key: z.string().min(1),
+      }),
+      Response: z.object({
+        values: z.array(z.string()),
+      }),
+    },
     Copy: {
       Params: z.object({
         id: z.string(),
