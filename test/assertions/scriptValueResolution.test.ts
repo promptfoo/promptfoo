@@ -1,0 +1,276 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
+import cliState from '../../src/cliState';
+import * as matchers from '../../src/matchers';
+
+import type { Assertion, ProviderResponse } from '../../src/types/index';
+
+// Mock dependencies
+jest.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+}));
+
+jest.mock('better-sqlite3');
+
+jest.mock('proxy-agent', () => ({
+  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+}));
+
+jest.mock('node:module', () => {
+  const mockRequire: NodeJS.Require = {
+    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
+  } as unknown as NodeJS.Require;
+  return {
+    createRequire: jest.fn().mockReturnValue(mockRequire),
+  };
+});
+
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
+
+jest.mock('../../src/esm');
+jest.mock('../../src/database', () => ({
+  getDb: jest.fn(),
+}));
+
+jest.mock('../../src/matchers', () => {
+  const actual = jest.requireActual('../../src/matchers');
+  return {
+    ...actual,
+    matchesLlmRubric: jest.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
+    matchesFactuality: jest.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
+    matchesClosedQa: jest.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
+    matchesSimilarity: jest.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
+  };
+});
+
+describe('Script value resolution', () => {
+  const originalBasePath = cliState.basePath;
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    cliState.basePath = path.resolve(__dirname, '../fixtures/file-script-assertions');
+  });
+
+  afterEach(() => {
+    cliState.basePath = originalBasePath;
+  });
+
+  const baseProviderResponse: ProviderResponse = {
+    output: 'test output',
+    tokenUsage: { total: 0, prompt: 0, completion: 0 },
+  };
+
+  describe('llm-rubric with file:// script', () => {
+    it('should pass script output to matchesLlmRubric', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+      const mockMatchesLlmRubric = jest.mocked(matchers.matchesLlmRubric);
+      mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
+
+      await runAssertion({
+        assertion: {
+          type: 'llm-rubric',
+          value: 'file://rubric-generator.js:knownValue',
+        },
+        test: { vars: {}, options: { provider: { id: 'echo' } } },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
+        'SCRIPT_OUTPUT_12345', // Script output, NOT file path
+        expect.any(String),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should pass direct value to matchesLlmRubric when no script', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+      const mockMatchesLlmRubric = jest.mocked(matchers.matchesLlmRubric);
+      mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
+
+      await runAssertion({
+        assertion: {
+          type: 'llm-rubric',
+          value: 'direct rubric text',
+        },
+        test: { vars: {}, options: { provider: { id: 'echo' } } },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
+        'direct rubric text',
+        expect.any(String),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should pass object returned by script to matchesLlmRubric', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+      const mockMatchesLlmRubric = jest.mocked(matchers.matchesLlmRubric);
+      mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
+
+      await runAssertion({
+        assertion: {
+          type: 'llm-rubric',
+          value: 'file://rubric-generator.js:rubricObject',
+        },
+        test: { vars: {}, options: { provider: { id: 'echo' } } },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
+        { role: 'system', content: 'Evaluate the response for accuracy' },
+        expect.any(String),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        undefined,
+        undefined,
+      );
+    });
+  });
+
+  describe('contains with file:// script', () => {
+    it('should use script output for contains assertion', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'contains',
+          value: 'file://rubric-generator.js:knownValue',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'The answer is SCRIPT_OUTPUT_12345 here',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should fail when output does not contain script value', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'contains',
+          value: 'file://rubric-generator.js:knownValue',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'wrong output',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(false);
+      // Verify error message contains script output, not file path
+      expect(result.reason).toContain('SCRIPT_OUTPUT_12345');
+      expect(result.reason).not.toContain('file://');
+    });
+
+    it('should use numeric script output for contains assertion', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'contains',
+          value: 'file://rubric-generator.js:numericValue',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'The answer is 42',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+  });
+
+  describe('equals with file:// script', () => {
+    it('should use script output for equals assertion', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'equals',
+          value: 'file://rubric-generator.js:knownValue',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'SCRIPT_OUTPUT_12345',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should fail when output does not equal script value', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'equals',
+          value: 'file://rubric-generator.js:knownValue',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'wrong output',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(false);
+    });
+  });
+
+  describe('regex with file:// script', () => {
+    it('should use script output as regex pattern', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'regex',
+          value: 'file://rubric-generator.js:getPattern',
+        },
+        test: { vars: { pattern: '\\d+' } },
+        providerResponse: {
+          output: 'Code: 12345',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should throw error when script returns function for non-script assertion', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      await expect(
+        runAssertion({
+          assertion: {
+            type: 'equals',
+            value: 'file://rubric-generator.js:functionValue',
+          },
+          test: { vars: {} },
+          providerResponse: baseProviderResponse,
+        }),
+      ).rejects.toThrow(/Script for "equals" assertion returned a function/);
+    });
+  });
+});
