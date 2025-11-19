@@ -118,8 +118,29 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
           const { options: _options, ...rest } = testCase;
           const { strategyConfig: _strategyConfig, ...restMetadata } = rest.metadata || {};
 
+          // Parse response to check for redteamHistory
+          const response =
+            typeof r.response === 'string' ? JSON.parse(r.response) : r.response;
+          const redteamHistory = response?.redteamHistory;
+
+          // If redteamHistory exists, use the last prompt
+          let vars = rest.vars;
+          if (redteamHistory && Array.isArray(redteamHistory) && redteamHistory.length > 0) {
+            const lastEntry = redteamHistory[redteamHistory.length - 1];
+            if (lastEntry?.prompt) {
+              vars = {
+                ...rest.vars,
+                prompt: lastEntry.prompt,
+              };
+              logger.debug(
+                `Using last prompt from redteamHistory (${redteamHistory.length} turns) for retry test`,
+              );
+            }
+          }
+
           return {
             ...rest,
+            vars,
             ...(testCase.provider ? { provider: testCase.provider } : {}),
             metadata: {
               ...restMetadata,
