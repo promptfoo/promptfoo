@@ -41,7 +41,7 @@ describe('handleContextRelevance', () => {
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {
           query: 'What is the capital of France?',
@@ -79,6 +79,7 @@ describe('handleContextRelevance', () => {
       'test context',
       0.8,
       {},
+      undefined,
     );
   });
 
@@ -113,7 +114,7 @@ describe('handleContextRelevance', () => {
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {
           query: 'What is the capital of France?',
@@ -151,6 +152,7 @@ describe('handleContextRelevance', () => {
       'irrelevant context',
       0.7,
       {},
+      undefined,
     );
   });
 
@@ -173,7 +175,7 @@ describe('handleContextRelevance', () => {
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { query: 'test query', context: 'test context' },
         test: { vars: { query: 'test query', context: 'test context' }, options: {} },
@@ -186,7 +188,13 @@ describe('handleContextRelevance', () => {
       providerResponse: { output: 'out', tokenUsage: {} },
     } as any);
 
-    expect(matchesContextRelevance).toHaveBeenCalledWith('test query', 'test context', 0, {});
+    expect(matchesContextRelevance).toHaveBeenCalledWith(
+      'test query',
+      'test context',
+      0,
+      {},
+      undefined,
+    );
     expect(result.metadata).toEqual({
       context: 'test context',
     });
@@ -203,7 +211,7 @@ describe('handleContextRelevance', () => {
         output: 'test output',
         prompt: 'test prompt',
         baseType: 'context-relevance',
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: {},
           test: { vars: undefined, options: {} },
@@ -231,7 +239,7 @@ describe('handleContextRelevance', () => {
         output: 'test output',
         prompt: 'test prompt',
         baseType: 'context-relevance',
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: { context: 'test context' },
           test: { vars: { context: 'test context' }, options: {} },
@@ -263,7 +271,7 @@ describe('handleContextRelevance', () => {
         options: {},
       },
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'p',
         vars: {},
         test: { vars: { query: 'q' }, options: {} },
@@ -286,7 +294,7 @@ describe('handleContextRelevance', () => {
       undefined,
       { output: 'out', tokenUsage: {} },
     );
-    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {});
+    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {}, undefined);
     expect(result.metadata).toEqual({
       context: 'cx',
     });

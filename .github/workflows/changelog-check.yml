@@ -3,6 +3,22 @@ name: Changelog Check
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths-ignore:
+      - 'site/**'
+      - '.vscode/**'
+      - '.cursor/**'
+      - '.devcontainer/**'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'LICENSE'
+      - '.**ignore'
+      - '.prettierrc*'
+      - '.rubocop.yml'
+      - '.ruff.toml'
+      - '.coderabbit.yaml'
 
 jobs:
   check-changelog:
@@ -13,7 +29,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -55,15 +71,4 @@ jobs:
           echo "To bypass this check, add one of these labels:"
           echo "  - 'no-changelog' (exceptional cases only)"
           echo "  - 'dependencies' (automated dependency updates)"
-          echo ""
-          echo "Include ALL changes:"
-          echo "  - Feature additions (feat:)"
-          echo "  - Bug fixes (fix:)"
-          echo "  - Dependency updates (chore(deps):)"
-          echo "  - Test changes (test:)"
-          echo "  - CI/CD changes (ci:, build:)"
-          echo "  - Documentation updates (docs:)"
-          echo "  - Code refactors (refactor:)"
-          echo "  - Style changes (style:)"
-          echo "  - All other changes (chore:)"
           exit 1

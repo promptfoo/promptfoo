@@ -297,6 +297,18 @@
                             "REPLICATE_API_TOKEN": {
                               "type": "string"
                             },
+                            "SHAREPOINT_BASE_URL": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_CLIENT_ID": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_TENANT_ID": {
+                              "type": "string"
+                            },
                             "VERTEX_API_HOST": {
                               "type": "string"
                             },
@@ -593,6 +605,9 @@
                                               "rouge-n",
                                               "ruby",
                                               "similar",
+                                              "similar:cosine",
+                                              "similar:dot",
+                                              "similar:euclidean",
                                               "starts-with",
                                               "trace-error-spans",
                                               "trace-span-count",
@@ -1093,8 +1108,36 @@
               "description": "Number of tests to generate"
             },
             "language": {
-              "type": "string",
-              "description": "Language of tests ot generate for this plugin"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ],
+              "description": "Language(s) of tests to generate for this plugin"
+            },
+            "frameworks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mitre:atlas",
+                  "nist:ai:measure",
+                  "owasp:api",
+                  "owasp:llm",
+                  "owasp:agentic",
+                  "eu:ai-act",
+                  "iso:42001",
+                  "gdpr"
+                ]
+              },
+              "minItems": 1,
+              "description": "Compliance frameworks to include across reports and commands"
             },
             "entities": {
               "type": "array",
@@ -1149,6 +1192,8 @@
                           "eu:ai-act:art5:social-scoring",
                           "eu:ai-act:art5:subliminal-manipulation",
                           "excessive-agency",
+                          "ferpa",
+                          "financial",
                           "financial:calculation-error",
                           "financial:compliance-violation",
                           "financial:confidential-disclosure",
@@ -1168,6 +1213,7 @@
                           "gdpr:art32",
                           "gdpr:art5",
                           "gdpr:art9",
+                          "goal-misalignment",
                           "guardrails-eval",
                           "hallucination",
                           "harmbench",
@@ -1202,6 +1248,10 @@
                           "illegal-activity",
                           "imitation",
                           "indirect-prompt-injection",
+                          "insurance",
+                          "insurance:coverage-discrimination",
+                          "insurance:network-misinformation",
+                          "insurance:phi-disclosure",
                           "intent",
                           "iso:42001",
                           "iso:42001:accountability",
@@ -1252,7 +1302,15 @@
                           "nist:ai:measure:4.3",
                           "off-topic",
                           "overreliance",
+                          "owasp:agentic:redteam",
                           "owasp:agentic:t01",
+                          "owasp:agentic:t02",
+                          "owasp:agentic:t03",
+                          "owasp:agentic:t04",
+                          "owasp:agentic:t05",
+                          "owasp:agentic:t06",
+                          "owasp:agentic:t08",
+                          "owasp:agentic:t10",
                           "owasp:api",
                           "owasp:api:01",
                           "owasp:api:02",
@@ -1280,6 +1338,10 @@
                           "owasp:llm:redteam:runtime",
                           "owasp:llm:redteam:system",
                           "personal-safety",
+                          "pharmacy",
+                          "pharmacy:controlled-substance-compliance",
+                          "pharmacy:dosage-calculation",
+                          "pharmacy:drug-interaction",
                           "pii",
                           "pii:api-db",
                           "pii:direct",
@@ -1361,6 +1423,8 @@
                               "eu:ai-act:art5:social-scoring",
                               "eu:ai-act:art5:subliminal-manipulation",
                               "excessive-agency",
+                              "ferpa",
+                              "financial",
                               "financial:calculation-error",
                               "financial:compliance-violation",
                               "financial:confidential-disclosure",
@@ -1380,6 +1444,7 @@
                               "gdpr:art32",
                               "gdpr:art5",
                               "gdpr:art9",
+                              "goal-misalignment",
                               "guardrails-eval",
                               "hallucination",
                               "harmbench",
@@ -1414,6 +1479,10 @@
                               "illegal-activity",
                               "imitation",
                               "indirect-prompt-injection",
+                              "insurance",
+                              "insurance:coverage-discrimination",
+                              "insurance:network-misinformation",
+                              "insurance:phi-disclosure",
                               "intent",
                               "iso:42001",
                               "iso:42001:accountability",
@@ -1464,7 +1533,15 @@
                               "nist:ai:measure:4.3",
                               "off-topic",
                               "overreliance",
+                              "owasp:agentic:redteam",
                               "owasp:agentic:t01",
+                              "owasp:agentic:t02",
+                              "owasp:agentic:t03",
+                              "owasp:agentic:t04",
+                              "owasp:agentic:t05",
+                              "owasp:agentic:t06",
+                              "owasp:agentic:t08",
+                              "owasp:agentic:t10",
                               "owasp:api",
                               "owasp:api:01",
                               "owasp:api:02",
@@ -1492,6 +1569,10 @@
                               "owasp:llm:redteam:runtime",
                               "owasp:llm:redteam:system",
                               "personal-safety",
+                              "pharmacy",
+                              "pharmacy:controlled-substance-compliance",
+                              "pharmacy:dosage-calculation",
+                              "pharmacy:drug-interaction",
                               "pii",
                               "pii:api-db",
                               "pii:direct",
@@ -1580,6 +1661,7 @@
                           "image",
                           "jailbreak",
                           "jailbreak:composite",
+                          "jailbreak:hydra",
                           "jailbreak:likert",
                           "jailbreak:meta",
                           "jailbreak:tree",
@@ -1594,6 +1676,7 @@
                           "prompt-injection",
                           "retry",
                           "rot13",
+                          "simba",
                           "video"
                         ]
                       },
@@ -1622,7 +1705,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, simba, video",
               "default": ["default"]
             },
             "maxConcurrency": {
@@ -1638,6 +1721,56 @@
             "excludeTargetOutputFromAgenticAttackGeneration": {
               "type": "boolean",
               "description": "Whether to exclude target output from the agentific attack generation process"
+            },
+            "tracing": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "includeInAttack": {
+                  "type": "boolean"
+                },
+                "includeInGrading": {
+                  "type": "boolean"
+                },
+                "includeInternalSpans": {
+                  "type": "boolean"
+                },
+                "maxSpans": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "maxDepth": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "maxRetries": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "retryDelayMs": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "spanFilter": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sanitizeAttributes": {
+                  "type": "boolean"
+                },
+                "strategies": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/definitions/PromptfooConfigSchema/properties/redteam/properties/tracing"
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "description": "Tracing defaults applied to all strategies unless overridden"
             }
           },
           "additionalProperties": false

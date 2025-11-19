@@ -13,7 +13,7 @@ import { type TestResultStats } from './FrameworkComplianceUtils';
 interface OverviewProps {
   categoryStats: Record<PluginType, TestResultStats>;
   plugins: RedteamPluginObject[];
-  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
+  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
 }
 

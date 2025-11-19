@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Link as RouterLink } from 'react-router-dom';
+
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Divider from '@mui/material/Divider';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
@@ -18,21 +21,24 @@ import {
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
-import { Link as RouterLink } from 'react-router-dom';
+import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import EstimationsDisplay from './EstimationsDisplay';
 import PageWrapper from './PageWrapper';
-import StrategyConfigDialog from './StrategyConfigDialog';
-import { PresetSelector } from './strategies/PresetSelector';
 import { AgenticStrategiesGroup } from './strategies/AgenticStrategiesGroup';
+import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
-import { getStrategyId } from './strategies/utils';
-import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
-import EstimationsDisplay from './EstimationsDisplay';
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
-import Divider from '@mui/material/Divider';
+import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
+import {
+  getStrategyId,
+  isStrategyConfigured,
+  STRATEGIES_REQUIRING_CONFIG,
+} from './strategies/utils';
+import StrategyConfigDialog from './StrategyConfigDialog';
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -56,15 +62,17 @@ const RECOMMENDED_STRATEGIES = DEFAULT_STRATEGIES;
 const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
   basic:
     'Standard testing without additional attack strategies. Tests prompts as-is to establish baseline behavior.',
+  layer:
+    'Applies multiple transformation strategies sequentially, where each step modifies test cases before passing to the next step.',
 };
 
-const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter((id) => id !== 'default').map(
-  (id) => ({
-    id,
-    name: strategyDisplayNames[id] || id,
-    description: UI_STRATEGY_DESCRIPTIONS[id] || strategyDescriptions[id],
-  }),
-);
+const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter(
+  (id) => id !== 'default' && id !== 'multilingual' && id !== 'simba',
+).map((id) => ({
+  id,
+  name: strategyDisplayNames[id] || id,
+  description: UI_STRATEGY_DESCRIPTIONS[id] || strategyDescriptions[id],
+}));
 
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
@@ -94,6 +102,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       return isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE.includes(strategyId as any);
     },
     [isRemoteGenerationDisabled],
+  );
+
+  const selectedStrategyIds = useMemo(
+    () => config.strategies.map((s) => getStrategyId(s)),
+    [config.strategies],
   );
 
   // Categorize strategies by type
@@ -282,9 +295,25 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         }
 
         updateConfig('strategies', [...config.strategies, newStrategy]);
+
+        // Auto-open config dialog for strategies that require configuration
+        if (STRATEGIES_REQUIRING_CONFIG.includes(strategyId)) {
+          setConfigDialog({
+            isOpen: true,
+            selectedStrategy: strategyId,
+          });
+        }
       }
     },
-    [config.strategies, recordEvent, updateConfig, isStatefulValue, isStrategyDisabled, toast],
+    [
+      config.strategies,
+      recordEvent,
+      updateConfig,
+      isStatefulValue,
+      isStrategyDisabled,
+      toast,
+      setConfigDialog,
+    ],
   );
 
   const handleSelectNoneInSection = useCallback(
@@ -405,14 +434,41 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies, updateConfig],
   );
 
+  // Check if a specific strategy is configured
+  const isStrategyConfiguredById = useCallback(
+    (strategyId: string): boolean => {
+      const strategy = config.strategies.find((s) => getStrategyId(s) === strategyId);
+      return strategy ? isStrategyConfigured(strategyId, strategy) : true;
+    },
+    [config.strategies],
+  );
+
+  // Validation function to check if all selected strategies are properly configured
+  const isStrategyConfigValid = useCallback(() => {
+    return config.strategies.every((strategy) =>
+      isStrategyConfigured(getStrategyId(strategy), strategy),
+    );
+  }, [config.strategies]);
+
+  const getNextButtonTooltip = useCallback(() => {
+    if (!isStrategyConfigValid()) {
+      const unconfiguredStrategies = config.strategies
+        .filter((strategy) => {
+          const strategyId = getStrategyId(strategy);
+          return !isStrategyConfigured(strategyId, strategy);
+        })
+        .map((s) => getStrategyId(s));
+
+      if (unconfiguredStrategies.length > 0) {
+        return `Please configure the following ${unconfiguredStrategies.length === 1 ? 'strategy' : 'strategies'}: ${unconfiguredStrategies.join(', ')}`;
+      }
+    }
+    return '';
+  }, [config.strategies, isStrategyConfigValid]);
+
   // ----------------------------------------------
   // Derived states
   // ----------------------------------------------
-
-  const selectedStrategyIds = useMemo(
-    () => config.strategies.map((s) => getStrategyId(s)),
-    [config.strategies],
-  );
 
   // Check if user has selected all or most strategies
   const hasSelectedMostStrategies = useMemo(() => {
@@ -420,7 +476,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     const totalSelected = selectedStrategyIds.length;
     // Show warning if more than 80% of strategies are selected or all strategies are selected
     return totalSelected >= totalAvailable * 0.8 || totalSelected === totalAvailable;
-  }, [selectedStrategyIds, availableStrategies]);
+  }, [selectedStrategyIds]);
 
   const showSystemConfig = config.strategies.some((s) =>
     ['goat', 'crescendo'].includes(getStrategyId(s)),
@@ -461,6 +517,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       }
       onNext={onNext}
       onBack={onBack}
+      nextDisabled={!isStrategyConfigValid()}
+      warningMessage={getNextButtonTooltip()}
     >
       {/* Warning banner when remote generation is disabled - full width sticky */}
       {isRemoteGenerationDisabled && (
@@ -561,6 +619,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             isStrategyDisabled={isStrategyDisabled}
             isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isStrategyConfigured={isStrategyConfiguredById}
           />
         )}
 
@@ -576,6 +635,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             isStrategyDisabled={isStrategyDisabled}
             isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isStrategyConfigured={isStrategyConfiguredById}
           />
         )}
 
@@ -591,6 +651,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             isStrategyDisabled={isStrategyDisabled}
             isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isStrategyConfigured={isStrategyConfiguredById}
           />
         )}
 
@@ -606,6 +667,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             isStrategyDisabled={isStrategyDisabled}
             isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isStrategyConfigured={isStrategyConfiguredById}
           />
         )}
 
@@ -640,6 +702,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           strategyData={
             availableStrategies.find((s) => s.id === configDialog.selectedStrategy) ?? null
           }
+          selectedPlugins={config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) ?? []}
+          allStrategies={config.strategies}
         />
       </Box>
     </PageWrapper>

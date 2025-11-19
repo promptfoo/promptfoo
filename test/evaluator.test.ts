@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 
 import glob from 'glob';
-import { FILE_METADATA_KEY } from '../src/constants';
+import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from '../src/constants';
 import {
   evaluate,
   formatVarsForDisplay,
@@ -14,6 +14,7 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
+import { strategyDisplayNames } from '../src/redteam/constants/metadata';
 import {
   type ApiProvider,
   type Prompt,
@@ -378,6 +379,87 @@ describe('evaluator', () => {
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  it('runs Simba test cases after other providers during evaluate', async () => {
+    const callOrder: string[] = [];
+
+    const normalProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('normal-provider'),
+      label: 'Normal provider',
+      delay: 0,
+      callApi: jest.fn().mockImplementation(async () => {
+        callOrder.push('normal');
+        return {
+          output: 'normal output',
+          tokenUsage: {
+            total: 1,
+            prompt: 1,
+            completion: 0,
+            cached: 0,
+            numRequests: 1,
+            completionDetails: {
+              reasoning: 0,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+            },
+          },
+        };
+      }),
+    };
+
+    const runResults = [
+      {
+        promptIdx: -1,
+        testIdx: -1,
+        testCase: { assert: [] },
+        promptId: 'simba-case',
+        provider: {
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
+        },
+        prompt: {
+          raw: 'Test prompt',
+          label: strategyDisplayNames.simba,
+        },
+        vars: {},
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 5,
+        namedScores: {},
+      },
+    ];
+
+    const agentProvider = {
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
+      delay: 0,
+      callApi: jest.fn(),
+      runSimba: jest.fn().mockImplementation(async () => {
+        callOrder.push('simba');
+        return runResults.map((result) => ({ ...result }));
+      }),
+    } as unknown as ApiProvider & { runSimba: jest.Mock };
+
+    const testSuite: TestSuite = {
+      providers: [normalProvider, agentProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const addResultSpy = jest.spyOn(evalRecord, 'addResult');
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(callOrder).toEqual(['normal', 'simba']);
+    expect(normalProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(agentProvider.runSimba as jest.Mock).toHaveBeenCalledTimes(1);
+    expect(agentProvider.callApi as jest.Mock).not.toHaveBeenCalled();
+    expect(addResultSpy).toHaveBeenCalledTimes(2);
+    expect(addResultSpy.mock.calls[0][0].provider.id).toBe('normal-provider');
+    expect(addResultSpy.mock.calls[1][0].provider.id).toBe('promptfoo:redteam:simba');
   });
 
   it('evaluate with vars - no escaping', async () => {
@@ -2790,6 +2872,53 @@ describe('evaluator', () => {
     });
   });
 
+  it('forces cache busting for repeat iterations', async () => {
+    const contexts: Array<Record<string, any> | undefined> = [];
+    const provider: ApiProvider = {
+      id: () => 'mock-provider',
+      callApi: jest
+        .fn()
+        .mockImplementation(async (_prompt: string, context?: Record<string, any>) => {
+          contexts.push(context);
+          return {
+            output: 'result',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }),
+    };
+
+    const baseOptions = {
+      provider,
+      prompt: { raw: 'Test prompt', label: 'test-label' } as Prompt,
+      delay: 0,
+      nunjucksFilters: undefined,
+      evaluateOptions: {},
+      testIdx: 0,
+      promptIdx: 0,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    };
+
+    await runEval({
+      ...baseOptions,
+      test: { assert: [] },
+      repeatIndex: 0,
+    });
+
+    expect(contexts[0]?.bustCache).toBeFalsy();
+
+    contexts.length = 0;
+
+    await runEval({
+      ...baseOptions,
+      test: { assert: [] },
+      repeatIndex: 1,
+    });
+
+    expect(contexts[0]?.bustCache).toBe(true);
+  });
+
   it('should NOT include assertion tokens in main token totals', async () => {
     // Mock provider that returns fixed token usage
     const providerWithTokens: ApiProvider = {
@@ -3513,6 +3642,189 @@ describe('runEval', () => {
 
     expect(results[0].success).toBe(true);
     expect(results[0].response?.output).toBe('original-provider-test');
+  });
+
+  it('delegates Simba providers to runSimba using evaluateOptions maxConcurrency', async () => {
+    const runSimbaResults = [
+      {
+        promptIdx: -1,
+        testIdx: -1,
+        testCase: { assert: [] },
+        promptId: 'simba-case',
+        provider: {
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
+        },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
+        vars: {},
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 50,
+        namedScores: {},
+      },
+    ];
+
+    const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
+    const agentProvider = {
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
+      delay: 0,
+      callApi: jest.fn(),
+      runSimba: runSimbaMock,
+    } as unknown as ApiProvider & { runSimba: jest.Mock };
+
+    const options = {
+      ...defaultOptions,
+      testIdx: 5,
+      promptIdx: 2,
+      evaluateOptions: { maxConcurrency: 7 },
+      concurrency: 99,
+    };
+
+    const results = await runEval({
+      ...options,
+      provider: agentProvider,
+      prompt: { raw: 'Simba prompt', label: 'simba-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(runSimbaMock).toHaveBeenCalledTimes(1);
+    expect(runSimbaMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'Simba prompt',
+        context: expect.objectContaining({ vars: {} }),
+        options: undefined,
+        concurrency: 7,
+      }),
+    );
+    expect(agentProvider.callApi as jest.Mock).not.toHaveBeenCalled();
+    expect(results).toHaveLength(1);
+    expect(results[0].promptIdx).toBe(2);
+    expect(results[0].testIdx).toBe(5);
+    expect(results[0].success).toBe(true);
+  });
+
+  it('uses default Simba concurrency when evaluateOptions are not provided', async () => {
+    const runSimbaResults = [
+      {
+        promptIdx: -1,
+        testIdx: -1,
+        testCase: { assert: [] },
+        promptId: 'simba-case',
+        provider: {
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
+        },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
+        vars: {},
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 50,
+        namedScores: {},
+      },
+    ];
+
+    const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
+    const agentProvider = {
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
+      delay: 0,
+      callApi: jest.fn(),
+      runSimba: runSimbaMock,
+    } as unknown as ApiProvider & { runSimba: jest.Mock };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: agentProvider,
+      prompt: { raw: 'Simba prompt', label: 'simba-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(runSimbaMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'Simba prompt',
+        context: expect.any(Object),
+        options: undefined,
+        concurrency: DEFAULT_MAX_CONCURRENCY,
+      }),
+    );
+    expect(results[0].promptIdx).toBe(defaultOptions.promptIdx);
+    expect(results[0].testIdx).toBe(defaultOptions.testIdx);
+  });
+
+  it('assigns sequential test indices when runSimba returns multiple results', async () => {
+    const runSimbaResults = [
+      {
+        promptIdx: -1,
+        testIdx: -1,
+        testCase: { assert: [] },
+        promptId: 'simba-case-1',
+        provider: {
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
+        },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
+        vars: {},
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 10,
+        namedScores: {},
+      },
+      {
+        promptIdx: -1,
+        testIdx: -1,
+        testCase: { assert: [] },
+        promptId: 'simba-case-2',
+        provider: {
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
+        },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
+        vars: {},
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 0.5,
+        latencyMs: 20,
+        namedScores: {},
+      },
+    ];
+
+    const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
+    const agentProvider = {
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
+      delay: 0,
+      callApi: jest.fn(),
+      runSimba: runSimbaMock,
+    } as unknown as ApiProvider & { runSimba: jest.Mock };
+
+    const results = await runEval({
+      ...defaultOptions,
+      testIdx: 10,
+      promptIdx: 3,
+      provider: agentProvider,
+      prompt: { raw: 'Simba prompt', label: 'simba-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(runSimbaMock).toHaveBeenCalledTimes(1);
+    expect(results).toHaveLength(2);
+    expect(results[0].testIdx).toBe(10);
+    expect(results[0].promptIdx).toBe(3);
+    expect(results[1].testIdx).toBe(11);
+    expect(results[1].promptIdx).toBe(3);
   });
 
   it('should accumulate token usage correctly', async () => {
