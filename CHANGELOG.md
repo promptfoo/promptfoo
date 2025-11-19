@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- feat(redteam): preserve original strategyId and prevent retry tests from being transformed by strategies - retry tests now maintain their original metadata (strategyId: goat, basic, or undefined) and skip strategy transformations to avoid redundant variations (#6243)
+
 ## [0.119.7] - 2025-11-17
 
 ### Added
