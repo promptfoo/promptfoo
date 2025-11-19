@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(providers): propagate agent errors in simulated-user provider - fixes issue where errors from sendMessageToAgent() were silently ignored, causing false-positive test results when the target provider fails (#6209)
 - fix(code-scan): in `code-scans run`, don't log anything to stdout except json results when --json is used—fixes GitHub action (#6248)
 - fix(code-scan): update default API host to https://api.promptfoo.app to fix websocket connection issues (#6247)
 
