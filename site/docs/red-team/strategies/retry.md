@@ -62,7 +62,7 @@ redteam:
       numTests: 5
   strategies:
     - id: retry
-    - id: multilingual
+    - id: jailbreak
 ```
 
 And previously some hate speech tests failed against your target, the retry strategy will:
@@ -71,7 +71,7 @@ And previously some hate speech tests failed against your target, the retry stra
 2. Find previously failed hate speech test cases for this target
 3. Combine and deduplicate them
 4. Select the top 5 most relevant test cases
-5. Pass these to subsequent strategies (like multilingual)
+5. Pass these to subsequent strategies (like jailbreak)
 
 ## Best Practices
 

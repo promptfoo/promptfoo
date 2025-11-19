@@ -12,10 +12,10 @@ The `sagemaker` provider allows you to use Amazon SageMaker AI endpoints in your
 
 1. Ensure you have deployed the desired models as SageMaker AI endpoints.
 
-2. Install required dependencies:
+2. Install the `@aws-sdk/client-sagemaker-runtime` package:
 
    ```bash
-   npm install -g @aws-sdk/client-sagemaker-runtime
+   npm install @aws-sdk/client-sagemaker-runtime
    ```
 
 3. The AWS SDK will automatically pull credentials from the following locations:

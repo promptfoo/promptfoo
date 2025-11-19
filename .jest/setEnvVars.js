@@ -1,5 +1,7 @@
 const TEST_CONFIG_DIR = './.local/jest/config';
 
+process.env.NODE_ENV = 'test';
+process.env.PROMPTFOO_CACHE_TYPE = 'memory';
 process.env.ANTHROPIC_API_KEY = 'foo';
 process.env.AZURE_OPENAI_API_HOST = 'azure.openai.host';
 process.env.AZURE_OPENAI_API_KEY = 'foo';

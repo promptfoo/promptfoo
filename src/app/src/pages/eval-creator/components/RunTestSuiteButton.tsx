@@ -19,6 +19,7 @@ const RunTestSuiteButton = () => {
     providers,
     scenarios,
     tests,
+    extensions,
   } = config;
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
@@ -43,6 +44,7 @@ const RunTestSuiteButton = () => {
       providers,
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'
+      extensions,
     };
 
     try {

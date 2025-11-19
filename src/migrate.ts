@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { getDb } from './database';
+import { getDb } from './database/index';
 import logger from './logger';
 
 /**

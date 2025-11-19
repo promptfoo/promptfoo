@@ -67,11 +67,11 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: github:anthropic/claude-4-opus
+  - id: github:anthropic/claude-4-opus # Uses GITHUB_TOKEN env var
     config:
       temperature: 0.7
       max_tokens: 4096
-      apiKey: ${GITHUB_TOKEN}
+      # apiKey: "{{ env.GITHUB_TOKEN }}"  # optional, auto-detected
 ```
 
 ### Multiple Models

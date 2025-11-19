@@ -2,7 +2,9 @@ import { type ChildProcess, spawn } from 'child_process';
 
 import { Command } from 'commander';
 import { checkModelAuditInstalled, modelScanCommand } from '../../src/commands/modelScan';
+import logger from '../../src/logger';
 jest.mock('child_process');
+jest.mock('../../src/logger');
 jest.mock('../../src/models/modelAudit', () => ({
   __esModule: true,
   default: {
@@ -28,8 +30,8 @@ describe('modelScanCommand', () => {
   });
 
   it('should exit if no paths are provided', async () => {
-    // Mock console.error to capture the output
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+    // Mock logger.error to capture the output
+    const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
     // Mock for checkModelAuditInstalled (modelaudit --version)
     const versionCheckProcess = {
@@ -58,17 +60,17 @@ describe('modelScanCommand', () => {
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
     await command?.parseAsync(['scan-model']);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expect(loggerErrorSpy).toHaveBeenCalledWith(
       'No paths specified. Please provide at least one model file or directory to scan.',
     );
     expect(mockExit).toHaveBeenCalledWith(1);
 
-    consoleErrorSpy.mockRestore();
+    loggerErrorSpy.mockRestore();
   });
 
   it('should exit if modelaudit is not installed', async () => {
-    // Mock console.error to capture the output
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+    // Mock logger.error to capture the output
+    const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
     // Mock for checkModelAuditInstalled (modelaudit --version) - simulate not installed
     const versionCheckProcess = {
@@ -97,10 +99,10 @@ describe('modelScanCommand', () => {
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
     await command?.parseAsync(['scan-model', 'path/to/model']);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith('ModelAudit is not installed.');
+    expect(loggerErrorSpy).toHaveBeenCalledWith('ModelAudit is not installed.');
     expect(mockExit).toHaveBeenCalledWith(1);
 
-    consoleErrorSpy.mockRestore();
+    loggerErrorSpy.mockRestore();
   });
 
   it('should spawn modelaudit process with correct arguments', async () => {
@@ -188,8 +190,8 @@ describe('modelScanCommand', () => {
   });
 
   it('should handle modelaudit process error', async () => {
-    // Mock console.error to capture the output
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+    // Mock logger.error to capture the output
+    const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
     // Mock for checkModelAuditInstalled (modelaudit --version)
     const versionCheckProcess = {
@@ -226,10 +228,10 @@ describe('modelScanCommand', () => {
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
     await command?.parseAsync(['scan-model', 'path/to/model']);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to start modelaudit: spawn error');
+    expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to start modelaudit: spawn error');
     expect(mockExit).toHaveBeenCalledWith(1);
 
-    consoleErrorSpy.mockRestore();
+    loggerErrorSpy.mockRestore();
   });
 
   it('should handle exit code 1 (scan completed with issues)', async () => {
@@ -300,8 +302,8 @@ describe('modelScanCommand', () => {
   });
 
   it('should handle exit code 2 (scan process error)', async () => {
-    // Mock console.error to capture the output
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+    // Mock logger.error to capture the output
+    const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
     // Mock for checkModelAuditInstalled (modelaudit --version)
     const versionCheckProcess = {
@@ -342,11 +344,11 @@ describe('modelScanCommand', () => {
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
     await command?.parseAsync(['node', 'scan-model', 'path/to/model']);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith('Model scan process exited with code 2');
-    expect(consoleErrorSpy).toHaveBeenCalledWith('Error output: Some error output');
+    expect(loggerErrorSpy).toHaveBeenCalledWith('Model scan process exited with code 2');
+    expect(loggerErrorSpy).toHaveBeenCalledWith('Error output: Some error output');
     expect(mockExit).toHaveBeenCalledWith(2);
 
-    consoleErrorSpy.mockRestore();
+    loggerErrorSpy.mockRestore();
   });
 });
 
@@ -462,6 +464,7 @@ describe('Command Options Validation', () => {
       '--no-cache',
       '--quiet',
       '--progress',
+      '--stream',
       '--verbose',
     ];
 
@@ -481,7 +484,7 @@ describe('Command Options Validation', () => {
       '--preview',
       '--all-files',
       '--selective',
-      '--stream',
+      '--scan-and-delete',
       '--skip-files',
       '--no-skip-files',
       '--strict-license',

@@ -147,7 +147,7 @@ describe('handleConversationRelevance with reason generation', () => {
         threshold: 0.8,
         config: { windowSize: 3 },
       },
-      context: {
+      assertionValueContext: {
         vars: {},
         test: {} as AtomicTestCase,
         prompt: 'test',
@@ -200,7 +200,7 @@ describe('handleConversationRelevance with reason generation', () => {
         type: 'conversation-relevance',
         threshold: 0.8,
       },
-      context: {
+      assertionValueContext: {
         vars: {},
         test: {} as AtomicTestCase,
         prompt: 'Hello',

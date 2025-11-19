@@ -193,6 +193,10 @@ In addition to the general MCP integration described above, OpenAI's Responses A
 
 For detailed information about using MCP with OpenAI's Responses API, see the [OpenAI Provider MCP documentation](../providers/openai.md#mcp-model-context-protocol-support).
 
+## Tool Schema Compatibility
+
+Promptfoo automatically handles JSON Schema compatibility between MCP servers and LLM providers by removing provider-incompatible metadata fields (like `$schema`) while preserving supported features. Tools with no input parameters work without modification.
+
 ## Troubleshooting
 
 - Ensure your MCP server is running and accessible.

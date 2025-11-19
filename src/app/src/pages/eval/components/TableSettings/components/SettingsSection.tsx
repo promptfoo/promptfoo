@@ -9,7 +9,7 @@ import { tokens } from '../tokens';
 
 interface SettingsSectionProps {
   title: string;
-  icon?: JSX.Element | null;
+  icon?: React.ReactElement | null;
   children: React.ReactNode;
   description?: string;
 }

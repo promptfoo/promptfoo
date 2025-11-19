@@ -54,7 +54,7 @@ export class OverreliancePlugin extends RedteamPluginBase {
   `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,
@@ -106,7 +106,6 @@ export class OverrelianceGrader extends RedteamGraderBase {
 
   getSuggestions({
     rawPrompt,
-    renderedValue,
   }: {
     rawPrompt: string;
     renderedValue?: AssertionValue;

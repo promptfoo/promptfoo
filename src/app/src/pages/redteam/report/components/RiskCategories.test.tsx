@@ -161,7 +161,6 @@ describe('RiskCategories', () => {
       expect(props.evalId).toBe(mockEvalId);
       expect(props.failuresByPlugin).toBe(mockFailuresByPlugin);
       expect(props.passesByPlugin).toBe(mockPassesByPlugin);
-      expect(props.strategyStats).toBe(mockStrategyStats);
     });
   });
 

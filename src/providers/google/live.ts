@@ -1,13 +1,13 @@
 import { type ChildProcess, spawn } from 'child_process';
 import path from 'path';
 
-import axios from 'axios';
 import WebSocket from 'ws';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
+import { fetchWithProxy } from '../../util/fetch';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { geminiFormatAndSystemInstructions, loadFile } from './util';
 
@@ -41,6 +41,43 @@ const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
     },
   };
   return contentMessage;
+};
+
+/**
+ * Helper function to fetch JSON with error handling
+ */
+export const fetchJson = async (url: string, options?: RequestInit): Promise<any> => {
+  const response = await fetchWithProxy(url, options);
+  if (!response.ok) {
+    throw new Error(`HTTP error - status: ${response.status}`);
+  }
+  return response.json();
+};
+
+/**
+ * Helper function to try GET with query params, fallback to POST with JSON body
+ */
+export const tryGetThenPost = async (url: string, data?: any): Promise<any> => {
+  try {
+    // Try GET first with query params
+    const urlWithParams = new URL(url);
+    if (data) {
+      const params = typeof data === 'string' ? JSON.parse(data) : data;
+      Object.entries(params).forEach(([key, value]) => {
+        urlWithParams.searchParams.append(key, String(value));
+      });
+    }
+    return await fetchJson(urlWithParams.href);
+  } catch {
+    // Fall back to POST
+    return fetchJson(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: data ? JSON.stringify(typeof data === 'string' ? JSON.parse(data) : data) : null,
+    });
+  }
 };
 
 export class GoogleLiveProvider implements ApiProvider {
@@ -203,8 +240,7 @@ export class GoogleLiveProvider implements ApiProvider {
         if (this.config.functionToolStatefulApi) {
           try {
             const url = new URL('get_state', this.config.functionToolStatefulApi.url).href;
-            const apiResponse = await axios.get(url);
-            statefulApiState = apiResponse.data;
+            statefulApiState = await fetchJson(url);
             logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
           } catch (err) {
             logger.error(`Error retrieving final state of api: ${JSON.stringify(err)}`);
@@ -475,18 +511,10 @@ export class GoogleLiveProvider implements ApiProvider {
                     logger.warn(
                       'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
                     );
-                    const url = new URL(functionName, this.config.functionToolStatefulApi.url).href;
+                    const baseUrl = new URL(functionName, this.config.functionToolStatefulApi.url)
+                      .href;
                     try {
-                      // Try GET first, then fall back to POST
-                      try {
-                        const axiosResponse = await axios.get(url, {
-                          params: functionCall.args || null,
-                        });
-                        callbackResponse = axiosResponse.data;
-                      } catch {
-                        const axiosResponse = await axios.post(url, functionCall.args || null);
-                        callbackResponse = axiosResponse.data;
-                      }
+                      callbackResponse = await tryGetThenPost(baseUrl, functionCall.args);
                       logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
                     } catch (err) {
                       callbackResponse = {

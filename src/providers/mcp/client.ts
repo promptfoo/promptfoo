@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import logger from '../../logger';
+import { getAuthHeaders } from './util';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -78,7 +79,7 @@ export class MCPClient {
         await client.connect(transport);
       } else if (server.url) {
         // Get auth headers and combine with custom headers
-        const authHeaders = this.getAuthHeaders(server);
+        const authHeaders = getAuthHeaders(server);
         const headers = {
           ...(server.headers || {}),
           ...authHeaders,
@@ -144,21 +145,6 @@ export class MCPClient {
       }
       throw new Error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
     }
-  }
-
-  private getAuthHeaders(server: MCPServerConfig): Record<string, string> {
-    if (!server.auth) {
-      return {};
-    }
-
-    if (server.auth.type === 'bearer' && server.auth.token) {
-      return { Authorization: `Bearer ${server.auth.token}` };
-    }
-    if (server.auth.type === 'api_key' && server.auth.api_key) {
-      return { 'X-API-Key': server.auth.api_key };
-    }
-
-    return {};
   }
 
   getAllTools(): MCPTool[] {

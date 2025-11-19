@@ -286,6 +286,23 @@ providers:
   # - id: file://./myProvider.js   # CommonJS modules
 ```
 
+### Link to Cloud Target
+
+:::info Promptfoo Cloud Feature
+Available in [Promptfoo Cloud](/docs/enterprise) deployments.
+:::
+
+Link your local provider configuration to a cloud target using `linkedTargetId`:
+
+```yaml
+providers:
+  - id: file://./myProvider.mjs
+    config:
+      linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
+```
+
+See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/linking-targets/) for setup instructions.
+
 ### Multiple Instances
 
 ```yaml title="multiple-providers.yaml"

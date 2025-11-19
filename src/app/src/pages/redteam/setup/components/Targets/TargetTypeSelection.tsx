@@ -19,14 +19,9 @@ import type { ProviderOptions } from '../../types';
 interface TargetTypeSelectionProps {
   onNext: () => void;
   onBack?: () => void;
-  setupModalOpen: boolean;
 }
 
-export default function TargetTypeSelection({
-  onNext,
-  onBack,
-  setupModalOpen,
-}: TargetTypeSelectionProps) {
+export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelectionProps) {
   const { config, updateConfig, providerType, setProviderType } = useRedTeamConfig();
 
   // Check if we have a complete saved configuration

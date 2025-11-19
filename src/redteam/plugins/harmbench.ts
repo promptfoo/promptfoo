@@ -56,7 +56,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
     throw new Error('Not implemented');
   }
 
-  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs: number = 0): Promise<TestCase[]> {
     const records = await fetchDataset(n);
 
     return records.map(
@@ -75,7 +75,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
     );
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,

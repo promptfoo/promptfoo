@@ -5,7 +5,7 @@ import { POSTHOG_KEY } from './constants/build';
 import { getEnvBool, getEnvString, isCI } from './envars';
 import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
-import { fetchWithProxy, fetchWithTimeout } from './util/fetch';
+import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
 
 export const TelemetryEventSchema = z.object({
   event: z.enum([
@@ -14,6 +14,13 @@ export const TelemetryEventSchema = z.object({
     'eval_ran',
     'feature_used',
     'funnel',
+    'redteam discover',
+    'redteam generate',
+    'redteam init',
+    'redteam poison',
+    'redteam report',
+    'redteam run',
+    'redteam setup',
     'webui_action',
     'webui_api',
     'webui_page_view',
@@ -73,6 +80,7 @@ export class Telemetry {
           properties: {
             email: this.email,
             isLoggedIntoCloud: isLoggedIntoCloud(),
+            isRunningInCi: isCI(),
           },
         });
         client.flush().catch(() => {

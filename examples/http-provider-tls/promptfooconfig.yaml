@@ -13,7 +13,7 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
-        Authorization: Bearer ${API_KEY}
+        Authorization: Bearer {{ env.API_KEY }}
       body:
         model: gpt-4o-mini
         messages:
@@ -60,7 +60,7 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
-        X-API-Key: ${API_KEY}
+        X-API-Key: '{{ env.API_KEY }}'
       body:
         input: '{{prompt}}'
       tls:
@@ -95,7 +95,7 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
-        Authorization: Bearer ${API_KEY}
+        Authorization: Bearer {{ env.API_KEY }}
       body:
         query: '{{prompt}}'
       tls:

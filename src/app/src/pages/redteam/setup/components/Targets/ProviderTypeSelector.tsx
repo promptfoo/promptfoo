@@ -19,6 +19,7 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { DEFAULT_WEBSOCKET_TIMEOUT_MS } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
 import type { ProviderOptions } from '../../types';
@@ -501,9 +502,9 @@ export default function ProviderTypeSelector({
           config: {
             type: 'websocket',
             url: 'wss://example.com/ws',
-            messageTemplate: '{"message": "{{prompt}}"}',
+            messageTemplate: '{"message": {{prompt | dump}}}',
             transformResponse: 'response.message',
-            timeoutMs: 30000,
+            timeoutMs: DEFAULT_WEBSOCKET_TIMEOUT_MS,
           },
         },
         'websocket',
@@ -721,15 +722,6 @@ export default function ProviderTypeSelector({
         },
         'helicone',
       );
-    } else if (value === 'ibm-bam') {
-      setProvider(
-        {
-          id: 'bam:chat:ibm/granite-13b-chat-v2',
-          config: {},
-          label: currentLabel,
-        },
-        'ibm-bam',
-      );
     } else if (value === 'jfrog') {
       setProvider(
         {
@@ -760,7 +752,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'watsonx') {
       setProvider(
         {
-          id: 'watsonx:ibm/granite-13b-chat-v2',
+          id: 'watsonx:ibm/granite-3-3-8b-instruct',
           config: {},
           label: currentLabel,
         },

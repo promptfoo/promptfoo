@@ -94,7 +94,7 @@ export class FunctionCallbackHandler {
     calls: any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    options?: { returnRawOnError?: boolean },
+    _options?: { returnRawOnError?: boolean },
   ): Promise<any> {
     if (!calls) {
       return calls;

@@ -27,6 +27,12 @@ const EvalSelector = ({ onEvalSelected }: EvalSelectorProps) => {
 
   React.useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input field or textarea
+      const target = event.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
       if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
         event.preventDefault();
         handleOpen();

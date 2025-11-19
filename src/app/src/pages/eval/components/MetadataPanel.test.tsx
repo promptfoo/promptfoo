@@ -16,12 +16,104 @@ describe('MetadataPanel', () => {
     onApplyFilter: mockOnApplyFilter,
   };
 
-  it("should render a table with all metadata keys except 'citations' when metadata is provided", () => {
+  it('should filter out metadata keys present in HIDDEN_METADATA_KEYS, including newly added keys', () => {
+    const mockMetadata = {
+      stringKey: 'stringValue',
+      citations: [{ source: 'doc1', content: 'citation content' }],
+      _promptfooFileMetadata: { fileName: 'test.txt', size: 1024 },
+      newHiddenKey: 'hiddenValue',
+    };
+
+    vi.mock('@app/constants', () => {
+      return {
+        HIDDEN_METADATA_KEYS: ['citations', '_promptfooFileMetadata', 'newHiddenKey'],
+      };
+    });
+
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+
+    expect(screen.getByText('Key')).toBeInTheDocument();
+    expect(screen.getByText('Value')).toBeInTheDocument();
+    expect(screen.getByText('stringKey')).toBeInTheDocument();
+    expect(screen.getByText('stringValue')).toBeInTheDocument();
+
+    expect(screen.queryByText('citations')).not.toBeInTheDocument();
+    expect(screen.queryByText('_promptfooFileMetadata')).not.toBeInTheDocument();
+    expect(screen.queryByText('newHiddenKey')).not.toBeInTheDocument();
+
+    vi.restoreAllMocks();
+  });
+
+  it('should handle malformed URLs by rendering them as plain text instead of a link', () => {
+    const malformedUrl = 'http://';
+    const mockMetadata = {
+      malformedUrlKey: malformedUrl,
+    };
+
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+
+    expect(screen.getByText(malformedUrl)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: malformedUrl })).not.toBeInTheDocument();
+  });
+
+  it("should render a 'View policy in Promptfoo Cloud' link in the value cell for 'policyName' when metadata contains both 'policyName' and a valid reusable 'policyId', and cloudConfig is enabled with an appUrl", () => {
+    const mockMetadata = {
+      policyName: 'My Policy',
+      policyId: '550e8400-e29b-41d4-a716-446655440000',
+    };
+
+    const mockCloudConfig = {
+      isEnabled: true,
+      appUrl: 'https://cloud.promptfoo.com',
+    };
+
+    render(
+      <MetadataPanel {...defaultProps} metadata={mockMetadata} cloudConfig={mockCloudConfig} />,
+    );
+
+    const linkElement = screen.getByRole('link', {
+      name: /view policy in promptfoo cloud/i,
+    });
+    expect(linkElement).toBeInTheDocument();
+    expect(linkElement).toHaveAttribute(
+      'href',
+      'https://cloud.promptfoo.com/redteam/plugins/policies/550e8400-e29b-41d4-a716-446655440000',
+    );
+    expect(linkElement).toHaveAttribute('target', '_blank');
+    expect(linkElement).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it("should render the value for 'policyName' as plain text when cloudConfig is enabled and has an appUrl, but metadata does not contain a valid 'policyId'", () => {
+    const mockMetadata = {
+      policyName: 'My Policy',
+    };
+
+    const mockCloudConfig = {
+      isEnabled: true,
+      appUrl: 'https://example.com',
+    };
+
+    render(
+      <MetadataPanel {...defaultProps} metadata={mockMetadata} cloudConfig={mockCloudConfig} />,
+    );
+
+    const policyNameCell = screen.getByText('My Policy');
+    expect(policyNameCell).toBeInTheDocument();
+    expect(policyNameCell.closest('td')).toBeInTheDocument();
+  });
+
+  it('should return null when metadata is undefined', () => {
+    const { container } = render(<MetadataPanel {...defaultProps} metadata={undefined} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("should render a table with all metadata keys except 'citations' and '_promptfooFileMetadata' when metadata is provided", () => {
     const mockMetadata = {
       stringKey: 'stringValue',
       numberKey: 123,
       objectKey: { nested: 'value' },
       citations: [{ source: 'doc1', content: 'citation content' }],
+      _promptfooFileMetadata: { fileName: 'test.txt', size: 1024 },
     };
 
     render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
@@ -38,7 +130,9 @@ describe('MetadataPanel', () => {
     expect(screen.getByText('objectKey')).toBeInTheDocument();
     expect(screen.getByText(JSON.stringify(mockMetadata.objectKey))).toBeInTheDocument();
 
+    // Verify hidden metadata keys are not displayed
     expect(screen.queryByText('citations')).not.toBeInTheDocument();
+    expect(screen.queryByText('_promptfooFileMetadata')).not.toBeInTheDocument();
   });
 
   it('should render a metadata value as a Link when the value is a valid URL string', () => {

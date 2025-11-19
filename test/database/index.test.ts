@@ -7,7 +7,7 @@ import {
   getDbPath,
   getDbSignalPath,
   isDbOpen,
-} from '../../src/database';
+} from '../../src/database/index';
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';

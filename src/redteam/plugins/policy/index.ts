@@ -1,13 +1,14 @@
 import dedent from 'dedent';
 import invariant from '../../../util/invariant';
 import { type PolicyObject } from '../../types';
-import { RedteamGraderBase, RedteamPluginBase } from '../base';
+import { RedteamGraderBase, RedteamPluginBase, type RedteamGradingContext } from '../base';
 import { POLICY_METRIC_PREFIX } from './constants';
 import { isValidPolicyObject, makeInlinePolicyId } from './utils';
 
 import type {
   ApiProvider,
   Assertion,
+  AssertionValue,
   AtomicTestCase,
   GradingResult,
   PluginConfig,
@@ -105,7 +106,7 @@ export class PolicyPlugin extends RedteamPluginBase {
    * @param prompt
    * @returns
    */
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,
@@ -156,6 +157,10 @@ export class PolicyViolationGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
+    renderedValue?: AssertionValue,
+    additionalRubric?: string,
+    skipRefusalCheck?: boolean,
+    gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const { policy, ...restMetadata } = test.metadata || {};
 
@@ -172,9 +177,10 @@ export class PolicyViolationGrader extends RedteamGraderBase {
         },
       },
       provider,
-      undefined,
-      undefined,
-      true, // skipRefusalCheck - custom policies should evaluate refusals
+      renderedValue,
+      additionalRubric,
+      skipRefusalCheck ?? true,
+      gradingContext,
     );
   }
 }

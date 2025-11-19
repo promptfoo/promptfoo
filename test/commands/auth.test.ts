@@ -8,7 +8,7 @@ import telemetry from '../../src/telemetry';
 import { getDefaultTeam } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { openAuthBrowser } from '../../src/util/server';
-import { createMockResponse } from '../util/utils';
+import { createMockResponse, stripAnsi } from '../util/utils';
 
 const mockCloudUser = {
   id: '1',
@@ -119,10 +119,21 @@ describe('auth command', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
       );
-      expect(logger.info).toHaveBeenCalledWith('Manual login URL: https://www.promptfoo.app/');
-      expect(logger.info).toHaveBeenCalledWith(
-        'After login, get your API token at: https://www.promptfoo.app/welcome',
-      );
+      // Check that both info calls were made
+      const infoCalls = jest.mocked(logger.info).mock.calls;
+      const infoMessages = infoCalls.map((call) => stripAnsi(String(call[0])));
+      expect(infoCalls.length).toBeGreaterThanOrEqual(2);
+
+      expect(
+        infoMessages.some((message) =>
+          message.includes('Manual login URL: https://www.promptfoo.app/'),
+        ),
+      ).toBe(true);
+      expect(
+        infoMessages.some((message) =>
+          message.includes('After login, get your API token at: https://www.promptfoo.app/welcome'),
+        ),
+      ).toBe(true);
       expect(process.exitCode).toBe(1);
       expect(openAuthBrowser).not.toHaveBeenCalled();
 
@@ -267,6 +278,8 @@ describe('auth command', () => {
       jest.mocked(getDefaultTeam).mockResolvedValueOnce({
         id: 'team-1',
         name: 'Default Team',
+        organizationId: 'org-1',
+        createdAt: '2023-01-01T00:00:00Z',
       });
 
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(

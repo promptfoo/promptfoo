@@ -9,6 +9,7 @@ export const handleGEval = async ({
   prompt,
   outputString,
   test,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string' || Array.isArray(renderedValue),
@@ -21,7 +22,14 @@ export const handleGEval = async ({
     const scores: number[] = [];
     const reasons: string[] = [];
     for (const value of renderedValue) {
-      const resp = await matchesGEval(value, prompt || '', outputString, threshold, test.options);
+      const resp = await matchesGEval(
+        value,
+        prompt || '',
+        outputString,
+        threshold,
+        test.options,
+        providerCallContext,
+      );
 
       scores.push(resp.score);
       reasons.push(resp.reason);
@@ -42,6 +50,7 @@ export const handleGEval = async ({
       outputString,
       threshold,
       test.options,
+      providerCallContext,
     );
 
     return {

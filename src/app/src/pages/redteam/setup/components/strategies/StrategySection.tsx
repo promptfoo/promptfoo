@@ -15,6 +15,9 @@ interface StrategySectionProps {
   onSelectNone?: (strategyIds: string[]) => void;
   highlighted?: boolean;
   description?: string;
+  isStrategyDisabled: (strategyId: string) => boolean;
+  isRemoteGenerationDisabled: boolean;
+  isStrategyConfigured?: (strategyId: string) => boolean;
 }
 
 export function StrategySection({
@@ -26,6 +29,9 @@ export function StrategySection({
   onSelectNone,
   highlighted = false,
   description,
+  isStrategyDisabled,
+  isRemoteGenerationDisabled,
+  isStrategyConfigured,
 }: StrategySectionProps) {
   const selectedStrategiesInSection = strategies
     .map((strategy) => strategy.id)
@@ -108,6 +114,9 @@ export function StrategySection({
             isSelected={selectedIds.includes(strategy.id)}
             onToggle={onToggle}
             onConfigClick={onConfigClick}
+            isDisabled={isStrategyDisabled(strategy.id)}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
           />
         ))}
       </Box>

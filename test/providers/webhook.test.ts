@@ -72,6 +72,8 @@ describe('WebhookProvider', () => {
 
       expect(result).toEqual({
         output: 'test response',
+        cached: false,
+        latencyMs: undefined,
       });
     });
 

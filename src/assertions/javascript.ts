@@ -20,7 +20,7 @@ export const handleJavascript = async ({
   assertion,
   renderedValue,
   valueFromScript,
-  context,
+  assertionValueContext,
   outputString,
   output,
   inverse,
@@ -29,7 +29,7 @@ export const handleJavascript = async ({
   let score;
   try {
     if (typeof assertion.value === 'function') {
-      let ret = assertion.value(outputString, context);
+      let ret = assertion.value(outputString, assertionValueContext);
       ret = await validateResult(ret);
       if (!ret.assertion) {
         // Populate the assertion object if the custom function didn't return it.
@@ -58,7 +58,7 @@ export const handleJavascript = async ({
     if (typeof valueFromScript === 'undefined') {
       const functionBody = renderedValue.includes('\n') ? renderedValue : `return ${renderedValue}`;
       const customFunction = new Function('output', 'context', functionBody);
-      result = await validateResult(customFunction(output, context));
+      result = await validateResult(customFunction(output, assertionValueContext));
     } else {
       invariant(
         typeof valueFromScript === 'boolean' ||

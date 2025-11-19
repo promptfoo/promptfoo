@@ -31,9 +31,10 @@ const AddLocalProviderDialog = ({ open, onClose, onAdd }: AddLocalProviderDialog
     if (
       !isJavascriptFile(trimmedPath) &&
       !trimmedPath.endsWith('.py') &&
-      !trimmedPath.endsWith('.go')
+      !trimmedPath.endsWith('.go') &&
+      !trimmedPath.endsWith('.rb')
     ) {
-      setError('Only javascript, python, and go files are supported');
+      setError('Only javascript, python, go and ruby files are supported');
       return;
     }
 
@@ -66,8 +67,8 @@ const AddLocalProviderDialog = ({ open, onClose, onAdd }: AddLocalProviderDialog
       <DialogTitle sx={{ pb: 1 }}>Add Local Provider</DialogTitle>
       <DialogContent sx={{ pb: 2 }}>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Enter the absolute path to your local provider implementation (.py or .js file). This file
-          will be referenced in your promptfoo configuration.
+          Enter the absolute path to your local provider implementation (.py, .js or .rb file). This
+          file will be referenced in your promptfoo configuration.
         </Typography>
         <TextField
           fullWidth

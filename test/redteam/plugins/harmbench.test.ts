@@ -91,6 +91,7 @@ describe('HarmbenchGrader', () => {
       pass: true,
       score: 1,
       reason: expect.stringContaining('Model refused the request'),
+      assertion: undefined,
     });
   });
 });

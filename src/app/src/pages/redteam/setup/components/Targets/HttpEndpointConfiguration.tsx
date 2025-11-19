@@ -6,11 +6,14 @@ import { useCallback, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
+import HttpIcon from '@mui/icons-material/Http';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -22,6 +25,8 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
@@ -29,11 +34,12 @@ import Switch from '@mui/material/Switch';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import dedent from 'dedent';
 import yaml from 'js-yaml';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
+import PostmanImportDialog from './PostmanImportDialog';
+import ResponseParserTestModal from './ResponseParserTestModal';
 import TestSection from './TestSection';
 
 import type { ProviderOptions } from '../../types';
@@ -46,7 +52,6 @@ interface HttpEndpointConfigurationProps {
   setBodyError: (error: string | React.ReactNode | null) => void;
   urlError: string | null;
   setUrlError: (error: string | null) => void;
-  updateFullTarget: (target: ProviderOptions) => void;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
 }
@@ -84,10 +89,9 @@ const HttpEndpointConfiguration = ({
   setBodyError,
   urlError,
   setUrlError,
-  updateFullTarget,
   onTargetTested,
   onSessionTested,
-}: HttpEndpointConfigurationProps): JSX.Element => {
+}: HttpEndpointConfigurationProps): React.ReactElement => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
@@ -130,22 +134,46 @@ Content-Type: application/json
   const [generatedConfig, setGeneratedConfig] = useState<GeneratedConfig | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+
+  // Import menu state
+  const [importMenuAnchor, setImportMenuAnchor] = useState<null | HTMLElement>(null);
+  const [postmanDialogOpen, setPostmanDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Test Target state
   const [isTestRunning, setIsTestRunning] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
 
+  // Response transform test state
+  const [responseTestOpen, setResponseTestOpen] = useState(false);
+
   // Handle test target
   const handleTestTarget = useCallback(async () => {
     setIsTestRunning(true);
     setTestResult(null);
 
+    // Validate URL before testing (skip validation for raw request mode)
+    if (!selectedTarget.config?.request) {
+      const targetUrl = selectedTarget.config?.url;
+      if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
+        setTestResult({
+          success: false,
+          message:
+            'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
+        });
+        setIsTestRunning(false);
+        if (onTargetTested) {
+          onTargetTested(false);
+        }
+        return;
+      }
+    }
+
     try {
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(selectedTarget),
+        body: JSON.stringify({ providerOptions: selectedTarget }),
       });
 
       if (response.ok) {
@@ -189,9 +217,22 @@ Content-Type: application/json
       }
     } catch (error) {
       console.error('Error testing target:', error);
+      let errorMessage = 'Failed to test target configuration';
+      if (error instanceof Error) {
+        // Improve URL-related error messages
+        if (
+          error.message.includes('Failed to parse URL') ||
+          error.message.includes('Invalid URL')
+        ) {
+          errorMessage =
+            'Invalid URL configuration. Please enter a complete URL (e.g., https://api.example.com/endpoint).';
+        } else {
+          errorMessage = error.message;
+        }
+      }
       setTestResult({
         success: false,
-        message: error instanceof Error ? error.message : 'Failed to test target configuration',
+        message: errorMessage,
       });
 
       if (onTargetTested) {
@@ -452,6 +493,30 @@ ${exampleRequest}`;
     }
   };
 
+  const handlePostmanImport = (config: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body: string;
+  }) => {
+    // Apply the configuration
+    resetState(false);
+    updateCustomTarget('url', config.url);
+    updateCustomTarget('method', config.method);
+    updateCustomTarget('headers', config.headers);
+    setHeaders(
+      Object.entries(config.headers).map(([key, value]) => ({
+        key,
+        value: String(value),
+      })),
+    );
+
+    if (config.body) {
+      setRequestBody(config.body);
+      updateCustomTarget('body', config.body);
+    }
+  };
+
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -471,19 +536,55 @@ ${exampleRequest}`;
         />
         <Button
           variant="outlined"
-          startIcon={<AutoFixHighIcon />}
-          onClick={() => setConfigDialogOpen(true)}
-          sx={{
-            borderColor: 'primary.main',
-            color: 'primary.main',
-            '&:hover': {
-              borderColor: 'primary.dark',
-              backgroundColor: 'action.hover',
+          endIcon={<ArrowDropDownIcon />}
+          onClick={(e) => setImportMenuAnchor(e.currentTarget)}
+        >
+          Import
+        </Button>
+        <Menu
+          anchorEl={importMenuAnchor}
+          open={Boolean(importMenuAnchor)}
+          onClose={() => setImportMenuAnchor(null)}
+          anchorOrigin={{
+            vertical: 'bottom',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+          slotProps={{
+            paper: {
+              sx: {
+                mt: 0.5,
+                minWidth: 200,
+              },
             },
           }}
         >
-          Auto-fill from Example
-        </Button>
+          <MenuItem
+            onClick={() => {
+              setImportMenuAnchor(null);
+              setConfigDialogOpen(true);
+            }}
+          >
+            <ListItemIcon>
+              <AutoFixHighIcon fontSize="small" />
+            </ListItemIcon>
+            Auto-fill from Example
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              setImportMenuAnchor(null);
+              setPostmanDialogOpen(true);
+            }}
+          >
+            <ListItemIcon>
+              <HttpIcon fontSize="small" />
+            </ListItemIcon>
+            Postman
+          </MenuItem>
+        </Menu>
       </Box>
 
       {/* Main configuration box containing everything */}
@@ -679,6 +780,24 @@ ${exampleRequest}`;
             docs
           </a>{' '}
           for examples.
+          <Box sx={{ mt: 1 }}>
+            <details>
+              <summary>Examples</summary>
+              <ul style={{ listStyleType: 'decimal' }}>
+                <li>
+                  A JavaScript object path: <code>json.choices[0].message.content</code>
+                </li>{' '}
+                <li>
+                  A function:{' '}
+                  <code>{`(json, text) => json.choices[0].message.content || text`}</code>{' '}
+                </li>
+                <li>
+                  With guardrails:{' '}
+                  <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
+                </li>
+              </ul>
+            </details>
+          </Box>
         </Typography>
         <Box
           sx={{
@@ -694,18 +813,27 @@ ${exampleRequest}`;
             onValueChange={(code) => updateCustomTarget('transformResponse', code)}
             highlight={highlightJS}
             padding={10}
-            placeholder={dedent`Optional: Transform the API response before using it. Format as either:
-
-                        1. A JavaScript object path: \`json.choices[0].message.content\`
-                        2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
-
-                        With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
+            placeholder={'json.choices[0].message.content'}
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
               minHeight: '150px',
             }}
           />
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<PlayArrowIcon />}
+            onClick={() => setResponseTestOpen(true)}
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 1,
+            }}
+          >
+            Test
+          </Button>
         </Box>
 
         {/* Test Target Section - Common for both modes */}
@@ -824,12 +952,27 @@ ${exampleRequest}`;
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Postman Import Dialog */}
+      <PostmanImportDialog
+        open={postmanDialogOpen}
+        onClose={() => setPostmanDialogOpen(false)}
+        onImport={handlePostmanImport}
+      />
+
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={updateCustomTarget}
         defaultRequestTransform={selectedTarget.config.transformRequest}
-        onTargetTested={onTargetTested}
         onSessionTested={onSessionTested}
+      />
+
+      {/* Response Transform Test Dialog */}
+      <ResponseParserTestModal
+        open={responseTestOpen}
+        onClose={() => setResponseTestOpen(false)}
+        currentTransform={selectedTarget.config.transformResponse || ''}
+        onApply={(code) => updateCustomTarget('transformResponse', code)}
       />
     </Box>
   );

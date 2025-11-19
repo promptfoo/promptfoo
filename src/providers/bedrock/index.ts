@@ -504,8 +504,8 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
     params: (
       config: BedrockLlamaGenerationOptions,
       prompt: string,
-      stop?: string[],
-      modelName?: string,
+      _stop?: string[],
+      _modelName?: string,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -547,8 +547,8 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       );
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => responseJson?.generation,
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    output: (_config: BedrockOptions, responseJson: any) => responseJson?.generation,
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
           prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
@@ -590,8 +590,8 @@ export const BEDROCK_MODEL = {
     params: (
       config: BedrockAI21GenerationOptions,
       prompt: string,
-      stop?: string[],
-      modelName?: string,
+      _stop?: string[],
+      _modelName?: string,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const params: any = {
@@ -627,13 +627,13 @@ export const BEDROCK_MODEL = {
       );
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => {
+    output: (_config: BedrockOptions, responseJson: any) => {
       if (responseJson.error) {
         throw new Error(`AI21 API error: ${responseJson.error}`);
       }
       return responseJson.choices?.[0]?.message?.content;
     },
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
           prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
@@ -656,8 +656,8 @@ export const BEDROCK_MODEL = {
     params: (
       config: BedrockAmazonNovaGenerationOptions,
       prompt: string,
-      stop?: string[],
-      modelName?: string,
+      _stop?: string[],
+      _modelName?: string,
     ) => {
       let messages;
       let systemPrompt;
@@ -715,8 +715,8 @@ export const BEDROCK_MODEL = {
 
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    output: (_config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       const usage = responseJson?.usage;
       if (!usage) {
         return {
@@ -740,7 +740,7 @@ export const BEDROCK_MODEL = {
       config: BedrockClaudeLegacyCompletionOptions,
       prompt: string,
       stop: string[],
-      modelName?: string,
+      _modelName?: string,
     ) => {
       const params: any = {
         prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
@@ -762,8 +762,8 @@ export const BEDROCK_MODEL = {
       );
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => responseJson?.completion,
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    output: (_config: BedrockOptions, responseJson: any) => responseJson?.completion,
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
         return {
           prompt: undefined,
@@ -801,8 +801,8 @@ export const BEDROCK_MODEL = {
     params: (
       config: BedrockClaudeMessagesCompletionOptions,
       prompt: string,
-      stop?: string[],
-      modelName?: string,
+      _stop?: string[],
+      _modelName?: string,
     ) => {
       let messages;
       let systemPrompt;
@@ -889,7 +889,7 @@ export const BEDROCK_MODEL = {
     output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
       return outputFromMessage(responseJson, config?.showThinking ?? true);
     },
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
         return {
           prompt: undefined,
@@ -932,7 +932,7 @@ export const BEDROCK_MODEL = {
       config: BedrockTextGenerationOptions,
       prompt: string,
       stop?: string[],
-      modelName?: string,
+      _modelName?: string,
     ) => {
       const textGenerationConfig: any = {};
       addConfigParam(
@@ -965,8 +965,8 @@ export const BEDROCK_MODEL = {
       );
       return { inputText: prompt, textGenerationConfig };
     },
-    output: (config: BedrockOptions, responseJson: any) => responseJson?.results[0]?.outputText,
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    output: (_config: BedrockOptions, responseJson: any) => responseJson?.results[0]?.outputText,
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       // If token usage is provided by the API, use it
       if (responseJson?.usage) {
         return {
@@ -997,7 +997,7 @@ export const BEDROCK_MODEL = {
       config: BedrockCohereCommandGenerationOptions,
       prompt: string,
       stop?: string[],
-      modelName?: string,
+      _modelName?: string,
     ) => {
       const params: any = { prompt };
       addConfigParam(
@@ -1024,8 +1024,8 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'stop_sequences', stop, undefined, undefined);
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => responseJson?.generations[0]?.text,
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    output: (_config: BedrockOptions, responseJson: any) => responseJson?.generations[0]?.text,
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.meta?.billed_units) {
         const inputTokens = coerceStrToNum(responseJson.meta.billed_units.input_tokens);
         const outputTokens = coerceStrToNum(responseJson.meta.billed_units.output_tokens);
@@ -1052,7 +1052,7 @@ export const BEDROCK_MODEL = {
       config: BedrockCohereCommandRGenerationOptions,
       prompt: string,
       stop?: string[],
-      modelName?: string,
+      _modelName?: string,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const lastMessage = messages[messages.length - 1].content;
@@ -1084,8 +1084,8 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => responseJson?.text,
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    output: (_config: BedrockOptions, responseJson: any) => responseJson?.text,
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.meta?.billed_units) {
         const inputTokens = coerceStrToNum(responseJson.meta.billed_units.input_tokens);
         const outputTokens = coerceStrToNum(responseJson.meta.billed_units.output_tokens);
@@ -1111,8 +1111,8 @@ export const BEDROCK_MODEL = {
     params: (
       config: BedrockDeepseekGenerationOptions,
       prompt: string,
-      stop?: string[],
-      modelName?: string,
+      _stop?: string[],
+      _modelName?: string,
     ) => {
       const wrappedPrompt = `
 ${prompt}
@@ -1161,7 +1161,7 @@ ${prompt}
 
       return undefined;
     },
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
           prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
@@ -1185,7 +1185,7 @@ ${prompt}
       config: BedrockMistralGenerationOptions,
       prompt: string,
       stop: string[],
-      modelName?: string,
+      _modelName?: string,
     ) => {
       const params: any = { prompt, stop };
       addConfigParam(
@@ -1207,13 +1207,13 @@ ${prompt}
 
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => {
+    output: (_config: BedrockOptions, responseJson: any) => {
       if (!responseJson?.outputs || !Array.isArray(responseJson.outputs)) {
         return undefined;
       }
       return responseJson.outputs[0]?.text;
     },
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
           prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
@@ -1258,7 +1258,7 @@ ${prompt}
       config: BedrockMistralGenerationOptions,
       prompt: string,
       stop: string[],
-      modelName?: string,
+      _modelName?: string,
     ) => {
       const params: any = { prompt, stop };
       addConfigParam(
@@ -1280,13 +1280,13 @@ ${prompt}
 
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => {
+    output: (_config: BedrockOptions, responseJson: any) => {
       if (responseJson?.choices && Array.isArray(responseJson.choices)) {
         return responseJson.choices[0]?.message?.content;
       }
       return undefined;
     },
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       // Chat completion format (used by mistral-large-2407-v1:0)
       if (
         responseJson?.prompt_tokens !== undefined &&
@@ -1338,7 +1338,7 @@ ${prompt}
       config: BedrockOpenAIGenerationOptions,
       prompt: string,
       stop?: string[],
-      modelName?: string,
+      _modelName?: string,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -1394,13 +1394,13 @@ ${prompt}
 
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => {
+    output: (_config: BedrockOptions, responseJson: any) => {
       if (responseJson.error) {
         throw new Error(`OpenAI API error: ${responseJson.error}`);
       }
       return responseJson.choices?.[0]?.message?.content;
     },
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
           prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
@@ -1424,7 +1424,7 @@ ${prompt}
       config: BedrockQwenGenerationOptions,
       prompt: string,
       stop?: string[],
-      modelName?: string,
+      _modelName?: string,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -1515,7 +1515,7 @@ ${prompt}
 
       return responseJson.choices?.[0]?.message?.content;
     },
-    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
           prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
@@ -1554,6 +1554,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
@@ -1588,6 +1590,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
@@ -1601,6 +1605,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
@@ -1624,6 +1630,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'us.meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
@@ -1816,8 +1824,15 @@ export abstract class AwsBedrockGenericProvider {
     // 3. SSO profile as third priority
     if (this.config.profile) {
       logger.debug(`Using SSO profile: ${this.config.profile}`);
-      const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
-      return fromSSO({ profile: this.config.profile });
+      try {
+        const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
+        return fromSSO({ profile: this.config.profile });
+      } catch (err) {
+        logger.error(`Error loading @aws-sdk/credential-provider-sso: ${err}`);
+        throw new Error(
+          'The @aws-sdk/credential-provider-sso package is required for SSO profiles. Please install it: npm install @aws-sdk/credential-provider-sso',
+        );
+      }
     }
 
     // 4. AWS default credential chain (lowest priority)
@@ -1926,7 +1941,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       this.modelName,
     );
 
-    logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Amazon Bedrock API', { params });
 
     const cache = await getCache();
     const cacheKey = `bedrock:${this.modelName}:${JSON.stringify(params)}`;
@@ -2057,7 +2072,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           : {}),
       };
     } catch (err) {
-      logger.error(`Bedrock API response error: ${String(err)}: ${JSON.stringify(response)}`);
+      logger.error('Bedrock API response error', { error: String(err), response });
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
       };
@@ -2082,7 +2097,7 @@ export class AwsBedrockEmbeddingProvider
           inputText: text,
         };
 
-    logger.debug(`Calling AWS Bedrock API for embeddings: ${JSON.stringify(params)}`);
+    logger.debug('Calling AWS Bedrock API for embeddings', { params });
     let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();

@@ -1,0 +1,34 @@
+.githubStars {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  text-decoration: none;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+}
+
+.githubStars:hover {
+  opacity: 0.6;
+  text-decoration: none;
+  color: inherit;
+}
+
+.githubIcon {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+.starCount {
+  font-variant-numeric: tabular-nums;
+}
+
+@media screen and (max-width: 768px) {
+  .githubStars {
+    display: none;
+  }
+}

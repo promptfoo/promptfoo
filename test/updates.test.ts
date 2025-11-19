@@ -134,9 +134,9 @@ describe('getModelAuditLatestVersion', () => {
 });
 
 describe('getModelAuditCurrentVersion', () => {
-  it('should return the current version from pip show', async () => {
+  it('should return the current version from modelaudit --version', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nVersion: 0.1.5\nSummary: Model audit tool',
+      stdout: 'modelaudit, version 0.1.5',
       stderr: '',
     });
 
@@ -144,7 +144,7 @@ describe('getModelAuditCurrentVersion', () => {
     expect(version).toBe('0.1.5');
   });
 
-  it('should return null if pip show fails', async () => {
+  it('should return null if modelaudit --version fails', async () => {
     mockExecAsync.mockRejectedValueOnce(new Error('Command failed'));
 
     const version = await getModelAuditCurrentVersion();
@@ -153,7 +153,7 @@ describe('getModelAuditCurrentVersion', () => {
 
   it('should return null if version pattern not found', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nSummary: Model audit tool',
+      stdout: 'some invalid output',
       stderr: '',
     });
 
@@ -175,7 +175,7 @@ describe('checkModelAuditUpdates', () => {
 
   it('should return true and log message when update is available', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nVersion: 0.1.5\nSummary: Model audit tool',
+      stdout: 'modelaudit, version 0.1.5',
       stderr: '',
     });
 
@@ -190,7 +190,7 @@ describe('checkModelAuditUpdates', () => {
 
   it('should return false when versions are equal', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nVersion: 0.1.7\nSummary: Model audit tool',
+      stdout: 'modelaudit, version 0.1.7',
       stderr: '',
     });
 
@@ -205,7 +205,7 @@ describe('checkModelAuditUpdates', () => {
 
   it('should return false when current version is newer', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nVersion: 0.2.0\nSummary: Model audit tool',
+      stdout: 'modelaudit, version 0.2.0',
       stderr: '',
     });
 
@@ -240,7 +240,7 @@ describe('checkModelAuditUpdates', () => {
 
   it('should return false when latest version cannot be determined', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nVersion: 0.1.5\nSummary: Model audit tool',
+      stdout: 'modelaudit, version 0.1.5',
       stderr: '',
     });
 

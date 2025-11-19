@@ -24,6 +24,7 @@ interface AtomicTestCase {
   score?: number;
   failureReason?: string;
   metadata?: Record<string, any>;
+  options?: Record<string, any>;
 }
 export interface ProviderModerationResponse {
   error?: string;
@@ -66,6 +67,7 @@ export interface CallApiContextParams {
   // Evaluation metadata (for manual correlation if needed)
   evaluationId?: string;
   testCaseId?: string;
+  repeatIndex?: number;
 }
 
 export interface CallApiOptionsParams {
@@ -123,12 +125,14 @@ export interface ProviderResponse {
   cost?: number;
   error?: string;
   logProbs?: number[];
+  latencyMs?: number;
   metadata?: {
     redteamFinalPrompt?: string;
     http?: {
       status: number;
       statusText: string;
       headers: Record<string, string>;
+      requestHeaders?: Record<string, string>;
     };
     [key: string]: any;
   };
@@ -157,6 +161,7 @@ export interface ProviderEmbeddingResponse {
   cost?: number;
   error?: string;
   embedding?: number[];
+  latencyMs?: number;
   tokenUsage?: Partial<TokenUsage>;
   metadata?: {
     transformed?: boolean;
@@ -207,6 +212,7 @@ export function isProviderOptions(provider: any): provider is ProviderOptions {
 
 export interface ProviderTestResponse {
   testResult: {
+    message?: string;
     error?: string;
     changes_needed?: boolean;
     changes_needed_reason?: string;

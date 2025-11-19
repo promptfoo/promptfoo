@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { DEFAULT_MAX_CONCURRENCY } from '../../../evaluator';
+import { DEFAULT_MAX_CONCURRENCY } from '../../../constants';
 import logger from '../../../logger';
 import { doRedteamRun } from '../../../redteam/shared';
 import type { RedteamRunOptions } from '../../../redteam/types';

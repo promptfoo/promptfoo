@@ -190,6 +190,17 @@ echo "This is the LLM output"
 php my_script.php
 `;
 
+const WINDOWS_PROVIDER = `@echo off
+REM Learn more about building any generic provider: https://promptfoo.dev/docs/providers/custom-script
+
+REM Anything printed to standard output will be captured as the output of the provider
+
+echo This is the LLM output
+
+REM You can also call external scripts or executables
+REM php my_script.php
+`;
+
 const PYTHON_VAR = `# Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/guide/#import-vars-from-separate-files
 def get_var(var_name, prompt, other_vars):
     # This is where you can fetch documents from a database, call an API, etc.
@@ -265,7 +276,7 @@ export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[
   return Object.entries(map)
     .filter(([prefix, key]) => ids.some((id) => id.startsWith(prefix)) && !getEnvString(key))
     .map(
-      ([prefix, key]) => dedent`
+      ([_prefix, key]) => dedent`
     ${chalk.bold(`Warning: ${key} environment variable is not set.`)}
     Please set this environment variable like: export ${key}=<my-api-key>
   `,
@@ -423,7 +434,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-sonnet-4-20250514',
+          'anthropic:messages:claude-sonnet-4-5-20250929',
           'anthropic:messages:claude-opus-4-1-20250805',
           'anthropic:messages:claude-opus-4-20250514',
           'anthropic:messages:claude-3-7-sonnet-20250219',
@@ -448,7 +459,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: 'Local executable',
-        value: ['exec:provider.sh'],
+        value: [process.platform === 'win32' ? 'exec:provider.bat' : 'exec:provider.sh'],
       },
       {
         name: 'HTTP endpoint',
@@ -467,7 +478,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: ['bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0'],
+        value: ['bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0'],
       },
       {
         name: '[Cohere] Command R, Command R+, ...',
@@ -481,7 +492,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[WatsonX] Llama, IBM Granite, ...',
         value: [
           'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
-          'watsonx:ibm/granite-13b-chat-v2',
+          'watsonx:ibm/granite-3-3-8b-instruct',
         ],
       },
     ];
@@ -535,9 +546,11 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       if (
         providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
       ) {
+        // Generate platform-appropriate executable provider script
+        const isWindows = process.platform === 'win32';
         await writeFile({
-          file: 'provider.sh',
-          contents: BASH_PROVIDER,
+          file: isWindows ? 'provider.bat' : 'provider.sh',
+          contents: isWindows ? WINDOWS_PROVIDER : BASH_PROVIDER,
           required: true,
         });
       }

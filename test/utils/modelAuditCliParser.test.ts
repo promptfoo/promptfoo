@@ -205,14 +205,13 @@ describe('ModelAudit CLI Parser', () => {
     });
 
     it('should return null for options with no replacement', () => {
-      const deprecated = ['--registry-uri', '--cache-dir', '--stream'];
+      const deprecated = ['--registry-uri', '--cache-dir'];
 
       const suggestions = suggestReplacements(deprecated);
 
       expect(suggestions).toEqual({
         '--registry-uri': null,
         '--cache-dir': null,
-        '--stream': null,
       });
     });
 
@@ -299,6 +298,7 @@ describe('ModelAudit CLI Parser', () => {
         '--max-size',
         '--dry-run',
         '--no-cache',
+        '--stream',
       ];
 
       expectedOptions.forEach((option) => {

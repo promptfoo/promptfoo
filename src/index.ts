@@ -4,7 +4,7 @@ import { evaluate as doEvaluate } from './evaluator';
 import guardrails from './guardrails';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
-import { processPrompts, readProviderPromptMap } from './prompts';
+import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers/index';
 import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';

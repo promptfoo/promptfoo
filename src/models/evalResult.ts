@@ -116,13 +116,14 @@ export default class EvalResult {
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
-    await db.transaction(async (tx) => {
+    db.transaction(() => {
       for (const result of results) {
-        const dbResult = await tx
+        const dbResult = db
           .insert(evalResultsTable)
           .values({ ...result, evalId, id: randomUUID() })
-          .returning();
-        returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
+          .returning()
+          .get();
+        returnResults.push(new EvalResult({ ...dbResult, persisted: true }));
       }
     });
     return returnResults;

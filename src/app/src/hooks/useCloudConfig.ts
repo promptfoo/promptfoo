@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { callApi } from '../utils/api';
 
-type CloudConfigData = {
+export type CloudConfigData = {
   appUrl: string;
   isEnabled: boolean;
 };

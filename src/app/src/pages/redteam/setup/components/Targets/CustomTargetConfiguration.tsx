@@ -23,16 +23,27 @@ const CustomTargetConfiguration = ({
   setRawConfigJson,
   bodyError,
 }: CustomTargetConfigurationProps) => {
-  const [targetId, setTargetId] = useState(selectedTarget.id || '');
+  const [targetId, setTargetId] = useState(selectedTarget.id?.replace('file://', '') || '');
 
   useEffect(() => {
-    setTargetId(selectedTarget.id || '');
+    setTargetId(selectedTarget.id?.replace('file://', '') || '');
   }, [selectedTarget.id]);
 
   const handleTargetIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newId = e.target.value;
-    setTargetId(newId);
-    updateCustomTarget('id', newId);
+    const value = e.target.value;
+    setTargetId(value);
+
+    let idToSave = value;
+    if (
+      value &&
+      !value.startsWith('file://') &&
+      !value.startsWith('http://') &&
+      !value.startsWith('https://') &&
+      (value.includes('.py') || value.includes('.js'))
+    ) {
+      idToSave = `file://${value}`;
+    }
+    updateCustomTarget('id', idToSave);
   };
 
   return (

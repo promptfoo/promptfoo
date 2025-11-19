@@ -33,7 +33,7 @@ describe('TargetTypeSelection', () => {
     const theme = createTheme();
     return render(
       <ThemeProvider theme={theme}>
-        <TargetTypeSelection onNext={onNext} onBack={onBack} setupModalOpen={false} />
+        <TargetTypeSelection onNext={onNext} onBack={onBack} />
       </ThemeProvider>,
     );
   };

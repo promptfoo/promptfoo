@@ -33,7 +33,7 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
     return categoryConfig.prompt;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return getHarmfulAssertions(this.harmCategory);
   }
 

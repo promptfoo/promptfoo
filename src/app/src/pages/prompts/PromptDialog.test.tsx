@@ -146,7 +146,9 @@ describe('PromptDialog', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Prompt Details')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: mockSelectedPrompt.prompt.label }),
+    ).toBeInTheDocument();
     expect(screen.getByText(mockSelectedPrompt.id.slice(0, 6))).toBeInTheDocument();
 
     expect(screen.getByRole('textbox')).toHaveValue(mockSelectedPrompt.prompt.raw);
@@ -583,5 +585,223 @@ describe('PromptDialog', () => {
         </ThemeProvider>
       </MemoryRouter>,
     );
+  });
+
+  it('should display label in dialog title, falling back to display or "Prompt Details"', () => {
+    const handleClose = vi.fn();
+
+    // Test with label
+    const { rerender } = render(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={handleClose}
+          selectedPrompt={mockSelectedPrompt}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole('heading', { name: mockSelectedPrompt.prompt.label }),
+    ).toBeInTheDocument();
+
+    // Test fallback to display when label is empty
+    const mockWithDisplayOnly: ServerPromptWithMetadata = {
+      ...mockSelectedPrompt,
+      prompt: {
+        raw: 'Raw text',
+        display: 'Display text',
+        label: '',
+      },
+    };
+
+    rerender(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={handleClose}
+          selectedPrompt={mockWithDisplayOnly}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Display text' })).toBeInTheDocument();
+
+    // Test fallback to "Prompt Details" when both are empty
+    const mockWithNeither: ServerPromptWithMetadata = {
+      ...mockSelectedPrompt,
+      prompt: {
+        raw: 'Raw text',
+        display: '',
+        label: '',
+      },
+    };
+
+    rerender(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={handleClose}
+          selectedPrompt={mockWithNeither}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Prompt Details' })).toBeInTheDocument();
+  });
+
+  it('should correctly handle and display evaluation IDs and dataset IDs that contain special characters or are extremely long', () => {
+    const handleClose = vi.fn();
+
+    const mockSelectedPrompt: ServerPromptWithMetadata = {
+      id: 'prompt:special-chars',
+      prompt: {
+        raw: 'This is a sample prompt with special characters and long IDs.',
+        display: '[display] This is a sample prompt with special characters and long IDs.',
+        label: 'Special Chars & Long IDs',
+      },
+      count: 1,
+      recentEvalDate: '2024-01-01T00:00:00.000Z',
+      recentEvalId: 'eval-special-chars',
+      evals: [
+        {
+          id: 'eval-with-!@#$%^&*()_+=-`~[]\{}|;\':",./<>?',
+          datasetId: 'dataset-with-very-very-very-long-id-1234567890',
+          metrics: {
+            testPassCount: 1,
+            testFailCount: 0,
+            testErrorCount: 0,
+            score: 0.95,
+            assertPassCount: 0,
+            assertFailCount: 0,
+            totalLatencyMs: 0,
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+            namedScores: {},
+            namedScoresCount: {},
+            cost: 0,
+          },
+        },
+        {
+          id: 'very-long-eval-id-1234567890-abcdefghijklmnop',
+          datasetId: '!@#dataset',
+          metrics: {
+            testPassCount: 0,
+            testFailCount: 1,
+            testErrorCount: 0,
+            score: 0.4,
+            assertPassCount: 0,
+            assertFailCount: 0,
+            totalLatencyMs: 0,
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+            namedScores: {},
+            namedScoresCount: {},
+            cost: 0,
+          },
+        },
+      ],
+    };
+
+    render(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={handleClose}
+          selectedPrompt={mockSelectedPrompt}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    const evalWithSpecialCharsRow = screen
+      .getByText('eval-with-!@#$%^&*()_+=-`~[]\{}|;\':",./<>?')
+      .closest('tr');
+    expect(evalWithSpecialCharsRow).not.toBeNull();
+    expect(evalWithSpecialCharsRow).toHaveTextContent(
+      'eval-with-!@#$%^&*()_+=-`~[]\{}|;\':",./<>?',
+    );
+    expect(evalWithSpecialCharsRow).toHaveTextContent(
+      'dataset-with-very-very-very-long-id-1234567890'.slice(0, 6),
+    );
+
+    const longEvalIdRow = screen
+      .getByText('very-long-eval-id-1234567890-abcdefghijklmnop')
+      .closest('tr');
+    expect(longEvalIdRow).not.toBeNull();
+    expect(longEvalIdRow).toHaveTextContent('very-long-eval-id-1234567890-abcdefghijklmnop');
+    expect(longEvalIdRow).toHaveTextContent('!@#dataset'.slice(0, 6));
+  });
+
+  it('should properly handle and display evaluation metrics containing NaN or Infinity values', () => {
+    const handleClose = vi.fn();
+
+    const mockSelectedPrompt: ServerPromptWithMetadata = {
+      id: 'prompt:nan-infinity',
+      prompt: {
+        raw: 'This is a sample prompt for testing NaN and Infinity values.',
+        display: '[display] This is a sample prompt for testing NaN and Infinity values.',
+        label: 'This is a sample prompt for testing NaN and Infinity values.',
+      },
+      count: 1,
+      recentEvalDate: '2024-01-01T00:00:00.000Z',
+      recentEvalId: 'eval-nan-infinity',
+      evals: [
+        {
+          id: 'eval-nan-infinity',
+          datasetId: 'dataset-nan-infinity',
+          metrics: {
+            testPassCount: 0,
+            testFailCount: 0,
+            testErrorCount: 0,
+            score: NaN,
+            assertPassCount: 0,
+            assertFailCount: 0,
+            totalLatencyMs: 0,
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+            namedScores: {},
+            namedScoresCount: {},
+            cost: 0,
+          },
+        },
+        {
+          id: 'eval-infinity',
+          datasetId: 'dataset-infinity',
+          metrics: {
+            testPassCount: 1,
+            testFailCount: 0,
+            testErrorCount: 0,
+            score: Infinity,
+            assertPassCount: 0,
+            assertFailCount: 0,
+            totalLatencyMs: 0,
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+            namedScores: {},
+            namedScoresCount: {},
+            cost: 0,
+          },
+        },
+      ],
+    };
+
+    render(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={handleClose}
+          selectedPrompt={mockSelectedPrompt}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    const row1 = screen.getByText('eval-nan-infinity').closest('tr');
+    expect(row1).not.toBeNull();
+    expect(row1).toHaveTextContent('NaN');
+
+    const row2 = screen.getByText('eval-infinity').closest('tr');
+    expect(row2).not.toBeNull();
+    expect(row2).toHaveTextContent('Infinity');
   });
 });

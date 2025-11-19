@@ -525,6 +525,168 @@ describe('OllamaChatProvider', () => {
       },
     });
   });
+
+  it('should handle tool calls in response', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"","images":null,"tool_calls":[{"function":{"name":"get_weather","arguments":"{\\"location\\":\\"Amsterdam\\",\\"unit\\":\\"celsius\\"}"}}]},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: {
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get current weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: {
+                    type: 'string',
+                    description: 'City and state, e.g. San Francisco, CA',
+                  },
+                  unit: {
+                    type: 'string',
+                    enum: ['celsius', 'fahrenheit'],
+                  },
+                },
+                required: ['location'],
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const result = await provider.callApi('What is the weather in Amsterdam?');
+
+    expect(result.output).toEqual([
+      {
+        function: {
+          name: 'get_weather',
+          arguments: '{"location":"Amsterdam","unit":"celsius"}',
+        },
+      },
+    ]);
+  });
+
+  it('should handle tool calls with content in response', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"Let me check the weather for you.","images":null,"tool_calls":[{"function":{"name":"get_weather","arguments":"{\\"location\\":\\"Amsterdam\\",\\"unit\\":\\"celsius\\"}"}}]},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: {
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get current weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: {
+                    type: 'string',
+                    description: 'City and state, e.g. San Francisco, CA',
+                  },
+                  unit: {
+                    type: 'string',
+                    enum: ['celsius', 'fahrenheit'],
+                  },
+                },
+                required: ['location'],
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const result = await provider.callApi('What is the weather in Amsterdam?');
+
+    expect(result.output).toEqual({
+      content: 'Let me check the weather for you.',
+      tool_calls: [
+        {
+          function: {
+            name: 'get_weather',
+            arguments: '{"location":"Amsterdam","unit":"celsius"}',
+          },
+        },
+      ],
+    });
+  });
+
+  it('should handle multiple tool calls in response', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"","images":null,"tool_calls":[{"function":{"name":"get_weather","arguments":"{\\"location\\":\\"Amsterdam\\",\\"unit\\":\\"celsius\\"}"}},{"function":{"name":"get_weather","arguments":"{\\"location\\":\\"Paris\\",\\"unit\\":\\"celsius\\"}"}}]},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: {
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get current weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: {
+                    type: 'string',
+                    description: 'City and state, e.g. San Francisco, CA',
+                  },
+                  unit: {
+                    type: 'string',
+                    enum: ['celsius', 'fahrenheit'],
+                  },
+                },
+                required: ['location'],
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const result = await provider.callApi('Compare weather in Amsterdam and Paris');
+
+    expect(result.output).toEqual([
+      {
+        function: {
+          name: 'get_weather',
+          arguments: '{"location":"Amsterdam","unit":"celsius"}',
+        },
+      },
+      {
+        function: {
+          name: 'get_weather',
+          arguments: '{"location":"Paris","unit":"celsius"}',
+        },
+      },
+    ]);
+  });
 });
 
 describe('OllamaEmbeddingProvider', () => {

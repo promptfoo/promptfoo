@@ -168,7 +168,7 @@ export default function History({
         flex: 3,
         minWidth: 200,
         // Ensure proper formatting for export:
-        valueGetter: (value: undefined, row: StandaloneEval) =>
+        valueGetter: (_value: undefined, row: StandaloneEval) =>
           `[${row.promptId?.slice(0, 6)}]: ${row.raw}`,
         renderCell: (params: GridRenderCellParams<StandaloneEval>) => (
           <>
@@ -197,7 +197,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) => {
+        valueGetter: (_value: undefined, row: StandaloneEval) => {
           const testPassCount = row.metrics?.testPassCount ?? 0;
           const testFailCount = row.metrics?.testFailCount ?? 0;
           const totalCount = testPassCount + testFailCount;
@@ -211,7 +211,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) => row.metrics?.testPassCount,
+        valueGetter: (_value: undefined, row: StandaloneEval) => row.metrics?.testPassCount,
         valueFormatter: (value: number) => value?.toString() ?? '-',
       },
       {
@@ -220,7 +220,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) =>
+        valueGetter: (_value: undefined, row: StandaloneEval) =>
           (row.metrics?.testFailCount ?? 0) + (row.metrics?.testErrorCount ?? 0),
         renderCell: (params: GridRenderCellParams<StandaloneEval>) => {
           const failCount = params.row.metrics?.testFailCount ?? 0;
@@ -244,7 +244,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value, row) => row.metrics?.score,
+        valueGetter: (_value, row) => row.metrics?.score,
         valueFormatter: (value: number) => value?.toFixed(2) ?? '-',
       },
     ],

@@ -16,14 +16,13 @@ import type { ProviderOptions } from '../../types';
 interface TargetsProps {
   onNext?: () => void;
   onBack?: () => void;
-  setupModalOpen?: boolean;
 }
 
 const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
-export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
+export default function Targets({ onNext, onBack }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,

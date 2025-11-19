@@ -24,6 +24,7 @@ export function importCommand(program: Command) {
             id: evalData.id,
             createdAt: evalData.createdAt,
             author: evalData.author || 'Unknown',
+            completedPrompts: evalData.results.prompts,
           });
           await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
           evalId = evalRecord.id;

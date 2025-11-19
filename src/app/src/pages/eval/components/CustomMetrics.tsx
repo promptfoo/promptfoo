@@ -3,12 +3,9 @@ import {
   determinePolicyTypeFromId,
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
-  isValidPolicyObject,
   makeCustomPolicyCloudUrl,
-  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
-import { useCallback, useMemo } from 'react';
 
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
@@ -18,8 +15,8 @@ import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import useCloudConfig from '../../../hooks/useCloudConfig';
 import { useTableStore } from './store';
-import type { PolicyObject } from '@promptfoo/redteam/types';
-
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { useApplyFilterFromMetric } from './hooks';
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;
@@ -86,8 +83,9 @@ const CustomMetrics = ({
   truncationCount = 10,
   onShowMore,
 }: CustomMetricsProps) => {
+  const applyFilterFromMetric = useApplyFilterFromMetric();
   const { data: cloudConfig } = useCloudConfig();
-  const { filters, addFilter, config } = useTableStore();
+  const { config } = useTableStore();
 
   if (!lookup || !Object.keys(lookup).length) {
     return null;
@@ -96,51 +94,9 @@ const CustomMetrics = ({
   const metrics = Object.entries(lookup);
   const displayMetrics = metrics.slice(0, truncationCount);
 
-  const handleClick = useCallback(
-    (value: string) => {
-      const asPolicy = isPolicyMetric(value);
-      const filter = {
-        type: asPolicy ? ('policy' as const) : ('metric' as const),
-        operator: 'equals' as const,
-        value: asPolicy ? deserializePolicyIdFromMetric(value) : value,
-        logicOperator: 'or' as const,
-      };
+  const handleClick = applyFilterFromMetric;
 
-      // If this filter is already applied, do not re-apply it.
-      if (
-        Object.values(filters.values).find(
-          (f) =>
-            f.type === filter.type &&
-            f.value === filter.value &&
-            f.operator === filter.operator &&
-            f.logicOperator === filter.logicOperator,
-        )
-      ) {
-        return;
-      }
-
-      addFilter(filter);
-    },
-    [addFilter, filters.values],
-  );
-
-  const policiesById = useMemo(() => {
-    const map: Record<PolicyObject['id'], PolicyObject> = {};
-    config?.redteam?.plugins?.forEach((plugin) => {
-      if (typeof plugin !== 'string' && plugin.id === 'policy') {
-        const policy = plugin?.config?.policy;
-        if (policy) {
-          if (isValidPolicyObject(policy)) {
-            map[policy.id] = policy;
-          } else {
-            const id = makeInlinePolicyId(policy);
-            map[id] = { id, text: policy };
-          }
-        }
-      }
-    });
-    return map;
-  }, [config]);
+  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   return (
     <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>
@@ -154,7 +110,7 @@ const CustomMetrics = ({
             const policyId = deserializePolicyIdFromMetric(metric);
             const policy = policiesById[policyId];
             if (policy) {
-              displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
+              displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id, metric);
               tooltipContent = (
                 <>
                   <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 600, mb: 1 }}>

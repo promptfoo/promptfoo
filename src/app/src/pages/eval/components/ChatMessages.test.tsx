@@ -60,7 +60,7 @@ describe('ChatMessages', () => {
     renderWithTheme(<ChatMessages messages={mockMessages} />);
 
     expect(
-      screen.getByText((content, element) => {
+      screen.getByText((_content, element) => {
         return element?.textContent?.startsWith('This is a very long message.') ?? false;
       }),
     ).toBeInTheDocument();

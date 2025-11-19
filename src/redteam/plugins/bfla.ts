@@ -69,13 +69,7 @@ export class BflaGrader extends RedteamGraderBase {
     }
   `;
 
-  getSuggestions({
-    rawPrompt,
-    renderedValue,
-  }: {
-    rawPrompt: string;
-    renderedValue?: AssertionValue;
-  }): ResultSuggestion[] {
+  getSuggestions({}: { rawPrompt: string; renderedValue?: AssertionValue }): ResultSuggestion[] {
     const noteValue = dedent`
       It's recommended to enforce proper access control at the API or application logic layer
       to prevent unauthorized actions or function-level escalation.

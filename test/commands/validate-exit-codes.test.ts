@@ -151,10 +151,14 @@ describe('Validate Command Exit Codes', () => {
 
       expect(validateCmd).toBeDefined();
       expect(validateCmd?.name()).toBe('validate');
-      expect(validateCmd?.description()).toBe('Validate a promptfoo configuration file');
+      expect(validateCmd?.description()).toBe('Validate configuration files and test providers');
 
-      // Check that the config option is registered
-      const configOption = validateCmd?.options.find((opt) => opt.long === '--config');
+      // Check that the config subcommand is registered
+      const configSubCmd = validateCmd?.commands.find((cmd) => cmd.name() === 'config');
+      expect(configSubCmd).toBeDefined();
+
+      // Check that the config option is registered on the config subcommand
+      const configOption = configSubCmd?.options.find((opt) => opt.long === '--config');
       expect(configOption).toBeDefined();
     });
   });

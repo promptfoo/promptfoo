@@ -21,6 +21,7 @@ export const handleContextRecall = async ({
   test,
   output,
   providerResponse,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string',
@@ -37,6 +38,7 @@ export const handleContextRecall = async ({
     assertion.threshold ?? 0,
     test.options,
     test.vars,
+    providerCallContext,
   );
 
   return {

@@ -1,0 +1,20 @@
+# RuboCop configuration for promptfoo Ruby files
+AllCops:
+  TargetRubyVersion: 3.0
+  NewCops: enable
+  Exclude:
+    - 'node_modules/**/*'
+    - 'dist/**/*'
+    - 'examples/**/*'
+
+# The wrapper method needs more than 10 lines to handle class methods, script loading, etc.
+Metrics/MethodLength:
+  Max: 15
+
+# Allow some complexity in the wrapper for argument handling
+Metrics/AbcSize:
+  Max: 20
+
+# The wrapper uses global variables ($LOAD_PATH) intentionally
+Style/GlobalVars:
+  Enabled: false

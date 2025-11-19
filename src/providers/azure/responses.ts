@@ -28,7 +28,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       modelName: this.deploymentName,
       providerType: 'azure',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName: string, usage: any, config?: any) =>
+      costCalculator: (modelName: string, usage: any, _config?: any) =>
         calculateAzureCost(modelName, usage) ?? 0,
     });
 
@@ -57,7 +57,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
   getAzureResponsesBody(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Record<string, any> {
     const config = {
       ...this.config,
@@ -154,7 +154,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    logger.debug(`Azure Responses API request body: ${JSON.stringify(body)}`);
+    logger.debug('Azure Responses API request body', { body });
     return body;
   }
 
@@ -216,7 +216,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       logger.debug(`Using timeout of ${timeout}ms for deep research model ${this.deploymentName}`);
     }
 
-    logger.debug(`Calling Azure Responses API: ${JSON.stringify(body)}`);
+    logger.debug('Calling Azure Responses API', { body });
 
     let data, status, statusText;
     let cached = false;
@@ -256,7 +256,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`\tAzure Responses API response: ${JSON.stringify(data)}`);
+    logger.debug('\tAzure Responses API response', { data });
 
     // Use the shared response processor for all response processing
     return this.processor.processResponseOutput(data, body, cached);

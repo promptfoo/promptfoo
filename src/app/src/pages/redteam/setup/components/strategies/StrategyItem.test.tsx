@@ -22,6 +22,8 @@ describe('StrategyItem', () => {
     it('renders strategy name and description', () => {
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={baseStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -36,6 +38,8 @@ describe('StrategyItem', () => {
     it('renders checkbox with correct state', () => {
       const { rerender } = render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={baseStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -48,6 +52,8 @@ describe('StrategyItem', () => {
 
       rerender(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={baseStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -68,6 +74,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={recommendedStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -86,6 +94,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={agenticStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -104,6 +114,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={multiModalStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -117,11 +129,13 @@ describe('StrategyItem', () => {
     it('renders multiple badges when a strategy belongs to multiple categories', () => {
       const multiCategoryStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'jailbreak',
+        id: 'jailbreak:meta',
       };
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={multiCategoryStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -138,11 +152,13 @@ describe('StrategyItem', () => {
     it('does not show settings button when not selected', () => {
       const configurableStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'multilingual',
+        id: 'jailbreak',
       };
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={configurableStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -156,11 +172,13 @@ describe('StrategyItem', () => {
     it('shows settings button for configurable strategies when selected', () => {
       const configurableStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'multilingual',
+        id: 'jailbreak',
       };
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={configurableStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -173,6 +191,27 @@ describe('StrategyItem', () => {
       expect(buttons).toHaveLength(1);
     });
 
+    it('shows settings button for hydra when selected and enabled', () => {
+      const hydraStrategy: StrategyCardData = {
+        ...baseStrategy,
+        id: 'jailbreak:hydra',
+      };
+
+      render(
+        <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
+          strategy={hydraStrategy}
+          isSelected={true}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      expect(buttons).toHaveLength(1);
+    });
+
     it('does not show settings button for non-configurable strategies even when selected', () => {
       const nonConfigurableStrategy: StrategyCardData = {
         ...baseStrategy,
@@ -181,6 +220,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={nonConfigurableStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -198,6 +239,8 @@ describe('StrategyItem', () => {
     it('calls onToggle when card is clicked', () => {
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={baseStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -214,6 +257,8 @@ describe('StrategyItem', () => {
     it('calls onToggle when checkbox is clicked', () => {
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={baseStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -230,11 +275,13 @@ describe('StrategyItem', () => {
     it('calls onConfigClick when settings button is clicked', () => {
       const configurableStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'multilingual',
+        id: 'jailbreak',
       };
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={configurableStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -246,7 +293,7 @@ describe('StrategyItem', () => {
       const settingsButton = buttons[buttons.length - 1]; // Last button is settings
       fireEvent.click(settingsButton);
 
-      expect(mockOnConfigClick).toHaveBeenCalledWith('multilingual');
+      expect(mockOnConfigClick).toHaveBeenCalledWith('jailbreak');
       expect(mockOnToggle).not.toHaveBeenCalled(); // Should not toggle
     });
   });
@@ -255,11 +302,13 @@ describe('StrategyItem', () => {
     it('applies padding to title section when settings button is present', () => {
       const configurableStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'multilingual',
+        id: 'jailbreak',
       };
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={configurableStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -274,11 +323,13 @@ describe('StrategyItem', () => {
     it('renders without overlap when multiple pills and settings button are present', () => {
       const multiBadgeStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'jailbreak',
+        id: 'jailbreak:meta',
       };
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={multiBadgeStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -298,13 +349,15 @@ describe('StrategyItem', () => {
       const longStrategyName =
         'This is an extremely long strategy name that should not break the layout';
       const configurableStrategy: StrategyCardData = {
-        id: 'multilingual',
+        id: 'jailbreak',
         name: longStrategyName,
         description: 'Test description',
       };
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={configurableStrategy}
           isSelected={true}
           onToggle={mockOnToggle}

@@ -17,10 +17,12 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
+import Autocomplete from '@mui/material/Autocomplete';
 import { useTheme } from '@mui/material/styles';
 import { displayNameOverrides, severityDisplayNames } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import { useDebounce } from 'use-debounce';
+import { BaseNumberInput } from '../../../../components/form/input/BaseNumberInput';
 import { type ResultsFilter, useTableStore } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
@@ -34,15 +36,24 @@ const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
 
 const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
   equals: 'Equals',
+  not_equals: 'Not Equals',
   contains: 'Contains',
   not_contains: 'Not Contains',
+  exists: 'Exists',
+  is_defined: 'Is Defined',
+  eq: '==',
+  neq: '!=',
+  gt: '>',
+  gte: '≥',
+  lt: '<',
+  lte: '≤',
 };
 
 /**
  * Convenience predicate function to determine if a filter type solely has equals operator.
  */
 function solelyHasEqualsOperator(type: ResultsFilter['type']): boolean {
-  return ['metric', 'plugin', 'strategy', 'severity', 'policy'].includes(type);
+  return ['strategy', 'severity', 'policy'].includes(type);
 }
 
 function Dropdown({
@@ -136,7 +147,6 @@ function DebouncedTextField({
 function Filter({
   value,
   index,
-  totalFilters,
   onClose,
 }: {
   value: ResultsFilter;
@@ -145,6 +155,8 @@ function Filter({
   onClose: () => void;
 }) {
   const theme = useTheme();
+  const [metadataAutocompleteOpen, setMetadataAutocompleteOpen] = useState(false);
+  const [metadataValueInput, setMetadataValueInput] = useState(value.value);
   const {
     filters,
     updateFilter,
@@ -155,6 +167,10 @@ function Filter({
     metadataKeysError,
     fetchMetadataKeys,
     evalId,
+    metadataValues,
+    metadataValuesLoading,
+    metadataValuesError,
+    fetchMetadataValues,
   } = useTableStore();
 
   // Get list of already selected metric values (excluding current filter)
@@ -182,6 +198,48 @@ function Filter({
     .filter((filter) => filter.id !== value.id && filter.type === 'policy' && filter.value)
     .map((filter) => filter.value);
 
+  const metadataKey = value.field ?? '';
+  const metadataValueOptions = metadataKey ? (metadataValues[metadataKey] ?? []) : [];
+  const metadataValuesAreLoading = metadataKey
+    ? Boolean(metadataValuesLoading[metadataKey])
+    : false;
+  const metadataValuesHadError = metadataKey ? Boolean(metadataValuesError[metadataKey]) : false;
+  const hasMetadataValueCache = metadataKey
+    ? Object.prototype.hasOwnProperty.call(metadataValues, metadataKey)
+    : false;
+
+  useEffect(() => {
+    setMetadataValueInput(value.value);
+  }, [value.value]);
+
+  useEffect(() => {
+    if (!metadataKey) {
+      setMetadataAutocompleteOpen(false);
+      setMetadataValueInput('');
+    }
+  }, [metadataKey]);
+
+  useEffect(() => {
+    if (
+      !evalId ||
+      !metadataKey ||
+      hasMetadataValueCache ||
+      metadataValuesAreLoading ||
+      metadataValuesHadError
+    ) {
+      return;
+    }
+
+    fetchMetadataValues(evalId, metadataKey);
+  }, [
+    evalId,
+    metadataKey,
+    hasMetadataValueCache,
+    metadataValuesAreLoading,
+    metadataValuesHadError,
+    fetchMetadataValues,
+  ]);
+
   /**
    * Updates the metadata field.
    * @param field - The new metadata field.
@@ -199,9 +257,9 @@ function Filter({
    */
   const handleTypeChange = useCallback(
     (filterType: ResultsFilter['type']) => {
-      // Clear field when switching away from metadata type
+      // Clear field when switching away from metadata or metric type
       const updatedFilter = { ...value, type: filterType };
-      if (filterType !== 'metadata') {
+      if (filterType !== 'metadata' && filterType !== 'metric') {
         updatedFilter.field = undefined;
       }
       // Clear value when switching between different filter types
@@ -212,6 +270,16 @@ function Filter({
       // Reset operator to 'equals' when changing to types that only support 'equals'
       if (solelyHasEqualsOperator(filterType) && value.operator !== 'equals') {
         updatedFilter.operator = 'equals';
+      }
+      if (filterType === 'plugin' && !['equals', 'not_equals'].includes(value.operator)) {
+        updatedFilter.operator = 'equals';
+      }
+      // Reset operator to 'is_defined' when switching to metric type with an incompatible operator
+      if (
+        filterType === 'metric' &&
+        !['is_defined', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(value.operator)
+      ) {
+        updatedFilter.operator = 'is_defined';
       }
 
       // Fetch metadata keys when user switches to metadata filter type
@@ -235,7 +303,10 @@ function Filter({
    */
   const handleOperatorChange = useCallback(
     (filterOperator: ResultsFilter['operator']) => {
-      updateFilter({ ...value, operator: filterOperator });
+      // Clear value when switching to exists or is_defined operator
+      const updatedValue =
+        filterOperator === 'exists' || filterOperator === 'is_defined' ? '' : value.value;
+      updateFilter({ ...value, operator: filterOperator, value: updatedValue });
     },
     [value, updateFilter],
   );
@@ -414,117 +485,241 @@ function Filter({
             />
           ))}
 
+        {value.type === 'metric' && filters.options.metric.length > 0 && (
+          <Dropdown
+            id={`${index}-metric-field-select`}
+            label="Metric"
+            values={filters.options.metric.map((metric) => ({ label: metric, value: metric }))}
+            value={value.field || ''}
+            onChange={handleFieldChange}
+            width={180}
+          />
+        )}
+
         <Dropdown
           id={`${index}-operator-select`}
           label="Operator"
           values={
-            solelyHasEqualsOperator(value.type)
-              ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
-              : [
-                  { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
-                  { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
-                  { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
+            value.type === 'metric'
+              ? [
+                  { label: OPERATOR_LABELS_BY_OPERATOR.is_defined, value: 'is_defined' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.eq, value: 'eq' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.neq, value: 'neq' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.gt, value: 'gt' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.gte, value: 'gte' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.lt, value: 'lt' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.lte, value: 'lte' },
                 ]
+              : value.type === 'plugin'
+                ? [
+                    { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
+                    { label: OPERATOR_LABELS_BY_OPERATOR.not_equals, value: 'not_equals' },
+                  ]
+                : solelyHasEqualsOperator(value.type)
+                  ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
+                  : [
+                      { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
+                      { label: OPERATOR_LABELS_BY_OPERATOR.exists, value: 'exists' },
+                    ]
           }
           value={value.operator}
           onChange={(e) => handleOperatorChange(e as ResultsFilter['operator'])}
           width={150}
         />
 
-        <Box
-          sx={{
-            // NOTE: Do not set a max-width here: this container requires dynamic width which resizes according
-            // to the width of its contents i.e. the dropdown values.
-            flex: 1,
-            minWidth: 250,
-          }}
-        >
-          {solelyHasEqualsOperator(value.type) ? (
-            <Dropdown
-              id={`${index}-value-select`}
-              label={TYPE_LABELS_BY_TYPE[value.type]}
-              values={(filters.options[value.type] ?? [])
-                .map((optionValue) => {
-                  let label: string | React.ReactNode = optionValue;
-                  let displayName: string | null = null;
-                  if (value.type === 'plugin' || value.type === 'strategy') {
-                    displayName = displayNameOverrides[
-                      optionValue as keyof typeof displayNameOverrides
-                    ] as string;
-                  }
-                  if (value.type === 'severity') {
-                    displayName = severityDisplayNames[
-                      optionValue as keyof typeof severityDisplayNames
-                    ] as string;
-                  }
-                  if (value.type === 'policy') {
-                    // For policies, use the name from the mapping if available, otherwise use the ID
-                    const policyName = filters.policyIdToNameMap?.[optionValue];
-                    displayName = policyName ?? formatPolicyIdentifierAsMetric(optionValue);
-                  }
-                  if (displayName) {
-                    // For policy filters, don't show the ID in the code section
-                    const showValue = value.type !== 'policy';
-                    label = showValue ? (
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          width: '100%',
-                          gap: 16,
-                        }}
-                      >
-                        {displayName}
-                        <code
+        {/* Hide value input when exists or is_defined operator is selected */}
+        {value.operator !== 'exists' && value.operator !== 'is_defined' && (
+          <Box
+            sx={{
+              // NOTE: Do not set a max-width here: this container requires dynamic width which resizes according
+              // to the width of its contents i.e. the dropdown values.
+              flex: 1,
+              minWidth: 250,
+            }}
+          >
+            {value.type === 'plugin' || solelyHasEqualsOperator(value.type) ? (
+              <Dropdown
+                id={`${index}-value-select`}
+                label={TYPE_LABELS_BY_TYPE[value.type]}
+                values={(filters.options[value.type] ?? [])
+                  .map((optionValue) => {
+                    let label: string | React.ReactNode = optionValue;
+                    let displayName: string | null = null;
+                    if (value.type === 'plugin' || value.type === 'strategy') {
+                      displayName = displayNameOverrides[
+                        optionValue as keyof typeof displayNameOverrides
+                      ] as string;
+                    }
+                    if (value.type === 'severity') {
+                      displayName = severityDisplayNames[
+                        optionValue as keyof typeof severityDisplayNames
+                      ] as string;
+                    }
+                    if (value.type === 'policy') {
+                      // For policies, use the name from the mapping if available, otherwise use the ID
+                      const policyName = filters.policyIdToNameMap?.[optionValue];
+                      displayName = policyName ?? formatPolicyIdentifierAsMetric(optionValue);
+                    }
+                    if (displayName) {
+                      // For policy filters, don't show the ID in the code section
+                      const showValue = value.type !== 'policy';
+                      label = showValue ? (
+                        <div
                           style={{
-                            fontSize: '0.8em',
-                            color: theme.palette.text.secondary,
+                            display: 'flex',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            width: '100%',
+                            gap: 16,
                           }}
                         >
-                          {optionValue}
-                        </code>
-                      </div>
-                    ) : (
-                      displayName
-                    );
+                          {displayName}
+                          <code
+                            style={{
+                              fontSize: '0.8em',
+                              color: theme.palette.text.secondary,
+                            }}
+                          >
+                            {optionValue}
+                          </code>
+                        </div>
+                      ) : (
+                        displayName
+                      );
+                    }
+                    return { label, value: optionValue, sortValue: displayName ?? optionValue };
+                  })
+                  .sort((a, b) => a.sortValue.localeCompare(b.sortValue))}
+                value={value.value}
+                onChange={(selected) => handleValueChange(selected)}
+                width="100%"
+                disabledValues={
+                  value.type === 'metric'
+                    ? selectedMetricValues
+                    : value.type === 'plugin'
+                      ? selectedPluginValues
+                      : value.type === 'strategy'
+                        ? selectedStrategyValues
+                        : value.type === 'severity'
+                          ? selectedSeverityValues
+                          : value.type === 'policy'
+                            ? selectedPolicyValues
+                            : []
+                }
+              />
+            ) : value.type === 'metric' &&
+              ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(value.operator) ? (
+              <BaseNumberInput
+                id={`${index}-value-input`}
+                label="Value"
+                variant="outlined"
+                size="small"
+                value={value.value === '' ? undefined : Number(value.value)}
+                onChange={(numericValue) => {
+                  handleValueChange(numericValue === undefined ? '' : String(numericValue));
+                }}
+                allowDecimals
+                step={0.1}
+                fullWidth
+                slotProps={{
+                  input: {
+                    sx: {
+                      py: 1,
+                    },
+                  },
+                }}
+              />
+            ) : value.type === 'metadata' && value.operator === 'equals' ? (
+              <Autocomplete
+                freeSolo
+                id={`${index}-metadata-value-autocomplete`}
+                size="small"
+                value={value.value || null}
+                inputValue={metadataValueInput}
+                onInputChange={(_event, newInputValue, reason) => {
+                  if (reason === 'reset') {
+                    return;
                   }
-                  return { label, value: optionValue, sortValue: displayName ?? optionValue };
-                })
-                .sort((a, b) => {
-                  // Sort by the option value since label might be a React element
-                  return a.sortValue.localeCompare(b.sortValue);
-                })} // Sort by value
-              value={value.value}
-              onChange={(e) => handleValueChange(e)}
-              width="100%"
-              disabledValues={
-                value.type === 'metric'
-                  ? selectedMetricValues
-                  : value.type === 'plugin'
-                    ? selectedPluginValues
-                    : value.type === 'strategy'
-                      ? selectedStrategyValues
-                      : value.type === 'severity'
-                        ? selectedSeverityValues
-                        : value.type === 'policy'
-                          ? selectedPolicyValues
-                          : []
-              }
-            />
-          ) : (
-            <DebouncedTextField
-              id={`${index}-value-input`}
-              label="Value"
-              variant="outlined"
-              size="small"
-              value={value.value}
-              onChange={handleValueChange}
-              fullWidth
-            />
-          )}
-        </Box>
+
+                  setMetadataValueInput(newInputValue);
+
+                  if (reason === 'input') {
+                    handleValueChange(newInputValue);
+                  }
+
+                  if (reason === 'clear') {
+                    handleValueChange('');
+                  }
+                }}
+                onChange={(_event, newValue) => {
+                  const nextValue = typeof newValue === 'string' ? newValue : '';
+                  setMetadataValueInput(nextValue);
+                  handleValueChange(nextValue);
+                }}
+                open={metadataAutocompleteOpen}
+                onOpen={() => {
+                  if (!metadataKey || !evalId) {
+                    setMetadataAutocompleteOpen(false);
+                    return;
+                  }
+
+                  setMetadataAutocompleteOpen(true);
+                  fetchMetadataValues(evalId, metadataKey);
+                }}
+                onClose={() => setMetadataAutocompleteOpen(false)}
+                options={metadataValueOptions}
+                loading={metadataValuesAreLoading}
+                noOptionsText={metadataKey ? 'No values found' : 'Select a key to load values'}
+                loadingText="Loading values..."
+                disabled={!metadataKey || !evalId}
+                isOptionEqualToValue={(option, currentValue) => option === currentValue}
+                sx={{ width: '100%' }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Value"
+                    variant="outlined"
+                    size="small"
+                    error={metadataValuesHadError}
+                    helperText={
+                      metadataValuesHadError ? 'Failed to load metadata values' : undefined
+                    }
+                    placeholder={metadataKey ? 'Select or type a value' : 'Select a key first'}
+                    sx={{
+                      '& .MuiInputBase-input': {
+                        py: 1,
+                      },
+                    }}
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {metadataValuesAreLoading ? (
+                            <CircularProgress color="inherit" size={16} />
+                          ) : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+            ) : (
+              <DebouncedTextField
+                id={`${index}-value-input`}
+                label="Value"
+                variant="outlined"
+                size="small"
+                value={value.value}
+                onChange={handleValueChange}
+                fullWidth
+              />
+            )}
+          </Box>
+        )}
       </Box>
     </Box>
   );

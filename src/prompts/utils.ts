@@ -57,7 +57,7 @@ export function normalizeInput(
     ];
   }
   if (Array.isArray(promptPathOrGlobs)) {
-    return promptPathOrGlobs.map((promptPathOrGlob, index) => {
+    return promptPathOrGlobs.map((promptPathOrGlob, _index) => {
       if (typeof promptPathOrGlob === 'string') {
         return {
           raw: promptPathOrGlob,

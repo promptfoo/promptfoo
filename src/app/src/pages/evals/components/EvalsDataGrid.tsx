@@ -318,7 +318,7 @@ export default function EvalsDataGrid({
           field: 'createdAt',
           headerName: 'Created',
           flex: 0.9,
-          valueGetter: (value: Eval['createdAt'], row: Eval) => {
+          valueGetter: (value: Eval['createdAt']) => {
             return new Date(value);
           },
           valueFormatter: (value: Eval['createdAt']) => formatDataGridDate(value),
@@ -335,7 +335,7 @@ export default function EvalsDataGrid({
                   { value: true, label: 'Red Team' },
                   { value: false, label: 'Eval' },
                 ],
-                valueGetter: (value: Eval['isRedteam'], row: Eval) => value === 1,
+                valueGetter: (value: Eval['isRedteam']) => value === 1,
                 renderCell: (params: GridRenderCellParams<Eval>) => {
                   const isRedteam = params.value as Eval['isRedteam'];
                   const displayType = isRedteam ? 'Red Team' : 'Eval';

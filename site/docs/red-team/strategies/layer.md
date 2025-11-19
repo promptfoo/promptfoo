@@ -1,12 +1,12 @@
 ---
 title: Layer Strategy
-description: Compose multiple red team strategies in order (e.g., multilingual → rot13) to stack transformations and agentic techniques
+description: Compose multiple red team strategies in order (e.g., base64 → rot13) to stack transformations and agentic techniques
 sidebar_label: Layer
 ---
 
 # Layer Strategy
 
-The Layer strategy allows you to compose multiple red team strategies sequentially, creating sophisticated attack chains by feeding the output of one strategy into the next. This enables complex transformations like translating text into multiple languages then encoding it, or combining multiple obfuscation techniques for maximum evasion potential.
+The Layer strategy allows you to compose multiple red team strategies sequentially, creating sophisticated attack chains by feeding the output of one strategy into the next. This enables complex transformations like applying multiple encoding layers or combining obfuscation techniques for maximum evasion potential.
 
 ## Quick Start
 
@@ -18,8 +18,8 @@ redteam:
     - id: layer
       config:
         steps:
-          - multilingual # First translate
-          - rot13 # Then encode
+          - base64 # First encode as base64
+          - rot13 # Then apply ROT13
 ```
 
 ## How It Works
@@ -62,10 +62,9 @@ redteam:
       config:
         steps:
           # Step with custom configuration
-          - id: multilingual
+          - id: jailbreak
             config:
-              languages: ['es', 'fr', 'zh']
-              batchSize: 5
+              maxIterations: 10
 
           # Simple step
           - hex
@@ -88,9 +87,8 @@ redteam:
         plugins: ['harmful', 'pii'] # Default for all steps
         steps:
           # Override for specific step
-          - id: multilingual
+          - id: jailbreak
             config:
-              languages: ['es']
               plugins: ['harmful'] # Only apply to harmful plugin
 
           # Uses default plugins from parent config
@@ -104,9 +102,9 @@ redteam:
 
 ## Example Scenarios
 
-### Multi-Language Encoding Attack
+### Double Encoding Attack
 
-Translate harmful content into a low-resource language, then encode it:
+Apply multiple encoding layers to evade detection:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
@@ -114,10 +112,8 @@ redteam:
     - id: layer
       config:
         steps:
-          - id: multilingual
-            config:
-              languages: ['sw', 'jv'] # Swahili, Javanese
-          - base64 # Encode the translated text
+          - hex # First encode as hexadecimal
+          - base64 # Then base64 encode
 ```
 
 ### Progressive Obfuscation
@@ -160,7 +156,7 @@ redteam:
       config:
         steps:
           - file://strategies/add-context.js
-          - multilingual
+          - base64
           - file://strategies/final-transform.js
 ```
 
@@ -168,11 +164,11 @@ redteam:
 
 ### Test Case Multiplication
 
-Be aware of exponential growth when combining strategies:
+Be aware of test case growth when combining strategies:
 
-- If `multilingual` with 3 languages is in your layer, test cases multiply by 3
-- Additional multiplying strategies compound this effect
-- Plan your test counts accordingly
+- Some strategies may multiply test cases (e.g., if you set global `language: ['en', 'es', 'fr']`, all test cases multiply by 3)
+- Layered strategies process sequentially, so test count growth is usually linear
+- Plan your test counts accordingly to avoid excessive evaluation time
 
 ### Optimization Tips
 
@@ -198,8 +194,8 @@ Be aware of exponential growth when combining strategies:
 
 ## Related Concepts
 
-- [Multilingual](./multilingual.md) - Translation-based testing
 - [ROT13](./rot13.md) - Simple cipher encoding
 - [Base64](./base64.md) - Common encoding technique
+- [Hex](./hex.md) - Hexadecimal encoding
 - [Custom Strategy Scripts](./custom.md) - Create your own strategies
 - [Red Team Strategies](./index.md) - Overview of all strategies

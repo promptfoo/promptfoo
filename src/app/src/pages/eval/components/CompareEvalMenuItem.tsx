@@ -27,8 +27,18 @@ function CompareEvalMenuItem({ onComparisonEvalSelected }: CompareEvalMenuItemPr
   };
 
   const handleEvalSelected = (evalId: string) => {
-    onComparisonEvalSelected(evalId);
-    handleCloseDialog();
+    // Prevent self-comparison
+    if (evalId === currentEvalId) {
+      handleCloseDialog();
+      return;
+    }
+
+    try {
+      onComparisonEvalSelected(evalId);
+    } finally {
+      // Always close the dialog, even if the callback throws an error
+      handleCloseDialog();
+    }
   };
 
   return (

@@ -9,7 +9,7 @@ export const tracesRouter = Router();
 tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response) => {
   try {
     const { evaluationId } = req.params;
-    logger.info(`[TracesRoute] Fetching traces for evaluation ${evaluationId}`);
+    logger.debug(`[TracesRoute] Fetching traces for evaluation ${evaluationId}`);
 
     const traceStore = getTraceStore();
     const traces = await traceStore.getTracesByEvaluation(evaluationId);

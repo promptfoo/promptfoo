@@ -43,7 +43,6 @@ describe('selectMaxScore', () => {
           assertion: { type: 'contains', value: 'orange' } as Assertion,
         },
       ],
-      assertion: null,
     },
     namedScores: {},
     cost: 0,

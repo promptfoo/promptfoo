@@ -71,7 +71,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   echo: `${BASE_DOCS_URL}/echo`,
   f5: `${BASE_DOCS_URL}/f5`,
   fireworks: `${BASE_DOCS_URL}/fireworks`,
-  'ibm-bam': `${BASE_DOCS_URL}/ibm-bam`,
   litellm: `${BASE_DOCS_URL}/litellm`,
   openllm: `${BASE_DOCS_URL}/openllm`,
   replicate: `${BASE_DOCS_URL}/replicate`,

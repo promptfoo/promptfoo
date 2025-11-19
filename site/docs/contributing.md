@@ -224,7 +224,7 @@ Here's a simple example:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:gpt-5
 prompts:
   - Translate "{{input}}" to {{language}}
 tests:
@@ -241,7 +241,7 @@ Providers are defined in TypeScript. We also provide language bindings for Pytho
 
 1. Ensure your provider doesn't already exist in promptfoo and fits its scope. For OpenAI-compatible providers, you may be able to re-use the openai provider and override the base URL and other settings. If your provider is OpenAI compatible, feel free to skip to step 4.
 
-2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as a peer dependency with `npm install --save-peer`.
+2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as an optional dependency.
 
 3. Write unit tests in `test/providers/yourProviderName.test.ts` and create an example in the `examples/` directory.
 
@@ -408,7 +408,7 @@ This will generate static content in the `build` directory that can be served us
 
 ### Database
 
-Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database.ts` and migrations are stored in `drizzle`. Note that the migrations are all generated and you should not access these files directly.
+Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `~/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database/schema.ts` and migrations are stored in `drizzle/`. Note that the migrations are all generated and you should not access these files directly.
 
 #### Main Tables
 
@@ -422,14 +422,14 @@ You can view the contents of each of these tables by running `npx drizzle-kit st
 
 #### Adding a Migration
 
-1. **Modify Schema**: Make changes to your schema in `src/database.ts`.
+1. **Modify Schema**: Make changes to your schema in `src/database/schema.ts`.
 2. **Generate Migration**: Run the command to create a new migration:
 
    ```bash
    npm run db:generate
    ```
 
-   This command will create a new SQL file in the `drizzle` directory.
+   This command will create a new SQL file in the `drizzle/` directory.
 
 3. **Review Migration**: Inspect the generated migration file to ensure it captures your intended changes.
 4. **Apply Migration**: Apply the migration with:
@@ -462,7 +462,13 @@ As a maintainer, when you are ready to release a new version:
 
 2. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
 
-3. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
+3. Update `CHANGELOG.md`:
+   - Move all entries from `## [Unreleased]` to a new version section
+   - Format: `## [X.Y.Z] - YYYY-MM-DD`
+   - Keep entries organized by category (Added, Changed, Fixed, etc.)
+   - The release notes will be based on these changelog entries
+
+4. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
    - Break up each PR in the release into one of the following 5 sections (as applicable)
      - New Features
      - Bug Fixes
@@ -472,7 +478,38 @@ As a maintainer, when you are ready to release a new version:
    - Sort the lines in each section alphabetically
    - Ensure that the author of the PR is correctly cited
 
-4. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+5. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+
+## Changelog
+
+All PRs should include an entry in `CHANGELOG.md` under the `## [Unreleased]` section. This is enforced by a GitHub Action.
+
+We follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format with these categories:
+
+- **Added**: New features
+- **Changed**: Changes to existing functionality
+- **Fixed**: Bug fixes
+- **Dependencies**: Dependency updates
+- **Documentation**: Documentation changes
+- **Tests**: Test changes
+
+### Entry Format
+
+```markdown
+- feat(providers): add new provider for XYZ (#1234)
+- fix(evaluator): correct scoring for edge case (#1235)
+```
+
+Each entry must include the PR number and use a conventional commit prefix.
+
+### Bypass Labels
+
+PRs can skip the changelog requirement with these labels:
+
+- `no-changelog` - For exceptional cases (automated bot PRs, reverts)
+- `dependencies` - For automated dependency updates (Dependabot, Renovate)
+
+If the GitHub Action reminds you to update the changelog, either add an entry or apply an appropriate label.
 
 ## Getting Help
 

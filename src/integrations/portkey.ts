@@ -1,5 +1,5 @@
 import { getEnvString } from '../envars';
-import { fetchWithProxy } from '../util/fetch';
+import { fetchWithProxy } from '../util/fetch/index';
 import invariant from '../util/invariant';
 
 interface PortkeyResponse {

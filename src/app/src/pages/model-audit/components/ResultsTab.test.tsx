@@ -250,22 +250,20 @@ describe('ResultsTab', () => {
     const originalMock = vi.mocked(ScanStatistics);
     let currentSeverity: string | null = null;
 
-    originalMock.mockImplementation(
-      ({ scanResults, selectedSeverity, onSeverityClick, onFilesClick }) => {
-        currentSeverity = selectedSeverity;
+    originalMock.mockImplementation(({ selectedSeverity, onSeverityClick }) => {
+      currentSeverity = selectedSeverity;
 
-        return (
-          <div data-testid="scan-statistics">
-            <button
-              data-testid="severity-button"
-              onClick={() => onSeverityClick(currentSeverity === 'error' ? null : 'error')}
-            >
-              Click Severity
-            </button>
-          </div>
-        );
-      },
-    );
+      return (
+        <div data-testid="scan-statistics">
+          <button
+            data-testid="severity-button"
+            onClick={() => onSeverityClick(currentSeverity === 'error' ? null : 'error')}
+          >
+            Click Severity
+          </button>
+        </div>
+      );
+    });
 
     const mockScanResults: ScanResult = {
       path: '/path/to/scan',

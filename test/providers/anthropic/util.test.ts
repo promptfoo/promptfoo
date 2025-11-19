@@ -6,6 +6,7 @@ import {
   processAnthropicTools,
 } from '../../../src/providers/anthropic/util';
 import type Anthropic from '@anthropic-ai/sdk';
+
 import type {
   WebFetchToolConfig,
   WebSearchToolConfig,
@@ -56,6 +57,68 @@ describe('Anthropic utilities', () => {
     it('should calculate default cost for Claude Sonnet 4 model', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-20250514', {}, 100, 200);
       expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - using default model costs
+    });
+
+    it('should calculate default cost for Claude Sonnet 4.5 model', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 100, 200);
+      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - using Sonnet 4 pricing
+    });
+
+    it('should calculate default cost for Claude Haiku 4.5 model', () => {
+      const cost = calculateAnthropicCost('claude-haiku-4-5-20251001', {}, 100, 200);
+      expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
+    });
+
+    it('should calculate default cost for Claude Haiku 4.5 latest model', () => {
+      const cost = calculateAnthropicCost('claude-haiku-4-5-latest', {}, 100, 200);
+      expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.5 with prompt <= 200k tokens', () => {
+      // Test with 150k tokens (below threshold)
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 150_000, 10_000);
+      expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.5 with prompt exactly 200k tokens', () => {
+      // Test with exactly 200k tokens (at threshold, should use lower tier)
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 200_000, 10_000);
+      expect(cost).toBe(0.75); // (3/1e6 * 200,000) + (15/1e6 * 10,000) = 0.6 + 0.15 = 0.75
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.5 with prompt > 200k tokens', () => {
+      // Test with 250k tokens (above threshold)
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 250_000, 10_000);
+      expect(cost).toBe(1.725); // (6/1e6 * 250,000) + (22.5/1e6 * 10,000) = 1.5 + 0.225 = 1.725
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.5 20250929 with > 200k tokens', () => {
+      // Only claude-sonnet-4-5-20250929 has tiered pricing
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 300_000, 20_000);
+      // (6/1e6 * 300,000) + (22.5/1e6 * 20,000) = 1.8 + 0.45 = 2.25
+      expect(cost).toBe(2.25);
+    });
+
+    it('should use base pricing for other Claude Sonnet 4 models', () => {
+      // Other Sonnet 4 models don't have tiered pricing
+      const models = ['claude-sonnet-4-20250514', 'claude-sonnet-4-0', 'claude-sonnet-4-latest'];
+
+      models.forEach((model) => {
+        const cost = calculateAnthropicCost(model, {}, 300_000, 20_000);
+        // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2
+        expect(cost).toBe(1.2);
+      });
+    });
+
+    it('should respect config.cost override for Claude Sonnet 4.5 models', () => {
+      // When config.cost is provided, it should override tiered pricing
+      const cost = calculateAnthropicCost(
+        'claude-sonnet-4-5-20250929',
+        { cost: 0.02 },
+        250_000,
+        10_000,
+      );
+      expect(cost).toBe(5200); // (0.02 * 250,000) + (0.02 * 10,000) = 5000 + 200 = 5200
     });
 
     it('should return undefined for missing model', () => {

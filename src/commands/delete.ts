@@ -6,7 +6,7 @@ import { setupEnv } from '../util/index';
 import { deleteAllEvals, deleteEval, getEvalFromId } from '../util/database';
 import type { Command } from 'commander';
 
-export async function handleEvalDelete(evalId: string, envPath?: string) {
+export async function handleEvalDelete(evalId: string, _envPath?: string) {
   try {
     await deleteEval(evalId);
     logger.info(`Evaluation with ID ${evalId} has been successfully deleted.`);

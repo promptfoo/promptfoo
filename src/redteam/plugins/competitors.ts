@@ -60,7 +60,6 @@ export class CompetitorsGrader extends RedteamGraderBase {
 
   getSuggestions({
     rawPrompt,
-    renderedValue,
     test,
   }: {
     rawPrompt: string;

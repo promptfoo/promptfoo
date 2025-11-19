@@ -241,7 +241,7 @@ describe('redteamConfigSchema', () => {
         plugins: expect.arrayContaining(
           Array(REDTEAM_DEFAULT_PLUGINS.size).fill(expect.any(Object)),
         ),
-        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       },
     });
   });
@@ -255,7 +255,7 @@ describe('redteamConfigSchema', () => {
         plugins: expect.arrayContaining(
           Array(REDTEAM_DEFAULT_PLUGINS.size).fill(expect.any(Object)),
         ),
-        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       },
     });
   });
@@ -269,7 +269,7 @@ describe('redteamConfigSchema', () => {
       data: {
         numTests: undefined,
         plugins: [{ id: 'hijacking' }, { id: 'overreliance' }],
-        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       },
     });
   });
@@ -358,7 +358,7 @@ describe('redteamConfigSchema', () => {
             numTests: 3,
           }))
           .sort((a, b) => a.id.localeCompare(b.id)),
-        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       },
     });
   });
@@ -386,7 +386,7 @@ describe('redteamConfigSchema', () => {
               numTests: 3,
             })),
         ].sort((a, b) => a.id.localeCompare(b.id)),
-        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       },
     });
     expect(RedteamConfigSchema.safeParse(input)?.data?.plugins).toHaveLength(
@@ -410,7 +410,7 @@ describe('redteamConfigSchema', () => {
             .filter((category) => !['harmful:hate', 'harmful:violent-crime'].includes(category))
             .map((category) => ({ id: category, numTests: 3 })),
         ]),
-        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       },
     });
   });
@@ -428,7 +428,7 @@ describe('redteamConfigSchema', () => {
           { id: 'harmful:hate', numTests: 10 },
           { id: 'harmful:violent-crime', numTests: 3 },
         ]),
-        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       },
     });
   });
@@ -505,7 +505,7 @@ describe('redteamConfigSchema', () => {
           { id: 'overreliance', numTests: undefined },
           { id: 'politics', numTests: undefined },
         ],
-        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       },
     });
   });
@@ -590,7 +590,7 @@ describe('redteamConfigSchema', () => {
             .filter((category) => category !== 'harmful:hate')
             .map((category) => ({ id: category, numTests: 2 })),
         ].sort((a, b) => a.id.localeCompare(b.id)),
-        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       },
     });
     expect(RedteamConfigSchema.safeParse(input)?.data?.plugins).toHaveLength(
@@ -994,7 +994,7 @@ describe('RedteamConfigSchema transform', () => {
         if (typeof s === 'string' || !s) {
           throw new Error('Strategy should be an object');
         }
-        return s.id === 'jailbreak';
+        return s.id === 'jailbreak:meta';
       }),
     ).toBe(true);
     expect(
@@ -1106,7 +1106,7 @@ describe('RedteamConfigSchema transform', () => {
 
     expect(result).toEqual({
       plugins: [{ id: 'harmful:hate', numTests: 5 }],
-      strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       delay: 1000,
       entities: ['ACME Corp', 'John Doe'],
       injectVar: 'system',
@@ -1127,7 +1127,7 @@ describe('RedteamConfigSchema transform', () => {
 
     expect(result).toEqual({
       plugins: [{ id: 'harmful:hate', numTests: 5 }],
-      strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       numTests: 5,
     });
 
@@ -1151,7 +1151,7 @@ describe('RedteamConfigSchema transform', () => {
 
     expect(result).toEqual({
       plugins: [{ id: 'harmful:hate', numTests: 3 }],
-      strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       entities: ['Company X', 'Jane Smith', 'Acme Industries'],
       numTests: 3,
     });
@@ -1168,7 +1168,7 @@ describe('RedteamConfigSchema transform', () => {
 
     expect(result).toEqual({
       plugins: [{ id: 'harmful:hate', numTests: 3 }],
-      strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      strategies: [{ id: 'basic' }, { id: 'jailbreak:composite' }, { id: 'jailbreak:meta' }],
       entities: [],
       numTests: 3,
     });
@@ -1251,6 +1251,119 @@ describe('RedteamConfigSchema transform', () => {
         (p: RedteamPluginObject) => !['foundation', 'harmful', 'pii'].includes(p.id),
       ),
     ).toBe(true);
+  });
+
+  describe('multilingual strategy lifting', () => {
+    it('should lift multilingual strategy languages to global language config', () => {
+      const input = {
+        plugins: ['overreliance'],
+        strategies: [
+          {
+            id: 'multilingual',
+            config: {
+              languages: ['hi', 'fr'],
+            },
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(input);
+
+      // Language should be lifted to global config with 'en' prepended as default
+      expect(result.language).toEqual(['en', 'hi', 'fr']);
+      // Multilingual should be removed from strategies array
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(false);
+    });
+
+    it('should merge multilingual languages with existing global language config', () => {
+      const input = {
+        plugins: ['overreliance'],
+        language: 'de',
+        strategies: [
+          {
+            id: 'multilingual',
+            config: {
+              languages: ['hi', 'fr'],
+            },
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(input);
+
+      // Should merge and deduplicate with 'en' added
+      expect(result.language).toEqual(['de', 'en', 'hi', 'fr']);
+      // Multilingual should be removed from strategies array
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(false);
+    });
+
+    it('should preserve other strategies when removing multilingual', () => {
+      const input = {
+        plugins: ['overreliance'],
+        strategies: [
+          'jailbreak',
+          {
+            id: 'multilingual',
+            config: {
+              languages: ['hi'],
+            },
+          },
+          'prompt-injection',
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(input);
+
+      expect(result.language).toEqual(['en', 'hi']);
+      // Should keep other strategies but remove multilingual
+      const strategyIds = result.strategies?.map((s) => (typeof s === 'string' ? s : s.id));
+      expect(strategyIds).toContain('jailbreak');
+      expect(strategyIds).toContain('prompt-injection');
+      expect(strategyIds).not.toContain('multilingual');
+    });
+
+    it('should handle multilingual as string (not lifting)', () => {
+      const input = {
+        plugins: ['overreliance'],
+        strategies: ['multilingual'],
+      };
+
+      const result = RedteamConfigSchema.parse(input);
+
+      // String form doesn't have config, so no lifting should occur
+      expect(result.language).toBeUndefined();
+      // Multilingual as string should be kept (no lifting occurred)
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(true);
+    });
+
+    it('should not lift if multilingual has no languages', () => {
+      const input = {
+        plugins: ['overreliance'],
+        strategies: [
+          {
+            id: 'multilingual',
+            config: {
+              languages: [],
+            },
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(input);
+
+      // No lifting should occur with empty languages
+      expect(result.language).toBeUndefined();
+      // Multilingual should still be removed? Or kept? Let's keep it for empty config
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(true);
+    });
   });
 });
 

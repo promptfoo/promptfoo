@@ -27,7 +27,7 @@ export class EchoProvider implements ApiProvider {
 
   async callApi(
     input: string,
-    options?: Record<string, any>,
+    _options?: Record<string, any>,
     context?: any,
   ): Promise<ProviderResponse> {
     if (this.delay && this.delay > 0) {

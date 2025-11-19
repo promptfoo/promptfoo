@@ -33,7 +33,6 @@ const RiskCard = ({
   evalId,
   failuresByPlugin,
   passesByPlugin,
-  strategyStats,
 }: {
   title: string;
   subtitle: string;
@@ -50,7 +49,6 @@ const RiskCard = ({
     string,
     { prompt: string; output: string; gradingResult?: GradingResult }[]
   >;
-  strategyStats: Record<string, { pass: number; total: number }>;
 }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -183,9 +181,9 @@ const RiskCard = ({
                             {`${Math.round(percentage * 100)}%`}
                           </Typography>
                         ) : percentage >= pluginPassRateThreshold ? (
-                          <CheckCircleIcon className="risk-card-icon-passed" />
+                          <CheckCircleIcon className="risk-card-icon-passed" color="success" />
                         ) : (
-                          <CancelIcon className="risk-card-icon-failed" />
+                          <CancelIcon className="risk-card-icon-failed" color="error" />
                         )}
                         <ArrowForwardIosIcon
                           className="risk-card-expand-icon print-hide"
@@ -215,7 +213,6 @@ const RiskCard = ({
               const testType = testTypes.find((t) => t.name === selectedCategory);
               return testType?.numFailed ?? 0;
             })()}
-            strategyStats={strategyStats}
           />
         )}
       </CardContent>

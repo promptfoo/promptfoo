@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -201,25 +202,176 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 }
 
 /**
- * Retrieves the default team for the current user from Promptfoo Cloud.
- * The default team is determined as the oldest team by creation date.
- * @returns Promise resolving to an object with team id and name
- * @throws Error if the request fails or no teams are found
+ * Retrieves all teams for the current user from Promptfoo Cloud.
+ * @returns Promise resolving to an array of team objects
+ * @throws Error if the request fails
  */
-export async function getDefaultTeam(): Promise<{ id: string; name: string }> {
+export async function getUserTeams(): Promise<
+  Array<{
+    id: string;
+    name: string;
+    slug: string;
+    organizationId: string;
+    createdAt: string;
+    updatedAt: string;
+  }>
+> {
   const response = await makeRequest(`/users/me/teams`, 'GET');
   if (!response.ok) {
-    throw new Error(`Failed to get default team id: ${response.statusText}`);
+    throw new Error(`Failed to get user teams: ${response.statusText}`);
   }
 
   const body = await response.json();
+  return body;
+}
+
+/**
+ * Retrieves the default team for the current user from Promptfoo Cloud.
+ * The default team is determined as the oldest team by creation date.
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the request fails or no teams are found
+ */
+export async function getDefaultTeam(): Promise<{
+  id: string;
+  name: string;
+  organizationId: string;
+  createdAt: string;
+}> {
+  const teams = await getUserTeams();
+
+  if (teams.length === 0) {
+    throw new Error('No teams found for user');
+  }
 
   // get the oldest team -- this matches the logic of the enterprise app
-  const oldestTeam = body.sort((a: { createdAt: string }, b: { createdAt: string }) => {
+  const oldestTeam = teams.sort((a, b) => {
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   })[0];
 
-  return oldestTeam;
+  return {
+    id: oldestTeam.id,
+    name: oldestTeam.name,
+    organizationId: oldestTeam.organizationId,
+    createdAt: oldestTeam.createdAt,
+  };
+}
+
+/**
+ * Retrieves a team by its ID.
+ * @param teamId - The team ID to look up
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the team is not found or not accessible
+ */
+export async function getTeamById(
+  teamId: string,
+): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
+  const teams = await getUserTeams();
+  const team = teams.find((t) => t.id === teamId);
+
+  if (!team) {
+    throw new Error(`Team with ID '${teamId}' not found or not accessible`);
+  }
+
+  return {
+    id: team.id,
+    name: team.name,
+    organizationId: team.organizationId,
+    createdAt: team.createdAt,
+  };
+}
+
+/**
+ * Resolves a team identifier (name, slug, or ID) to a team object.
+ * @param identifier - The team name, slug, or ID
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the team is not found
+ */
+export async function resolveTeamFromIdentifier(
+  identifier: string,
+): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
+  const teams = await getUserTeams();
+
+  // Try exact ID match first
+  let team = teams.find((t) => t.id === identifier);
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  // Try name match (case-insensitive)
+  team = teams.find((t) => t.name.toLowerCase() === identifier.toLowerCase());
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  // Try slug match
+  team = teams.find((t) => t.slug === identifier);
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  const availableTeams = teams.map((t) => t.name).join(', ');
+  throw new Error(`Team '${identifier}' not found. Available teams: ${availableTeams}`);
+}
+
+/**
+ * Resolves the current team context, checking stored preferences first.
+ * @param teamIdentifier - Optional explicit team identifier to use
+ * @param fallbackToDefault - Whether to fall back to server default team
+ * @returns Promise resolving to an object with team id and name
+ * @throws Error if no team can be resolved
+ */
+export async function resolveTeamId(
+  teamIdentifier?: string,
+  fallbackToDefault = true,
+): Promise<{ id: string; name: string }> {
+  // 1. Use explicit team identifier if provided
+  if (teamIdentifier) {
+    logger.debug(`[Team Resolution] Using explicit team identifier: ${teamIdentifier}`);
+    return await resolveTeamFromIdentifier(teamIdentifier);
+  }
+
+  // 2. Use stored current team preference (scoped to current organization)
+  const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
+  const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
+  if (currentTeamId) {
+    try {
+      logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
+      return await getTeamById(currentTeamId);
+    } catch (_error) {
+      logger.warn(
+        `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
+      );
+    }
+  }
+
+  // 3. Fall back to server default (oldest team)
+  if (fallbackToDefault) {
+    logger.debug(`[Team Resolution] Using server default team`);
+    const defaultTeam = await getDefaultTeam();
+    // Store the default team for future use (scoped to organization)
+    cloudConfig.setCurrentTeamId(defaultTeam.id, defaultTeam.organizationId);
+    logger.info(
+      `Using team: ${defaultTeam.name} (use 'promptfoo auth teams set <name>' to change)`,
+    );
+    return defaultTeam;
+  }
+
+  throw new Error('No team specified and no default available');
 }
 
 /**
@@ -410,5 +562,142 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     logger.error(`Failed to fetch policies from cloud.`);
     logger.error(String(e));
     throw new Error(`Failed to fetch policies from cloud.`);
+  }
+}
+
+/**
+ * Validates linkedTargetId format and existence.
+ * linkedTargetId is a Promptfoo Cloud feature that links custom provider results
+ * to an existing target instead of creating duplicates.
+ *
+ * Validates the prefix and checks existence in cloud. Format validation
+ * (e.g., UUID format) is deferred to the cloud API for simplicity.
+ *
+ * @param linkedTargetId - The linkedTargetId to validate
+ * @throws Error if validation fails
+ */
+export async function validateLinkedTargetId(linkedTargetId: string): Promise<void> {
+  // Validate format: promptfoo://provider/{id}
+  if (!isCloudProvider(linkedTargetId)) {
+    const apiHost = cloudConfig.getApiHost();
+    const appHost = apiHost.replace('/api', '').replace(':3201', '');
+
+    throw new Error(
+      dedent`
+        Invalid linkedTargetId format: "${linkedTargetId}"
+
+        linkedTargetId must start with "${CLOUD_PROVIDER_PREFIX}" followed by a target ID.
+        Example: ${CLOUD_PROVIDER_PREFIX}12345678-1234-1234-1234-123456789abc
+
+        linkedTargetId links your local provider configuration to a cloud target, allowing you to:
+        - Consolidate findings from multiple eval runs
+        - Track performance and vulnerabilities over time
+        - View comprehensive reporting in the cloud dashboard
+
+        To get a valid linkedTargetId:
+        1. Log in to Promptfoo Cloud: ${appHost}
+        2. Navigate to Targets page: ${appHost}/redteam/targets
+        3. Find the target you want to link to and copy its ID
+        4. Format as: ${CLOUD_PROVIDER_PREFIX}<target-id>
+      `,
+    );
+  }
+
+  // Check existence in cloud (if enabled)
+  if (!cloudConfig.isEnabled()) {
+    logger.warn('[Cloud] linkedTargetId specified but cloud is not configured', {
+      linkedTargetId,
+      suggestion: "Run 'promptfoo auth login' to enable cloud features",
+    });
+    return;
+  }
+
+  const providerId = getCloudDatabaseId(linkedTargetId);
+  try {
+    logger.debug('[Cloud] Validating linkedTargetId exists in cloud', {
+      linkedTargetId,
+      providerId,
+    });
+    await getProviderFromCloud(providerId);
+    logger.debug('[Cloud] linkedTargetId validation successful', {
+      linkedTargetId,
+    });
+  } catch (error) {
+    logger.error('[Cloud] linkedTargetId validation failed', {
+      linkedTargetId,
+      error,
+    });
+    const apiHost = cloudConfig.getApiHost();
+    const appHost = apiHost.replace('/api', '').replace(':3201', '');
+
+    throw new Error(
+      dedent`
+        linkedTargetId not found: "${linkedTargetId}"
+
+        This target doesn't exist in your Promptfoo Cloud organization or you don't have access to it.
+
+        Troubleshooting steps:
+        1. Verify you're logged in to the correct organization
+           Run: promptfoo auth status
+
+        2. Check that the target exists in your cloud dashboard:
+           ${appHost}/redteam/targets
+
+        3. Ensure you have permission to access this target
+           (Targets are scoped to your organization)
+
+        4. Verify the target ID is correct and hasn't been deleted
+      `,
+    );
+  }
+}
+
+/**
+ * Fetches the current organization and optional team context for display.
+ * Returns null if cloud is not enabled or if fetching fails.
+ * @returns Promise resolving to organization name and optional team name, or null
+ */
+export async function getOrgContext(): Promise<{
+  organizationName: string;
+  teamName?: string;
+} | null> {
+  if (!cloudConfig.isEnabled()) {
+    return null;
+  }
+
+  try {
+    const apiHost = cloudConfig.getApiHost();
+    const apiKey = cloudConfig.getApiKey();
+    const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const { organization } = await response.json();
+    const currentTeamId = cloudConfig.getCurrentTeamId(organization.id);
+
+    // Only include team name if it differs from organization name
+    let teamName: string | undefined;
+    if (currentTeamId) {
+      try {
+        const team = await getTeamById(currentTeamId);
+        if (team.name !== organization.name) {
+          teamName = team.name;
+        }
+      } catch {
+        // Team lookup failed, continue without team name
+      }
+    }
+
+    return {
+      organizationName: organization.name,
+      teamName,
+    };
+  } catch {
+    // Silently fail and return null
+    return null;
   }
 }

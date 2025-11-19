@@ -1,11 +1,11 @@
 import path from 'path';
 
-import axios from 'axios';
 import dedent from 'dedent';
 import WebSocket from 'ws';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
-import { GoogleLiveProvider } from '../../../src/providers/google/live';
+import { fetchJson, GoogleLiveProvider, tryGetThenPost } from '../../../src/providers/google/live';
+import * as fetchModule from '../../../src/util/fetch';
 
 // Mock setTimeout globally to speed up tests
 const originalSetTimeout = global.setTimeout;
@@ -19,7 +19,6 @@ global.setTimeout = jest.fn((callback: any, delay?: number) => {
 }) as any;
 
 jest.mock('ws');
-jest.mock('axios');
 jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),
 }));
@@ -39,6 +38,9 @@ jest.mock('child_process', () => ({
     kill: jest.fn(),
     killed: false,
   })),
+}));
+jest.mock('../../../src/util/fetch', () => ({
+  fetchWithProxy: jest.fn(),
 }));
 
 const mockImportModule = jest.mocked(importModule);
@@ -74,7 +76,6 @@ const simulateCompletionMessage = (mockWs: jest.Mocked<WebSocket>) => {
 
 describe('GoogleLiveProvider', () => {
   let mockWs: jest.Mocked<WebSocket>;
-  const mockedAxios = axios as jest.Mocked<typeof axios>;
   let provider: GoogleLiveProvider;
 
   beforeEach(() => {
@@ -103,10 +104,6 @@ describe('GoogleLiveProvider', () => {
         apiKey: 'test-api-key',
       },
     });
-
-    // Reset mocks before each test
-    mockedAxios.get.mockReset();
-    mockedAxios.post.mockReset();
   });
 
   afterEach(() => {
@@ -537,6 +534,8 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should handle function tool calls to a spawned stateful api', async () => {
+    const mockFetchWithProxy = jest.mocked(fetchModule.fetchWithProxy);
+
     jest.mocked(WebSocket).mockImplementation(() => {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -623,7 +622,11 @@ describe('GoogleLiveProvider', () => {
       },
     });
 
-    mockedAxios.get.mockResolvedValue({ data: { counter: 5 } });
+    // Mock fetchWithProxy to return successful responses
+    mockFetchWithProxy.mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({ counter: 5 }),
+    } as any);
 
     const response = await provider.callApi('Add to the counter until it reaches 5');
     expect(response).toEqual({
@@ -644,7 +647,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     // Check the specific calls made to the stateful API
-    const getCallUrls = mockedAxios.get.mock.calls.map((call) => call[0]);
+    const getCallUrls = mockFetchWithProxy.mock.calls.map((call) => call[0]);
     const expectedUrls = [
       'http://127.0.0.1:5000/get_count',
       'http://127.0.0.1:5000/add_one',
@@ -655,7 +658,10 @@ describe('GoogleLiveProvider', () => {
     ];
 
     expect(getCallUrls).toEqual(expectedUrls);
-    expect(mockedAxios.get).toHaveBeenLastCalledWith('http://127.0.0.1:5000/get_state');
+    expect(mockFetchWithProxy).toHaveBeenLastCalledWith(
+      'http://127.0.0.1:5000/get_state',
+      undefined,
+    );
   });
   describe('Python executable integration', () => {
     it('should handle Python executable validation correctly', async () => {
@@ -1385,6 +1391,273 @@ describe('GoogleLiveProvider', () => {
       );
       expect(mockExternalFunction).toHaveBeenCalledWith('{"external":"test"}');
       expect(response.output.text).toBe('Mixed functions completed');
+    });
+  });
+
+  describe('fetchJson', () => {
+    const mockFetchWithProxy = jest.mocked(fetchModule.fetchWithProxy);
+
+    beforeEach(() => {
+      mockFetchWithProxy.mockReset();
+    });
+
+    it('should successfully fetch and parse JSON', async () => {
+      const mockData = { success: true, data: 'test data' };
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue(mockData),
+      } as any);
+
+      const result = await fetchJson('https://example.com/api');
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://example.com/api', undefined);
+      expect(result).toEqual(mockData);
+    });
+
+    it('should pass options to fetchWithProxy', async () => {
+      const mockData = { result: 'success' };
+      const options = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      };
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue(mockData),
+      } as any);
+
+      const result = await fetchJson('https://example.com/api', options);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://example.com/api', options);
+      expect(result).toEqual(mockData);
+    });
+
+    it('should throw error when response is not ok', async () => {
+      mockFetchWithProxy.mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: jest.fn(),
+      } as any);
+
+      await expect(fetchJson('https://example.com/api')).rejects.toThrow(
+        'HTTP error - status: 404',
+      );
+    });
+
+    it('should throw error with status 500', async () => {
+      mockFetchWithProxy.mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: jest.fn(),
+      } as any);
+
+      await expect(fetchJson('https://example.com/api')).rejects.toThrow(
+        'HTTP error - status: 500',
+      );
+    });
+
+    it('should propagate network errors', async () => {
+      const networkError = new Error('Network failure');
+      mockFetchWithProxy.mockRejectedValue(networkError);
+
+      await expect(fetchJson('https://example.com/api')).rejects.toThrow('Network failure');
+    });
+  });
+
+  describe('tryGetThenPost', () => {
+    const mockFetchWithProxy = jest.mocked(fetchModule.fetchWithProxy);
+
+    beforeEach(() => {
+      mockFetchWithProxy.mockReset();
+    });
+
+    it('should successfully fetch with GET when no data provided', async () => {
+      const mockData = { result: 'success' };
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue(mockData),
+      } as any);
+
+      const result = await tryGetThenPost('https://example.com/api');
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://example.com/api', undefined);
+      expect(result).toEqual(mockData);
+    });
+
+    it('should successfully fetch with GET when data is provided as object', async () => {
+      const mockData = { result: 'success' };
+      const data = { param1: 'value1', param2: 'value2' };
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue(mockData),
+      } as any);
+
+      const result = await tryGetThenPost('https://example.com/api', data);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://example.com/api?param1=value1&param2=value2',
+        undefined,
+      );
+      expect(result).toEqual(mockData);
+    });
+
+    it('should successfully fetch with GET when data is provided as string', async () => {
+      const mockData = { result: 'success' };
+      const data = '{"param1":"value1","param2":"value2"}';
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue(mockData),
+      } as any);
+
+      const result = await tryGetThenPost('https://example.com/api', data);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://example.com/api?param1=value1&param2=value2',
+        undefined,
+      );
+      expect(result).toEqual(mockData);
+    });
+
+    it('should fallback to POST when GET fails', async () => {
+      const mockData = { result: 'success via POST' };
+      const data = { param1: 'value1' };
+
+      // First call (GET) fails
+      mockFetchWithProxy
+        .mockRejectedValueOnce(new Error('GET failed'))
+        // Second call (POST) succeeds
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue(mockData),
+        } as any);
+
+      const result = await tryGetThenPost('https://example.com/api', data);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+      // First call with GET
+      expect(mockFetchWithProxy).toHaveBeenNthCalledWith(
+        1,
+        'https://example.com/api?param1=value1',
+        undefined,
+      );
+      // Second call with POST
+      expect(mockFetchWithProxy).toHaveBeenNthCalledWith(2, 'https://example.com/api', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should fallback to POST when GET returns non-ok response', async () => {
+      const mockData = { result: 'success via POST' };
+      const data = { param1: 'value1' };
+
+      // First call (GET) returns 404
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          json: jest.fn(),
+        } as any)
+        // Second call (POST) succeeds
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue(mockData),
+        } as any);
+
+      const result = await tryGetThenPost('https://example.com/api', data);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithProxy).toHaveBeenNthCalledWith(2, 'https://example.com/api', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should handle POST with string data', async () => {
+      const mockData = { result: 'success' };
+      const data = '{"param1":"value1"}';
+
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('GET failed')).mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue(mockData),
+      } as any);
+
+      const result = await tryGetThenPost('https://example.com/api', data);
+
+      expect(mockFetchWithProxy).toHaveBeenNthCalledWith(2, 'https://example.com/api', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: data,
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should handle POST with no data', async () => {
+      const mockData = { result: 'success' };
+
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('GET failed')).mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue(mockData),
+      } as any);
+
+      const result = await tryGetThenPost('https://example.com/api');
+
+      expect(mockFetchWithProxy).toHaveBeenNthCalledWith(2, 'https://example.com/api', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: null,
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should handle complex query parameters in GET', async () => {
+      const mockData = { result: 'success' };
+      const data = {
+        param1: 'value with spaces',
+        param2: 123,
+        param3: true,
+        param4: 'special&chars=test',
+      };
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue(mockData),
+      } as any);
+
+      const result = await tryGetThenPost('https://example.com/api', data);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+      const calledUrl = mockFetchWithProxy.mock.calls[0][0] as string;
+      expect(calledUrl).toContain('param1=value+with+spaces');
+      expect(calledUrl).toContain('param2=123');
+      expect(calledUrl).toContain('param3=true');
+      expect(result).toEqual(mockData);
+    });
+
+    it('should throw error when both GET and POST fail', async () => {
+      const data = { param1: 'value1' };
+
+      mockFetchWithProxy
+        .mockRejectedValueOnce(new Error('GET failed'))
+        .mockRejectedValueOnce(new Error('POST failed'));
+
+      await expect(tryGetThenPost('https://example.com/api', data)).rejects.toThrow('POST failed');
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -4,19 +4,76 @@ import shutil
 import subprocess
 import tempfile
 import time
+from textwrap import dedent
 
 from e2b_code_interpreter import Sandbox
+
+# Optional: use OpenAI if available for real patch generation
+try:
+    from openai import OpenAI  # pip install openai
+except Exception:
+    OpenAI = None
 
 
 def model_call_patch(fail_log: str, relevant_files: dict) -> str:
     """
-    IMPLEMENT: call your LLM provider / promptfoo to get a patch (unified diff string).
-    Example options:
-      - call promptfoo to generate a patch prompt and parse model output
-      - call OpenAI / other provider directly
-    Return: unified diff (git apply-ready)
+    Minimal working example:
+    - If OPENAI_API_KEY is set and the OpenAI SDK is available, ask the model for a unified diff.
+    - Otherwise, return a tiny, valid unified diff against the first relevant file (demo fallback).
     """
-    raise NotImplementedError("Implement model_call_patch()")
+
+    # 1) Try LLM-backed patch generation (only if configured)
+    if OpenAI and os.getenv("OPENAI_API_KEY"):
+        client = OpenAI()
+        model = os.getenv("PATCH_MODEL", "gpt-4o-mini")
+
+        sys_msg = (
+            "You are a code repair assistant. Output ONLY a unified diff patch that "
+            "can be applied with `git apply -p0`. Do NOT include any explanations."
+        )
+        files_blob = "\n\n".join(
+            f"{path}:\n{content}" for path, content in relevant_files.items()
+        )
+        user_msg = (
+            "Given the failing test log and the repository files, produce a minimal fix:\n\n"
+            f"Failing test log:\n{fail_log}\n\n"
+            f"Relevant files (path => content):\n{files_blob}\n"
+        )
+
+        resp = client.chat.completions.create(
+            model=model,
+            temperature=0,
+            messages=[
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user_msg},
+            ],
+        )
+        patch = resp.choices[0].message.content.strip()
+        return patch
+
+    # 2) Fallback: return a harmless, valid unified diff so the example runs without any API keys
+    if not relevant_files:
+        demo_path = "README.md"
+        old = ""
+        new = "# patched-by-demo\n"
+    else:
+        demo_path = next(iter(relevant_files.keys()))
+        old = relevant_files[demo_path]
+        new = (
+            (old or "")
+            + ("\n" if old and not old.endswith("\n") else "")
+            + "# patched-by-demo\n"
+        )
+
+    # Minimal unified diff; uses -p0 friendly paths (a/ and b/)
+    fallback_patch = dedent(f"""\
+    --- a/{demo_path}
+    +++ b/{demo_path}
+    @@
+    {old or ""}
+    +# patched-by-demo
+    """)
+    return fallback_patch
 
 
 def run_task_local(

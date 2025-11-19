@@ -1,5 +1,5 @@
 import { matchesAnswerRelevance } from '../../src/matchers';
-import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts';
+import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts/index';
 import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
@@ -75,6 +75,7 @@ describe('matchesAnswerRelevance', () => {
     });
     expect(mockCallApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
+      expect.any(Object),
     );
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith('Input text');
   });
@@ -133,6 +134,7 @@ describe('matchesAnswerRelevance', () => {
     });
     expect(mockCallApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
+      expect.any(Object),
     );
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),

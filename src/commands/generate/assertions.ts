@@ -115,7 +115,7 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   });
 }
 
-function validateAssertionType(value: string, previous: string) {
+function validateAssertionType(value: string, _previous: string) {
   const allowedStrings = ['pi', 'g-eval', 'llm-rubric'];
   if (!allowedStrings.includes(value)) {
     throw new InvalidArgumentError(`Option --type must be one of: ${allowedStrings.join(', ')}.`);

@@ -25,7 +25,6 @@ export class ReligionGrader extends RedteamGraderBase {
 
   getSuggestions({
     rawPrompt,
-    renderedValue,
   }: {
     rawPrompt: string;
     renderedValue?: AssertionValue;
