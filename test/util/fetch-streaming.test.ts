@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { processStreamingResponse } from '../../src/util/fetch';
 
 describe('processStreamingResponse', () => {
@@ -17,7 +17,7 @@ describe('processStreamingResponse', () => {
         read: vi.fn(async () => {
           if (chunkIndex < chunks.length) {
             // Simulate 50ms delay between chunks
-            await new Promise(resolve => setTimeout(resolve, 50));
+            await new Promise((resolve) => setTimeout(resolve, 50));
             return { done: false, value: chunks[chunkIndex++] };
           }
           return { done: true, value: undefined };
@@ -78,9 +78,7 @@ describe('processStreamingResponse', () => {
     it('should set isActuallyStreaming=false for single-chunk responses', async () => {
       const requestStartTime = Date.now() - 10; // Small delay to avoid 0ms TTFT
 
-      const chunks = [
-        new TextEncoder().encode('Complete response in one chunk'),
-      ];
+      const chunks = [new TextEncoder().encode('Complete response in one chunk')];
 
       let chunkIndex = 0;
       const mockReader = {
@@ -111,8 +109,8 @@ describe('processStreamingResponse', () => {
       const requestStartTime = Date.now();
 
       const chunks = [
-        new TextEncoder().encode(''),        // Empty
-        new TextEncoder().encode('   '),     // Whitespace only
+        new TextEncoder().encode(''), // Empty
+        new TextEncoder().encode('   '), // Whitespace only
         new TextEncoder().encode('Content'), // First real content
         new TextEncoder().encode(' More'),
       ];
@@ -121,7 +119,7 @@ describe('processStreamingResponse', () => {
       const mockReader = {
         read: vi.fn(async () => {
           if (chunkIndex < chunks.length) {
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise((resolve) => setTimeout(resolve, 10));
             return { done: false, value: chunks[chunkIndex++] };
           }
           return { done: true, value: undefined };
@@ -147,10 +145,7 @@ describe('processStreamingResponse', () => {
       const requestStartTime = Date.now();
       const onFirstToken = vi.fn();
 
-      const chunks = [
-        new TextEncoder().encode('First'),
-        new TextEncoder().encode(' Second'),
-      ];
+      const chunks = [new TextEncoder().encode('First'), new TextEncoder().encode(' Second')];
 
       let chunkIndex = 0;
       const mockReader = {
@@ -178,9 +173,7 @@ describe('processStreamingResponse', () => {
       // Simulate a request that was sent 500ms ago
       const requestStartTime = Date.now() - 500;
 
-      const chunks = [
-        new TextEncoder().encode('Response'),
-      ];
+      const chunks = [new TextEncoder().encode('Response')];
 
       let chunkIndex = 0;
       const mockReader = {
@@ -216,9 +209,9 @@ describe('processStreamingResponse', () => {
         body: null,
       } as unknown as Response;
 
-      await expect(
-        processStreamingResponse(mockResponse, requestStartTime)
-      ).rejects.toThrow('Response body is not readable');
+      await expect(processStreamingResponse(mockResponse, requestStartTime)).rejects.toThrow(
+        'Response body is not readable',
+      );
     });
 
     it('should release lock even if reading fails', async () => {
@@ -237,9 +230,9 @@ describe('processStreamingResponse', () => {
         },
       } as unknown as Response;
 
-      await expect(
-        processStreamingResponse(mockResponse, requestStartTime)
-      ).rejects.toThrow('Read failed');
+      await expect(processStreamingResponse(mockResponse, requestStartTime)).rejects.toThrow(
+        'Read failed',
+      );
 
       // Verify lock was released despite error
       expect(mockReader.releaseLock).toHaveBeenCalled();

@@ -3,10 +3,10 @@ import { HttpProvider } from '../../src/providers/http';
 import * as fetchModule from '../../src/util/fetch';
 
 describe('HttpProvider streaming integration', () => {
-  let originalFetchWithRetries: typeof fetchModule.fetchWithRetries;
+  let _originalFetchWithRetries: typeof fetchModule.fetchWithRetries;
 
   beforeEach(() => {
-    originalFetchWithRetries = fetchModule.fetchWithRetries;
+    _originalFetchWithRetries = fetchModule.fetchWithRetries;
   });
 
   afterEach(() => {
@@ -41,7 +41,7 @@ describe('HttpProvider streaming integration', () => {
       const mockReader = {
         read: vi.fn(async () => {
           if (chunkIndex < mockChunks.length) {
-            await new Promise(resolve => setTimeout(resolve, 50));
+            await new Promise((resolve) => setTimeout(resolve, 50));
             return {
               done: false,
               value: new TextEncoder().encode(mockChunks[chunkIndex++]),
@@ -103,9 +103,10 @@ describe('HttpProvider streaming integration', () => {
         status: 200,
         statusText: 'OK',
         headers: new Map([['content-type', 'application/json']]),
-        text: async () => JSON.stringify({
-          choices: [{ message: { content: 'Hello world' } }],
-        }),
+        text: async () =>
+          JSON.stringify({
+            choices: [{ message: { content: 'Hello world' } }],
+          }),
       } as unknown as Response;
 
       vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(mockResponse);
@@ -174,7 +175,9 @@ describe('HttpProvider streaming integration', () => {
       expect(result.streamingMetrics?.isActuallyStreaming).toBe(false);
 
       // TTFT and latencyMs should be similar for single-chunk
-      expect(Math.abs(result.streamingMetrics!.timeToFirstToken! - result.latencyMs!)).toBeLessThan(50);
+      expect(Math.abs(result.streamingMetrics!.timeToFirstToken! - result.latencyMs!)).toBeLessThan(
+        50,
+      );
     });
 
     it('should ensure TTFT is always <= latencyMs', async () => {
@@ -203,7 +206,7 @@ describe('HttpProvider streaming integration', () => {
       const mockReader = {
         read: vi.fn(async () => {
           if (chunkIndex < mockChunks.length) {
-            await new Promise(resolve => setTimeout(resolve, 25));
+            await new Promise((resolve) => setTimeout(resolve, 25));
             return {
               done: false,
               value: new TextEncoder().encode(mockChunks[chunkIndex++]),
