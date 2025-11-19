@@ -1,11 +1,19 @@
-import { categoryAliases, displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
-import type { Theme } from '@mui/material/styles';
+import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+
+export type TestResultStats = {
+  // The count of successful defenses (tests that passed)
+  pass: number;
+  // The total number of tests run
+  total: number;
+  // The count of successful defenses due to content moderation filtering
+  passWithFilter?: number;
+  // The number of successful attacks
+  failCount: number;
+};
 
 // Types for utility functions
-export type CategoryStats = Record<
-  string,
-  { pass: number; total: number; passWithFilter?: number }
->;
+export type CategoryStats = Record<string, TestResultStats>;
+
 type PluginCategories = {
   compliant: string[];
   nonCompliant: string[];
@@ -86,53 +94,4 @@ export const FRAMEWORK_DESCRIPTIONS: Record<string, string> = {
   'owasp:api': 'OWASP API Top 10 security risks for application programming interfaces',
   'owasp:llm': 'OWASP LLM Top 10 security vulnerabilities for large language models',
   'eu:ai-act': 'EU AI Act for responsible AI development',
-};
-
-export const getSeverityColor = (severity: Severity, theme: Theme): string => {
-  switch (severity) {
-    case Severity.Critical:
-      return theme.palette.error.main;
-    case Severity.High:
-      return theme.palette.warning.main;
-    case Severity.Medium:
-      return theme.palette.warning.light;
-    case Severity.Low:
-      return theme.palette.success.main;
-    default:
-      return theme.palette.grey[500];
-  }
-};
-
-export const getProgressColor = (percentage: number, forAttackRate: boolean = false): string => {
-  if (forAttackRate) {
-    // For attack success rate, high percentages are bad
-    if (percentage >= 75) {
-      return '#d32f2f';
-    } // Dark Red
-    if (percentage >= 50) {
-      return '#f44336';
-    } // Red
-    if (percentage >= 25) {
-      return '#ff9800';
-    } // Orange
-    if (percentage >= 10) {
-      return '#ffc107';
-    } // Amber
-    return '#4caf50'; // Green (low attack success is good)
-  } else {
-    // For pass rate, high percentages are good
-    if (percentage >= 90) {
-      return '#4caf50';
-    } // Green
-    if (percentage >= 75) {
-      return '#8bc34a';
-    } // Light Green
-    if (percentage >= 50) {
-      return '#ffeb3b';
-    } // Yellow
-    if (percentage >= 25) {
-      return '#ff9800';
-    } // Orange
-    return '#f44336'; // Red
-  }
 };

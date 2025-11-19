@@ -138,10 +138,11 @@ Initialize a new project with dummy files.
 
 Start a browser UI for visualization of results.
 
-| Option                | Description                             |
-| --------------------- | --------------------------------------- |
-| `-p, --port <number>` | Port number for the local server        |
-| `-y, --yes`           | Skip confirmation and auto-open the URL |
+| Option                | Description                               |
+| --------------------- | ----------------------------------------- |
+| `-p, --port <number>` | Port number for the local server          |
+| `-y, --yes`           | Skip confirmation and auto-open the URL   |
+| `-n, --no`            | Skip confirmation and do not open the URL |
 
 If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory, run `promptfoo view [directory]`.
 
@@ -748,6 +749,7 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_AJV_STRICT_MODE`           | If set, disables AJV strict mode for JSON schema validation                                                                                                                                                                                                                       |                               |
 | `PROMPTFOO_DISABLE_CONVERSATION_VAR`          | Prevents the `_conversation` variable from being set                                                                                                                                                                                                                              |                               |
 | `PROMPTFOO_DISABLE_ERROR_LOG`                 | Prevents error logs from being written to a file                                                                                                                                                                                                                                  |                               |
+| `PROMPTFOO_DISABLE_DEBUG_LOG`                 | Prevents debug logs from being written to a file                                                                                                                                                                                                                                  |                               |
 | `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`           | If set, disables smart variable substitution within JSON prompts                                                                                                                                                                                                                  |                               |
 | `PROMPTFOO_DISABLE_OBJECT_STRINGIFY`          | Disable object stringification in templates. When false (default), objects are stringified to prevent `[object Object]` issues. When true, allows direct property access (e.g., `{{output.property}}`).                                                                           | `false`                       |
 | `PROMPTFOO_DISABLE_REF_PARSER`                | Prevents JSON schema dereferencing                                                                                                                                                                                                                                                |                               |

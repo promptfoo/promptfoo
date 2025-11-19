@@ -29,7 +29,7 @@ export const SeverityBadge = styled(Box)<{
     background: alpha(theme.palette.grey[500], 0.1),
     color: theme.palette.grey[700],
   }),
-}));
+})) as any;
 
 export const StatCard = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),

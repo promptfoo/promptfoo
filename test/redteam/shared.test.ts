@@ -46,7 +46,7 @@ jest.mock('../../src/globalConfig/accounts', () => ({
   setUserEmail: jest.fn(),
   getAuthor: jest.fn(() => 'test@example.com'),
   promptForEmailUnverified: jest.fn().mockResolvedValue(undefined),
-  checkEmailStatusOrExit: jest.fn().mockResolvedValue(undefined),
+  checkEmailStatusAndMaybeExit: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../src/telemetry', () => ({
   record: jest.fn().mockResolvedValue(undefined),

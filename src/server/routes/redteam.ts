@@ -232,7 +232,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   res.json({ id });
 });
 
-redteamRouter.post('/cancel', async (req: Request, res: Response): Promise<void> => {
+redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void> => {
   if (!currentJobId) {
     res.status(400).json({ error: 'No job currently running' });
     return;
@@ -300,7 +300,7 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
   }
 });
 
-redteamRouter.get('/status', async (req: Request, res: Response): Promise<void> => {
+redteamRouter.get('/status', async (_req: Request, res: Response): Promise<void> => {
   res.json({
     hasRunningJob: currentJobId !== null,
     jobId: currentJobId,

@@ -1,7 +1,6 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -14,15 +13,17 @@ import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import type { GradingResult } from '@promptfoo/types';
 
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import { useTableStore } from './store';
+import type { ResultsFilterType, ResultsFilterOperator } from './store';
+import type { Trace } from '../../../components/traces/TraceView';
 
-// Common style object for copy buttons
 const copyButtonSx = {
   position: 'absolute',
   right: '8px',
@@ -35,7 +36,6 @@ const copyButtonSx = {
   },
 };
 
-// Common typography styles
 const subtitleTypographySx = {
   mb: 1,
   fontWeight: 500,
@@ -48,7 +48,6 @@ const textContentTypographySx = {
   wordBreak: 'break-word',
 };
 
-// Code display component
 interface CodeDisplayProps {
   content: string;
   title: string;
@@ -145,6 +144,34 @@ function CodeDisplay({
   );
 }
 
+/**
+ * Parameters for replaying an evaluation with a modified prompt.
+ */
+export interface ReplayEvaluationParams {
+  evaluationId: string;
+  testIndex?: number;
+  prompt: string;
+  variables?: Record<string, any>;
+}
+
+/**
+ * Result from replaying an evaluation.
+ */
+export interface ReplayEvaluationResult {
+  output?: string;
+  error?: string;
+}
+
+/**
+ * Filter configuration for table filtering.
+ */
+export interface FilterConfig {
+  type: ResultsFilterType;
+  operator: ResultsFilterOperator;
+  value: string;
+  field?: string;
+}
+
 interface EvalOutputPromptDialogProps {
   open: boolean;
   onClose: () => void;
@@ -158,6 +185,12 @@ interface EvalOutputPromptDialogProps {
   testIndex?: number;
   promptIndex?: number;
   variables?: Record<string, any>;
+  onAddFilter?: (filter: FilterConfig) => void;
+  onResetFilters?: () => void;
+  onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
+  fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
+  cloudConfig?: CloudConfigData | null;
+  readOnly?: boolean;
 }
 
 export default function EvalOutputPromptDialog({
@@ -173,6 +206,12 @@ export default function EvalOutputPromptDialog({
   testIndex,
   promptIndex,
   variables,
+  onAddFilter,
+  onResetFilters,
+  onReplay,
+  fetchTraces,
+  cloudConfig,
+  readOnly = false,
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -184,7 +223,7 @@ export default function EvalOutputPromptDialog({
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
-  const { addFilter, resetFilters } = useTableStore();
+  const [traces, setTraces] = useState<Trace[]>([]);
 
   useEffect(() => {
     setCopied(false);
@@ -196,7 +235,38 @@ export default function EvalOutputPromptDialog({
     setActiveTab(0); // Reset to first tab when dialog opens
   }, [prompt]);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  // Fetch traces once when evaluationId changes
+  useEffect(() => {
+    let isActive = true;
+    const controller = new AbortController();
+
+    const loadTraces = async () => {
+      if (!evaluationId || !fetchTraces) {
+        setTraces([]);
+        return;
+      }
+
+      try {
+        const fetchedTraces = await fetchTraces(evaluationId, controller.signal);
+        if (isActive) {
+          setTraces(fetchedTraces || []);
+        }
+      } catch (error) {
+        if (isActive && (error as Error).name !== 'AbortError') {
+          setTraces([]);
+        }
+      }
+    };
+
+    loadTraces();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [evaluationId, fetchTraces]);
+
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
   };
 
@@ -209,7 +279,6 @@ export default function EvalOutputPromptDialog({
     await navigator.clipboard.writeText(text);
     setCopiedFields((prev) => ({ ...prev, [key]: true }));
 
-    // Reset copied status after 2 seconds
     setTimeout(() => {
       setCopiedFields((prev) => ({ ...prev, [key]: false }));
     }, 2000);
@@ -221,40 +290,27 @@ export default function EvalOutputPromptDialog({
       return;
     }
 
+    if (!onReplay) {
+      setReplayError('Replay functionality is not available');
+      return;
+    }
+
     setReplayLoading(true);
     setReplayError(null);
     setReplayOutput(null);
 
     try {
-      const response = await callApi('/eval/replay', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          evaluationId,
-          testIndex,
-          prompt: editedPrompt,
-          variables,
-        }),
+      const result = await onReplay({
+        evaluationId,
+        testIndex,
+        prompt: editedPrompt,
+        variables,
       });
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || 'Failed to replay evaluation');
-      }
-
-      const data = await response.json();
-
-      // Handle the response, checking for output in various locations
-      if (data.output) {
-        setReplayOutput(data.output);
-      } else if (data.response?.output) {
-        setReplayOutput(data.response.output);
-      } else if (data.response?.raw) {
-        setReplayOutput(data.response.raw);
-      } else if (data.error) {
-        setReplayError(`Provider error: ${data.error}`);
+      if (result.error) {
+        setReplayError(result.error);
+      } else if (result.output) {
+        setReplayOutput(result.output);
       } else {
         setReplayOutput('(No output returned)');
       }
@@ -284,10 +340,8 @@ export default function EvalOutputPromptDialog({
     value: string,
     operator: 'equals' | 'contains' = 'equals',
   ) => {
-    // Reset all filters first
-    resetFilters();
-    // Then apply only this filter
-    addFilter({
+    onResetFilters?.();
+    onAddFilter?.({
       type: 'metadata',
       operator,
       value: typeof value === 'string' ? value : JSON.stringify(value),
@@ -307,15 +361,12 @@ export default function EvalOutputPromptDialog({
     parsedMessages = JSON.parse(metadata?.messages || '[]');
   } catch {}
 
-  // Get citations from metadata if they exist
   const citationsData = metadata?.citations;
 
-  // Determine if there's output content to show
   const hasOutputContent = Boolean(
     output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
   );
 
-  // Check if red team history has actual content
   const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
     .filter((entry: any) => entry?.prompt && entry?.output)
     .flatMap(
@@ -331,13 +382,12 @@ export default function EvalOutputPromptDialog({
       ],
     );
 
-  // Determine which tabs have content
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
   const hasMetadata =
-    metadata && Object.keys(metadata).filter((key) => key !== 'citations').length > 0;
+    metadata &&
+    Object.keys(metadata).filter((key) => !HIDDEN_METADATA_KEYS.includes(key)).length > 0;
 
-  // Build visible tabs list to handle dynamic tab indices
   const visibleTabs: string[] = ['prompt-output'];
   if (hasEvaluationData) {
     visibleTabs.push('evaluation');
@@ -349,16 +399,13 @@ export default function EvalOutputPromptDialog({
     visibleTabs.push('metadata');
   }
 
-  // Always show traces tab when evaluationId exists - TraceView will handle empty state messaging
-  // This prevents tab indices from shifting when TraceView reports no content
-  const hasTracesData = Boolean(evaluationId);
+  // Show traces tab only when there's actual trace data
+  const hasTracesData = traces.length > 0;
 
-  // Put Traces tab last if it should be shown
   if (hasTracesData) {
     visibleTabs.push('traces');
   }
 
-  // Get final tab name after all tabs are added
   const finalTabName = visibleTabs[activeTab] || 'prompt-output';
 
   const drawerTransitionDuration = useMemo(() => ({ enter: 320, exit: 250 }), []);
@@ -380,8 +427,8 @@ export default function EvalOutputPromptDialog({
       slotProps={drawerSlotProps}
       sx={{
         '& .MuiDrawer-paper': {
-          width: { xs: '100%', sm: '75%', md: '65%', lg: '65%' },
-          maxWidth: '1200px',
+          width: { xs: '100%', sm: '85%', md: '85%', lg: '85%' },
+          //maxWidth: '1200px',
           boxSizing: 'border-box',
         },
       }}
@@ -446,7 +493,7 @@ export default function EvalOutputPromptDialog({
                 onMouseLeave={() => setHoveredElement(null)}
                 CodeDisplay={CodeDisplay}
                 subtitleTypographySx={subtitleTypographySx}
-                readOnly={!evaluationId}
+                readOnly={readOnly}
               />
               {hasOutputContent && (
                 <OutputsPanel
@@ -494,6 +541,7 @@ export default function EvalOutputPromptDialog({
                 onMetadataClick={handleMetadataClick}
                 onCopy={copyFieldToClipboard}
                 onApplyFilter={handleApplyFilter}
+                cloudConfig={cloudConfig}
               />
             </Box>
           )}
@@ -506,6 +554,7 @@ export default function EvalOutputPromptDialog({
                 testCaseId={testCaseId}
                 testIndex={testIndex}
                 promptIndex={promptIndex}
+                traces={traces}
               />
             </Box>
           )}

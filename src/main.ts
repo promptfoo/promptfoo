@@ -3,8 +3,10 @@
 import { Command } from 'commander';
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
+import cliState from './cliState';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
+import { codeScansCommand } from './codeScan';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
@@ -39,6 +41,7 @@ import { handleAutoUpdate, setUpdateHandler } from './updates/handleAutoUpdate';
 import { updateCommand } from './commands/update';
 import { getEnvBool } from './envars';
 import { loadDefaultConfig } from './util/config/default';
+import { printErrorInformation } from './util/errors';
 import { setupEnv } from './util/index';
 
 /**
@@ -158,6 +161,7 @@ async function main() {
   // Alphabetical order
   authCommand(program);
   cacheCommand(program);
+  codeScansCommand(program);
   configCommand(program);
   debugCommand(program, defaultConfig, defaultConfigPath);
   deleteCommand(program);
@@ -194,6 +198,14 @@ async function main() {
   simbaCommand(redteamBaseCommand, defaultConfig);
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
+
+  program.hook('postAction', async () => {
+    printErrorInformation(cliState.errorLogFile, cliState.debugLogFile);
+
+    if (cliState.postActionCallback) {
+      await cliState.postActionCallback();
+    }
+  });
 
   program.parse();
 }

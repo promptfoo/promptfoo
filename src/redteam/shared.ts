@@ -6,10 +6,9 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
-import { createShareableUrl } from '../share';
-import { promptfooCommand } from '../util/promptfooCommand';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
+import { promptfooCommand } from '../util/promptfooCommand';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
 
@@ -71,9 +70,12 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
   // Generate new test cases
   logger.info('Generating test cases...');
+  const { maxConcurrency, ...passThroughOptions } = options;
+
   const redteamConfig = await doGenerateRedteam({
-    ...options,
+    ...passThroughOptions,
     ...(options.liveRedteamConfig?.commandLineOptions || {}),
+    ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
     config: configPath,
     output: redteamPath,
     force: options.force,
@@ -113,10 +115,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   );
 
   logger.info(chalk.green('\nRed team scan complete!'));
-  if (options.loadedFromCloud) {
-    const url = await createShareableUrl(evalResult, false);
-    logger.info(`View results: ${chalk.greenBright.bold(url)}`);
-  } else {
+  if (!evalResult?.shared) {
     if (options.liveRedteamConfig) {
       logger.info(
         chalk.blue(

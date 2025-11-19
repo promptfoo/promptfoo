@@ -9,7 +9,10 @@ interface GeneratePromptsOutput {
   tokensUsed: TokenUsage;
 }
 
-export async function generatePrompts(prompt: string, num: number): Promise<GeneratePromptsOutput> {
+export async function generatePrompts(
+  prompt: string,
+  _num: number,
+): Promise<GeneratePromptsOutput> {
   const provider = DefaultSuggestionsProvider;
 
   const resp = await provider.callApi(

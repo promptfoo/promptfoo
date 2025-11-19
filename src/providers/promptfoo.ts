@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+
 import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -8,9 +9,7 @@ import {
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
 } from '../redteam/remoteGeneration';
-import { fetchWithRetries } from '../util/fetch/index';
-import { REQUEST_TIMEOUT_MS } from './shared';
-
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -19,7 +18,8 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
+import { fetchWithRetries } from '../util/fetch/index';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
@@ -54,9 +54,9 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse & { output?: string[] }> {
     // Check if remote generation is disabled
     if (neverGenerateRemote()) {
@@ -137,7 +137,9 @@ interface PromptfooChatCompletionOptions {
     | 'iterative:image'
     | 'iterative:tree'
     | 'judge'
-    | 'blocking-question-analysis';
+    | 'blocking-question-analysis'
+    | 'meta-agent-decision'
+    | 'hydra-decision';
 }
 
 /**
@@ -162,7 +164,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Check if remote generation is disabled
     if (neverGenerateRemote()) {
@@ -256,8 +258,8 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Check if this is a redteam task
     const isRedteamTask = this.taskId === REDTEAM_SIMULATED_USER_TASK_ID;

@@ -63,6 +63,8 @@ That's it! You've created your first custom Python provider.
 
 ## How It Works
 
+Python providers use persistent worker processes. Your script is loaded once when the worker starts, not on every call. This makes subsequent calls much faster, especially for scripts with heavy imports like ML models.
+
 When Promptfoo evaluates a test case with a Python provider:
 
 1. **Promptfoo** prepares the prompt based on your configuration
@@ -388,12 +390,29 @@ providers:
     label: 'My Custom Provider' # Optional display name
     config:
       # Any configuration your provider needs
-      api_key: ${CUSTOM_API_KEY}
+      api_key: '{{ env.CUSTOM_API_KEY }}'
       endpoint: https://api.example.com
       model_params:
         temperature: 0.7
         max_tokens: 100
 ```
+
+### Link to Cloud Target
+
+:::info Promptfoo Cloud Feature
+Available in [Promptfoo Cloud](/docs/enterprise) deployments.
+:::
+
+Link your local provider configuration to a cloud target using `linkedTargetId`:
+
+```yaml
+providers:
+  - id: 'file://my_provider.py'
+    config:
+      linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
+```
+
+See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/linking-targets/) for setup instructions.
 
 ### Using External Configuration Files
 
@@ -425,6 +444,61 @@ Supported formats:
 - **Text** (`.txt`, `.md`) - Loaded as strings
 - **Python** (`.py`) - Must export a function returning config
 - **JavaScript** (`.js`, `.mjs`) - Must export a function returning config
+
+### Worker Configuration
+
+Python providers use persistent worker processes that stay alive between calls, making subsequent calls faster.
+
+#### Parallelism
+
+Control the number of workers per provider:
+
+```yaml
+providers:
+  # Default: 1 worker
+  - id: file://my_provider.py
+
+  # Multiple workers for parallel execution
+  - id: file://api_wrapper.py
+    config:
+      workers: 4
+```
+
+Or set globally:
+
+```bash
+export PROMPTFOO_PYTHON_WORKERS=4
+```
+
+**When to use 1 worker** (default):
+
+- GPU-bound ML models
+- Scripts with heavy imports (avoids loading them multiple times)
+- Conversational flows requiring session state
+
+**When to use multiple workers:**
+
+- CPU-bound tasks where parallelism helps
+- Lightweight API wrappers
+
+Note that global state is not shared across workers. If your script uses global variables for session management (common in conversational flows like red team evaluations), use `workers: 1` to ensure all requests hit the same worker.
+
+#### Timeouts
+
+Default timeout is 5 minutes (300 seconds). Increase if needed:
+
+```yaml
+providers:
+  - id: file://slow_model.py
+    config:
+      timeout: 300000 # milliseconds
+```
+
+Or set globally for all providers:
+
+```bash
+export REQUEST_TIMEOUT_MS=600000  # 10 minutes
+```
 
 ### Environment Configuration
 
@@ -550,6 +624,42 @@ def call_api(prompt, options, context):
             "output": "[Content filtered]",
             "guardrails": {"flagged": True}
         }
+```
+
+### Handling Retries
+
+When calling external APIs, implement retry logic in your script to handle rate limits and transient failures:
+
+```python
+import time
+import requests
+
+def call_api(prompt, options, context):
+    """Provider with retry logic for external API calls."""
+    config = options.get('config', {})
+    max_retries = config.get('max_retries', 3)
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                config['api_url'],
+                json={'prompt': prompt},
+                timeout=30
+            )
+
+            # Handle rate limits
+            if response.status_code == 429:
+                wait_time = int(response.headers.get('Retry-After', 2 ** attempt))
+                time.sleep(wait_time)
+                continue
+
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries - 1:
+                return {"output": "", "error": f"Failed after {max_retries} attempts: {str(e)}"}
+            time.sleep(2 ** attempt)  # Exponential backoff
 ```
 
 ## Troubleshooting

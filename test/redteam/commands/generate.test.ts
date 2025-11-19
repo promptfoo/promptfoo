@@ -180,7 +180,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: undefined,
         plugins: expect.any(Array),
         prompts: [],
@@ -305,7 +304,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: undefined,
         purpose: 'Test purpose',
         plugins: expect.any(Array),
@@ -373,7 +371,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: 1,
         plugins: expect.arrayContaining([
           expect.objectContaining({ id: 'competitors', numTests: 1 }),
@@ -442,7 +439,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: 5,
         plugins: expect.arrayContaining([
           expect.objectContaining({ id: 'contracts', numTests: 5 }),
@@ -573,7 +569,6 @@ describe('doGenerateRedteam', () => {
         strategies: [],
         abortSignal: undefined,
         delay: undefined,
-        language: undefined,
         maxConcurrency: undefined,
         numTests: undefined,
       }),
