@@ -101,14 +101,27 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
     description:
       'PCI DSS compliance, payment data security, and customer privacy for online retail.',
     longDescription:
-      'Targeted testing for e-commerce AI systems to ensure compliance with PCI DSS and protect sensitive customer data. Tests focus on preventing the extraction of credit card numbers, CVVs, bank account details, and other payment information. It also covers vulnerabilities related to payment token exposure and unauthorized access to financial data.',
+      'Comprehensive testing for e-commerce AI systems covering payment security, compliance, and transaction integrity. Tests focus on preventing extraction of credit card numbers, CVVs, bank account details, and payment tokens (PCI DSS compliance), detecting attempts to bypass security rules or terms of service, identifying fraudulent order patterns or unauthorized transactions, and preventing price manipulation through discount abuse or inventory exploits.',
     color: 'primary',
     complianceFrameworks: ['PCI DSS'],
-    plugins: ['ecommerce:pci-dss'] as Plugin[],
+    plugins: [
+      'ecommerce:pci-dss',
+      'ecommerce:compliance-bypass',
+      'ecommerce:order-fraud',
+      'ecommerce:price-manipulation',
+    ] as Plugin[],
     pluginGroups: [
       {
-        name: 'Payment Card Industry (PCI) Compliance',
+        name: 'Payment Data Security',
         plugins: ['ecommerce:pci-dss'] as Plugin[],
+      },
+      {
+        name: 'Security & Compliance',
+        plugins: ['ecommerce:compliance-bypass'] as Plugin[],
+      },
+      {
+        name: 'Fraud Prevention',
+        plugins: ['ecommerce:order-fraud', 'ecommerce:price-manipulation'] as Plugin[],
       },
     ],
   },
