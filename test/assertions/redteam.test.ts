@@ -190,7 +190,6 @@ describe('handleRedteam', () => {
     });
   });
 
-
   it('returns the value provided to the `assertion` param if `grade.assertion` returned by `grader.getResult` is null', async () => {
     // =========================
     // ===== Setup =====
