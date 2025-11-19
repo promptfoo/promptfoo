@@ -7,6 +7,14 @@ prompts:
     Please solve this step by step, showing your reasoning process.
 
 providers:
+  - id: google:gemini-3-pro-preview
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 4096
+        thinkingConfig:
+          thinkingLevel: HIGH # State-of-the-art extended thinking for complex reasoning
+
   - id: google:gemini-2.5-flash-preview-09-2025
     config:
       generationConfig:
