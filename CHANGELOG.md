@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.119.8] - 2025-11-18
+
+### Added
+
+- feat(plugins): organize domain-specific risks into vertical suites
+- feat(providers): add Gemini 3 Pro support with thinking configuration (#6241)
+
+### Fixed
+
+- fix(code-scan): in `code-scans run`, don't log anything to stdout except json results when --json is used—fixes GitHub action (#6248)
+- fix(code-scan): update default API host to https://api.promptfoo.app to fix websocket connection issues (#6247)
+
+## [0.119.7] - 2025-11-17
+
 ### Added
 
 - feat(providers): add Groq reasoning model support (GPT-OSS, DeepSeek R1, Qwen3), Responses API provider (`groq-responses:` prefix), compound model tool control (`compound_custom.tools.enabled_tools`), and built-in tools (browser_search, code execution, web search)
@@ -26,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- fix: exclude source maps from npm package to reduce bundle size by ~22MB (#6235)
 - chore(ci): synchronize package-lock.json to resolve npm ci failures (#6195)
 - chore(ci): increase webui test timeout to 8 minutes in GitHub Actions workflow to prevent CI timeouts (#6201)
 - chore(redteam): update foundation model report redteam config to use newer redteam strategies (#6216)
@@ -39,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(webui): fix duplicate React key warning in DefaultTestVariables component by implementing counter-based unique ID generation (#6201)
 - fix(samples): downlevel pem dependency to supported version
 - fix(deps): remove unused dependency on @libsql/client
+- fix(redteam): store rendered grading rubric in assertion.value for agentic strategies to display in UI Value column (#6125)
 
 ### Tests
 
@@ -46,8 +62,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
-- chore(deps)!: upgrade to React 19 - upgrade react and react-dom from 18.3.1 to 19.2.0; migrate deprecated ReactDOM.render to createRoot API; replace JSX.Element with React.ReactElement for React 19 namespace removal; fix RefObject types for stricter React 19 typing (useRef(null) now correctly typed as RefObject<T | null>); add Vite path aliases and npm overrides to enforce single React 19 instance across monorepo workspaces (prevents duplicate installations that caused test failures); all third-party dependencies verified compatible (Emotion 11.14.0+, MUI v7, React Router v7, TanStack Query v5, Recharts 2.15.4); test results: 1,970/1,972 passing (100%, 2 skipped); BREAKING CHANGE: React 19 is a major version upgrade that removes deprecated APIs (ReactDOM.render, unmountComponentAtNode) and the global JSX namespace (#6229)
-- chore(deps): upgrade @googleapis/sheets from 9.8.0 to 12.0.0 and resolve gcp-metadata dependency conflicts - fixes recurring npm ci failures by (1) updating the existing mongoose npm override from gcp-metadata ^6.0.0 to ^8.1.2, and (2) adding gcp-metadata ^8.1.2 as a direct dependency for consistent npm resolution across npm 10.x and 11.x (note: gcp-metadata is not directly imported in code but required for dependency resolution consistency, hence excluded from depcheck); this allows using google-auth-library 10.5.0 with X.509 certificate authentication and Cloud Run Jobs detection while ensuring single gcp-metadata version across the dependency tree; @googleapis/sheets v12 is a major version upgrade (v9→v12) that requires googleapis-common v8 and google-auth-library v10+, but maintains backwards-compatible API usage for spreadsheets.get() and spreadsheets.values.get() methods (#6227)
+- chore(deps): upgrade to React 19 (#6229)
+- chore(deps): upgrade @googleapis/sheets from 9.8.0 to 12.0.0 (#6227)
 - chore(deps): bump openai from 6.8.1 to 6.9.0 (#6208)
 
 ## [0.119.6] - 2025-11-12
