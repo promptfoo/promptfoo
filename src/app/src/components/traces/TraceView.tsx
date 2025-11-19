@@ -1,69 +1,31 @@
-import { useEffect, useState } from 'react';
-
-import { callApi } from '@app/utils/api';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import TraceTimeline from './TraceTimeline';
+
+export interface Trace {
+  traceId: string;
+  testCaseId?: string | number;
+  spans?: any[];
+}
 
 interface TraceViewProps {
   evaluationId?: string;
   testCaseId?: string;
+  testIndex?: number;
+  promptIndex?: number;
+  traces?: Trace[];
 }
 
-export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) {
-  const [traces, setTraces] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchTraces = async () => {
-      if (!evaluationId) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await callApi(`/traces/evaluation/${evaluationId}`);
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setTraces(data.traces || []);
-      } catch (err) {
-        console.error('Error fetching traces:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch traces');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTraces();
-  }, [evaluationId]);
-
+export default function TraceView({
+  evaluationId,
+  testCaseId,
+  testIndex,
+  promptIndex,
+  traces = [],
+}: TraceViewProps) {
   if (!evaluationId) {
     return null;
-  }
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-        <CircularProgress size={24} />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Alert severity="error">{error}</Alert>
-      </Box>
-    );
   }
 
   if (traces.length === 0) {
@@ -76,12 +38,46 @@ export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) 
     );
   }
 
-  // Filter traces by test case ID if provided
-  const filteredTraces = testCaseId
-    ? traces.filter((trace) => trace.testCaseId === testCaseId)
-    : traces;
+  // Filter traces with try-direct-match then fallback approach
+  const isComposedId = (id: unknown): id is string =>
+    typeof id === 'string' && /^\d+-\d+$/.test(id);
 
-  if (filteredTraces.length === 0 && testCaseId) {
+  const matchesIndices = (id: unknown, ti?: number, pi?: number) => {
+    if (!isComposedId(id) || ti === undefined || pi === undefined) {
+      return false;
+    }
+    const [a, b] = id.split('-');
+    return Number.parseInt(a, 10) === ti && Number.parseInt(b, 10) === pi;
+  };
+
+  let filteredTraces: any[] = traces;
+
+  if (traces.length > 0) {
+    if (testCaseId) {
+      // Try direct testCaseId match first
+      const directMatches = traces.filter((trace) => trace.testCaseId === testCaseId);
+
+      if (directMatches.length > 0) {
+        filteredTraces = directMatches;
+      } else if (testIndex !== undefined && promptIndex !== undefined) {
+        // Fallback: try index-based matching on composed trace.testCaseId
+        filteredTraces = traces.filter((trace) =>
+          matchesIndices(trace.testCaseId, testIndex, promptIndex),
+        );
+      } else {
+        // No direct match and no indices for fallback
+        filteredTraces = [];
+      }
+    } else if (testIndex !== undefined && promptIndex !== undefined) {
+      // No testCaseId but indices provided - try index-based filtering
+      filteredTraces = traces.filter((trace) =>
+        matchesIndices(trace.testCaseId, testIndex, promptIndex),
+      );
+    }
+    // If no testCaseId and no indices, show all traces for the evaluation
+  }
+
+  if (filteredTraces.length === 0 && (testCaseId || testIndex !== undefined)) {
     return (
       <Box sx={{ p: 2 }}>
         <Typography variant="body2" color="text.secondary">

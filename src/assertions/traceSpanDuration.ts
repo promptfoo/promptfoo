@@ -1,4 +1,4 @@
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
 
 interface TraceSpanDurationValue {
@@ -28,14 +28,12 @@ function calculatePercentile(durations: number[], percentile: number): number {
   return sorted[Math.max(0, index)];
 }
 
-export const handleTraceSpanDuration = ({ assertion, context }: AssertionParams): GradingResult => {
-  if (!context.trace || !context.trace.spans) {
-    return {
-      pass: false,
-      score: 0,
-      reason: 'No trace data available for trace-span-duration assertion',
-      assertion,
-    };
+export const handleTraceSpanDuration = ({
+  assertion,
+  assertionValueContext,
+}: AssertionParams): GradingResult => {
+  if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
+    throw new Error('No trace data available for trace-span-duration assertion');
   }
 
   const value = assertion.value as TraceSpanDurationValue;
@@ -44,7 +42,7 @@ export const handleTraceSpanDuration = ({ assertion, context }: AssertionParams)
   }
 
   const { pattern = '*', max, percentile } = value;
-  const spans = context.trace.spans as TraceSpan[];
+  const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern and calculate durations
   const matchingSpans = spans.filter((span) => {

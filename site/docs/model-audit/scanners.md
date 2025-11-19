@@ -38,6 +38,9 @@ The Pickle Scanner analyzes Python pickle files for security risks, which are co
 - Encoded payloads and suspicious string patterns
 - Embedded executables in binary content
 - ML context detection to reduce false positives
+- Network communication patterns (URLs, IPs, sockets)
+- Embedded credentials (API keys, tokens, passwords)
+- JIT/Script execution patterns
 
 **Why it matters:**
 Pickle files are a common serialization format for ML models but can execute arbitrary code during unpickling. Attackers can craft malicious pickle files that execute harmful commands when loaded.
@@ -108,6 +111,22 @@ This scanner analyzes Keras models stored in HDF5 format.
 **Why it matters:**
 Keras models with Lambda layers can contain arbitrary Python code that executes when the model is loaded or run. This could be exploited to execute malicious code on the host system.
 
+## Keras ZIP Scanner
+
+**File types:** `.keras`
+
+This scanner analyzes ZIP-based Keras model files (new `.keras` format introduced in Keras 3).
+
+**Key checks:**
+
+- Unsafe Lambda layers with base64-encoded Python code
+- Suspicious layer configurations and custom objects
+- Python files or executables embedded in the ZIP archive
+- Dangerous patterns in model configuration JSON
+
+**Why it matters:**
+The new `.keras` ZIP format stores Lambda layers as base64-encoded functions that execute during inference. Malicious actors could embed arbitrary code in these layers or hide executables within the archive structure.
+
 ## ONNX Scanner
 
 **File types:** `.onnx`
@@ -124,6 +143,23 @@ This scanner examines ONNX (Open Neural Network Exchange) model files for securi
 **Why it matters:**
 ONNX models can reference external data files and custom operators. Malicious actors could exploit these features to include harmful custom operations or manipulate external data references to access unauthorized files on the system.
 
+## OpenVINO Scanner
+
+**File types:** `.xml`, `.bin` (OpenVINO IR format)
+
+This scanner examines Intel OpenVINO Intermediate Representation (IR) model files.
+
+**Key checks:**
+
+- Suspicious custom layer configurations
+- External data references with path traversal attempts
+- Malformed XML structure or oversized files
+- Dangerous layer types that could access system resources
+- Plugin references that might load unauthorized code
+
+**Why it matters:**
+OpenVINO models consist of XML topology files and binary weight files. The XML can contain custom layer definitions or external references that could be exploited to execute malicious code or access unauthorized files.
+
 ## PyTorch Zip Scanner
 
 **File types:** `.pt`, `.pth`
@@ -139,6 +175,23 @@ This scanner examines PyTorch model files, which are ZIP archives containing pic
 
 **Why it matters:**
 PyTorch models are essentially ZIP archives containing pickled objects, which can include malicious code. The scanner unpacks these archives and applies pickle security checks to the contents.
+
+## ExecuTorch Scanner
+
+**File types:** `.pte`, `.pt` (ExecuTorch archives)
+
+This scanner examines PyTorch ExecuTorch model files designed for mobile and edge deployment.
+
+**Key checks:**
+
+- Embedded pickle files within ExecuTorch archives
+- Python code or executables bundled in the archive
+- Suspicious serialization patterns
+- Custom operators that might contain malicious functionality
+- Dangerous metadata or configuration data
+
+**Why it matters:**
+ExecuTorch models package PyTorch models for edge devices but can still contain pickled data and embedded code. Mobile deployment environments are often resource-constrained and may have limited security monitoring, making them attractive targets.
 
 ## GGUF/GGML Scanner
 
@@ -172,6 +225,24 @@ This scanner analyzes joblib serialized files, which are commonly used by ML lib
 
 **Why it matters:**
 Joblib files often contain compressed pickle data, inheriting the same security risks as pickle files. Additionally, malicious actors could craft compression bombs that consume excessive memory or CPU resources when loaded. The scanner provides safe decompression with security limits.
+
+## Skops Scanner
+
+**File types:** `.skops`, `.pkl` (skops format)
+
+This scanner detects known vulnerabilities in scikit-learn models saved with the skops library.
+
+**Key checks:**
+
+- **CVE-2025-54412**: Remote code execution via malicious sklearn estimator
+- **CVE-2025-54413**: Arbitrary code execution through sklearn.compose.ColumnTransformer
+- **CVE-2025-54886**: Code execution via callable arguments in estimators
+- Version detection for vulnerable skops versions (< 0.12.0)
+- Dangerous sklearn components (Pipeline, ColumnTransformer, FunctionTransformer)
+- Malicious callable arguments in estimator configurations
+
+**Why it matters:**
+Skops versions before 0.12.0 contain multiple critical vulnerabilities allowing remote code execution through specially crafted sklearn estimators. Attackers can embed malicious callables in pipelines, transformers, or estimator parameters that execute when the model is loaded or used.
 
 ## Flax/JAX Scanner
 
@@ -259,6 +330,56 @@ This scanner analyzes model configuration files and manifests.
 **Why it matters:**
 Model configuration files can contain settings that lead to insecure behavior, such as downloading content from untrusted sources, accessing sensitive files, or executing commands.
 
+## Text Scanner
+
+**File types:** `.txt`, `.md`, `.markdown`, `.rst`
+
+This scanner analyzes ML-specific text files like vocabulary lists, README files, and model documentation.
+
+**Key checks:**
+
+- Unusually large text files that may indicate data hiding
+- File type identification (vocabulary, labels, documentation)
+- Basic content validation for ML-related text files
+
+**Why it matters:**
+Text files in ML repositories like vocab.txt, labels.txt, and README files should follow expected patterns. Deviations may indicate tampering or hidden data.
+
+## Jinja2 Template Scanner
+
+**File types:** `.gguf`, `.json`, `.yaml`, `.yml`, `.jinja`, `.j2`, `.template`
+
+This scanner detects template injection vulnerabilities in Jinja2 templates embedded in model files and configurations.
+
+**Key checks:**
+
+- Server-side template injection (SSTI) patterns
+- Dangerous Jinja2 filters or functions (e.g., `eval`, `exec`, `import`)
+- Unrestricted variable access that could leak sensitive data
+- Code execution patterns in template expressions
+- CVE-2024-34359 exploitation in GGUF chat templates
+
+**Why it matters:**
+Jinja2 templates in GGUF models, tokenizer configs, and deployment files can execute arbitrary code when processed. CVE-2024-34359 affects llama-cpp-python when loading malicious chat templates. Template injection allows full system compromise.
+
+## Metadata Scanner
+
+**File types:** `README.md`, `MODEL_CARD.md`, `METADATA.md`, model card files
+
+This scanner analyzes model documentation and metadata files for security concerns.
+
+**Key checks:**
+
+- Embedded credentials or API keys in documentation
+- Suspicious URLs or download links
+- References to malicious code repositories
+- Known vulnerable model versions or components
+- Misleading or deceptive model descriptions
+- Missing or inadequate security disclosures
+
+**Why it matters:**
+Model documentation often contains setup instructions, example code, and configuration that may reference malicious resources or expose sensitive information. Attackers can embed malicious download links or credentials in README files that users may execute without careful review.
+
 ## PyTorch Binary Scanner
 
 **File types:** `.bin` (raw PyTorch tensor files)
@@ -294,6 +415,41 @@ This scanner examines ZIP archives and their contents recursively.
 
 **Why it matters:**
 ZIP archives are commonly used to distribute models and datasets. Malicious actors can craft ZIP files that exploit extraction vulnerabilities, contain malware, or cause resource exhaustion. This scanner ensures that archives are safe to extract and that their contents don't pose security risks.
+
+## TAR Scanner
+
+**File types:** `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2`
+
+This scanner examines TAR archives and their contents recursively.
+
+**Key checks:**
+
+- Directory traversal attacks with paths containing ".." or absolute paths
+- Symlink attacks that could point to sensitive system files
+- TAR bombs with excessive file counts or decompression ratios
+- Malicious content within archived files (scans with appropriate scanners)
+- Resource limits to prevent denial-of-service attacks
+
+**Why it matters:**
+TAR archives are commonly used in Linux environments and container images to distribute models. They can contain symlinks that point outside the extraction directory, potentially allowing access to sensitive files. TAR bombs can exhaust system resources during extraction.
+
+## 7-Zip Scanner
+
+**File types:** `.7z`
+
+This scanner examines 7-Zip archives and their contents.
+
+**Key checks:**
+
+- Directory traversal attacks in entry paths
+- Compression bombs with suspicious ratios
+- Encrypted archives that might hide malicious content
+- Nested archives to prevent infinite recursion
+- Resource limits for memory and CPU usage
+- Malicious content within archived files
+
+**Why it matters:**
+7-Zip archives offer high compression ratios, making them attractive for compression bomb attacks. They support encryption, which can hide malicious content from initial inspection. The scanner safely extracts and analyzes 7z files with appropriate security limits.
 
 ## Weight Distribution Scanner
 
@@ -337,6 +493,41 @@ This scanner examines SafeTensors format files, which are designed to be a safer
 
 **Why it matters:**
 While SafeTensors is designed to be safer than pickle files, the metadata section can still contain malicious content. Attackers might try to exploit parsers or include encoded payloads in the metadata. The scanner ensures the format integrity and metadata safety.
+
+## PaddlePaddle Scanner
+
+**File types:** `.pdmodel`, `.pdiparams`
+
+This scanner examines PaddlePaddle model files, including model definitions and parameter files.
+
+**Key checks:**
+
+- Suspicious operations in model definitions
+- Embedded pickle data within PaddlePaddle files
+- Custom operators that might contain malicious code
+- Dangerous configuration patterns
+- Executable content or embedded scripts
+
+**Why it matters:**
+PaddlePaddle models can contain custom operators and may use pickle serialization internally. Malicious actors could embed harmful code in model definitions or exploit custom operators to execute unauthorized operations.
+
+## XGBoost Scanner
+
+**File types:** `.bst`, `.model`, `.json`, `.ubj`
+
+This scanner examines XGBoost model files in binary, JSON, and UBJSON formats.
+
+**Key checks:**
+
+- Suspicious custom objectives or evaluation metrics
+- Embedded code in JSON configurations
+- Malformed model structures
+- Dangerous callback functions
+- Path traversal in external feature maps
+- Pickle-based custom functions in binary models
+
+**Why it matters:**
+XGBoost models can include custom Python functions for objectives, metrics, and callbacks. In binary format, these are often pickled, inheriting pickle security risks. JSON formats can contain embedded code strings or references to malicious external resources.
 
 ## PMML Scanner
 
@@ -413,6 +604,69 @@ The SBOM includes component information, license metadata, risk scores, and copy
 
 **Why it matters:**
 AI/ML projects often combine components with different licenses. AGPL requires source disclosure for network services, non-commercial licenses block commercial use, and unlicensed datasets create legal risks.
+
+## Network Communication Detection
+
+ModelAudit includes comprehensive detection of network communication capabilities that could be used for data exfiltration or command & control:
+
+**Detection capabilities:**
+
+- **URL patterns**: HTTP(S), FTP, SSH, WebSocket URLs embedded in model data
+- **IP addresses**: Both IPv4 and IPv6 addresses that could indicate hardcoded endpoints
+- **Domain names**: Suspicious domain patterns that might be C&C servers
+- **Network libraries**: Imports of socket, urllib, requests, and 50+ other network libraries
+- **Network functions**: Calls to urlopen, socket.connect, requests.get, and other network operations
+- **C&C patterns**: Known command & control patterns like beacon_url, callback_url, exfil_endpoint
+- **Port numbers**: Common and suspicious port numbers for various protocols
+
+**Why it matters:**
+Malicious models could contain embedded network communication code to:
+
+- Exfiltrate sensitive data from the deployment environment
+- Download additional payloads or updates
+- Establish command & control channels
+- Report telemetry to unauthorized servers
+
+## Secrets Detection
+
+ModelAudit scans for embedded credentials and sensitive information:
+
+**Detection patterns:**
+
+- **API Keys**: AWS, Azure, GCP, OpenAI, and other service API keys
+- **Tokens**: JWT tokens, OAuth tokens, GitHub tokens, etc.
+- **Passwords**: Hardcoded passwords and authentication strings
+- **Private Keys**: SSH keys, SSL certificates, cryptographic keys
+- **Database Credentials**: Connection strings with embedded passwords
+- **Webhook URLs**: Slack, Discord, and other webhook endpoints
+
+**Why it matters:**
+Credentials embedded in models could:
+
+- Expose production infrastructure access
+- Lead to unauthorized cloud resource usage
+- Enable lateral movement in compromised systems
+- Result in data breaches or compliance violations
+
+## JIT/Script Detection
+
+ModelAudit detects Just-In-Time compilation and script execution patterns:
+
+**Detection capabilities:**
+
+- **TorchScript**: Embedded TorchScript code that could execute arbitrary operations
+- **ONNX Custom Ops**: Custom operators that might contain malicious functionality
+- **TensorFlow Eager Execution**: Dynamic execution patterns in TF models
+- **Compilation Patterns**: eval(), exec(), compile() calls in various contexts
+- **Script Injections**: JavaScript, Python, or shell script injection attempts
+
+**Why it matters:**
+JIT-compiled code can:
+
+- Bypass static analysis security checks
+- Execute arbitrary code at runtime
+- Modify model behavior dynamically
+- Access system resources without detection
 
 ## HuggingFace URL Support
 

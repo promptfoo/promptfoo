@@ -17,7 +17,12 @@ import type {
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
 import type { Prompt, PromptFunction } from './prompts';
-import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 import type { TraceData } from './tracing';
 
@@ -54,6 +59,7 @@ export const CommandLineOptionsSchema = z.object({
   cache: z.boolean().optional(),
   table: z.boolean().optional(),
   share: z.boolean().optional(),
+  noShare: z.boolean().optional(),
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
   filterErrorsOnly: z.string().optional(),
@@ -69,6 +75,7 @@ export const CommandLineOptionsSchema = z.object({
   generateSuggestions: z.boolean().optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
+  retryErrors: z.boolean().optional(),
 
   envPath: z.string().optional(),
 });
@@ -148,8 +155,6 @@ export interface RunEvalOptions {
   registers?: EvalRegisters;
   isRedteam: boolean;
 
-  // Used by pandamonium, this should never be passed to callApi, it could be a massive object that will break the stack
-  allTests?: RunEvalOptions[];
   concurrency?: number;
 
   /**
@@ -299,6 +304,7 @@ export interface EvaluateTableOutput {
   testCase: AtomicTestCase;
   text: string;
   tokenUsage?: Partial<TokenUsage>;
+  error?: string | null;
   audio?: {
     id?: string;
     expiresAt?: number;
@@ -351,6 +357,7 @@ export type EvalTableDTO = {
   table: EvaluateTable;
   totalCount: number;
   filteredCount: number;
+  filteredMetrics: PromptMetrics[] | null;
   config: Partial<UnifiedConfig>;
   author: string | null;
   version: number;
@@ -383,7 +390,8 @@ export interface GradingResult {
   componentResults?: GradingResult[];
 
   // The assertion that was evaluated
-  assertion?: Assertion | null;
+  // TODO(Will): Can we move to this being required?
+  assertion?: Assertion;
 
   // User comment
   comment?: string;
@@ -395,6 +403,11 @@ export interface GradingResult {
   metadata?: {
     pluginId?: string;
     strategyId?: string;
+    // Context value for context-related assertions (context-faithfulness, context-recall, context-relevance)
+    context?: string | string[];
+    contextUnits?: string[];
+    // Rendered assertion value with substituted variables (for display in UI)
+    renderedAssertionValue?: string;
     [key: string]: any;
   };
 }
@@ -423,12 +436,14 @@ export const BaseAssertionTypesSchema = z.enum([
   'contains',
   'contains-all',
   'contains-any',
+  'contains-html',
   'contains-json',
   'contains-sql',
   'contains-xml',
   'context-faithfulness',
   'context-recall',
   'context-relevance',
+  'conversation-relevance',
   'cost',
   'equals',
   'factuality',
@@ -439,6 +454,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'icontains',
   'icontains-all',
   'icontains-any',
+  'is-html',
   'is-json',
   'is-refusal',
   'is-sql',
@@ -460,7 +476,11 @@ export const BaseAssertionTypesSchema = z.enum([
   'python',
   'regex',
   'rouge-n',
+  'ruby',
   'similar',
+  'similar:cosine',
+  'similar:dot',
+  'similar:euclidean',
   'starts-with',
   'trace-error-spans',
   'trace-span-count',
@@ -476,9 +496,11 @@ type NotPrefixed<T extends string> = `not-${T}`;
 // The 'human' assertion type is added via the web UI to allow manual grading.
 // The 'select-best' assertion type compares all variations for a given test case
 // and selects the highest scoring one after all other assertions have completed.
-export type SpecialAssertionTypes = 'select-best' | 'human';
+// The 'max-score' assertion type selects the output with the highest aggregate score
+// from other assertions.
+export type SpecialAssertionTypes = 'select-best' | 'human' | 'max-score';
 
-export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human']);
+export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human', 'max-score']);
 
 export const NotPrefixedAssertionTypesSchema = BaseAssertionTypesSchema.transform(
   (baseType) => `not-${baseType}` as NotPrefixed<BaseAssertionTypes>,
@@ -570,7 +592,10 @@ export type AssertionValueFunctionResult = boolean | number | GradingResult;
 export interface AssertionParams {
   assertion: Assertion;
   baseType: AssertionType;
-  context: AssertionValueFunctionContext;
+  /** Context passed to provider.callApi() for model-graded assertions */
+  providerCallContext?: CallApiContextParams;
+  /** Context passed to assertion value functions */
+  assertionValueContext: AssertionValueFunctionContext;
   cost?: number;
   inverse: boolean;
   logProbs?: number[];
@@ -1140,7 +1165,26 @@ export interface ResultLightweight {
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
-export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
+export type EvalSummary = ResultLightweightWithLabel & {
+  isRedteam: boolean;
+  passRate: number;
+  label: string;
+  providers: {
+    id: string;
+    label: string | null;
+  }[];
+  attackSuccessRate?: number;
+};
+
+export interface OutputMetadata {
+  promptfooVersion: string;
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  exportedAt: string;
+  evaluationCreatedAt?: string;
+  author?: string;
+}
 
 // File exported as --output option
 export interface OutputFile {
@@ -1148,6 +1192,7 @@ export interface OutputFile {
   results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
+  metadata?: OutputMetadata;
 }
 
 // Live eval job state
@@ -1178,3 +1223,14 @@ export interface LoadApiProviderContext {
   basePath?: string;
   env?: EnvOverrides;
 }
+
+export const EvalResultsFilterMode = z.enum([
+  'all',
+  'failures',
+  'different',
+  'highlights',
+  'errors',
+  'passes',
+]);
+
+export type EvalResultsFilterMode = z.infer<typeof EvalResultsFilterMode>;

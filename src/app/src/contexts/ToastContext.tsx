@@ -5,7 +5,7 @@ import Snackbar from '@mui/material/Snackbar';
 import { ToastContext, type ToastProviderProps } from './ToastContextDef';
 import type { AlertColor } from '@mui/material/Alert';
 
-export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
+export const ToastProvider = ({ children }: ToastProviderProps) => {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [severity, setSeverity] = useState<AlertColor>('info');
@@ -16,7 +16,7 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
     setOpen(true);
   }, []);
 
-  const handleClose = useCallback((event?: React.SyntheticEvent | Event, reason?: string) => {
+  const handleClose = useCallback((_event?: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {
       return;
     }

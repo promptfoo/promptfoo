@@ -3,8 +3,20 @@ description: 'Bedrock Claude Eval'
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
+  - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
+    label: Claude Opus 4.1
+    config:
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
   - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
     label: Claude Opus 4
+    config:
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
+  - id: bedrock:anthropic.claude-haiku-4-5-20251001-v1:0
+    label: Claude Haiku 4.5
     config:
       temperature: 1
       max_tokens: 2048

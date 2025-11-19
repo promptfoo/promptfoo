@@ -1,5 +1,6 @@
 ---
 sidebar_label: Google Sheets
+description: Import and export LLM test cases with Google Sheets integration. Configure public or authenticated access, write evaluation results, and run model-graded metrics.
 ---
 
 # Google Sheets Integration
@@ -118,7 +119,7 @@ defaultTest:
   options:
     provider:
       text:
-        id: ollama:llama3.1:70b
+        id: ollama:chat:llama3.3:70b
       embedding:
         id: ollama:embeddings:mxbai-embed-large
 ```

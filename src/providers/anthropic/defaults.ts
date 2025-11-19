@@ -1,10 +1,10 @@
 import { AnthropicMessagesProvider } from './messages';
 
-import type { DefaultProviders, ProviderResponse } from '../../types';
+import type { DefaultProviders, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 
 // Default model to use for all default providers
-export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-5-20250929';
 
 /**
  * Helper function to create a lazy-loaded provider. This allows the .env file to be

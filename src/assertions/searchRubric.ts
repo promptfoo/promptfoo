@@ -3,7 +3,7 @@ import type { AssertionParams, GradingResult } from '../types';
 
 export async function handleSearchRubric({
   assertion,
-  baseType,
+  baseType: _baseType,
   inverse,
   provider,
   renderedValue,

@@ -5,7 +5,6 @@ import ClearIcon from '@mui/icons-material/Clear';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
-import InfoIcon from '@mui/icons-material/Info';
 import PreviewIcon from '@mui/icons-material/Preview';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -25,7 +24,6 @@ import Pagination from '@mui/material/Pagination';
 import Paper from '@mui/material/Paper';
 import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -150,12 +148,6 @@ export default function CustomIntentSection() {
     };
   }, [updateTimeout, draftTimeout]);
 
-  useEffect(() => {
-    if (localConfig?.intent) {
-      debouncedUpdatePlugins(localConfig.intent as (string | string[])[]);
-    }
-  }, [localConfig, debouncedUpdatePlugins]);
-
   const handleArrayInputChange = useCallback(
     (key: string, index: number, value: string) => {
       const actualIndex = (currentPage - 1) * ITEMS_PER_PAGE + index;
@@ -175,28 +167,40 @@ export default function CustomIntentSection() {
             ? [...(prev[key as keyof PluginConfig] as string[])]
             : [''];
           currentArray[actualIndex] = value;
-          return {
+          const newConfig = {
             ...prev,
             [key]: currentArray,
           };
+
+          // Update plugins directly after state update
+          debouncedUpdatePlugins(currentArray as (string | string[])[]);
+
+          return newConfig;
         });
       }, UPDATE_DRAFT_MS);
 
       setDraftTimeout(timeout);
     },
-    [currentPage, draftTimeout],
+    [currentPage, draftTimeout, debouncedUpdatePlugins],
   );
 
   const addArrayItem = (key: string) => {
-    setLocalConfig((prev) => ({
-      ...prev,
-      [key]: [
+    setLocalConfig((prev) => {
+      const newArray = [
         ...(Array.isArray(prev[key as keyof PluginConfig])
           ? (prev[key as keyof PluginConfig] as string[])
           : []),
         '',
-      ],
-    }));
+      ];
+
+      // Update plugins directly after state update
+      debouncedUpdatePlugins(newArray as (string | string[])[]);
+
+      return {
+        ...prev,
+        [key]: newArray,
+      };
+    });
     const newTotalPages = Math.ceil(((localConfig.intent?.length || 0) + 1) / ITEMS_PER_PAGE);
     setCurrentPage(newTotalPages);
   };
@@ -218,6 +222,10 @@ export default function CustomIntentSection() {
       if (currentArray.length === 0) {
         currentArray.push('');
       }
+
+      // Update plugins directly after state update
+      debouncedUpdatePlugins(currentArray as (string | string[])[]);
+
       return {
         ...prev,
         [key]: currentArray,
@@ -306,10 +314,16 @@ export default function CustomIntentSection() {
       typeof intent === 'string' ? intent.trim() !== '' : true,
     );
 
+    const combinedIntents = [...nonEmptyExisting, ...newIntents];
+
     setLocalConfig((prev) => ({
       ...prev,
-      intent: [...nonEmptyExisting, ...newIntents],
+      intent: combinedIntents,
     }));
+
+    // Update plugins directly after state update
+    debouncedUpdatePlugins(combinedIntents);
+
     setCurrentPage(1);
     setPreviewDialog(null);
   };
@@ -351,6 +365,10 @@ export default function CustomIntentSection() {
       ...prev,
       intent: [''],
     }));
+
+    // Update plugins directly after state update
+    debouncedUpdatePlugins(['']);
+
     setCurrentPage(1);
     setShowClearConfirm(false);
   };
@@ -362,41 +380,6 @@ export default function CustomIntentSection() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography variant="body2" color="text.secondary">
-          These prompts are passed directly to your target. They are also used as goals by
-          Promptfoo's automated jailbreak strategies.
-        </Typography>
-        <Tooltip
-          title={
-            <Box>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                <strong>Supported file formats:</strong>
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                • <strong>CSV:</strong> First column used, requires header row
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                • <strong>JSON:</strong> Array of strings or nested arrays for multi-step intents
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                <strong>JSON examples:</strong>
-              </Typography>
-              <Typography variant="body2" component="pre" sx={{ fontSize: '0.7rem', mt: 0.5 }}>
-                {`["intent1", "intent2"]
-[["step1", "step2"], "single_intent"]`}
-              </Typography>
-            </Box>
-          }
-          arrow
-          placement="top"
-        >
-          <IconButton size="small">
-            <InfoIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Box>
-
       {uploadError && (
         <Alert severity="error" onClose={() => setUploadError(null)}>
           {uploadError}
@@ -489,7 +472,7 @@ export default function CustomIntentSection() {
               variant="contained"
               disabled={hasEmptyArrayItems(localConfig.intent as (string | string[])[])}
             >
-              Add prompt
+              Add Intent
             </Button>
             <Button component="label" variant="outlined" startIcon={<FileUploadIcon />}>
               Upload File

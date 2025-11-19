@@ -24,6 +24,7 @@ jobs:
   test-action:
     name: Tusk Test Runner
     runs-on: ubuntu-latest
+    timeout-minutes: 8
 
     strategy:
       matrix:
@@ -32,12 +33,12 @@ jobs:
     steps:
       - name: Checkout
         id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.inputs.commitSha }} # Required for Tusk to access files for the commit being tested
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'

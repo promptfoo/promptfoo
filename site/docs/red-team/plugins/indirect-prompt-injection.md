@@ -1,5 +1,6 @@
 ---
 sidebar_label: Indirect Prompt Injection
+description: Red team indirect prompt injection attacks by detecting malicious user content manipulation to protect AI systems from unauthorized control and behavioral hijacking
 ---
 
 # Indirect Prompt Injection Plugin

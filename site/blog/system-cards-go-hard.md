@@ -1,6 +1,6 @@
 ---
 title: 'System Cards Go Hard'
-description: 'Understanding LLM system cards and their importance for responsible AI deployment'
+description: 'Master LLM system cards for responsible AI deployment with transparency, safety documentation, and compliance requirements'
 authors: [tabs]
 tags: [research-analysis, best-practices, openai, anthropic]
 keywords: [llm system card, AI safety documentation, model transparency, responsible AI]

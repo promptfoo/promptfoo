@@ -2,7 +2,7 @@ import { handleContextRecall } from '../../src/assertions/contextRecall';
 import * as contextUtils from '../../src/assertions/contextUtils';
 import * as matchers from '../../src/matchers';
 
-import type { ApiProvider, AssertionParams, ProviderResponse } from '../../src/types';
+import type { ApiProvider, AssertionParams, ProviderResponse } from '../../src/types/index';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/assertions/contextUtils');
@@ -15,7 +15,20 @@ describe('handleContextRecall', () => {
   });
 
   it('should pass when context recall is above threshold', async () => {
-    const mockResult = { pass: true, score: 0.9, reason: 'Context contains expected information' };
+    const mockResult = {
+      pass: true,
+      score: 0.9,
+      reason: 'Context contains expected information',
+      metadata: {
+        sentenceAttributions: [
+          { sentence: 'Test sentence 1', attributed: true },
+          { sentence: 'Test sentence 2', attributed: false },
+        ],
+        totalSentences: 2,
+        attributedSentences: 1,
+        score: 0.9,
+      },
+    };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     jest.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
@@ -30,7 +43,7 @@ describe('handleContextRecall', () => {
       prompt: 'test prompt',
       test: { vars: { context: 'test context' }, options: {} },
       baseType: 'context-recall',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { context: 'test context' },
         test: { vars: { context: 'test context' }, options: {} },
@@ -52,12 +65,21 @@ describe('handleContextRecall', () => {
     expect(result.reason).toBe('Context contains expected information');
     expect(result.metadata).toBeDefined();
     expect(result.metadata?.context).toBe('test context');
+    // Verify metadata from matcher is preserved
+    expect(result.metadata?.sentenceAttributions).toEqual([
+      { sentence: 'Test sentence 1', attributed: true },
+      { sentence: 'Test sentence 2', attributed: false },
+    ]);
+    expect(result.metadata?.totalSentences).toBe(2);
+    expect(result.metadata?.attributedSentences).toBe(1);
+    expect(result.metadata?.score).toBe(0.9);
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test context',
       'Expected fact',
       0.8,
       {},
       { context: 'test context' },
+      undefined,
     );
   });
 
@@ -77,7 +99,7 @@ describe('handleContextRecall', () => {
       prompt: 'test prompt',
       test: { vars: { context: 'incomplete context' }, options: {} },
       baseType: 'context-recall',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { context: 'incomplete context' },
         test: { vars: { context: 'incomplete context' }, options: {} },
@@ -105,6 +127,7 @@ describe('handleContextRecall', () => {
       0.7,
       {},
       { context: 'incomplete context' },
+      undefined,
     );
   });
 
@@ -124,7 +147,7 @@ describe('handleContextRecall', () => {
       prompt: 'test prompt',
       test: { vars: { context: 'test context' }, options: {} },
       baseType: 'context-recall',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { context: 'test context' },
         test: { vars: { context: 'test context' }, options: {} },
@@ -149,6 +172,7 @@ describe('handleContextRecall', () => {
       0,
       {},
       { context: 'test context' },
+      undefined,
     );
   });
 
@@ -168,7 +192,7 @@ describe('handleContextRecall', () => {
       prompt: 'test prompt',
       test: { vars: {}, options: {} },
       baseType: 'context-recall',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: { vars: {}, options: {} },
@@ -195,7 +219,14 @@ describe('handleContextRecall', () => {
       'test prompt',
       {},
     );
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('test prompt', 'test output', 0, {}, {});
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test prompt',
+      'test output',
+      0,
+      {},
+      {},
+      undefined,
+    );
   });
 
   it('should use contextTransform when provided', async () => {
@@ -211,7 +242,7 @@ describe('handleContextRecall', () => {
       prompt: 'prompt',
       test: { vars: {}, options: {} },
       baseType: 'context-recall',
-      context: {
+      assertionValueContext: {
         prompt: 'prompt',
         vars: {},
         test: { vars: {}, options: {} },
@@ -238,7 +269,7 @@ describe('handleContextRecall', () => {
       'prompt',
       {},
     );
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0, {}, {});
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0, {}, {}, undefined);
   });
 
   it('should throw error when renderedValue is not a string', async () => {
@@ -253,7 +284,7 @@ describe('handleContextRecall', () => {
       prompt: 'test prompt',
       test: { vars: { context: 'test context' }, options: {} },
       baseType: 'context-recall',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { context: 'test context' },
         test: { vars: { context: 'test context' }, options: {} },
@@ -285,7 +316,7 @@ describe('handleContextRecall', () => {
       prompt: undefined,
       test: { vars: { context: 'test context' }, options: {} },
       baseType: 'context-recall',
-      context: {
+      assertionValueContext: {
         prompt: undefined,
         vars: { context: 'test context' },
         test: { vars: { context: 'test context' }, options: {} },

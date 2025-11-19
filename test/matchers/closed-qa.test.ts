@@ -1,7 +1,7 @@
 import { matchesClosedQa } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
-import type { GradingConfig } from '../../src/types';
+import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesClosedQa', () => {
   beforeEach(() => {
@@ -139,14 +139,66 @@ describe('matchesClosedQa', () => {
 
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('Input {{ var }}'),
+      expect.any(Object),
     );
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('Expected {{ var }}'),
+      expect.any(Object),
     );
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('Output {{ var }}'),
+      expect.any(Object),
     );
 
     process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
+  });
+
+  it('should correctly substitute variables in custom rubricPrompt', async () => {
+    const input = 'What is the largest ocean?';
+    const expected = 'Pacific Ocean';
+    const output = 'The largest ocean is the Pacific Ocean.';
+
+    const customPrompt = `Compare these answers:
+Question: {{input}}
+Criteria: {{criteria}}
+Answer: {{completion}}
+
+Does the answer meet the criteria? Answer Y or N.`;
+
+    const mockCallApi = jest.fn().mockResolvedValue({
+      output: 'Y',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const grading = {
+      rubricPrompt: customPrompt,
+      provider: {
+        id: () => 'test-provider',
+        callApi: mockCallApi,
+      },
+    };
+
+    const result = await matchesClosedQa(input, expected, output, grading);
+
+    expect(result).toEqual({
+      pass: true,
+      reason: expect.any(String),
+      score: 1,
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+    });
+
+    // Verify all variables were substituted in the prompt
+    expect(mockCallApi).toHaveBeenCalledTimes(1);
+    const actualPrompt = mockCallApi.mock.calls[0][0];
+    expect(actualPrompt).toContain('Question: What is the largest ocean?');
+    expect(actualPrompt).toContain('Criteria: Pacific Ocean');
+    expect(actualPrompt).toContain('Answer: The largest ocean is the Pacific Ocean.');
+    expect(actualPrompt).not.toContain('{{input}}');
+    expect(actualPrompt).not.toContain('{{criteria}}');
+    expect(actualPrompt).not.toContain('{{completion}}');
   });
 });

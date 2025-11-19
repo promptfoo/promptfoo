@@ -3,7 +3,7 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
 import telemetry from '../telemetry';
-import { printBorder, setupEnv } from '../util';
+import { printBorder, setupEnv } from '../util/index';
 import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../util/database';
 import invariant from '../util/invariant';
 import type { Command } from 'commander';

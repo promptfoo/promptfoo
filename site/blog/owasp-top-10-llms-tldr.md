@@ -1,6 +1,6 @@
 ---
 title: 'OWASP Top 10 LLM Security Risks (2025) – 5-Minute TLDR'
-description: 'Learn the 10 biggest LLM security risks and practical fixes, in a 5-minute TLDR. Updated for OWASP 2025.'
+description: 'Master OWASP Top 10 LLM security vulnerabilities with practical mitigation strategies in this comprehensive 2025 guide'
 image: /img/blog/owasp-top10/red_panda_list.jpg
 keywords:
   [
@@ -100,7 +100,7 @@ Embeddings are used to represent text numerically (vectors) in a way that captur
 
 ### 9. Misinformation
 
-LLMs say things with such unabashed confidence they sound true; people trust incorrect LLM outputs much like they trust misinformation from the average non-expert and websites. Perhaps I could've published this article with the title alone and ignored the rest of the content but alas; I only evaluate titles mid-way through writing and you are - thankfully - an audience of skeptics. Learn how to [measure and prevent LLM hallucinations](https://www.promptfoo.dev/docs/guides/prevent-llm-hallucations/).
+LLMs say things with such unabashed confidence they sound true; people trust incorrect LLM outputs much like they trust misinformation from the average non-expert and websites. Perhaps I could've published this article with the title alone and ignored the rest of the content but alas; I only evaluate titles mid-way through writing and you are - thankfully - an audience of skeptics. Learn how to [measure and prevent LLM hallucinations](https://www.promptfoo.dev/docs/guides/prevent-llm-hallucinations/).
 
 ### 10. Unbounded consumption
 

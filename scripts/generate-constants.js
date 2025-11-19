@@ -9,17 +9,17 @@ const constantsTemplate = `// This file is auto-generated during build. Do not e
 export const POSTHOG_KEY = '${posthogKey}';
 `;
 
-const outputPath = path.join(__dirname, '../src/generated-constants.ts');
+const generatedDir = path.join(__dirname, '../src/generated');
+const outputPath = path.join(generatedDir, 'constants.ts');
 
 try {
   // Ensure the directory exists
-  const dir = path.dirname(outputPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(generatedDir)) {
+    fs.mkdirSync(generatedDir, { recursive: true });
   }
 
   fs.writeFileSync(outputPath, constantsTemplate, 'utf8');
-  console.log('Generated constants file');
+  console.log('Generated constants file at src/generated/constants.ts');
 } catch (error) {
   console.error('✗ Failed to generate constants file:', error);
   process.exit(1);

@@ -3,7 +3,7 @@ import { doValidate, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { resolveConfigs } from '../../src/util/config/load';
 
-import type { UnifiedConfig } from '../../src/types';
+import type { UnifiedConfig } from '../../src/types/index';
 
 jest.mock('../../src/logger');
 jest.mock('../../src/util/config/load');
@@ -151,10 +151,14 @@ describe('Validate Command Exit Codes', () => {
 
       expect(validateCmd).toBeDefined();
       expect(validateCmd?.name()).toBe('validate');
-      expect(validateCmd?.description()).toBe('Validate a promptfoo configuration file');
+      expect(validateCmd?.description()).toBe('Validate configuration files and test providers');
 
-      // Check that the config option is registered
-      const configOption = validateCmd?.options.find((opt) => opt.long === '--config');
+      // Check that the config subcommand is registered
+      const configSubCmd = validateCmd?.commands.find((cmd) => cmd.name() === 'config');
+      expect(configSubCmd).toBeDefined();
+
+      // Check that the config option is registered on the config subcommand
+      const configOption = configSubCmd?.options.find((opt) => opt.long === '--config');
       expect(configOption).toBeDefined();
     });
   });

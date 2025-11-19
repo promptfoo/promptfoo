@@ -1,10 +1,10 @@
-import type { TokenUsage } from '../../src/types/shared';
 import {
-  createEmptyTokenUsage,
-  accumulateTokenUsage,
   accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
 } from '../../src/util/tokenUsageUtils';
+
+import type { TokenUsage } from '../../src/types/shared';
 
 describe('tokenUsageUtils', () => {
   describe('createEmptyTokenUsage', () => {
@@ -245,46 +245,6 @@ describe('tokenUsageUtils', () => {
       expect(target.prompt).toBe(50);
       expect(target.completion).toBe(30);
       expect(target.numRequests).toBe(2);
-    });
-  });
-
-  describe('accumulateGraderTokenUsage', () => {
-    it('should accumulate token usage from grader result with tokensUsed', () => {
-      const target = createEmptyTokenUsage();
-      const graderResult = {
-        tokensUsed: {
-          total: 50,
-          prompt: 30,
-          completion: 20,
-          numRequests: 1,
-        },
-      };
-
-      accumulateGraderTokenUsage(target, graderResult);
-
-      expect(target.total).toBe(50);
-      expect(target.prompt).toBe(30);
-      expect(target.completion).toBe(20);
-      expect(target.numRequests).toBe(1);
-    });
-
-    it('should increment numRequests when grader result exists but has no tokensUsed', () => {
-      const target = createEmptyTokenUsage();
-      const graderResult = {};
-
-      accumulateGraderTokenUsage(target, graderResult);
-
-      expect(target.numRequests).toBe(1);
-      expect(target.total).toBe(0);
-    });
-
-    it('should handle undefined grader result', () => {
-      const target = createEmptyTokenUsage();
-
-      accumulateGraderTokenUsage(target, undefined);
-
-      expect(target.numRequests).toBe(0);
-      expect(target.total).toBe(0);
     });
   });
 });

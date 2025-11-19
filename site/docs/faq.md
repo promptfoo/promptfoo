@@ -1,5 +1,6 @@
 ---
 sidebar_label: FAQ
+description: Evaluate LLM outputs, run red team tests, and automate AI security checks with Promptfoo's open-source framework. Configure assertions and metrics for 50+ providers.
 ---
 
 # Frequently asked questions
@@ -115,7 +116,7 @@ Set the following environment variables before running the CLI to disable all ou
 ```bash
 export PROMPTFOO_DISABLE_TELEMETRY=1
 export PROMPTFOO_DISABLE_UPDATE=1
-export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
+export PROMPTFOO_DISABLE_REMOTE_GENERATION=true
 export PROMPTFOO_DISABLE_SHARING=1
 export PROMPTFOO_SELF_HOSTED=1
 ```

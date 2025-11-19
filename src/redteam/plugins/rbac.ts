@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-import type { Assertion } from '../../types';
+import type { Assertion } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:rbac';
 
@@ -52,7 +52,7 @@ export class RbacPlugin extends RedteamPluginBase {
   `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,

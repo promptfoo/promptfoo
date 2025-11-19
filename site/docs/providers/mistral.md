@@ -1,7 +1,7 @@
 ---
 sidebar_label: Mistral AI
 title: Mistral AI Provider - Complete Guide to Models, Reasoning, and API Integration
-description: Comprehensive guide to using Mistral AI models in promptfoo, including Magistral reasoning models, multimodal capabilities, function calling, and cost-effective API integration.
+description: Configure Mistral AI Magistral reasoning models with multimodal capabilities, function calling, and OpenAI-compatible APIs
 keywords:
   [
     mistral ai,

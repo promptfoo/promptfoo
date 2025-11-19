@@ -4,7 +4,7 @@ import yaml from 'js-yaml';
 import { getEnvBool, getEnvString } from '../envars';
 import invariant from '../util/invariant';
 
-import type { EvaluateResult, ResultFailureReason } from '../types';
+import type { EvaluateResult, ResultFailureReason } from '../types/index';
 
 let ajvInstance: Ajv | null = null;
 
@@ -105,7 +105,7 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
     return (
       JSON.stringify(
         value,
-        (key, val) => {
+        (_key, val) => {
           if (typeof val === 'object' && val !== null) {
             if (cache.has(val)) {
               return;

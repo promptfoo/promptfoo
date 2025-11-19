@@ -29,6 +29,11 @@ jest.mock('../../../src/util', () => ({
     grader: 'Grade the response',
   }),
 }));
+jest.mock('../../../src/integrations/huggingfaceDatasets', () => ({
+  fetchHuggingFaceDataset: jest
+    .fn()
+    .mockResolvedValue([{ vars: { prompt: 'test prompt', category: 'test' } }]),
+}));
 
 // Mock contracts plugin to ensure it has canGenerateRemote = true
 jest.mock('../../../src/redteam/plugins/contracts', () => {

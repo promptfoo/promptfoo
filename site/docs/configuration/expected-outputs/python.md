@@ -1,6 +1,7 @@
 ---
 sidebar_position: 51
 sidebar_label: Python
+description: Create advanced Python validation scripts with complex logic, external APIs, and ML libraries for sophisticated output grading
 ---
 
 # Python assertions

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 99
 sidebar_label: Classification
+description: Apply HuggingFace classifiers for comprehensive output analysis including sentiment, toxicity, bias, PII detection, and custom labels
 ---
 
 # Classifier grading

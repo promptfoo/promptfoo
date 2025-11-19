@@ -1,7 +1,7 @@
 ---
 sidebar_label: ROT13 Encoding
 title: ROT13 Encoding Strategy
-description: Test how AI systems handle ROT13-encoded text that may bypass content filters through letter rotation
+description: Assess AI defense against ROT13 cipher obfuscation that rotates letters to evade content detection and safety mechanisms
 ---
 
 # ROT13 Encoding Strategy

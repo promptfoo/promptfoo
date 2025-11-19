@@ -1,5 +1,6 @@
 ---
 sidebar_label: Function-Level Authorization
+description: Red team function-level authorization controls by simulating unauthorized access attempts to detect privilege escalation vulnerabilities in AI systems
 ---
 
 # Broken Function Level Authorization (BFLA) Plugin

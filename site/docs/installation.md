@@ -13,7 +13,7 @@ import TabItem from '@theme/TabItem';
 
 ## Requirements
 
-- Node.js 18 or newer
+- Node.js 20 or newer
 - Supported operating systems: macOS, Linux, Windows
 
 ## For Command-Line Usage
@@ -22,19 +22,19 @@ Install promptfoo using [npx](https://nodejs.org/en/download), [npm](https://nod
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npm" label="npm" default>
-    <CodeBlock language="bash">
-      npm install -g promptfoo
-    </CodeBlock>
+    ```bash
+    npm install -g promptfoo
+    ```
   </TabItem>
   <TabItem value="npx" label="npx">
-    <CodeBlock language="bash">
-      npx promptfoo@latest
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest
+    ```
   </TabItem>
   <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      brew install promptfoo
-    </CodeBlock>
+    ```bash
+    brew install promptfoo
+    ```
   </TabItem>
 </Tabs>
 
@@ -52,25 +52,25 @@ To verify that promptfoo is installed correctly, run:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npm" label="npm" default>
-    <CodeBlock language="bash">
-      promptfoo --version
-    </CodeBlock>
+    ```bash
+    promptfoo --version
+    ```
   </TabItem>
   <TabItem value="npx" label="npx">
-    <CodeBlock language="bash">
-      npx promptfoo@latest --version
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest --version
+    ```
   </TabItem>
   <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo --version
-    </CodeBlock>
+    ```bash
+    promptfoo --version
+    ```
   </TabItem>
 </Tabs>
 
 This should display the version number of promptfoo:
 
-```
+```text
 0.114.7
 ```
 
@@ -80,22 +80,28 @@ After installation, you can start using promptfoo by running:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npm" label="npm" default>
-    <CodeBlock language="bash">
-      promptfoo init
-    </CodeBlock>
+    ```bash
+    promptfoo init
+    ```
   </TabItem>
   <TabItem value="npx" label="npx">
-    <CodeBlock language="bash">
-      npx promptfoo@latest init
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest init
+    ```
   </TabItem>
   <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo init
-    </CodeBlock>
+    ```bash
+    promptfoo init
+    ```
   </TabItem>
 </Tabs>
 
 This will create a `promptfooconfig.yaml` placeholder in your current directory.
 
 For more detailed usage instructions, please refer to our [Getting Started guide](./getting-started.md).
+
+## See Also
+
+- [Getting Started](./getting-started.md)
+- [Troubleshooting](./usage/troubleshooting.md)
+- [Contributing](./contributing.md)

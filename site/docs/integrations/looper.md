@@ -1,5 +1,6 @@
 ---
 sidebar_label: Looper
+description: Automate LLM testing in CI/CD by integrating Promptfoo with Looper workflows. Configure quality gates, caching, and multi-environment evaluations for production AI pipelines.
 ---
 
 # Setting up Promptfoo with Looper

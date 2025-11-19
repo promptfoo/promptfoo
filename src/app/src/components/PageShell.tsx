@@ -2,13 +2,70 @@ import React, { useCallback, useEffect, useState } from 'react';
 
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
+import UpdateBanner from '@app/components/UpdateBanner';
+import { red } from '@mui/material/colors';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
+import { Severity } from '@promptfoo/redteam/constants';
 import { Outlet } from 'react-router-dom';
 import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 
-const createAppTheme = (darkMode: boolean) =>
-  createTheme({
+declare module '@mui/material/styles' {
+  interface Palette {
+    custom: {
+      darkOverlay: string;
+      lightOverlay: string;
+      severity: Record<
+        Severity,
+        {
+          light: string;
+          main: string;
+          dark: string;
+          contrastText: string;
+        }
+      >;
+    };
+  }
+  interface PaletteOptions {
+    custom?: {
+      darkOverlay: string;
+      lightOverlay: string;
+      severity: Record<
+        Severity,
+        {
+          light: string;
+          main: string;
+          dark: string;
+          contrastText: string;
+        }
+      >;
+    };
+  }
+}
+
+export const createAppTheme = (darkMode: boolean) => {
+  // We need to instantiate the theme so that contrast settings can be applied in the actual theme below;
+  const theme = createTheme({
+    palette: {
+      mode: darkMode ? 'dark' : 'light',
+      // Custom colors for specific use cases
+      custom: {
+        darkOverlay: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
+        lightOverlay: darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+        severity: {
+          // @ts-expect-error - full colors will be added in the actual theme below
+          critical: {
+            main: red[900],
+          },
+          // @ts-expect-error - full colors will be added in the actual theme below
+          high: {
+            main: red[500],
+          },
+        },
+      },
+    },
+  });
+  return createTheme({
     typography: {
       fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       /*
@@ -59,6 +116,36 @@ const createAppTheme = (darkMode: boolean) =>
       text: {
         primary: darkMode ? '#ffffff' : '#0f172a',
         secondary: darkMode ? '#a0a0a0' : '#475569',
+      },
+      custom: {
+        darkOverlay: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
+        lightOverlay: darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+        severity: {
+          critical: theme.palette.augmentColor({
+            color: {
+              main: theme.palette.custom.severity.critical.main,
+            },
+            name: 'custom.severity.critical',
+          }),
+          high: theme.palette.augmentColor({
+            color: {
+              main: theme.palette.custom.severity.high.main,
+            },
+            name: 'custom.severity.high',
+          }),
+          medium: theme.palette.augmentColor({
+            color: {
+              main: theme.palette.warning.main,
+            },
+            name: 'custom.severity.medium',
+          }),
+          low: theme.palette.augmentColor({
+            color: {
+              main: theme.palette.success.main,
+            },
+            name: 'custom.severity.low',
+          }),
+        },
       },
     },
     components: {
@@ -229,6 +316,7 @@ const createAppTheme = (darkMode: boolean) =>
       },
     },
   });
+};
 
 const lightTheme = createAppTheme(false);
 const darkTheme = createAppTheme(true);
@@ -276,7 +364,8 @@ export default function PageShell() {
     <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
       <PostHogProvider>
         <Layout>
-          <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
+          <Navigation onToggleDarkMode={toggleDarkMode} />
+          <UpdateBanner />
           <Outlet />
           <PostHogPageViewTracker />
         </Layout>

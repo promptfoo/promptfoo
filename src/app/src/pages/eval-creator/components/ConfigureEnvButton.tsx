@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 import { useStore } from '@app/stores/evalConfig';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -12,7 +12,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 
-const ConfigureEnvButton: React.FC = () => {
+const ConfigureEnvButton = () => {
   const { config, updateConfig } = useStore();
   const defaultEnv = config.env || {};
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -46,21 +46,21 @@ const ConfigureEnvButton: React.FC = () => {
                 label="OpenAI API key"
                 fullWidth
                 margin="normal"
-                value={env.OPENAI_API_KEY}
+                value={env.OPENAI_API_KEY || ''}
                 onChange={(e) => setEnv({ ...env, OPENAI_API_KEY: e.target.value })}
               />
               <TextField
                 label="OpenAI API host"
                 fullWidth
                 margin="normal"
-                value={env.OPENAI_API_HOST}
+                value={env.OPENAI_API_HOST || ''}
                 onChange={(e) => setEnv({ ...env, OPENAI_API_HOST: e.target.value })}
               />
               <TextField
                 label="OpenAI organization"
                 fullWidth
                 margin="normal"
-                value={env.OPENAI_ORGANIZATION}
+                value={env.OPENAI_ORGANIZATION || ''}
                 onChange={(e) => setEnv({ ...env, OPENAI_ORGANIZATION: e.target.value })}
               />
             </AccordionDetails>
@@ -72,7 +72,7 @@ const ConfigureEnvButton: React.FC = () => {
                 label="Azure API key"
                 fullWidth
                 margin="normal"
-                value={env.AZURE_API_KEY || env.AZURE_OPENAI_API_KEY}
+                value={env.AZURE_API_KEY || env.AZURE_OPENAI_API_KEY || ''}
                 onChange={(e) => setEnv({ ...env, AZURE_API_KEY: e.target.value })}
               />
             </AccordionDetails>
@@ -84,7 +84,7 @@ const ConfigureEnvButton: React.FC = () => {
                 label="Bedrock Region"
                 fullWidth
                 margin="normal"
-                value={env.AWS_BEDROCK_REGION}
+                value={env.AWS_BEDROCK_REGION || ''}
                 onChange={(e) => setEnv({ ...env, AWS_BEDROCK_REGION: e.target.value })}
               />
             </AccordionDetails>
@@ -96,7 +96,7 @@ const ConfigureEnvButton: React.FC = () => {
                 label="Anthropic API key"
                 fullWidth
                 margin="normal"
-                value={env.ANTHROPIC_API_KEY}
+                value={env.ANTHROPIC_API_KEY || ''}
                 onChange={(e) => setEnv({ ...env, ANTHROPIC_API_KEY: e.target.value })}
               />
             </AccordionDetails>
@@ -108,7 +108,7 @@ const ConfigureEnvButton: React.FC = () => {
                 label="Vertex API Key"
                 fullWidth
                 margin="normal"
-                value={env.VERTEX_API_KEY}
+                value={env.VERTEX_API_KEY || ''}
                 onChange={(e) => setEnv({ ...env, VERTEX_API_KEY: e.target.value })}
               />
             </AccordionDetails>
@@ -117,7 +117,7 @@ const ConfigureEnvButton: React.FC = () => {
                 label="Vertex Project ID"
                 fullWidth
                 margin="normal"
-                value={env.VERTEX_PROJECT_ID}
+                value={env.VERTEX_PROJECT_ID || ''}
                 onChange={(e) => setEnv({ ...env, VERTEX_PROJECT_ID: e.target.value })}
               />
             </AccordionDetails>
@@ -126,7 +126,7 @@ const ConfigureEnvButton: React.FC = () => {
                 label="Vertex Region"
                 fullWidth
                 margin="normal"
-                value={env.VERTEX_REGION}
+                value={env.VERTEX_REGION || ''}
                 onChange={(e) => setEnv({ ...env, VERTEX_REGION: e.target.value })}
               />
             </AccordionDetails>
@@ -138,7 +138,7 @@ const ConfigureEnvButton: React.FC = () => {
                 label="Replicate API key"
                 fullWidth
                 margin="normal"
-                value={env.REPLICATE_API_KEY}
+                value={env.REPLICATE_API_KEY || ''}
                 onChange={(e) => setEnv({ ...env, REPLICATE_API_KEY: e.target.value })}
               />
             </AccordionDetails>

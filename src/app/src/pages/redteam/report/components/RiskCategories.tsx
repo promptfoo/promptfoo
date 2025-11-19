@@ -1,13 +1,18 @@
-import React from 'react';
-
 import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
 import RiskCard from './RiskCard';
 import type { TopLevelCategory } from '@promptfoo/redteam/constants';
 import type { GradingResult } from '@promptfoo/types';
+import { type CategoryStats } from './FrameworkComplianceUtils';
 
-const RiskCategories: React.FC<{
-  categoryStats: Record<string, { pass: number; total: number }>;
+const RiskCategories = ({
+  categoryStats,
+  evalId,
+  failuresByPlugin,
+  passesByPlugin,
+}: {
+  categoryStats: CategoryStats;
   evalId: string;
   failuresByPlugin: Record<
     string,
@@ -17,8 +22,7 @@ const RiskCategories: React.FC<{
     string,
     { prompt: string; output: string; gradingResult?: GradingResult }[]
   >;
-  strategyStats: Record<string, { pass: number; total: number }>;
-}> = ({ categoryStats, evalId, failuresByPlugin, passesByPlugin, strategyStats }) => {
+}) => {
   const categories = Object.keys(riskCategories).map((category) => ({
     name: category,
     passed: riskCategories[category as TopLevelCategory].every(
@@ -28,6 +32,7 @@ const RiskCategories: React.FC<{
 
   return (
     <Stack spacing={4}>
+      <Typography variant="h5">Risk Categories</Typography>
       {categories.map((category, index) => {
         const categoryName = category.name as TopLevelCategory;
         const subCategories = riskCategories[categoryName];
@@ -65,7 +70,6 @@ const RiskCategories: React.FC<{
             evalId={evalId}
             failuresByPlugin={failuresByPlugin}
             passesByPlugin={passesByPlugin}
-            strategyStats={strategyStats}
           />
         );
       })}

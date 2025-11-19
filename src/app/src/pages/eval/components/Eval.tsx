@@ -8,14 +8,15 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
+import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
+import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
-
+import { useFilterMode } from './FilterModeProvider';
+import { useToast } from '@app/hooks/useToast';
 interface EvalOptions {
   /**
    * ID of a specific eval to load.
@@ -26,10 +27,12 @@ interface EvalOptions {
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { showToast } = useToast();
 
   const {
     table,
+    setTable,
     setTableFromResultsFile,
     config,
     setConfig,
@@ -38,7 +41,11 @@ export default function Eval({ fetchId }: EvalOptions) {
     setAuthor,
     fetchEvalData,
     resetFilters,
+    addFilter,
+    setIsStreaming,
   } = useTableStore();
+
+  const { filterMode } = useFilterMode();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -69,14 +76,27 @@ export default function Eval({ fetchId }: EvalOptions) {
   /**
    * Triggers the fetching of a specific eval by id. Eval data is populated in the table store.
    *
+   * @param {string} id - The eval ID to load
+   * @param {boolean} isBackgroundUpdate - Whether this is a background update (e.g., from socket) that shouldn't show loading state
    * @returns {Boolean} Whether the eval was loaded successfully.
    */
   const loadEvalById = useCallback(
-    async (id: string) => {
+    async (id: string, isBackgroundUpdate = false) => {
       try {
         setEvalId(id);
 
-        const data = await fetchEvalData(id, { skipSettingEvalId: true });
+        const { filters } = useTableStore.getState();
+
+        const data = await fetchEvalData(id, {
+          skipSettingEvalId: true,
+          skipLoadingState: isBackgroundUpdate,
+          filterMode,
+          filters: Object.values(filters.values).filter((filter) =>
+            filter.type === 'metadata'
+              ? Boolean(filter.value && filter.field)
+              : Boolean(filter.value),
+          ),
+        });
 
         if (!data) {
           setFailed(true);
@@ -89,7 +109,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         return false;
       }
     },
-    [fetchEvalData, setFailed, setEvalId],
+    [fetchEvalData, setFailed, setEvalId, filterMode],
   );
 
   /**
@@ -109,20 +129,70 @@ export default function Eval({ fetchId }: EvalOptions) {
   // Effects
   // ================================
 
+  /**
+   * Listens for changes to the filters state. Updates the URL query string with the new filters.
+   */
   useEffect(() => {
-    // Reset filters when navigating to a different eval; necessary because Zustand
-    // is a global store.
+    const unsubscribe = useTableStore.subscribe(
+      (state) => state.filters,
+      (_filters) => {
+        // Read the search params from the URL. Does not use the hook to avoid re-running when the search params change.
+        const _searchParams = new URLSearchParams(window.location.search);
+
+        // Do search params need to be removed?
+        if (_filters.appliedCount === 0) {
+          // clear the search params
+          setSearchParams((prev) => {
+            prev.delete('filter');
+            return prev;
+          });
+        } else if (_filters.appliedCount > 0) {
+          // Serialize the filters to a JSON string
+          const serializedFilters = JSON.stringify(Object.values(_filters.values));
+          // Check whether the serialized filters are already in the search params
+          if (_searchParams.get('filter') !== serializedFilters) {
+            // Add each filter to the search params
+            setSearchParams((prev) => {
+              prev.set('filter', serializedFilters);
+              return prev;
+            });
+          }
+        }
+      },
+    );
+    return () => unsubscribe();
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    const _searchParams = new URLSearchParams(window.location.search);
+
     resetFilters();
+
+    // Read search params
+    const filtersParam = _searchParams.get('filter');
+
+    if (filtersParam) {
+      let filters: ResultsFilter[] = [];
+      try {
+        filters = JSON.parse(filtersParam) as ResultsFilter[];
+      } catch {
+        showToast('URL contains invalid JSON-encoded filters', 'error');
+        return;
+      }
+      filters.forEach((filter: ResultsFilter) => {
+        addFilter(filter);
+      });
+    }
 
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
         const success = await loadEvalById(fetchId);
         if (success) {
-          setLoaded(true);
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
           fetchRecentFileEvals();
+          // Note: setLoaded(true) is handled by the useEffect that watches for table updates
         }
       };
       run();
@@ -134,17 +204,31 @@ export default function Eval({ fetchId }: EvalOptions) {
       /**
        * Populates the table store with the most recent eval result.
        */
-      const handleResultsFile = async (data: ResultsFile) => {
-        setTableFromResultsFile(data);
-        setConfig(data.config);
-        setAuthor(data.author ?? null);
+      const handleResultsFile = async (data: ResultsFile | null) => {
+        // If no data provided (e.g., no evals exist yet), clear stale state and mark as loaded
+        if (!data) {
+          console.log('No eval data available');
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
+          setLoaded(true);
+          return;
+        }
+
+        // Set streaming state when we start receiving data
+        setIsStreaming(true);
+
         const newRecentEvals = await fetchRecentFileEvals();
         if (newRecentEvals && newRecentEvals.length > 0) {
           const newId = newRecentEvals[0].evalId;
           setDefaultEvalId(newId);
           setEvalId(newId);
-          loadEvalById(newId);
+          await loadEvalById(newId, true); // Pass true for isBackgroundUpdate since this is from socket
         }
+
+        // Clear streaming state after update is complete
+        setIsStreaming(false);
       };
 
       socket
@@ -163,6 +247,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
       return () => {
         socket.disconnect();
+        setIsStreaming(false);
       };
     } else {
       console.log('Eval init: Fetching eval via recent');
@@ -173,15 +258,16 @@ export default function Eval({ fetchId }: EvalOptions) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);
           if (success) {
-            setLoaded(true);
             setDefaultEvalId(defaultEvalId);
+            // Note: setLoaded(true) is handled by the useEffect that watches for table updates
           }
         } else {
-          return (
-            <div className="notice">
-              No evals yet. Share some evals to this server and they will appear here.
-            </div>
-          );
+          // No evals exist - clear stale state and show empty state
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
+          setLoaded(true);
         }
       };
       run();
@@ -201,6 +287,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setInComparisonMode,
     setComparisonEvalIds,
     resetFilters,
+    setIsStreaming,
   ]);
 
   usePageMeta({
@@ -229,7 +316,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     return <div className="notice">404 Eval not found</div>;
   }
 
-  if (!loaded || !table) {
+  if (!loaded) {
     return (
       <div className="notice">
         <div>
@@ -240,7 +327,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     );
   }
 
-  if (loaded && !table) {
+  if (!table) {
     return <EmptyState />;
   }
 
