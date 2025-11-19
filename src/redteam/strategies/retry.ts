@@ -33,40 +33,46 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
     `Searching for failed test cases: plugin='${pluginId}', target='${targetLabel}', cloudMode=${isCloudMode()}`,
   );
 
+  const allTestCases: TestCase[] = [];
+
   try {
-    // Check if we should use cloud API
+    // Try to fetch from cloud API if available
     if (isCloudMode()) {
       logger.debug(
-        `Using cloud API to fetch failed test cases: plugin='${pluginId}', target='${targetLabel}'`,
+        `Fetching failed test cases from cloud API: plugin='${pluginId}', target='${targetLabel}'`,
       );
 
-      // makeRequest already prepends the apiHost and /api/v1/, so just pass the path
-      const response = await makeRequest('results/failed-tests', 'POST', {
-        pluginId,
-        targetLabel,
-        limit: 100,
-      });
+      try {
+        // makeRequest already prepends the apiHost and /api/v1/, so just pass the path
+        const response = await makeRequest('results/failed-tests', 'POST', {
+          pluginId,
+          targetLabel,
+          limit: 100,
+        });
 
-      if (!response.ok) {
+        if (response.ok) {
+          const data = await response.json();
+          const cloudTestCases = data.testCases || [];
+          allTestCases.push(...cloudTestCases);
+
+          logger.debug(
+            `Retrieved ${cloudTestCases.length} failed test cases from cloud for plugin '${pluginId}' and target '${targetLabel}'`,
+          );
+        } else {
+          logger.error(
+            `Failed to fetch failed test cases from cloud API: ${response.status} ${response.statusText}`,
+          );
+        }
+      } catch (cloudError) {
         logger.error(
-          `Failed to fetch failed test cases from cloud API: ${response.status} ${response.statusText}`,
+          `Error fetching from cloud API: ${cloudError}`,
         );
-        return [];
       }
-
-      const data = await response.json();
-      const testCases = data.testCases || [];
-
-      logger.debug(
-        `Retrieved ${testCases.length} failed test cases from cloud for plugin '${pluginId}' and target '${targetLabel}'`,
-      );
-
-      return deduplicateTests(testCases);
     }
 
-    // Use local SQLite database
+    // Always also check local SQLite database
     logger.debug(
-      `Using local SQLite database to fetch failed test cases: plugin='${pluginId}', target='${targetLabel}'`,
+      `Fetching failed test cases from local SQLite database: plugin='${pluginId}', target='${targetLabel}'`,
     );
 
     const db = getDb();
@@ -104,7 +110,7 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
       .orderBy(evalResultsTable.createdAt)
       .limit(100);
 
-    const testCases = results
+    const localTestCases = results
       .map((r) => {
         try {
           const testCase: TestCase =
@@ -133,9 +139,16 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
       })
       .filter((tc): tc is NonNullable<typeof tc> => tc !== null);
 
-    const unique = deduplicateTests(testCases);
+    allTestCases.push(...localTestCases);
+
     logger.debug(
-      `Found ${results.length} failed test cases for plugin '${pluginId}' and target '${targetLabel}', ${unique.length} unique`,
+      `Found ${results.length} failed test cases in local SQLite for plugin '${pluginId}' and target '${targetLabel}'`,
+    );
+
+    // Deduplicate combined results from both cloud and local
+    const unique = deduplicateTests(allTestCases);
+    logger.debug(
+      `Total: ${allTestCases.length} failed test cases (cloud + local), ${unique.length} unique`,
     );
     return unique;
   } catch (error) {
