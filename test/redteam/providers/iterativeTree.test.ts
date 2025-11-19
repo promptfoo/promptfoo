@@ -1245,6 +1245,102 @@ describe('Token Counting', () => {
     });
   });
 
+  describe('Rubric Storage', () => {
+    it('should store rendered rubric in storedGraderResult.assertion.value', () => {
+      const mockRenderedRubric = '<rubric>Rendered policy evaluation criteria</rubric>';
+      const mockGraderResult: {
+        pass: boolean;
+        score: number;
+        reason: string;
+        assertion?: any;
+      } = {
+        pass: false,
+        score: 0,
+        reason: 'Policy violation detected',
+      };
+
+      const testCase: AtomicTestCase = {
+        vars: {},
+        assert: [
+          {
+            type: 'promptfoo:redteam:policy',
+            metric: 'PolicyViolation:test',
+          },
+        ],
+        metadata: {
+          pluginId: 'policy',
+          goal: 'Test goal',
+        },
+      };
+
+      // Test the pattern used in iterativeTree for storing rubric
+      const storedResult = {
+        ...mockGraderResult,
+        assertion: mockGraderResult.assertion
+          ? { ...mockGraderResult.assertion, value: mockRenderedRubric }
+          : testCase.assert?.[0] &&
+              'type' in testCase.assert[0] &&
+              (testCase.assert[0] as any).type !== 'assert-set'
+            ? { ...testCase.assert[0], value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeDefined();
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:policy');
+    });
+
+    it('should handle grade.assertion when present', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResultWithAssertion = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+        assertion: {
+          type: 'promptfoo:redteam:harmful' as const,
+          metric: 'Harmful',
+          value: 'old value',
+        },
+      };
+
+      const storedResult = {
+        ...mockGraderResultWithAssertion,
+        assertion: mockGraderResultWithAssertion.assertion
+          ? { ...mockGraderResultWithAssertion.assertion, value: mockRenderedRubric }
+          : undefined,
+      };
+
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:harmful');
+      expect(storedResult.assertion?.metric).toBe('Harmful');
+    });
+
+    it('should not create assertion for AssertionSet', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResult = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+      };
+
+      const assertionSet = {
+        type: 'assert-set' as const,
+        assert: [{ type: 'contains' as const, value: 'test' }],
+      };
+
+      const storedResult = {
+        ...mockGraderResult,
+        assertion:
+          assertionSet && 'type' in assertionSet && assertionSet.type !== 'assert-set'
+            ? { ...assertionSet, value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeUndefined();
+      expect(storedResult.pass).toBe(false);
+    });
+  });
+
   it('should properly accumulate token usage across multiple provider calls', async () => {
     // This test simulates how token usage would be accumulated in the actual iterativeTree provider
     // by testing individual components that contribute to token usage

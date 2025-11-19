@@ -286,6 +286,7 @@ export const ADDITIONAL_PLUGINS = [
   'debug-access',
   'divergent-repetition',
   'donotanswer',
+  'ferpa',
   'harmbench',
   'toxic-chat',
   'imitation',
@@ -348,7 +349,13 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 ] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
-export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench', 'vlguard'] as const;
+export const DATASET_EXEMPT_PLUGINS = [
+  'beavertails',
+  'cyberseceval',
+  'pliny',
+  'unsafebench',
+  'vlguard',
+] as const;
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
@@ -405,6 +412,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'cca',
   'competitors',
   'coppa',
+  'ferpa',
   'goal-misalignment',
   'harmful:misinformation-disinformation',
   'harmful:specialized-advice',

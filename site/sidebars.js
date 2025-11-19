@@ -95,6 +95,7 @@ const redTeamSidebar = [
           'red-team/plugins/coppa',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
+          'red-team/plugins/ferpa',
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
           'red-team/plugins/harmful',
@@ -190,6 +191,7 @@ const redTeamSidebar = [
         items: [
           'red-team/strategies/iterative',
           'red-team/strategies/meta',
+          'red-team/strategies/hydra',
           'red-team/strategies/tree',
           'red-team/strategies/composite-jailbreaks',
         ],
@@ -244,6 +246,10 @@ const redTeamSidebar = [
       {
         type: 'doc',
         id: 'red-team/discovery',
+      },
+      {
+        type: 'doc',
+        id: 'red-team/guardrails',
       },
       {
         type: 'category',
@@ -402,6 +408,19 @@ const sidebars = {
         type: 'generated-index',
       },
       items: [...redTeamSidebar, { type: 'doc', id: 'guides/llm-redteaming' }],
+    },
+    {
+      type: 'category',
+      label: 'Code scanning',
+      link: {
+        type: 'doc',
+        id: 'code-scanning/index',
+      },
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'code-scanning/github-action' },
+        { type: 'doc', id: 'code-scanning/cli' },
+      ],
     },
     {
       type: 'category',

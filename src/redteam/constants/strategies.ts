@@ -4,17 +4,20 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
   'nist:ai:measure',
   'owasp:api',
   'owasp:llm',
+  'owasp:agentic',
   'eu:ai-act',
   'iso:42001',
+  'gdpr',
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
-export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
+export const DEFAULT_STRATEGIES = ['basic', 'jailbreak:meta', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
 export const MULTI_TURN_STRATEGIES = [
   'crescendo',
   'goat',
+  'jailbreak:hydra',
   'custom',
   'mischievous-user',
   'simba',
@@ -34,6 +37,7 @@ export const AGENTIC_STRATEGIES = [
   'goat',
   'custom',
   'jailbreak',
+  'jailbreak:hydra',
   'jailbreak:meta',
   'jailbreak:tree',
   'mischievous-user',
@@ -69,6 +73,8 @@ export const ADDITIONAL_STRATEGIES = [
   'hex',
   'homoglyph',
   'image',
+  'jailbreak:hydra',
+  'jailbreak',
   'jailbreak:likert',
   'jailbreak:meta',
   'jailbreak:tree',
@@ -110,6 +116,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'goat',
   'crescendo',
   'jailbreak',
+  'jailbreak:hydra',
   'jailbreak:meta',
   'jailbreak:tree',
   'gcg',
@@ -194,6 +201,7 @@ export const STRATEGIES_REQUIRING_REMOTE = [
   'gcg',
   'goat',
   'jailbreak:composite',
+  'jailbreak:hydra',
   'jailbreak:likert',
   'jailbreak:meta',
 ] as const;

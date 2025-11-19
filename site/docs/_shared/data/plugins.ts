@@ -403,6 +403,20 @@ export const PLUGINS = [
   },
   {
     category: 'Compliance and Legal',
+    description: 'Tests compliance with student educational privacy regulations (FERPA)',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/ferpa/',
+    name: 'FERPA',
+    pluginId: 'ferpa',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
+  },
+  {
+    category: 'Compliance and Legal',
     description:
       'Tests for errors in financial calculations, risk assessments, or quantitative analysis',
     label: 'technical',
@@ -748,7 +762,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful content',
+    vulnerabilityType: 'harmful',
     isRemote: true,
   },
   {
@@ -973,7 +987,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful content',
+    vulnerabilityType: 'harmful',
     isRemote: true,
   },
   {
