@@ -1,0 +1,5 @@
+[
+  { "role": "user", "content": "Origin: {{origin}}" },
+  { "role": "assistant", "content": "Destination: {{destination}}" },
+  { "role": "user", "content": "Date: {{date}}" }
+]

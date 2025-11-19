@@ -57,6 +57,11 @@ export function getUnifiedConfig(
       purpose: config.purpose,
       numTests: config.numTests,
       ...(config.maxConcurrency && { maxConcurrency: config.maxConcurrency }),
+      ...(config.language && { language: config.language }),
+      ...(config.frameworks &&
+        config.frameworks.length > 0 && {
+          frameworks: Array.from(new Set(config.frameworks)),
+        }),
       plugins: config.plugins.map((plugin): RedteamPluginObject => {
         if (typeof plugin === 'string') {
           return { id: plugin };

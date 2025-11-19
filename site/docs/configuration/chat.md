@@ -231,7 +231,7 @@ When the `_conversation` variable is present, the eval will run single-threaded 
 
 ## Separating Chat Conversations
 
-When running multiple test files or test sequences, you may want to maintain separate conversation histories in the same eval run. This can be achieved by adding a `conversationId` to the test metadata:
+When running multiple test files or test sequences, you may want to maintain conversation history between tests. This can be achieved by adding a `conversationId` to the test metadata:
 
 ```yaml title="test1.yaml"
 - vars:

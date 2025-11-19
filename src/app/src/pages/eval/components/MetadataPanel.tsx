@@ -13,7 +13,11 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
-import { makeCustomPolicyCloudUrl } from '@promptfoo/redteam/plugins/policy/utils';
+import {
+  determinePolicyTypeFromId,
+  makeCustomPolicyCloudUrl,
+} from '@promptfoo/redteam/plugins/policy/utils';
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import { ellipsize } from '../../../../../util/text';
 
@@ -32,8 +36,6 @@ export interface ExpandedMetadataState {
     lastClickTime: number;
   };
 }
-
-const HIDDEN_KEYS = ['citations', '_promptfooFileMetadata'];
 
 interface MetadataPanelProps {
   metadata?: Record<string, any>;
@@ -59,7 +61,7 @@ export function MetadataPanel({
   }
 
   const metadataEntries = Object.entries(metadata)
-    .filter((d) => !HIDDEN_KEYS.includes(d[0]))
+    .filter((d) => !HIDDEN_METADATA_KEYS.includes(d[0]))
     .sort((a, b) => a[0].localeCompare(b[0]));
 
   if (metadataEntries.length === 0) {
@@ -95,15 +97,19 @@ export function MetadataPanel({
                   <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span>{value}</span>
-                      <Link
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policyId)}
-                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-                      >
-                        <span>View policy in Promptfoo Cloud</span>
-                        <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
-                      </Link>
+                      {determinePolicyTypeFromId(policyId) === 'reusable' &&
+                        cloudConfig?.appUrl && (
+                          <Link
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policyId)}
+                            sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                            data-testId="pf-cloud-policy-detail-link"
+                          >
+                            <span>View policy in Promptfoo Cloud</span>
+                            <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
+                          </Link>
+                        )}
                     </div>
                   </TableCell>
                 );

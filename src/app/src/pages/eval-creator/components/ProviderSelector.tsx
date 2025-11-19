@@ -148,16 +148,16 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'anthropic:messages:claude-3-5-sonnet-20241022',
-      label: 'Anthropic: Claude 3.5 Sonnet',
+      id: 'anthropic:messages:claude-haiku-4-5-20251001',
+      label: 'Anthropic: Claude 4.5 Haiku',
       config: {
-        max_tokens: 1024,
+        max_tokens: 2048,
         temperature: 0.5,
       },
     },
     {
-      id: 'anthropic:messages:claude-3-5-haiku-20241022',
-      label: 'Anthropic: Claude 3.5 Haiku',
+      id: 'anthropic:messages:claude-3-5-sonnet-20241022',
+      label: 'Anthropic: Claude 3.5 Sonnet',
       config: {
         max_tokens: 1024,
         temperature: 0.5,
@@ -486,6 +486,16 @@ const defaultProviders: ProviderOptions[] = (
     {
       id: 'vertex:claude-3-5-sonnet-v2@20241022',
       label: 'Vertex: Claude 3.5 Sonnet',
+      config: {
+        region: 'us-east5',
+        anthropic_version: 'vertex-2023-10-16',
+        max_tokens: 1024,
+        temperature: 0.5,
+      },
+    },
+    {
+      id: 'vertex:claude-4-5-haiku@20251001',
+      label: 'Vertex: Claude 3.5 Haiku',
       config: {
         region: 'us-east5',
         anthropic_version: 'vertex-2023-10-16',

@@ -497,7 +497,7 @@ Content-Type: application/json
         '/providers/test',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify(validHttpTarget),
+          body: JSON.stringify({ providerOptions: validHttpTarget }),
         }),
       );
     });

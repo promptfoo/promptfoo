@@ -128,13 +128,18 @@ async function testHttpProvider(provider: ApiProvider): Promise<void> {
   const connectivityResult = await testHTTPProviderConnectivity(provider);
   displayTestResult(connectivityResult, 'Connectivity test');
 
-  // Test 2: Session management (only if connectivity test passed)
+  // Test 2: Session management (only if connectivity test passed and target is stateful)
   if (connectivityResult.success) {
-    logger.info('\nTesting session management...');
-    const sessionResult = await testProviderSession(provider, undefined, {
-      skipConfigValidation: true,
-    });
-    displayTestResult(sessionResult, 'Session test');
+    // Check if the provider is explicitly configured as non-stateful
+    if (provider.config?.stateful === false) {
+      logger.info(chalk.dim('\nSkipping session management test (target is not stateful)'));
+    } else {
+      logger.info('\nTesting session management...');
+      const sessionResult = await testProviderSession(provider, undefined, {
+        skipConfigValidation: true,
+      });
+      displayTestResult(sessionResult, 'Session test');
+    }
   } else {
     logger.info(chalk.dim('\nSkipping session management test (connectivity test failed)'));
   }

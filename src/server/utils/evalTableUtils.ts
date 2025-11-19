@@ -4,6 +4,30 @@ import { ResultFailureReason } from '../../types';
 import type { EvaluateTableRow, Prompt } from '../../types';
 
 /**
+ *
+ *
+ *
+ * Keep this in it's current order, as it is used to map the columns in the CSV, so it needs to be static.
+ *
+ *
+ * The keys are the names of the columns in the metadata object, and the values are the names of the columns in the CSV.
+ *
+ * This is imported by enterprise so it doesn't need to be copied.
+ *
+ */
+export const REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES = {
+  messages: 'Messages',
+  redteamHistory: 'RedteamHistory',
+  redteamTreeHistory: 'RedteamTreeHistory',
+  pluginId: 'pluginId',
+  strategyId: 'strategyId',
+  sessionId: 'sessionId',
+  sessionIds: 'sessionIds',
+};
+
+const REDTEAM_METADATA_COLUMNS = Object.values(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
+
+/**
  * Generates CSV data from evaluation table data
  * Includes grader reason, comment, and conversation columns similar to client-side implementation
  *
@@ -34,9 +58,12 @@ export function evalTableToCsv(
   ];
 
   if (isRedteam) {
-    headers.push('Messages', 'RedteamHistory', 'RedteamTreeHistory');
+    headers.push(...REDTEAM_METADATA_COLUMNS);
   }
   csvRows.push(headers);
+
+  // Compute stable key ordering for redteam metadata columns
+  const redteamKeys = Object.keys(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
 
   // Process body rows with pass/fail prefixes and conversation data
   table.body.forEach((row) => {
@@ -45,15 +72,10 @@ export function evalTableToCsv(
       ...row.vars,
       ...row.outputs.flatMap((output) => {
         if (!output) {
-          const emptyValues = ['', '', ''];
-          if (isRedteam) {
-            // handle message, redteamHistory, redteamTreeHistory columns
-            emptyValues.push('', '', '');
-          }
-          return emptyValues;
+          return ['', '', ''];
         }
 
-        const baseValues = [
+        return [
           // Add pass/fail/error prefix to text
           (output.pass
             ? '[PASS] '
@@ -65,27 +87,30 @@ export function evalTableToCsv(
           // Add comment
           output.gradingResult?.comment || '',
         ];
-
-        if (isRedteam && output.metadata) {
-          baseValues.push(
-            // Messages column - for message-based providers (GOAT, Crescendo, SimulatedUser)
-            output.metadata.messages ? JSON.stringify(output.metadata.messages) : '',
-            // RedteamHistory column - for iterative provider (only if no messages)
-            output.metadata.redteamHistory && !output.metadata.messages
-              ? JSON.stringify(output.metadata.redteamHistory)
-              : '',
-            // RedteamTreeHistory column - for iterative tree provider (only if no messages)
-            output.metadata.redteamTreeHistory && !output.metadata.messages
-              ? JSON.stringify(output.metadata.redteamTreeHistory)
-              : '',
-          );
-        } else if (isRedteam) {
-          baseValues.push('', '', '');
-        }
-
-        return baseValues;
       }),
     ];
+
+    // Add redteam metadata once per row (using first output's metadata)
+    if (isRedteam) {
+      const firstOutputMetadata = row.outputs[0]?.metadata;
+      for (const key of redteamKeys) {
+        const value = firstOutputMetadata?.[key];
+        if (value === null || value === undefined) {
+          rowValues.push('');
+        } else if (
+          typeof value === 'string' ||
+          typeof value === 'number' ||
+          typeof value === 'boolean'
+        ) {
+          // Don't stringify primitives - add them directly
+          rowValues.push(value.toString());
+        } else {
+          // Stringify objects and arrays
+          rowValues.push(JSON.stringify(value));
+        }
+      }
+    }
+
     csvRows.push(rowValues);
   });
 

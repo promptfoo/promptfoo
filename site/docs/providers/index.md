@@ -287,7 +287,24 @@ For detailed MCP documentation and advanced configurations, see the [MCP Integra
 
 ## Advanced Usage
 
-### Linking Custom Providers to Existing Targets (Promptfoo Cloud)
+### Linking Custom Providers to Cloud Targets (Promptfoo Cloud)
+
+:::info Promptfoo Cloud Feature
+This feature is available in [Promptfoo Cloud](/docs/enterprise) deployments.
+:::
+
+Link custom providers ([Python](/docs/providers/python/), [JavaScript](/docs/providers/custom-api/), [HTTP](/docs/providers/http/)) to cloud targets using `linkedTargetId`. This consolidates findings from multiple eval runs into one dashboard, allowing you to track performance over time and view comprehensive reporting.
+
+```yaml
+providers:
+  - id: 'file://my_provider.py'
+    config:
+      linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
+```
+
+See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/linking-targets/) for setup instructions.
+
+### Using Cloud Targets with Local Config Overrides
 
 :::info Promptfoo Cloud Feature
 
@@ -295,12 +312,31 @@ This feature is available in [Promptfoo Cloud](/docs/enterprise) deployments.
 
 :::
 
-Use `linkedTargetId` to link custom providers to existing cloud targets. Results from the custom provider appear under the linked target instead of creating duplicate entries.
+Cloud targets store provider configurations (API keys, base settings) in Promptfoo Cloud. Reference them using the `promptfoo://provider/` protocol and optionally override specific config values locally.
+
+**Basic usage:**
 
 ```yaml
 providers:
-  - id: 'custom-wrapper'
-    config:
-      linkedTargetId: 'promptfoo://provider/12345-abcd-uuid'
-      # other custom provider config...
+  - promptfoo://provider/12345-abcd-uuid
 ```
+
+**Override cloud config locally:**
+
+```yaml
+providers:
+  - id: promptfoo://provider/12345-abcd-uuid
+    config:
+      temperature: 0.9 # Override cloud temperature
+      max_tokens: 2000 # Override cloud max_tokens
+    label: 'Custom Label' # Override display name
+```
+
+Local config takes precedence, allowing you to:
+
+- Store API keys centrally in the cloud
+- Override model parameters per eval (temperature, max_tokens, etc.)
+- Test different configurations without modifying the cloud target
+- Customize labels and other metadata locally
+
+All fields from the cloud provider are preserved unless explicitly overridden.
