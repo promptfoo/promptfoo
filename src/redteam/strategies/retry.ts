@@ -1,7 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from '../../database/index';
 import { evalResultsTable } from '../../database/tables';
-import { getEnvString } from '../../envars';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { makeRequest } from '../../util/cloud';
@@ -13,7 +12,7 @@ import type { TestCase, TestCaseWithPlugin } from '../../types/index';
  * Check if we should use cloud mode for fetching failed test cases
  */
 function isCloudMode(): boolean {
-  return !!getEnvString('PROMPTFOO_REMOTE_GENERATION_URL') || cloudConfig.isEnabled();
+  return cloudConfig.isEnabled();
 }
 
 export function deduplicateTests(tests: TestCase[]): TestCase[] {
