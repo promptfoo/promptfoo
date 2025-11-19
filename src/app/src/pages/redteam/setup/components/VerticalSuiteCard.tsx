@@ -65,7 +65,7 @@ export default function VerticalSuiteCard({
   onGenerateTestCase,
   isPluginConfigured,
   isPluginDisabled,
-}: VerticalSuiteCardProps): JSX.Element {
+}: VerticalSuiteCardProps) {
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
   const {
@@ -165,11 +165,10 @@ export default function VerticalSuiteCard({
               color: 'primary.main',
               opacity: 0.85,
               mt: 0.25,
+              fontSize: '2rem',
             }}
           >
-            {React.cloneElement(suite.icon, {
-              sx: { fontSize: '2rem' },
-            })}
+            {suite.icon}
           </Box>
 
           {/* Content */}
