@@ -27,9 +27,13 @@ export function deduplicateTests(tests: TestCase[]): TestCase[] {
   });
 }
 
-async function getFailedTestCases(pluginId: string, targetLabel: string): Promise<TestCase[]> {
+async function getFailedTestCases(
+  pluginId: string,
+  targetId: string,
+  limit: number = 100,
+): Promise<TestCase[]> {
   logger.debug(
-    `Searching for failed test cases: plugin='${pluginId}', target='${targetLabel}', cloudMode=${isCloudMode()}`,
+    `Searching for failed test cases: plugin='${pluginId}', targetId='${targetId}', limit=${limit}, cloudMode=${isCloudMode()}`,
   );
 
   const allTestCases: TestCase[] = [];
@@ -38,15 +42,15 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
     // Try to fetch from cloud API if available
     if (isCloudMode()) {
       logger.debug(
-        `Fetching failed test cases from cloud API: plugin='${pluginId}', target='${targetLabel}'`,
+        `Fetching failed test cases from cloud API: plugin='${pluginId}', targetId='${targetId}'`,
       );
 
       try {
         // makeRequest already prepends the apiHost and /api/v1/, so just pass the path
         const response = await makeRequest('results/failed-tests', 'POST', {
           pluginId,
-          targetLabel,
-          limit: 100,
+          targetId,
+          limit,
         });
 
         if (response.ok) {
@@ -63,15 +67,13 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
           );
         }
       } catch (cloudError) {
-        logger.error(
-          `Error fetching from cloud API: ${cloudError}`,
-        );
+        logger.error(`Error fetching from cloud API: ${cloudError}`);
       }
     }
 
     // Always also check local SQLite database
     logger.debug(
-      `Fetching failed test cases from local SQLite database: plugin='${pluginId}', target='${targetLabel}'`,
+      `Fetching failed test cases from local SQLite database: plugin='${pluginId}', targetId='${targetId}'`,
     );
 
     const db = getDb();
@@ -83,14 +85,14 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
         and(
           eq(evalResultsTable.success, 0 as any),
           sql`json_valid(provider)`,
-          sql`json_extract(provider, '$.label') = ${targetLabel}`,
+          sql`json_extract(provider, '$.id') = ${targetId}`,
         ),
       )
       .orderBy(desc(evalResultsTable.updatedAt))
       .limit(1);
 
     if (targetResults.length === 0) {
-      logger.debug(`No failed test cases found for target '${targetLabel}'`);
+      logger.debug(`No failed test cases found for targetId '${targetId}'`);
       return [];
     }
 
@@ -101,13 +103,13 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
         and(
           eq(evalResultsTable.success, 0 as any),
           sql`json_valid(provider)`,
-          sql`json_extract(provider, '$.label') = ${targetLabel}`,
+          sql`json_extract(provider, '$.id') = ${targetId}`,
           sql`json_valid(test_case)`,
           sql`json_extract(test_case, '$.metadata.pluginId') = ${pluginId}`,
         ),
       )
       .orderBy(desc(evalResultsTable.updatedAt))
-      .limit(100);
+      .limit(limit);
 
     const localTestCases = results
       .map((r) => {
@@ -119,8 +121,7 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
           const { strategyConfig: _strategyConfig, ...restMetadata } = rest.metadata || {};
 
           // Parse response to check for redteamHistory
-          const response =
-            typeof r.response === 'string' ? JSON.parse(r.response) : r.response;
+          const response = typeof r.response === 'string' ? JSON.parse(r.response) : r.response;
           const redteamHistory = response?.redteamHistory;
 
           // If redteamHistory exists, use the last prompt
@@ -138,7 +139,7 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
             }
           }
 
-          return {
+          const result = {
             ...rest,
             vars,
             ...(testCase.provider ? { provider: testCase.provider } : {}),
@@ -152,6 +153,12 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
               metric: assertion.metric?.split('/')[0],
             })),
           } as TestCase;
+
+          logger.debug(
+            `Retrieved test case - pluginId: ${result.metadata?.pluginId}, strategyId: ${result.metadata?.strategyId}, retry: ${result.metadata?.retry}`,
+          );
+
+          return result;
         } catch (e) {
           logger.debug(`Failed to parse test case: ${e}`);
           return null;
@@ -198,29 +205,30 @@ export async function addRetryTestCases(
     testsByPlugin.get(pluginId)!.push(test);
   }
 
-  const targetLabels: string[] = (config?.targetLabels ?? []) as string[];
+  const targetIds: string[] = (config?.targetIds ?? []) as string[];
 
   invariant(
-    targetLabels.length > 0 && targetLabels.every((label) => typeof label === 'string'),
-    'No target labels found in config. The retry strategy requires at least one target label to be specified.',
+    targetIds.length > 0 && targetIds.every((id) => typeof id === 'string'),
+    'No target IDs found in config. The retry strategy requires at least one target ID to be specified.',
   );
 
-  logger.debug(`Processing target labels: ${targetLabels.join(', ')}`);
+  logger.debug(`Processing target IDs: ${targetIds.join(', ')}`);
 
   // For each plugin, get its failed test cases
   const retryTestCases: TestCase[] = [];
-  for (const targetLabel of targetLabels) {
+  for (const targetId of targetIds) {
     for (const [pluginId, tests] of testsByPlugin.entries()) {
-      const failedTests = await getFailedTestCases(pluginId, targetLabel);
       // Use configured numTests if available, otherwise use original test count
       const maxTests = typeof config.numTests === 'number' ? config.numTests : tests.length;
-      const selected = failedTests.slice(0, maxTests);
+
+      // Fetch only the number of tests we need for efficiency
+      const failedTests = await getFailedTestCases(pluginId, targetId, maxTests);
 
       // Get provider configuration from an existing test case if available
       const existingTest = tests.find((t) => t.provider && typeof t.provider === 'object');
 
       // Ensure each test case has a proper provider configuration
-      const withProvider = selected.map((test) => {
+      const withProvider = failedTests.map((test) => {
         // If test has a provider in object format already, keep it
         if (test.provider && typeof test.provider === 'object') {
           return test;

@@ -565,7 +565,7 @@ export async function synthesize({
   provider,
   purpose: purposeOverride,
   strategies,
-  targetLabels,
+  targetIds,
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
   testGenerationInstructions,
@@ -1083,7 +1083,7 @@ export async function synthesize({
   if (retryStrategy) {
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
-      targetLabels,
+      targetIds,
       ...retryStrategy.config,
     };
     const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(
