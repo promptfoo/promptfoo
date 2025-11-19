@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { sleep } from '../../util/time';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
@@ -12,7 +12,11 @@ import { OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { AssistantFunctionCallback, CallbackContext, OpenAiSharedOptions } from './types';
 
@@ -219,7 +223,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
@@ -259,15 +263,12 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       },
     };
 
-    logger.debug(`Calling OpenAI API, creating thread run: ${JSON.stringify(body)}`);
     let run: OpenAI.Beta.Threads.Run;
     try {
       run = await openai.beta.threads.createAndRun(body);
     } catch (err) {
       return failApiCall(err);
     }
-
-    logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
 
     while (true) {
       const currentRun = await openai.beta.threads.runs.retrieve(run.id, {

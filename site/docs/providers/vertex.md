@@ -1,35 +1,58 @@
 ---
 sidebar_label: Google Vertex
+title: Google Vertex AI Provider
+description: Use Google Vertex AI models including Gemini, Claude, Llama, and specialized models for text, code, and embeddings in your evals
 ---
 
 # Google Vertex
 
-The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, PaLM (Bison), Llama, Claude, and specialized models for text, code, and embeddings.
+The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, Llama, Claude, and specialized models for text, code, and embeddings.
 
 ## Available Models
 
-### Latest Gemini Models
+### Gemini Models
 
-- `vertex:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding (2M context)
-- `vertex:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
-- `vertex:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
-- `vertex:gemini-2.0-pro` - Strongest model quality, especially for code & world knowledge with 2M context window
-- `vertex:gemini-2.0-flash-thinking-exp` - Enhanced reasoning capabilities with thinking process in responses
-- `vertex:gemini-2.0-flash-001` - Workhorse model for all daily tasks with strong overall performance and real-time streaming
-- `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput
-- `vertex:gemini-1.5-flash` - Fast and efficient for high-volume, quality, cost-effective applications
+**Gemini 2.5:**
+
+- `vertex:gemini-2.5-pro` - Enhanced reasoning, coding, and multimodal understanding with 2M context
+- `vertex:gemini-2.5-flash` - Fast model with enhanced reasoning and thinking capabilities
+- `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
+- `vertex:gemini-2.5-flash-preview-09-2025` - Preview: Enhanced quality improvements
+- `vertex:gemini-2.5-flash-lite-preview-09-2025` - Preview: Cost and latency optimizations
+
+**Gemini 2.0:**
+
+- `vertex:gemini-2.0-pro` - Experimental: Strong model quality for code and world knowledge with 2M context
+- `vertex:gemini-2.0-flash-001` - Multimodal model for daily tasks with strong performance and real-time streaming
+- `vertex:gemini-2.0-flash-exp` - Experimental: Enhanced capabilities
+- `vertex:gemini-2.0-flash-thinking-exp` - Experimental: Reasoning with thinking process in responses
+- `vertex:gemini-2.0-flash-lite-preview-02-05` - Preview: Cost-effective for high throughput
+- `vertex:gemini-2.0-flash-lite-001` - Preview: Optimized for cost efficiency and low latency
+
+**Gemini 1.5:**
+
 - `vertex:gemini-1.5-pro` - Strong performance for text/chat with long-context understanding
-- `vertex:gemini-1.5-pro-latest` - Latest Gemini 1.5 Pro model with same capabilities as gemini-1.5-pro
-- `vertex:gemini-1.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
+- `vertex:gemini-1.5-pro-latest` - Same capabilities as gemini-1.5-pro
+- `vertex:gemini-1.5-flash` - Fast and efficient for high-volume, cost-effective applications
+- `vertex:gemini-1.5-flash-8b` - Compact model for high-volume, lower complexity tasks
 
 ### Claude Models
 
 Anthropic's Claude models are available with the following versions:
 
-- `vertex:claude-3-haiku@20240307` - Fast Claude 3 Haiku
-- `vertex:claude-3-opus@20240229` - Claude 3 Opus (Public Preview)
-- `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku
-- `vertex:claude-3-5-sonnet-v2@20241022` - Claude 3.5 Sonnet
+**Claude 4:**
+
+- `vertex:claude-sonnet-4-5@20250929` - Claude 4.5 Sonnet for agents, coding, and computer use
+- `vertex:claude-opus-4-1@20250805` - Claude 4.1 Opus for complex tasks and agentic search
+- `vertex:claude-haiku-4-5@20251001` - Claude 4.5 Haiku for fast, cost-effective use cases
+- `vertex:claude-opus-4@20250514` - Claude 4 Opus for coding and agent capabilities
+- `vertex:claude-sonnet-4@20250514` - Claude 4 Sonnet balancing performance with speed
+
+**Claude 3:**
+
+- `vertex:claude-3-7-sonnet@20250219` - Claude 3.7 Sonnet with extended thinking for complex problem-solving
+- `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku optimized for speed and affordability
+- `vertex:claude-3-haiku@20240307` - Claude 3 Haiku for basic queries and vision tasks
 
 :::info
 Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
@@ -37,19 +60,31 @@ Claude models require explicit access enablement through the [Vertex AI Model Ga
 
 Note: Claude models support up to 200,000 tokens context length and include built-in safety features.
 
-### Llama Models (Preview)
+### Llama Models
 
 Meta's Llama models are available through Vertex AI with the following versions:
 
-- `vertex:llama4-scout-instruct-maas` - Llama 4 Scout 17B (16 experts) with 10M context
-- `vertex:llama4-maverick-instruct-maas` - Llama 4 Maverick 17B (128 experts) with 1M context
-- `vertex:llama-3.3-70b-instruct-maas` - Latest Llama 3.3 70B model (Preview)
-- `vertex:llama-3.2-90b-vision-instruct-maas` - Vision-capable Llama 3.2 90B (Preview)
-- `vertex:llama-3.1-405b-instruct-maas` - Llama 3.1 405B (GA)
-- `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B (Preview)
-- `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B (Preview)
+**Llama 4:**
 
-Note: Llama models support built-in safety features through Llama Guard. Llama 4 models support up to 10M tokens context length (Scout) and 1M tokens (Maverick) and are natively multimodal, supporting both text and image inputs.
+- `vertex:llama4-scout-instruct-maas` - Llama 4 Scout (17B active, 109B total with 16 experts) for retrieval and reasoning with 10M context
+- `vertex:llama4-maverick-instruct-maas` - Llama 4 Maverick (17B active, 400B total with 128 experts) with 1M context, natively multimodal
+
+**Llama 3.3:**
+
+- `vertex:llama-3.3-70b-instruct-maas` - Llama 3.3 70B for text applications
+- `vertex:llama-3.3-8b-instruct-maas` - Llama 3.3 8B for efficient text generation
+
+**Llama 3.2:**
+
+- `vertex:llama-3.2-90b-vision-instruct-maas` - Llama 3.2 90B with vision capabilities
+
+**Llama 3.1:**
+
+- `vertex:llama-3.1-405b-instruct-maas` - Llama 3.1 405B
+- `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B
+- `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B
+
+Note: All Llama models support built-in safety features through Llama Guard. Llama 4 models are natively multimodal with support for both text and image inputs.
 
 #### Llama Configuration Example
 
@@ -83,29 +118,22 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 - `vertex:codegemma` - Lightweight code generation and completion model
 - `vertex:paligemma` - Lightweight vision-language model for image tasks
 
-### PaLM 2 (Bison) Models
-
-Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)](https://cloud.google.com/vertex-ai/generative-ai/docs/legacy/legacy-models) and it's recommended to migrate to the Gemini models.
-
-- `vertex:chat-bison[@001|@002]` - Chat model
-- `vertex:chat-bison-32k[@001|@002]` - Extended context chat
-- `vertex:codechat-bison[@001|@002]` - Code-specialized chat
-- `vertex:codechat-bison-32k[@001|@002]` - Extended context code chat
-- `vertex:text-bison[@001|@002]` - Text completion
-- `vertex:text-unicorn[@001]` - Specialized text model
-- `vertex:code-bison[@001|@002]` - Code completion
-- `vertex:code-bison-32k[@001|@002]` - Extended context code completion
-
 ### Embedding Models
 
 - `vertex:textembedding-gecko@001` - Text embeddings (3,072 tokens, 768d)
 - `vertex:textembedding-gecko@002` - Text embeddings (2,048 tokens, 768d)
 - `vertex:textembedding-gecko@003` - Text embeddings (2,048 tokens, 768d)
-- `vertex:text-embedding-004` - Latest text embeddings (2,048 tokens, ≤768d)
-- `vertex:text-embedding-005` - Latest text embeddings (2,048 tokens, ≤768d)
+- `vertex:text-embedding-004` - Text embeddings (2,048 tokens, ≤768d)
+- `vertex:text-embedding-005` - Text embeddings (2,048 tokens, ≤768d)
 - `vertex:textembedding-gecko-multilingual@001` - Multilingual embeddings (2,048 tokens, 768d)
-- `vertex:text-multilingual-embedding-002` - Latest multilingual embeddings (2,048 tokens, ≤768d)
+- `vertex:text-multilingual-embedding-002` - Multilingual embeddings (2,048 tokens, ≤768d)
 - `vertex:multimodalembedding` - Multimodal embeddings for text, image, and video
+
+### Image Generation Models
+
+:::note
+Imagen models are available through [Google AI Studio](/docs/providers/google#image-generation-models) using the `google:image:` prefix.
+:::
 
 ## Model Capabilities
 
@@ -181,7 +209,37 @@ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/credentials.json"
 export VERTEX_PROJECT_ID="your-project-id"
 ```
 
-#### Option 3: Direct API Key (Quick Testing)
+#### Option 3: Service Account via Config (Alternative)
+
+You can also provide service account credentials directly in your configuration:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-pro
+    config:
+      # Load credentials from file
+      credentials: 'file://service-account.json'
+      projectId: 'your-project-id'
+```
+
+Or with inline credentials (not recommended for production):
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-pro
+    config:
+      credentials: '{"type":"service_account","project_id":"..."}'
+      projectId: 'your-project-id'
+```
+
+This approach:
+
+- Allows per-provider authentication
+- Enables using different service accounts for different models
+- Simplifies credential management in complex setups
+- Avoids the need for environment variables
+
+#### Option 4: Direct API Key (Quick Testing)
 
 For quick testing, you can use a temporary access token:
 
@@ -195,7 +253,7 @@ export VERTEX_PROJECT_ID="your-project-id"
 
 **Note:** Access tokens expire after 1 hour. For long-running evaluations, use Application Default Credentials or Service Account authentication.
 
-#### 4. Environment Variables
+#### 5. Environment Variables
 
 Promptfoo automatically loads environment variables from your shell or a `.env` file. Create a `.env` file in your project root:
 
@@ -349,8 +407,11 @@ jobs:
 providers:
   - id: vertex:gemini-2.5-pro
     config:
+      # Authentication options
+      credentials: 'file://service-account.json' # Optional: Use specific service account
       projectId: ${VERTEX_PROJECT_ID}
       region: ${VERTEX_REGION:-us-central1}
+
       generationConfig:
         temperature: 0.2
         maxOutputTokens: 2048
@@ -464,24 +525,26 @@ defaultTest:
 
 ### Configuration Reference
 
-| Option                             | Description                                      | Default                              |
-| ---------------------------------- | ------------------------------------------------ | ------------------------------------ |
-| `apiKey`                           | GCloud API token                                 | None                                 |
-| `apiHost`                          | API host override                                | `{region}-aiplatform.googleapis.com` |
-| `apiVersion`                       | API version                                      | `v1`                                 |
-| `projectId`                        | GCloud project ID                                | None                                 |
-| `region`                           | GCloud region                                    | `us-central1`                        |
-| `publisher`                        | Model publisher                                  | `google`                             |
-| `context`                          | Model context                                    | None                                 |
-| `examples`                         | Few-shot examples                                | None                                 |
-| `safetySettings`                   | Content filtering                                | None                                 |
-| `generationConfig.temperature`     | Randomness control                               | None                                 |
-| `generationConfig.maxOutputTokens` | Max tokens to generate                           | None                                 |
-| `generationConfig.topP`            | Nucleus sampling                                 | None                                 |
-| `generationConfig.topK`            | Sampling diversity                               | None                                 |
-| `generationConfig.stopSequences`   | Generation stop triggers                         | `[]`                                 |
-| `toolConfig`                       | Tool/function calling config                     | None                                 |
-| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`) | None                                 |
+| Option                             | Description                                            | Default                              |
+| ---------------------------------- | ------------------------------------------------------ | ------------------------------------ |
+| `apiKey`                           | GCloud API token                                       | None                                 |
+| `apiHost`                          | API host override                                      | `{region}-aiplatform.googleapis.com` |
+| `apiVersion`                       | API version                                            | `v1`                                 |
+| `credentials`                      | Service account credentials (JSON or file path)        | None                                 |
+| `projectId`                        | GCloud project ID                                      | `VERTEX_PROJECT_ID` env var          |
+| `region`                           | GCloud region                                          | `us-central1`                        |
+| `publisher`                        | Model publisher                                        | `google`                             |
+| `context`                          | Model context                                          | None                                 |
+| `examples`                         | Few-shot examples                                      | None                                 |
+| `safetySettings`                   | Content filtering                                      | None                                 |
+| `generationConfig.temperature`     | Randomness control                                     | None                                 |
+| `generationConfig.maxOutputTokens` | Max tokens to generate                                 | None                                 |
+| `generationConfig.topP`            | Nucleus sampling                                       | None                                 |
+| `generationConfig.topK`            | Sampling diversity                                     | None                                 |
+| `generationConfig.stopSequences`   | Generation stop triggers                               | `[]`                                 |
+| `responseSchema`                   | JSON schema for structured output (supports `file://`) | None                                 |
+| `toolConfig`                       | Tool/function calling config                           | None                                 |
+| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -608,6 +671,71 @@ providers:
         topP: 0.8 # Nucleus sampling
         topK: 40 # Top-k sampling
         stopSequences: ["\n"] # Stop generation at specific sequences
+```
+
+### Structured Output (JSON Schema)
+
+Control output format using JSON schemas for consistent, parseable responses:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash
+    config:
+      # Inline JSON schema
+      responseSchema: |
+        {
+          "type": "object",
+          "properties": {
+            "summary": {"type": "string", "description": "Brief summary"},
+            "rating": {"type": "integer", "minimum": 1, "maximum": 5}
+          },
+          "required": ["summary", "rating"]
+        }
+
+  # Or load from external file
+  - id: vertex:gemini-2.5-pro
+    config:
+      responseSchema: file://schemas/analysis-schema.json
+
+tests:
+  - assert:
+      - type: is-json # Validates JSON format
+      - type: javascript
+        value: JSON.parse(output).rating >= 1 && JSON.parse(output).rating <= 5
+```
+
+The `responseSchema` option automatically:
+
+- Sets `response_mime_type` to `application/json`
+- Validates the schema format
+- Supports variable substitution with `{{var}}` syntax
+- Loads schemas from external files with `file://` protocol
+
+Example `schemas/analysis-schema.json`:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sentiment": {
+      "type": "string",
+      "enum": ["positive", "negative", "neutral"],
+      "description": "Overall sentiment of the text"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score from 0 to 1"
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key topics identified"
+    }
+  },
+  "required": ["sentiment", "confidence"]
+}
 ```
 
 ### Context and Examples

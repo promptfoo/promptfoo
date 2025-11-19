@@ -20,9 +20,10 @@ npm install
 
 ```yaml
 providers:
-  - openai:chat:gpt-4 # OpenAI
-  - ollama:chat:llama3.1 # Ollama
-  - id: huggingface:text-generation:mistralai/Mistral-7B-v0.1 # HuggingFace
+  - openai:gpt-4o # OpenAI
+  - anthropic:messages:claude-3-5-sonnet-20241022 # Anthropic
+  - ollama:chat:llama3.3 # Ollama
+  - replicate:meta/llama-2-70b-chat # Replicate
 ```
 
 ## Usage

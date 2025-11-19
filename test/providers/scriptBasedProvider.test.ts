@@ -1,7 +1,7 @@
 import { createScriptBasedProviderFactory } from '../../src/providers/scriptBasedProvider';
 import { getResolvedRelativePath } from '../../src/util/file';
 
-import type { LoadApiProviderContext } from '../../src/types';
+import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
 // Mock the getResolvedRelativePath function

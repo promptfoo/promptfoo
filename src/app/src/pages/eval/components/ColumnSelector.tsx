@@ -31,11 +31,7 @@ interface ColumnSelectorProps {
   onChange: (event: SelectChangeEvent<string[]>) => void;
 }
 
-export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
-  columnData,
-  selectedColumns,
-  onChange,
-}) => {
+export const ColumnSelector = ({ columnData, selectedColumns, onChange }: ColumnSelectorProps) => {
   const [open, setOpen] = React.useState(false);
 
   const handleOpen = () => setOpen(true);

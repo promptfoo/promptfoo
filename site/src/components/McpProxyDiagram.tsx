@@ -27,9 +27,9 @@ export default function MCPProxyDiagram() {
         boxShadow: 3,
       }}
     >
-      <Grid container alignItems="center" justifyContent="center">
+      <Grid container spacing={0} alignItems="center" justifyContent="center">
         {/* Left column: Users & Apps */}
-        <Grid item xs={12} sm={3}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Stack
             spacing={8}
             justifyContent="center"
@@ -52,7 +52,7 @@ export default function MCPProxyDiagram() {
         </Grid>
 
         {/* Center column: Proxy */}
-        <Grid item xs={12} sm={6}>
+        <Grid size={{ xs: 12, sm: 6 }}>
           <Stack spacing={2} alignItems="center">
             <Box
               sx={{
@@ -88,7 +88,7 @@ export default function MCPProxyDiagram() {
         </Grid>
 
         {/* Right column: Trusted & Unapproved */}
-        <Grid item xs={12} sm={3}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Stack
             spacing={8}
             justifyContent="center"

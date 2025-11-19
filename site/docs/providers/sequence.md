@@ -1,5 +1,6 @@
 ---
 sidebar_label: Sequence
+description: 'Chain multiple AI providers sequentially to create sophisticated evaluation workflows with data transformation and routing'
 ---
 
 # Sequence Provider

@@ -1,5 +1,6 @@
 ---
 sidebar_label: GPT-4o vs GPT-4o-mini
+description: Compare GPT-4o vs GPT-4o-mini performance on your custom datasets with automated benchmarks to evaluate cost, latency and reasoning capabilities
 ---
 
 # GPT-4o vs GPT-4o-mini: Benchmark on Your Own Data

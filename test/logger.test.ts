@@ -1,11 +1,30 @@
+import path from 'path';
 import chalk from 'chalk';
 import type { Logger } from 'winston';
 import type Transport from 'winston-transport';
 
+const mockGetEnvString = jest.fn((_: string, defaultValue: any) => defaultValue);
+const mockGetEnvBool = jest.fn((_: string, defaultValue: any) => defaultValue);
+const mockGetConfigDirectoryPath = jest.fn(() => '/mock/config');
+const fsMock = {
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  readdirSync: jest.fn(),
+  statSync: jest.fn(),
+  unlinkSync: jest.fn(),
+};
+
 jest.unmock('../src/logger');
 jest.mock('../src/envars', () => ({
-  getEnvString: jest.fn((key, defaultValue) => defaultValue),
+  getEnvString: mockGetEnvString,
+  getEnvBool: mockGetEnvBool,
 }));
+
+jest.mock('../src/util/config/manage', () => ({
+  getConfigDirectoryPath: mockGetConfigDirectoryPath,
+}));
+
+jest.mock('fs', () => fsMock);
 
 interface MockLogger extends Omit<Logger, 'transports'> {
   error: jest.Mock;
@@ -65,6 +84,18 @@ describe('logger', () => {
     originalError = global.Error;
     mockStdout = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
     jest.clearAllMocks();
+    mockGetEnvString.mockReset();
+    mockGetEnvBool.mockReset();
+    mockGetEnvString.mockImplementation((_, defaultValue) => defaultValue);
+    mockGetEnvBool.mockImplementation((_, defaultValue) => defaultValue);
+    mockGetConfigDirectoryPath.mockReset();
+    mockGetConfigDirectoryPath.mockReturnValue('/mock/config');
+    for (const fn of Object.values(fsMock)) {
+      (fn as jest.Mock).mockReset();
+    }
+    (fsMock.existsSync as jest.Mock).mockReturnValue(true);
+    (fsMock.readdirSync as jest.Mock).mockReturnValue([]);
+    (fsMock.statSync as jest.Mock).mockReturnValue({ mtime: new Date() });
     logger = await import('../src/logger');
     mockLogger.transports[0].level = 'info';
   });
@@ -325,6 +356,126 @@ describe('logger', () => {
     });
   });
 
+  describe('initializeRunLogging', () => {
+    let cliState: { debugLogFile?: string; errorLogFile?: string };
+    let winston: any;
+    let expectedDebugFile: string;
+    let expectedErrorFile: string;
+
+    beforeEach(async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2025-03-01T12:00:00.000Z'));
+      expectedDebugFile = path.join(
+        '/mock/config',
+        'logs',
+        'promptfoo-debug-2025-03-01_12-00-00-000Z.log',
+      );
+      expectedErrorFile = path.join(
+        '/mock/config',
+        'logs',
+        'promptfoo-error-2025-03-01_12-00-00-000Z.log',
+      );
+      cliState = (await import('../src/cliState')).default;
+      winston = jest.requireMock('winston');
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should create debug and error log files when enabled', () => {
+      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+      (fsMock.readdirSync as jest.Mock).mockReturnValue([]);
+
+      logger.initializeRunLogging();
+
+      expect(mockGetConfigDirectoryPath).toHaveBeenCalledWith(true);
+      expect(fsMock.mkdirSync).toHaveBeenCalledWith(path.join('/mock/config', 'logs'), {
+        recursive: true,
+      });
+      expect(cliState.debugLogFile).toBe(expectedDebugFile);
+      expect(cliState.errorLogFile).toBe(expectedErrorFile);
+
+      const debugCall = winston.transports.File.mock.calls.find(
+        ([config]: any[]) => config.level === 'debug',
+      );
+      const errorCall = winston.transports.File.mock.calls.find(
+        ([config]: any[]) => config.level === 'error',
+      );
+
+      expect(debugCall?.[0]).toEqual(
+        expect.objectContaining({
+          level: 'debug',
+          filename: cliState.debugLogFile,
+        }),
+      );
+      expect(errorCall?.[0]).toEqual(
+        expect.objectContaining({
+          level: 'error',
+          filename: cliState.errorLogFile,
+        }),
+      );
+
+      expect(mockLogger.add).toHaveBeenCalledTimes(2);
+      expect(winston.transports.File).toHaveBeenCalledTimes(2);
+    });
+
+    it('should respect PROMPTFOO_DISABLE_DEBUG_LOG', () => {
+      mockGetEnvBool.mockImplementation((key, defaultValue) =>
+        key === 'PROMPTFOO_DISABLE_DEBUG_LOG' ? true : defaultValue,
+      );
+      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+
+      logger.initializeRunLogging();
+
+      expect(cliState.debugLogFile).toBeUndefined();
+      expect(cliState.errorLogFile).toBe(expectedErrorFile);
+
+      expect(winston.transports.File).toHaveBeenCalledTimes(1);
+      const errorConfig = winston.transports.File.mock.calls[0][0];
+      expect(errorConfig.level).toBe('error');
+      expect(mockLogger.add).toHaveBeenCalledTimes(1);
+    });
+
+    it('should respect PROMPTFOO_DISABLE_ERROR_LOG', () => {
+      mockGetEnvBool.mockImplementation((key, defaultValue) =>
+        key === 'PROMPTFOO_DISABLE_ERROR_LOG' ? true : defaultValue,
+      );
+      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+
+      logger.initializeRunLogging();
+
+      expect(cliState.debugLogFile).toBe(expectedDebugFile);
+      expect(cliState.errorLogFile).toBeUndefined();
+
+      expect(winston.transports.File).toHaveBeenCalledTimes(1);
+      const debugConfig = winston.transports.File.mock.calls[0][0];
+      expect(debugConfig.level).toBe('debug');
+      expect(mockLogger.add).toHaveBeenCalledTimes(1);
+    });
+
+    it('should warn when creating file transports fails', () => {
+      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+
+      const winstonMock = jest.requireMock('winston');
+      winstonMock.transports.File.mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+
+      logger.initializeRunLogging();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Error creating run log file: Error: boom'),
+        }),
+      );
+      expect(cliState.debugLogFile).toBe(expectedDebugFile);
+      expect(cliState.errorLogFile).toBeUndefined();
+      expect(mockLogger.add).not.toHaveBeenCalled();
+      expect(winston.transports.File).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('initializeSourceMapSupport', () => {
     let mockInstall: jest.Mock;
 
@@ -373,44 +524,6 @@ describe('logger', () => {
 
       // Should not throw error
       await expect(logger.initializeSourceMapSupport()).resolves.toBeUndefined();
-    });
-  });
-
-  describe('error log file', () => {
-    let originalEnv: NodeJS.ProcessEnv;
-
-    beforeEach(() => {
-      originalEnv = process.env;
-      process.env = { ...originalEnv };
-      process.env.PROMPTFOO_LOG_DIR = '.';
-    });
-
-    afterEach(() => {
-      process.env = originalEnv;
-    });
-
-    it('should create error log file on error', () => {
-      const mockFileTransport = { write: jest.fn() };
-      const winston = jest.requireMock('winston');
-      winston.transports.File.mockReturnValue(mockFileTransport);
-
-      const errorChunk = { level: 'error', message: 'test error' };
-      mockLogger.on.mock.calls.find((call: any[]) => call[0] === 'data')?.[1](errorChunk);
-
-      expect(winston.transports.File).toHaveBeenCalledWith(
-        expect.objectContaining({
-          level: 'error',
-        }),
-      );
-      expect(mockLogger.add).toHaveBeenCalledWith(mockFileTransport);
-      expect(mockFileTransport.write).toHaveBeenCalledWith(errorChunk);
-    });
-
-    it('should not create error log file when disabled', () => {
-      process.env.PROMPTFOO_DISABLE_ERROR_LOG = 'true';
-      logger.default.error('test error');
-      const winston = jest.requireMock('winston');
-      expect(winston.transports.File).not.toHaveBeenCalled();
     });
   });
 
@@ -523,6 +636,391 @@ describe('logger', () => {
 
       // Verify we can access the transports array
       expect(Array.isArray(logger.default.transports)).toBe(true);
+    });
+  });
+
+  describe('logRequestResponse', () => {
+    let mockResponse: Partial<Response>;
+    let consoleSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      mockResponse = {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        clone: jest.fn().mockReturnValue({
+          text: jest.fn().mockResolvedValue('{"success": true}'),
+        }),
+      };
+    });
+
+    afterEach(() => {
+      consoleSpy.mockRestore();
+      jest.clearAllMocks();
+    });
+
+    it('should log successful requests as debug', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      expect(mockLogger.debug).toHaveBeenCalled();
+      const call = mockLogger.debug.mock.calls[0][0];
+      expect(call.message).toContain('Api Request');
+      const loggedMessage = call.message;
+      expect(loggedMessage).toContain('"message": "API request"');
+      expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
+      expect(loggedMessage).toContain('"method": "POST"');
+      expect(loggedMessage).toContain('"status": 200');
+      expect(mockLogger.error).not.toHaveBeenCalled();
+    });
+
+    it('should log failed responses as debug when error flag not set', async () => {
+      // @ts-expect-error
+      mockResponse.ok = false;
+      // @ts-expect-error
+      mockResponse.status = 500;
+      // @ts-expect-error
+      mockResponse.statusText = 'Internal Server Error';
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      expect(mockLogger.debug).toHaveBeenCalled();
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('"status": 500');
+      expect(loggedMessage).toContain('"statusText": "Internal Server Error"');
+      expect(mockLogger.error).not.toHaveBeenCalled();
+    });
+
+    it('should log as error when error flag is true', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+        error: true,
+      });
+
+      expect(mockLogger.error).toHaveBeenCalled();
+      const loggedMessage = mockLogger.error.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
+      expect(loggedMessage).toContain('"method": "POST"');
+      expect(mockLogger.debug).not.toHaveBeenCalled();
+    });
+
+    it('should handle requests without response', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+      });
+
+      expect(mockLogger.debug).toHaveBeenCalled();
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
+      expect(loggedMessage).toContain('"method": "POST"');
+      expect(loggedMessage).toContain('"prompt": "test prompt"');
+      // Should not have status or response when no response is provided
+      expect(loggedMessage).not.toContain('"status"');
+      expect(loggedMessage).not.toContain('"response"');
+    });
+
+    it('should sanitize sensitive data in URL and request body', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test?api_key=secret123',
+        requestBody: {
+          prompt: 'test prompt',
+          api_key: 'secret456',
+          password: 'mypassword',
+        },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      // Check that sensitive data is redacted
+      expect(loggedMessage).toContain('[REDACTED]');
+      expect(loggedMessage).toContain('"prompt": "test prompt"');
+    });
+
+    it('should include all request/response details in message', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt', model: 'gpt-4' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
+      expect(loggedMessage).toContain('"method": "POST"');
+      expect(loggedMessage).toContain('"prompt": "test prompt"');
+      expect(loggedMessage).toContain('"model": "gpt-4"');
+      expect(loggedMessage).toContain('"status": 200');
+      expect(loggedMessage).toContain('"statusText": "OK"');
+      // Response text is embedded as a string within the JSON
+      expect(loggedMessage).toContain('success');
+    });
+
+    it('should handle response text extraction errors', async () => {
+      mockResponse.clone = jest.fn().mockReturnValue({
+        text: jest.fn().mockRejectedValue(new Error('Failed to read response')),
+      });
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('"response": "Unable to read response"');
+    });
+
+    it('should handle complex nested request bodies', async () => {
+      const complexBody = {
+        messages: [
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi there!' },
+        ],
+        model: 'gpt-4',
+        temperature: 0.7,
+        max_tokens: 100,
+      };
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/chat',
+        requestBody: complexBody,
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('"messages"');
+      expect(loggedMessage).toContain('"role": "user"');
+      expect(loggedMessage).toContain('"model": "gpt-4"');
+    });
+
+    it('should handle different HTTP methods', async () => {
+      const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
+
+      for (const method of methods) {
+        mockLogger.debug.mockClear();
+
+        await logger.logRequestResponse({
+          url: 'https://api.example.com/test',
+          requestBody: { data: 'test' },
+          requestMethod: method,
+          response: mockResponse as Response,
+        });
+
+        const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+        expect(loggedMessage).toContain(`"method": "${method}"`);
+      }
+    });
+
+    it('should handle various HTTP status codes', async () => {
+      const statusCodes = [
+        { code: 200, text: 'OK' },
+        { code: 201, text: 'Created' },
+        { code: 400, text: 'Bad Request' },
+        { code: 401, text: 'Unauthorized' },
+        { code: 403, text: 'Forbidden' },
+        { code: 404, text: 'Not Found' },
+        { code: 500, text: 'Internal Server Error' },
+        { code: 502, text: 'Bad Gateway' },
+        { code: 503, text: 'Service Unavailable' },
+      ];
+
+      for (const { code, text } of statusCodes) {
+        mockLogger.debug.mockClear();
+        mockLogger.error.mockClear();
+
+        // @ts-expect-error
+        mockResponse.ok = code >= 200 && code < 300;
+        // @ts-expect-error
+        mockResponse.status = code;
+        // @ts-expect-error
+        mockResponse.statusText = text;
+
+        await logger.logRequestResponse({
+          url: 'https://api.example.com/test',
+          requestBody: { data: 'test' },
+          requestMethod: 'POST',
+          response: mockResponse as Response,
+        });
+
+        // All status codes should log as debug when error flag is not set
+        const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+        expect(loggedMessage).toContain(`"status": ${code}`);
+        expect(loggedMessage).toContain(`"statusText": "${text}"`);
+        expect(mockLogger.debug).toHaveBeenCalled();
+        expect(mockLogger.error).not.toHaveBeenCalled();
+      }
+    });
+
+    it('should log as error when error flag is set regardless of status code', async () => {
+      const statusCodes = [
+        { code: 200, text: 'OK' },
+        { code: 400, text: 'Bad Request' },
+        { code: 500, text: 'Internal Server Error' },
+      ];
+
+      for (const { code, text } of statusCodes) {
+        mockLogger.debug.mockClear();
+        mockLogger.error.mockClear();
+
+        // @ts-expect-error
+        mockResponse.ok = code >= 200 && code < 300;
+        // @ts-expect-error
+        mockResponse.status = code;
+        // @ts-expect-error
+        mockResponse.statusText = text;
+
+        await logger.logRequestResponse({
+          url: 'https://api.example.com/test',
+          requestBody: { data: 'test' },
+          requestMethod: 'POST',
+          response: mockResponse as Response,
+          error: true, // Explicitly set error flag
+        });
+
+        // Should always log as error when error flag is true
+        const loggedMessage = mockLogger.error.mock.calls[0][0].message;
+        expect(loggedMessage).toContain(`"status": ${code}`);
+        expect(loggedMessage).toContain(`"statusText": "${text}"`);
+        expect(mockLogger.error).toHaveBeenCalled();
+        expect(mockLogger.debug).not.toHaveBeenCalled();
+      }
+    });
+
+    it('should handle empty request body', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: {},
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('"requestBody": {}');
+    });
+
+    it('should handle null request body', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: null,
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('"requestBody": null');
+    });
+
+    it('should handle undefined request body', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: undefined,
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      // When undefined is passed through sanitizeObject, it may be omitted or converted to null
+      // Just verify the log message exists and doesn't crash
+      expect(loggedMessage).toContain('Api Request');
+      expect(loggedMessage).toContain('"url"');
+    });
+
+    it('should handle response with empty body', async () => {
+      mockResponse.clone = jest.fn().mockReturnValue({
+        text: jest.fn().mockResolvedValue(''),
+      });
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { data: 'test' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      // Empty response text should not be included in the log object
+      expect(loggedMessage).not.toContain('"response"');
+    });
+
+    it('should handle response with whitespace-only body', async () => {
+      mockResponse.clone = jest.fn().mockReturnValue({
+        text: jest.fn().mockResolvedValue('   \n\t  '),
+      });
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { data: 'test' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      // Whitespace-only response should be included
+      expect(loggedMessage).toContain('"response": "   \\n\\t  "');
+    });
+
+    it('should log requests with very long URLs', async () => {
+      const longUrl = 'https://api.example.com/test?' + 'param=value&'.repeat(100);
+
+      await logger.logRequestResponse({
+        url: longUrl,
+        requestBody: { data: 'test' },
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('https://api.example.com/test');
+    });
+
+    it('should handle concurrent logging calls', async () => {
+      const promises = Array.from({ length: 5 }, (_, i) =>
+        logger.logRequestResponse({
+          url: `https://api.example.com/test${i}`,
+          requestBody: { id: i },
+          requestMethod: 'POST',
+          response: mockResponse as Response,
+        }),
+      );
+
+      await Promise.all(promises);
+      expect(mockLogger.debug).toHaveBeenCalledTimes(5);
+    });
+
+    it('should maintain message format consistency', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('Api Request');
+      expect(loggedMessage).toContain('"message": "API request"');
+      expect(loggedMessage).toContain('"url":');
+      expect(loggedMessage).toContain('"method":');
+      expect(loggedMessage).toContain('"requestBody":');
+      expect(loggedMessage).toContain('"status":');
+      expect(loggedMessage).toContain('"response":');
     });
   });
 });

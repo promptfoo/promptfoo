@@ -1,5 +1,6 @@
 ---
 sidebar_label: XSTest
+description: Red team homonym vulnerabilities by testing LLM interpretation of ambiguous terms to prevent misclassification of harmful content in production AI systems
 ---
 
 # XSTest Homonym Dataset

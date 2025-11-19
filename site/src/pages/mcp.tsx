@@ -155,7 +155,7 @@ function CallToActionSection() {
   );
 }
 
-export default function Mcp(): JSX.Element {
+export default function Mcp(): React.ReactElement {
   return (
     <Layout
       title="MCP Proxy"

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 20
+description: Red team LLM apps against OWASP Top 10 vulnerabilities to protect AI systems from injection, data leakage, and supply chain attacks
 ---
 
 # OWASP LLM Top 10
@@ -325,7 +326,7 @@ There are two ways to test for misinformation using Promptfoo:
 
 ### Evals Framework
 
-You can test for factuality and LLM "grounding" through [Promptfoo evals framework](/docs/guides/prevent-llm-hallucations/). This is a more methodical approach that helps developers mitigate the risk of LLM hallucinations by defining test cases and evaluating multiple approaches (such as prompt tuning and RAG).
+You can test for factuality and LLM "grounding" through [Promptfoo evals framework](/docs/guides/prevent-llm-hallucinations/). This is a more methodical approach that helps developers mitigate the risk of LLM hallucinations by defining test cases and evaluating multiple approaches (such as prompt tuning and RAG).
 
 ### Red Team Plugins
 

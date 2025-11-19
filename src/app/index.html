@@ -11,6 +11,35 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      (function () {
+        var e = window;
+        var t = document;
+        var n = function () {
+          n.e(arguments);
+        };
+        n.q = [];
+        n.e = function (e) {
+          n.q.push(e);
+        };
+        e.Pylon = n;
+        var r = function () {
+          var e = t.createElement('script');
+          e.setAttribute('type', 'text/javascript');
+          e.setAttribute('async', 'true');
+          e.setAttribute(
+            'src',
+            'https://widget.usepylon.com/widget/f8db82c2-b988-49b8-815a-c3c095722397',
+          );
+          var n = t.getElementsByTagName('script')[0];
+          n.parentNode.insertBefore(e, n);
+        };
+        if (t.readyState === 'complete') {
+          r();
+        } else if (e.addEventListener) {
+          e.addEventListener('load', r, false);
+        }
+      })();
+    </script>
   </body>
-  <script src="/scripts/polyfills/scroll-timeline.js"></script>
 </html>

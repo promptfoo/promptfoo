@@ -50,7 +50,7 @@ CyberSecEval is a benchmark suite designed by Meta to assess cybersecurity vulne
 
 Before starting, make sure you have:
 
-- **Node.js**: Version 18 or later ([download](https://nodejs.org/))
+- **Node.js**: Version 20 or later ([download](https://nodejs.org/))
 - **Promptfoo**: We'll use `npx` to run commands, so no separate installation is needed
 - **Model Access**: API keys or local setup for the models you want to test
 
@@ -117,7 +117,7 @@ Then configure Promptfoo to use it:
 
 ```yaml
 targets:
-  - ollama:chat:llama3.1
+  - ollama:chat:llama3.3
     config:
       temperature: 0.7
       max_tokens: 150

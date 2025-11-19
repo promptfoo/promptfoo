@@ -1,0 +1,26 @@
+# Certificates and keys
+certs/
+*.pem
+*.pfx
+*.p12
+*.key
+*.crt
+*.cer
+*.csr
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test outputs
+output/
+results/
+*.log
+
+# Node modules (if running mock server locally)
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db 

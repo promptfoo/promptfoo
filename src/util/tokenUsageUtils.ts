@@ -1,4 +1,4 @@
-import type { TokenUsage, CompletionTokenDetails } from '../types/shared';
+import type { CompletionTokenDetails, TokenUsage } from '../types/shared';
 
 /**
  * Helper to create empty completion details
@@ -183,28 +183,6 @@ export function accumulateResponseTokenUsage(
     }
   } else if (response) {
     // Only increment numRequests if we got a response but no token usage
-    target.numRequests = (target.numRequests ?? 0) + 1;
-  }
-}
-
-/**
- * Accumulate token usage from a grader result, handling the common pattern of
- * incrementing numRequests when no token usage is provided.
- * @param target Object to update
- * @param graderResult Result that may contain tokensUsed
- */
-export function accumulateGraderTokenUsage(
-  target: TokenUsage,
-  graderResult: { tokensUsed?: Partial<TokenUsage> } | undefined,
-): void {
-  if (graderResult?.tokensUsed) {
-    accumulateTokenUsage(target, graderResult.tokensUsed);
-    // Increment numRequests if not already present in tokensUsed
-    if (graderResult.tokensUsed.numRequests === undefined) {
-      target.numRequests = (target.numRequests ?? 0) + 1;
-    }
-  } else if (graderResult) {
-    // Only increment numRequests if we got a grader result but no token usage
     target.numRequests = (target.numRequests ?? 0) + 1;
   }
 }

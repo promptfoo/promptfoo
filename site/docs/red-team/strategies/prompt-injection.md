@@ -1,7 +1,7 @@
 ---
 sidebar_label: Prompt Injection
 title: Prompt Injection Strategy
-description: Test common direct prompt injection vulnerabilities in LLMs using curated injection techniques
+description: Identify prompt injection vulnerabilities using comprehensive attack vectors including system prompt extraction and hijacking
 ---
 
 # Prompt Injection Strategy

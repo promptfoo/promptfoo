@@ -1,9 +1,9 @@
-import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { fetchWithTimeout } from '../../util/fetch/index';
 import { RedteamPluginBase } from './base';
 
-import type { Assertion, TestCase } from '../../types';
+import type { Assertion, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:cyberseceval';
 
@@ -40,7 +40,6 @@ async function fetchDataset(
       throw new Error(`[CyberSecEval] HTTP status: ${response.status} ${response.statusText}`);
     }
     const data = (await response.json()) as CyberSecEvalInput[];
-    logger.debug(`[CyberSecEval] Got response from ${DATASET_URL}: ${JSON.stringify(data)}`);
 
     if (!data || !Array.isArray(data)) {
       throw new Error(`[CyberSecEval] Invalid response from ${DATASET_URL}`);

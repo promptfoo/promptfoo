@@ -1,5 +1,6 @@
 ---
 sidebar_label: Choosing the right temperature for your LLM
+description: Compare LLM temperature settings from 0.1-1.0 to optimize model creativity vs consistency with automated benchmarks and randomness metrics
 ---
 
 # Choosing the right temperature for your LLM

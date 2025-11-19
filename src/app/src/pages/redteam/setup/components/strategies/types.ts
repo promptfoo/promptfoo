@@ -38,11 +38,11 @@ export const STRATEGY_PRESETS: Record<PresetId, StrategyPreset> = {
   [PRESET_IDS.MEDIUM]: {
     name: 'Medium',
     description: 'Recommended strategies for moderate coverage',
-    strategies: ['basic', 'jailbreak', 'jailbreak:composite', 'jailbreak:likert'] as const,
+    strategies: ['basic', 'jailbreak', 'jailbreak:composite'] as const,
     options: {
       multiTurn: {
         label: 'My target application is conversational (multi-turn)',
-        strategies: ['goat'],
+        strategies: ['crescendo'],
       },
     },
   },

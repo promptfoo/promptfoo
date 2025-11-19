@@ -1,9 +1,8 @@
-import { fetchWithProxy } from '../../src/fetch';
 import { API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
-import logger from '../../src/logger';
+import { fetchWithProxy } from '../../src/util/fetch/index';
 
-jest.mock('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts');
 jest.mock('../../src/logger');
 jest.mock('../../src/globalConfig/globalConfig');
 
@@ -133,7 +132,6 @@ describe('CloudConfig', () => {
           appUrl: 'https://test.app',
         }),
       });
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
     });
 
     it('should throw error on failed validation', async () => {

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Gemini vs GPT
+description: Compare Gemini Pro vs GPT-4 performance on your custom datasets using automated benchmarks and side-by-side analysis to identify the best model for your use case
 ---
 
 # Gemini vs GPT: benchmark on your own data

@@ -1,5 +1,6 @@
 ---
 sidebar_label: LocalAI
+description: 'Run self-hosted OpenAI-compatible APIs locally with LocalAI for private, offline LLM deployment and testing environments'
 ---
 
 # Local AI

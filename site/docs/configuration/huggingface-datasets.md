@@ -1,8 +1,8 @@
 ---
-sidebar_position: 23
+displayed_sidebar: promptfoo
 sidebar_label: HuggingFace Datasets
 title: Loading Test Cases from HuggingFace Datasets
-description: Import test cases directly from HuggingFace datasets using the huggingface://datasets/ prefix with query parameters for splits and configurations
+description: Load HuggingFace datasets directly for LLM evaluation with automatic splits, filtering, and format conversion capabilities
 keywords:
   [
     huggingface datasets,
@@ -14,7 +14,7 @@ keywords:
     existing datasets,
   ]
 pagination_prev: configuration/datasets
-pagination_next: configuration/outputs
+pagination_next: configuration/scenarios
 ---
 
 # HuggingFace Datasets

@@ -6,7 +6,7 @@ import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
 
-import type { ApiProvider, ProviderOptions } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 
 function getValue<T extends object, K extends string>(obj: T, path: K): any {
   return path.split('.').reduce((acc: any, key: string) => {
@@ -27,9 +27,17 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
     );
   }
 
+  // First, try to resolve the package path
+  let filePath: string;
   try {
     const require = createRequire(path.resolve(basePath));
-    const filePath = require.resolve(packageName);
+    filePath = require.resolve(packageName);
+  } catch {
+    throw new Error(`Package not found: ${packageName}. Make sure it's installed in ${basePath}`);
+  }
+
+  // Then, try to import the module
+  try {
     const module = await importModule(filePath);
     const entity = getValue(module, entityName ?? 'default');
 
@@ -41,8 +49,8 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
     }
 
     return entity;
-  } catch {
-    throw new Error(`Package not found: ${packageName}. Make sure it's installed in ${basePath}`);
+  } catch (error) {
+    throw new Error(`Failed to import module: ${packageName}. Error: ${error}`);
   }
 }
 

@@ -312,6 +312,287 @@ redteam:
 
 For more information, see [red team setup](/docs/red-team/quickstart/).
 
+### Testing AWS Bedrock Guardrails with Images
+
+AWS Bedrock Guardrails also support image content moderation through the ApplyGuardrail API, allowing you to detect harmful visual content. This requires a separate provider implementation since image and text testing work fundamentally differently in Promptfoo.
+
+For comprehensive testing with image datasets like UnsafeBench, see the [Multi-Modal Red Teaming guide](/docs/guides/multimodal-red-team/#approach-3-unsafebench-dataset-testing).
+
+Here's an image-specific provider implementation:
+
+```python title="aws_bedrock_guardrails_with_images.py"
+import boto3
+import json
+import base64
+from botocore.exceptions import ClientError
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def call_api(prompt, options, context):
+    """
+    AWS Bedrock Guardrails provider for image content analysis.
+    Supports image input through ApplyGuardrail API with comprehensive error handling.
+    """
+    # Get configuration
+    config = options.get("config", {})
+    guardrail_id = config.get("guardrail_id")
+    guardrail_version = config.get("guardrail_version", "DRAFT")
+    region = config.get("region", "us-east-1")
+    log_requests = config.get("log_requests", False)
+
+    # Create Bedrock Runtime client
+    bedrock_runtime = boto3.client('bedrock-runtime', region_name=region)
+
+    try:
+        # Get variables from context
+        vars_dict = context.get("vars", {})
+
+        # Initialize content array
+        content = []
+
+        # Process image input
+        image_data = vars_dict.get("image")
+        image_format = vars_dict.get("format", "jpeg")
+
+        if not image_data:
+            return {
+                "output": None,
+                "error": "No image data provided in context variables"
+            }
+
+        # Handle image input processing
+        if log_requests:
+            logger.info(f"Processing image input (format: {image_format})")
+            logger.info(f"Image data length: {len(image_data) if image_data else 0}")
+
+        # Ensure image_data is properly formatted base64, then decode once
+        try:
+            if isinstance(image_data, str):
+                # Remove any data URL prefix if present
+                if image_data.startswith('data:'):
+                    image_data = image_data.split(',', 1)[1] if ',' in image_data else image_data
+                # Strict base64 decode
+                image_bytes = base64.b64decode(image_data, validate=True)
+            elif isinstance(image_data, (bytes, bytearray)):
+                # If bytes are provided, assume already-decoded content
+                image_bytes = bytes(image_data)
+            else:
+                raise ValueError("Unsupported image data type; expected base64 string or bytes")
+
+            # Enforce 5MB limit proactively
+            if len(image_bytes) > 5 * 1024 * 1024:
+                return {
+                    "output": None,
+                    "error": "Image size exceeds limits. Maximum size: 5MB."
+                }
+
+            content.append({
+                "image": {
+                    "format": image_format.lower(),  # AWS expects lowercase
+                    "source": {
+                        "bytes": image_bytes
+                    }
+                }
+            })
+        except Exception as e:
+            logger.error(f"Failed to decode base64 image for AWS: {e}")
+            return {
+                "output": None,
+                "error": f"Failed to decode base64 image: {str(e)}"
+            }
+
+        if log_requests:
+            logger.info(f"Calling ApplyGuardrail with {len(content)} content items")
+            logger.info(f"Guardrail ID: {guardrail_id}, Version: {guardrail_version}")
+
+        # Call the ApplyGuardrail API
+        response = bedrock_runtime.apply_guardrail(
+            guardrailIdentifier=guardrail_id,
+            guardrailVersion=guardrail_version,
+            source='INPUT',  # Test input content
+            content=content
+        )
+
+        if log_requests:
+            logger.info(f"Guardrail response: {json.dumps(response, indent=2)}")
+
+        # Check the action taken by the guardrail
+        action = response.get('action', '')
+
+        # Extract assessment details
+        assessments = response.get('assessments', [])
+
+        # Build detailed reason from assessments
+        detailed_reasons = []
+        for assessment in assessments:
+            if 'topicPolicy' in assessment:
+                for topic in assessment['topicPolicy'].get('topics', []):
+                    if topic.get('action') == 'BLOCKED':
+                        detailed_reasons.append(f"Topic: {topic.get('name', 'Unknown')}")
+
+            if 'contentPolicy' in assessment:
+                filters = assessment['contentPolicy'].get('filters', [])
+                for filter_item in filters:
+                    if filter_item.get('action') == 'BLOCKED':
+                        filter_type = filter_item.get('type', 'Unknown')
+                        confidence = filter_item.get('confidence', 'N/A')
+                        detailed_reasons.append(f"Content Filter: {filter_type} (Confidence: {confidence})")
+
+            if 'wordPolicy' in assessment:
+                custom_words = assessment['wordPolicy'].get('customWords', [])
+                managed_words = assessment['wordPolicy'].get('managedWordLists', [])
+                if custom_words:
+                    detailed_reasons.append(f"Custom words detected: {', '.join(custom_words)}")
+                if managed_words:
+                    detailed_reasons.append(f"Managed word lists: {', '.join(managed_words)}")
+
+        # Get the actual AWS blocked message from outputs
+        outputs = response.get('outputs', [])
+        aws_blocked_message = ""
+        if outputs and len(outputs) > 0:
+            aws_blocked_message = outputs[0].get('text', '')
+
+        if action == 'GUARDRAIL_INTERVENED':
+            # Content was blocked
+            if detailed_reasons:
+                blocked_message = f"Image content blocked. Categories: {'; '.join(detailed_reasons)}."
+            else:
+                blocked_message = "Image content blocked by guardrails."
+
+            # Add AWS blocked message if available
+            if aws_blocked_message:
+                blocked_message += f" AWS Response: '{aws_blocked_message}'"
+
+            return {
+                "output": blocked_message,
+                "guardrails": {
+                    "flagged": True,  # Content was flagged (blocked)
+                    "blocked": True,  # Explicitly indicate blocking
+                    "reason": aws_blocked_message or "Guardrail intervened",
+                    "detailed_reasons": detailed_reasons,
+                    "action": action,
+                    "assessments": assessments,
+                    "aws_message": aws_blocked_message,
+                    "details": response
+                }
+            }
+        else:
+            # Content passed guardrails
+            return {
+                "output": "Image content passed guardrails check",
+                "guardrails": {
+                    "flagged": False,  # Content was not flagged
+                    "blocked": False,  # Content was not blocked
+                    "reason": "Image content passed guardrails check",
+                    "action": action,
+                    "details": response
+                }
+            }
+
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+
+        logger.error(f"AWS ClientError: {error_code} - {error_message}")
+
+        # Provide specific error messages for common issues
+        if error_code == 'ValidationException':
+            if 'image format' in error_message.lower():
+                return {
+                    "output": None,
+                    "error": f"Invalid image format. Supported formats: JPEG, PNG. Error: {error_message}"
+                }
+            elif 'size' in error_message.lower():
+                return {
+                    "output": None,
+                    "error": f"Image size exceeds limits. Maximum size: 5MB. Error: {error_message}"
+                }
+
+        return {
+            "output": None,
+            "error": f"AWS Error ({error_code}): {error_message}"
+        }
+
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        return {
+            "output": None,
+            "error": f"Unexpected error: {str(e)}"
+        }
+```
+
+Configure image testing with a dedicated configuration file:
+
+```yaml title="promptfooconfig_bedrock_images.yaml"
+# Image-only configuration for AWS Bedrock Guardrails
+targets:
+  - id: 'file://aws_bedrock_guardrails_with_images.py'
+    config:
+      region: us-east-1
+      guardrail_id: 'your-guardrail-id'
+      guardrail_version: 'DRAFT' # Set your version
+      log_requests: false # Set to true for debugging
+
+prompts:
+  - 'Check image safety'
+
+defaultTest:
+  options:
+    transformVars: |
+      // Clean image data for AWS Bedrock
+      if (vars.image && typeof vars.image === 'string') {
+        // Remove any data URL prefix
+        if (vars.image.includes('base64,')) {
+          vars.image = vars.image.split('base64,')[1];
+        }
+        // Set format (default to jpeg)
+        vars.format = vars.format || 'jpeg';
+      }
+      return vars;
+
+redteam:
+  purpose: 'Test AWS Bedrock Guardrails ability to detect harmful visual content'
+  injectVar: image # Critical: tells Promptfoo to inject images, not text
+  numTests: 10
+  plugins:
+    - id: unsafebench
+      config:
+        categories:
+          - Violence
+          - Sexual
+          - Hate
+          # Additional available categories:
+          # - Deception
+          # - Harassment
+          # - Illegal activity
+          # - Political
+          # - Public and personal health
+          # - Self-harm
+          # - Shocking
+          # - Spam
+```
+
+:::warning Image Testing Requirements
+
+- **Separate Configuration**: Keeping image and text testing in a separate configuration file
+- **Format Support**: JPEG and PNG only (max 5MB)
+- **Base64 Handling**: Images must be decoded from base64 strings to bytes before sending to AWS
+- **Target**: Use the image-specific target, not the standard text target
+- **InjectVar**: Must use `injectVar: image` for image plugins to work properly
+
+:::
+
+Run image-only tests with:
+
+```bash
+promptfoo redteam run -c promptfooconfig_bedrock_images.yaml
+```
+
+The Promptfoo UI will properly render the images and show which ones were blocked by your guardrails.
+
 ## Testing NVIDIA NeMo Guardrails
 
 For NVIDIA NeMo Guardrails, you'd implement a similar approach. We implement `call_api` with a `{output, guardrails, error}` return dictionary:

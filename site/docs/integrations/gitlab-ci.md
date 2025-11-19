@@ -1,5 +1,6 @@
 ---
 sidebar_label: GitLab CI
+description: Automate LLM testing in GitLab CI pipelines with Promptfoo. Configure caching, API keys, and evaluation workflows to validate prompts and models in your CI/CD process.
 ---
 
 # Setting up Promptfoo with GitLab CI
@@ -19,7 +20,7 @@ This guide shows how to integrate Promptfoo's LLM evaluation into your GitLab CI
 Create a `.gitlab-ci.yml` file in your repository root. Here's a basic configuration that installs Promptfoo and runs evaluations:
 
 ```yaml
-image: node:18
+image: node:20
 
 evaluate_prompts:
   script:

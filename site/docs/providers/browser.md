@@ -1,5 +1,6 @@
 ---
 sidebar_label: Web Browser
+description: 'Execute LLM evaluations directly in browsers using WebGPU acceleration and local models for privacy-preserving testing'
 ---
 
 # Browser Provider
@@ -35,7 +36,7 @@ When using browser automation:
 
 ## Prerequisites
 
-Playwright is a peer dependency of promptfoo, so you will need to install it separately:
+The browser provider requires Playwright and related packages. These are optional dependencies, so you'll need to install them:
 
 ```bash
 npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth

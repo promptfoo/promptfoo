@@ -63,37 +63,39 @@ export default function Setup({ open, onClose }: SetupProps) {
             including techniques like jailbreaking and prompt injection.
           </li>
         </ul>
-        <Grid item xs={12}>
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mt: 4,
-            }}
-          >
-            <Link
-              href="https://www.promptfoo.dev/docs/red-team/"
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{ textDecoration: 'none', color: theme.palette.primary.main }}
-            >
-              Learn more about LLM red teaming
-            </Link>
-            <Button
-              variant="contained"
-              endIcon={<KeyboardArrowRightIcon />}
-              onClick={onClose}
+        <Grid container>
+          <Grid size={{ xs: 12 }}>
+            <Box
               sx={{
-                backgroundColor: theme.palette.primary.main,
-                '&:hover': { backgroundColor: theme.palette.primary.dark },
-                px: 4,
-                py: 1,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                mt: 4,
               }}
             >
-              Get Started
-            </Button>
-          </Box>
+              <Link
+                href="https://www.promptfoo.dev/docs/red-team/"
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ textDecoration: 'none', color: theme.palette.primary.main }}
+              >
+                Learn more about LLM red teaming
+              </Link>
+              <Button
+                variant="contained"
+                endIcon={<KeyboardArrowRightIcon />}
+                onClick={onClose}
+                sx={{
+                  backgroundColor: theme.palette.primary.main,
+                  '&:hover': { backgroundColor: theme.palette.primary.dark },
+                  px: 4,
+                  py: 1,
+                }}
+              >
+                Get Started
+              </Button>
+            </Box>
+          </Grid>
         </Grid>
       </DialogContent>
     </Dialog>

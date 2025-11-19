@@ -89,6 +89,12 @@ export interface AzureCompletionOptions {
   seed?: number;
   reasoning_effort?: 'low' | 'medium' | 'high';
 
+  /**
+   * If set, automatically call these functions when the model calls them.
+   * Keys are function names, values are either functions or strings (JavaScript code).
+   */
+  functionToolCallbacks?: Record<string, AssistantFunctionCallback | string>;
+
   passthrough?: object;
   mcp?: MCPConfig;
 }
@@ -141,7 +147,8 @@ export interface AzureProviderOptions {
 }
 
 export interface AzureAssistantProviderOptions {
-  config?: AzureAssistantOptions;
+  config?: AzureAssistantOptions & { projectUrl?: string };
   id?: string;
   env?: EnvOverrides;
+  /** Azure AI Project URL for Foundry agent provider */
 }

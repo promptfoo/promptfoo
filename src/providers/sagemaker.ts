@@ -15,7 +15,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 import type { TransformContext } from '../util/transform';
 
@@ -691,7 +691,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');

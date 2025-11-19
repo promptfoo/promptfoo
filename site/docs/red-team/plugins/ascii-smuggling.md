@@ -1,5 +1,6 @@
 ---
 sidebar_label: ASCII Smuggling
+description: Red team LLM systems against ASCII smuggling attacks by detecting hidden Unicode instructions to prevent unauthorized prompt injections and data exfiltration risks
 ---
 
 # ASCII Smuggling for LLMs

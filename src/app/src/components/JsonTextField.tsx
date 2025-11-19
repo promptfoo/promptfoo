@@ -7,7 +7,7 @@ interface JsonTextFieldProps extends Omit<TextFieldProps, 'onChange'> {
   onChange?: (parsed: any) => void;
 }
 
-const JsonTextField: React.FC<JsonTextFieldProps> = ({ onChange, ...props }) => {
+const JsonTextField = ({ onChange, ...props }: JsonTextFieldProps) => {
   const [value, setValue] = React.useState('');
   const [error, setError] = React.useState(false);
 

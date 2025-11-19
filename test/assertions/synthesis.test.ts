@@ -4,9 +4,9 @@ import {
   generateNewQuestionsPrompt,
   synthesize,
 } from '../../src/assertions/synthesis';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 
-import type { TestCase } from '../../src/types';
+import type { TestCase } from '../../src/types/index';
 
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),

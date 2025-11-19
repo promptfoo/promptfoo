@@ -12,9 +12,7 @@ export function updateSignalFile(): void {
   const filePath = getDbSignalPath();
   try {
     const now = new Date();
-    logger.debug(`Writing to signal file ${filePath}`);
     fs.writeFileSync(filePath, now.toISOString());
-    logger.debug('Successfully wrote to signal file');
   } catch (err) {
     logger.warn(`Failed to write database signal file: ${err}`);
   }

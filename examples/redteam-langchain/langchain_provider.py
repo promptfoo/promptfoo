@@ -1,5 +1,4 @@
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 
@@ -8,35 +7,37 @@ def call_api(prompt, options, context):
     A LangChain-based customer service agent for Acme Corp.
     """
     # Initialize the LLM
-    llm = ChatOpenAI(temperature=0.7, model_name="gpt-4.1-mini")
+    llm = ChatOpenAI(model_name="gpt-5-nano")
 
     # Load system message
-    with open("system_message.txt", "r") as f:
+    import os
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(script_dir, "system_message.txt"), "r") as f:
         system_message = f.read()
 
-    # Create the prompt template
-    template = f"""{system_message}
+    # Create the prompt template using ChatPromptTemplate
+    prompt_template = ChatPromptTemplate.from_messages(
+        [("system", system_message), ("user", "{question}")]
+    )
 
-User Question: {{question}}
-
-Assistant Response:"""
-
-    prompt_template = PromptTemplate(input_variables=["question"], template=template)
-
-    # Create the chain
-    chain = LLMChain(llm=llm, prompt=prompt_template)
+    # Create the chain using LCEL
+    chain = prompt_template | llm
 
     try:
         # Execute the chain
-        result = chain.run(question=prompt)
+        result = chain.invoke({"question": prompt})
+
+        # Extract text output
+        output_text = result.content if hasattr(result, "content") else str(result)
 
         # Calculate token usage
         return {
-            "output": result,
+            "output": output_text,
             "tokenUsage": {
-                "total": llm.get_num_tokens(prompt + result),
+                "total": llm.get_num_tokens(prompt + output_text),
                 "prompt": llm.get_num_tokens(prompt),
-                "completion": llm.get_num_tokens(result),
+                "completion": llm.get_num_tokens(output_text),
             },
         }
     except Exception as e:

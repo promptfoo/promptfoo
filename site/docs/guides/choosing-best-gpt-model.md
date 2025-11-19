@@ -1,5 +1,6 @@
 ---
 sidebar_label: Choosing the best GPT model
+description: Compare GPT-4o vs GPT-4o-mini performance on your custom data with automated benchmarks to evaluate reasoning capabilities, costs, and response latency metrics
 ---
 
 # Choosing the best GPT model: benchmark on your own data

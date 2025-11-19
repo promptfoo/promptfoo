@@ -1,5 +1,6 @@
 ---
 sidebar_label: Generic webhook
+description: Configure webhook integrations to trigger custom LLM flows and prompt chains with HTTP POST requests, enabling seamless API-based testing and evaluation
 ---
 
 # Generic webhook

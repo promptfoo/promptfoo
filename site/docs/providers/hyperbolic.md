@@ -1,5 +1,6 @@
 ---
 sidebar_position: 42
+description: Configure Hyperbolic's OpenAI-compatible API to access DeepSeek, Qwen, and other specialized LLMs for text, image, and audio generation through a unified endpoint
 ---
 
 # Hyperbolic

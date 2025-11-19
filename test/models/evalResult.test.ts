@@ -8,7 +8,7 @@ import {
   type Prompt,
   type ProviderOptions,
   ResultFailureReason,
-} from '../../src/types';
+} from '../../src/types/index';
 
 describe('EvalResult', () => {
   beforeAll(async () => {

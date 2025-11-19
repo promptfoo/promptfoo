@@ -1,4 +1,4 @@
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
 
 interface TraceErrorSpansValue {
@@ -63,14 +63,12 @@ function isErrorSpan(span: TraceSpan): boolean {
   return false;
 }
 
-export const handleTraceErrorSpans = ({ assertion, context }: AssertionParams): GradingResult => {
-  if (!context.trace || !context.trace.spans) {
-    return {
-      pass: false,
-      score: 0,
-      reason: 'No trace data available for trace-error-spans assertion',
-      assertion,
-    };
+export const handleTraceErrorSpans = ({
+  assertion,
+  assertionValueContext,
+}: AssertionParams): GradingResult => {
+  if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
+    throw new Error('No trace data available for trace-error-spans assertion');
   }
 
   const value = assertion.value;
@@ -97,7 +95,7 @@ export const handleTraceErrorSpans = ({ assertion, context }: AssertionParams): 
     maxCount = 0; // Default to no errors allowed
   }
 
-  const spans = context.trace.spans as TraceSpan[];
+  const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern
   const matchingSpans = spans.filter((span) => matchesPattern(span.name, pattern));

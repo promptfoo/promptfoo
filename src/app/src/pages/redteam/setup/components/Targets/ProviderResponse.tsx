@@ -9,57 +9,136 @@ import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
 export default function ProviderResponse({ providerResponse }: { providerResponse: any }) {
+  const hasHeaders = Object.keys(providerResponse?.metadata?.headers || {}).length > 0;
   return (
     <Box>
       {providerResponse && providerResponse.raw !== undefined ? (
         <>
-          <Typography variant="subtitle2" gutterBottom>
-            Headers:
-          </Typography>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2,
-              bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-              maxHeight: '200px',
-              overflow: 'auto',
-              mb: 2,
-            }}
-          >
-            <Box sx={{ width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
-              <Table size="small" sx={{ tableLayout: 'fixed', width: '100%', minWidth: 0 }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ width: '30%', minWidth: 0 }}>Header</TableCell>
-                    <TableCell sx={{ width: '70%', minWidth: 0 }}>Value</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {Object.entries(providerResponse?.metadata?.headers || {}).map(([key, value]) => (
-                    <TableRow key={key}>
-                      <TableCell
-                        sx={{
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {key}
-                      </TableCell>
-                      <TableCell
-                        sx={{
-                          wordBreak: 'break-all',
-                          overflowWrap: 'anywhere',
-                          overflow: 'hidden',
-                          maxWidth: 0,
-                        }}
-                      >
-                        {value as string}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Box>
-          </Paper>
+          {hasHeaders ? (
+            <>
+              <Typography variant="subtitle2" gutterBottom>
+                Headers:
+              </Typography>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
+                  maxHeight: '200px',
+                  overflow: 'auto',
+                  mb: 2,
+                }}
+              >
+                <Box sx={{ width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+                  <Table size="small" sx={{ tableLayout: 'fixed', width: '100%', minWidth: 0 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell
+                          sx={{
+                            width: '30%',
+                            minWidth: 0,
+                            backgroundColor: (theme) =>
+                              theme.palette.mode === 'dark' ? 'grey.700' : 'grey.200',
+                            fontWeight: 'bold',
+                            borderRadius: '4px 0 0 4px',
+                          }}
+                        >
+                          Header
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            width: '70%',
+                            minWidth: 0,
+                            backgroundColor: (theme) =>
+                              theme.palette.mode === 'dark' ? 'grey.700' : 'grey.200',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          Value
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {Object.entries(providerResponse?.metadata?.headers || {}).map(
+                        ([key, value]) => (
+                          <TableRow key={key}>
+                            <TableCell
+                              sx={{
+                                wordBreak: 'break-word',
+                              }}
+                            >
+                              {key}
+                            </TableCell>
+                            <TableCell
+                              sx={{
+                                wordBreak: 'break-all',
+                                overflowWrap: 'anywhere',
+                                overflow: 'hidden',
+                                maxWidth: 0,
+                              }}
+                            >
+                              {value as string}
+                            </TableCell>
+                          </TableRow>
+                        ),
+                      )}
+                    </TableBody>
+                  </Table>
+                </Box>
+              </Paper>
+            </>
+          ) : null}
+
+          {/* Display Request Body if available in metadata */}
+          {providerResponse?.metadata?.requestBody && (
+            <>
+              <Typography variant="subtitle2" gutterBottom>
+                Request Body Sent:
+              </Typography>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
+                  maxHeight: '200px',
+                  overflow: 'auto',
+                  mb: 2,
+                }}
+              >
+                <pre
+                  style={{
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {typeof providerResponse.metadata.requestBody === 'string'
+                    ? providerResponse.metadata.requestBody
+                    : JSON.stringify(providerResponse.metadata.requestBody, null, 2)}
+                </pre>
+              </Paper>
+            </>
+          )}
+
+          {/* Display Request Method if available in metadata */}
+          {providerResponse?.metadata?.requestMethod && (
+            <>
+              <Typography variant="subtitle2" gutterBottom>
+                Request Method:
+              </Typography>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
+                  mb: 2,
+                }}
+              >
+                <pre style={{ margin: 0 }}>{providerResponse.metadata.requestMethod}</pre>
+              </Paper>
+            </>
+          )}
+
           <Typography variant="subtitle2" gutterBottom>
             Raw Result:
           </Typography>

@@ -1,5 +1,6 @@
 ---
 sidebar_label: llamafile
+description: 'Deploy LLMs as portable single-file executables using llamafile for offline testing with OpenAI-compatible API endpoints'
 ---
 
 # llamafile

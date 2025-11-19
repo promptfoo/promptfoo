@@ -1,6 +1,7 @@
 ---
 sidebar_position: 50
 sidebar_label: Javascript
+description: Build sophisticated JavaScript validators for LLM outputs with async operations, scoring logic, and comprehensive error handling
 ---
 
 # Javascript assertions

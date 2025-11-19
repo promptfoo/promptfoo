@@ -1,7 +1,7 @@
 ---
 sidebar_label: Single Turn Composite
 title: Composite Jailbreaks Strategy
-description: Combine multiple jailbreak techniques from research papers to create more sophisticated attacks
+description: Stack multiple research-proven jailbreak methods including DAN, AIM, and role-play for compound attack effectiveness
 ---
 
 # Composite Jailbreaks Strategy
@@ -87,7 +87,8 @@ The composite approach is often more effective than single techniques because:
 
 ## Related Concepts
 
-- [Iterative Jailbreaks](iterative.md) - Sequential approach to jailbreaking
-- [Tree-based Jailbreaks](tree.md) - Branching approach to jailbreaking
+- [Iterative Jailbreaks](iterative.md) - Sequential refinement approach
+- [Meta-Agent Jailbreaks](meta.md) - Strategic taxonomy-building approach
+- [Tree-based Jailbreaks](tree.md) - Branching exploration strategy
 - [Citation Strategy](citation.md) - Academic framing technique used within composite approach
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities

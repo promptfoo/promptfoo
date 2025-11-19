@@ -46,7 +46,7 @@ jest.mock('../../../src/table', () => ({
 jest.mock('../../../src/models/eval', () => {
   return {
     __esModule: true,
-    default: jest.fn().mockImplementation(() => ({
+    default: jest.fn().mockImplementation((config) => ({
       addResult: jest.fn().mockResolvedValue({}),
       addPrompts: jest.fn().mockResolvedValue({}),
       clearResults: jest.fn().mockReturnValue(undefined),
@@ -61,6 +61,7 @@ jest.mock('../../../src/models/eval', () => {
       prompts: [],
       persisted: false,
       results: [],
+      config: config || {},
     })),
   };
 });

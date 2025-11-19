@@ -1,5 +1,6 @@
 ---
 sidebar_label: Divergent Repetition
+description: Red team training data extraction vulnerabilities by exploiting repetitive pattern divergence to protect AI systems from unauthorized model memory leakage
 ---
 
 # Divergent Repetition Plugin

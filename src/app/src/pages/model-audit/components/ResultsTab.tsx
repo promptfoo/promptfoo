@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { Folder as FolderIcon, InsertDriveFile as FileIcon } from '@mui/icons-material';
+import { InsertDriveFile as FileIcon, Folder as FolderIcon } from '@mui/icons-material';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
@@ -11,9 +11,10 @@ import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { getIssueFilePath, isCriticalSeverity } from '../utils';
+import ChecksSection from './ChecksSection';
 import ScanStatistics from './ScanStatistics';
 import SecurityFindings from './SecurityFindings';
-import { getIssueFilePath } from '../utils';
 
 import type { ScanResult } from '../ModelAudit.types';
 
@@ -25,7 +26,6 @@ interface ResultsTabProps {
 export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTabProps) {
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
   const [showRawOutput, setShowRawOutput] = useState(false);
-
   return (
     <Box>
       <ScanStatistics
@@ -33,6 +33,16 @@ export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTa
         selectedSeverity={selectedSeverity}
         onSeverityClick={setSelectedSeverity}
         onFilesClick={onShowFilesDialog}
+      />
+
+      {/* Security Checks Section */}
+      <ChecksSection
+        checks={scanResults.checks}
+        totalChecks={scanResults.total_checks ?? scanResults.totalChecks}
+        passedChecks={scanResults.passed_checks ?? scanResults.passedChecks}
+        failedChecks={scanResults.failed_checks ?? scanResults.failedChecks}
+        assets={scanResults.assets}
+        filesScanned={scanResults.files_scanned ?? scanResults.scannedFiles}
       />
 
       {/* Scanned Files Section */}
@@ -49,7 +59,7 @@ export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTa
                 const issueFile = getIssueFilePath(issue);
                 return issueFile !== 'Unknown' && issueFile.startsWith(file);
               });
-              const criticalCount = fileIssues.filter((i) => i.severity === 'error').length;
+              const criticalCount = fileIssues.filter((i) => isCriticalSeverity(i.severity)).length;
               const warningCount = fileIssues.filter((i) => i.severity === 'warning').length;
               const infoCount = fileIssues.filter((i) => i.severity === 'info').length;
 

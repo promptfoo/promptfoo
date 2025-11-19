@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-// For Node >= 18, fetch is available globally
+// For Node >= 20, fetch is available globally
 const { fetch } = globalThis;
 
 /**

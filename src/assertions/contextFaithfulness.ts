@@ -2,7 +2,7 @@ import { matchesContextFaithfulness } from '../matchers';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * Handles context-faithfulness assertions by evaluating whether the LLM output
@@ -20,6 +20,7 @@ export async function handleContextFaithfulness({
   output,
   prompt,
   providerResponse,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> {
   invariant(test.vars, 'context-faithfulness assertion requires a test with variables');
   invariant(
@@ -48,6 +49,8 @@ export async function handleContextFaithfulness({
       context,
       assertion.threshold ?? 0,
       test.options,
+      test.vars,
+      providerCallContext,
     )),
     metadata: {
       context,

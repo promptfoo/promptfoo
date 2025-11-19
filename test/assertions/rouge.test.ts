@@ -1,7 +1,7 @@
 import * as rouge from 'js-rouge';
 import { handleRougeScore } from '../../src/assertions/rouge';
 
-import type { Assertion, AssertionParams } from '../../src/types';
+import type { Assertion, AssertionParams } from '../../src/types/index';
 
 jest.mock('js-rouge', () => ({
   n: jest.fn(),
@@ -25,7 +25,7 @@ describe('handleRougeScore', () => {
     renderedValue: 'expected text',
     outputString: 'actual text',
     inverse: false,
-    context: {
+    assertionValueContext: {
       prompt: 'test prompt',
       vars: {},
       test: { assert: [mockAssertion] },

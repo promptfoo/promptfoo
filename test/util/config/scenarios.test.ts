@@ -4,16 +4,22 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { validateAssertions } from '../../../src/assertions/validateAssertions';
 import cliState from '../../../src/cliState';
-import { readPrompts, readProviderPromptMap } from '../../../src/prompts';
-import { loadApiProviders } from '../../../src/providers';
-import { readFilters } from '../../../src/util';
+import { readPrompts, readProviderPromptMap } from '../../../src/prompts/index';
+import { loadApiProviders } from '../../../src/providers/index';
+import { readFilters } from '../../../src/util/index';
 // Import after mocking
 import { resolveConfigs } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { readTests } from '../../../src/util/testCaseReader';
 
 jest.mock('fs');
-jest.mock('glob');
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
+}));
 
 // Mock all the dependencies first
 jest.mock('../../../src/util/file', () => ({

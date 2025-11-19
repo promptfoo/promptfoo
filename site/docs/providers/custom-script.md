@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom scripts
+description: Configure custom shell commands and scripts as LLM providers to test chains, Python frameworks, and unsupported APIs with promptfoo's testing framework
 ---
 
 # Custom scripts

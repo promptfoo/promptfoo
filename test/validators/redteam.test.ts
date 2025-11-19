@@ -755,7 +755,7 @@ describe('Error message quality', () => {
       },
     ];
 
-    testCases.forEach(({ config, expectedError, description }) => {
+    testCases.forEach(({ config, expectedError }) => {
       let errorCaught = false;
       let zodError: z.ZodError | null = null;
 

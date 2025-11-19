@@ -1,5 +1,6 @@
 ---
 sidebar_label: Uncensored Llama2 benchmark
+description: Compare Llama2 Uncensored vs GPT-3.5 responses on sensitive topics using automated benchmarks to evaluate model safety and content filtering capabilities
 ---
 
 # How to benchmark Llama2 Uncensored vs. GPT-3.5 on your own inputs
@@ -10,7 +11,7 @@ This guide will walk you through the process of benchmarking [Llama2 Uncensored]
 
 By the end of this guide, you'll be able to produce a side-by-side comparison of these models using your own data. You can substitute your own test cases and choose the model that's best for you.
 
-View the final example code [here](https://github.com/promptfoo/promptfoo/tree/main/examples/ollama-comparison).
+View the final example code [here](https://github.com/promptfoo/promptfoo/tree/main/examples/ollama).
 
 ![llama2 uncensored and gpt comparison](/img/docs/llama-uncensored-comparison.png)
 
@@ -18,7 +19,7 @@ View the final example code [here](https://github.com/promptfoo/promptfoo/tree/m
 
 This guide assumes you have installed both promptfoo and Ollama.
 
-Run this on the command line to download the Llama2 base model:
+Run this on the command line to download the models:
 
 ```sh
 ollama pull llama2
@@ -140,6 +141,8 @@ Let's set up a few assertions to automatically assess the output for correctness
 // highlight-start
 defaultTest:
   assert:
+    - type: icontains
+      value: "don't know"
     - type: not-icontains
       value: AI language model
     - type: not-icontains

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Factuality
+description: 'Validate factual accuracy of LLM responses using AI-powered fact-checking against verified knowledge bases and sources'
 ---
 
 # Factuality
@@ -16,6 +17,8 @@ assert:
     # Specify the reference statement to check against:
     value: The Earth orbits around the Sun
 ```
+
+For non-English evaluation output, see the [multilingual evaluation guide](/docs/configuration/expected-outputs/model-graded#non-english-evaluation).
 
 ## How it works
 

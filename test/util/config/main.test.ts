@@ -4,11 +4,8 @@ import * as path from 'path';
 
 import yaml from 'js-yaml';
 import logger from '../../../src/logger';
-import {
-  getConfigDirectoryPath,
-  setConfigDirectoryPath,
-  writePromptfooConfig,
-} from '../../../src/util/config/manage';
+import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../../src/util/config/manage';
+import { writePromptfooConfig } from '../../../src/util/config/writer';
 
 import type { UnifiedConfig } from '../../../src/types';
 

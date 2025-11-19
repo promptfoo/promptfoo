@@ -30,12 +30,12 @@ interface PromptDialogProps {
   showDatasetColumn?: boolean;
 }
 
-const PromptDialog: React.FC<PromptDialogProps> = ({
+const PromptDialog = ({
   openDialog,
   handleClose,
   selectedPrompt,
   showDatasetColumn = true,
-}) => {
+}: PromptDialogProps) => {
   const [copySnackbar, setCopySnackbar] = React.useState(false);
 
   const sortedEvals = useMemo(
@@ -116,7 +116,7 @@ const PromptDialog: React.FC<PromptDialogProps> = ({
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              Prompt Details
+              {selectedPrompt.prompt.label || selectedPrompt.prompt.display || 'Prompt Details'}
             </Typography>
             <Box
               sx={(theme) => ({

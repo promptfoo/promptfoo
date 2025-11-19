@@ -5,24 +5,33 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
+import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import useTheme from '@mui/material/styles/useTheme';
+import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
+import invariant from '@promptfoo/util/invariant';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
-import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
+import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
 import { useTableStore as useResultsViewStore } from './store';
 
+/**
+ * Renders a "Download" menu item and a modal dialog that lets users export evaluation data
+ * (configuration files, table exports, and advanced formats), copy related CLI commands, and track downloaded files.
+ *
+ * @returns A React element containing the menu item and the download options dialog with controls for exporting files and copying commands.
+ */
 function DownloadMenu() {
   const { table, config, evalId } = useResultsViewStore();
   const [open, setOpen] = React.useState(false);
@@ -31,17 +40,23 @@ function DownloadMenu() {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
 
-  const openDownloadDialog = (blob: Blob, downloadName: string) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = downloadName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  // Use the new hooks for CSV and JSON downloads
+  const { download: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(
+    DownloadFormat.CSV,
+    {
+      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
+    },
+  );
+  const { download: downloadJsonApi, isLoading: isLoadingJson } = useDownloadEval(
+    DownloadFormat.JSON,
 
-    // Mark this file as downloaded
+    {
+      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
+    },
+  );
+
+  const openDownloadDialog = (blob: Blob, downloadName: string) => {
+    downloadBlob(blob, downloadName);
     setDownloadedFiles((prev) => new Set([...prev, downloadName]));
   };
 
@@ -92,14 +107,29 @@ function DownloadMenu() {
     // No longer closing the dialog after download
   };
 
+  const getFilename = (suffix: string): string => {
+    invariant(evalId, 'evalId is required for file downloads');
+
+    return `${evalId}-${suffix}`;
+  };
+
   const downloadConfig = () => {
-    const fileName = evalId ? `${evalId}-config.yaml` : 'promptfooconfig.yaml';
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
+      return;
+    }
+    const fileName = getFilename('config.yaml');
     downloadYamlConfig(config, fileName, 'Configuration downloaded successfully');
   };
 
   const downloadFailedTestsConfig = () => {
     if (!config || !table) {
       showToast('No configuration or results available', 'error');
+      return;
+    }
+
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
 
@@ -117,7 +147,7 @@ function DownloadMenu() {
     const configCopy = { ...config, tests: failedTests };
 
     // Create the file name
-    const fileName = evalId ? `${evalId}-failed-tests.yaml` : 'failed-tests.yaml';
+    const fileName = getFilename('failed-tests.yaml');
 
     downloadYamlConfig(
       configCopy,
@@ -132,6 +162,10 @@ function DownloadMenu() {
       showToast('No table data', 'error');
       return;
     }
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
+      return;
+    }
     const formattedData = table.body.map((row) => ({
       chosen: row.outputs.filter((output) => output?.pass).map((output) => output!.text),
       rejected: row.outputs.filter((output) => output && !output.pass).map((output) => output.text),
@@ -140,60 +174,41 @@ function DownloadMenu() {
       prompts: table.head.prompts.map((prompt) => prompt.label || prompt.display || prompt.raw),
     }));
     const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
-    openDownloadDialog(blob, `${evalId}-dpo.json`);
+    openDownloadDialog(blob, getFilename('dpo.json'));
     handleClose();
   };
 
-  const downloadTable = () => {
-    if (!table) {
-      showToast('No table data', 'error');
+  const downloadTable = async () => {
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
-    const blob = new Blob([JSON.stringify(table, null, 2)], { type: 'application/json' });
-    openDownloadDialog(blob, `${evalId}-table.json`);
-    handleClose();
+    try {
+      await downloadJsonApi(evalId);
+    } catch {
+      // Error is already handled by the hook
+    }
   };
 
-  const downloadCsv = () => {
-    if (!table) {
-      showToast('No table data', 'error');
+  const downloadCsv = async () => {
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
-
-    const csvRows = [];
-
-    const headers = [
-      ...table.head.vars,
-      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-    ];
-    csvRows.push(headers);
-
-    table.body.forEach((row) => {
-      const rowValues = [
-        ...row.vars,
-        ...row.outputs
-          .filter((output): output is EvaluateTableOutput => output != null)
-          .map(
-            ({ pass, text, failureReason: failureType }) =>
-              (pass
-                ? '[PASS] '
-                : failureType === ResultFailureReason.ASSERT
-                  ? '[FAIL] '
-                  : '[ERROR] ') + text,
-          ),
-      ];
-      csvRows.push(rowValues);
-    });
-
-    const output = csvStringify(csvRows);
-    const blob = new Blob([output], { type: 'text/csv;charset=utf-8;' });
-    openDownloadDialog(blob, `${evalId}-table.csv`);
-    handleClose();
+    try {
+      await downloadCsvApi(evalId);
+    } catch {
+      // Error is already handled by the hook
+    }
   };
 
   const downloadHumanEvalTestCases = () => {
     if (!table) {
       showToast('No table data', 'error');
+      return;
+    }
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
 
@@ -221,7 +236,7 @@ function DownloadMenu() {
 
     const yamlContent = yaml.dump(humanEvalCases);
     const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
-    openDownloadDialog(blob, `${evalId}-human-eval-cases.yaml`);
+    openDownloadDialog(blob, getFilename('human-eval-cases.yaml'));
     handleClose();
   };
 
@@ -233,6 +248,11 @@ function DownloadMenu() {
 
     if (!config?.redteam) {
       showToast('No redteam config', 'error');
+      return;
+    }
+
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
 
@@ -252,59 +272,13 @@ function DownloadMenu() {
 
     const content = uniquePayloads.join('\n');
     const blob = new Blob([content], { type: 'text/plain' });
-    openDownloadDialog(blob, `${evalId}-burp-payloads.burp`);
+    openDownloadDialog(blob, getFilename('burp-payloads.burp'));
     handleClose();
   };
 
   const handleOpen = () => {
     setOpen(true);
   };
-
-  const handleKeyDown = React.useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === 'Escape') {
-        handleClose();
-      } else if (open && !event.altKey && !event.ctrlKey && !event.metaKey) {
-        switch (event.key) {
-          case '1':
-            downloadConfig();
-            break;
-          case '2':
-            downloadFailedTestsConfig();
-            break;
-          case '3':
-            downloadCsv();
-            break;
-          case '4':
-            downloadTable();
-            break;
-          case '5':
-            downloadBurpPayloads();
-            break;
-          case '6':
-            downloadDpoJson();
-            break;
-          case '7':
-            downloadHumanEvalTestCases();
-            break;
-        }
-      }
-    },
-    [open],
-  );
-
-  React.useEffect(() => {
-    const handleGlobalKeyDown = (event: KeyboardEvent) => {
-      if (open) {
-        handleKeyDown(event as unknown as React.KeyboardEvent<HTMLDivElement>);
-      }
-    };
-
-    document.addEventListener('keydown', handleGlobalKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleGlobalKeyDown);
-    };
-  }, [handleKeyDown, open]);
 
   // Generate the command text based on filename
   const getCommandText = (fileName: string) => {
@@ -317,23 +291,28 @@ function DownloadMenu() {
     const isDownloaded = downloadedFiles.has(fileName);
 
     return (
-      <Box sx={{ mt: 1.5, mb: 2.5 }}>
+      <Paper
+        elevation={0}
+        sx={{
+          mt: 2,
+          p: 2,
+          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)',
+          border: '1px solid',
+          borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
+          borderRadius: 2,
+        }}
+      >
         {helpText && (
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.75 }}>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{
-                fontStyle: 'italic',
-                flexGrow: 1,
-              }}
-            >
+          <Box
+            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}
+          >
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
               {helpText}
             </Typography>
             {isDownloaded && (
-              <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <CheckCircleIcon fontSize="small" color="success" sx={{ mr: 0.5 }} />
-                <Typography variant="body2" color="success.main">
+                <Typography variant="body2" color="success.main" sx={{ fontWeight: 500 }}>
                   Downloaded
                 </Typography>
               </Box>
@@ -344,40 +323,42 @@ function DownloadMenu() {
           sx={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+            backgroundColor: isDarkMode ? 'rgba(0, 0, 0, 0.4)' : 'rgba(255, 255, 255, 0.8)',
             border: '1px solid',
-            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.1)',
-            borderRadius: 1,
-            p: '10px 16px',
-            color: theme.palette.text.primary,
-            fontFamily: 'monospace',
-            fontSize: '0.9rem',
-            position: 'relative',
-            overflow: 'hidden',
+            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.15)',
+            borderRadius: 1.5,
+            p: 1.5,
           }}
         >
-          <Box component="code" sx={{ flexGrow: 1, mr: 1 }}>
+          <Box
+            component="code"
+            sx={{
+              flexGrow: 1,
+              fontFamily: '"SF Mono", "Monaco", "Inconsolata", "Roboto Mono", monospace',
+              fontSize: '0.875rem',
+              color: theme.palette.text.primary,
+              fontWeight: 500,
+            }}
+          >
             {commandText}
           </Box>
           <IconButton
             onClick={() => copyToClipboard(commandText)}
             size="small"
             sx={{
+              ml: 1,
               color: theme.palette.primary.main,
-              backgroundColor: isDarkMode ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.5)',
+              backgroundColor: 'transparent',
               '&:hover': {
-                backgroundColor: isDarkMode ? 'rgba(0, 0, 0, 0.4)' : 'rgba(255, 255, 255, 0.8)',
+                backgroundColor: theme.palette.primary.main + '15',
               },
-              border: '1px solid',
-              borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
             }}
             aria-label="Copy command"
           >
             <ContentCopyIcon fontSize="small" />
           </IconButton>
         </Box>
-      </Box>
+      </Paper>
     );
   };
 
@@ -389,119 +370,173 @@ function DownloadMenu() {
         </ListItemIcon>
         <ListItemText>Download</ListItemText>
       </MenuItem>
-      <Dialog onClose={handleClose} open={open} onKeyDown={handleKeyDown} maxWidth="md">
+      <Dialog onClose={handleClose} open={open} maxWidth="lg">
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            Download Options
-            <Button onClick={handleClose} color="inherit" size="small">
+            <Typography variant="h5" component="h2" sx={{ fontWeight: 600 }}>
+              Download Options
+            </Typography>
+            <Button onClick={handleClose} variant="outlined" size="small">
               Close
             </Button>
           </Box>
         </DialogTitle>
-        <DialogContent>
-          <Stack direction="column" spacing={2} sx={{ width: '100%', mb: 2 }}>
-            {/* Config section */}
-            <Typography variant="subtitle1" sx={{ mt: 1 }}>
-              Promptfoo Configs
-            </Typography>
+        <DialogContent sx={{ p: 3 }}>
+          <Stack spacing={3}>
+            {/* Configuration Files Section */}
+            <Card elevation={0} sx={{ border: `1px solid ${theme.palette.divider}` }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                  Configuration Files
+                </Typography>
 
-            <Box>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Download the complete configuration file for this eval.
-              </Typography>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <Box sx={{ height: '100%' }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Complete configuration file for this evaluation
+                      </Typography>
+                      <Button
+                        onClick={downloadConfig}
+                        startIcon={<DownloadIcon />}
+                        variant="contained"
+                        fullWidth
+                        sx={{ mb: 1 }}
+                      >
+                        Download YAML Config
+                      </Button>
+                      {evalId && (
+                        <CommandBlock
+                          fileName={getFilename('config.yaml')}
+                          helpText="Run this command to execute the eval again:"
+                        />
+                      )}
+                    </Box>
+                  </Grid>
 
-              <Button
-                onClick={downloadConfig}
-                startIcon={<DownloadIcon />}
-                variant="contained"
-                color="primary"
-                fullWidth
-              >
-                Download YAML Config
-              </Button>
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <Box sx={{ height: '100%' }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Configuration with only failed tests for focused debugging
+                      </Typography>
+                      <Button
+                        onClick={downloadFailedTestsConfig}
+                        startIcon={<DownloadIcon />}
+                        variant="outlined"
+                        fullWidth
+                        sx={{ mb: 1 }}
+                        disabled={
+                          !table ||
+                          !table.body ||
+                          table.body.every((row) => row.outputs.every((output) => output?.pass))
+                        }
+                      >
+                        Download Failed Tests
+                      </Button>
+                      {evalId && (
+                        <CommandBlock
+                          fileName={getFilename('failed-tests.yaml')}
+                          helpText="Run this command to re-run just the failed tests:"
+                        />
+                      )}
+                    </Box>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
 
-              <CommandBlock
-                fileName={evalId ? `${evalId}-config.yaml` : 'promptfooconfig.yaml'}
-                helpText="After downloading, run this command to execute the eval again:"
-              />
-            </Box>
+            {/* Table Data Section */}
+            <Card elevation={0} sx={{ border: `1px solid ${theme.palette.divider}` }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
+                  Export Results
+                </Typography>
 
-            <Box>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Download a configuration file containing only the failed tests from this eval. This
-                helps you focus on fixing just the tests that need attention.
-              </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Export evaluation results in standard formats for further analysis or reporting.
+                </Typography>
 
-              <Button
-                onClick={downloadFailedTestsConfig}
-                startIcon={<DownloadIcon />}
-                variant="outlined"
-                color="secondary"
-                fullWidth
-                disabled={
-                  !table ||
-                  !table.body ||
-                  table.body.every((row) => row.outputs.every((output) => output?.pass))
-                }
-              >
-                Download Failed Tests Config
-              </Button>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Button
+                      onClick={downloadCsv}
+                      startIcon={<DownloadIcon />}
+                      variant="outlined"
+                      fullWidth
+                      disabled={isLoadingCsv}
+                      sx={{ height: 48 }}
+                    >
+                      {isLoadingCsv ? 'Downloading...' : 'Download Results CSV'}
+                    </Button>
+                  </Grid>
 
-              <CommandBlock
-                fileName={evalId ? `${evalId}-failed-tests.yaml` : 'failed-tests.yaml'}
-                helpText="After downloading, run this command to re-run just the failed tests:"
-              />
-            </Box>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Button
+                      onClick={downloadTable}
+                      startIcon={<DownloadIcon />}
+                      variant="outlined"
+                      fullWidth
+                      disabled={isLoadingJson}
+                      sx={{ height: 48 }}
+                    >
+                      {isLoadingJson ? 'Downloading...' : 'Download Results JSON'}
+                    </Button>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
 
-            <Divider />
-            <Typography variant="subtitle1">Table Data</Typography>
+            {/* Advanced Options Section */}
+            <Card elevation={0} sx={{ border: `1px solid ${theme.palette.divider}` }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
+                  Advanced Exports
+                </Typography>
 
-            {/* Standard table data buttons */}
-            <Button onClick={downloadCsv} startIcon={<DownloadIcon />} variant="outlined" fullWidth>
-              Download Table CSV
-            </Button>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Specialized formats for security testing, machine learning training, and human
+                  evaluation workflows.
+                </Typography>
 
-            <Button
-              onClick={downloadTable}
-              startIcon={<DownloadIcon />}
-              variant="outlined"
-              fullWidth
-            >
-              Download Table JSON
-            </Button>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <Button
+                      onClick={downloadBurpPayloads}
+                      startIcon={<DownloadIcon />}
+                      variant="outlined"
+                      fullWidth
+                      sx={{ height: 48 }}
+                    >
+                      Burp Payloads
+                    </Button>
+                  </Grid>
 
-            <Divider />
-            <Typography variant="subtitle1">Advanced Options</Typography>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <Button
+                      onClick={downloadDpoJson}
+                      startIcon={<DownloadIcon />}
+                      variant="outlined"
+                      fullWidth
+                      sx={{ height: 48 }}
+                    >
+                      DPO JSON
+                    </Button>
+                  </Grid>
 
-            <Button
-              onClick={downloadBurpPayloads}
-              startIcon={<DownloadIcon />}
-              variant="outlined"
-              color="secondary"
-              fullWidth
-            >
-              Download Burp Suite Payloads
-            </Button>
-
-            <Button
-              onClick={downloadDpoJson}
-              startIcon={<DownloadIcon />}
-              variant="outlined"
-              color="secondary"
-              fullWidth
-            >
-              Download DPO JSON
-            </Button>
-
-            <Button
-              onClick={downloadHumanEvalTestCases}
-              startIcon={<DownloadIcon />}
-              variant="outlined"
-              color="secondary"
-              fullWidth
-            >
-              Download Human Eval Test YAML
-            </Button>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <Button
+                      onClick={downloadHumanEvalTestCases}
+                      startIcon={<DownloadIcon />}
+                      variant="outlined"
+                      fullWidth
+                      sx={{ height: 48 }}
+                    >
+                      Human Eval YAML
+                    </Button>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
           </Stack>
         </DialogContent>
       </Dialog>

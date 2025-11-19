@@ -1,7 +1,7 @@
 ---
 sidebar_label: CI/CD
 title: CI/CD Integration for LLM Eval and Security
-description: Integrate promptfoo into CI/CD pipelines for automated prompt eval, security scanning, and quality assurance
+description: Automate LLM testing in CI/CD pipelines with GitHub Actions, GitLab CI, and Jenkins for continuous security and quality checks
 keywords:
   [
     ci/cd,
@@ -41,7 +41,7 @@ npx promptfoo@latest redteam run
 
 ## Prerequisites
 
-- Node.js 18+ installed in your CI environment
+- Node.js 20+ installed in your CI environment
 - LLM provider API keys (stored as secure environment variables)
 - A promptfoo configuration file (`promptfooconfig.yaml`)
 - (Optional) Docker for containerized environments

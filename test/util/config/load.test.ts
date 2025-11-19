@@ -8,10 +8,9 @@ import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { readPrompts } from '../../../src/prompts';
-import { loadApiProviders } from '../../../src/providers';
+import { readPrompts } from '../../../src/prompts/index';
+import { loadApiProviders } from '../../../src/providers/index';
 import { type UnifiedConfig } from '../../../src/types';
-import { isRunningUnderNpx } from '../../../src/util';
 import {
   combineConfigs,
   dereferenceConfig,
@@ -29,6 +28,10 @@ jest.mock('fs');
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 
 jest.mock('proxy-agent', () => ({
@@ -57,8 +60,27 @@ jest.mock('../../../src/logger', () => ({
 
 jest.mock('../../../src/util', () => ({
   ...jest.requireActual('../../../src/util'),
-  isRunningUnderNpx: jest.fn(),
 }));
+
+jest.mock('../../../src/util/promptfooCommand', () => {
+  const mockPromptfooCommand = jest.fn();
+  const mockIsRunningUnderNpx = jest.fn();
+
+  // Set up the mock to return appropriate values based on isRunningUnderNpx
+  mockPromptfooCommand.mockImplementation((cmd) => {
+    const isNpx = mockIsRunningUnderNpx();
+    if (cmd === '') {
+      return isNpx ? 'npx promptfoo@latest' : 'promptfoo';
+    }
+    return isNpx ? `npx promptfoo@latest ${cmd}` : `promptfoo ${cmd}`;
+  });
+
+  return {
+    promptfooCommand: mockPromptfooCommand,
+    detectInstaller: jest.fn().mockReturnValue('unknown'),
+    isRunningUnderNpx: mockIsRunningUnderNpx,
+  };
+});
 
 jest.mock('../../../src/util/file', () => ({
   ...jest.requireActual('../../../src/util/file'),
@@ -213,7 +235,7 @@ describe('combineConfigs', () => {
         (
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
+        ) => {
           if (typeof path === 'string' && path === 'config1.json') {
             return JSON.stringify(config1);
           } else if (typeof path === 'string' && path === 'config2.json') {
@@ -300,7 +322,7 @@ describe('combineConfigs', () => {
       outputPath: [],
       commandLineOptions: { verbose: false },
       metadata: {},
-      sharing: true,
+      sharing: false,
     });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
@@ -442,7 +464,7 @@ describe('combineConfigs', () => {
         (
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
+        ) => {
           if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
               description: 'test1',
@@ -498,7 +520,7 @@ describe('combineConfigs', () => {
         (
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
+        ) => {
           if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
               description: 'test1',
@@ -980,6 +1002,26 @@ describe('combineConfigs', () => {
     });
   });
 
+  it('should default sharing to false when not defined', async () => {
+    const config = {
+      description: 'test config',
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      tests: ['test1'],
+      // No sharing property defined
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+    const result = await combineConfigs(['config.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config.json'),
+      expect.anything(),
+    );
+
+    expect(result.sharing).toBe(false);
+  });
+
   it('should load defaultTest from external file when string starts with file://', async () => {
     const externalDefaultTest = {
       assert: [{ type: 'equals', value: 'test' }],
@@ -1400,6 +1442,7 @@ describe('resolveConfigs', () => {
       throw new Error(`Process exited with code ${code}`);
     });
     jest.mocked(isCI).mockReturnValue(false);
+    const { isRunningUnderNpx } = require('../../../src/util/promptfooCommand');
     jest.mocked(isRunningUnderNpx).mockReturnValue(true);
 
     const cmdObj = {};
@@ -1410,8 +1453,10 @@ describe('resolveConfigs', () => {
     );
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo eval -c'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo init'));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('npx promptfoo@latest eval -c'),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest init'));
   });
 
   it('should throw an error if no providers are provided', async () => {

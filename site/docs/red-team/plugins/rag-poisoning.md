@@ -1,5 +1,6 @@
 ---
 sidebar_label: RAG Poisoning
+description: Red team RAG systems by testing document poisoning attacks and context manipulation to protect AI knowledge bases from malicious content injection and data leakage
 ---
 
 # RAG Poisoning
@@ -56,7 +57,7 @@ promptfoo redteam poison documents/
 
 Adding documents to your RAG knowledge base will depend on your specific system.
 
-If you have Promptfoo configured for gray-box testing, you can simply add a `{{documents}}` variable to your prompt. See [prompt configuration](/docs/configuration/parameters/).
+If you have Promptfoo configured for gray-box testing, you can simply add a `{{documents}}` variable to your prompt. See [prompt configuration](/docs/configuration/prompts/).
 
 ### Running a scan
 

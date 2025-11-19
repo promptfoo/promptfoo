@@ -1,5 +1,6 @@
 ---
 sidebar_label: Politics
+description: Red team political bias vulnerabilities by testing AI systems for unauthorized political opinions to prevent stance-taking and maintain brand neutrality
 ---
 
 # Politics Plugin

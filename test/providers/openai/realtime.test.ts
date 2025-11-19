@@ -69,6 +69,33 @@ describe('OpenAI Realtime Provider', () => {
       expect(provider.config.maintainContext).toBe(true); // Default value
     });
 
+    it('should initialize with gpt-realtime model and new voices', () => {
+      const config = {
+        modalities: ['text', 'audio'],
+        instructions: 'Test instructions',
+        voice: 'cedar' as const, // New voice for gpt-realtime
+      };
+
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', { config });
+
+      expect(provider.modelName).toBe('gpt-realtime');
+      expect(provider.config).toEqual(expect.objectContaining(config));
+      expect(provider.config.maintainContext).toBe(true); // Default value
+    });
+
+    it('should support marin voice for gpt-realtime model', () => {
+      const config = {
+        modalities: ['text', 'audio'],
+        instructions: 'Test instructions',
+        voice: 'marin' as const, // New voice for gpt-realtime
+      };
+
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', { config });
+
+      expect(provider.modelName).toBe('gpt-realtime');
+      expect(provider.config.voice).toBe('marin');
+    });
+
     it('should log warning for unknown model', () => {
       new OpenAiRealtimeProvider('unknown-model');
       expect(logger.debug).toHaveBeenCalledWith(
@@ -548,12 +575,14 @@ describe('OpenAI Realtime Provider', () => {
 
       // Then verify audio properties
       expect(response.audio!.format).toBe('wav');
-      expect(response.audio!.data).toBe(audioData.toString('base64'));
+      // The audio data should be converted from PCM16 to WAV, so it will be different from the original
+      expect(response.audio!.data).toBeDefined();
+      expect(response.audio!.data!.length).toBeGreaterThan(audioData.toString('base64').length); // WAV has headers
       expect(response.audio!.transcript).toBe('Hello there');
 
       // Verify metadata
       expect(response.metadata!.audio!.format).toBe('wav');
-      expect(response.metadata!.audio!.data).toBe(audioData.toString('base64'));
+      expect(response.metadata!.audio!.data).toBe(response.audio!.data); // Should match the audio data
     });
 
     it('should reuse existing connection for subsequent requests', async () => {
@@ -590,6 +619,117 @@ describe('OpenAI Realtime Provider', () => {
 
       expect(cleanupMockWs.close).toHaveBeenCalledWith();
       expect(provider.persistentConnection).toBeNull();
+    });
+  });
+
+  describe('WebSocket URL configuration', () => {
+    beforeEach(() => {
+      (MockWebSocket as any).mockClear();
+    });
+
+    const simulateMinimalFlow = () => {
+      const messageHandlers = mockHandlers.message;
+      const lastHandler = messageHandlers[messageHandlers.length - 1];
+
+      // Simulate server creating user item so client will proceed
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.created',
+            item: { id: 'msg_x', role: 'user' },
+          }),
+        ),
+      );
+
+      // Simulate response created and text events to resolve promises
+      lastHandler(
+        Buffer.from(JSON.stringify({ type: 'response.created', response: { id: 'r1' } })),
+      );
+      lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.delta', delta: 'ok' })));
+      lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.done', text: 'ok' })));
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+          }),
+        ),
+      );
+    };
+
+    it('uses default OpenAI base for direct WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.directWebSocketRequest('hi');
+
+      // Trigger open to allow client to send
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      expect(constructedUrl).toBe(
+        'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
+      );
+    });
+
+    it('converts custom https apiBaseUrl to wss for direct WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(constructedUrl).toBe(
+        'wss://my-custom-api.com/v1/realtime?model=' +
+          encodeURIComponent('gpt-4o-realtime-preview'),
+      );
+      expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
+    });
+
+    it('converts custom http apiBaseUrl to ws for direct WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { apiBaseUrl: 'http://localhost:8080/v1' },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(constructedUrl).toBe(
+        'ws://localhost:8080/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
+      );
+      expect(wsOptions.headers.Origin).toBe('http://localhost:8080');
+    });
+
+    it('uses apiBaseUrl for client-secret socket URL', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
+      });
+      const promise = provider.webSocketRequest('secret123', 'hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(constructedUrl).toBe(
+        'wss://my-custom-api.com/v1/realtime/socket?client_secret=' +
+          encodeURIComponent('secret123'),
+      );
+      expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
     });
   });
 });

@@ -4,22 +4,37 @@ import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { getTokenUsage } from './util';
 
-import type { ProviderEmbeddingResponse } from '../../types';
+import type { ProviderEmbeddingResponse } from '../../types/index';
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.getApiKey()) {
-      throw new Error('OpenAI API key must be set for similarity comparison');
+    // Validate API key first (like chat provider)
+    if (this.requiresApiKey() && !this.getApiKey()) {
+      return {
+        error: `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`,
+      };
+    }
+
+    // Validate input type to catch objects early
+    if (typeof text !== 'string') {
+      return {
+        error: `Invalid input type for embedding API. Expected string, got ${typeof text}. Input: ${JSON.stringify(text)}`,
+      };
     }
 
     const body = {
       input: text,
       model: this.modelName,
     };
-    let data,
-      cached = false;
+
+    let data: any;
+    let status: number | undefined;
+    let statusText: string | undefined;
+    let deleteFromCache: (() => Promise<void>) | undefined;
+    let cached = false;
+    let latencyMs: number | undefined;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      const response = await fetchWithCache(
         `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
@@ -32,25 +47,44 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
+        'json',
+        false,
+        this.config.maxRetries,
+      );
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache } = response as any);
+
+      // Check HTTP status like chat provider
+      if (status && (status < 200 || status >= 300)) {
+        return {
+          error: `API error: ${status} ${statusText || 'Unknown error'}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+        };
+      }
     } catch (err) {
-      logger.error(`API call error: ${err}`);
-      throw err;
+      logger.error(`API call error: ${String(err)}`);
+      await deleteFromCache?.();
+      return {
+        error: `API call error: ${String(err)}`,
+      };
     }
-    logger.debug(`\tOpenAI embeddings API response: ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;
       if (!embedding) {
-        throw new Error('No embedding found in OpenAI embeddings API response');
+        return {
+          error: 'No embedding found in OpenAI embeddings API response',
+        };
       }
       return {
         embedding,
+        latencyMs,
         tokenUsage: getTokenUsage(data, cached),
       };
     } catch (err) {
-      logger.error(data.error.message);
-      throw err;
+      logger.error(`Response parsing error: ${String(err)}`);
+      await deleteFromCache?.();
+      return {
+        error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
+      };
     }
   }
 }

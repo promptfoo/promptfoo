@@ -1,6 +1,6 @@
 ---
 title: Using MCP (Model Context Protocol) in Promptfoo
-description: Configure and integrate Model Context Protocol (MCP) with Promptfoo to enable tool use, memory, and agentic capabilities across different LLM providers
+description: Enable Model Context Protocol (MCP) integration for enhanced tool use, persistent memory, and agentic workflows across providers
 sidebar_label: Model Context Protocol (MCP)
 sidebar_position: 20
 ---
@@ -192,6 +192,10 @@ In addition to the general MCP integration described above, OpenAI's Responses A
 - Tool filtering capabilities
 
 For detailed information about using MCP with OpenAI's Responses API, see the [OpenAI Provider MCP documentation](../providers/openai.md#mcp-model-context-protocol-support).
+
+## Tool Schema Compatibility
+
+Promptfoo automatically handles JSON Schema compatibility between MCP servers and LLM providers by removing provider-incompatible metadata fields (like `$schema`) while preserving supported features. Tools with no input parameters work without modification.
 
 ## Troubleshooting
 

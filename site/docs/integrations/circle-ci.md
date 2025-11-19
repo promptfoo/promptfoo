@@ -1,5 +1,6 @@
 ---
 sidebar_label: CircleCI
+description: Automate LLM testing in CircleCI pipelines with promptfoo. Configure caching, API keys, and evaluation workflows to validate prompts and models in CI/CD environments.
 ---
 
 # Setting up Promptfoo with CircleCI
@@ -23,7 +24,7 @@ Create a `.circleci/config.yml` file in your repository. Here's a basic configur
     jobs:
       evaluate_prompts:
         docker:
-          - image: cimg/node:18.0.0
+          - image: cimg/node:20.0.0
         steps:
           - checkout
 

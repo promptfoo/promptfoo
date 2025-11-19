@@ -1,8 +1,7 @@
 import { matchesFactuality } from '../matchers';
 import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleFactuality = async ({
   assertion,
@@ -10,21 +9,25 @@ export const handleFactuality = async ({
   outputString,
   test,
   prompt,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string',
     'factuality assertion type must have a string value',
   );
   invariant(prompt, 'factuality assertion type must have a prompt');
-  if (test.options?.rubricPrompt) {
-    // Substitute vars in prompt
-    invariant(typeof test.options.rubricPrompt === 'string', 'rubricPrompt must be a string');
-    const nunjucks = getNunjucksEngine();
-    test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
-  }
+  // Note: rubricPrompt will be rendered later in matchesFactuality with proper variables
+  // (input, ideal, completion) available at that point
 
   return {
     assertion,
-    ...(await matchesFactuality(prompt, renderedValue, outputString, test.options, test.vars)),
+    ...(await matchesFactuality(
+      prompt,
+      renderedValue,
+      outputString,
+      test.options,
+      test.vars,
+      providerCallContext,
+    )),
   };
 };

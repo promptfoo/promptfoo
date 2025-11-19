@@ -10,7 +10,7 @@
   "dependencies": {
     "express": "^5.1.0",
     "pem": "^1.14.8",
-    "promptfoo": "^0.116.7"
+    "promptfoo": "^0.118.15"
   },
   "keywords": [
     "promptfoo",

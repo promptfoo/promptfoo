@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { formatDataGridDate } from '@app/utils/date';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Paper from '@mui/material/Paper';
@@ -101,9 +102,18 @@ export default function Prompts({
       {
         field: 'id',
         headerName: 'ID',
-        flex: 1,
-        minWidth: 100,
+        flex: 0.5,
+        minWidth: 80,
         valueFormatter: (value: ServerPromptWithMetadata['id']) => value.toString().slice(0, 6),
+      },
+      {
+        field: 'label',
+        headerName: 'Label',
+        flex: 1.5,
+        minWidth: 200,
+        valueGetter: (_value, row: ServerPromptWithMetadata) => {
+          return row.prompt.label || row.prompt.display || row.prompt.raw;
+        },
       },
       {
         field: 'prompt',
@@ -135,7 +145,7 @@ export default function Prompts({
                   '&:hover': { textDecoration: 'underline' },
                 }}
               >
-                {params.value}
+                {formatDataGridDate(params.value)}
               </Typography>
             </Link>
           );
@@ -144,7 +154,7 @@ export default function Prompts({
       {
         field: 'count',
         headerName: '# Evals',
-        flex: 1,
+        flex: 0.5,
         minWidth: 80,
       },
     ],

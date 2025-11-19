@@ -1,10 +1,10 @@
-import chalk from 'chalk';
 import { getEnvString } from '../envars';
-import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
-export const API_HOST = getEnvString('API_HOST', 'https://api.promptfoo.app');
+export const CLOUD_API_HOST = 'https://api.promptfoo.app';
+
+export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
 
 interface CloudUser {
   id: string;
@@ -21,6 +21,15 @@ interface CloudOrganization {
   updatedAt: Date;
 }
 
+interface CloudTeam {
+  id: string;
+  name: string;
+  slug: string;
+  organizationId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface CloudApp {
   url: string;
 }
@@ -30,6 +39,19 @@ export class CloudConfig {
     appUrl: string;
     apiHost: string;
     apiKey?: string;
+    currentOrganizationId?: string;
+    currentTeamId?: string;
+    teams?: {
+      [organizationId: string]: {
+        currentTeamId?: string;
+        cache?: Array<{
+          id: string;
+          name: string;
+          slug: string;
+          lastFetched: string;
+        }>;
+      };
+    };
   };
 
   constructor() {
@@ -38,6 +60,9 @@ export class CloudConfig {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost || API_HOST,
       apiKey: savedConfig.apiKey,
+      currentOrganizationId: savedConfig.currentOrganizationId,
+      currentTeamId: savedConfig.currentTeamId,
+      teams: savedConfig.teams,
     };
   }
 
@@ -87,6 +112,9 @@ export class CloudConfig {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost || API_HOST,
       apiKey: savedConfig.apiKey,
+      currentOrganizationId: savedConfig.currentOrganizationId,
+      currentTeamId: savedConfig.currentTeamId,
+      teams: savedConfig.teams,
     };
   }
 
@@ -95,6 +123,7 @@ export class CloudConfig {
     apiHost: string,
   ): Promise<{ user: CloudUser; organization: CloudOrganization; app: CloudApp }> {
     try {
+      const { fetchWithProxy } = await import('../util/fetch');
       const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -114,12 +143,6 @@ export class CloudConfig {
       this.setApiHost(apiHost);
       this.setAppUrl(app.url);
 
-      logger.info(chalk.green.bold('Successfully logged in'));
-      logger.info(chalk.dim('Logged in as:'));
-      logger.info(`User: ${chalk.cyan(user.email)}`);
-      logger.info(`Organization: ${chalk.cyan(organization.name)}`);
-      logger.info(`Access the app at ${chalk.cyan(app.url)}`);
-
       return {
         user,
         organization,
@@ -133,6 +156,76 @@ export class CloudConfig {
       }
       throw error;
     }
+  }
+
+  getCurrentOrganizationId(): string | undefined {
+    return this.config.currentOrganizationId;
+  }
+
+  setCurrentOrganization(organizationId: string): void {
+    this.config.currentOrganizationId = organizationId;
+    this.saveConfig();
+  }
+
+  getCurrentTeamId(organizationId?: string): string | undefined {
+    if (organizationId) {
+      return this.config.teams?.[organizationId]?.currentTeamId;
+    }
+    return this.config.currentTeamId;
+  }
+
+  setCurrentTeamId(teamId: string, organizationId?: string): void {
+    if (organizationId) {
+      if (!this.config.teams) {
+        this.config.teams = {};
+      }
+      if (!this.config.teams[organizationId]) {
+        this.config.teams[organizationId] = {};
+      }
+      this.config.teams[organizationId].currentTeamId = teamId;
+    } else {
+      this.config.currentTeamId = teamId;
+    }
+    this.saveConfig();
+  }
+
+  clearCurrentTeamId(organizationId?: string): void {
+    if (organizationId) {
+      if (this.config.teams?.[organizationId]) {
+        delete this.config.teams[organizationId].currentTeamId;
+      }
+    } else {
+      delete this.config.currentTeamId;
+    }
+    this.saveConfig();
+  }
+
+  cacheTeams(teams: CloudTeam[], organizationId?: string): void {
+    if (organizationId) {
+      if (!this.config.teams) {
+        this.config.teams = {};
+      }
+      if (!this.config.teams[organizationId]) {
+        this.config.teams[organizationId] = {};
+      }
+
+      this.config.teams[organizationId].cache = teams.map((t) => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        lastFetched: new Date().toISOString(),
+      }));
+    }
+    this.saveConfig();
+  }
+
+  getCachedTeams(
+    organizationId?: string,
+  ): Array<{ id: string; name: string; slug: string }> | undefined {
+    if (organizationId) {
+      return this.config.teams?.[organizationId]?.cache;
+    }
+    return undefined;
   }
 }
 

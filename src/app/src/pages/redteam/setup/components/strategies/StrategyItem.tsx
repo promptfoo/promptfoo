@@ -5,6 +5,7 @@ import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import { alpha } from '@mui/material/styles';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
   AGENTIC_STRATEGIES,
@@ -20,30 +21,69 @@ interface StrategyItemProps {
   isSelected: boolean;
   onToggle: (id: string) => void;
   onConfigClick: (id: string) => void;
+  isDisabled: boolean;
+  isRemoteGenerationDisabled: boolean;
+  isConfigured?: boolean;
 }
 
-export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: StrategyItemProps) {
+export function StrategyItem({
+  strategy,
+  isSelected,
+  onToggle,
+  onConfigClick,
+  isDisabled,
+  isRemoteGenerationDisabled,
+  isConfigured = true,
+}: StrategyItemProps) {
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
+  const hasError = isSelected && !isConfigured;
+
+  const handleToggle = () => {
+    // If selecting simba for the first time, auto-open config dialog
+    if (strategy.id === 'simba' && !isSelected && !isDisabled) {
+      onToggle(strategy.id);
+      // Use setTimeout to ensure the toggle completes before opening config
+      setTimeout(() => onConfigClick(strategy.id), 0);
+    } else {
+      onToggle(strategy.id);
+    }
+  };
 
   return (
     <Paper
       elevation={2}
-      onClick={() => onToggle(strategy.id)}
+      onClick={handleToggle}
       sx={(theme) => ({
         height: '100%',
         display: 'flex',
-        cursor: 'pointer',
+        cursor: isDisabled ? 'not-allowed' : 'pointer',
         userSelect: 'none',
-        border: isSelected ? `1px solid ${theme.palette.primary.main}` : undefined,
-        backgroundColor: isSelected
-          ? alpha(theme.palette.primary.main, 0.04)
-          : theme.palette.background.paper,
+        opacity: isDisabled ? 0.5 : 1,
+        border: hasError
+          ? `2px solid ${theme.palette.error.main}`
+          : isSelected
+            ? `1px solid ${theme.palette.primary.main}`
+            : undefined,
+        backgroundColor: isDisabled
+          ? theme.palette.action.disabledBackground
+          : hasError
+            ? alpha(theme.palette.error.main, 0.08)
+            : isSelected
+              ? alpha(theme.palette.primary.main, 0.04)
+              : theme.palette.background.paper,
         transition: 'all 0.2s ease-in-out',
         '&:hover': {
-          backgroundColor: isSelected
-            ? alpha(theme.palette.primary.main, 0.08)
-            : alpha(theme.palette.action.hover, 0.04),
+          backgroundColor: isDisabled
+            ? theme.palette.action.disabledBackground
+            : hasError
+              ? alpha(theme.palette.error.main, 0.12)
+              : isSelected
+                ? alpha(theme.palette.primary.main, 0.08)
+                : alpha(theme.palette.action.hover, 0.04),
         },
+        ...(hasError && {
+          boxShadow: `0 2px 8px ${alpha(theme.palette.error.main, 0.15)}`,
+        }),
       })}
     >
       {/* Checkbox container */}
@@ -56,9 +96,10 @@ export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: 
       >
         <Checkbox
           checked={isSelected}
+          disabled={isDisabled}
           onChange={(e) => {
             e.stopPropagation();
-            onToggle(strategy.id);
+            handleToggle();
           }}
           onClick={(e) => e.stopPropagation()}
           color="primary"
@@ -80,9 +121,13 @@ export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: 
               top: 8,
               right: 8,
               opacity: 0.6,
+              color: hasError ? 'error.main' : undefined,
               '&:hover': {
                 opacity: 1,
-                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                backgroundColor: (theme) =>
+                  hasError
+                    ? alpha(theme.palette.error.main, 0.08)
+                    : alpha(theme.palette.primary.main, 0.08),
               },
             }}
           >
@@ -132,20 +177,24 @@ export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: 
                 }}
               />
             )}
-            {strategy.id === 'pandamonium' && (
-              <Chip
-                label="Experimental"
-                size="small"
-                sx={{
-                  backgroundColor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? alpha(theme.palette.error.main, 0.1)
-                      : alpha(theme.palette.error.main, 0.1),
-                  color: 'error.main',
-                  borderColor: 'error.main',
-                  border: 1,
-                }}
-              />
+            {isDisabled && isRemoteGenerationDisabled && (
+              <Tooltip title="This strategy requires remote generation. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.">
+                <Typography
+                  variant="caption"
+                  sx={(theme) => ({
+                    fontSize: '0.7rem',
+                    color: 'error.main',
+                    fontWeight: 500,
+                    backgroundColor: alpha(theme.palette.error.main, 0.08),
+                    px: 0.5,
+                    py: 0.25,
+                    borderRadius: 0.5,
+                    border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
+                  })}
+                >
+                  Remote generation required
+                </Typography>
+              </Tooltip>
             )}
           </Box>
         </Box>

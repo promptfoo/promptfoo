@@ -1,5 +1,6 @@
 ---
 sidebar_label: Cross-Session Leak
+description: Red team cross-session data leaks by simulating sequential user interactions to protect AI systems from unauthorized information disclosure between conversations
 ---
 
 # Cross-Session Leak Plugin

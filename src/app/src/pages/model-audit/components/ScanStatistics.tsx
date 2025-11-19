@@ -9,6 +9,7 @@ import { alpha, useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { StatCard } from '../ModelAudit.styles';
+import { isCriticalSeverity } from '../utils';
 
 import type { ScanResult } from '../ModelAudit.types';
 
@@ -33,7 +34,7 @@ export default function ScanStatistics({
       icon: ErrorIcon,
       label: 'Critical',
       color: theme.palette.error.main,
-      count: scanResults.issues.filter((i) => i.severity === 'error').length,
+      count: scanResults.issues.filter((i) => isCriticalSeverity(i.severity)).length,
     },
     {
       severity: 'warning',
@@ -54,7 +55,14 @@ export default function ScanStatistics({
   return (
     <Grid container spacing={3} sx={{ mb: 4 }}>
       {severityStats.map(({ severity, icon: Icon, label, color, count }) => (
-        <Grid item xs={12} sm={6} md={3} key={severity}>
+        <Grid
+          key={severity}
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3,
+          }}
+        >
           <Tooltip
             title={
               selectedSeverity === severity
@@ -89,7 +97,7 @@ export default function ScanStatistics({
           </Tooltip>
         </Grid>
       ))}
-      <Grid item xs={12} sm={6} md={3}>
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <Tooltip title="Click to see which files were scanned" placement="top">
           <StatCard
             elevation={0}
@@ -106,7 +114,7 @@ export default function ScanStatistics({
           >
             <CheckCircleIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
             <Typography variant="h3" fontWeight={700} color="success.main">
-              {scanResults.scannedFiles || 0}
+              {scanResults.files_scanned ?? scanResults.scannedFiles ?? 0}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Files Scanned

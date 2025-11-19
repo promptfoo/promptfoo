@@ -8,7 +8,7 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 async function generateCitations(
   testCases: TestCase[],

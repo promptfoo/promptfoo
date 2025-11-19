@@ -1,6 +1,7 @@
 ---
 sidebar_label: Architecture
 sidebar_position: 10
+description: Red team AI systems by analyzing architecture components and attack surfaces to protect LLM applications through systematic vulnerability assessment and threat modeling
 ---
 
 # Architecture
@@ -174,3 +175,57 @@ The configuration defines:
 Components can be used independently or composed into larger test suites. The modular design allows for extending functionality by adding new [plugins](/docs/red-team/configuration/#plugins), [strategies](/docs/red-team/configuration/#strategies), [targets](/docs/providers/) or evaluators.
 
 For CI/CD integration, see our [automation guide](/docs/integrations/ci-cd).
+
+## Data Flow
+
+The following sequence diagram illustrates the runtime communication between Promptfoo components during a red team assessment.
+
+The data flow follows a three-phase approach:
+
+**Phase 1: Initial Attack Generation**: The Promptfoo Client requests an attack from the cloud service, which leverages AI models to generate adversarial payloads. These attacks are based on the configured plugins and strategies.
+
+**Phase 2: Iterative Refinement** - The client executes attacks against the target system and evaluates responses. If a vulnerability is detected, testing concludes. Otherwise, the client generates follow-up attacks, providing context from previous attempts.
+
+This feedback loop generates increasingly sophisticated attacks, applying different strategies and attack vectors until either a vulnerability is found or the maximum attempt limit is reached.
+
+**Phase 3: Results Reporting**: Upon completion, the client produces a comprehensive test summary.
+
+```mermaid
+sequenceDiagram
+    participant Client as Promptfoo<br/>Client
+    participant Cloud as Promptfoo<br/>Server
+    participant AI as AI Models
+    participant Target as Target<br/>System
+
+    rect rgb(230, 245, 255)
+        Note over Client,Target: PHASE 1: Initial Attack
+        Client->>Cloud: Request attack generation
+        Cloud->>AI: Generate attack
+        AI-->>Cloud: Attack payload
+        Cloud-->>Client: Return attack
+        Client->>Target: Execute attack
+        Target-->>Client: Response
+    end
+
+    rect rgb(255, 245, 230)
+        Note over Client,Target: PHASE 2: Iterate Until Success
+
+        alt Target is vulnerable
+            Client->>Client: Vulnerability detected<br/>End testing
+        else Target not vulnerable
+            Client->>Cloud: Request follow-up attack<br/>(include previous context)
+            Cloud->>AI: Generate refined attack
+            AI-->>Cloud: New attack payload
+            Cloud-->>Client: Return follow-up attack
+            Client->>Target: Execute new attack
+            Target-->>Client: Response
+            Note over Client: Repeat until vulnerable<br/>or max attempts reached
+        end
+    end
+
+    rect rgb(245, 255, 245)
+        Note over Client,Target: PHASE 3: Report Results
+        Client->>Cloud: Submit test summary<br/>(attacks & results)
+        Cloud-->>Client: Acknowledge receipt
+    end
+```

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 1
+description: Evaluate and secure LLM applications with automated testing, red teaming, and benchmarking. Compare outputs across 50+ providers.
 ---
 
 # Intro
@@ -21,8 +22,8 @@ The goal: **test-driven LLM development**, not trial-and-error.
 
 **Get Started:**
 
-- [**Red teaming**](/docs/red-team/quickstart) - LLM security scans
-- [**Evaluations**](/docs/getting-started) - LLM quality benchmarks
+- [**Red teaming**](/docs/red-team/quickstart) - Scan for security vulnerabilities and compliance risks
+- [**Evaluations**](/docs/getting-started) - Test quality and accuracy of your prompts, models, and applications
 
 </div>
 

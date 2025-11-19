@@ -1,5 +1,6 @@
 ---
 sidebar_label: Mistral vs Llama
+description: Compare Mistral 7B, Mixtral 8x7B, and Llama 3.1 performance on custom benchmarks to optimize model selection for your specific LLM application needs
 ---
 
 # Mistral vs Llama: benchmark on your own data

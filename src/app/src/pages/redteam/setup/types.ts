@@ -38,6 +38,7 @@ export interface Config {
   entities: string[];
   defaultTest?: TestCase;
   extensions?: string[];
+  language?: string | string[]; // Global language configuration
 }
 
 export interface ProviderOptions {
@@ -71,6 +72,7 @@ export interface ProviderOptions {
       | string;
     stateful?: boolean;
     sessionSource?: 'client' | 'server';
+    streamResponse?: string;
   };
 }
 

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Mixtral vs GPT
+description: Compare Mixtral vs GPT-4 performance on custom datasets using automated benchmarks and evaluation metrics to identify the optimal model for your use case
 ---
 
 # Mixtral vs GPT: Run a benchmark with your own data

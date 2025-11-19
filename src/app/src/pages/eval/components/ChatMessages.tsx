@@ -1,7 +1,6 @@
-import { memo, useState } from 'react';
+import { memo } from 'react';
 
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
@@ -61,6 +60,7 @@ const ChatMessage = memo(({ message }: { message: Message | null }) => {
           variant="body1"
           sx={{
             whiteSpace: 'pre-wrap',
+            overflowWrap: 'break-word',
             color: textColor,
             textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',
             fontWeight: isUser ? 500 : 400,
@@ -74,81 +74,27 @@ const ChatMessage = memo(({ message }: { message: Message | null }) => {
 });
 
 interface ChatMessagesProps {
-  title?: string;
   messages: Message[];
 }
 
-export default function ChatMessages({ title, messages }: ChatMessagesProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-
+export default function ChatMessages({ messages }: ChatMessagesProps) {
   if (!messages || messages.length === 0) {
     return null;
   }
 
-  const minHeight = 200;
-  const maxHeight = isExpanded ? 'none' : minHeight;
-  const hasMoreMessages = messages.length > 1;
-
   return (
-    <>
-      <Typography variant="subtitle1" sx={{ mb: 2, mt: 2 }}>
-        {title || 'Messages'}
-      </Typography>
-      <Box
-        mb={2}
-        sx={{
-          backgroundColor: (theme) =>
-            theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.2)' : '#F8F9FA',
-          p: 2,
-          borderRadius: 2,
-          position: 'relative',
-          minHeight,
-          maxHeight,
-          overflow: 'hidden',
-          transition: 'max-height 0.3s ease-in-out',
-          '&::after':
-            !isExpanded && hasMoreMessages
-              ? {
-                  content: '""',
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: '50px',
-                  background: `linear-gradient(to bottom, transparent, ${isDark ? 'rgba(0, 0, 0, 0.2)' : '#F8F9FA'})`,
-                  pointerEvents: 'none',
-                }
-              : {},
-        }}
-      >
-        <Box sx={{ height: '100%', overflowY: 'auto' }}>
-          {messages.map((message, index) => (
-            <ChatMessage key={index} message={message} />
-          ))}
-        </Box>
-      </Box>
-      {hasMoreMessages && (
-        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-          <Button
-            variant="outlined"
-            onClick={() => setIsExpanded(!isExpanded)}
-            sx={{
-              mt: -1,
-              mb: 2,
-              minWidth: '160px',
-              color: theme.palette.text.secondary,
-              '&:hover': {
-                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
-              },
-            }}
-          >
-            {isExpanded ? 'Show Less' : 'Expand Messages'}
-          </Button>
-        </Box>
-      )}
-    </>
+    <Box
+      mb={2}
+      sx={{
+        backgroundColor: (theme) =>
+          theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.2)' : '#F8F9FA',
+        p: 2,
+      }}
+    >
+      {messages.map((message, index) => (
+        <ChatMessage key={index} message={message} />
+      ))}
+    </Box>
   );
 }
 

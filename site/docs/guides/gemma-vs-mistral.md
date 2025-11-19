@@ -1,5 +1,6 @@
 ---
 sidebar_label: Gemma vs Mistral/Mixtral
+description: Compare Gemma vs Mistral vs Mixtral performance on your custom datasets with automated benchmarks to identify the best model for your specific use case
 ---
 
 # Gemma vs Mistral: benchmark on your own data

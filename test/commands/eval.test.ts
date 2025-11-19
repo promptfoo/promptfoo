@@ -9,24 +9,41 @@ import {
   showRedteamProviderLabelMissingWarning,
 } from '../../src/commands/eval';
 import { evaluate } from '../../src/evaluator';
-import { checkEmailStatusOrExit, promptForEmailUnverified } from '../../src/globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  promptForEmailUnverified,
+} from '../../src/globalConfig/accounts';
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
+import { checkCloudPermissions, ConfigPermissionError } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');
 jest.mock('../../src/globalConfig/accounts');
+jest.mock('../../src/globalConfig/cloud', () => ({
+  cloudConfig: {
+    isEnabled: jest.fn().mockReturnValue(false),
+    getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+  },
+}));
 jest.mock('../../src/migrate');
 jest.mock('../../src/providers');
+jest.mock('../../src/redteam/shared', () => ({}));
 jest.mock('../../src/share');
 jest.mock('../../src/table');
+jest.mock('../../src/util/cloud', () => ({
+  ...jest.requireActual('../../src/util/cloud'),
+  getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
+  checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('fs');
 jest.mock('path', () => {
   const actualPath = jest.requireActual('path');
@@ -73,6 +90,8 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    jest.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
 
   it('should create eval command with correct options', () => {
@@ -81,14 +100,12 @@ describe('evalCommand', () => {
     expect(cmd.description()).toBe('Evaluate prompts');
   });
 
-  it('should open help when called with help argument', async () => {
+  it('should have help option available', () => {
     const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
-    const helpSpy = jest.spyOn(cmd, 'help').mockReturnValue(cmd as never);
-
-    await program.parseAsync(['node', 'test', 'eval', 'help']);
-
-    expect(helpSpy).toHaveBeenCalledWith();
-    expect(logger.warn).not.toHaveBeenCalled();
+    // The help option is automatically added by commander
+    const helpText = cmd.helpInformation();
+    expect(helpText).toContain('-h, --help');
+    expect(helpText).toContain('display help for command');
   });
 
   it('should handle --no-cache option', async () => {
@@ -129,7 +146,7 @@ describe('evalCommand', () => {
     await doEval(cmdObj, config, defaultConfigPath, {});
 
     expect(promptForEmailUnverified).toHaveBeenCalledTimes(1);
-    expect(checkEmailStatusOrExit).toHaveBeenCalledTimes(1);
+    expect(checkEmailStatusAndMaybeExit).toHaveBeenCalledTimes(1);
   });
 
   it('should handle share option when enabled', async () => {
@@ -153,6 +170,125 @@ describe('evalCommand', () => {
     await doEval(cmdObj, config, defaultConfigPath, {});
 
     expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+  });
+
+  it('should not share when share is explicitly set to false even if config has sharing enabled', async () => {
+    const cmdObj = { share: false };
+    const config = { sharing: true } as UnifiedConfig;
+    const evalRecord = new Eval(config);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(evalRecord);
+    jest.mocked(isSharingEnabled).mockReturnValue(true);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(createShareableUrl).not.toHaveBeenCalled();
+  });
+
+  it('should share when share is true even if config has no sharing enabled', async () => {
+    const cmdObj = { share: true };
+    const config = {} as UnifiedConfig;
+    const evalRecord = new Eval(config);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(evalRecord);
+    jest.mocked(isSharingEnabled).mockReturnValue(true);
+    jest.mocked(createShareableUrl).mockResolvedValue('http://share.url');
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+  });
+
+  it('should share when share is undefined and config has sharing enabled', async () => {
+    const cmdObj = {};
+    const config = { sharing: true } as UnifiedConfig;
+    const evalRecord = new Eval(config);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(evalRecord);
+    jest.mocked(isSharingEnabled).mockReturnValue(true);
+    jest.mocked(createShareableUrl).mockResolvedValue('http://share.url');
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+  });
+
+  it('should auto-share when connected to cloud even if sharing is not explicitly enabled', async () => {
+    const cmdObj = {};
+    const config = {} as UnifiedConfig; // No sharing config
+    const evalRecord = new Eval(config);
+
+    // Mock cloud config as enabled
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(evalRecord);
+    jest.mocked(isSharingEnabled).mockReturnValue(true);
+    jest.mocked(createShareableUrl).mockResolvedValue('http://share.url');
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+  });
+
+  it('should not auto-share when connected to cloud if share is explicitly set to false', async () => {
+    const cmdObj = { share: false };
+    const config = {} as UnifiedConfig;
+    const evalRecord = new Eval(config);
+
+    // Mock cloud config as enabled
+    jest.mocked(cloudConfig.isEnabled).mockReturnValueOnce(true);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(evalRecord);
+    jest.mocked(isSharingEnabled).mockReturnValueOnce(true);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(createShareableUrl).not.toHaveBeenCalled();
   });
 
   it('should handle grader option', async () => {
@@ -223,6 +359,127 @@ describe('evalCommand', () => {
       expect.anything(),
       expect.objectContaining({ maxConcurrency: 4 }),
     );
+  });
+});
+
+describe('checkCloudPermissions', () => {
+  const defaultConfigPath = 'config.yaml';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    jest.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
+  });
+
+  it('should fail when checkCloudPermissions throws an error', async () => {
+    // Mock cloudConfig to be enabled
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+
+    // Mock checkCloudPermissions to throw an error
+    const permissionError = new ConfigPermissionError('Permission denied: insufficient access');
+    jest.mocked(checkCloudPermissions).mockRejectedValueOnce(permissionError);
+
+    // Setup the test configuration
+    const config = {
+      providers: ['openai:gpt-4'],
+    } as UnifiedConfig;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }] as ApiProvider[],
+        tests: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const cmdObj = {};
+
+    await expect(doEval(cmdObj, config, defaultConfigPath, {})).rejects.toThrow(
+      'Permission denied: insufficient access',
+    );
+
+    // Verify checkCloudPermissions was called with the correct arguments
+    expect(checkCloudPermissions).toHaveBeenCalledWith(config);
+
+    // Verify that evaluate was not called
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('should call checkCloudPermissions and proceed when it succeeds', async () => {
+    // Mock cloudConfig to be enabled
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+
+    // Mock checkCloudPermissions to succeed (resolve without throwing)
+    jest.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
+
+    // Setup the test configuration
+    const config = {
+      providers: ['openai:gpt-4'],
+    } as UnifiedConfig;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
+        tests: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const mockEvalRecord = new Eval(config);
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    const cmdObj = {};
+
+    const result = await doEval(cmdObj, config, defaultConfigPath, {});
+
+    // Verify checkCloudPermissions was called
+    expect(checkCloudPermissions).toHaveBeenCalledWith(config);
+
+    // Verify that the function proceeded normally
+    expect(result).not.toBeNull();
+
+    // Verify that evaluate was called
+    expect(evaluate).toHaveBeenCalled();
+  });
+
+  it('should call checkCloudPermissions but skip permission check when cloudConfig is disabled', async () => {
+    // Mock cloudConfig to be disabled
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+
+    // Mock checkCloudPermissions to succeed (it should return early due to disabled cloud)
+    jest.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
+
+    // Setup the test configuration
+    const config = {
+      providers: ['openai:gpt-4'],
+    } as UnifiedConfig;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
+        tests: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const mockEvalRecord = new Eval(config);
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    const cmdObj = {};
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    // Verify checkCloudPermissions was called (but returns early due to disabled cloud)
+    expect(checkCloudPermissions).toHaveBeenCalledWith(config);
+
+    // Verify that evaluate was called
+    expect(evaluate).toHaveBeenCalled();
   });
 });
 
@@ -391,6 +648,8 @@ describe('doEval with external defaultTest', () => {
       },
       basePath: path.resolve('/'),
     });
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    jest.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
 
   it('should handle grader option with string defaultTest', async () => {

@@ -183,19 +183,13 @@ describe('TestCaseForm', () => {
 
     const { rerender } = renderComponent({ initialValues: initialValues1 });
 
-    expect(mockVarsForm).toHaveBeenCalledWith(
-      expect.objectContaining({
-        initialValues: initialValues1.vars,
-      }),
-      expect.anything(),
-    );
+    expect(mockVarsForm.mock.calls[0][0]).toMatchObject({
+      initialValues: initialValues1.vars,
+    });
 
-    expect(mockAssertsForm).toHaveBeenCalledWith(
-      expect.objectContaining({
-        initialValues: initialValues1.assert,
-      }),
-      expect.anything(),
-    );
+    expect(mockAssertsForm.mock.calls[0][0]).toMatchObject({
+      initialValues: initialValues1.assert,
+    });
 
     const initialValues2: TestCase = {
       description: 'Updated description',
@@ -215,19 +209,14 @@ describe('TestCaseForm', () => {
       </ThemeProvider>,
     );
 
-    expect(mockVarsForm).toHaveBeenCalledWith(
-      expect.objectContaining({
-        initialValues: initialValues2.vars,
-      }),
-      expect.anything(),
-    );
+    // Get the last call since it was re-rendered with new props
+    expect(mockVarsForm.mock.lastCall?.[0]).toMatchObject({
+      initialValues: initialValues2.vars,
+    });
 
-    expect(mockAssertsForm).toHaveBeenCalledWith(
-      expect.objectContaining({
-        initialValues: initialValues2.assert,
-      }),
-      expect.anything(),
-    );
+    expect(mockAssertsForm.mock.lastCall?.[0]).toMatchObject({
+      initialValues: initialValues2.assert,
+    });
   });
 
   it('should reset form fields when the dialog is closed and reopened', async () => {
@@ -315,12 +304,9 @@ describe('TestCaseForm', () => {
     renderComponent({ varsList: [] });
 
     expect(mockVarsForm).toHaveBeenCalled();
-    expect(mockVarsForm).toHaveBeenCalledWith(
-      expect.objectContaining({
-        varsList: [],
-      }),
-      expect.anything(),
-    );
+    expect(mockVarsForm.mock.calls[0][0]).toMatchObject({
+      varsList: [],
+    });
   });
 
   it('should create deep copies of initialValues to prevent mutation', async () => {

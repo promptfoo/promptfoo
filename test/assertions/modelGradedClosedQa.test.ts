@@ -1,34 +1,12 @@
 import { handleModelGradedClosedQa } from '../../src/assertions/modelGradedClosedQa';
 import { matchesClosedQa } from '../../src/matchers';
-import { getNunjucksEngine } from '../../src/util/templates';
-import type nunjucks from 'nunjucks';
 
-import type { AssertionParams } from '../../src/types';
+import type { AssertionParams } from '../../src/types/index';
 
 jest.mock('../../src/matchers');
-jest.mock('../../src/util/templates');
 
 describe('handleModelGradedClosedQa', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    const mockNunjucksEnv = {
-      options: { autoescape: true },
-      render: jest.fn(),
-      renderString: jest.fn().mockImplementation((str) => str),
-      addFilter: jest.fn(),
-      getFilter: jest.fn(),
-      hasExtension: jest.fn(),
-      addExtension: jest.fn(),
-      removeExtension: jest.fn(),
-      getExtension: jest.fn(),
-      addGlobal: jest.fn(),
-      getGlobal: jest.fn(),
-      getTemplate: jest.fn(),
-      express: jest.fn(),
-      on: jest.fn(),
-    } as unknown as nunjucks.Environment;
-
-    jest.mocked(getNunjucksEngine).mockReturnValue(mockNunjucksEnv);
     jest.mocked(matchesClosedQa).mockResolvedValue({
       pass: true,
       score: 1,
@@ -40,7 +18,7 @@ describe('handleModelGradedClosedQa', () => {
     const params: AssertionParams = {
       assertion: { type: 'model-graded-closedqa' },
       baseType: 'model-graded-closedqa',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: { vars: {} },
@@ -69,7 +47,7 @@ describe('handleModelGradedClosedQa', () => {
     const params: AssertionParams = {
       assertion: { type: 'model-graded-closedqa' },
       baseType: 'model-graded-closedqa',
-      context: {
+      assertionValueContext: {
         prompt: undefined,
         vars: {},
         test: { vars: {} },
@@ -94,95 +72,11 @@ describe('handleModelGradedClosedQa', () => {
     );
   });
 
-  it('should validate rubricPrompt is string if provided', async () => {
-    const params: AssertionParams = {
-      assertion: { type: 'model-graded-closedqa' },
-      baseType: 'model-graded-closedqa',
-      context: {
-        prompt: 'test prompt',
-        vars: {},
-        test: { vars: {} },
-        logProbs: undefined,
-        provider: undefined,
-        providerResponse: undefined,
-      },
-      inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      prompt: 'test prompt',
-      providerResponse: {},
-      renderedValue: 'test value',
-      test: {
-        options: {
-          rubricPrompt: {} as any,
-        },
-        vars: {},
-      },
-    };
-
-    await expect(handleModelGradedClosedQa(params)).rejects.toThrow(
-      'rubricPrompt must be a string',
-    );
-  });
-
-  it('should process rubricPrompt with nunjucks if provided', async () => {
-    const mockRenderString = jest.fn().mockReturnValue('rendered rubric');
-    const mockNunjucksEnv = {
-      options: { autoescape: true },
-      render: jest.fn(),
-      renderString: mockRenderString,
-      addFilter: jest.fn(),
-      getFilter: jest.fn(),
-      hasExtension: jest.fn(),
-      addExtension: jest.fn(),
-      removeExtension: jest.fn(),
-      getExtension: jest.fn(),
-      addGlobal: jest.fn(),
-      getGlobal: jest.fn(),
-      getTemplate: jest.fn(),
-      express: jest.fn(),
-      on: jest.fn(),
-    } as unknown as nunjucks.Environment;
-
-    jest.mocked(getNunjucksEngine).mockReturnValue(mockNunjucksEnv);
-
-    const params: AssertionParams = {
-      assertion: { type: 'model-graded-closedqa' },
-      baseType: 'model-graded-closedqa',
-      context: {
-        prompt: 'test prompt',
-        vars: { var: 'value' },
-        test: { vars: { var: 'value' } },
-        logProbs: undefined,
-        provider: undefined,
-        providerResponse: undefined,
-      },
-      inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      prompt: 'test prompt',
-      providerResponse: {},
-      renderedValue: 'test value',
-      test: {
-        options: {
-          rubricPrompt: 'test rubric {{ var }}',
-        },
-        vars: {
-          var: 'value',
-        },
-      },
-    };
-
-    await handleModelGradedClosedQa(params);
-
-    expect(mockRenderString).toHaveBeenCalledWith('test rubric {{ var }}', { var: 'value' });
-  });
-
   it('should call matchesClosedQa with correct parameters', async () => {
     const params: AssertionParams = {
       assertion: { type: 'model-graded-closedqa' },
       baseType: 'model-graded-closedqa',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { var: 'value' },
         test: { vars: { var: 'value' } },
@@ -218,6 +112,7 @@ describe('handleModelGradedClosedQa', () => {
       {
         var: 'value',
       },
+      undefined,
     );
 
     expect(result).toEqual({

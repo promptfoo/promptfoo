@@ -1,7 +1,7 @@
 ---
 sidebar_label: Best-of-N
 title: Best-of-N Jailbreaking Strategy
-description: Black-box jailbreaking technique that tests multiple prompt variations to bypass safety mechanisms
+description: Execute black-box jailbreaking by testing multiple prompt variations simultaneously to maximize bypass success probability
 ---
 
 # Best-of-N (BoN) Jailbreaking Strategy

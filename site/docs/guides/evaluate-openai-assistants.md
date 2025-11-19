@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluating OpenAI Assistants
+description: Compare OpenAI Assistant configurations and measure performance across different prompts, models, and tools to optimize your AI application's accuracy and reliability
 ---
 
 # How to evaluate OpenAI Assistants

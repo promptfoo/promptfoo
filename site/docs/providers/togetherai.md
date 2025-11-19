@@ -1,5 +1,6 @@
 ---
 sidebar_label: Together AI
+description: "Deploy open-source models at scale using Together AI's optimized inference platform with serverless GPU infrastructure"
 ---
 
 # Together AI

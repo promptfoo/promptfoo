@@ -1,7 +1,12 @@
-import { runAssertion } from '../../src/assertions';
+import { runAssertion } from '../../src/assertions/index';
 import { getTraceStore } from '../../src/tracing/store';
 
-import type { Assertion, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types';
+import type {
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+} from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
 // Mock the trace store

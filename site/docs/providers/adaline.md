@@ -1,5 +1,6 @@
 ---
 sidebar_label: Adaline Gateway
+description: "Access multiple LLM providers via Adaline's unified API gateway with automatic failover, routing, and usage optimization"
 ---
 
 # Adaline Gateway
@@ -13,7 +14,7 @@ Read more about Adaline Gateway: https://github.com/adaline/gateway
 
 ## Installation
 
-All Adaline Gateway packages are peer dependencies. You need to install them separately:
+Adaline Gateway packages are optional dependencies. Install them before using Adaline Gateway:
 
 ```bash
 npm install @adaline/anthropic@latest @adaline/azure@latest @adaline/gateway@latest @adaline/google@latest @adaline/groq@latest @adaline/open-router@latest @adaline/openai@latest @adaline/provider@latest @adaline/together-ai@latest @adaline/types@latest @adaline/vertex@latest

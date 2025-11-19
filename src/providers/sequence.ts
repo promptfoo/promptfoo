@@ -8,7 +8,7 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 
 interface SequenceProviderConfig {

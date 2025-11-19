@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluating Nscale models for reasoning and creative tasks
+prompts:
+  - file://prompts.txt
+providers:
+  - id: nscale:openai/gpt-oss-120b
+    config:
+      temperature: 0.7
+      max_tokens: 1024
+  - id: nscale:meta/llama-3.3-70b-instruct
+    config:
+      temperature: 0.5
+      max_tokens: 1024
+tests:
+  - vars:
+      task_type: mathematical reasoning
+      task_description: 'Solve this problem step by step: A train leaves Station A at 2:00 PM traveling at 60 mph toward Station B, which is 180 miles away. Another train leaves Station B at 2:30 PM traveling at 80 mph toward Station A. At what time will the two trains meet?'
+    assert:
+      - type: contains-any
+        value: ['3:48', '3:48 PM', 'distance', 'relative speed', 'combined speed']
+      - type: llm-rubric
+        value: 'The response should show clear step-by-step mathematical reasoning and arrive at the correct answer of 3:48 PM.'
+  - vars:
+      task_type: creative writing
+      task_description: 'Write a short story (2-3 paragraphs) about a librarian who discovers that books in their library are portals to different worlds. Include vivid descriptions and an intriguing plot twist.'
+    assert:
+      - type: contains-any
+        value: ['portal', 'world', 'librarian', 'books', 'discovery']
+      - type: llm-rubric
+        value: 'The story should be creative, well-structured, include vivid descriptions, and have an interesting plot twist.'
+  - vars:
+      task_type: logical reasoning
+      task_description: "Three friends - Alice, Bob, and Charlie - each have a different favorite color (red, blue, green) and a different pet (cat, dog, bird). Given the clues: 1) Alice doesn't like red, 2) The person who likes blue has a cat, 3) Charlie has a bird, 4) Bob doesn't like green. Determine who has which pet and favorite color."
+    assert:
+      - type: contains-any
+        value: ['Alice', 'Bob', 'Charlie', 'blue', 'cat', 'bird']
+      - type: llm-rubric
+        value: 'The response should systematically work through the logical constraints and arrive at the correct solution.'
+  - vars:
+      task_type: scientific explanation
+      task_description: "Explain the concept of photosynthesis in a way that a 12-year-old could understand, including why it's important for life on Earth."
+    assert:
+      - type: contains-any
+        value: ['sunlight', 'carbon dioxide', 'oxygen', 'glucose', 'chlorophyll', 'plants']
+      - type: llm-rubric
+        value: 'The explanation should be age-appropriate, scientifically accurate, and clearly explain the importance of photosynthesis.'
+outputs:
+  - type: csv

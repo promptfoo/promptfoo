@@ -14,7 +14,7 @@ interface EnterpriseBannerProps {
  * Enterprise Banner component that shows information about community edition
  * Displays only when in redteam mode and when user is not logged into cloud
  */
-const EnterpriseBanner: React.FC<EnterpriseBannerProps> = ({ evalId, sx }) => {
+const EnterpriseBanner = ({ evalId, sx }: EnterpriseBannerProps) => {
   const [isCloudEnabled, setIsCloudEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {

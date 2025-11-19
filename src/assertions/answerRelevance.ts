@@ -1,13 +1,14 @@
 import { matchesAnswerRelevance } from '../matchers';
 import invariant from '../util/invariant';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleAnswerRelevance = async ({
   assertion,
   output,
   prompt,
   test,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof output === 'string',
@@ -15,8 +16,15 @@ export const handleAnswerRelevance = async ({
   );
   invariant(prompt, 'answer-relevance assertion type must have a prompt');
   const input = typeof test?.vars?.query === 'string' ? test.vars.query : prompt;
+
   return {
     assertion,
-    ...(await matchesAnswerRelevance(input, output, assertion.threshold ?? 0, test.options)),
+    ...(await matchesAnswerRelevance(
+      input,
+      output,
+      assertion.threshold ?? 0,
+      test.options,
+      providerCallContext,
+    )),
   };
 };

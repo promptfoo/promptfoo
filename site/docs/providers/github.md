@@ -1,6 +1,6 @@
 ---
 title: GitHub Models Provider
-description: Access OpenAI, Anthropic, Google, and xAI models through GitHub's unified API with OpenAI-compatible format
+description: 'Leverage GitHub Models API to access OpenAI, Anthropic, Google, and xAI models with unified OpenAI-compatible formatting'
 keywords:
   [github models, llm providers, openai, anthropic, claude, gemini, grok, deepseek, ai models]
 sidebar_label: GitHub Models
@@ -67,11 +67,11 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: github:anthropic/claude-4-opus
+  - id: github:anthropic/claude-4-opus # Uses GITHUB_TOKEN env var
     config:
       temperature: 0.7
       max_tokens: 4096
-      apiKey: ${GITHUB_TOKEN}
+      # apiKey: "{{ env.GITHUB_TOKEN }}"  # optional, auto-detected
 ```
 
 ### Multiple Models

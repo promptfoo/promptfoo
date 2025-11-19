@@ -1,9 +1,9 @@
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import { createCerebrasProvider } from '../../src/providers/cerebras';
 import type { z } from 'zod';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import type { ApiProvider } from '../../src/types';
+import type { ApiProvider } from '../../src/types/index';
 import type { ProviderEnvOverridesSchema } from '../../src/types/env';
 
 type ProviderEnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;
