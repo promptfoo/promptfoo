@@ -60,9 +60,9 @@ export class RoleConfusionGrader extends RedteamGraderBase {
   `;
 
   getSuggestions({
-    test,
+    _test,
     rawPrompt,
-    renderedValue,
+    _renderedValue,
   }: {
     test: AtomicTestCase;
     rawPrompt: string;
