@@ -408,9 +408,7 @@ describe('ResponsesProcessor', () => {
               {
                 type: 'output_text',
                 text: 'Deep research with citations',
-                annotations: [
-                  { url: 'https://example.com', title: 'Example Source' },
-                ],
+                annotations: [{ url: 'https://example.com', title: 'Example Source' }],
               },
             ],
           },
@@ -423,9 +421,7 @@ describe('ResponsesProcessor', () => {
       expect(result.metadata).toEqual({
         responseId: 'resp_combined999',
         model: 'o4-mini-deep-research',
-        annotations: [
-          { url: 'https://example.com', title: 'Example Source' },
-        ],
+        annotations: [{ url: 'https://example.com', title: 'Example Source' }],
       });
     });
 
@@ -471,9 +467,7 @@ describe('ResponsesProcessor', () => {
               {
                 type: 'output_text',
                 text: 'Second citation',
-                annotations: [
-                  { url: 'https://source3.com', title: 'Source 3' },
-                ],
+                annotations: [{ url: 'https://source3.com', title: 'Source 3' }],
               },
             ],
           },
@@ -554,9 +548,7 @@ describe('ResponsesProcessor', () => {
               {
                 type: 'output_text',
                 text: 'Research with citations',
-                annotations: [
-                  { url: 'https://example.com', title: 'Example' },
-                ],
+                annotations: [{ url: 'https://example.com', title: 'Example' }],
               },
             ],
           },
@@ -573,9 +565,7 @@ describe('ResponsesProcessor', () => {
 
       // Annotations should also be in raw for backwards compatibility
       expect(result.raw).toHaveProperty('annotations');
-      expect(result.raw.annotations).toEqual([
-        { url: 'https://example.com', title: 'Example' },
-      ]);
+      expect(result.raw.annotations).toEqual([{ url: 'https://example.com', title: 'Example' }]);
     });
   });
 });
