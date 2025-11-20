@@ -358,7 +358,12 @@ describe('Telemetry', () => {
 
       expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
         distinctId: 'test-user-id',
-        properties: { email: 'test@example.com', isLoggedIntoCloud: false, authMethod: 'none', isRunningInCi: false },
+        properties: {
+          email: 'test@example.com',
+          isLoggedIntoCloud: false,
+          authMethod: 'none',
+          isRunningInCi: false,
+        },
       });
       expect(mockPostHogInstance.flush).toHaveBeenCalledWith();
     });
