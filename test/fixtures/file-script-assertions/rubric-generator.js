@@ -1,7 +1,7 @@
 // Test fixture for file-based script assertions
 // Used to test that script output is correctly passed to assertion handlers
 
-module.exports.rubric = (output, context) => {
+module.exports.rubric = (_output, context) => {
   return `Check that the output correctly addresses: ${context.vars.topic}`;
 };
 
@@ -35,12 +35,12 @@ module.exports.undefinedValue = () => undefined;
 module.exports.functionValue = () => () => 'nested function';
 
 // Dynamic regex pattern based on context
-module.exports.getPattern = (output, context) => {
+module.exports.getPattern = (_output, context) => {
   return context.vars.pattern || '\\d+';
 };
 
 // For regression testing - javascript assertion that returns GradingResult
-module.exports.gradingFunction = (output, context) => {
+module.exports.gradingFunction = (output, _context) => {
   const pass = output.includes('expected');
   return {
     pass,
