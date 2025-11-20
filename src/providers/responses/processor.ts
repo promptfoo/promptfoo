@@ -55,7 +55,17 @@ export class ResponsesProcessor {
     requestConfig: any,
     cached: boolean,
   ): Promise<ProviderResponse> {
-    logger.debug(`Processing ${this.config.providerType} responses output`);
+    // Log response metadata for debugging
+    logger.debug(`Processing ${this.config.providerType} responses output`, {
+      responseId: data.id,
+      model: data.model,
+      systemFingerprint: data.system_fingerprint,
+      serviceTier: data.service_tier,
+      created: data.created,
+      object: data.object,
+      outputItemCount: data.output?.length || 0,
+      cached,
+    });
 
     if (data.error) {
       return {
@@ -80,6 +90,7 @@ export class ResponsesProcessor {
           cached,
           cost: this.config.costCalculator(this.config.modelName, data.usage, requestConfig),
           raw: data,
+          metadata: this.extractMetadata(data, processedOutput),
         };
       }
 
@@ -103,12 +114,8 @@ export class ResponsesProcessor {
         cached,
         cost: this.config.costCalculator(this.config.modelName, data.usage, requestConfig),
         raw: data,
+        metadata: this.extractMetadata(data, processedOutput),
       };
-
-      // Add annotations if present (for deep research citations)
-      if (processedOutput.annotations && processedOutput.annotations.length > 0) {
-        result.raw = { ...data, annotations: processedOutput.annotations };
-      }
 
       return result;
     } catch (err) {
@@ -363,5 +370,30 @@ export class ResponsesProcessor {
   private processMcpApprovalRequest(item: any): Promise<{ content?: string }> {
     const content = `MCP Approval Required for ${item.server_label}.${item.name}: ${item.arguments}`;
     return Promise.resolve({ content });
+  }
+
+  /**
+   * Extract user-facing metadata from response data.
+   * Only includes fields that are useful for users viewing eval results.
+   */
+  private extractMetadata(data: any, processedOutput: ProcessedOutput): Record<string, any> {
+    const metadata: Record<string, any> = {};
+
+    // Response ID - for linking to OpenAI dashboard
+    if (data.id) {
+      metadata.responseId = data.id;
+    }
+
+    // Actual model used - may differ from requested (e.g., gpt-5 -> gpt-5-2025-08-07)
+    if (data.model) {
+      metadata.model = data.model;
+    }
+
+    // Deep research annotations (citations)
+    if (processedOutput.annotations && processedOutput.annotations.length > 0) {
+      metadata.annotations = processedOutput.annotations;
+    }
+
+    return metadata;
   }
 }
