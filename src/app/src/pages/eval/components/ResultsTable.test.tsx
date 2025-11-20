@@ -2997,7 +2997,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     const isPass = true;
 
     // Verify logic: if score is provided, use it; if only isPass, use 0/1
-    let finalScore: number;
+    let finalScore: number = 0;
     if (typeof customScore !== 'undefined') {
       finalScore = customScore;
     } else if (typeof isPass !== 'undefined' && isPass !== null) {
