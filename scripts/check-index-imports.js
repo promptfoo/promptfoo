@@ -8,7 +8,6 @@
  *   import { foo } from './types';  ❌
  */
 
-const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -40,8 +39,6 @@ function checkFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf8');
   const violations = [];
 
-  let match;
-  let lineNumber = 1;
   const lines = content.split('\n');
 
   lines.forEach((line, idx) => {
