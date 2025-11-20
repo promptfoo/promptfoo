@@ -22,6 +22,10 @@ import { type StrategyConfig, type RedteamStrategyObject } from '@promptfoo/redt
 
 const TEST_GENERATION_PLUGIN = 'harmful:hate';
 
+// Strategies that do not support test case generation
+// These strategies will have the test case generation button disabled in the UI
+const STRATEGIES_WITHOUT_TEST_CASE_GENERATION = ['retry', 'other-encodings'] as const;
+
 interface StrategyItemProps {
   strategy: StrategyCardData;
   isSelected: boolean;
@@ -64,6 +68,10 @@ export function StrategyItem({
   const hasSettingsButton =
     requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any));
 
+  const isTestCaseGenerationDisabled = STRATEGIES_WITHOUT_TEST_CASE_GENERATION.includes(
+    strategy.id as any,
+  );
+
   const { tooltipTitle, settingsTooltipTitle } = useMemo(() => {
     if (requiresConfig) {
       const reason =
@@ -80,11 +88,18 @@ export function StrategyItem({
       };
     }
 
+    if (isTestCaseGenerationDisabled) {
+      return {
+        tooltipTitle: `Test case generation is not available for ${strategy.name} strategy.`,
+        settingsTooltipTitle: 'Configure strategy settings',
+      };
+    }
+
     return {
       tooltipTitle: `Generate an example test case using the ${strategy.name} Strategy.`,
       settingsTooltipTitle: 'Configure strategy settings',
     };
-  }, [requiresConfig, strategy.id, strategy.name]);
+  }, [requiresConfig, strategy.id, strategy.name, isTestCaseGenerationDisabled]);
 
   const handleTestCaseGeneration = useCallback(async () => {
     await generateTestCase(
@@ -229,7 +244,9 @@ export function StrategyItem({
       <Box>
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
-          disabled={isDisabled || generatingTestCase || requiresConfig}
+          disabled={
+            isDisabled || generatingTestCase || requiresConfig || isTestCaseGenerationDisabled
+          }
           isGenerating={generatingTestCase && currentStrategy === strategy.id}
           size="small"
           tooltipTitle={tooltipTitle}
