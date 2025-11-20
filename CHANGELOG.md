@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(redteam): prevent template evaluation of adversarial security payloads when using custom Python providers - adds skipRenderVars parameter to renderPrompt() to allow SSTI, XSS, and other attack payloads to pass through unmodified to custom providers for proper red team testing instead of causing template rendering errors (#6240)
 
+### Changed
+
+- chore: Add visiblity button for PFX passphrase (#6258)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
