@@ -49,7 +49,7 @@ describe('Per-test configuration merging', () => {
       },
     };
 
-    const result = await runEval({
+    const _result = await runEval({
       provider: mockProvider,
       prompt: mockPrompt,
       test,
@@ -81,7 +81,7 @@ describe('Per-test configuration merging', () => {
       },
     };
 
-    const result = await runEval({
+    const _result = await runEval({
       provider: mockProvider,
       prompt: mockPrompt,
       test,
@@ -119,7 +119,7 @@ describe('Per-test configuration merging', () => {
       },
     };
 
-    const result = await runEval({
+    const _result = await runEval({
       provider: mockProvider,
       prompt: mockPrompt,
       test,
@@ -147,7 +147,7 @@ describe('Per-test configuration merging', () => {
       // No options
     };
 
-    const result = await runEval({
+    const _result = await runEval({
       provider: mockProvider,
       prompt: mockPrompt,
       test,
@@ -174,7 +174,7 @@ describe('Per-test configuration merging', () => {
       options: {},
     };
 
-    const result = await runEval({
+    const _result = await runEval({
       provider: mockProvider,
       prompt: mockPrompt,
       test,
@@ -209,7 +209,7 @@ describe('Per-test configuration merging', () => {
       },
     };
 
-    const result = await runEval({
+    const _result = await runEval({
       provider: mockProvider,
       prompt: mockPrompt,
       test,
@@ -255,7 +255,7 @@ describe('Per-test configuration merging', () => {
       },
     };
 
-    const result = await runEval({
+    const _result = await runEval({
       provider: mockProvider,
       prompt: mockPrompt,
       test,
@@ -291,7 +291,7 @@ describe('Per-test configuration merging', () => {
       },
     };
 
-    const result = await runEval({
+    const _result = await runEval({
       provider: mockProvider,
       prompt: mockPrompt,
       test,
@@ -322,7 +322,7 @@ describe('Per-test configuration merging', () => {
     };
 
     // These fields should still be accessible in test.options AND in prompt.config
-    const result = await runEval({
+    const _result = await runEval({
       provider: mockProvider,
       prompt: mockPrompt,
       test,
@@ -354,7 +354,7 @@ describe('Per-test configuration merging', () => {
       },
     };
 
-    const result = await runEval({
+    const _result = await runEval({
       provider: mockProvider,
       prompt: mockPrompt,
       test,
