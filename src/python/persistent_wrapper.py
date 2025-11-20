@@ -149,7 +149,7 @@ def main():
 
             if line.startswith("SHUTDOWN"):
                 break
-            elif line.startswith("CALL:"):
+            elif line.startswith("CALL|"):
                 handle_call(line, user_module, function_name)
             else:
                 print(f"ERROR: Unknown command: {line}", file=sys.stderr, flush=True)
