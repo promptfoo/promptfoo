@@ -7,6 +7,7 @@ import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString, isCI } from '../envars';
 import logger from '../logger';
 import { fetchWithTimeout } from '../util/fetch/index';
+import { CloudConfig } from './cloud';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';
@@ -84,8 +85,11 @@ export function getAuthor(): string | null {
 }
 
 export function isLoggedIntoCloud(): boolean {
-  const userEmail = getUserEmail();
-  return !!userEmail && !isCI();
+  // Check if user has authenticated with Promptfoo Cloud
+  // This supports both interactive (email-based) and non-interactive (API key) authentication
+  // CI environments can authenticate via API keys, so we no longer exclude CI
+  const cloudConfig = new CloudConfig();
+  return cloudConfig.isEnabled();
 }
 
 interface EmailStatusResult {
