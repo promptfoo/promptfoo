@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Link as RouterLink } from 'react-router-dom';
-
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -11,8 +9,8 @@ import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Paper from '@mui/material/Paper';
-import { alpha, useTheme } from '@mui/material/styles';
 import Switch from '@mui/material/Switch';
+import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
   AGENTIC_STRATEGIES,
@@ -24,24 +22,25 @@ import {
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
-import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
-
+import { Link as RouterLink } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import EstimationsDisplay from './EstimationsDisplay';
 import PageWrapper from './PageWrapper';
+import StrategyConfigDialog from './StrategyConfigDialog';
 import { AgenticStrategiesGroup } from './strategies/AgenticStrategiesGroup';
 import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
 import {
   getStrategyId,
   isStrategyConfigured,
   STRATEGIES_REQUIRING_CONFIG,
 } from './strategies/utils';
-import StrategyConfigDialog from './StrategyConfigDialog';
+import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+
+import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -170,24 +169,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           updateConfig('strategies', [...config.strategies, { id: 'basic' }]);
         }
       } else {
-        if (hasBasic) {
-          // Set existing basic to disabled
-          updateConfig(
-            'strategies',
-            config.strategies.map((s) => {
-              if (getStrategyId(s) === 'basic') {
-                return { id: 'basic', config: { enabled: false } };
-              }
-              return s;
-            }),
-          );
-        } else {
-          // Add basic with enabled: false
-          updateConfig('strategies', [
-            ...config.strategies,
-            { id: 'basic', config: { enabled: false } },
-          ]);
-        }
+        // Remove basic strategy from the array
+        updateConfig(
+          'strategies',
+          config.strategies.filter((s) => getStrategyId(s) !== 'basic'),
+        );
       }
     },
     [config.strategies, updateConfig, hasActiveNonBasicStrategies, toast],
@@ -375,7 +361,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           return true;
         });
 
-        if (!hasActiveStrategies) {
+        if (hasActiveStrategies) {
+          updateConfig('strategies', newStrategies);
+        } else {
           // Auto-enable basic to ensure at least one strategy is active
           const hasBasic = newStrategies.some((s) => getStrategyId(s) === 'basic');
           if (hasBasic) {
@@ -392,8 +380,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             updateConfig('strategies', [...newStrategies, { id: 'basic' }]);
           }
           toast.showToast('Baseline tests enabled - at least one strategy is required.', 'info');
-        } else {
-          updateConfig('strategies', newStrategies);
         }
       } else {
         // Add strategy with stateful config if it's multi-turn
@@ -447,7 +433,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         return true;
       });
 
-      if (!hasActiveStrategies) {
+      if (hasActiveStrategies) {
+        updateConfig('strategies', newStrategies);
+      } else {
         // Auto-enable basic to ensure at least one strategy is active
         const hasBasic = newStrategies.some((s) => getStrategyId(s) === 'basic');
         if (hasBasic) {
@@ -462,8 +450,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           updateConfig('strategies', [...newStrategies, { id: 'basic' }]);
         }
         toast.showToast('Baseline tests enabled - at least one strategy is required.', 'info');
-      } else {
-        updateConfig('strategies', newStrategies);
       }
     },
     [config.strategies, updateConfig, toast],
