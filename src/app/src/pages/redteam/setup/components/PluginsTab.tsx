@@ -54,6 +54,7 @@ import type { LocalPluginConfig } from '../types';
 import { useTestCaseGeneration } from './TestCaseGenerationProvider';
 import { TestCaseGenerateButton } from './TestCaseDialog';
 import { useApiHealth } from '@app/hooks/useApiHealth';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import VerticalSuiteCard from './VerticalSuiteCard';
 import { VERTICAL_SUITES, DOMAIN_SPECIFIC_PLUGINS } from './verticalSuites';
 
@@ -112,6 +113,10 @@ export default function PluginsTab({
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
+
+  // Check if user has enterprise access (cloud enabled)
+  const { data: cloudConfig } = useCloudConfig();
+  const hasEnterpriseAccess = cloudConfig?.isEnabled ?? false;
 
   // Test case generation state - now from context
   const {
@@ -546,6 +551,14 @@ export default function PluginsTab({
                   onGenerateTestCase={handleGenerateTestCase}
                   isPluginConfigured={isPluginConfigured}
                   isPluginDisabled={isPluginDisabled}
+                  hasEnterpriseAccess={hasEnterpriseAccess}
+                  onUpgradeClick={() => {
+                    recordEvent('feature_used', {
+                      feature: 'redteam_config_enterprise_upgrade_clicked',
+                      source: 'vertical_suite_card',
+                    });
+                    window.open('https://www.promptfoo.dev/pricing/', '_blank');
+                  }}
                 />
               ))}
             </Stack>
