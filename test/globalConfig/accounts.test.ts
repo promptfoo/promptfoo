@@ -597,31 +597,60 @@ describe('accounts', () => {
       jest.clearAllMocks();
     });
 
-    it('should return true when user has email and not in CI', () => {
+    it('should return true when API key is present (not in CI)', () => {
       jest.mocked(readGlobalConfig).mockReturnValue({
-        account: { email: 'test@example.com' },
+        cloud: { apiKey: 'test-api-key' },
       });
       jest.mocked(isCI).mockReturnValue(false);
       expect(isLoggedIntoCloud()).toBe(true);
     });
 
-    it('should return false when user has no email', () => {
+    it('should return true when API key is present (in CI)', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        cloud: { apiKey: 'test-api-key' },
+      });
+      jest.mocked(isCI).mockReturnValue(true);
+      expect(isLoggedIntoCloud()).toBe(true);
+    });
+
+    it('should return false when no API key is present (not in CI)', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        cloud: {},
+      });
+      jest.mocked(isCI).mockReturnValue(false);
+      expect(isLoggedIntoCloud()).toBe(false);
+    });
+
+    it('should return false when no API key is present (in CI)', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        cloud: {},
+      });
+      jest.mocked(isCI).mockReturnValue(true);
+      expect(isLoggedIntoCloud()).toBe(false);
+    });
+
+    it('should return false when cloud config is missing', () => {
       jest.mocked(readGlobalConfig).mockReturnValue({});
       jest.mocked(isCI).mockReturnValue(false);
       expect(isLoggedIntoCloud()).toBe(false);
     });
 
-    it('should return false when in CI environment', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({});
-      jest.mocked(isCI).mockReturnValue(true);
-      expect(isLoggedIntoCloud()).toBe(false);
-    });
-
-    it('should return false when user has email but in CI environment', () => {
+    it('should return true with email and API key (backwards compatibility)', () => {
       jest.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
+        cloud: { apiKey: 'test-api-key' },
       });
-      jest.mocked(isCI).mockReturnValue(true);
+      jest.mocked(isCI).mockReturnValue(false);
+      expect(isLoggedIntoCloud()).toBe(true);
+    });
+
+    it('should return false with email but no API key', () => {
+      // Having email alone is not sufficient for cloud authentication
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+        cloud: {},
+      });
+      jest.mocked(isCI).mockReturnValue(false);
       expect(isLoggedIntoCloud()).toBe(false);
     });
   });
