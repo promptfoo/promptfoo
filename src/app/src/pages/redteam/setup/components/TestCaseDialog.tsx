@@ -135,6 +135,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   const canAddAdditionalTurns =
     !isGenerating && !isRunningTest && isMultiTurnStrategy(strategyName as Strategy);
 
+  const renderPluginDocumentationLink =
+    pluginName && !plugin?.isStatic && hasSpecificPluginDocumentation(pluginName as Plugin);
+
   return (
     <Dialog
       open={open}
@@ -189,33 +192,37 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           )}
         </Stack>
       </DialogContent>
-      <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 3 }}>
-        {pluginName &&
-          !plugin?.isStatic &&
-          hasSpecificPluginDocumentation(pluginName as Plugin) && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Link
-                href={getPluginDocumentationUrl(pluginName as Plugin)}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  fontSize: '0.875rem',
-                  textDecoration: 'none',
-                  '&:hover': {
-                    textDecoration: 'underline',
-                  },
-                }}
-              >
-                Learn more about {pluginDisplayName}
-                <Box component="span" sx={{ fontSize: '0.75rem' }}>
-                  ↗
-                </Box>
-              </Link>
-            </Box>
-          )}
+      <DialogActions
+        sx={{
+          justifyContent: renderPluginDocumentationLink ? 'space-between' : 'flex-end',
+          px: 3,
+          pb: 3,
+        }}
+      >
+        {renderPluginDocumentationLink && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Link
+              href={getPluginDocumentationUrl(pluginName as Plugin)}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.5,
+                fontSize: '0.875rem',
+                textDecoration: 'none',
+                '&:hover': {
+                  textDecoration: 'underline',
+                },
+              }}
+            >
+              Learn more about {pluginDisplayName}
+              <Box component="span" sx={{ fontSize: '0.75rem' }}>
+                ↗
+              </Box>
+            </Link>
+          </Box>
+        )}
 
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
           {canAddAdditionalTurns && (
