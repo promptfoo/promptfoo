@@ -75,11 +75,13 @@ export class Telemetry {
     const client = getPostHogClient();
     if (client) {
       try {
+        const { getAuthMethod } = await import('./globalConfig/accounts');
         client.identify({
           distinctId: this.id,
           properties: {
             email: this.email,
             isLoggedIntoCloud: isLoggedIntoCloud(),
+            authMethod: getAuthMethod(),
             isRunningInCi: isCI(),
           },
         });

@@ -92,6 +92,30 @@ export function isLoggedIntoCloud(): boolean {
   return cloudConfig.isEnabled();
 }
 
+/**
+ * Get the authentication method used for cloud access
+ * @returns 'api-key' | 'email' | 'none'
+ */
+export function getAuthMethod(): 'api-key' | 'email' | 'none' {
+  const cloudConfig = new CloudConfig();
+  const hasApiKey = cloudConfig.isEnabled();
+  const hasEmail = !!getUserEmail();
+
+  if (hasApiKey && hasEmail) {
+    // Both present - API key is the actual auth mechanism
+    return 'api-key';
+  }
+  if (hasApiKey) {
+    return 'api-key';
+  }
+  if (hasEmail) {
+    // Email without API key - not fully authenticated
+    // (this shouldn't happen in normal flow but handle it)
+    return 'email';
+  }
+  return 'none';
+}
+
 interface EmailStatusResult {
   status: UserEmailStatus;
   message?: string;

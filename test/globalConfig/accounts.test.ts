@@ -5,6 +5,7 @@ import {
   checkEmailStatus,
   checkEmailStatusAndMaybeExit,
   clearUserEmail,
+  getAuthMethod,
   getAuthor,
   getUserEmail,
   getUserId,
@@ -652,6 +653,52 @@ describe('accounts', () => {
       });
       jest.mocked(isCI).mockReturnValue(false);
       expect(isLoggedIntoCloud()).toBe(false);
+    });
+  });
+
+  describe('getAuthMethod', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should return "api-key" when API key is present', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthMethod()).toBe('api-key');
+    });
+
+    it('should return "api-key" when both API key and email are present', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthMethod()).toBe('api-key');
+    });
+
+    it('should return "email" when only email is present (no API key)', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+        cloud: {},
+      });
+      expect(getAuthMethod()).toBe('email');
+    });
+
+    it('should return "none" when neither API key nor email is present', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        cloud: {},
+      });
+      expect(getAuthMethod()).toBe('none');
+    });
+
+    it('should return "none" when cloud config is missing', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({});
+      expect(getAuthMethod()).toBe('none');
+    });
+
+    it('should return "none" when global config is null', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue(null as any);
+      expect(getAuthMethod()).toBe('none');
     });
   });
 });
