@@ -15,6 +15,8 @@ import type { ConversationMessage, PluginConfig, StrategyConfig } from '@promptf
 
 const TEST_GENERATION_TIMEOUT = 60000; // 60s timeout
 const TEST_EXECUTION_TIMEOUT = 60000; // 60s timeout
+const ERROR_MSG_DURATION = 7500; // 7.5s duration
+
 export interface GeneratedTestCase {
   prompt: string;
   context?: string;
@@ -271,7 +273,7 @@ export const TestCaseGenerationProvider: React.FC<{
               : error.message
             : 'Failed to generate test case';
 
-        toast.showToast(errorMessage, 'error', 7500);
+        toast.showToast(errorMessage, 'error', ERROR_MSG_DURATION);
 
         // Abort any pending test execution
         setIsRunningTest(false);
@@ -396,7 +398,11 @@ export const TestCaseGenerationProvider: React.FC<{
       const isMultiTurn = isMultiTurnStrategy(strategy.id);
       // Don't allow multi-turn strategies to be used unless the target is configured
       if (isMultiTurn && !shouldEvaluateAgainstTarget) {
-        toast.showToast('Multi-turn strategies require a target to be configured.', 'error');
+        toast.showToast(
+          'Multi-turn strategies require a target to be configured.',
+          'error',
+          ERROR_MSG_DURATION,
+        );
         return;
       }
       // Read the turn count from the strategy config
