@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
+- chore(deps): upgrade glob to v13 and mathjs to v15 (#6279)
 - chore(deps): update 67 minor and patch dependencies across all workspaces (#6278)
 - chore(deps): bump langchain-core from 0.3.78 to 0.3.80 in /examples/redteam-langchain in the pip group (#6270)
 - chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.933.0 to 3.934.0 (#6254)
