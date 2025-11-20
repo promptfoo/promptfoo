@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(cli): add team-aware sharing with --team flag for auth and share commands (#6076)
+
+### Changed
+
 - chore: Add visiblity button for PFX passphrase (#6258)
 - feat(app): Red Team Strategy Test Generation (#6005)
 

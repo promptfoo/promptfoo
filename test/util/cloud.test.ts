@@ -11,7 +11,7 @@ import {
   makeRequest,
   validateLinkedTargetId,
 } from '../../src/util/cloud';
-import { fetchWithProxy } from '../../src/util/fetch/index';
+import { fetchWithRetries } from '../../src/util/fetch/index';
 import { checkServerFeatureSupport } from '../../src/util/server';
 
 jest.mock('../../src/util/fetch/index.ts');
@@ -23,7 +23,8 @@ jest.mock('../../src/util/cloud', () => ({
 }));
 
 describe('cloud utils', () => {
-  const mockFetchWithProxy = jest.mocked(fetchWithProxy);
+  const EXPECTED_TIMEOUT_MS = 300_000;
+  const mockFetchWithRetries = jest.mocked(fetchWithRetries);
   const mockCloudConfig = cloudConfig as jest.Mocked<typeof cloudConfig>;
   const mockCheckServerFeatureSupport = jest.mocked(checkServerFeatureSupport);
   let mockMakeRequest: jest.SpyInstance;
@@ -49,11 +50,15 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method, body);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
-        method: 'POST',
-        body: JSON.stringify(body),
-        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-      });
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/test/path',
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+        EXPECTED_TIMEOUT_MS,
+      );
     });
 
     it('should make GET request without body', async () => {
@@ -62,11 +67,15 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
-        method: 'GET',
-        body: undefined,
-        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-      });
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/test/path',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+        EXPECTED_TIMEOUT_MS,
+      );
     });
 
     it('should handle undefined API key', async () => {
@@ -77,11 +86,15 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
-        method: 'GET',
-        body: undefined,
-        headers: { Authorization: 'Bearer undefined', 'Content-Type': 'application/json' },
-      });
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/test/path',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer undefined', 'Content-Type': 'application/json' },
+        },
+        EXPECTED_TIMEOUT_MS,
+      );
     });
 
     it('should handle empty path', async () => {
@@ -90,11 +103,15 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/', {
-        method: 'GET',
-        body: undefined,
-        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-      });
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+        EXPECTED_TIMEOUT_MS,
+      );
     });
 
     it('should handle API host without trailing slash', async () => {
@@ -105,9 +122,10 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/test/path',
         expect.any(Object),
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -119,9 +137,10 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/test/path',
         expect.any(Object),
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -131,11 +150,15 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
-        method: 'GET',
-        body: undefined,
-        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-      });
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/test/path',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+        EXPECTED_TIMEOUT_MS,
+      );
     });
 
     it('should handle complex request body', async () => {
@@ -153,11 +176,15 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method, body);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
-        method: 'POST',
-        body: JSON.stringify(body),
-        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-      });
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/test/path',
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+        EXPECTED_TIMEOUT_MS,
+      );
     });
 
     it('should handle non-JSON body', async () => {
@@ -167,11 +194,15 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method, body);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
-        method: 'POST',
-        body: JSON.stringify(body),
-        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-      });
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/test/path',
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+        EXPECTED_TIMEOUT_MS,
+      );
     });
 
     it('should handle null/undefined body', async () => {
@@ -179,18 +210,26 @@ describe('cloud utils', () => {
       const method = 'POST';
 
       await makeRequest(path, method, null);
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
-        method: 'POST',
-        body: 'null',
-        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-      });
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/test/path',
+        {
+          method: 'POST',
+          body: 'null',
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+        EXPECTED_TIMEOUT_MS,
+      );
 
       await makeRequest(path, method, undefined);
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
-        method: 'POST',
-        body: undefined,
-        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-      });
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/test/path',
+        {
+          method: 'POST',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+        EXPECTED_TIMEOUT_MS,
+      );
     });
   });
 
@@ -207,7 +246,7 @@ describe('cloud utils', () => {
         },
       };
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         json: () => Promise.resolve(mockProvider),
         ok: true,
       } as Response);
@@ -215,13 +254,14 @@ describe('cloud utils', () => {
       const result = await getProviderFromCloud('test-provider');
 
       expect(result).toEqual({ ...mockProvider.config });
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/providers/test-provider',
         {
           method: 'GET',
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -234,7 +274,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw error when provider fetch fails', async () => {
-      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
+      mockFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
 
       await expect(getProviderFromCloud('test-provider')).rejects.toThrow(
         'Failed to fetch provider from cloud: test-provider.',
@@ -249,11 +289,11 @@ describe('cloud utils', () => {
         },
       };
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         json: () => Promise.resolve({ buildDate: '2025-03-011' }),
       } as Response);
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         json: () => Promise.resolve(mockProvider),
       } as Response);
 
@@ -276,7 +316,7 @@ describe('cloud utils', () => {
         tests: [{ vars: { input: 'test' } }],
       };
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         json: () => Promise.resolve(mockUnifiedConfig),
         ok: true,
       } as Response);
@@ -284,13 +324,14 @@ describe('cloud utils', () => {
       const result = await getConfigFromCloud('test-config');
 
       expect(result).toEqual(mockUnifiedConfig);
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/redteam/configs/test-config/unified',
         {
           method: 'GET',
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -302,7 +343,7 @@ describe('cloud utils', () => {
         tests: [{ vars: { input: 'test' } }],
       };
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         json: () => Promise.resolve(mockUnifiedConfig),
         ok: true,
       } as Response);
@@ -310,13 +351,14 @@ describe('cloud utils', () => {
       const result = await getConfigFromCloud('test-config', 'test-provider');
 
       expect(result).toEqual(mockUnifiedConfig);
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/redteam/configs/test-config/unified?providerId=test-provider',
         {
           method: 'GET',
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -329,7 +371,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw error when config fetch fails', async () => {
-      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
+      mockFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
 
       await expect(getConfigFromCloud('test-config')).rejects.toThrow(
         'Failed to fetch config from cloud: test-config.',
@@ -337,7 +379,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw error when response is not ok', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: false,
         statusText: 'Not Found',
         json: () => Promise.resolve({}),
@@ -364,12 +406,12 @@ describe('cloud utils', () => {
         ],
       };
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockProvider),
       } as any);
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockOverride),
       } as any);
@@ -386,7 +428,7 @@ describe('cloud utils', () => {
     });
 
     it('should return null when no override ID exists', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({}),
       } as any);
@@ -404,7 +446,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw error when provider fetch fails', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: false,
         status: 404,
         statusText: 'Not Found',
@@ -417,12 +459,12 @@ describe('cloud utils', () => {
     });
 
     it('should throw error when override fetch fails', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ pluginSeverityOverrideId: 'override-1' }),
       } as any);
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: false,
         status: 404,
         statusText: 'Not Found',
@@ -438,12 +480,12 @@ describe('cloud utils', () => {
       const mockProvider = { pluginSeverityOverrideId: 'override-1' };
       const mockOverride = { id: 'override-1', members: [] };
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockProvider),
       } as any);
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockOverride),
       } as any);
@@ -463,12 +505,12 @@ describe('cloud utils', () => {
         members: [{ pluginId: 'pluginX', severity: 'MEDIUM' }],
       };
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockProvider),
       } as any);
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockOverride),
       } as any);
@@ -492,12 +534,12 @@ describe('cloud utils', () => {
         ],
       };
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockProvider),
       } as any);
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockOverride),
       } as any);
@@ -513,7 +555,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw error if first fetch throws synchronously', async () => {
-      mockFetchWithProxy.mockImplementationOnce(() => {
+      mockFetchWithRetries.mockImplementationOnce(() => {
         throw new Error('Synchronous fetch error');
       });
 
@@ -523,12 +565,12 @@ describe('cloud utils', () => {
     });
 
     it('should throw error if second fetch throws synchronously', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ pluginSeverityOverrideId: 'override-err' }),
       } as any);
 
-      mockFetchWithProxy.mockImplementationOnce(() => {
+      mockFetchWithRetries.mockImplementationOnce(() => {
         throw new Error('Synchronous fetch error 2');
       });
 
@@ -538,7 +580,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw error if first fetch rejects', async () => {
-      mockFetchWithProxy.mockRejectedValueOnce(new Error('Async fetch error'));
+      mockFetchWithRetries.mockRejectedValueOnce(new Error('Async fetch error'));
 
       await expect(getPluginSeverityOverridesFromCloud('provider-err3')).rejects.toThrow(
         'Failed to fetch plugin severity overrides from cloud.',
@@ -546,12 +588,12 @@ describe('cloud utils', () => {
     });
 
     it('should throw error if second fetch rejects', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ pluginSeverityOverrideId: 'override-err4' }),
       } as any);
 
-      mockFetchWithProxy.mockRejectedValueOnce(new Error('Async fetch error 2'));
+      mockFetchWithRetries.mockRejectedValueOnce(new Error('Async fetch error 2'));
 
       await expect(getPluginSeverityOverridesFromCloud('provider-err4')).rejects.toThrow(
         'Failed to fetch plugin severity overrides from cloud.',
@@ -586,7 +628,7 @@ describe('cloud utils', () => {
         },
       ];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockPolicies),
       } as Response);
@@ -614,13 +656,14 @@ describe('cloud utils', () => {
         severity: 'low',
       });
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/custom-policies/?id=policy-1&id=policy-2&id=policy-3&teamId=team-123',
         {
           method: 'GET',
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -634,7 +677,7 @@ describe('cloud utils', () => {
         },
       ];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockPolicies),
       } as Response);
@@ -662,7 +705,7 @@ describe('cloud utils', () => {
         },
       ];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockPolicies),
       } as Response);
@@ -686,7 +729,7 @@ describe('cloud utils', () => {
         },
       ];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockPolicies),
       } as Response);
@@ -701,7 +744,7 @@ describe('cloud utils', () => {
     });
 
     it('should handle empty policy list', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve([]),
       } as Response);
@@ -711,13 +754,14 @@ describe('cloud utils', () => {
       expect(result).toBeInstanceOf(Map);
       expect(result.size).toBe(0);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/custom-policies/?&teamId=team-empty',
         {
           method: 'GET',
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -728,11 +772,11 @@ describe('cloud utils', () => {
         'Could not fetch policies from cloud. Cloud config is not enabled. Please run `promptfoo auth login` to login.',
       );
 
-      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
     });
 
     it('should throw error when response is not ok', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: false,
         status: 404,
         statusText: 'Not Found',
@@ -745,7 +789,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw error when fetch rejects', async () => {
-      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
+      mockFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
 
       await expect(getPoliciesFromCloud(['policy-1'], 'team-123')).rejects.toThrow(
         'Failed to fetch policies from cloud.',
@@ -753,7 +797,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw error when response has invalid JSON', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.reject(new Error('Invalid JSON')),
       } as Response);
@@ -791,7 +835,7 @@ describe('cloud utils', () => {
         },
       ];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockPolicies),
       } as Response);
@@ -831,20 +875,21 @@ describe('cloud utils', () => {
     it('should properly encode multiple policy IDs in URL', async () => {
       const policyIds = ['policy-1', 'policy-2', 'policy-3', 'policy-4', 'policy-5'];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve([]),
       } as Response);
 
       await getPoliciesFromCloud(policyIds, 'team-multi');
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/custom-policies/?id=policy-1&id=policy-2&id=policy-3&id=policy-4&id=policy-5&teamId=team-multi',
         {
           method: 'GET',
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -858,7 +903,7 @@ describe('cloud utils', () => {
         },
       ];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockPolicies),
       } as Response);
@@ -882,7 +927,7 @@ describe('cloud utils', () => {
         },
       ];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockPolicies),
       } as Response);
@@ -906,7 +951,7 @@ describe('cloud utils', () => {
         },
       ];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockPolicies),
       } as Response);
@@ -924,25 +969,26 @@ describe('cloud utils', () => {
     it('should handle team IDs with special characters', async () => {
       const specialTeamId = 'team-123-@#$%';
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve([]),
       } as Response);
 
       await getPoliciesFromCloud(['policy-1'], specialTeamId);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         `https://api.example.com/api/v1/custom-policies/?id=policy-1&teamId=${specialTeamId}`,
         {
           method: 'GET',
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
     it('should handle HTTP error with detailed message', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
@@ -963,7 +1009,7 @@ describe('cloud utils', () => {
         { id: 'team-2', name: 'Team 2', createdAt: '2023-01-02T00:00:00Z' },
       ];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockTeams),
       } as Response);
@@ -971,13 +1017,14 @@ describe('cloud utils', () => {
       const result = await getDefaultTeam();
 
       expect(result).toEqual({ id: 'team-1', name: 'Team 1', createdAt: '2023-01-01T00:00:00Z' });
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/users/me/teams',
         {
           method: 'GET',
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -986,7 +1033,7 @@ describe('cloud utils', () => {
         { id: 'team-single', name: 'Single Team', createdAt: '2023-01-01T00:00:00Z' },
       ];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockTeams),
       } as Response);
@@ -1006,7 +1053,7 @@ describe('cloud utils', () => {
         { id: 'team-b', name: 'Team B', createdAt: '2023-01-01T00:00:00Z' },
       ];
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockTeams),
       } as Response);
@@ -1018,7 +1065,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw error when request fails', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: false,
         statusText: 'Unauthorized',
       } as Response);
@@ -1027,13 +1074,13 @@ describe('cloud utils', () => {
     });
 
     it('should throw error when fetch throws', async () => {
-      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
+      mockFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
 
       await expect(getDefaultTeam()).rejects.toThrow('Network error');
     });
 
     it('should handle empty teams array', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve([]),
       } as Response);
@@ -1056,14 +1103,14 @@ describe('cloud utils', () => {
       ).resolves.toBeUndefined();
 
       expect(mockCheckServerFeatureSupport).not.toHaveBeenCalled();
-      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
     });
 
     it('should return early with warning when no providers specified', async () => {
       await expect(checkCloudPermissions({})).resolves.toBeUndefined();
 
       expect(mockCheckServerFeatureSupport).not.toHaveBeenCalled();
-      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
     });
 
     it('should return early when server feature is not supported', async () => {
@@ -1077,11 +1124,11 @@ describe('cloud utils', () => {
         'config-permission-check-endpoint',
         '2025-09-03T14:49:11Z',
       );
-      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
     });
 
     it('should pass when permissions check succeeds', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ success: true }),
       } as Response);
@@ -1090,13 +1137,14 @@ describe('cloud utils', () => {
         checkCloudPermissions({ providers: ['test-provider'] }),
       ).resolves.toBeUndefined();
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/permissions/check',
         {
           method: 'POST',
           body: JSON.stringify({ config: { providers: ['test-provider'] } }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -1111,7 +1159,7 @@ describe('cloud utils', () => {
           },
         ],
       };
-      mockFetchWithProxy.mockResolvedValue({
+      mockFetchWithRetries.mockResolvedValue({
         ok: false,
         status: 403,
         json: () => Promise.resolve(errorData),
@@ -1128,7 +1176,7 @@ describe('cloud utils', () => {
 
     it('should throw ConfigPermissionError when response is 403 with single error', async () => {
       const errorData = { error: 'Single error message' };
-      mockFetchWithProxy.mockResolvedValue({
+      mockFetchWithRetries.mockResolvedValue({
         ok: false,
         status: 403,
         json: () => Promise.resolve(errorData),
@@ -1144,7 +1192,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw ConfigPermissionError when response is 403 with malformed JSON', async () => {
-      mockFetchWithProxy.mockResolvedValue({
+      mockFetchWithRetries.mockResolvedValue({
         ok: false,
         status: 403,
         json: () => Promise.reject(new Error('Invalid JSON')),
@@ -1163,7 +1211,7 @@ describe('cloud utils', () => {
       const errorData = {
         errors: [{ type: 'server', id: 'internal_error', message: 'Server error' }],
       };
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: false,
         status: 500,
         json: () => Promise.resolve(errorData),
@@ -1181,7 +1229,7 @@ describe('cloud utils', () => {
           { type: 'config', id: 'invalid_provider', message: 'Invalid provider' },
         ],
       };
-      mockFetchWithProxy.mockResolvedValue({
+      mockFetchWithRetries.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(resultWithErrors),
       } as Response);
@@ -1197,7 +1245,7 @@ describe('cloud utils', () => {
 
     it('should pass when result contains empty errors array', async () => {
       const resultWithEmptyErrors = { errors: [] };
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(resultWithEmptyErrors),
       } as Response);
@@ -1214,11 +1262,11 @@ describe('cloud utils', () => {
         checkCloudPermissions({ providers: ['test-provider'] }),
       ).resolves.toBeUndefined();
 
-      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
     });
 
     it('should log warning and continue when fetch throws non-ConfigPermissionError', async () => {
-      mockFetchWithProxy.mockRejectedValue(new Error('Network error'));
+      mockFetchWithRetries.mockRejectedValue(new Error('Network error'));
 
       await expect(
         checkCloudPermissions({ providers: ['test-provider'] }),
@@ -1227,7 +1275,7 @@ describe('cloud utils', () => {
 
     it('should re-throw ConfigPermissionError when makeRequest throws ConfigPermissionError', async () => {
       const configError = new ConfigPermissionError('Permission denied');
-      mockFetchWithProxy.mockRejectedValue(configError);
+      mockFetchWithRetries.mockRejectedValue(configError);
 
       await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
         ConfigPermissionError,
@@ -1246,20 +1294,21 @@ describe('cloud utils', () => {
         redteam: { plugins: [{ id: 'plugin1' }] },
       };
 
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ success: true }),
       } as Response);
 
       await expect(checkCloudPermissions(complexConfig)).resolves.toBeUndefined();
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/permissions/check',
         {
           method: 'POST',
           body: JSON.stringify({ config: complexConfig }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -1267,24 +1316,25 @@ describe('cloud utils', () => {
       await expect(checkCloudPermissions({ providers: undefined })).resolves.toBeUndefined();
 
       expect(mockCheckServerFeatureSupport).not.toHaveBeenCalled();
-      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
     });
 
     it('should handle config with empty providers array', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
+      mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ success: true }),
       } as Response);
 
       await expect(checkCloudPermissions({ providers: [] })).resolves.toBeUndefined();
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/permissions/check',
         {
           method: 'POST',
           body: JSON.stringify({ config: { providers: [] } }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+        EXPECTED_TIMEOUT_MS,
       );
     });
   });
