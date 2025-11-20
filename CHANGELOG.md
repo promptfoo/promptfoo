@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - chore(webui): ui treatment for domain-specific risks (#6269)
 - chore(deps): re-generate lock file (#6249)
-- ci: add code scan action (#6261)
+- ci(github): add code scan action (#6261)
 
 ### Fixed
 
@@ -25,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
-- docs: update readme with code scanning (#6268)
+- docs(readme): update readme with code scanning (#6268)
 - docs(site): fix duplicate in sidebar (#6259)
 
 ### Dependencies
