@@ -165,9 +165,10 @@ def handle_call(command_line, user_module, default_function_name):
     """Handle a CALL command."""
     response_file = None
     try:
-        # Parse command: "CALL:<function_name>:<request_file>:<response_file>"
-        # or legacy: "CALL:<request_file>:<response_file>"
-        parts = command_line.split(":", 3)
+        # Parse command: "CALL|<function_name>|<request_file>|<response_file>"
+        # or legacy: "CALL|<request_file>|<response_file>"
+        # Note: Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:)
+        parts = command_line.split("|", 3)
 
         # Extract response_file first (always the last part) so it's available even if validation fails
         # This ensures we can write an error response file if command format is invalid
@@ -175,10 +176,10 @@ def handle_call(command_line, user_module, default_function_name):
             response_file = parts[-1]
 
         if len(parts) == 4:
-            # New format: CALL:<function_name>:<request_file>:<response_file>
+            # New format: CALL|<function_name>|<request_file>|<response_file>
             _, function_name, request_file, _ = parts
         elif len(parts) == 3:
-            # Legacy format: CALL:<request_file>:<response_file>
+            # Legacy format: CALL|<request_file>|<response_file>
             _, request_file, _ = parts
             function_name = default_function_name
         else:
