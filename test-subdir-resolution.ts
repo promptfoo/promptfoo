@@ -33,7 +33,10 @@ async function testSubdirectoryResolution() {
       failed++;
     }
   } catch (error) {
-    console.log('❌ FAILED -', error instanceof Error ? error.message.split('\n')[0] : String(error));
+    console.log(
+      '❌ FAILED -',
+      error instanceof Error ? error.message.split('\n')[0] : String(error),
+    );
     failed++;
   }
 
@@ -55,7 +58,10 @@ async function testSubdirectoryResolution() {
       failed++;
     }
   } catch (error) {
-    console.log('❌ FAILED -', error instanceof Error ? error.message.split('\n')[0] : String(error));
+    console.log(
+      '❌ FAILED -',
+      error instanceof Error ? error.message.split('\n')[0] : String(error),
+    );
     failed++;
   }
 
@@ -77,7 +83,10 @@ async function testSubdirectoryResolution() {
       failed++;
     }
   } catch (error) {
-    console.log('❌ FAILED -', error instanceof Error ? error.message.split('\n')[0] : String(error));
+    console.log(
+      '❌ FAILED -',
+      error instanceof Error ? error.message.split('\n')[0] : String(error),
+    );
     failed++;
   }
 
@@ -95,7 +104,11 @@ async function testSubdirectoryResolution() {
     failed++;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    if (msg.includes('Failed to load tools') || msg.includes('ENOENT') || msg.includes('No such file')) {
+    if (
+      msg.includes('Failed to load tools') ||
+      msg.includes('ENOENT') ||
+      msg.includes('No such file')
+    ) {
       console.log('✅ PASSED - Correctly throws error for nonexistent file');
       passed++;
     } else {
@@ -117,7 +130,7 @@ async function testSubdirectoryResolution() {
   }
 }
 
-testSubdirectoryResolution().catch(error => {
+testSubdirectoryResolution().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
