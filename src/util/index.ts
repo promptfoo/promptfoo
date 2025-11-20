@@ -657,12 +657,14 @@ export async function maybeLoadToolsFromExternalFile(
         let toolDefinitions: any;
 
         if (filePath.endsWith('.py')) {
-          // Use existing async Python execution
-          toolDefinitions = await runPython(filePath, functionName, []);
+          // Resolve Python path relative to config base directory (same as JavaScript)
+          const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
+          logger.debug(`[maybeLoadToolsFromExternalFile] Resolved Python path: ${absPath}`);
+          toolDefinitions = await runPython(absPath, functionName, []);
         } else {
           // Use safeResolve for security (prevents path traversal)
           const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
-          logger.debug(`[maybeLoadToolsFromExternalFile] Resolved path: ${absPath}`);
+          logger.debug(`[maybeLoadToolsFromExternalFile] Resolved JavaScript path: ${absPath}`);
 
           const module = await importModule(absPath);
           const fn = module[functionName] || module.default?.[functionName];
