@@ -6,7 +6,7 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
-import { fetchWithProxy } from '../util/fetch';
+import { fetchWithProxy } from '../util/fetch/index';
 import { sanitizeObject } from '../util/sanitizer';
 import {
   determineEffectiveSessionSource,

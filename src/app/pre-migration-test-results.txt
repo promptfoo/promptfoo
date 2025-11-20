@@ -1,0 +1,10 @@
+npm error Lifecycle script `test:app` failed with error:
+npm error workspace app@0.0.0
+npm error location /Users/mdangelo/projects/pf4/src/app
+npm error Missing script: "test:app"
+npm error
+npm error Did you mean this?
+npm error   npm run test:ci # run the "test:ci" package script
+npm error
+npm error To see a list of scripts, run:
+npm error   npm run --workspace=app@0.0.0

@@ -1,0 +1,30 @@
+
+> app@0.0.0 build
+> tsc -b && vite build
+
+vite v7.2.2 building client environment for production...
+transforming...
+✓ 14220 modules transformed.
+rendering chunks...
+computing gzip size...
+../../dist/src/app/index.html                                 2.15 kB │ gzip:   0.83 kB
+../../dist/src/app/assets/logo-BuYvzEyb.svg                   8.36 kB │ gzip:   3.22 kB
+../../dist/src/app/assets/index-C2eAYIz5.css                 25.90 kB │ gzip:   5.84 kB
+../../dist/src/app/assets/sync-BDzD8DJb.js                    0.37 kB │ gzip:   0.27 kB │ map:     1.48 kB
+../../dist/src/app/assets/vendor-syntax-CszxnOoo.js          18.96 kB │ gzip:   7.08 kB │ map:    85.99 kB
+../../dist/src/app/assets/vendor-mui-icons-DLWN-nGk.js       25.28 kB │ gzip:   9.32 kB │ map:    59.46 kB
+../../dist/src/app/assets/source-map-support-Cr0F8mCs.js     34.37 kB │ gzip:  10.98 kB │ map:   175.76 kB
+../../dist/src/app/assets/scroll-timeline-BD77rkqF.js        60.19 kB │ gzip:  16.77 kB │ map:   173.18 kB
+../../dist/src/app/assets/vendor-markdown-dqRuYh9I.js       157.25 kB │ gzip:  45.52 kB │ map: 1,056.99 kB
+../../dist/src/app/assets/vendor-utils-BcDiGeyY.js          209.09 kB │ gzip:  60.52 kB │ map:   868.36 kB
+../../dist/src/app/assets/vendor-react-BF2d83QO.js          224.51 kB │ gzip:  72.66 kB │ map:   872.32 kB
+../../dist/src/app/assets/vendor-charts-CntkkMSK.js         274.76 kB │ gzip:  88.91 kB │ map: 1,415.81 kB
+../../dist/src/app/assets/vendor-mui-x-vA4qspBa.js          343.02 kB │ gzip: 100.11 kB │ map: 1,649.27 kB
+../../dist/src/app/assets/vendor-mui-core-DdlzO1Md.js       435.21 kB │ gzip: 124.58 kB │ map: 2,247.96 kB
+../../dist/src/app/assets/index-BkDuhcQa.js               2,541.29 kB │ gzip: 691.54 kB │ map: 8,368.83 kB
+
+(!) Some chunks are larger than 2500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 13.91s
