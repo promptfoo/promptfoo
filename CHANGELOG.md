@@ -8,14 +8,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- chore: Add visiblity button for PFX passphrase (#6258)
-- feat(app): Red Team Strategy Test Generation (#6005)
-- feat(app): custom policy generation (#6181)
+- feat(webui): add custom policy generation to red team setup (#6181)
+- feat(webui): add strategy test generation to red team setup (#6005)
+- feat(webui): add visibility button for PFX passphrase field in red team target configuration (#6258)
+
+### Changed
+
+- chore(webui): improve UI treatment for domain-specific risks in red team setup (#6269)
+- chore(deps): re-generate lock file (#6249)
+- ci(github): add code scan action (#6261)
 
 ### Fixed
 
 - fix(auth): allow CI environments to authenticate with Promptfoo Cloud using API keys — unblocks `jailbreak:meta` strategy in GitHub Actions by recognizing API key auth regardless of CI status (#6273)
 - fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
+- fix(webui): allow thumbs up/down ratings to toggle off and remove manual grading when clicked again (#6260)
+
+### Documentation
+
+- docs(readme): update readme with code scanning (#6268)
+- docs(site): fix duplicate in sidebar (#6259)
+
+### Dependencies
+
+- chore(deps): update dependencies in 12 example projects (#6280)
+- chore(deps): upgrade glob to v13 and mathjs to v15 (#6279)
+- chore(deps): update 67 minor and patch dependencies across all workspaces (#6278)
+- chore(deps): bump langchain-core from 0.3.78 to 0.3.80 in /examples/redteam-langchain in the pip group (#6270)
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.933.0 to 3.934.0 (#6254)
+- chore(deps): bump @anthropic-ai/sdk from 0.69.0 to 0.70.0 (#6255)
 
 ## [0.119.8] - 2025-11-18
 
