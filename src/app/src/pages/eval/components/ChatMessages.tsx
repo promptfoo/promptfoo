@@ -130,10 +130,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
   }, [(message as LoadedMessage)?.contentType, message?.content]);
 
   return (
-    <Box
-      sx={{ display: 'flex', justifyContent: alignSelf }}
-      data-testid={`chat-message-${index}`}
-    >
+    <Box sx={{ display: 'flex', justifyContent: alignSelf }} data-testid={`chat-message-${index}`}>
       {message.loading ? (
         <Skeleton
           variant="rectangular"

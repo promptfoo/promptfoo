@@ -13,6 +13,7 @@ import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import Tooltip from '@mui/material/Tooltip';
 import Divider from '@mui/material/Divider';
+import Stack from '@mui/material/Stack';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -174,23 +175,26 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           <Chip label={`Plugin: ${pluginDisplayName}`} data-testid="plugin-chip" />
         </Box>
       </Box>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <ChatMessages messages={turnMessages} displayTurnCount={maxTurns > 1} maxTurns={maxTurns} />
-
-        <div />
-
-        {generatedTestCases.length > 0 && (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            Dissatisfied with the test case? Fine tune it by adjusting your{' '}
-            {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
-          </Alert>
-        )}
+      <DialogContent>
+        <Stack direction="column" gap={2}>
+          <ChatMessages
+            messages={turnMessages}
+            displayTurnCount={maxTurns > 1}
+            maxTurns={maxTurns}
+          />
+          {generatedTestCases.length > 0 && (
+            <Alert severity="info">
+              Dissatisfied with the test case? Fine tune it by adjusting your{' '}
+              {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
+            </Alert>
+          )}
+        </Stack>
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {pluginName &&
-            !plugin?.isStatic &&
-            hasSpecificPluginDocumentation(pluginName as Plugin) && (
+        {pluginName &&
+          !plugin?.isStatic &&
+          hasSpecificPluginDocumentation(pluginName as Plugin) && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Link
                 href={getPluginDocumentationUrl(pluginName as Plugin)}
                 target="_blank"
@@ -211,8 +215,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                   ↗
                 </Box>
               </Link>
-            )}
-        </Box>
+            </Box>
+          )}
+
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
           {canAddAdditionalTurns && (
             <>
