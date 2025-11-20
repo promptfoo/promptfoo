@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(providers): add automatic cost tracking for AWS Bedrock provider with pricing data for 80+ models including Nova, Claude, Llama, Mistral, and more
+
+### Changed
+
 - chore: Add visiblity button for PFX passphrase (#6258)
 
 ## [0.119.8] - 2025-11-18
