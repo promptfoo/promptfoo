@@ -1,0 +1,16 @@
+{
+	"extends": ["config:base", ":disableDependencyDashboard"],
+	"pinVersions": false,
+	"rebaseStalePrs": true,
+	"lockFileMaintenance": {
+		"enabled": true,
+		"schedule": ["before 3am on the first day of the month", "before 3am on the 15th day of the month"]
+	},
+	"includePaths": [
+		"package.json",
+		"site/package.json",
+		"src/app/package.json",
+		"code-scan-action/package.json",
+		"examples/**/package.json"
+	]
+}
