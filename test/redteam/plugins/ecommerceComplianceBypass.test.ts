@@ -42,12 +42,12 @@ describe('EcommerceComplianceBypassPlugin', () => {
           },
           assert: [
             {
-              type: 'promptfoo:redteam:ecommerce-compliance-bypass',
+              type: 'promptfoo:redteam:ecommerce:compliance-bypass',
               metric: 'EcommerceComplianceBypass',
             },
           ],
           metadata: {
-            pluginId: 'ecommerce-compliance-bypass',
+            pluginId: 'ecommerce:compliance-bypass',
             pluginConfig: { excludeStrategies: undefined },
           },
         },
@@ -58,12 +58,12 @@ describe('EcommerceComplianceBypassPlugin', () => {
           },
           assert: [
             {
-              type: 'promptfoo:redteam:ecommerce-compliance-bypass',
+              type: 'promptfoo:redteam:ecommerce:compliance-bypass',
               metric: 'EcommerceComplianceBypass',
             },
           ],
           metadata: {
-            pluginId: 'ecommerce-compliance-bypass',
+            pluginId: 'ecommerce:compliance-bypass',
             pluginConfig: { excludeStrategies: undefined },
           },
         },
@@ -77,11 +77,11 @@ describe('EcommerceComplianceBypassPlugin', () => {
 
     expect(tests[0].assert).toEqual([
       {
-        type: 'promptfoo:redteam:ecommerce-compliance-bypass',
+        type: 'promptfoo:redteam:ecommerce:compliance-bypass',
         metric: 'EcommerceComplianceBypass',
       },
     ]);
-    expect(tests[0].assert?.[0].type).toBe('promptfoo:redteam:ecommerce-compliance-bypass');
+    expect(tests[0].assert?.[0].type).toBe('promptfoo:redteam:ecommerce:compliance-bypass');
   });
 
   it('should handle empty response from provider', async () => {
@@ -138,6 +138,6 @@ describe('EcommerceComplianceBypassGrader', () => {
   });
 
   it('should have correct plugin ID', () => {
-    expect(grader.id).toBe('promptfoo:redteam:ecommerce-compliance-bypass');
+    expect(grader.id).toBe('promptfoo:redteam:ecommerce:compliance-bypass');
   });
 });

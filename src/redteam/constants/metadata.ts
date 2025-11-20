@@ -106,6 +106,14 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for inappropriate off-label medication recommendations without proper disclaimers',
   'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
   'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
+  'ecommerce:compliance-bypass':
+    'Tests for attempts to manipulate the system to bypass regulatory and compliance requirements',
+  'ecommerce:order-fraud':
+    'Tests for vulnerabilities that could enable fraudulent orders, unauthorized discounts, or inventory manipulation',
+  'ecommerce:pci-dss':
+    'Tests for PCI DSS compliance violations including extraction of credit card numbers, CVVs, and payment data',
+  'ecommerce:price-manipulation':
+    'Tests for price manipulation vulnerabilities including unauthorized discounts and pricing exploits',
   'financial:calculation-error':
     'Tests for errors in financial calculations, risk assessments, or quantitative analysis',
   'financial:compliance-violation':
@@ -177,6 +185,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   pharmacy: 'Pharmacy AI safety testing across pharmaceutical vulnerabilities',
   insurance: 'Insurance AI safety testing across healthcare coverage vulnerabilities',
   financial: 'Financial AI safety testing across financial services vulnerabilities',
+  ecommerce: 'E-commerce AI safety testing focused on PCI DSS compliance and payment security',
 };
 
 // These names are displayed in risk cards and in the table
@@ -246,6 +255,11 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   pharmacy: 'Pharmacy Safety Suite',
   insurance: 'Insurance Safety Suite',
   financial: 'Financial Safety Suite',
+  ecommerce: 'E-commerce Safety Suite',
+  'ecommerce:compliance-bypass': 'Compliance Bypass',
+  'ecommerce:order-fraud': 'Order Fraud',
+  'ecommerce:pci-dss': 'PCI DSS Compliance',
+  'ecommerce:price-manipulation': 'Price Manipulation',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'IP Violations',
@@ -410,6 +424,11 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   pharmacy: Severity.High,
   insurance: Severity.High,
   financial: Severity.High,
+  ecommerce: Severity.High,
+  'ecommerce:compliance-bypass': Severity.High,
+  'ecommerce:order-fraud': Severity.High,
+  'ecommerce:pci-dss': Severity.Critical,
+  'ecommerce:price-manipulation': Severity.High,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
@@ -651,6 +670,10 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:off-label-use': 'MedicalOffLabelUse',
   'medical:prioritization-error': 'MedicalPrioritizationError',
   'medical:sycophancy': 'MedicalSycophancy',
+  'ecommerce:compliance-bypass': 'EcommerceComplianceBypass',
+  'ecommerce:order-fraud': 'EcommerceOrderFraud',
+  'ecommerce:pci-dss': 'EcommercePciDss',
+  'ecommerce:price-manipulation': 'EcommercePriceManipulation',
   'financial:calculation-error': 'FinancialCalculationError',
   'financial:compliance-violation': 'FinancialComplianceViolation',
   'financial:confidential-disclosure': 'FinancialConfidentialDisclosure',
@@ -684,6 +707,7 @@ export const categoryAliases: Record<Plugin, string> = {
   pharmacy: 'Pharmacy Safety',
   insurance: 'Insurance Safety',
   financial: 'Financial Safety',
+  ecommerce: 'E-commerce Safety',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -798,6 +822,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Comprehensive insurance AI safety testing for healthcare coverage vulnerabilities including coverage discrimination, network misinformation, and PHI disclosure',
   financial:
     'Comprehensive financial AI safety testing for financial services vulnerabilities including calculation errors, compliance violations, hallucination, and data leakage',
+  ecommerce:
+    'Comprehensive e-commerce AI safety testing for online retail vulnerabilities including PCI DSS compliance, price manipulation, compliance bypass, and order fraud',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -845,6 +871,14 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for poor medical prioritization and triage decisions that could delay critical care',
   'medical:sycophancy':
     'Tests for agreeing with incorrect medical assumptions or providing responses aligned with user desires at the expense of medical accuracy',
+  'ecommerce:compliance-bypass':
+    'Tests for attempts to manipulate the system to bypass regulatory and compliance requirements in e-commerce contexts',
+  'ecommerce:order-fraud':
+    'Tests for vulnerabilities that could enable fraudulent orders, unauthorized discounts, or inventory manipulation',
+  'ecommerce:pci-dss':
+    'Tests for PCI DSS compliance violations including extraction of credit card numbers, CVVs, bank account details, and other payment data',
+  'ecommerce:price-manipulation':
+    'Tests for price manipulation vulnerabilities including unauthorized discounts, pricing exploits, and revenue protection bypasses',
   'financial:calculation-error':
     'Tests for errors in option pricing, risk calculations, portfolio optimization, or other quantitative financial analysis that could lead to significant losses',
   'financial:compliance-violation':
