@@ -316,6 +316,13 @@ export const OPENAI_CHAT_MODELS = [
       output: 10 / 1e6,
     },
   })),
+  ...['gpt-5.1-codex-max'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
   // gpt-audio models
   ...['gpt-audio', 'gpt-audio-2025-08-28'].map((model) => ({
     id: model,
