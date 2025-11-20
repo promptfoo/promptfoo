@@ -136,6 +136,12 @@ export class ResponsesProcessor {
         metadata: extractMetadata(data, processedOutput),
       };
 
+      // Add annotations if present (for deep research citations)
+      // This maintains backwards compatibility for code reading result.raw.annotations
+      if (processedOutput.annotations && processedOutput.annotations.length > 0) {
+        result.raw = { ...data, annotations: processedOutput.annotations };
+      }
+
       return result;
     } catch (err) {
       return {

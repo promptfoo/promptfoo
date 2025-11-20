@@ -541,5 +541,41 @@ describe('ResponsesProcessor', () => {
       // Empty strings are falsy, so they should not be included
       expect(result.metadata).toEqual({});
     });
+
+    it('should add annotations to both raw and metadata for backwards compatibility', async () => {
+      const mockData = {
+        id: 'resp_compat123',
+        model: 'o4-mini-deep-research',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Research with citations',
+                annotations: [
+                  { url: 'https://example.com', title: 'Example' },
+                ],
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      // Annotations should be in metadata (new behavior)
+      expect(result.metadata?.annotations).toEqual([
+        { url: 'https://example.com', title: 'Example' },
+      ]);
+
+      // Annotations should also be in raw for backwards compatibility
+      expect(result.raw).toHaveProperty('annotations');
+      expect(result.raw.annotations).toEqual([
+        { url: 'https://example.com', title: 'Example' },
+      ]);
+    });
   });
 });
