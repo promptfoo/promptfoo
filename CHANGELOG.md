@@ -8,13 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(app): custom policy generation (#6181)
-- feat(app): Red Team Strategy Test Generation (#6005)
-- feat(webui): add visibility button for PFX passphrase field (#6258)
+- feat(webui): add custom policy generation to red team setup (#6181)
+- feat(webui): add strategy test generation to red team setup (#6005)
+- feat(webui): add visibility button for PFX passphrase field in red team target configuration (#6258)
 
 ### Changed
 
-- chore(webui): ui treatment for domain-specific risks (#6269)
+- chore(webui): improve UI treatment for domain-specific risks in red team setup (#6269)
 - chore(deps): re-generate lock file (#6249)
 - ci(github): add code scan action (#6261)
 
