@@ -116,6 +116,7 @@ export async function doGenerateRedteam(
   let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
   let resolvedConfigMetadata: Record<string, any> | undefined;
+  let resolvedConfig: Partial<UnifiedConfig> | undefined;
 
   // Write a remote config to a temporary file
   if (options.configFromCloud) {
@@ -170,6 +171,7 @@ export async function doGenerateRedteam(
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
     resolvedConfigMetadata = resolved.config.metadata;
+    resolvedConfig = resolved.config;
 
     await checkCloudPermissions(resolved.config);
 
@@ -393,9 +395,18 @@ export async function doGenerateRedteam(
     throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
   }
 
-  const targetIds = testSuite.providers
-    .map((provider: ApiProvider) => provider?.id)
-    .filter(Boolean);
+  // Extract target IDs from the config providers (targets get rewritten to providers)
+  const targetIds: string[] =
+    (Array.isArray(resolvedConfig?.providers)
+      ? resolvedConfig.providers
+          .filter((target) => typeof target !== 'function')
+          .map((target) => (typeof target === 'string' ? target : (target as { id?: string })?.id))
+          .filter((id): id is string => typeof id === 'string')
+      : []) ?? [];
+
+  logger.debug(
+    `Extracted ${targetIds.length} target IDs from config providers: ${JSON.stringify(targetIds)}`,
+  );
 
   // Extract MCP tools information and add to purpose
   let enhancedPurpose = parsedConfig.data.purpose || '';
