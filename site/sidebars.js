@@ -407,7 +407,7 @@ const sidebars = {
       link: {
         type: 'generated-index',
       },
-      items: [...redTeamSidebar, { type: 'doc', id: 'guides/llm-redteaming' }],
+      items: redTeamSidebar,
     },
     {
       type: 'category',
