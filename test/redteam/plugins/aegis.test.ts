@@ -7,7 +7,7 @@ import {
 } from '../../../src/redteam/plugins/aegis';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 
-import type { ApiProvider, TestCase } from '../../../src/types';
+import type { ApiProvider, TestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/integrations/huggingfaceDatasets');
 

@@ -1,5 +1,5 @@
 import { addHydra } from '../../../src/redteam/strategies/hydra';
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('addHydra', () => {
   it('should add hydra configuration to test cases', () => {
