@@ -13,8 +13,8 @@ import { TestCaseDialog } from './TestCaseDialog';
 import { type Config } from '../types';
 import type { ConversationMessage, PluginConfig, StrategyConfig } from '@promptfoo/redteam/types';
 
-const TEST_GENERATION_TIMEOUT = 30000; // 30s timeout
-const TEST_EXECUTION_TIMEOUT = 30000; // 30s timeout
+const TEST_GENERATION_TIMEOUT = 60000; // 60s timeout
+const TEST_EXECUTION_TIMEOUT = 60000; // 60s timeout
 export interface GeneratedTestCase {
   prompt: string;
   context?: string;

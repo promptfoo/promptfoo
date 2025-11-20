@@ -71,14 +71,14 @@ describe('TableSettingsModal', () => {
   it.each([
     { hasChanges: true, expectedButtonText: 'Save Changes' },
     { hasChanges: false, expectedButtonText: 'Done' },
-  ])(
-    'should display "$expectedButtonText" when hasChanges is $hasChanges',
-    ({ hasChanges, expectedButtonText }) => {
-      mockSettingsState(hasChanges);
-      render(<TableSettingsModal open={true} onClose={mockOnClose} />);
-      expect(screen.getByRole('button', { name: expectedButtonText })).toBeInTheDocument();
-    },
-  );
+  ])('should display "$expectedButtonText" when hasChanges is $hasChanges', ({
+    hasChanges,
+    expectedButtonText,
+  }) => {
+    mockSettingsState(hasChanges);
+    render(<TableSettingsModal open={true} onClose={mockOnClose} />);
+    expect(screen.getByRole('button', { name: expectedButtonText })).toBeInTheDocument();
+  });
 
   it('should call useSettingsState with the correct initial open state', () => {
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
@@ -88,16 +88,16 @@ describe('TableSettingsModal', () => {
   it.each([
     { hasChanges: true, buttonText: 'Save Changes' },
     { hasChanges: false, buttonText: 'Done' },
-  ])(
-    'should call onClose when the main action button ($buttonText) is clicked',
-    ({ hasChanges, buttonText }) => {
-      mockSettingsState(hasChanges);
-      render(<TableSettingsModal open={true} onClose={mockOnClose} />);
-      const mainActionButton = screen.getByRole('button', { name: buttonText });
-      fireEvent.click(mainActionButton);
-      expect(mockOnClose).toHaveBeenCalledTimes(1);
-    },
-  );
+  ])('should call onClose when the main action button ($buttonText) is clicked', ({
+    hasChanges,
+    buttonText,
+  }) => {
+    mockSettingsState(hasChanges);
+    render(<TableSettingsModal open={true} onClose={mockOnClose} />);
+    const mainActionButton = screen.getByRole('button', { name: buttonText });
+    fireEvent.click(mainActionButton);
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
 
   it('should render the dialog in full screen mode when isMobile is true', () => {
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
