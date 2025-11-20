@@ -6,13 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Fixed
-
-- fix(python): resolve Windows path compatibility issues in Python provider protocol - changed delimiter from `:` to `|` to avoid conflicts with Windows drive letters (C:, D:, etc.), fixing ENOENT errors and timeouts in Python provider on Windows (#6262)
-
 ### Changed
 
 - chore: Add visiblity button for PFX passphrase (#6258)
+- feat(app): Red Team Strategy Test Generation (#6005)
+
+### Fixed
+
+- fix(python): resolve Windows path compatibility issues in Python provider protocol - changed delimiter from `:` to `|` to avoid conflicts with Windows drive letters (C:, D:, etc.), fixing ENOENT errors and timeouts in Python provider on Windows (#6262)
 
 ## [0.119.8] - 2025-11-18
 
