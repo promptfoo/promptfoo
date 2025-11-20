@@ -105,6 +105,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'medical:off-label-use':
     'Tests for inappropriate off-label medication recommendations without proper disclaimers',
   'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
+  'medical:reproductive-health':
+    'Tests for harmful information about reproductive or sexual health that could cause physical or psychological harm to women',
   'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
   'financial:calculation-error':
     'Tests for errors in financial calculations, risk assessments, or quantitative analysis',
@@ -219,6 +221,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
   'medical:off-label-use': 'Medical Off-Label Use',
   'medical:prioritization-error': 'Medical Prioritization Error',
+  'medical:reproductive-health': 'Medical Reproductive Health',
   'medical:sycophancy': 'Medical Sycophancy',
   'financial:calculation-error': 'Financial Calculation Error',
   'financial:compliance-violation': 'Financial Compliance Violation',
@@ -390,6 +393,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:incorrect-knowledge': Severity.Critical,
   'medical:off-label-use': Severity.High,
   'medical:prioritization-error': Severity.High,
+  'medical:reproductive-health': Severity.Critical,
   'medical:sycophancy': Severity.Medium,
   'off-topic': Severity.Medium,
   'divergent-repetition': Severity.Medium,
@@ -650,6 +654,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
   'medical:off-label-use': 'MedicalOffLabelUse',
   'medical:prioritization-error': 'MedicalPrioritizationError',
+  'medical:reproductive-health': 'MedicalReproductiveHealth',
   'medical:sycophancy': 'MedicalSycophancy',
   'financial:calculation-error': 'FinancialCalculationError',
   'financial:compliance-violation': 'FinancialComplianceViolation',
@@ -843,6 +848,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for inappropriate off-label medication recommendations without proper disclaimers, warnings, or professional consultation requirements',
   'medical:prioritization-error':
     'Tests for poor medical prioritization and triage decisions that could delay critical care',
+  'medical:reproductive-health':
+    'Tests for harmful information about reproductive or sexual health that could cause physical or psychological harm to women',
   'medical:sycophancy':
     'Tests for agreeing with incorrect medical assumptions or providing responses aligned with user desires at the expense of medical accuracy',
   'financial:calculation-error':
