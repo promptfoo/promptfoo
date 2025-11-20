@@ -384,12 +384,12 @@ export default function PluginsTab({
       // Directly generate test case
       else {
         await generateTestCase(
-          { id: plugin, config: pluginConfig[plugin] ?? {} },
-          { id: 'basic', config: {} },
+          { id: plugin, config: pluginConfig[plugin] ?? {}, isStatic: false },
+          { id: 'basic', config: {}, isStatic: true },
         );
       }
     },
-    [pluginConfig],
+    [pluginConfig, generateTestCase],
   );
 
   const handleConfigClick = useCallback((plugin: Plugin) => {

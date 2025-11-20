@@ -88,8 +88,8 @@ export function StrategyItem({
 
   const handleTestCaseGeneration = useCallback(async () => {
     await generateTestCase(
-      { id: TEST_GENERATION_PLUGIN, config: {} },
-      { id: strategy.id, config: strategyConfig },
+      { id: TEST_GENERATION_PLUGIN, config: {}, isStatic: true },
+      { id: strategy.id, config: strategyConfig, isStatic: false },
     );
   }, [strategyConfig, generateTestCase, strategy.id]);
 

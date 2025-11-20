@@ -456,8 +456,8 @@ export const CustomPoliciesSection = () => {
       setGeneratingPolicyId(row.id);
 
       await generateTestCase(
-        { id: 'policy', config: { policy: row.policyText } },
-        { id: 'basic', config: {} },
+        { id: 'policy', config: { policy: row.policyText }, isStatic: true },
+        { id: 'basic', config: {}, isStatic: true },
         function onSuccess() {
           setGeneratingPolicyId(null);
         },

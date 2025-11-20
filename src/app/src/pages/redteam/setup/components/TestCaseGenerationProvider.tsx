@@ -28,13 +28,15 @@ export interface TargetResponse {
   error: string | null;
 }
 
-interface TargetPlugin {
+export interface TargetPlugin {
   id: Plugin;
   config: PluginConfig;
+  isStatic: boolean;
 }
-interface TargetStrategy {
+export interface TargetStrategy {
   id: Strategy;
   config: StrategyConfig;
+  isStatic: boolean;
 }
 
 interface MultiTurnState {
@@ -541,8 +543,8 @@ export const TestCaseGenerationProvider: React.FC<{
         onClose={handleCloseDialog}
         onRegenerate={handleRegenerate}
         onContinue={handleContinue}
-        plugin={plugin?.id ?? null}
-        strategy={strategy?.id ?? null}
+        plugin={plugin}
+        strategy={strategy}
         isGenerating={isGenerating}
         generatedTestCases={generatedTestCases}
         targetResponses={targetResponses}

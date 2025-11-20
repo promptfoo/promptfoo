@@ -33,13 +33,18 @@ import ChatMessages, {
   type LoadingMessage,
   type Message,
 } from '@app/pages/eval/components/ChatMessages';
-import { type GeneratedTestCase, type TargetResponse } from './TestCaseGenerationProvider';
+import {
+  type GeneratedTestCase,
+  type TargetResponse,
+  type TargetPlugin,
+  type TargetStrategy,
+} from './TestCaseGenerationProvider';
 
 interface TestCaseDialogProps {
   open: boolean;
   onClose: () => void;
-  plugin: Plugin | null;
-  strategy: Strategy | null;
+  plugin: TargetPlugin | null;
+  strategy: TargetStrategy | null;
   isGenerating: boolean;
   generatedTestCases: GeneratedTestCase[];
   targetResponses: TargetResponse[];
@@ -64,13 +69,13 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   currentTurn,
   maxTurns,
 }) => {
-  const pluginName = typeof plugin === 'string' ? plugin : plugin || '';
+  const pluginName = plugin?.id ?? '';
   const pluginDisplayName =
     displayNameOverrides[pluginName as Plugin] ||
     categoryAliases[pluginName as Plugin] ||
     pluginName;
 
-  const strategyName = typeof strategy === 'string' ? strategy : strategy || '';
+  const strategyName = strategy?.id ?? '';
   const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
 
   const turnMessages = useMemo<Message[]>(() => {
@@ -84,11 +89,11 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           role: 'user' as const,
           content: generatedTestCase.prompt,
           contentType:
-            strategy === 'audio'
+            strategyName === 'audio'
               ? ('audio' as const)
-              : strategy === 'image'
+              : strategyName === 'image'
                 ? ('image' as const)
-                : strategy === 'video'
+                : strategyName === 'video'
                   ? ('video' as const)
                   : ('text' as const),
         } as LoadedMessage);
@@ -124,11 +129,11 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     maxTurns,
     isGenerating,
     isRunningTest,
-    strategy,
+    strategyName,
   ]);
 
   const canAddAdditionalTurns =
-    !isGenerating && !isRunningTest && isMultiTurnStrategy(strategy as Strategy);
+    !isGenerating && !isRunningTest && isMultiTurnStrategy(strategyName as Strategy);
 
   return (
     <Dialog
@@ -183,28 +188,30 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {pluginName && hasSpecificPluginDocumentation(pluginName as Plugin) && (
-            <Link
-              href={getPluginDocumentationUrl(pluginName as Plugin)}
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 0.5,
-                fontSize: '0.875rem',
-                textDecoration: 'none',
-                '&:hover': {
-                  textDecoration: 'underline',
-                },
-              }}
-            >
-              Learn more about {pluginDisplayName}
-              <Box component="span" sx={{ fontSize: '0.75rem' }}>
-                ↗
-              </Box>
-            </Link>
-          )}
+          {pluginName &&
+            !plugin?.isStatic &&
+            hasSpecificPluginDocumentation(pluginName as Plugin) && (
+              <Link
+                href={getPluginDocumentationUrl(pluginName as Plugin)}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  fontSize: '0.875rem',
+                  textDecoration: 'none',
+                  '&:hover': {
+                    textDecoration: 'underline',
+                  },
+                }}
+              >
+                Learn more about {pluginDisplayName}
+                <Box component="span" sx={{ fontSize: '0.75rem' }}>
+                  ↗
+                </Box>
+              </Link>
+            )}
         </Box>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
           {canAddAdditionalTurns && (

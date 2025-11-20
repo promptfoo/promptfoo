@@ -107,14 +107,21 @@ callApiMock.mockImplementation((path, options) => {
 const TestConsumer = ({
   testPlugin,
   testStrategy,
+  isPluginStatic = false,
+  isStrategyStatic = false,
 }: {
   testPlugin: Plugin;
   testStrategy: Strategy;
+  isPluginStatic?: boolean;
+  isStrategyStatic?: boolean;
 }) => {
   const { isGenerating, plugin, strategy, generateTestCase } = useTestCaseGeneration();
 
   async function handleGenerateTestCase() {
-    await generateTestCase({ id: testPlugin, config: {} }, { id: testStrategy, config: {} });
+    await generateTestCase(
+      { id: testPlugin, config: {}, isStatic: isPluginStatic },
+      { id: testStrategy, config: {}, isStatic: isStrategyStatic },
+    );
   }
 
   return (
@@ -187,6 +194,12 @@ describe('TestCaseGenerationProvider', () => {
       expect(pluginChipComponent).toBeInTheDocument();
       expect(pluginChipComponent).toHaveTextContent('Plugin: Hate Speech');
 
+      await waitFor(() => {
+        expect(
+          within(testCaseDialogComponent).getByText(/Learn more about Hate Speech/i),
+        ).toBeInTheDocument();
+      });
+
       // Wait for the API call to be made with correct parameters
       await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
 
@@ -205,6 +218,26 @@ describe('TestCaseGenerationProvider', () => {
       const targetResponseComponent =
         within(testCaseDialogComponent).queryByTestId('chat-message-1');
       expect(targetResponseComponent).not.toBeInTheDocument();
+    });
+
+    it('should hide plugin documentation link when plugin is static', async () => {
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" isPluginStatic />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+
+      const testCaseDialogComponent = await screen.findByTestId('test-case-dialog');
+
+      await waitFor(() => {
+        expect(
+          within(testCaseDialogComponent).queryByText(/Learn more about Hate Speech/i),
+        ).not.toBeInTheDocument();
+      });
     });
 
     it('should generate images (strategy: image)', async () => {
