@@ -80,26 +80,28 @@ describe('SettingsPanel', () => {
       setter: 'setWordBreak' as const,
       expectedNewValue: 'break-all',
     },
-  ])(
-    'should update the $setter setting when the "$name" toggle is clicked',
-    ({ name, initialState, setter, expectedNewValue }) => {
-      render(<SettingsPanel />);
+  ])('should update the $setter setting when the "$name" toggle is clicked', ({
+    name,
+    initialState,
+    setter,
+    expectedNewValue,
+  }) => {
+    render(<SettingsPanel />);
 
-      const toggle = screen.getByRole('checkbox', { name });
-      expect(toggle).toBeInTheDocument();
+    const toggle = screen.getByRole('checkbox', { name });
+    expect(toggle).toBeInTheDocument();
 
-      if (initialState) {
-        expect(toggle).toBeChecked();
-      } else {
-        expect(toggle).not.toBeChecked();
-      }
+    if (initialState) {
+      expect(toggle).toBeChecked();
+    } else {
+      expect(toggle).not.toBeChecked();
+    }
 
-      fireEvent.click(toggle);
+    fireEvent.click(toggle);
 
-      expect(mockStore[setter]).toHaveBeenCalledTimes(1);
-      expect(mockStore[setter]).toHaveBeenCalledWith(expectedNewValue);
-    },
-  );
+    expect(mockStore[setter]).toHaveBeenCalledTimes(1);
+    expect(mockStore[setter]).toHaveBeenCalledWith(expectedNewValue);
+  });
 
   it.each([
     {
@@ -114,22 +116,23 @@ describe('SettingsPanel', () => {
       newValue: 1001,
       expectedValue: Number.POSITIVE_INFINITY,
     },
-  ])(
-    'should update maxTextLength for $description',
-    ({ initialValue, newValue, expectedValue }) => {
-      render(<SettingsPanel />);
+  ])('should update maxTextLength for $description', ({
+    initialValue,
+    newValue,
+    expectedValue,
+  }) => {
+    render(<SettingsPanel />);
 
-      const slider = screen.getByRole('slider', { name: /maximum text length/i });
-      expect(slider).toBeInTheDocument();
-      expect(slider).toHaveAttribute('aria-valuenow', String(initialValue));
+    const slider = screen.getByRole('slider', { name: /maximum text length/i });
+    expect(slider).toBeInTheDocument();
+    expect(slider).toHaveAttribute('aria-valuenow', String(initialValue));
 
-      fireEvent.change(slider, { target: { value: newValue } });
-      fireEvent.mouseUp(slider);
+    fireEvent.change(slider, { target: { value: newValue } });
+    fireEvent.mouseUp(slider);
 
-      expect(mockStore.setMaxTextLength).toHaveBeenCalledTimes(1);
-      expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(expectedValue);
-    },
-  );
+    expect(mockStore.setMaxTextLength).toHaveBeenCalledTimes(1);
+    expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(expectedValue);
+  });
 
   it('should set maxTextLength to POSITIVE_INFINITY when the store has POSITIVE_INFINITY value', () => {
     mockedUseResultsViewSettingsStore.mockReturnValue({
