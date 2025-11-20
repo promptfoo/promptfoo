@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - feat(cli): add automatic changelog update on version bump (#6252)
 - feat(ci): add enhanced changelog validation rules requiring PR numbers and Unreleased section (#6252)
+- chore: Add visiblity button for PFX passphrase (#6258)
 
 ## [0.119.8] - 2025-11-18
 
