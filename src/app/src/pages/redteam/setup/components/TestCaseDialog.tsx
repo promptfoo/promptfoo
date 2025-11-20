@@ -106,7 +106,11 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     }
 
     // Indicate loading state to the user
-    if (isGenerating && generatedTestCases.length === targetResponses.length) {
+    if (
+      isGenerating &&
+      generatedTestCases.length === targetResponses.length &&
+      generatedTestCases.length < maxTurns
+    ) {
       messages.push({ role: 'user' as const, loading: true } as LoadingMessage);
     } else if (isRunningTest) {
       messages.push({ role: 'assistant' as const, loading: true } as LoadingMessage);
