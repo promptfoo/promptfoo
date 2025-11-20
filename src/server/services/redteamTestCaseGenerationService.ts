@@ -5,7 +5,6 @@ import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
   type MultiTurnStrategy,
   type Plugin,
-  type Strategy,
 } from '../../redteam/constants';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
 import type { ConversationMessage } from '../../redteam/types';

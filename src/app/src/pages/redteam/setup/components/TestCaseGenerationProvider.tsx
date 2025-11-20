@@ -39,14 +39,6 @@ export interface TargetStrategy {
   isStatic: boolean;
 }
 
-interface MultiTurnState {
-  history: ConversationMessage[];
-  turn: number;
-  maxTurns: number;
-  done: boolean;
-  stateful: boolean;
-}
-
 type OnGenerationSuccess = (testCase: GeneratedTestCase) => void;
 type OnGenerationError = (error: Error) => void;
 

@@ -27,7 +27,6 @@ import {
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
 import { useApiHealth } from '@app/hooks/useApiHealth';
-import Skeleton from '@mui/material/Skeleton';
 import Chip from '@mui/material/Chip';
 import ChatMessages, {
   type LoadedMessage,
