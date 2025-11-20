@@ -455,11 +455,6 @@ describe('AgenticStrategiesGroup', () => {
     it('handles strategies with special characters in IDs', () => {
       const specialStrategies: StrategyCardData[] = [
         {
-          id: 'base64',
-          name: 'Strategy With Dash',
-          description: 'Test strategy',
-        },
-        {
           id: 'jailbreak:tree',
           name: 'Strategy With Colon',
           description: 'Test strategy',
@@ -472,18 +467,17 @@ describe('AgenticStrategiesGroup', () => {
           isRemoteGenerationDisabled={false}
           singleTurnStrategies={specialStrategies}
           multiTurnStrategies={[]}
-          selectedIds={['base64']}
+          selectedIds={['jailbreak:tree']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
         />,
       );
 
-      expect(screen.getByText('Strategy With Dash')).toBeInTheDocument();
       expect(screen.getByText('Strategy With Colon')).toBeInTheDocument();
 
-      const dashCheckbox = screen.getByLabelText('Strategy With Dash') as HTMLInputElement;
-      expect(dashCheckbox.checked).toBe(true);
+      const colonCheckbox = screen.getByLabelText('Strategy With Colon') as HTMLInputElement;
+      expect(colonCheckbox.checked).toBe(true);
     });
 
     it('handles very long strategy names and descriptions', () => {
