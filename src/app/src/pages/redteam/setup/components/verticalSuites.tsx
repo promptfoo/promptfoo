@@ -104,6 +104,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       'Comprehensive testing for e-commerce AI systems covering payment security, compliance, and transaction integrity. Tests focus on preventing extraction of credit card numbers, CVVs, bank account details, and payment tokens (PCI DSS compliance), detecting attempts to bypass security rules or terms of service, identifying fraudulent order patterns or unauthorized transactions, and preventing price manipulation through discount abuse or inventory exploits.',
     color: 'primary',
     complianceFrameworks: ['PCI DSS'],
+    requiresEnterprise: true,
     plugins: [
       'ecommerce:pci-dss',
       'ecommerce:compliance-bypass',
