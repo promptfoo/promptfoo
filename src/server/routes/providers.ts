@@ -14,7 +14,7 @@ import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
-import { testHTTPProviderConnectivity, testProviderSession } from '../../validators/testProvider';
+import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
 import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
 
@@ -63,7 +63,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   });
 
   // Use refactored function with optional prompt
-  const result = await testHTTPProviderConnectivity(loadedProvider, payload.prompt);
+  const result = await testProviderConnectivity(loadedProvider, payload.prompt);
 
   res.status(200).json({
     testResult: {
