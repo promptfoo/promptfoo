@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - chore(providers)!: remove deprecated Groq gemma2-9b-it model - model no longer supported by Groq API. Use llama-3.3-70b-versatile or llama-3.1-8b-instant instead (#6231)
+- chore: Add visiblity button for PFX passphrase (#6258)
 
 ## [0.119.8] - 2025-11-18
 
