@@ -469,9 +469,10 @@ describe('util', () => {
 
   it('readFilters', async () => {
     const mockFilter = jest.fn();
-    jest.doMock(path.resolve('filter.js'), () => mockFilter, { virtual: true });
+    const { importModule } = jest.requireMock('../../src/esm');
 
     jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+    importModule.mockResolvedValueOnce(mockFilter);
 
     const filters = await readFilters({ testFilter: 'filter.js' });
 
