@@ -37,7 +37,7 @@ export interface EvalOutputCellProps {
   rowIndex: number;
   promptIndex: number;
   showStats: boolean;
-  onRating: (isPass?: boolean, score?: number, comment?: string) => void;
+  onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
   isRedteam?: boolean;
@@ -293,10 +293,11 @@ function EvalOutputCell({
 
   const handleRating = React.useCallback(
     (isPass: boolean) => {
-      setActiveRating(isPass);
-      onRating(isPass, undefined, output.gradingResult?.comment);
+      const newRating = activeRating === isPass ? null : isPass;
+      setActiveRating(newRating);
+      onRating(newRating, undefined, output.gradingResult?.comment);
     },
-    [onRating, output.gradingResult?.comment],
+    [activeRating, onRating, output.gradingResult?.comment],
   );
 
   const handleSetScore = React.useCallback(() => {
