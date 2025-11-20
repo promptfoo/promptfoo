@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(cli): add auto-updater to keep CLI up-to-date with latest releases (#5744)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
