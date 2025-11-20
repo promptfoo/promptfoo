@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrategyItem } from './StrategyItem';
 import { TestCaseGenerationProvider } from '../TestCaseGenerationProvider';
 
@@ -42,6 +43,14 @@ describe('StrategyItem', () => {
     description: 'Test description',
   };
 
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
   const renderStrategyItem = (props: any) => {
     const redTeamConfig = {
       description: 'Test config',
@@ -56,9 +65,11 @@ describe('StrategyItem', () => {
     };
 
     return render(
-      <TestCaseGenerationProvider redTeamConfig={redTeamConfig as any}>
-        <StrategyItem {...props} />
-      </TestCaseGenerationProvider>,
+      <QueryClientProvider client={queryClient}>
+        <TestCaseGenerationProvider redTeamConfig={redTeamConfig as any}>
+          <StrategyItem {...props} />
+        </TestCaseGenerationProvider>
+      </QueryClientProvider>,
     );
   };
 
@@ -107,16 +118,18 @@ describe('StrategyItem', () => {
       };
 
       rerender(
-        <TestCaseGenerationProvider redTeamConfig={redTeamConfig as any}>
-          <StrategyItem
-            isDisabled={false}
-            isRemoteGenerationDisabled={false}
-            strategy={baseStrategy}
-            isSelected={true}
-            onToggle={mockOnToggle}
-            onConfigClick={mockOnConfigClick}
-          />
-        </TestCaseGenerationProvider>,
+        <QueryClientProvider client={queryClient}>
+          <TestCaseGenerationProvider redTeamConfig={redTeamConfig as any}>
+            <StrategyItem
+              isDisabled={false}
+              isRemoteGenerationDisabled={false}
+              strategy={baseStrategy}
+              isSelected={true}
+              onToggle={mockOnToggle}
+              onConfigClick={mockOnConfigClick}
+            />
+          </TestCaseGenerationProvider>
+        </QueryClientProvider>,
       );
 
       expect(checkbox).toBeChecked();
@@ -246,19 +259,36 @@ describe('StrategyItem', () => {
         id: 'jailbreak:hydra',
       };
 
+      const redTeamConfig = {
+        description: 'Test config',
+        prompts: ['Test prompt'],
+        strategies: [],
+        plugins: [],
+        applicationDefinition: {
+          purpose: 'Test app',
+        },
+        entities: [],
+        target: null as any,
+      };
+
       render(
-        <StrategyItem
-          isDisabled={false}
-          isRemoteGenerationDisabled={false}
-          strategy={hydraStrategy}
-          isSelected={true}
-          onToggle={mockOnToggle}
-          onConfigClick={mockOnConfigClick}
-        />,
+        <QueryClientProvider client={queryClient}>
+          <TestCaseGenerationProvider redTeamConfig={redTeamConfig as any}>
+            <StrategyItem
+              isDisabled={false}
+              isRemoteGenerationDisabled={false}
+              strategy={hydraStrategy}
+              isSelected={true}
+              onToggle={mockOnToggle}
+              onConfigClick={mockOnConfigClick}
+            />
+          </TestCaseGenerationProvider>
+        </QueryClientProvider>,
       );
 
+      // Should have test case generation button + settings button
       const buttons = screen.getAllByRole('button');
-      expect(buttons).toHaveLength(1);
+      expect(buttons).toHaveLength(2); // Test case generation + settings buttons
     });
 
     it('does not show settings button for non-configurable strategies even when selected', () => {
