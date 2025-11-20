@@ -35,22 +35,6 @@ import {
 
 export const redteamRouter = Router();
 
-function respondWithMultiTurnError(error: unknown, res: Response, strategyId: Strategy) {
-  if (error instanceof RemoteGenerationDisabledError) {
-    res.status(400).json({ error: error.message });
-    return;
-  }
-
-  logger.error('[Multi-turn] Error generating prompt', {
-    message: error instanceof Error ? error.message : String(error),
-    strategy: strategyId,
-  });
-  res.status(500).json({
-    error: 'Failed to generate multi-turn prompt',
-    details: error instanceof Error ? error.message : String(error),
-  });
-}
-
 const TestCaseGenerationSchema = z.object({
   plugin: z.object({
     id: z.string().refine((val) => ALL_PLUGINS.includes(val as any), {
@@ -195,9 +179,20 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           metadata: multiTurnResult.metadata,
         });
         return;
-      } catch (multiTurnError) {
-        respondWithMultiTurnError(multiTurnError, res, strategy.id);
-        return;
+      } catch (error) {
+        if (error instanceof RemoteGenerationDisabledError) {
+          res.status(400).json({ error: error.message });
+          return;
+        }
+
+        logger.error('[Multi-turn] Error generating prompt', {
+          message: error instanceof Error ? error.message : String(error),
+          strategy: strategy.id,
+        });
+        res.status(500).json({
+          error: 'Failed to generate multi-turn prompt',
+          details: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
