@@ -18,7 +18,7 @@ To reference prompts in Portkey:
      - 'portkey://pp-test-promp-669f48'
 
    providers:
-     - openai:gpt-5
+     - openai:gpt-5-mini
 
    tests:
      - vars:
@@ -40,7 +40,7 @@ Example:
 
 ```yaml
 providers:
-  id: portkey:gpt-5
+  id: portkey:gpt-5-mini
   config:
     portkeyProvider: openai
 ```
@@ -49,7 +49,7 @@ More complex portkey configurations are also supported.
 
 ```yaml
 providers:
-  id: portkey:gpt-5
+  id: portkey:gpt-5-mini
   config:
     # Can alternatively set environment variable, e.g. PORTKEY_API_KEY
     portkeyApiKey: xxx

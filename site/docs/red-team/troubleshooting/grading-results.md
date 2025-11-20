@@ -5,7 +5,7 @@ description: Red team LLM grading systems by validating output classification to
 
 # About the Grader
 
-When you run a red team scan against a target, Promptfoo will evaluate the results of the output and determine whether the result passes or fails. These results are determined by a model, which is `gpt-4.1-2025-04-14` by default. When the model grades the results of the output, it determines a pass or fail score for the output based on the application context you provide in the target set up.
+When you run a red team scan against a target, Promptfoo will evaluate the results of the output and determine whether the result passes or fails. These results are determined by a model, which is `gpt-5` by default. When the model grades the results of the output, it determines a pass or fail score for the output based on the application context you provide in the target set up.
 
 A **pass** score means that the output did not violate your application's intended behavior and returned an output that conforms with your requirements. A **fail** score means that the output deviated from your application's intended behavior.
 

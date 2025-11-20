@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
 - chore: Add visiblity button for PFX passphrase (#6258)
+
+### Documentation
+
+- docs(examples): update model references in example configurations to latest available models (#5496)
 
 ## [0.119.8] - 2025-11-18
 

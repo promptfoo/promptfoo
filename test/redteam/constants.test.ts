@@ -1,41 +1,104 @@
 import {
   ADDITIONAL_PLUGINS,
-  ADDITIONAL_STRATEGIES,
-  AGENTIC_EXEMPT_PLUGINS,
   AGENTIC_PLUGINS,
   ALL_PLUGINS,
-  ALL_STRATEGIES,
   BASE_PLUGINS,
   COLLECTIONS,
   CONFIG_REQUIRED_PLUGINS,
-  categoryAliases,
   categoryDescriptions,
-  DATASET_EXEMPT_PLUGINS,
-  DATASET_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS,
-  displayNameOverrides,
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
   PII_PLUGINS,
-  pluginDescriptions,
   REDTEAM_MODEL,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   riskCategories,
-  riskCategorySeverityMap,
-  Severity,
-  STRATEGY_COLLECTION_MAPPINGS,
-  STRATEGY_COLLECTIONS,
-  STRATEGY_EXEMPT_PLUGINS,
-  severityDisplayNames,
-  strategyDescriptions,
-  strategyDisplayNames,
-  subCategoryDescriptions,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
+  it('DEFAULT_NUM_TESTS_PER_PLUGIN should be defined', () => {
+    expect(DEFAULT_NUM_TESTS_PER_PLUGIN).toBeDefined();
+    expect(DEFAULT_NUM_TESTS_PER_PLUGIN).toBe(5);
+  });
+
+  it('REDTEAM_MODEL should be defined', () => {
+    expect(REDTEAM_MODEL).toBeDefined();
+    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-5-2025-08-07');
+  });
+
+  it('LLAMA_GUARD_REPLICATE_PROVIDER should be defined', () => {
+    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBeDefined();
+    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBe('replicate:moderation:meta/llama-guard-4-12b');
+  });
+
+  it('LLAMA_GUARD_ENABLED_CATEGORIES should contain expected categories', () => {
+    expect(LLAMA_GUARD_ENABLED_CATEGORIES).toContain('S1');
+    expect(LLAMA_GUARD_ENABLED_CATEGORIES).toContain('S2');
+    expect(LLAMA_GUARD_ENABLED_CATEGORIES).not.toContain('S7');
+  });
+
+  it('COLLECTIONS should contain expected values', () => {
+    expect(COLLECTIONS).toEqual([
+      'default',
+      'foundation',
+      'harmful',
+      'pii',
+      'bias',
+      'medical',
+      'pharmacy',
+      'insurance',
+      'financial',
+      'guardrails-eval',
+    ]);
+  });
+
+  it('UNALIGNED_PROVIDER_HARM_PLUGINS should contain expected plugins', () => {
+    expect(UNALIGNED_PROVIDER_HARM_PLUGINS['harmful:child-exploitation']).toBe(
+      'Child Exploitation',
+    );
+    expect(UNALIGNED_PROVIDER_HARM_PLUGINS['harmful:hate']).toBe('Hate');
+  });
+
+  it('REDTEAM_PROVIDER_HARM_PLUGINS should contain expected plugins', () => {
+    expect(REDTEAM_PROVIDER_HARM_PLUGINS['harmful:intellectual-property']).toBe(
+      'Intellectual Property violation',
+    );
+    expect(REDTEAM_PROVIDER_HARM_PLUGINS['harmful:privacy']).toBe('Privacy violations');
+  });
+
+  it('HARM_PLUGINS should combine plugins from other harm plugin objects', () => {
+    expect(HARM_PLUGINS).toMatchObject({
+      ...UNALIGNED_PROVIDER_HARM_PLUGINS,
+      ...REDTEAM_PROVIDER_HARM_PLUGINS,
+      'harmful:misinformation-disinformation':
+        'Misinformation & Disinformation - Harmful lies and propaganda',
+      'harmful:specialized-advice': 'Specialized Advice - Financial',
+    });
+  });
+
+  it('PII_PLUGINS should contain expected plugins', () => {
+    expect(PII_PLUGINS).toEqual(['pii:api-db', 'pii:direct', 'pii:session', 'pii:social']);
+  });
+
+  it('BASE_PLUGINS should contain expected plugins', () => {
+    expect(BASE_PLUGINS).toContain('contracts');
+    expect(BASE_PLUGINS).toContain('excessive-agency');
+    expect(BASE_PLUGINS).toContain('hallucination');
+  });
+
+  it('ADDITIONAL_PLUGINS should contain MCP plugin', () => {
+    expect(ADDITIONAL_PLUGINS).toContain('mcp');
+  });
+
+  it('DEFAULT_PLUGINS should be a Set containing base plugins, harm plugins and PII plugins', () => {
+    expect(DEFAULT_PLUGINS).toBeInstanceOf(Set);
+    expect(DEFAULT_PLUGINS.has('contracts')).toBe(true);
+    expect(DEFAULT_PLUGINS.has('pii:api-db')).toBe(true);
+  });
+
   it('ALL_PLUGINS should contain all plugins sorted', () => {
     expect(ALL_PLUGINS).toEqual(
       [

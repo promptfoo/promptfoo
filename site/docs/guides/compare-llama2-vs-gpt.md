@@ -5,7 +5,7 @@ description: Compare Llama 3.1 405B vs GPT-4 performance on custom datasets usin
 
 # Llama 3.1 vs GPT: Benchmark on your own data
 
-This guide describes how to compare three models - Llama 3.1 405B, GPT 4o, and GPT 4o-mini - using the `promptfoo` CLI.
+This guide describes how to compare three models - Llama 3.1 405B, GPT 4o, and gpt-5-mini - using the `promptfoo` CLI.
 
 LLM use cases vary widely and there is no one-size-fits-all benchmark. We'll use some dummy test cases from the [Hacker News thread on Llama](https://news.ycombinator.com/item?id=36774627), but you can substitute your own.
 
@@ -31,8 +31,8 @@ Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of mod
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4.1
-  - openai:gpt-4.1-mini
+  - openai:gpt-5
+  - openai:gpt-5-mini
   - replicate:meta/meta-llama-3.1-405b-instruct
 ```
 
@@ -64,8 +64,8 @@ prompts:
 // highlight-end
 
 providers:
-  - openai:gpt-4.1
-  - openai:gpt-4.1-mini
+  - openai:gpt-5
+  - openai:gpt-5-mini
   - replicate:meta/meta-llama-3.1-405b-instruct
 ```
 
@@ -103,11 +103,11 @@ prompts:
   file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     label: GPT 4o
     prompts: chat_prompt
-  - id: openai:gpt-4.1-mini
-    label: GPT 4o-mini
+  - id: openai:gpt-5-mini
+    label: gpt-5-mini
     prompts: chat_prompt
   - id: replicate:meta/meta-llama-3.1-405b-instruct
     label: Llama 3.1 405B
@@ -200,13 +200,13 @@ Each model has a `config` field where you can specify additional parameters. Let
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     // highlight-start
     config:
       temperature: 0
       max_tokens: 128
     // highlight-end
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     // highlight-start
     config:
       temperature: 0
@@ -261,6 +261,6 @@ Which produces a simple spreadsheet containing the eval results (view on [Google
 
 ## Conclusion
 
-In this example we've constructed, GPT-4o scores 100%, GPT-4o-mini scores 75.00%, and Llama 3.1 405B scores 87.50%.
+In this example we've constructed, GPT-4o scores 100%, GPT-4.1-mini scores 75.00%, and Llama 3.1 405B scores 87.50%.
 
 But the key here is that your results may vary based on your LLM needs, so I encourage you to try it out for yourself and choose the model that is best for you.

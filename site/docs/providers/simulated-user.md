@@ -138,7 +138,7 @@ prompts:
   - You are a helpful customer service agent. Answer questions politely and try to resolve issues.
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-5-mini
 
 defaultTest:
   provider:
@@ -157,7 +157,7 @@ For complex scenarios with function calling, you can define structured APIs with
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     config:
       tools:
         - file://functions/search_flights.json
