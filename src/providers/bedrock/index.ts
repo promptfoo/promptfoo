@@ -10,6 +10,12 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { outputFromMessage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
+import { calculateBedrockCost, BEDROCK_MODELS_WITH_PRICING } from './pricing';
+import {
+  fetchBedrockPricing,
+  calculateCostWithFetchedPricing,
+  type BedrockPricingData,
+} from './pricingFetcher';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
@@ -62,6 +68,7 @@ interface BedrockOptions {
   showThinking?: boolean;
   endpoint?: string;
   inferenceModelType?: BedrockModelFamily;
+  cost?: number | { input: number; output: number };
 }
 
 export interface TextGenerationOptions {
@@ -1768,6 +1775,7 @@ export abstract class AwsBedrockGenericProvider {
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
   config: BedrockOptions;
+  pricingData: BedrockPricingData | null | undefined;
 
   constructor(
     modelName: string,
@@ -1778,6 +1786,9 @@ export abstract class AwsBedrockGenericProvider {
     this.modelName = modelName;
     this.config = config || {};
     this.id = id ? () => id : this.id;
+    // Pricing data starts as undefined (not yet attempted)
+    // Will become BedrockPricingData (success) or null (failed) after first call
+    this.pricingData = undefined;
 
     if (this.config.guardrailIdentifier) {
       telemetry.record('feature_used', {
@@ -1840,7 +1851,84 @@ export abstract class AwsBedrockGenericProvider {
     return undefined;
   }
 
+  /**
+   * Lazily initializes pricing data from AWS Pricing API.
+   * Called once on the first API call to fetch current pricing.
+   * Checks cache first, then fetches from API if needed.
+   * Falls back to static pricing if fetch fails.
+   */
+  async initializePricingIfNeeded(): Promise<void> {
+    // Only attempt fetch once (undefined means not yet attempted)
+    if (this.pricingData !== undefined) {
+      return;
+    }
+
+    const region = this.getRegion();
+    const cache = await getCache();
+    const cacheKey = `bedrock-pricing:${region}`;
+
+    // Check if we have cached pricing data
+    if (isCacheEnabled()) {
+      try {
+        const cachedData = await cache.get(cacheKey);
+        if (cachedData) {
+          const parsed = JSON.parse(cachedData as string);
+          // Reconstruct Map from cached array
+          const models = new Map(parsed.models);
+          this.pricingData = {
+            models,
+            region: parsed.region,
+            fetchedAt: new Date(parsed.fetchedAt),
+          };
+          logger.debug('[Bedrock Pricing]: Using cached pricing data', {
+            region,
+            modelCount: this.pricingData.models.size,
+            cachedAt: this.pricingData.fetchedAt,
+          });
+          return;
+        }
+      } catch (err) {
+        logger.debug('[Bedrock Pricing]: Failed to parse cached pricing', {
+          error: String(err),
+        });
+      }
+    }
+
+    // Fetch from API if not in cache
+    const credentials = await this.getCredentials();
+    this.pricingData = await fetchBedrockPricing(region, credentials);
+
+    if (this.pricingData) {
+      logger.debug('[Bedrock Pricing]: Successfully fetched pricing from API', {
+        region,
+        modelCount: this.pricingData.models.size,
+      });
+
+      // Cache the pricing data
+      if (isCacheEnabled()) {
+        try {
+          const cacheData = JSON.stringify({
+            models: Array.from(this.pricingData.models.entries()),
+            region: this.pricingData.region,
+            fetchedAt: this.pricingData.fetchedAt.toISOString(),
+          });
+          await cache.set(cacheKey, cacheData);
+          logger.debug('[Bedrock Pricing]: Cached pricing data');
+        } catch (err) {
+          logger.debug('[Bedrock Pricing]: Failed to cache pricing data', {
+            error: String(err),
+          });
+        }
+      }
+    } else {
+      logger.debug('[Bedrock Pricing]: Pricing fetch failed, using static fallback');
+    }
+  }
+
   async getBedrockInstance() {
+    // Initialize pricing data on first call (lazy init)
+    await this.initializePricingIfNeeded();
+
     if (!this.bedrock) {
       let handler;
       const apiKey = this.getApiKey();
@@ -2060,9 +2148,34 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
+      // Calculate cost with priority: config.cost > fetched pricing > static pricing
+      let cost: number | undefined;
+      if (this.config.cost !== undefined) {
+        // Use config override if provided
+        cost = calculateBedrockCost(
+          this.modelName,
+          this.config,
+          tokenUsage.prompt,
+          tokenUsage.completion,
+        );
+      } else {
+        // Otherwise use fetched pricing with static fallback
+        const staticModelPricing = BEDROCK_MODELS_WITH_PRICING.find(
+          (m) => m.id === this.modelName,
+        )?.cost;
+        cost = calculateCostWithFetchedPricing(
+          this.modelName,
+          this.pricingData,
+          tokenUsage.prompt,
+          tokenUsage.completion,
+          staticModelPricing,
+        );
+      }
+
       return {
         output: model.output(this.config, output),
         tokenUsage,
+        cost,
         ...(output['amazon-bedrock-guardrailAction']
           ? {
               guardrails: {
