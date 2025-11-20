@@ -71,7 +71,7 @@ export default function VerticalSuiteCard({
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
-  const { isGenerating: generatingTestCase, currentPlugin: generatingPlugin } =
+  const { isGenerating: generatingTestCase, plugin: generatingPlugin } =
     useTestCaseGeneration();
 
   // Calculate stats
