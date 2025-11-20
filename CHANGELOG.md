@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(config): add per-test structured output configuration - test-level `options` now override prompt-level config for all providers, enabling different `response_format` (OpenAI) or `responseSchema` (Google) per test without duplicating prompts; works with all providers (OpenAI, Azure, Google Vertex, Mistral, etc.); supports external schema files with `file://` prefix and variable substitution; uses shallow merge (object spread) where test options completely replace conflicting prompt config objects; 100% backward compatible (#6239)
+
+### Changed
+
 - chore: Add visiblity button for PFX passphrase (#6258)
 - feat(app): Red Team Strategy Test Generation (#6005)
 - feat(app): custom policy generation (#6181)
