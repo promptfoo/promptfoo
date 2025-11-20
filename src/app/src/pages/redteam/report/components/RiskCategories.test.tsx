@@ -214,39 +214,42 @@ describe('RiskCategories', () => {
         rbac: { pass: 5, total: -5 },
       },
     },
-  ])(
-    'should handle $name gracefully',
-    ({ categoryStats, expectedTestTypes, expectedProgress, expectedPasses, expectedFails }) => {
-      const mockProps = createMockProps({ categoryStats });
+  ])('should handle $name gracefully', ({
+    categoryStats,
+    expectedTestTypes,
+    expectedProgress,
+    expectedPasses,
+    expectedFails,
+  }) => {
+    const mockProps = createMockProps({ categoryStats });
 
-      render(<RiskCategories {...mockProps} />);
+    render(<RiskCategories {...mockProps} />);
 
-      const securityCardProps = expectRiskCardProps('Security & Access Control', {});
+    const securityCardProps = expectRiskCardProps('Security & Access Control', {});
 
-      expect(typeof securityCardProps.progressValue).toBe('number');
-      expect(Number.isNaN(securityCardProps.progressValue)).toBe(false);
+    expect(typeof securityCardProps.progressValue).toBe('number');
+    expect(Number.isNaN(securityCardProps.progressValue)).toBe(false);
 
-      if (expectedTestTypes) {
-        expectedTestTypes.forEach((type) => {
-          expect(securityCardProps.testTypes).toEqual(
-            expect.arrayContaining([expect.objectContaining(type)]),
-          );
-        });
-      }
+    if (expectedTestTypes) {
+      expectedTestTypes.forEach((type) => {
+        expect(securityCardProps.testTypes).toEqual(
+          expect.arrayContaining([expect.objectContaining(type)]),
+        );
+      });
+    }
 
-      if (expectedProgress !== undefined) {
-        expect(securityCardProps.progressValue).toBeCloseTo(expectedProgress);
-      }
+    if (expectedProgress !== undefined) {
+      expect(securityCardProps.progressValue).toBeCloseTo(expectedProgress);
+    }
 
-      if (expectedPasses !== undefined) {
-        expect(securityCardProps.numTestsPassed).toBe(expectedPasses);
-      }
+    if (expectedPasses !== undefined) {
+      expect(securityCardProps.numTestsPassed).toBe(expectedPasses);
+    }
 
-      if (expectedFails !== undefined) {
-        expect(securityCardProps.numTestsFailed).toBe(expectedFails);
-      }
-    },
-  );
+    if (expectedFails !== undefined) {
+      expect(securityCardProps.numTestsFailed).toBe(expectedFails);
+    }
+  });
 
   it('should handle failuresByPlugin and passesByPlugin containing entries for subcategories not defined in riskCategories', () => {
     const mockProps = createMockProps({
