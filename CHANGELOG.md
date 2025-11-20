@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking
+
+### Changed
+
 - chore: Add visiblity button for PFX passphrase (#6258)
 
 ## [0.119.8] - 2025-11-18

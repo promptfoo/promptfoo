@@ -428,5 +428,118 @@ describe('ResponsesProcessor', () => {
         ],
       });
     });
+
+    it('should include only model when id is missing', async () => {
+      const mockData = {
+        // No id field
+        model: 'gpt-4o-2024-11-20',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response without id' }],
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 3 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.metadata).toEqual({
+        model: 'gpt-4o-2024-11-20',
+      });
+      expect(result.metadata).not.toHaveProperty('responseId');
+    });
+
+    it('should handle multiple annotations from deep research', async () => {
+      const mockData = {
+        id: 'resp_multi123',
+        model: 'o3-deep-research',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'First citation',
+                annotations: [
+                  { url: 'https://source1.com', title: 'Source 1' },
+                  { url: 'https://source2.com', title: 'Source 2' },
+                ],
+              },
+              {
+                type: 'output_text',
+                text: 'Second citation',
+                annotations: [
+                  { url: 'https://source3.com', title: 'Source 3' },
+                ],
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 30, output_tokens: 20 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.metadata).toHaveProperty('responseId', 'resp_multi123');
+      expect(result.metadata).toHaveProperty('model', 'o3-deep-research');
+      expect(result.metadata?.annotations).toHaveLength(3);
+      expect(result.metadata?.annotations).toEqual([
+        { url: 'https://source1.com', title: 'Source 1' },
+        { url: 'https://source2.com', title: 'Source 2' },
+        { url: 'https://source3.com', title: 'Source 3' },
+      ]);
+    });
+
+    it('should not include annotations field when empty array', async () => {
+      const mockData = {
+        id: 'resp_noannotations',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'No citations',
+                annotations: [],
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.metadata).toEqual({
+        responseId: 'resp_noannotations',
+        model: 'gpt-4.1',
+      });
+      expect(result.metadata).not.toHaveProperty('annotations');
+    });
+
+    it('should handle empty string values gracefully', async () => {
+      const mockData = {
+        id: '',
+        model: '',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Empty strings' }],
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 3 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      // Empty strings are falsy, so they should not be included
+      expect(result.metadata).toEqual({});
+    });
   });
 });
