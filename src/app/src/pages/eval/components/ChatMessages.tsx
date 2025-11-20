@@ -1,6 +1,7 @@
-import { memo, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
 import Paper from '@mui/material/Paper';
 import { useTheme, keyframes } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
@@ -130,7 +131,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
 
   return (
     <Box
-      sx={{ display: 'flex', justifyContent: alignSelf, mb: 1 }}
+      sx={{ display: 'flex', justifyContent: alignSelf }}
       data-testid={`chat-message-${index}`}
     >
       {message.loading ? (
@@ -206,13 +207,14 @@ export default function ChatMessages({
   const isDark = theme.palette.mode === 'dark';
 
   return (
-    <Box
-      mb={2}
+    <Stack
       sx={{
         backgroundColor: (theme) =>
           theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.2)' : '#F8F9FA',
         p: 2,
       }}
+      direction="column"
+      gap={2}
     >
       {messages.map((message, index) => {
         const msg = <ChatMessage key={index} message={message} index={index} />;
@@ -254,6 +256,6 @@ export default function ChatMessages({
           msg
         );
       })}
-    </Box>
+    </Stack>
   );
 }
