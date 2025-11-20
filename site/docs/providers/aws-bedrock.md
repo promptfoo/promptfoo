@@ -740,6 +740,62 @@ providers:
       tool_choice: auto
 ```
 
+## Cost Tracking
+
+Promptfoo automatically tracks token usage and calculates costs for AWS Bedrock models. Cost data appears in eval outputs and the web UI.
+
+### Real-Time Pricing
+
+Promptfoo automatically fetches current pricing from the AWS Pricing API and caches it. This ensures accurate costs for your region and automatically reflects AWS price changes.
+
+**How it works:**
+
+1. First eval checks the cache for pricing data
+2. If not cached, fetches from AWS Pricing API (~500ms)
+3. Caches pricing data
+4. Subsequent evals use cached pricing (0ms overhead)
+5. Falls back to static pricing if fetch fails
+
+**Requirements:**
+
+- AWS credentials with `pricing:GetProducts` permission
+- Same credentials used for Bedrock API calls
+
+No configuration needed - pricing fetch and caching happens automatically.
+
+### Supported Models
+
+Pricing is included for 80+ Bedrock models across all families:
+
+- **Amazon**: Nova (Micro, Lite, Pro), Titan
+- **Anthropic**: Claude (3.x, 4.x, Haiku, Sonnet, Opus)
+- **Meta**: Llama (2, 3.x, 3.1, 3.2, 3.3, 4)
+- **Mistral**: All variants
+- **AI21**: Jamba
+- **Cohere**: Command series
+- **DeepSeek**: R1
+- **OpenAI**: GPT-OSS (via Bedrock)
+- **Alibaba**: Qwen
+
+When real-time pricing is unavailable, Promptfoo uses built-in pricing data current as of January 2025.
+
+### Custom Pricing Override
+
+Override pricing for specific use cases:
+
+```yaml
+providers:
+  - id: bedrock:amazon.nova-micro-v1:0
+    config:
+      cost:
+        input: 0.00005 # USD per token
+        output: 0.0002 # USD per token
+```
+
+Custom pricing takes precedence over both real-time and static pricing.
+
+**Note**: For the latest pricing information, see the [AWS Bedrock Pricing page](https://aws.amazon.com/bedrock/pricing/).
+
 ## Model-graded tests
 
 You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-4.1-2025-04-14` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
