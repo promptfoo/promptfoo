@@ -2015,19 +2015,17 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
 
-    let model = getHandlerForModel(this.modelName, { ...this.config, ...context?.prompt.config });
+    // Merge provider config with per-prompt config
+    const resolvedConfig = { ...this.config, ...context?.prompt.config };
+
+    let model = getHandlerForModel(this.modelName, resolvedConfig);
     if (!model) {
       logger.warn(
         `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(
-      { ...this.config, ...context?.prompt.config },
-      prompt,
-      stop,
-      this.modelName,
-    );
+    const params = model.params(resolvedConfig, prompt, stop, this.modelName);
 
     logger.debug('Calling Amazon Bedrock API', { params });
 
@@ -2040,8 +2038,9 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
-          output: model.output(this.config, JSON.parse(cachedResponse as string)),
+          output: model.output(resolvedConfig, JSON.parse(cachedResponse as string)),
           tokenUsage: createEmptyTokenUsage(),
+          cost: 0, // Cache hit - no Bedrock API billing occurred
         };
       }
     }
@@ -2150,11 +2149,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
 
       // Calculate cost with priority: config.cost > fetched pricing > static pricing
       let cost: number | undefined;
-      if (this.config.cost !== undefined) {
-        // Use config override if provided
+      if (resolvedConfig.cost !== undefined) {
+        // Use config override if provided (supports per-prompt cost overrides)
         cost = calculateBedrockCost(
           this.modelName,
-          this.config,
+          resolvedConfig,
           tokenUsage.prompt,
           tokenUsage.completion,
         );
@@ -2173,7 +2172,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       }
 
       return {
-        output: model.output(this.config, output),
+        output: model.output(resolvedConfig, output),
         tokenUsage,
         cost,
         ...(output['amazon-bedrock-guardrailAction']

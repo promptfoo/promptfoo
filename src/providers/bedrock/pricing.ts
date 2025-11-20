@@ -4,7 +4,13 @@
  * Pricing data for AWS Bedrock foundation models.
  * Source: https://aws.amazon.com/bedrock/pricing/
  * Last updated: 2025-01-20
- * Prices in USD per 1,000 tokens for us-east-1 region (unless otherwise noted)
+ *
+ * AWS pricing is listed per 1,000 tokens on their website. Our cost values are
+ * stored as per-token rates (divide AWS price by 1000). This allows direct
+ * multiplication: cost = rate * token_count.
+ *
+ * Example: AWS shows $0.035/1K tokens → we store 0.000035/token (0.035/1000)
+ * Inline comments show equivalent $/1M tokens for easier verification.
  *
  * Note: Pricing may vary by region. Actual costs may differ.
  * Users can override pricing via config.cost parameter.

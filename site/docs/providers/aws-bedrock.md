@@ -758,10 +758,11 @@ Promptfoo automatically fetches current pricing from the AWS Pricing API and cac
 
 **Requirements:**
 
-- AWS credentials with `pricing:GetProducts` permission
-- Same credentials used for Bedrock API calls
+- **IAM credentials** with `pricing:GetProducts` permission
+- Pricing API requires IAM authentication (AWS access key + secret key)
+- If using API key-only authentication for Bedrock, real-time pricing will be skipped and static pricing will be used instead
 
-No configuration needed - pricing fetch and caching happens automatically.
+No configuration needed - pricing fetch and caching happens automatically when IAM credentials are available.
 
 ### Supported Models
 
@@ -788,11 +789,13 @@ providers:
   - id: bedrock:amazon.nova-micro-v1:0
     config:
       cost:
-        input: 0.00005 # USD per token
-        output: 0.0002 # USD per token
+        input: 0.00005 # USD per token (AWS lists prices per 1K tokens - divide by 1000)
+        output: 0.0002 # USD per token (AWS lists prices per 1K tokens - divide by 1000)
 ```
 
 Custom pricing takes precedence over both real-time and static pricing.
+
+**Note:** AWS Bedrock pricing is typically shown per 1,000 tokens on their pricing page. When configuring `cost` overrides, convert to per-token rates by dividing by 1000. For example, if AWS shows $0.05 per 1K input tokens, use `input: 0.00005` (0.05 / 1000).
 
 **Note**: For the latest pricing information, see the [AWS Bedrock Pricing page](https://aws.amazon.com/bedrock/pricing/).
 

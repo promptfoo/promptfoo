@@ -91,7 +91,7 @@ export async function fetchBedrockPricing(
     // Create Pricing client (always use us-east-1 for Pricing API)
     const pricingClient = new PricingClient({
       region: 'us-east-1', // Pricing API only available in us-east-1
-      credentials,
+      ...(credentials ? { credentials } : {}),
     });
 
     // Fetch Bedrock pricing products
@@ -201,7 +201,12 @@ export function calculateCostWithFetchedPricing(
   completionTokens: number | undefined,
   staticPricing: { input: number; output: number } | undefined,
 ): number | undefined {
-  if (promptTokens === undefined || completionTokens === undefined) {
+  if (
+    promptTokens === undefined ||
+    completionTokens === undefined ||
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens)
+  ) {
     return undefined;
   }
 
