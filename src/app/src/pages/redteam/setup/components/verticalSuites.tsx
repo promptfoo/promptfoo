@@ -8,39 +8,34 @@ import type { VerticalSuite } from './VerticalSuiteCard';
 
 export const VERTICAL_SUITES: VerticalSuite[] = [
   {
-    id: 'medical',
-    name: 'Healthcare',
-    icon: <LocalHospitalOutlined />,
-    description: 'Clinical decision support, diagnosis assistance, and patient triage systems',
+    id: 'ecommerce',
+    name: 'E-commerce',
+    icon: <ShoppingCartOutlined />,
+    description:
+      'PCI DSS compliance, payment data security, and customer privacy for online retail.',
     longDescription:
-      'Specialized tests for medical AI systems including clinical decision support, diagnosis assistance, treatment recommendations, and patient triage. Tests cover hallucination of medical facts, clinical accuracy, anchoring bias, prioritization errors, off-label medication suggestions, and sycophantic behavior that prioritizes user satisfaction over medical accuracy.',
-    color: 'primary', // Use theme primary color
-    complianceFrameworks: ['HIPAA', 'FDA 21 CFR Part 11'],
+      'Comprehensive testing for e-commerce AI systems covering payment security, compliance, and transaction integrity. Tests focus on preventing extraction of credit card numbers, CVVs, bank account details, and payment tokens (PCI DSS compliance), detecting attempts to bypass security rules or terms of service, identifying fraudulent order patterns or unauthorized transactions, and preventing price manipulation through discount abuse or inventory exploits.',
+    color: 'primary',
+    complianceFrameworks: ['PCI DSS'],
     requiresEnterprise: true,
     plugins: [
-      'medical:hallucination',
-      'medical:incorrect-knowledge',
-      'medical:prioritization-error',
-      'medical:off-label-use',
-      'medical:anchoring-bias',
-      'medical:sycophancy',
+      'ecommerce:pci-dss',
+      'ecommerce:compliance-bypass',
+      'ecommerce:order-fraud',
+      'ecommerce:price-manipulation',
     ] as Plugin[],
     pluginGroups: [
       {
-        name: 'Clinical Accuracy & Safety',
-        plugins: [
-          'medical:hallucination',
-          'medical:incorrect-knowledge',
-          'medical:prioritization-error',
-        ] as Plugin[],
+        name: 'Payment Data Security',
+        plugins: ['ecommerce:pci-dss'] as Plugin[],
       },
       {
-        name: 'Treatment Recommendations',
-        plugins: ['medical:off-label-use', 'medical:anchoring-bias'] as Plugin[],
+        name: 'Security & Compliance',
+        plugins: ['ecommerce:compliance-bypass'] as Plugin[],
       },
       {
-        name: 'Decision Quality',
-        plugins: ['medical:sycophancy'] as Plugin[],
+        name: 'Fraud Prevention',
+        plugins: ['ecommerce:order-fraud', 'ecommerce:price-manipulation'] as Plugin[],
       },
     ],
   },
@@ -95,60 +90,39 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
     ],
   },
   {
-    id: 'ecommerce',
-    name: 'E-commerce',
-    icon: <ShoppingCartOutlined />,
-    description:
-      'PCI DSS compliance, payment data security, and customer privacy for online retail.',
+    id: 'medical',
+    name: 'Healthcare',
+    icon: <LocalHospitalOutlined />,
+    description: 'Clinical decision support, diagnosis assistance, and patient triage systems',
     longDescription:
-      'Comprehensive testing for e-commerce AI systems covering payment security, compliance, and transaction integrity. Tests focus on preventing extraction of credit card numbers, CVVs, bank account details, and payment tokens (PCI DSS compliance), detecting attempts to bypass security rules or terms of service, identifying fraudulent order patterns or unauthorized transactions, and preventing price manipulation through discount abuse or inventory exploits.',
-    color: 'primary',
-    complianceFrameworks: ['PCI DSS'],
+      'Specialized tests for medical AI systems including clinical decision support, diagnosis assistance, treatment recommendations, and patient triage. Tests cover hallucination of medical facts, clinical accuracy, anchoring bias, prioritization errors, off-label medication suggestions, and sycophantic behavior that prioritizes user satisfaction over medical accuracy.',
+    color: 'primary', // Use theme primary color
+    complianceFrameworks: ['HIPAA', 'FDA 21 CFR Part 11'],
     requiresEnterprise: true,
     plugins: [
-      'ecommerce:pci-dss',
-      'ecommerce:compliance-bypass',
-      'ecommerce:order-fraud',
-      'ecommerce:price-manipulation',
+      'medical:hallucination',
+      'medical:incorrect-knowledge',
+      'medical:prioritization-error',
+      'medical:off-label-use',
+      'medical:anchoring-bias',
+      'medical:sycophancy',
     ] as Plugin[],
     pluginGroups: [
       {
-        name: 'Payment Data Security',
-        plugins: ['ecommerce:pci-dss'] as Plugin[],
+        name: 'Clinical Accuracy & Safety',
+        plugins: [
+          'medical:hallucination',
+          'medical:incorrect-knowledge',
+          'medical:prioritization-error',
+        ] as Plugin[],
       },
       {
-        name: 'Security & Compliance',
-        plugins: ['ecommerce:compliance-bypass'] as Plugin[],
+        name: 'Treatment Recommendations',
+        plugins: ['medical:off-label-use', 'medical:anchoring-bias'] as Plugin[],
       },
       {
-        name: 'Fraud Prevention',
-        plugins: ['ecommerce:order-fraud', 'ecommerce:price-manipulation'] as Plugin[],
-      },
-    ],
-  },
-  {
-    id: 'pharmacy',
-    name: 'Pharmacy',
-    icon: <LocalPharmacyOutlined />,
-    description: 'Medication dispensing, drug interactions, and dosage calculations',
-    longDescription:
-      'Critical safety testing for pharmacy AI systems including medication dispensing, drug interaction checking, dosage calculations, and controlled substance monitoring. Tests cover dangerous drug-drug/drug-food/drug-supplement interactions, dosage calculation errors (weight-based, renal adjustments, pediatric dosing), and DEA controlled substance compliance (schedule restrictions, early refill detection, PDMP requirements).',
-    color: 'primary',
-    complianceFrameworks: ['DEA', 'FDA', '21 CFR Part 1300'],
-    requiresEnterprise: true,
-    plugins: [
-      'pharmacy:drug-interaction',
-      'pharmacy:dosage-calculation',
-      'pharmacy:controlled-substance-compliance',
-    ] as Plugin[],
-    pluginGroups: [
-      {
-        name: 'Patient Safety',
-        plugins: ['pharmacy:drug-interaction', 'pharmacy:dosage-calculation'] as Plugin[],
-      },
-      {
-        name: 'Regulatory Compliance',
-        plugins: ['pharmacy:controlled-substance-compliance'] as Plugin[],
+        name: 'Decision Quality',
+        plugins: ['medical:sycophancy'] as Plugin[],
       },
     ],
   },
@@ -179,6 +153,32 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       {
         name: 'Privacy & Data Protection',
         plugins: ['insurance:phi-disclosure'] as Plugin[],
+      },
+    ],
+  },
+  {
+    id: 'pharmacy',
+    name: 'Pharmacy',
+    icon: <LocalPharmacyOutlined />,
+    description: 'Medication dispensing, drug interactions, and dosage calculations',
+    longDescription:
+      'Critical safety testing for pharmacy AI systems including medication dispensing, drug interaction checking, dosage calculations, and controlled substance monitoring. Tests cover dangerous drug-drug/drug-food/drug-supplement interactions, dosage calculation errors (weight-based, renal adjustments, pediatric dosing), and DEA controlled substance compliance (schedule restrictions, early refill detection, PDMP requirements).',
+    color: 'primary',
+    complianceFrameworks: ['DEA', 'FDA', '21 CFR Part 1300'],
+    requiresEnterprise: true,
+    plugins: [
+      'pharmacy:drug-interaction',
+      'pharmacy:dosage-calculation',
+      'pharmacy:controlled-substance-compliance',
+    ] as Plugin[],
+    pluginGroups: [
+      {
+        name: 'Patient Safety',
+        plugins: ['pharmacy:drug-interaction', 'pharmacy:dosage-calculation'] as Plugin[],
+      },
+      {
+        name: 'Regulatory Compliance',
+        plugins: ['pharmacy:controlled-substance-compliance'] as Plugin[],
       },
     ],
   },

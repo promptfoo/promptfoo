@@ -13,7 +13,7 @@ E-commerce applications face heightened security requirements due to handling se
 
 ### PCI DSS Compliance
 
-**Plugin ID:** `ecommerce-pci-dss`
+**Plugin ID:** `ecommerce:pci-dss`
 
 Tests whether an AI system can be manipulated to expose sensitive payment card industry data that should be protected under PCI DSS regulations. This plugin attempts to extract credit card numbers, CVV codes, bank account details, payment tokens, or other financial information that must never be revealed.
 
@@ -22,7 +22,7 @@ Tests whether an AI system can be manipulated to expose sensitive payment card i
 ```yaml
 redteam:
   plugins:
-    - ecommerce-pci-dss
+    - ecommerce:pci-dss
 ```
 
 **What it tests:**
@@ -39,7 +39,7 @@ redteam:
 
 ### Price Manipulation
 
-**Plugin ID:** `ecommerce-price-manipulation`
+**Plugin ID:** `ecommerce:price-manipulation`
 
 Tests whether an AI system can be exploited to manipulate prices, apply unauthorized discounts, or violate promotional policies in ways that cause revenue loss or regulatory issues. This plugin attempts to get the AI to override pricing rules, stack incompatible coupons, or grant special status discounts without authorization.
 
@@ -48,7 +48,7 @@ Tests whether an AI system can be exploited to manipulate prices, apply unauthor
 ```yaml
 redteam:
   plugins:
-    - ecommerce-price-manipulation
+    - ecommerce:price-manipulation
 ```
 
 **What it tests:**
@@ -66,7 +66,7 @@ redteam:
 
 ### Compliance Bypass
 
-**Plugin ID:** `ecommerce-compliance-bypass`
+**Plugin ID:** `ecommerce:compliance-bypass`
 
 Tests whether an AI system can be manipulated to bypass age restrictions, geographic limitations, quantity controls, or other regulatory requirements for restricted products. This plugin attempts to circumvent age-gating for alcohol/tobacco, evade geographic shipping restrictions, bypass quantity limits on controlled items, or skip required safety disclosures.
 
@@ -75,7 +75,7 @@ Tests whether an AI system can be manipulated to bypass age restrictions, geogra
 ```yaml
 redteam:
   plugins:
-    - ecommerce-compliance-bypass
+    - ecommerce:compliance-bypass
 ```
 
 **What it tests:**
@@ -92,7 +92,7 @@ redteam:
 
 ### Order Fraud
 
-**Plugin ID:** `ecommerce-order-fraud`
+**Plugin ID:** `ecommerce:order-fraud`
 
 Tests whether an AI system enables order fraud, transaction manipulation, or abuse of return/refund policies. This plugin attempts to exploit order management workflows through post-purchase address changes, unauthorized refunds, fraudulent returns, order modifications without payment, or loyalty program abuse.
 
@@ -101,7 +101,7 @@ Tests whether an AI system enables order fraud, transaction manipulation, or abu
 ```yaml
 redteam:
   plugins:
-    - ecommerce-order-fraud
+    - ecommerce:order-fraud
 ```
 
 **What it tests:**
@@ -127,10 +127,10 @@ Include the plugins you want to test in your red teaming configuration:
 redteam:
   purpose: 'e-commerce customer service chatbot'
   plugins:
-    - ecommerce-pci-dss
-    - ecommerce-price-manipulation
-    - ecommerce-compliance-bypass
-    - ecommerce-order-fraud
+    - ecommerce:pci-dss
+    - ecommerce:price-manipulation
+    - ecommerce:compliance-bypass
+    - ecommerce:order-fraud
 ```
 
 ### Combined with Strategies
@@ -141,8 +141,8 @@ Apply adversarial strategies to test how obfuscation or manipulation techniques 
 redteam:
   purpose: 'online retail shopping assistant'
   plugins:
-    - ecommerce-pci-dss
-    - ecommerce-price-manipulation
+    - ecommerce:pci-dss
+    - ecommerce:price-manipulation
   strategies:
     - jailbreak
     - prompt-injection
