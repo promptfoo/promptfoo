@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - feat(providers): add Anthropic structured outputs support with JSON schema outputs via `output_format` parameter and strict tool use via `strict: true` in tool definitions - ensures schema-compliant responses with automatic beta header handling, external file loading, variable rendering, and JSON parsing for Claude Sonnet 4.5 and Claude Opus 4.1 (#6226)
 
+### Changed
+
+- chore: Add visiblity button for PFX passphrase (#6258)
+
 ### Documentation
 
 - docs(providers): add comprehensive Anthropic structured outputs documentation covering JSON outputs (`output_format`) and strict tool use (`strict: true`), including usage examples, schema limitations, and feature compatibility (#6226)
