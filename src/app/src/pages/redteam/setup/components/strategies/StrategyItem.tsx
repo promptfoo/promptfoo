@@ -64,6 +64,28 @@ export function StrategyItem({
   const hasSettingsButton =
     requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any));
 
+  const { tooltipTitle, settingsTooltipTitle } = useMemo(() => {
+    if (requiresConfig) {
+      const reason =
+        strategy.id === 'custom'
+          ? 'Strategy text is required'
+          : strategy.id === 'simba'
+            ? 'At least one goal is required'
+            : 'Configuration is required';
+      const configRequiredTooltip = `Configuration required: ${reason}. Click the settings icon to configure.`;
+
+      return {
+        tooltipTitle: configRequiredTooltip,
+        settingsTooltipTitle: configRequiredTooltip,
+      };
+    }
+
+    return {
+      tooltipTitle: `Generate an example test case using the ${strategy.name} Strategy.`,
+      settingsTooltipTitle: 'Configure strategy settings',
+    };
+  }, [requiresConfig, strategy.id, strategy.name]);
+
   const handleTestCaseGeneration = useCallback(async () => {
     await generateTestCase(
       { id: TEST_GENERATION_PLUGIN, config: {} },
@@ -210,22 +232,12 @@ export function StrategyItem({
           disabled={isDisabled || generatingTestCase || requiresConfig}
           isGenerating={generatingTestCase && currentStrategy === strategy.id}
           size="small"
-          tooltipTitle={
-            requiresConfig
-              ? `Configuration required: ${strategy.id === 'custom' ? 'Strategy text is required' : strategy.id === 'simba' ? 'At least one goal is required' : 'Configuration is required'}. Click the settings icon to configure.`
-              : `Generate an example test case using the ${strategy.name} Strategy.`
-          }
+          tooltipTitle={tooltipTitle}
         />
 
         {/* Settings button - positioned absolutely in the top-right corner */}
         {hasSettingsButton && (
-          <Tooltip
-            title={
-              requiresConfig
-                ? `Configuration required: ${strategy.id === 'custom' ? 'Strategy text is required' : strategy.id === 'simba' ? 'At least one goal is required' : 'Configuration is required'}. Click to configure.`
-                : 'Configure strategy settings'
-            }
-          >
+          <Tooltip title={settingsTooltipTitle}>
             <IconButton
               size="small"
               onClick={(e) => {
