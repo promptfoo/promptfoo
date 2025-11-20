@@ -5,7 +5,6 @@ import {
 } from '@aws-sdk/client-pricing';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import logger from '../../logger';
-import { sanitizeObject } from '../../util/sanitizer';
 
 export interface BedrockPricingData {
   models: Map<string, BedrockModelPricing>;

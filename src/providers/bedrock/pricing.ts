@@ -582,5 +582,11 @@ export function calculateBedrockCost(
   completionTokens: number | undefined,
 ): number | undefined {
   // Use shared utility - handles validation and custom cost overrides
-  return calculateCost(modelName, config, promptTokens, completionTokens, BEDROCK_MODELS_WITH_PRICING);
+  return calculateCost(
+    modelName,
+    config,
+    promptTokens,
+    completionTokens,
+    BEDROCK_MODELS_WITH_PRICING,
+  );
 }
