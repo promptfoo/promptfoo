@@ -1,4 +1,3 @@
-// biome-ignore lint/correctness/noUnusedImports: React is needed for JSX.Element return type
 import React, { useState } from 'react';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SettingsIcon from '@mui/icons-material/Settings';

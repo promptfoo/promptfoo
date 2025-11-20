@@ -78,7 +78,7 @@ describe('GitHub Models Default Providers', () => {
   });
 
   it('should use GitHub with env overrides', async () => {
-    mockedGetEnvString.mockImplementation((key: string, defaultValue = '') => defaultValue);
+    mockedGetEnvString.mockImplementation((_key: string, defaultValue = '') => defaultValue);
 
     const providers = await getDefaultProviders({
       GITHUB_TOKEN: 'override-github-token',
