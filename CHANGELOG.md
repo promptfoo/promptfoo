@@ -10,7 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - feat(cli): add automatic changelog update on version bump with comprehensive error handling (#6252)
 - feat(ci): add JavaScript-based changelog validator replacing bash script for PR number and Unreleased section enforcement (#6252)
+
+### Changed
+
 - chore: Add visiblity button for PFX passphrase (#6258)
+- feat(app): Red Team Strategy Test Generation (#6005)
 
 ### Tests
 
