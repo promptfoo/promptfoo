@@ -95,4 +95,36 @@ describe('getEstimatedProbes', () => {
     } as Config;
     expect(getEstimatedProbes(config)).toBe(10); // (5*1) + (5*1*1)
   });
+
+  it('should not count basic strategy when it has enabled: false', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: ['plugin1'],
+      strategies: [{ id: 'basic', config: { enabled: false } }, 'jailbreak'],
+    } as Config;
+    // Basic is disabled, so only jailbreak (multiplier 10) is counted
+    expect(getEstimatedProbes(config)).toBe(55); // (5*1) + (5*1*10)
+  });
+
+  it('should count basic strategy when enabled is not false', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: ['plugin1'],
+      strategies: [{ id: 'basic' }, 'jailbreak'],
+    } as Config;
+    // Basic (multiplier 1) and jailbreak (multiplier 10) are both counted
+    expect(getEstimatedProbes(config)).toBe(60); // (5*1) + (5*1*(1+10))
+  });
+
+  it('should count basic strategy when it is a string', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: ['plugin1'],
+      strategies: ['basic', 'jailbreak'],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(60); // (5*1) + (5*1*(1+10))
+  });
 });

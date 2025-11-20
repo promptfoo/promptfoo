@@ -106,6 +106,16 @@ export function getEstimatedProbes(config: Config) {
   const strategyMultiplier = config.strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
+
+    // Skip basic strategy if it's explicitly disabled
+    if (
+      strategyId === 'basic' &&
+      typeof strategy === 'object' &&
+      strategy.config?.enabled === false
+    ) {
+      return total;
+    }
+
     return total + STRATEGY_PROBE_MULTIPLIER[strategyId];
   }, 0);
 

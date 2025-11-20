@@ -9,7 +9,10 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Paper from '@mui/material/Paper';
 import { alpha, useTheme } from '@mui/material/styles';
+import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
 import {
   AGENTIC_STRATEGIES,
@@ -67,7 +70,7 @@ const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
 };
 
 const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter(
-  (id) => id !== 'default' && id !== 'multilingual' && id !== 'simba',
+  (id) => id !== 'default' && id !== 'multilingual' && id !== 'simba' && id !== 'basic',
 ).map((id) => ({
   id,
   name: strategyDisplayNames[id] || id,
@@ -107,6 +110,87 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const selectedStrategyIds = useMemo(
     () => config.strategies.map((s) => getStrategyId(s)),
     [config.strategies],
+  );
+
+  // Derive whether basic (baseline) tests are enabled
+  const isBasicEnabled = useMemo(() => {
+    const basicStrategy = config.strategies.find((s) => getStrategyId(s) === 'basic');
+    if (!basicStrategy) {
+      return false;
+    }
+    // Check if explicitly disabled via config
+    if (
+      typeof basicStrategy === 'object' &&
+      basicStrategy.config &&
+      basicStrategy.config.enabled === false
+    ) {
+      return false;
+    }
+    return true;
+  }, [config.strategies]);
+
+  // Helper to check if there are any active non-basic strategies
+  const hasActiveNonBasicStrategies = useCallback((strategies: typeof config.strategies) => {
+    return strategies.some((s) => getStrategyId(s) !== 'basic');
+  }, []);
+
+  // Handle baseline tests toggle
+  const handleBasicToggle = useCallback(
+    (enabled: boolean) => {
+      const hasBasic = config.strategies.some((s) => getStrategyId(s) === 'basic');
+
+      if (!enabled) {
+        // Check if there are other strategies selected
+        if (!hasActiveNonBasicStrategies(config.strategies)) {
+          toast.showToast(
+            'At least one strategy is required. Select another strategy before disabling baseline tests.',
+            'warning',
+          );
+          return;
+        }
+      }
+
+      // Switch to Custom preset when user toggles baseline
+      setSelectedPreset('Custom');
+
+      if (enabled) {
+        if (hasBasic) {
+          // Update existing basic to be enabled (remove enabled: false config)
+          updateConfig(
+            'strategies',
+            config.strategies.map((s) => {
+              if (getStrategyId(s) === 'basic') {
+                return { id: 'basic' };
+              }
+              return s;
+            }),
+          );
+        } else {
+          // Add basic strategy
+          updateConfig('strategies', [...config.strategies, { id: 'basic' }]);
+        }
+      } else {
+        if (hasBasic) {
+          // Set existing basic to disabled
+          updateConfig(
+            'strategies',
+            config.strategies.map((s) => {
+              if (getStrategyId(s) === 'basic') {
+                return { id: 'basic', config: { enabled: false } };
+              }
+              return s;
+            }),
+          );
+        } else {
+          // Add basic with enabled: false
+          updateConfig('strategies', [
+            ...config.strategies,
+            { id: 'basic', config: { enabled: false } },
+          ]);
+        }
+      }
+    },
+    [config.strategies, updateConfig, hasActiveNonBasicStrategies, toast],
   );
 
   // Categorize strategies by type
@@ -279,10 +363,38 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
       if (isSelected) {
         // Remove strategy
-        updateConfig(
-          'strategies',
-          config.strategies.filter((s) => getStrategyId(s) !== strategyId),
-        );
+        const newStrategies = config.strategies.filter((s) => getStrategyId(s) !== strategyId);
+
+        // Check if this would leave no active strategies (only basic with enabled: false or empty)
+        const hasActiveStrategies = newStrategies.some((s) => {
+          const id = getStrategyId(s);
+          if (id === 'basic') {
+            // Basic is only active if it doesn't have enabled: false
+            return !(typeof s === 'object' && s.config && s.config.enabled === false);
+          }
+          return true;
+        });
+
+        if (!hasActiveStrategies) {
+          // Auto-enable basic to ensure at least one strategy is active
+          const hasBasic = newStrategies.some((s) => getStrategyId(s) === 'basic');
+          if (hasBasic) {
+            // Update basic to be enabled
+            const strategiesWithBasicEnabled = newStrategies.map((s) => {
+              if (getStrategyId(s) === 'basic') {
+                return { id: 'basic' };
+              }
+              return s;
+            });
+            updateConfig('strategies', strategiesWithBasicEnabled);
+          } else {
+            // Add basic
+            updateConfig('strategies', [...newStrategies, { id: 'basic' }]);
+          }
+          toast.showToast('Baseline tests enabled - at least one strategy is required.', 'info');
+        } else {
+          updateConfig('strategies', newStrategies);
+        }
       } else {
         // Add strategy with stateful config if it's multi-turn
         const newStrategy: RedteamStrategyObject = {
@@ -322,12 +434,39 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       setSelectedPreset('Custom');
 
       // Remove all strategies in the given section
-      updateConfig(
-        'strategies',
-        config.strategies.filter((s) => !strategyIds.includes(getStrategyId(s))),
+      const newStrategies = config.strategies.filter(
+        (s) => !strategyIds.includes(getStrategyId(s)),
       );
+
+      // Check if this would leave no active strategies
+      const hasActiveStrategies = newStrategies.some((s) => {
+        const id = getStrategyId(s);
+        if (id === 'basic') {
+          return !(typeof s === 'object' && s.config && s.config.enabled === false);
+        }
+        return true;
+      });
+
+      if (!hasActiveStrategies) {
+        // Auto-enable basic to ensure at least one strategy is active
+        const hasBasic = newStrategies.some((s) => getStrategyId(s) === 'basic');
+        if (hasBasic) {
+          const strategiesWithBasicEnabled = newStrategies.map((s) => {
+            if (getStrategyId(s) === 'basic') {
+              return { id: 'basic' };
+            }
+            return s;
+          });
+          updateConfig('strategies', strategiesWithBasicEnabled);
+        } else {
+          updateConfig('strategies', [...newStrategies, { id: 'basic' }]);
+        }
+        toast.showToast('Baseline tests enabled - at least one strategy is required.', 'info');
+      } else {
+        updateConfig('strategies', newStrategies);
+      }
     },
-    [config.strategies, updateConfig],
+    [config.strategies, updateConfig, toast],
   );
 
   const handleMultiTurnChange = useCallback(
@@ -589,6 +728,39 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         <EstimationsDisplay config={config} />
 
         <Divider sx={{ my: 4 }} />
+
+        {/* Baseline Tests Toggle */}
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2,
+            mb: 3,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Box>
+            <Typography variant="subtitle1" fontWeight="medium">
+              Include Baseline Tests
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Run original plugin-generated tests without attack strategies applied. Useful for
+              establishing baseline behavior.
+            </Typography>
+          </Box>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={isBasicEnabled}
+                onChange={(e) => handleBasicToggle(e.target.checked)}
+                color="primary"
+              />
+            }
+            label=""
+            sx={{ mr: 0 }}
+          />
+        </Paper>
 
         {/* Preset Selector */}
         <PresetSelector

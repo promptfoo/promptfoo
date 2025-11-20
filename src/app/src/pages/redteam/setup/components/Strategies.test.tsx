@@ -311,6 +311,214 @@ describe('Strategies', () => {
     expect(mockOnBack).toHaveBeenCalledTimes(1);
   });
 
+  describe('Baseline tests toggle', () => {
+    it('renders the baseline tests toggle', () => {
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('Include Baseline Tests')).toBeInTheDocument();
+      expect(
+        screen.getByText(/Run original plugin-generated tests without attack strategies/),
+      ).toBeInTheDocument();
+    });
+
+    it('shows toggle as checked when basic strategy is in config', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'basic' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+
+      // Find the switch by its container text
+      const baselineSection = screen
+        .getByText('Include Baseline Tests')
+        .closest('div')?.parentElement;
+      const toggle = baselineSection?.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      expect(toggle).toBeChecked();
+    });
+
+    it('shows toggle as unchecked when basic strategy has enabled: false', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'basic', config: { enabled: false } }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+
+      const baselineSection = screen
+        .getByText('Include Baseline Tests')
+        .closest('div')?.parentElement;
+      const toggle = baselineSection?.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      expect(toggle).not.toBeChecked();
+    });
+
+    it('shows toggle as unchecked when basic strategy is not in config', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'jailbreak' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+
+      const baselineSection = screen
+        .getByText('Include Baseline Tests')
+        .closest('div')?.parentElement;
+      const toggle = baselineSection?.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      expect(toggle).not.toBeChecked();
+    });
+
+    it('calls updateConfig when toggle is turned on', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'jailbreak' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+
+      const baselineSection = screen
+        .getByText('Include Baseline Tests')
+        .closest('div')?.parentElement;
+      const toggle = baselineSection?.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      fireEvent.click(toggle);
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('strategies', [
+        { id: 'jailbreak' },
+        { id: 'basic' },
+      ]);
+    });
+
+    it('calls updateConfig with enabled: false when toggle is turned off', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'basic' }, { id: 'jailbreak' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+
+      const baselineSection = screen
+        .getByText('Include Baseline Tests')
+        .closest('div')?.parentElement;
+      const toggle = baselineSection?.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      fireEvent.click(toggle);
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('strategies', [
+        { id: 'basic', config: { enabled: false } },
+        { id: 'jailbreak' },
+      ]);
+    });
+
+    it('does not show basic strategy in the strategy cards grid', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'basic' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+
+      // Basic should not appear as a strategy card
+      // Use queryAllByText since it may return empty array
+      const basicTexts = screen.queryAllByText(/^Basic$/);
+      // Should find zero instances (basic is not shown as a card)
+      expect(basicTexts.length).toBe(0);
+    });
+  });
+
   describe('AgenticStrategiesGroup integration', () => {
     it('renders AgenticStrategiesGroup with parent header when agentic strategies are available', () => {
       render(
