@@ -3,12 +3,9 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { neverGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { doRemoteGrading } from '../../src/remoteGrading';
-import { ResultFailureReason } from '../../src/types/index';
-import { fetchWithProxy } from '../../src/util/fetch/index';
-import {
-  testHTTPProviderConnectivity,
-  testProviderSession,
-} from '../../src/validators/testProvider';
+import { ResultFailureReason } from '../../src/types';
+import { fetchWithProxy } from '../../src/util/fetch';
+import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
 
 import type { EvaluateResult, EvaluateSummaryV3 } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
@@ -97,7 +94,7 @@ describe('Provider Test Functions', () => {
     });
   });
 
-  describe('testHTTPProviderConnectivity', () => {
+  describe('testProviderConnectivity', () => {
     describe('successful connectivity tests', () => {
       it('should successfully test connectivity with agent endpoint analysis', async () => {
         const mockResult: EvaluateResult = {
@@ -144,7 +141,7 @@ describe('Provider Test Functions', () => {
           json: jest.fn().mockResolvedValue(mockAgentResponse),
         });
 
-        const result = await testHTTPProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity(mockProvider);
 
         // Verify evaluation was called WITHOUT assertions
         expect(evaluate).toHaveBeenCalledWith(
@@ -226,7 +223,7 @@ describe('Provider Test Functions', () => {
 
         mockSummary.results = [mockResult];
 
-        const result = await testHTTPProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity(mockProvider);
 
         // Verify evaluation was called without assertions
         expect(evaluate).toHaveBeenCalledWith(
@@ -292,7 +289,7 @@ describe('Provider Test Functions', () => {
           }),
         });
 
-        const result = await testHTTPProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity(mockProvider);
 
         expect(result.sessionId).toBe('provider-session-id');
       });
@@ -334,7 +331,7 @@ describe('Provider Test Functions', () => {
           }),
         });
 
-        const result = await testHTTPProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity(mockProvider);
 
         expect(result.sessionId).toBe('response-session-id');
       });
@@ -375,7 +372,7 @@ describe('Provider Test Functions', () => {
           }),
         });
 
-        const result = await testHTTPProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity(mockProvider);
 
         expect(result.sessionId).toBe('test-uuid-1234');
       });
@@ -418,7 +415,7 @@ describe('Provider Test Functions', () => {
           }),
         });
 
-        const result = await testHTTPProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity(mockProvider);
 
         // Should call agent endpoint even when there's an error for analysis
         expect(fetchWithProxy).toHaveBeenCalledWith(
@@ -486,7 +483,7 @@ describe('Provider Test Functions', () => {
           json: jest.fn().mockResolvedValue(mockAgentResponse),
         });
 
-        const result = await testHTTPProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity(mockProvider);
 
         expect(result).toEqual({
           success: false,
@@ -539,7 +536,7 @@ describe('Provider Test Functions', () => {
           statusText: 'Internal Server Error',
         });
 
-        const result = await testHTTPProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity(mockProvider);
 
         expect(result).toEqual({
           success: false,
@@ -590,7 +587,7 @@ describe('Provider Test Functions', () => {
         // Mock agent endpoint throwing exception
         (fetchWithProxy as jest.Mock).mockRejectedValue(new Error('Network error'));
 
-        const result = await testHTTPProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity(mockProvider);
 
         expect(result).toEqual({
           success: false,
@@ -646,7 +643,7 @@ describe('Provider Test Functions', () => {
           json: jest.fn().mockResolvedValue(mockAgentResponse),
         });
 
-        const result = await testHTTPProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity(mockProvider);
 
         expect(result).toEqual({
           success: false,
@@ -663,7 +660,7 @@ describe('Provider Test Functions', () => {
         const evalError = new Error('Evaluation failed');
         (evaluate as jest.Mock).mockRejectedValue(evalError);
 
-        const result = await testHTTPProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity(mockProvider);
 
         expect(result).toEqual({
           success: false,

@@ -6,10 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Changed
+### Added
 
-- chore: enforce explicit /index in directory imports - add linting tools and CI enforcement to prepare for ESM migration (#6263)
 - chore: Add visiblity button for PFX passphrase (#6258)
+- feat(app): Red Team Strategy Test Generation (#6005)
 
 ## [0.119.8] - 2025-11-18
 

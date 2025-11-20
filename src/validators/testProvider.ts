@@ -55,7 +55,7 @@ type ValidationResult = { success: true } | { success: false; result: SessionTes
  * @param provider The provider to test
  * @param prompt An optional prompt to test w/
  */
-export async function testHTTPProviderConnectivity(
+export async function testProviderConnectivity(
   provider: ApiProvider,
   prompt: string = 'Hello World!',
 ): Promise<ProviderTestResult> {
