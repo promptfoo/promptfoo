@@ -141,7 +141,7 @@ describe('redteam types', () => {
           id: 'test-strategy',
         },
       ],
-      targetLabels: ['label1', 'label2'],
+      targetIds: ['label1', 'label2'],
       maxConcurrency: 3,
     };
 

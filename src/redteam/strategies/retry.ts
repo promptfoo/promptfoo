@@ -59,7 +59,7 @@ async function getFailedTestCases(
           allTestCases.push(...cloudTestCases);
 
           logger.debug(
-            `Retrieved ${cloudTestCases.length} failed test cases from cloud for plugin '${pluginId}' and target '${targetLabel}'`,
+            `Retrieved ${cloudTestCases.length} failed test cases from cloud for plugin '${pluginId}' and target '${targetId}'`,
           );
         } else {
           logger.error(
@@ -120,28 +120,8 @@ async function getFailedTestCases(
           const { options: _options, ...rest } = testCase;
           const { strategyConfig: _strategyConfig, ...restMetadata } = rest.metadata || {};
 
-          // Parse response to check for redteamHistory
-          const response = typeof r.response === 'string' ? JSON.parse(r.response) : r.response;
-          const redteamHistory = response?.redteamHistory;
-
-          // If redteamHistory exists, use the last prompt
-          let vars = rest.vars;
-          if (redteamHistory && Array.isArray(redteamHistory) && redteamHistory.length > 0) {
-            const lastEntry = redteamHistory[redteamHistory.length - 1];
-            if (lastEntry?.prompt) {
-              vars = {
-                ...rest.vars,
-                prompt: lastEntry.prompt,
-              };
-              logger.debug(
-                `Using last prompt from redteamHistory (${redteamHistory.length} turns) for retry test`,
-              );
-            }
-          }
-
           const result = {
             ...rest,
-            vars,
             ...(testCase.provider ? { provider: testCase.provider } : {}),
             metadata: {
               ...restMetadata,
@@ -169,7 +149,7 @@ async function getFailedTestCases(
     allTestCases.push(...localTestCases);
 
     logger.debug(
-      `Found ${results.length} failed test cases in local SQLite for plugin '${pluginId}' and target '${targetLabel}'`,
+      `Found ${results.length} failed test cases in local SQLite for plugin '${pluginId}' and target '${targetId}'`,
     );
 
     // Deduplicate combined results from both cloud and local
