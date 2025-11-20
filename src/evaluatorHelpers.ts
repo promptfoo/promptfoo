@@ -130,6 +130,47 @@ export function collectFileMetadata(vars: Record<string, string | object>): File
   return fileMetadata;
 }
 
+/**
+ * Gets MIME type from file extension
+ * @param extension File extension (with or without dot)
+ * @returns MIME type string
+ */
+function getMimeTypeFromExtension(extension: string): string {
+  const normalizedExt = extension.toLowerCase().replace(/^\./, '');
+  const mimeTypes: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    bmp: 'image/bmp',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+  };
+  return mimeTypes[normalizedExt] || 'image/jpeg';
+}
+
+/**
+ * Detects MIME type from base64 magic numbers for additional accuracy
+ * @param base64Data Base64 encoded image data
+ * @returns MIME type string
+ */
+function detectMimeFromBase64(base64Data: string): string {
+  // Check magic numbers at the start of base64 data
+  if (base64Data.startsWith('/9j/')) {
+    return 'image/jpeg';
+  } else if (base64Data.startsWith('iVBORw0KGgo')) {
+    return 'image/png';
+  } else if (base64Data.startsWith('R0lGODlh')) {
+    return 'image/gif';
+  } else if (base64Data.startsWith('UklGR')) {
+    return 'image/webp';
+  } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
+    return 'image/bmp';
+  }
+  // Return fallback - will use extension-based detection
+  return 'image/jpeg';
+}
+
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
@@ -207,7 +248,26 @@ export async function renderPrompt(
         logger.debug(`Loading ${fileType} as base64: ${filePath}`);
         try {
           const fileBuffer = fs.readFileSync(filePath);
-          vars[varName] = fileBuffer.toString('base64');
+          const base64Data = fileBuffer.toString('base64');
+
+          if (fileType === 'image') {
+            // For images, generate data URL with proper MIME type
+            // Use extension first, then magic number detection for accuracy
+            let mimeType = getMimeTypeFromExtension(path.extname(filePath));
+
+            // For better accuracy, use magic number detection when extension gives generic JPEG
+            if (mimeType === 'image/jpeg') {
+              const detectedType = detectMimeFromBase64(base64Data);
+              if (detectedType !== 'image/jpeg') {
+                mimeType = detectedType;
+              }
+            }
+
+            vars[varName] = `data:${mimeType};base64,${base64Data}`;
+          } else {
+            // Keep existing behavior for video/audio files (raw base64)
+            vars[varName] = base64Data;
+          }
         } catch (error) {
           throw new Error(
             `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
