@@ -368,6 +368,11 @@ redteamRouter.post(
         },
       });
 
+      // Check whether the provider is authenticated
+      if (!provider.isAuthenticated) {
+        throw new Error('Set the OPENAI_API_KEY environment variable to use this feature');
+      }
+
       const systemPrompt = dedent`
       You are an expert at defining red teaming policies for AI applications.
       Your goal is to suggest custom policies (validators) that should be enforced based on the application definition.

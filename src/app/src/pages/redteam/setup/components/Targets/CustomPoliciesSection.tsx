@@ -426,7 +426,7 @@ export const CustomPoliciesSection = () => {
         let errorMessage = 'Failed to generate policies';
         try {
           const error = await response.json();
-          errorMessage = error.error || error.details || errorMessage;
+          errorMessage = error.details ?? error.error ?? errorMessage;
         } catch {
           // If response is not JSON, use status text
           errorMessage = `Failed to generate policies: ${response.statusText || response.status}`;
@@ -472,7 +472,7 @@ export const CustomPoliciesSection = () => {
         errorMessage = 'An unexpected error occurred while generating policies.';
       }
 
-      toast.showToast(errorMessage, 'error');
+      toast.showToast(errorMessage, 'error', 7500);
       setSuggestedPolicies([]);
     } finally {
       isGeneratingPoliciesRef.current = false;
