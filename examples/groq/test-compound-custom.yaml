@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compound with explicit tool control
+
+prompts:
+  - |
+    {{task}}
+
+providers:
+  - id: groq:groq/compound
+    label: Code execution only
+    config:
+      temperature: 0.7
+      max_completion_tokens: 3000
+      compound_custom:
+        tools:
+          enabled_tools:
+            - code_interpreter
+
+  - id: groq:groq/compound
+    label: Web search only
+    config:
+      temperature: 0.7
+      max_completion_tokens: 3000
+      compound_custom:
+        tools:
+          enabled_tools:
+            - web_search
+
+tests:
+  - description: Code execution task
+    vars:
+      task: Calculate the factorial of 15
+    assert:
+      - type: javascript
+        value: output.length > 20
+
+  - description: Web search task
+    vars:
+      task: What is the current population of Paris?
+    assert:
+      - type: javascript
+        value: output.length > 50
