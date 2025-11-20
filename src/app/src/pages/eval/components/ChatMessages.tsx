@@ -2,11 +2,21 @@ import { memo, useMemo } from 'react';
 
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
-import { useTheme } from '@mui/material/styles';
+import { useTheme, keyframes } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
 import { red, grey } from '@mui/material/colors';
 import invariant from 'tiny-invariant';
+
+const bounce = keyframes`
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+`;
+
 interface BaseMessage {
   role: 'user' | 'assistant' | 'system';
 }
@@ -128,8 +138,29 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
           variant="rectangular"
           width="100%" // Force max-width
           height={100}
-          sx={bubbleProps}
-        />
+          sx={{
+            ...bubbleProps,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Box sx={{ display: 'flex', gap: 1, visibility: 'visible !important' }}>
+            {[0, 1, 2].map((i) => (
+              <Box
+                key={i}
+                sx={{
+                  width: 8,
+                  height: 8,
+                  bgcolor: 'white',
+                  borderRadius: '50%',
+                  animation: `${bounce} 1.4s infinite ease-in-out both`,
+                  animationDelay: `${i * 0.16}s`,
+                }}
+              />
+            ))}
+          </Box>
+        </Skeleton>
       ) : (
         <Paper elevation={1} sx={bubbleProps} role="alert">
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
