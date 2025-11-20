@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - feat(providers): add automatic cost tracking for AWS Bedrock provider with pricing data for 80+ models including Nova, Claude, Llama, Mistral, and more
+- feat(app): Red Team Strategy Test Generation (#6005)
 
 ### Changed
 
