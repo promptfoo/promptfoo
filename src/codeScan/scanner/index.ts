@@ -84,15 +84,17 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   // Resolve repository path
   const absoluteRepoPath = path.resolve(repoPath);
 
-  // Display startup messages (always shown via logger.info, goes to stderr for CI-friendliness)
-  logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
-  logger.info(`  Minimum severity: ${config.minimumSeverity}`);
-  if (config.diffsOnly) {
-    logger.info(`  Mode: diffs only`);
-  } else {
-    logger.info(`  Mode: diffs + tracing into repo`);
+  // Display startup messages (skip in JSON mode to keep stdout clean for parsing)
+  if (!options.json) {
+    logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
+    logger.info(`  Minimum severity: ${config.minimumSeverity}`);
+    if (config.diffsOnly) {
+      logger.info(`  Mode: diffs only`);
+    } else {
+      logger.info(`  Mode: diffs + tracing into repo`);
+    }
+    logger.info('');
   }
-  logger.info('');
 
   logger.debug(`Repository: ${absoluteRepoPath}`);
 

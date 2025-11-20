@@ -187,5 +187,5 @@ export interface ApiHostOptions {
  * @returns API host URL
  */
 export function resolveApiHost(options: ApiHostOptions, config: Config): string {
-  return options.apiHost || config.apiHost || 'https://api.promptfoo.dev';
+  return options.apiHost || config.apiHost || 'https://api.promptfoo.app';
 }
