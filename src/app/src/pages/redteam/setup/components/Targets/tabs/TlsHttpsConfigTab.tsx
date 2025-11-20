@@ -26,6 +26,7 @@ import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { validatePrivateKey } from '../../../utils/crypto';
+import SensitiveTextField from './SensitiveTextField';
 import type { ProviderOptions } from '@promptfoo/types';
 
 interface TlsHttpsConfigTabProps {
@@ -543,9 +544,8 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     )}
                   </Box>
 
-                  <TextField
+                  <SensitiveTextField
                     fullWidth
-                    type="password"
                     label="Keystore Password"
                     placeholder="Enter keystore password"
                     value={selectedTarget.config.tls?.passphrase || ''}
@@ -745,9 +745,8 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   />
                 )}
 
-                <TextField
+                <SensitiveTextField
                   fullWidth
-                  type="password"
                   label="PFX Passphrase"
                   placeholder="Enter passphrase for PFX"
                   value={selectedTarget.config.tls?.passphrase || ''}
