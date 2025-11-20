@@ -146,6 +146,7 @@ Content-Type: application/json
 
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
+  const [savedProviderResponse, setSavedProviderResponse] = useState<string>('');
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
@@ -197,7 +198,17 @@ Content-Type: application/json
           // Include the suggestions if available
           changes_needed: hasConfigIssues,
           changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
+          configuration_change_suggestion: data.testResult?.configuration_change_suggestion,
         });
+
+        // Save the provider response for use in response parser test
+        if (data.providerResponse?.raw) {
+          const rawResponse =
+            typeof data.providerResponse.raw === 'string'
+              ? data.providerResponse.raw
+              : JSON.stringify(data.providerResponse.raw, null, 2);
+          setSavedProviderResponse(rawResponse);
+        }
 
         if (onTargetTested) {
           onTargetTested(isSuccess);
@@ -764,6 +775,36 @@ ${exampleRequest}`;
           </>
         )}
 
+        {/* Test Target Section - Common for both modes */}
+        <TestSection
+          selectedTarget={selectedTarget}
+          isTestRunning={isTestRunning}
+          testResult={testResult}
+          handleTestTarget={handleTestTarget}
+          disabled={
+            selectedTarget.config.request
+              ? !selectedTarget.config.request
+              : !selectedTarget.config.url
+          }
+          onApplyConfigSuggestion={(field, value) => {
+            updateCustomTarget(field, value);
+            // If updating headers as an object, convert to the internal format
+            if (field === 'headers' && typeof value === 'object') {
+              setHeaders(
+                Object.entries(value).map(([key, val]) => ({
+                  key,
+                  value: String(val),
+                })),
+              );
+            }
+            // If updating body, update the internal state
+            if (field === 'body') {
+              const bodyStr = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+              setRequestBody(bodyStr);
+            }
+          }}
+        />
+
         {/* Response Transform Section - Common for both modes */}
         <Typography variant="subtitle1" gutterBottom sx={{ mt: 3 }}>
           Response Parser
@@ -835,19 +876,6 @@ ${exampleRequest}`;
             Test
           </Button>
         </Box>
-
-        {/* Test Target Section - Common for both modes */}
-        <TestSection
-          selectedTarget={selectedTarget}
-          isTestRunning={isTestRunning}
-          testResult={testResult}
-          handleTestTarget={handleTestTarget}
-          disabled={
-            selectedTarget.config.request
-              ? !selectedTarget.config.request
-              : !selectedTarget.config.url
-          }
-        />
       </Box>
 
       <Dialog
@@ -973,6 +1001,7 @@ ${exampleRequest}`;
         onClose={() => setResponseTestOpen(false)}
         currentTransform={selectedTarget.config.transformResponse || ''}
         onApply={(code) => updateCustomTarget('transformResponse', code)}
+        initialTestInput={savedProviderResponse}
       />
     </Box>
   );
