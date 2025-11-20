@@ -10,10 +10,10 @@ jest.mock('../../../src/validators/testProvider');
 
 // Import after mocking
 import { loadApiProvider } from '../../../src/providers/index';
-import { testHTTPProviderConnectivity } from '../../../src/validators/testProvider';
+import { testProviderConnectivity } from '../../../src/validators/testProvider';
 
 const mockedLoadApiProvider = jest.mocked(loadApiProvider);
-const mockedTestHTTPProviderConnectivity = jest.mocked(testHTTPProviderConnectivity);
+const mockedTestProviderConnectivity = jest.mocked(testProviderConnectivity);
 
 describe('Providers Routes', () => {
   describe('POST /providers/test', () => {
@@ -51,7 +51,7 @@ describe('Providers Routes', () => {
         transformedRequest: { url: 'http://example.com/api' },
       };
 
-      mockedTestHTTPProviderConnectivity.mockResolvedValue(mockResult);
+      mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
       const response = await request(app).post('/api/providers/test').send({
         prompt: testPrompt,
@@ -82,7 +82,7 @@ describe('Providers Routes', () => {
         },
       });
 
-      expect(mockedTestHTTPProviderConnectivity).toHaveBeenCalledWith(mockProvider, testPrompt);
+      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith(mockProvider, testPrompt);
     });
 
     it('should handle valid request without prompt (optional)', async () => {
@@ -96,14 +96,14 @@ describe('Providers Routes', () => {
         message: 'Provider test successful',
       };
 
-      mockedTestHTTPProviderConnectivity.mockResolvedValue(mockResult);
+      mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
       const response = await request(app).post('/api/providers/test').send({
         providerOptions,
       });
 
       expect(response.status).toBe(200);
-      expect(mockedTestHTTPProviderConnectivity).toHaveBeenCalledWith(mockProvider, undefined);
+      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith(mockProvider, undefined);
     });
 
     it('should return 400 for missing providerOptions', async () => {
@@ -179,7 +179,7 @@ describe('Providers Routes', () => {
         error: 'Network timeout',
       };
 
-      mockedTestHTTPProviderConnectivity.mockResolvedValue(mockResult);
+      mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
       const response = await request(app).post('/api/providers/test').send({
         providerOptions,
@@ -221,7 +221,7 @@ describe('Providers Routes', () => {
         },
       };
 
-      mockedTestHTTPProviderConnectivity.mockResolvedValue(mockResult);
+      mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
       const response = await request(app).post('/api/providers/test').send({
         providerOptions,
@@ -274,7 +274,7 @@ describe('Providers Routes', () => {
         },
       };
 
-      mockedTestHTTPProviderConnectivity.mockResolvedValue(mockResult);
+      mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
       const response = await request(app).post('/api/providers/test').send({
         providerOptions,
@@ -320,7 +320,7 @@ describe('Providers Routes', () => {
         message: 'Success',
       };
 
-      mockedTestHTTPProviderConnectivity.mockResolvedValue(mockResult);
+      mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
       const response = await request(app).post('/api/providers/test').send({
         providerOptions,
