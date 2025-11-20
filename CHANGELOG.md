@@ -6,13 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Fixed
-
-- fix(cli): make export logs command respect PROMPTFOO_LOG_DIR environment variable (#6179)
-
 ### Changed
 
 - chore: Add visiblity button for PFX passphrase (#6258)
+- feat(app): Red Team Strategy Test Generation (#6005)
+
+### Fixed
+
+- fix(cli): make export logs command respect PROMPTFOO_LOG_DIR environment variable (#6179)
 
 ## [0.119.8] - 2025-11-18
 
