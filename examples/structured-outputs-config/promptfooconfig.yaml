@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Structured prompts'
+description: Multi-provider structured JSON outputs with schema validation
 
 prompts:
   # Schema output with `steps` array
@@ -53,12 +53,61 @@ prompts:
             additionalProperties: false
 
 providers:
-  - openai:chat:gpt-4o-2024-11-20
+  # OpenAI with structured outputs (response_format)
+  - openai:chat:gpt-4o-mini
+
+  # Azure OpenAI with structured outputs (response_format)
   - id: azure:chat:gpt-4o-2024-08-06
     config:
       apiHost: 'YOUR_ORG.openai.azure.com'
       apiVersion: '2024-08-01-preview'
       deploymentName: 'YOUR_DEPLOYMENT_NAME'
+
+  # Anthropic with structured outputs (output_format) - with steps
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    label: 'Anthropic (with steps)'
+    config:
+      max_tokens: 2048
+      output_format:
+        type: json_schema
+        schema:
+          type: object
+          properties:
+            steps:
+              type: array
+              items:
+                type: object
+                properties:
+                  explanation:
+                    type: string
+                  output:
+                    type: string
+                required:
+                  - explanation
+                  - output
+                additionalProperties: false
+            final_answer:
+              type: string
+          required:
+            - steps
+            - final_answer
+          additionalProperties: false
+
+  # Anthropic with structured outputs (output_format) - without steps
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    label: 'Anthropic (without steps)'
+    config:
+      max_tokens: 2048
+      output_format:
+        type: json_schema
+        schema:
+          type: object
+          properties:
+            final_answer:
+              type: string
+          required:
+            - final_answer
+          additionalProperties: false
 
 defaultTest:
   assert:
@@ -67,15 +116,21 @@ defaultTest:
       value: typeof output === 'object'
 
 tests:
-  - vars:
-      problem: '8x + 31 = 2'
+  - description: Solving for the number of dragons in a cave
+    vars:
+      problem: 'If a wizard has 8x dragons and finds 31 more in a cave, but only has room for 2 total, how many dragons must the wizard release? (8x + 31 = 2)'
     assert:
       - type: contains-any
         value:
           - -3.625
           - -29/8
-  - vars:
-      problem: 'sqrt(x) = 4.9'
+          - '-3.625'
+          - '-29/8'
+  - description: Calculating the area of a perfectly square pizza
+    vars:
+      problem: 'A perfectly square pizza has a side length of sqrt(x) meters. If the side length is 4.9 meters, what is the area in square meters? (sqrt(x) = 4.9)'
     assert:
-      - type: contains
-        value: 24.01
+      - type: contains-any
+        value:
+          - 24.01
+          - '24.01'
