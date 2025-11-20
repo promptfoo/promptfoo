@@ -15,6 +15,7 @@ import {
   fetchBedrockPricing,
   calculateCostWithFetchedPricing,
   type BedrockPricingData,
+  type BedrockModelPricing,
 } from './pricingFetcher';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
@@ -1873,8 +1874,10 @@ export abstract class AwsBedrockGenericProvider {
         const cachedData = await cache.get(cacheKey);
         if (cachedData) {
           const parsed = JSON.parse(cachedData as string);
-          // Reconstruct Map from cached array
-          const models = new Map(parsed.models);
+          // Reconstruct Map from cached array with explicit typing
+          const models = new Map<string, BedrockModelPricing>(
+            parsed.models as Array<[string, BedrockModelPricing]>,
+          );
           this.pricingData = {
             models,
             region: parsed.region,
@@ -1882,8 +1885,8 @@ export abstract class AwsBedrockGenericProvider {
           };
           logger.debug('[Bedrock Pricing]: Using cached pricing data', {
             region,
-            modelCount: this.pricingData.models.size,
-            cachedAt: this.pricingData.fetchedAt,
+            modelCount: models.size,
+            cachedAt: new Date(parsed.fetchedAt).toISOString(),
           });
           return;
         }

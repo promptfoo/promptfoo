@@ -3,7 +3,7 @@ import {
   GetProductsCommand,
   type GetProductsCommandOutput,
 } from '@aws-sdk/client-pricing';
-import type { AwsCredentialIdentity } from '@aws-sdk/types';
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import logger from '../../logger';
 
 export interface BedrockPricingData {
@@ -74,12 +74,12 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
  * This function is called once per evaluation run to get real-time pricing.
  *
  * @param region - AWS region for Bedrock models (e.g., 'us-east-1')
- * @param credentials - AWS credentials for Pricing API access
+ * @param credentials - AWS credentials for Pricing API access (identity or provider)
  * @returns Promise resolving to pricing data, or null if fetch fails
  */
 export async function fetchBedrockPricing(
   region: string,
-  credentials?: AwsCredentialIdentity,
+  credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider,
 ): Promise<BedrockPricingData | null> {
   const startTime = Date.now();
 
