@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(providers): propagate agent errors in simulated-user provider - fixes issue where errors from sendMessageToAgent() were silently ignored, causing false-positive test results when the target provider fails (#6251)
 
+### Changed
+
+- chore: Add visiblity button for PFX passphrase (#6258)
+
 ## [0.119.8] - 2025-11-18
 
 ### Added
