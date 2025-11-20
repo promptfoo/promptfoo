@@ -6,14 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- chore: Add visiblity button for PFX passphrase (#6258)
+- feat(app): Red Team Strategy Test Generation (#6005)
+
 ### Documentation
 
 - docs(examples): add TypeScript configuration with dynamic schema generation example showing how to reuse Zod schemas from application code, including automatic schema conversion for different providers (OpenAI/Gemini) (#6171)
 - docs(config): add comprehensive TypeScript configuration documentation to modular-configs guide with examples of sharing code between application and tests (#6171)
-
-### Changed
-
-- chore: Add visiblity button for PFX passphrase (#6258)
 
 ## [0.119.8] - 2025-11-18
 
