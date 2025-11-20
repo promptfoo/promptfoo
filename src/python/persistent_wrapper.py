@@ -6,12 +6,13 @@ This wrapper loads a user script once and handles multiple requests
 via a simple control protocol over stdin/stdout.
 
 Protocol:
-  - Node sends: "CALL:<function_name>:<request_file>:<response_file>\n"
+  - Node sends: "CALL|<function_name>|<request_file>|<response_file>\n"
   - Worker executes function, writes response to file
   - Worker sends: "DONE\n"
   - Node sends: "SHUTDOWN\n" to exit
 
 Data transfer uses files (proven UTF-8 handling), control uses stdin/stdout.
+Note: Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:).
 """
 
 import asyncio

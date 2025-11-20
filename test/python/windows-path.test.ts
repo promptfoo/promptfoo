@@ -49,11 +49,11 @@ describe('PythonProvider Windows Path Handling', () => {
   it(
     'should handle paths with colons (like C:\\ on Windows)',
     async () => {
-    // This test verifies that the protocol delimiter (pipe |) doesn't conflict
-    // with Windows drive letters (C:, D:, etc.) in file paths
-    const provider = createProvider(
-      'path_test.py',
-      `
+      // This test verifies that the protocol delimiter (pipe |) doesn't conflict
+      // with Windows drive letters (C:, D:, etc.) in file paths
+      const provider = createProvider(
+        'path_test.py',
+        `
 import os
 
 def call_api(prompt, options, context):
@@ -66,19 +66,19 @@ def call_api(prompt, options, context):
         }
     }
 `,
-    );
+      );
 
-    const result = await provider.callApi('Test prompt');
+      const result = await provider.callApi('Test prompt');
 
-    // Verify the call succeeded
-    expect(result.output).toBe('Processed: Test prompt');
-    expect(result.error).toBeUndefined();
+      // Verify the call succeeded
+      expect(result.output).toBe('Processed: Test prompt');
+      expect(result.error).toBeUndefined();
 
-    // On Windows, temp path should contain a colon (C:, D:, etc.)
-    if (process.platform === 'win32') {
-      expect(result.metadata?.has_colon).toBe(true);
-      expect(result.metadata?.temp_path).toMatch(/^[A-Z]:\\/);
-    }
+      // On Windows, temp path should contain a colon (C:, D:, etc.)
+      if (process.platform === 'win32') {
+        expect(result.metadata?.has_colon).toBe(true);
+        expect(result.metadata?.temp_path).toMatch(/^[A-Z]:\\/);
+      }
     },
     TEST_TIMEOUT,
   );
@@ -86,32 +86,32 @@ def call_api(prompt, options, context):
   it(
     'should handle multiple concurrent calls with Windows paths',
     async () => {
-    // Stress test: ensure protocol works with multiple concurrent requests
-    // where temp file paths all contain colons
-    const provider = createProvider(
-      'concurrent_test.py',
-      `
+      // Stress test: ensure protocol works with multiple concurrent requests
+      // where temp file paths all contain colons
+      const provider = createProvider(
+        'concurrent_test.py',
+        `
 def call_api(prompt, options, context):
     return {
         "output": f"Processed: {prompt}"
     }
 `,
-    );
+      );
 
-    // Execute multiple calls concurrently
-    const promises = [];
-    for (let i = 0; i < 5; i++) {
-      promises.push(provider.callApi(`Request ${i}`));
-    }
+      // Execute multiple calls concurrently
+      const promises = [];
+      for (let i = 0; i < 5; i++) {
+        promises.push(provider.callApi(`Request ${i}`));
+      }
 
-    const results = await Promise.all(promises);
+      const results = await Promise.all(promises);
 
-    // All calls should succeed
-    expect(results).toHaveLength(5);
-    results.forEach((result, index) => {
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe(`Processed: Request ${index}`);
-    });
+      // All calls should succeed
+      expect(results).toHaveLength(5);
+      results.forEach((result, index) => {
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe(`Processed: Request ${index}`);
+      });
     },
     TEST_TIMEOUT,
   );
@@ -119,13 +119,13 @@ def call_api(prompt, options, context):
   it(
     'should parse protocol commands correctly with Windows paths',
     async () => {
-    // This test verifies the internal protocol command parsing
-    // Command format: CALL|function_name|request_file|response_file
-    // With Windows paths: CALL|call_api|C:\path\req.json|C:\path\resp.json
+      // This test verifies the internal protocol command parsing
+      // Command format: CALL|function_name|request_file|response_file
+      // With Windows paths: CALL|call_api|C:\path\req.json|C:\path\resp.json
 
-    const provider = createProvider(
-      'protocol_test.py',
-      `
+      const provider = createProvider(
+        'protocol_test.py',
+        `
 def call_api(prompt, options, context):
     # If we got here, the protocol parsing worked correctly
     return {
@@ -133,12 +133,12 @@ def call_api(prompt, options, context):
         "platform": "${process.platform}"
     }
 `,
-    );
+      );
 
-    const result = await provider.callApi('Test');
+      const result = await provider.callApi('Test');
 
-    expect(result.output).toBe('Protocol parsing successful');
-    expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Protocol parsing successful');
+      expect(result.error).toBeUndefined();
     },
     TEST_TIMEOUT,
   );
@@ -146,28 +146,30 @@ def call_api(prompt, options, context):
   it(
     'should handle paths with special characters',
     async () => {
-    // Test that paths with various special characters work
-    // (except pipe | which is the delimiter)
-    const provider = createProvider(
-      'special_chars.py',
-      `
+      // Test that paths with various special characters work
+      // (except pipe | which is the delimiter)
+      const provider = createProvider(
+        'special_chars.py',
+        `
 def call_api(prompt, options, context):
     import os
     temp_dir = os.environ.get('TEMP', '/tmp')
     return {
         "output": "Success",
-        "temp_dir": temp_dir,
-        "has_special_chars": any(c in temp_dir for c in [' ', '-', '_', '.'])
+        "metadata": {
+            "temp_dir": temp_dir,
+            "has_special_chars": any(c in temp_dir for c in [' ', '-', '_', '.'])
+        }
     }
 `,
-    );
+      );
 
-    const result = await provider.callApi('Test');
+      const result = await provider.callApi('Test');
 
-    expect(result.output).toBe('Success');
-    expect(result.error).toBeUndefined();
-    // Verify temp directory path was processed correctly
-    expect(result.temp_dir).toBeTruthy();
+      expect(result.output).toBe('Success');
+      expect(result.error).toBeUndefined();
+      // Verify temp directory path was processed correctly
+      expect(result.metadata?.temp_dir).toBeTruthy();
     },
     TEST_TIMEOUT,
   );
