@@ -48,14 +48,10 @@ function fixFile(filePath) {
       `${absolutePath}/index.tsx`,
       `${absolutePath}/index.js`,
     ];
-    const possibleFiles = [
-      `${absolutePath}.ts`,
-      `${absolutePath}.tsx`,
-      `${absolutePath}.js`,
-    ];
+    const possibleFiles = [`${absolutePath}.ts`, `${absolutePath}.tsx`, `${absolutePath}.js`];
 
-    const hasIndex = possibleIndexFiles.some(f => fs.existsSync(f));
-    const isFile = possibleFiles.some(f => fs.existsSync(f));
+    const hasIndex = possibleIndexFiles.some((f) => fs.existsSync(f));
+    const isFile = possibleFiles.some((f) => fs.existsSync(f));
 
     if (hasIndex && !isFile) {
       modified = true;

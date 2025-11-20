@@ -62,8 +62,8 @@ function checkFile(filePath) {
         ];
 
         // If index file exists, this is a directory import that needs /index
-        const hasIndex = possibleIndexFiles.slice(0, 3).some(f => fs.existsSync(f));
-        const isFile = possibleIndexFiles.slice(3).some(f => fs.existsSync(f));
+        const hasIndex = possibleIndexFiles.slice(0, 3).some((f) => fs.existsSync(f));
+        const isFile = possibleIndexFiles.slice(3).some((f) => fs.existsSync(f));
 
         if (hasIndex && !isFile) {
           violations.push({
