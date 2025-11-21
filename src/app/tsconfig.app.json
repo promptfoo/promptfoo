@@ -10,7 +10,6 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
-    "types": ["vitest/globals"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -24,6 +23,5 @@
     "strict": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["./src"],
-  "exclude": ["./src/**/*.test.ts", "./src/**/*.test.tsx"]
+  "include": ["./src"]
 }
