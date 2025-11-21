@@ -27,6 +27,7 @@ export interface ScanIssue {
   severity: 'error' | 'critical' | 'warning' | 'info' | 'debug';
   message: string;
   location?: string;
+  why?: string;
   details?: Record<string, any> & {
     path?: string;
     files?: string[];

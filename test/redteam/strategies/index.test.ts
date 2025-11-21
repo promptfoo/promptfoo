@@ -209,17 +209,33 @@ describe('loadStrategy', () => {
 });
 
 describe('custom strategy validation', () => {
-  it('should validate simple custom strategy', async () => {
+  it('should reject custom strategy without strategyText', async () => {
     const strategies: RedteamStrategyObject[] = [{ id: 'custom' }];
+    await expect(validateStrategies(strategies)).rejects.toThrow(
+      'Custom strategy requires strategyText in config',
+    );
+  });
+
+  it('should reject custom strategy variant without strategyText', async () => {
+    const strategies: RedteamStrategyObject[] = [{ id: 'custom:aggressive' }];
+    await expect(validateStrategies(strategies)).rejects.toThrow(
+      'Custom strategy requires strategyText in config',
+    );
+  });
+
+  it('should validate custom strategy with strategyText', async () => {
+    const strategies: RedteamStrategyObject[] = [
+      { id: 'custom', config: { strategyText: 'Test strategy' } },
+    ];
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();
   });
 
   it('should validate custom strategy variants with compound IDs', async () => {
     const strategies: RedteamStrategyObject[] = [
-      { id: 'custom:aggressive' },
-      { id: 'custom:greeting-strategy' },
-      { id: 'custom:multi-word-variant' },
-      { id: 'custom:snake_case_variant' },
+      { id: 'custom:aggressive', config: { strategyText: 'Aggressive strategy' } },
+      { id: 'custom:greeting-strategy', config: { strategyText: 'Greeting strategy' } },
+      { id: 'custom:multi-word-variant', config: { strategyText: 'Multi-word variant' } },
+      { id: 'custom:snake_case_variant', config: { strategyText: 'Snake case variant' } },
     ];
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();
   });
@@ -241,8 +257,8 @@ describe('custom strategy validation', () => {
   it('should validate mixed strategies including custom variants', async () => {
     const strategies: RedteamStrategyObject[] = [
       { id: 'basic' },
-      { id: 'custom' },
-      { id: 'custom:variant1' },
+      { id: 'custom', config: { strategyText: 'Custom strategy' } },
+      { id: 'custom:variant1', config: { strategyText: 'Variant 1' } },
       { id: 'crescendo' },
       { id: 'custom:variant2', config: { strategyText: 'Custom text' } },
     ];
@@ -251,15 +267,22 @@ describe('custom strategy validation', () => {
 
   it('should validate custom strategies with complex variant names', async () => {
     const strategies: RedteamStrategyObject[] = [
-      { id: 'custom:very-long-complex-variant-name-with-many-hyphens' },
-      { id: 'custom:variant_with_underscores_and_numbers_123' },
-      { id: 'custom:CamelCaseVariant' },
-      { id: 'custom:variant.with.dots' },
+      {
+        id: 'custom:very-long-complex-variant-name-with-many-hyphens',
+        config: { strategyText: 'Long variant' },
+      },
+      {
+        id: 'custom:variant_with_underscores_and_numbers_123',
+        config: { strategyText: 'Underscore variant' },
+      },
+      { id: 'custom:CamelCaseVariant', config: { strategyText: 'CamelCase variant' } },
+      { id: 'custom:variant.with.dots', config: { strategyText: 'Dot variant' } },
     ];
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();
   });
 
   it('should reject invalid custom-like strategy patterns', async () => {
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     const strategies: RedteamStrategyObject[] = [
       { id: 'invalid-strategy' },
       { id: 'custom-invalid' },
@@ -270,6 +293,7 @@ describe('custom strategy validation', () => {
     await validateStrategies(strategies);
 
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid strategy(s)'));
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 });
 

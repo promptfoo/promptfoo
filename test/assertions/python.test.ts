@@ -2,6 +2,7 @@ import * as path from 'path';
 
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import * as pythonUtils from '../../src/python/pythonUtils';
 import { runPython } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 
@@ -32,6 +33,12 @@ jest.mock('path', () => ({
 describe('Python file references', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset mocked implementations to avoid test interference
+    jest.mocked(runPythonCode).mockReset();
+    jest.mocked(runPython).mockReset();
+    // Reset Python state to avoid test interference
+    pythonUtils.state.cachedPythonPath = null;
+    pythonUtils.state.validationPromise = null;
   });
 
   it('should handle Python file reference with function name', async () => {
@@ -256,50 +263,47 @@ describe('Python file references', () => {
       false,
       0.5,
     ],
-  ])(
-    'should handle inline return type %s with return value: %p',
-    async (type, returnValue, expectedScore, expectedReason, expectedPass, threshold) => {
-      const output =
-        'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
+  ])('should handle inline return type %s with return value: %p', async (type, returnValue, expectedScore, expectedReason, expectedPass, threshold) => {
+    const output =
+      'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
 
-      let resolvedValue;
-      if (type === 'GradingResult') {
-        resolvedValue = JSON.parse(returnValue as string);
-      } else {
-        resolvedValue = returnValue;
-      }
+    let resolvedValue;
+    if (type === 'GradingResult') {
+      resolvedValue = JSON.parse(returnValue as string);
+    } else {
+      resolvedValue = returnValue;
+    }
 
-      const pythonAssertion: Assertion = {
-        type: 'python',
-        value: returnValue.toString(),
-        threshold,
-      };
+    const pythonAssertion: Assertion = {
+      type: 'python',
+      value: returnValue.toString(),
+      threshold,
+    };
 
-      jest.mocked(runPythonCode).mockResolvedValueOnce(resolvedValue);
+    jest.mocked(runPythonCode).mockResolvedValueOnce(resolvedValue);
 
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-      const providerResponse = { output };
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider,
-        assertion: pythonAssertion,
-        test: {} as AtomicTestCase,
-        providerResponse,
-      });
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output };
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion: pythonAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
 
-      expect(runPythonCode).toHaveBeenCalledTimes(1);
-      expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
-        output,
-        { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse },
-      ]);
+    expect(runPythonCode).toHaveBeenCalledTimes(1);
+    expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
+      output,
+      { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse },
+    ]);
 
-      expect(result).toMatchObject({
-        pass: expectedPass,
-        reason: expect.stringMatching(expectedReason),
-        score: expectedScore,
-      });
-    },
-  );
+    expect(result).toMatchObject({
+      pass: expectedPass,
+      reason: expect.stringMatching(expectedReason),
+      score: expectedScore,
+    });
+  });
 
   it.each([
     ['boolean', 'True', true, 'Assertion passed'],
@@ -320,45 +324,42 @@ describe('Python file references', () => {
       false,
       'Custom reason',
     ],
-  ])(
-    'should handle when the file:// assertion with .py file returns a %s',
-    async (type, pythonOutput, expectedPass, expectedReason) => {
-      const output = 'Expected output';
-      jest.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
+  ])('should handle when the file:// assertion with .py file returns a %s', async (type, pythonOutput, expectedPass, expectedReason) => {
+    const output = 'Expected output';
+    jest.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
 
-      const fileAssertion: Assertion = {
-        type: 'python',
-        value: 'file:///path/to/assert.py',
-      };
+    const fileAssertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
 
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-      const providerResponse = { output };
-      const result: GradingResult = await runAssertion({
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output };
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
+      provider,
+      assertion: fileAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(runPython).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
+      output,
+      {
         prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
+        vars: {},
+        test: {},
         provider,
-        assertion: fileAssertion,
-        test: {} as AtomicTestCase,
         providerResponse,
-      });
+      },
+    ]);
 
-      expect(runPython).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
-        output,
-        {
-          prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-          vars: {},
-          test: {},
-          provider,
-          providerResponse,
-        },
-      ]);
-
-      expect(result).toMatchObject({
-        pass: expectedPass,
-        reason: expect.stringContaining(expectedReason),
-      });
-      expect(runPython).toHaveBeenCalledTimes(1);
-    },
-  );
+    expect(result).toMatchObject({
+      pass: expectedPass,
+      reason: expect.stringContaining(expectedReason),
+    });
+    expect(runPython).toHaveBeenCalledTimes(1);
+  });
 
   it('should handle when python file assertions throw an error', async () => {
     const output = 'Expected output';
@@ -487,6 +488,12 @@ describe('Python file references', () => {
 
     beforeEach(() => {
       jest.clearAllMocks();
+      // Reset mocked implementations to avoid test interference
+      jest.mocked(runPythonCode).mockReset();
+      jest.mocked(runPython).mockReset();
+      // Reset Python state to avoid test interference
+      pythonUtils.state.cachedPythonPath = null;
+      pythonUtils.state.validationPromise = null;
     });
 
     it('should FAIL when score=0 and no threshold', async () => {

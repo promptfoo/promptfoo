@@ -174,7 +174,7 @@ describe('exportToFile utils', () => {
       };
 
       const output = convertEvalResultToTableCell(result as EvalResult);
-      expect(output.text).toBe('test error\n---\ntest output');
+      expect(output.text).toBe('test output');
       expect(output.pass).toBe(false);
     });
 

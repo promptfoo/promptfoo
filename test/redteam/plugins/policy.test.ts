@@ -294,6 +294,7 @@ describe('PolicyViolationGrader', () => {
       undefined,
       undefined,
       true,
+      undefined, // gradingContext
     );
   });
 
@@ -338,6 +339,7 @@ describe('PolicyViolationGrader', () => {
       undefined,
       undefined,
       true,
+      undefined, // gradingContext
     );
   });
 });

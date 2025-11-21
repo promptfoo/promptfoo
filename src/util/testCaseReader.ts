@@ -18,6 +18,7 @@ import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { parseXlsxFile } from './xlsx';
 
 import type {
   CsvRow,
@@ -26,6 +27,7 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types/index';
+import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -135,6 +137,11 @@ export async function readStandaloneTestsFile(
       feature: 'csv tests file - google sheet',
     });
     rows = await fetchCsvFromGoogleSheet(varsPath);
+  } else if (/https:\/\/[^/]+\.sharepoint\.com\//i.test(varsPath)) {
+    telemetry.record('feature_used', {
+      feature: 'csv tests file - sharepoint',
+    });
+    rows = await fetchCsvFromSharepoint(varsPath);
   } else if (fileExtension === 'csv') {
     telemetry.record('feature_used', {
       feature: 'csv tests file - local',
@@ -179,6 +186,11 @@ export async function readStandaloneTestsFile(
       }
       throw e;
     }
+  } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+    telemetry.record('feature_used', {
+      feature: 'xlsx tests file - local',
+    });
+    rows = await parseXlsxFile(resolvedVarsPath);
   } else if (fileExtension === 'json') {
     telemetry.record('feature_used', {
       feature: 'json tests file',
@@ -316,8 +328,10 @@ export async function loadTestsFromGlob(
     windowsPathsNoEscape: true,
   });
 
-  // Check for possible function names in the path
-  const pathWithoutFunction: string = resolvedPath.split(':')[0];
+  // Check for possible function names in the path (Windows-aware)
+  const lastColonIndex = resolvedPath.lastIndexOf(':');
+  const pathWithoutFunction: string =
+    lastColonIndex > 1 ? resolvedPath.slice(0, lastColonIndex) : resolvedPath;
   // Only add the file if it's not already included by glob and it's a special file type
   if (
     (isJavascriptFile(pathWithoutFunction) || pathWithoutFunction.endsWith('.py')) &&
@@ -342,7 +356,10 @@ export async function loadTestsFromGlob(
   }
   for (const testFile of testFiles) {
     let testCases: TestCase[] | undefined;
-    const pathWithoutFunction: string = testFile.split(':')[0];
+    // Extract path without function name (Windows-aware)
+    const lastColonIndex = testFile.lastIndexOf(':');
+    const pathWithoutFunction: string =
+      lastColonIndex > 1 ? testFile.slice(0, lastColonIndex) : testFile;
 
     if (
       testFile.endsWith('.csv') ||
@@ -407,7 +424,10 @@ export async function readTests(
   if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
       if (typeof globOrTest === 'string') {
-        const pathWithoutFunction: string = globOrTest.split(':')[0];
+        // Extract path without function name (Windows-aware)
+        const lastColonIndex = globOrTest.lastIndexOf(':');
+        const pathWithoutFunction: string =
+          lastColonIndex > 1 ? globOrTest.slice(0, lastColonIndex) : globOrTest;
         // For Python and JS files, or files with potential function names, use readStandaloneTestsFile
         if (
           isJavascriptFile(pathWithoutFunction) ||

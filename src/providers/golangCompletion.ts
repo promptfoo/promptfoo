@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -19,8 +19,8 @@ const currentDir = (() => {
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
-import { parsePathOrGlob } from '../util/index';
 import { sha256 } from '../util/createHash';
+import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 
 import type {
@@ -32,7 +32,7 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 
-const execAsync = util.promisify(exec);
+const execFileAsync = util.promisify(execFile);
 
 interface GolangProviderConfig {
   goExecutable?: string;
@@ -146,18 +146,23 @@ export class GolangProvider implements ApiProvider {
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
 
-        // Build from the script directory
-        const compileCommand = `cd ${scriptDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} wrapper.go ${path.basename(relativeScriptPath)}`;
-
-        await execAsync(compileCommand);
+        // Build from the script directory using execFile (no shell injection)
+        const goExecutable = this.config.goExecutable || 'go';
+        await execFileAsync(
+          goExecutable,
+          ['build', '-o', executablePath, 'wrapper.go', path.basename(relativeScriptPath)],
+          { cwd: scriptDir },
+        );
 
         const jsonArgs = safeJsonStringify(args) || '[]';
-        // Escape single quotes in the JSON string
-        const escapedJsonArgs = jsonArgs.replace(/'/g, "'\\''");
-        const command = `${executablePath} ${tempScriptPath} ${functionName} '${escapedJsonArgs}'`;
-        logger.debug(`Running command: ${command}`);
+        logger.debug(`Running Go executable: ${executablePath}`);
 
-        const { stdout, stderr } = await execAsync(command);
+        // Execute compiled binary with args (no shell escaping needed)
+        const { stdout, stderr } = await execFileAsync(executablePath, [
+          tempScriptPath,
+          functionName,
+          jsonArgs,
+        ]);
         if (stderr) {
           logger.error(`Golang script stderr: ${stderr}`);
         }

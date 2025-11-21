@@ -186,8 +186,77 @@ describe('CustomProvider', () => {
     expect(provider.config.continueAfterSuccess).toBe(false); // Default false
   });
 
+  it('should include sessionId from context vars when response is missing it', async () => {
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'Custom strategy',
+      maxTurns: 0,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: {
+        objective: 'test objective',
+        sessionId: 'context-session-id',
+      },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.metadata?.sessionId).toBe('context-session-id');
+  });
+
+  it('should include sessionId from target response when stateful is true', async () => {
+    jest.mocked(tryUnblocking).mockResolvedValue({ success: false });
+
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'Custom strategy',
+      maxTurns: 1,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+    });
+
+    jest.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+      generatedQuestion: 'attack prompt',
+    });
+    jest.spyOn(provider as any, 'sendPrompt').mockResolvedValue({
+      output: 'target response',
+      sessionId: 'response-session-id',
+    });
+    jest.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+    jest.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+      value: false,
+      metadata: 0,
+      rationale: '',
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.metadata?.sessionId).toBe('response-session-id');
+  });
+
   describe('Unblocking functionality', () => {
     it('should detect blocking question and send unblocking response', async () => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Custom strategy for testing',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+
       const prompt = 'test prompt';
       const context = {
         originalProvider: mockTargetProvider,
@@ -229,7 +298,7 @@ describe('CustomProvider', () => {
         }),
       });
 
-      const result = await customProvider.callApi(prompt, context);
+      const result = await provider.callApi(prompt, context);
 
       expect(tryUnblocking).toHaveBeenCalledWith({
         messages: expect.any(Array),
@@ -239,10 +308,18 @@ describe('CustomProvider', () => {
       });
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2); // Original + unblocking response
-      expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
     });
 
     it('should continue without unblocking when no blocking question detected', async () => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Custom strategy for testing',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+
       const prompt = 'test prompt';
       const context = {
         originalProvider: mockTargetProvider,
@@ -275,14 +352,14 @@ describe('CustomProvider', () => {
         }),
       });
 
-      const result = await customProvider.callApi(prompt, context);
+      const result = await provider.callApi(prompt, context);
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1); // Only original call
-      expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
     });
   });
 
-  it('should succeed via internal evaluator when eval score is 100', async () => {
+  it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
     jest.mocked(getGraderById).mockReturnValue({
       getResult: jest.fn(async () => ({
@@ -296,7 +373,7 @@ describe('CustomProvider', () => {
     const testProvider = new CustomProvider({
       injectVar: 'objective',
       strategyText: 'Custom strategy for testing',
-      maxTurns: 2, // Use smaller max turns
+      maxTurns: 1, // Limit iterations to avoid additional calls
       maxBacktracks: 10,
       redteamProvider: mockRedTeamProvider,
       stateful: false,
@@ -343,7 +420,7 @@ describe('CustomProvider', () => {
     const result = await testProvider.callApi(prompt, context);
 
     expect(mockScoringProvider.callApi).toHaveBeenCalledTimes(2);
-    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.customResult).toBe(true);
     expect(result.metadata?.customConfidence).toBe(100);
   });
@@ -604,7 +681,7 @@ describe('CustomProvider', () => {
     const testProvider = new CustomProvider({
       injectVar: 'objective',
       strategyText: 'Stateful strategy test',
-      maxTurns: 2,
+      maxTurns: 1,
       stateful: true,
       redteamProvider: mockRedTeamProvider,
     });
@@ -640,7 +717,7 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
     // Verify sessionId was set in context vars
     expect((context.vars as any).sessionId).toBe('test-session-123');
   });
@@ -676,11 +753,11 @@ describe('CustomProvider', () => {
     jest.mocked(getGraderById).mockReturnValue({
       getResult: jest.fn(
         async (
-          prompt: string,
-          output: string,
-          test: any,
-          provider: any,
-          value: any,
+          _prompt: string,
+          _output: string,
+          _test: any,
+          _provider: any,
+          _value: any,
           additionalRubric?: string,
         ) => {
           capturedAdditionalRubric = additionalRubric;
@@ -799,7 +876,7 @@ describe('CustomProvider', () => {
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
   });
 
-  it('should store synthetic grader result when internal evaluator succeeds', async () => {
+  it('should not create synthetic grader result when internal evaluator succeeds', async () => {
     const testProvider = new CustomProvider({
       injectVar: 'objective',
       maxTurns: 1,
@@ -864,14 +941,11 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    // Should exit early due to internal evaluator success
-    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
-
-    // Should store a synthetic grader result
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.storedGraderResult).toEqual({
-      pass: false,
-      score: 0,
-      reason: 'Goal fully achieved - sensitive data extracted',
+      pass: true,
+      score: 1,
+      reason: 'No jailbreak detected',
     });
   });
 
@@ -945,5 +1019,64 @@ describe('CustomProvider', () => {
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
+  });
+
+  it('should include modifiers in system prompt from test metadata', async () => {
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+      test: {
+        vars: {},
+        metadata: {
+          pluginId: 'test-plugin',
+          purpose: 'payment processing system',
+          modifiers: {
+            testGenerationInstructions: 'Generate prompts as realistic invoice queries',
+            language: 'Spanish',
+          },
+        },
+      } as any,
+    };
+
+    // Capture the system prompt that gets sent
+    let capturedSystemPrompt = '';
+    mockRedTeamProvider.callApi.mockImplementation(async (prompt: string) => {
+      const input = JSON.parse(prompt);
+      if (Array.isArray(input) && input[0]?.role === 'system') {
+        capturedSystemPrompt = input[0].content;
+      }
+      return {
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      };
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: true,
+        metadata: 100,
+        rationale: 'Success',
+      }),
+    });
+
+    await customProvider.callApi(prompt, context);
+
+    // Verify modifiers were included in the system prompt
+    expect(capturedSystemPrompt).toContain('CRITICAL: Ensure all generated prompts');
+    expect(capturedSystemPrompt).toContain('<Modifiers>');
+    expect(capturedSystemPrompt).toContain(
+      'testGenerationInstructions: Generate prompts as realistic invoice queries',
+    );
+    expect(capturedSystemPrompt).toContain('language: Spanish');
+    expect(capturedSystemPrompt).toContain('Rewrite ALL prompts to fully comply');
   });
 });

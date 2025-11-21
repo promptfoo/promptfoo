@@ -67,9 +67,11 @@ export class LlamaProvider implements ApiProvider {
 
     const url = getEnvString('LLAMA_BASE_URL') || 'http://localhost:8080';
 
-    let response;
+    let data,
+      cached = false,
+      latencyMs: number | undefined;
     try {
-      response = await fetchWithCache(
+      ({ data, cached, latencyMs } = await fetchWithCache(
         `${url}/completion`,
         {
           method: 'POST',
@@ -79,7 +81,7 @@ export class LlamaProvider implements ApiProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      );
+      ));
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -88,11 +90,13 @@ export class LlamaProvider implements ApiProvider {
 
     try {
       return {
-        output: response.data.content,
+        output: data.content,
+        cached,
+        latencyMs,
       };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
+        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
   }

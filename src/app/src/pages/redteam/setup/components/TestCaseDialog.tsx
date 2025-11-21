@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import Alert from '@mui/material/Alert';
@@ -11,183 +11,196 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
-import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { categoryAliases, displayNameOverrides, type Plugin } from '@promptfoo/redteam/constants';
+import Divider from '@mui/material/Divider';
+import Stack from '@mui/material/Stack';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  isMultiTurnStrategy,
+  type Plugin,
+  type Strategy,
+} from '@promptfoo/redteam/constants';
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
+import { useApiHealth } from '@app/hooks/useApiHealth';
+import Chip from '@mui/material/Chip';
+import ChatMessages, {
+  type LoadedMessage,
+  type LoadingMessage,
+  type Message,
+} from '@app/pages/eval/components/ChatMessages';
+import {
+  type GeneratedTestCase,
+  type TargetResponse,
+  type TargetPlugin,
+  type TargetStrategy,
+} from './TestCaseGenerationProvider';
 
 interface TestCaseDialogProps {
   open: boolean;
   onClose: () => void;
-  plugin: Plugin | string | null;
+  plugin: TargetPlugin | null;
+  strategy: TargetStrategy | null;
   isGenerating: boolean;
-  generatedTestCase: { prompt: string; context?: string } | null;
-  mode?: 'config' | 'result';
-  config?: any;
-  onConfigChange?: (config: any) => void;
-  onGenerate?: (config: any) => void;
-  requiresConfig?: boolean;
-  supportsConfig?: boolean;
-  isConfigValid?: boolean;
+  generatedTestCases: GeneratedTestCase[];
+  targetResponses: TargetResponse[];
+  isRunningTest?: boolean;
+  onRegenerate: () => void;
+  onContinue: (additionalTurns: number) => void;
+  currentTurn: number;
+  maxTurns: number;
 }
 
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   open,
   onClose,
   plugin,
+  strategy,
   isGenerating,
-  generatedTestCase,
-  mode = 'result',
-  config,
-  onConfigChange,
-  onGenerate,
-  requiresConfig = false,
-  supportsConfig = false,
-  isConfigValid = true,
+  generatedTestCases,
+  targetResponses,
+  isRunningTest = false,
+  onRegenerate,
+  onContinue,
+  currentTurn,
+  maxTurns,
 }) => {
-  const theme = useTheme();
-  const pluginName = typeof plugin === 'string' ? plugin : plugin || '';
-  const displayName =
+  const pluginName = plugin?.id ?? '';
+  const pluginDisplayName =
     displayNameOverrides[pluginName as Plugin] ||
     categoryAliases[pluginName as Plugin] ||
     pluginName;
 
+  const strategyName = strategy?.id ?? '';
+  const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
+
+  const turnMessages = useMemo<Message[]>(() => {
+    const messages = [];
+
+    for (let i = 0; i < maxTurns; i++) {
+      const generatedTestCase = generatedTestCases[i];
+
+      if (generatedTestCase) {
+        messages.push({
+          role: 'user' as const,
+          content: generatedTestCase.prompt,
+          contentType:
+            strategyName === 'audio'
+              ? ('audio' as const)
+              : strategyName === 'image'
+                ? ('image' as const)
+                : strategyName === 'video'
+                  ? ('video' as const)
+                  : ('text' as const),
+        } as LoadedMessage);
+      }
+
+      const targetResponse = targetResponses[i];
+
+      if (targetResponse) {
+        messages.push({
+          role: 'assistant' as const,
+          content: targetResponse.output ?? targetResponse.error ?? 'No response from target',
+          contentType: 'text' as const,
+        } as LoadedMessage);
+      }
+    }
+
+    // Indicate loading state to the user
+    if (
+      isGenerating &&
+      generatedTestCases.length === targetResponses.length &&
+      generatedTestCases.length < maxTurns
+    ) {
+      messages.push({ role: 'user' as const, loading: true } as LoadingMessage);
+    } else if (isRunningTest) {
+      messages.push({ role: 'assistant' as const, loading: true } as LoadingMessage);
+    }
+
+    return messages;
+  }, [
+    generatedTestCases,
+    targetResponses,
+    currentTurn,
+    maxTurns,
+    isGenerating,
+    isRunningTest,
+    strategyName,
+  ]);
+
+  const canAddAdditionalTurns =
+    !isGenerating && !isRunningTest && isMultiTurnStrategy(strategyName as Strategy);
+
+  const renderPluginDocumentationLink =
+    pluginName && !plugin?.isStatic && hasSpecificPluginDocumentation(pluginName as Plugin);
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        {isGenerating
-          ? 'Generating Test Case...'
-          : generatedTestCase
-            ? 'Generated Test Case'
-            : mode === 'config'
-              ? `Configure ${displayName}`
-              : 'Test Generation Failed'}
-      </DialogTitle>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      sx={{
+        // Ensure the container is always rendered in front of tooltips
+        zIndex: 10000,
+      }}
+      data-testid="test-case-dialog"
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1,
+          px: 3,
+          py: 2,
+        }}
+      >
+        <DialogTitle
+          sx={{
+            // Override the default padding to set it consistently on the parent container
+            p: 0,
+          }}
+        >
+          Test Case
+        </DialogTitle>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Chip
+            label={`Strategy: ${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`}
+            data-testid="strategy-chip"
+          />
+          <Chip label={`Plugin: ${pluginDisplayName}`} data-testid="plugin-chip" />
+        </Box>
+      </Box>
       <DialogContent>
-        {mode === 'config' && supportsConfig && !isGenerating && !generatedTestCase ? (
-          <Box sx={{ pt: 2 }}>
-            {pluginName === 'indirect-prompt-injection' && (
-              <TextField
-                label="Application definition (e.g., 'Customer support chatbot')"
-                fullWidth
-                value={config?.applicationDefinition || ''}
-                onChange={(e) =>
-                  onConfigChange?.({ ...config, applicationDefinition: e.target.value })
-                }
-                margin="normal"
-                required={requiresConfig}
-                helperText={requiresConfig ? 'Required for this plugin' : 'Optional'}
-              />
-            )}
-            {pluginName === 'prompt-extraction' && (
-              <TextField
-                label="System prompt to extract"
-                fullWidth
-                multiline
-                rows={4}
-                value={config?.systemPrompt || ''}
-                onChange={(e) => onConfigChange?.({ ...config, systemPrompt: e.target.value })}
-                margin="normal"
-                required={requiresConfig}
-                helperText={requiresConfig ? 'Required for this plugin' : 'Optional'}
-              />
-            )}
-            {(pluginName === 'bfla' || pluginName === 'bola' || pluginName === 'ssrf') && (
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Target URLs (one per line)
-                </Typography>
-                {((config?.targetUrls as string[]) || ['']).map((url, index) => (
-                  <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                    <TextField
-                      fullWidth
-                      value={url}
-                      onChange={(e) => {
-                        const newUrls = [...((config?.targetUrls as string[]) || [''])];
-                        newUrls[index] = e.target.value;
-                        onConfigChange?.({ ...config, targetUrls: newUrls });
-                      }}
-                      placeholder="https://example.com/api/endpoint"
-                      size="small"
-                    />
-                    {((config?.targetUrls as string[]) || ['']).length > 1 && (
-                      <IconButton
-                        onClick={() => {
-                          const newUrls = ((config?.targetUrls as string[]) || ['']).filter(
-                            (_, i) => i !== index,
-                          );
-                          onConfigChange?.({ ...config, targetUrls: newUrls });
-                        }}
-                        size="small"
-                        color="error"
-                      >
-                        ×
-                      </IconButton>
-                    )}
-                  </Box>
-                ))}
-                <Button
-                  onClick={() => {
-                    const currentArray = (config?.targetUrls as string[]) || [''];
-                    onConfigChange?.({ ...config, targetUrls: [...currentArray, ''] });
-                  }}
-                  variant="outlined"
-                  size="small"
-                  sx={{ mt: 1 }}
-                  disabled={((config?.targetUrls as string[]) || ['']).some(
-                    (item) => item.trim() === '',
-                  )}
-                >
-                  Add
-                </Button>
-              </Box>
-            )}
-          </Box>
-        ) : isGenerating ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
-            <CircularProgress sx={{ mb: 2 }} />
-            <Typography variant="body2" color="text.secondary">
-              Generating test case...
-            </Typography>
-          </Box>
-        ) : generatedTestCase && mode === 'result' ? (
-          <Box sx={{ pt: 2 }}>
-            <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
-              <Typography variant="body2">
-                This is a sample test case generated for the <code>{pluginName}</code> plugin. Fine
-                tune it by adjusting your {pluginName === 'policy' ? 'policy' : 'application'}{' '}
-                details.
-              </Typography>
+        <Stack direction="column" gap={2}>
+          <ChatMessages
+            messages={turnMessages}
+            displayTurnCount={maxTurns > 1}
+            maxTurns={maxTurns}
+          />
+          {generatedTestCases.length > 0 && (
+            <Alert severity="info">
+              Dissatisfied with the test case? Fine tune it by adjusting your{' '}
+              {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
             </Alert>
-            <Typography variant="subtitle2" gutterBottom>
-              Test Case:
-            </Typography>
-            <Box
-              sx={{
-                p: 2,
-                backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
-                borderRadius: 1,
-                border: '1px solid',
-                borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
-              {generatedTestCase.prompt}
-            </Box>
-          </Box>
-        ) : null}
+          )}
+        </Stack>
       </DialogContent>
-      <DialogActions>
-        {pluginName && hasSpecificPluginDocumentation(pluginName as Plugin) && (
-          <Box sx={{ flex: 1, mr: 2 }}>
+      <DialogActions
+        sx={{
+          justifyContent: renderPluginDocumentationLink ? 'space-between' : 'flex-end',
+          px: 3,
+          pb: 3,
+        }}
+      >
+        {renderPluginDocumentationLink && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Link
               href={getPluginDocumentationUrl(pluginName as Plugin)}
               target="_blank"
@@ -201,33 +214,34 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                 '&:hover': {
                   textDecoration: 'underline',
                 },
-                paddingLeft: 2,
               }}
             >
-              Learn more about {displayName}
+              Learn more about {pluginDisplayName}
               <Box component="span" sx={{ fontSize: '0.75rem' }}>
                 ↗
               </Box>
             </Link>
           </Box>
         )}
-        <Button onClick={onClose}>{mode === 'config' ? 'Cancel' : 'Close'}</Button>
-        {mode === 'config' && supportsConfig && (
-          <>
-            {!requiresConfig && (
-              <Button onClick={() => onGenerate?.({})} disabled={isGenerating}>
-                Skip Configuration
-              </Button>
-            )}
-            <Button
-              variant="contained"
-              onClick={() => onGenerate?.(config)}
-              disabled={isGenerating || !isConfigValid}
-            >
-              Generate Test Case
-            </Button>
-          </>
-        )}
+
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          {canAddAdditionalTurns && (
+            <>
+              <MultiTurnExtensionControl onContinue={onContinue} />{' '}
+              <Divider orientation="vertical" flexItem />
+            </>
+          )}
+          <Button
+            onClick={onRegenerate}
+            variant={canAddAdditionalTurns ? 'outlined' : 'contained'}
+            loading={isGenerating || isRunningTest}
+          >
+            {canAddAdditionalTurns ? 'Start Over' : 'Regenerate'}
+          </Button>
+          <Button onClick={onClose} variant="outlined" color="error">
+            Close
+          </Button>
+        </Box>
       </DialogActions>
     </Dialog>
   );
@@ -238,21 +252,64 @@ export const TestCaseGenerateButton: React.FC<{
   disabled?: boolean;
   isGenerating?: boolean;
   size?: 'small' | 'medium';
-}> = ({ onClick, disabled = false, isGenerating = false, size = 'small' }) => (
-  <Tooltip title="Generate test case">
-    <IconButton
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      disabled={disabled}
-      sx={{ color: 'text.secondary', ml: size === 'small' ? 0.5 : 1 }}
+  tooltipTitle?: string;
+}> = ({ onClick, disabled = false, isGenerating = false, size = 'small', tooltipTitle }) => {
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
+  const isRemoteDisabled = apiHealthStatus !== 'connected';
+
+  return (
+    <Tooltip
+      title={
+        isRemoteDisabled
+          ? 'Requires Promptfoo Cloud connection'
+          : tooltipTitle || 'Generate test case'
+      }
     >
-      {isGenerating ? (
-        <CircularProgress size={size === 'small' ? 16 : 20} />
-      ) : (
-        <MagicWandIcon fontSize={size} />
-      )}
-    </IconButton>
-  </Tooltip>
-);
+      <span>
+        <IconButton
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          disabled={disabled || isRemoteDisabled}
+          sx={{ color: 'text.secondary' }}
+        >
+          {isGenerating ? (
+            <CircularProgress size={size === 'small' ? 16 : 20} />
+          ) : (
+            <MagicWandIcon fontSize={size} />
+          )}
+        </IconButton>
+      </span>
+    </Tooltip>
+  );
+};
+
+const MultiTurnExtensionControl: React.FC<{
+  onContinue: (additionalTurns: number) => void;
+}> = ({ onContinue }) => {
+  const [additionalTurns, setAdditionalTurns] = React.useState<number>(5);
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <BaseNumberInput
+        size="small"
+        value={additionalTurns}
+        onChange={(value) => {
+          if (value !== undefined) {
+            setAdditionalTurns(Math.max(1, Math.min(100, value)));
+          }
+        }}
+        sx={{ width: 125 }}
+        label="Additional Turns"
+        min={1}
+        max={100}
+      />
+      <Button onClick={() => onContinue(additionalTurns)} variant="contained" color="primary">
+        Continue
+      </Button>
+    </Box>
+  );
+};

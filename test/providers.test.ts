@@ -187,7 +187,7 @@ describe('loadApiProvider', () => {
 
   it('should load Provider from cloud', async () => {
     jest.mocked(getProviderFromCloud).mockResolvedValue({
-      id: 'openai:chat:gpt-4',
+      id: 'file://path/to/custom_provider.py:call_api',
       config: {
         apiKey: 'test-key',
         temperature: 0.7,
@@ -196,13 +196,241 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`);
 
     expect(provider).toBeDefined();
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', {
-      config: expect.objectContaining({
-        apiKey: 'test-key',
-        temperature: 0.7,
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/custom_provider\.py/),
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiKey: 'test-key',
+          temperature: 0.7,
+        }),
+        id: 'file://path/to/custom_provider.py:call_api',
       }),
-      id: 'openai:chat:gpt-4',
+    );
+  });
+
+  it('should merge local config overrides with cloud provider config', async () => {
+    jest.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'file://providers/custom_llm.py:generate',
+      config: {
+        apiKey: 'cloud-api-key',
+        temperature: 0.7,
+        maxTokens: 1000,
+      },
     });
+
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+      options: {
+        config: {
+          temperature: 0.9, // Override cloud temperature
+          topP: 0.95, // Add new config field
+        },
+      },
+    });
+
+    expect(provider).toBeDefined();
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/custom_llm\.py/),
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiKey: 'cloud-api-key', // Preserved from cloud
+          temperature: 0.9, // Overridden locally
+          maxTokens: 1000, // Preserved from cloud
+          topP: 0.95, // Added locally
+        }),
+        id: 'file://providers/custom_llm.py:generate',
+      }),
+    );
+  });
+
+  it('should override cloud provider label with local label', async () => {
+    jest.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'file://models/sentiment.py:analyze',
+      label: 'Cloud Label',
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+      options: {
+        label: 'Local Override Label',
+      },
+    });
+
+    expect(provider).toBeDefined();
+    expect(provider.label).toBe('Local Override Label');
+  });
+
+  it('should override cloud provider transform with local transform', async () => {
+    jest.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'file://adapters/wrapper.py:call_model',
+      transform: 'response.cloudTransform',
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+      options: {
+        transform: 'response.localTransform',
+      },
+    });
+
+    expect(provider).toBeDefined();
+    expect(provider.transform).toBe('response.localTransform');
+  });
+
+  it('should override cloud provider delay with local delay', async () => {
+    jest.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'file://rate_limited/api.py:fetch',
+      delay: 1000,
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+      options: {
+        delay: 2000,
+      },
+    });
+
+    expect(provider).toBeDefined();
+    expect(provider.delay).toBe(2000);
+  });
+
+  it('should merge cloud provider env with local env overrides', async () => {
+    jest.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'file://integrations/external_api.py:query',
+      config: {
+        apiKey: 'test-key',
+      },
+      env: {
+        ANTHROPIC_API_KEY: 'cloud-anthropic-key',
+        OPENAI_API_KEY: 'cloud-openai-key',
+      },
+    });
+
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+      options: {
+        env: {
+          OPENAI_API_KEY: 'local-openai-key', // Override
+          GOOGLE_API_KEY: 'local-google-key', // Add new
+        },
+      },
+    });
+
+    expect(provider).toBeDefined();
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/external_api\.py/),
+      expect.objectContaining({
+        config: expect.any(Object),
+        env: {
+          ANTHROPIC_API_KEY: 'cloud-anthropic-key', // Preserved
+          OPENAI_API_KEY: 'local-openai-key', // Overridden
+          GOOGLE_API_KEY: 'local-google-key', // Added
+        },
+        id: 'file://integrations/external_api.py:query',
+      }),
+    );
+  });
+
+  it('should merge context env, cloud provider env, and local env overrides', async () => {
+    jest.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'file://integrations/external_api.py:query',
+      config: {
+        apiKey: 'test-key',
+      },
+      env: {
+        ANTHROPIC_API_KEY: 'cloud-anthropic-key',
+        OPENAI_API_KEY: 'cloud-openai-key',
+      },
+    });
+
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+      env: {
+        MISTRAL_API_KEY: 'context-mistral-key',
+        OPENAI_API_KEY: 'context-openai-key', // Will be overridden by cloud
+      },
+      options: {
+        env: {
+          OPENAI_API_KEY: 'local-openai-key', // Highest priority - overrides both
+          GOOGLE_API_KEY: 'local-google-key', // Added by local
+        },
+      },
+    });
+
+    expect(provider).toBeDefined();
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/external_api\.py/),
+      expect.objectContaining({
+        config: expect.any(Object),
+        env: {
+          MISTRAL_API_KEY: 'context-mistral-key', // From context
+          ANTHROPIC_API_KEY: 'cloud-anthropic-key', // From cloud
+          OPENAI_API_KEY: 'local-openai-key', // Local wins (overrides cloud and context)
+          GOOGLE_API_KEY: 'local-google-key', // From local
+        },
+        id: 'file://integrations/external_api.py:query',
+      }),
+    );
+  });
+
+  it('should preserve cloud provider config when no local overrides provided', async () => {
+    jest.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'file://enterprise/secure_llm.py:invoke',
+      label: 'Cloud Label',
+      transform: 'response.transform',
+      delay: 500,
+      config: {
+        apiKey: 'cloud-key',
+        temperature: 0.8,
+      },
+    });
+
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`);
+
+    expect(provider).toBeDefined();
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/secure_llm\.py/),
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiKey: 'cloud-key',
+          temperature: 0.8,
+        }),
+        id: 'file://enterprise/secure_llm.py:invoke',
+      }),
+    );
+    expect(provider.transform).toBe('response.transform');
+    expect(provider.delay).toBe(500);
+  });
+
+  it('should handle cloud provider with empty local config override', async () => {
+    jest.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'file://backend/inference.py:predict',
+      config: {
+        apiKey: 'cloud-key',
+        temperature: 0.7,
+      },
+    });
+
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+      options: {
+        config: {}, // Empty override
+      },
+    });
+
+    expect(provider).toBeDefined();
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/inference\.py/),
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiKey: 'cloud-key',
+          temperature: 0.7,
+        }),
+        id: 'file://backend/inference.py:predict',
+      }),
+    );
   });
 
   it('should load OpenAI chat provider', async () => {

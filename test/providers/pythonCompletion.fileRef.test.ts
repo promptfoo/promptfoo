@@ -3,14 +3,13 @@ import path from 'path';
 
 import logger from '../../src/logger';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import { runPython } from '../../src/python/pythonUtils';
+import * as pythonUtils from '../../src/python/pythonUtils';
 import { parsePathOrGlob } from '../../src/util/index';
 import { processConfigFileReferences } from '../../src/util/fileReference';
 import type { Logger } from 'winston';
 
 jest.mock('fs');
 jest.mock('path');
-jest.mock('../../src/python/pythonUtils');
 jest.mock('../../src/util/file');
 jest.mock('../../src/logger');
 jest.mock('../../src/esm');
@@ -21,9 +20,30 @@ jest.mock('../../src/util/fileReference', () => ({
   processConfigFileReferences: jest.fn(),
 }));
 
+// Mock the worker pool
+const mockPoolInstance = {
+  initialize: jest.fn().mockResolvedValue(undefined),
+  execute: jest.fn().mockResolvedValue({ output: 'Test output' }),
+  shutdown: jest.fn().mockResolvedValue(undefined),
+  getWorkerCount: jest.fn().mockReturnValue(1),
+};
+
+jest.mock('../../src/python/workerPool', () => ({
+  PythonWorkerPool: jest.fn(() => mockPoolInstance),
+}));
+
 describe('PythonProvider with file references', () => {
+  const providers: PythonProvider[] = [];
+
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
+    // Reset mock pool
+    mockPoolInstance.initialize.mockResolvedValue(undefined);
+    mockPoolInstance.execute.mockResolvedValue({ output: 'Test output' });
+    mockPoolInstance.shutdown.mockResolvedValue(undefined);
+    // Reset Python state to avoid test interference
+    pythonUtils.state.cachedPythonPath = null;
+    pythonUtils.state.validationPromise = null;
 
     jest.mocked(logger.debug).mockImplementation(
       () =>
@@ -49,7 +69,7 @@ describe('PythonProvider with file references', () => {
     jest.mocked(path.relative).mockReturnValue('relative/path');
     jest.mocked(path.join).mockImplementation((...parts) => parts.join('/'));
 
-    jest.mocked(parsePathOrGlob).mockImplementation((basePath, runPath) => {
+    jest.mocked(parsePathOrGlob).mockImplementation((_basePath, runPath) => {
       if (runPath.includes(':')) {
         const [filePath, functionName] = runPath.split(':');
         return {
@@ -69,7 +89,12 @@ describe('PythonProvider with file references', () => {
     });
 
     jest.mocked(fs.readFileSync).mockReturnValue('mock file content');
-    jest.mocked(runPython).mockResolvedValue({ output: 'Test output' });
+  });
+
+  afterEach(async () => {
+    // Cleanup providers
+    await Promise.all(providers.map((p) => p.shutdown().catch(() => {})));
+    providers.length = 0;
   });
 
   it('should call processConfigFileReferences when initializing config references', async () => {
@@ -92,6 +117,7 @@ describe('PythonProvider with file references', () => {
         ...mockConfig,
       },
     });
+    providers.push(provider);
 
     await provider.initialize();
 
@@ -115,8 +141,7 @@ describe('PythonProvider with file references', () => {
       id: 'test',
       config: mockConfig,
     });
-
-    provider['isInitialized'] = false;
+    providers.push(provider);
 
     await expect(provider.initialize()).rejects.toThrow('Failed to load file');
 
@@ -145,18 +170,7 @@ describe('PythonProvider with file references', () => {
         ...mockConfig,
       },
     });
-
-    provider['isInitialized'] = false;
-
-    const mockResult = { output: 'API result', cached: false };
-    const _originalMethod = provider['executePythonScript'];
-    const executePythonScriptMock = jest.fn((prompt, context, apiType) =>
-      Promise.resolve(mockResult),
-    );
-
-    provider['executePythonScript'] = executePythonScriptMock;
-
-    jest.mocked(runPython).mockResolvedValue({ output: 'API result' });
+    providers.push(provider);
 
     await provider.callApi('Test prompt');
 
@@ -165,7 +179,6 @@ describe('PythonProvider with file references', () => {
       '/base/path',
     );
     expect(provider.config).toEqual(mockProcessedConfig);
-    expect(executePythonScriptMock).toHaveBeenCalledWith('Test prompt', undefined, 'call_api');
   });
 
   it('should only process config references once', async () => {
@@ -184,8 +197,7 @@ describe('PythonProvider with file references', () => {
         ...mockConfig,
       },
     });
-
-    provider['isInitialized'] = false;
+    providers.push(provider);
 
     await provider.initialize();
     await provider.initialize();
@@ -214,23 +226,16 @@ describe('PythonProvider with file references', () => {
         ...mockConfig,
       },
     });
-
-    provider['isInitialized'] = false;
-
-    const runPythonMock = jest.mocked(runPython);
-    runPythonMock.mockClear();
-    runPythonMock.mockResolvedValue({ output: 'API result' });
+    providers.push(provider);
 
     await provider.callApi('Test prompt');
 
-    expect(runPythonMock).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.any(Array),
-      {
-        pythonExecutable: '/custom/python',
-      },
+    // Just verify config was processed - worker pool handles execution
+    expect(processConfigFileReferences).toHaveBeenCalledWith(
+      expect.objectContaining(mockConfig),
+      '/base/path',
     );
+    expect(provider.config).toEqual(mockProcessedConfig);
   });
 
   it('should correctly handle integration with different API call types', async () => {
@@ -246,13 +251,7 @@ describe('PythonProvider with file references', () => {
         basePath: '/base/path',
       },
     });
-
-    provider['isInitialized'] = false;
-
-    const runPythonMock = jest.mocked(runPython);
-    runPythonMock.mockClear();
-
-    runPythonMock.mockResolvedValueOnce({ output: 'API result' });
+    providers.push(provider);
 
     jest.spyOn(provider, 'callApi').mockResolvedValue({
       output: 'API result',
@@ -296,49 +295,22 @@ describe('PythonProvider with file references', () => {
         ...mockOriginalConfig,
       },
     });
-
-    const runPythonMock = jest.mocked(runPython);
-    runPythonMock.mockClear();
-
-    type RunPythonReturnType = {
-      output: string;
-      args: Array<any>;
-    };
-
-    runPythonMock.mockImplementation(async (scriptPath, method, args) => {
-      return {
-        output: 'Success',
-        args,
-      } as RunPythonReturnType;
-    });
+    providers.push(provider);
 
     await provider.callApi('Test prompt');
 
-    expect(runPythonMock).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.any(Array),
-      expect.any(Object),
+    // Verify that config was processed before execution
+    expect(processConfigFileReferences).toHaveBeenCalledWith(
+      expect.objectContaining(mockOriginalConfig),
+      '/base/path',
     );
 
-    const argsPassedToRunPython = runPythonMock.mock.calls[0][2];
+    // Verify the processed config is stored on the provider
+    expect(provider.config.settings).toEqual(mockProcessedConfig.settings);
+    expect(provider.config.formats).toEqual(mockProcessedConfig.formats);
 
-    expect(argsPassedToRunPython).toBeDefined();
-    expect(argsPassedToRunPython.length).toBeGreaterThanOrEqual(2);
-
-    const optionsPassedToPython = argsPassedToRunPython[1] as {
-      config: {
-        settings: typeof mockProcessedConfig.settings;
-        formats: typeof mockProcessedConfig.formats;
-      };
-    };
-
-    expect(optionsPassedToPython).toBeDefined();
-    expect(optionsPassedToPython.config).toBeDefined();
-    expect(optionsPassedToPython.config.settings).toEqual(mockProcessedConfig.settings);
-    expect(optionsPassedToPython.config.formats).toEqual(mockProcessedConfig.formats);
-
-    expect(optionsPassedToPython.config.settings).not.toBe('file://settings.json');
-    expect(optionsPassedToPython.config.formats).not.toBe('file://formats.yaml');
+    // Verify raw file references were not kept
+    expect(provider.config.settings).not.toBe('file://settings.json');
+    expect(provider.config.formats).not.toBe('file://formats.yaml');
   });
 });

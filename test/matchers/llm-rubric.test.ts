@@ -73,7 +73,6 @@ describe('matchesLlmRubric', () => {
       pass: true,
       reason: 'Test grading output',
       score: 1,
-      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -103,7 +102,6 @@ describe('matchesLlmRubric', () => {
       pass: true,
       score: 0.85,
       reason: 'Direct object output',
-      assertion: undefined,
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -165,7 +163,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason:
@@ -196,7 +193,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: expect.stringContaining('Could not extract JSON from llm-rubric response'),
@@ -226,7 +222,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
@@ -256,7 +251,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
@@ -287,7 +281,6 @@ describe('matchesLlmRubric', () => {
 
     // Since extractJsonObjects only looks for objects starting with {, this returns no objects
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
@@ -317,7 +310,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
@@ -347,7 +339,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
@@ -379,7 +370,6 @@ describe('matchesLlmRubric', () => {
       pass: false,
       reason: 'Grading failed',
       score: 0,
-      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -408,7 +398,7 @@ describe('matchesLlmRubric', () => {
 
     // With throwOnError: true - should throw
     await expect(
-      matchesLlmRubric(rubric, llmOutput, grading, {}, null, { throwOnError: true }),
+      matchesLlmRubric(rubric, llmOutput, grading, {}, undefined, { throwOnError: true }),
     ).rejects.toThrow('Provider error');
   });
 
@@ -429,7 +419,7 @@ describe('matchesLlmRubric', () => {
 
     // With throwOnError: true - should throw
     await expect(
-      matchesLlmRubric(rubric, llmOutput, grading, {}, null, { throwOnError: true }),
+      matchesLlmRubric(rubric, llmOutput, grading, {}, undefined, { throwOnError: true }),
     ).rejects.toThrow('No output');
   });
 
@@ -461,7 +451,6 @@ describe('matchesLlmRubric', () => {
       reason: 'Grading passed',
       pass: true,
       score: 1,
-      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -854,7 +843,6 @@ describe('matchesLlmRubric', () => {
       pass: true,
       score: 1,
       reason: 'Test passed',
-      assertion: undefined,
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -974,18 +962,11 @@ describe('matchesLlmRubric', () => {
     );
   });
 
-  it('should call remote when redteam is enabled and rubric prompt is not overridden', async () => {
+  it('should call remote when redteam is enabled and rubric prompt is not overridden and no provider is configured', async () => {
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';
-    const grading = {
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
-          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
-    };
+    // No provider configured - this is the key change
+    const grading = {};
 
     // Clear and set up specific mock behavior for this test
     jest.mocked(remoteGrading.doRemoteGrading).mockClear();
@@ -1011,8 +992,45 @@ describe('matchesLlmRubric', () => {
       output: llmOutput,
       vars: {},
     });
+  });
 
-    expect(grading.provider.callApi).not.toHaveBeenCalled();
+  it('should use local provider when redteam.provider is configured even if remote generation is available', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Local provider used' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    // Clear and set up specific mock behavior for this test
+    jest.mocked(remoteGrading.doRemoteGrading).mockClear();
+    jest.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
+
+    // Import and set up shouldGenerateRemote mock properly
+    const { shouldGenerateRemote } = jest.requireMock('../../src/redteam/remoteGeneration');
+    jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+
+    // Give it a redteam config WITH a provider configured
+    (cliState as any).config = { redteam: { provider: 'ollama:llama3.2' } };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    // Remote grading should NOT be called when redteam.provider is configured
+    const { doRemoteGrading } = remoteGrading;
+    expect(doRemoteGrading).not.toHaveBeenCalled();
+
+    // Local provider should be used instead
+    expect(grading.provider.callApi).toHaveBeenCalled();
+    expect(result.reason).toBe('Local provider used');
   });
 });
 

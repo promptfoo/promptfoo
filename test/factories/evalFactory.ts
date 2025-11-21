@@ -130,7 +130,6 @@ export default class EvalFactory {
             },
           },
         ],
-        assertion: null,
       },
       namedScores: {},
       cost: 0.007,
@@ -178,7 +177,6 @@ export default class EvalFactory {
             },
           },
         ],
-        assertion: null,
       },
       namedScores: {},
       cost: 0.007,
@@ -275,7 +273,6 @@ export default class EvalFactory {
             },
           },
         ],
-        assertion: null,
       };
     }
 

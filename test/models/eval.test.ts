@@ -475,7 +475,9 @@ describe('evaluator', () => {
       for (const row of result.body) {
         const hasError = row.outputs.some(
           (output) =>
-            output.text.includes('error') || (output.gradingResult?.reason || '').includes('error'),
+            output.error?.includes('error') ||
+            output.text.includes('error') ||
+            (output.gradingResult?.reason || '').includes('error'),
         );
         expect(hasError).toBe(true);
       }
@@ -1148,6 +1150,48 @@ describe('evaluator', () => {
         ],
       });
       expect(strategyEq.testIndices).toEqual([5]);
+    });
+
+    it('filters plugin results with not_equals operator for ids and categories', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 5,
+        resultTypes: ['success'],
+      });
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"pluginId":"bias:toxicity"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"pluginId":"custom-plugin"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+      // Leave test_idx = 3 without pluginId to ensure nulls are included
+
+      const excludeSpecificPlugin = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'plugin',
+            operator: 'not_equals',
+            value: 'custom-plugin',
+          }),
+        ],
+      });
+      expect(excludeSpecificPlugin.testIndices).toEqual([0, 1, 3, 4]);
+
+      const excludeCategory = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'plugin',
+            operator: 'not_equals',
+            value: 'harmful',
+          }),
+        ],
+      });
+      expect(excludeCategory.testIndices).toEqual([1, 2, 3, 4]);
     });
 
     it('filters by explicit severity override', async () => {

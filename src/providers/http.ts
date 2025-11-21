@@ -7,7 +7,7 @@ import path from 'path';
 import httpZ from 'http-z';
 import { Agent } from 'undici';
 import { z } from 'zod';
-import { type FetchWithCacheResult, fetchWithCache } from '../cache';
+import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -21,6 +21,11 @@ import { safeResolve } from '../util/pathUtils';
 import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  createTransformRequest,
+  createTransformResponse,
+  type TransformResponseContext,
+} from './httpTransforms';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -35,7 +40,7 @@ import type {
  * Escapes string values in variables for safe JSON template substitution.
  * Converts { key: "value\nwith\nnewlines" } to { key: "value\\nwith\\nnewlines" }
  */
-function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
+export function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
   return Object.fromEntries(
     Object.entries(vars).map(([key, value]) => [
       key,
@@ -753,6 +758,8 @@ export const HttpProviderConfigSchema = z.object({
     .optional()
     .describe('Use HTTPS for the request. This only works with the raw request option'),
   sessionParser: z.union([z.string(), z.function()]).optional(),
+  sessionSource: z.enum(['client', 'server']).optional(),
+  stateful: z.boolean().optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
@@ -799,6 +806,46 @@ interface SessionParserData {
   body?: Record<string, any> | string | null;
 }
 
+/**
+ * Loads a module from a file:// reference if needed
+ * This function should be called before passing transforms to createTransformResponse/createTransformRequest
+ *
+ * @param transform - The transform config (string or function)
+ * @returns The loaded function, or the original value if not a file:// reference
+ */
+export async function loadTransformModule(
+  transform: string | Function | undefined,
+): Promise<string | Function | undefined> {
+  if (!transform) {
+    return transform;
+  }
+  if (typeof transform === 'function') {
+    return transform;
+  }
+  if (typeof transform === 'string' && transform.startsWith('file://')) {
+    let filename = transform.slice('file://'.length);
+    let functionName: string | undefined;
+    if (filename.includes(':')) {
+      const splits = filename.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filename, functionName] = splits;
+      }
+    }
+    const requiredModule = await importModule(
+      path.resolve(cliState.basePath || '', filename),
+      functionName,
+    );
+    if (typeof requiredModule === 'function') {
+      return requiredModule;
+    }
+    throw new Error(
+      `Transform module malformed: ${filename} must export a function or have a default export as a function`,
+    );
+  }
+  // For string expressions, return as-is
+  return transform;
+}
+
 export async function createSessionParser(
   parser: string | Function | undefined,
 ): Promise<(data: SessionParserData) => string> {
@@ -832,91 +879,6 @@ export async function createSessionParser(
       const trimmedParser = parser.trim();
 
       return new Function('data', `return (${trimmedParser});`)(data);
-    };
-  }
-  throw new Error(
-    `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
-  );
-}
-
-interface TransformResponseContext {
-  response: FetchWithCacheResult<any>;
-}
-
-export async function createTransformResponse(
-  parser: string | Function | undefined,
-): Promise<(data: any, text: string, context?: TransformResponseContext) => ProviderResponse> {
-  if (!parser) {
-    return (data, text) => ({ output: data || text });
-  }
-
-  if (typeof parser === 'function') {
-    return (data, text, context) => {
-      try {
-        const result = parser(data, text, context);
-        if (typeof result === 'object') {
-          return result;
-        } else {
-          return { output: result };
-        }
-      } catch (err) {
-        logger.error(
-          `[Http Provider] Error in response transform function: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
-        );
-        throw err;
-      }
-    };
-  }
-  if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filename = parser.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return requiredModule;
-    }
-    throw new Error(
-      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
-    );
-  } else if (typeof parser === 'string') {
-    return (data, text, context) => {
-      try {
-        const trimmedParser = parser.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
-        const transformFn = new Function(
-          'json',
-          'text',
-          'context',
-          isFunctionExpression
-            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
-            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
-        );
-        let resp: ProviderResponse | string;
-        if (context) {
-          resp = transformFn(data || null, text, context);
-        } else {
-          resp = transformFn(data || null, text);
-        }
-
-        if (typeof resp === 'string') {
-          return { output: resp };
-        }
-        return resp;
-      } catch (err) {
-        logger.error(
-          `[Http Provider] Error in response transform: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
-        );
-        throw new Error(`Failed to transform response: ${String(err)}`);
-      }
     };
   }
   throw new Error(
@@ -1036,100 +998,33 @@ function parseRawRequest(input: string) {
   // If the injectVar is in a query param, we need to encode the URL in the first line
   const encoded = urlEncodeRawRequestPath(adjusted);
   try {
-    const messageModel = httpZ.parse(encoded) as httpZ.HttpZRequestModel;
+    const messageModel = httpZ.parse(encoded);
+    // Type assertion for request model (http-z v8 doesn't export types)
+    const requestModel = messageModel as {
+      method: string;
+      target: string;
+      headers: Array<{ name: string; value: string }>;
+      body?: {
+        contentType?: string;
+        text?: string;
+        params?: Array<{ name: string; value: string }>;
+      };
+    };
     return {
-      method: messageModel.method,
-      url: messageModel.target,
-      headers: messageModel.headers.reduce(
-        (acc, header) => {
+      method: requestModel.method,
+      url: requestModel.target,
+      headers: requestModel.headers.reduce(
+        (acc: Record<string, string>, header: { name: string; value: string }) => {
           acc[header.name.toLowerCase()] = header.value;
           return acc;
         },
         {} as Record<string, string>,
       ),
-      body: messageModel.body,
+      body: requestModel.body,
     };
   } catch (err) {
     throw new Error(`Error parsing raw HTTP request: ${String(err)}`);
   }
-}
-
-export async function createTransformRequest(
-  transform: string | Function | undefined,
-): Promise<(prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any> {
-  if (!transform) {
-    return (prompt) => prompt;
-  }
-
-  if (typeof transform === 'function') {
-    return async (prompt, vars, context) => {
-      try {
-        // Pass prompt, vars, and context to user-provided function (extra args are safe)
-        return await (transform as any)(prompt, vars, context);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
-        logger.error(wrappedError.message);
-        throw wrappedError;
-      }
-    };
-  }
-
-  if (typeof transform === 'string') {
-    if (transform.startsWith('file://')) {
-      let filename = transform.slice('file://'.length);
-      let functionName: string | undefined;
-      if (filename.includes(':')) {
-        const splits = filename.split(':');
-        if (splits[0] && isJavascriptFile(splits[0])) {
-          [filename, functionName] = splits;
-        }
-      }
-      const requiredModule = await importModule(
-        path.resolve(cliState.basePath || '', filename),
-        functionName,
-      );
-      if (typeof requiredModule === 'function') {
-        return async (prompt, vars, context) => {
-          try {
-            return await requiredModule(prompt, vars, context);
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            const wrappedError = new Error(
-              `Error in request transform function from ${filename}: ${errorMessage}`,
-            );
-            logger.error(wrappedError.message);
-            throw wrappedError;
-          }
-        };
-      }
-      throw new Error(
-        `Request transform malformed: ${filename} must export a function or have a default export as a function`,
-      );
-    }
-    // Handle string template
-    return async (prompt, vars, context) => {
-      try {
-        const rendered = getNunjucksEngine().renderString(transform, { prompt, vars, context });
-        return await new Function('prompt', 'vars', 'context', `${rendered}`)(
-          prompt,
-          vars,
-          context,
-        );
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(
-          `Error in request transform string template: ${errorMessage}`,
-        );
-        logger.error(wrappedError.message);
-        throw wrappedError;
-      }
-    };
-  }
-
-  throw new Error(
-    `Unsupported request transform type: ${typeof transform}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
-  );
 }
 
 export function determineRequestBody(
@@ -1138,20 +1033,34 @@ export function determineRequestBody(
   configBody: Record<string, any> | any[] | string | undefined,
   vars: Record<string, any>,
 ): Record<string, any> | any[] | string {
+  // Parse stringified JSON body if needed (handles legacy data saved as strings)
+  let actualConfigBody = configBody;
+  if (typeof configBody === 'string' && contentType) {
+    try {
+      actualConfigBody = JSON.parse(configBody);
+      logger.debug('[HTTP Provider] Parsed stringified config body to object');
+    } catch (err) {
+      // If parsing fails, it's probably a template string or non-JSON content, leave as-is
+      logger.debug(
+        `[HTTP Provider] Config body is a string that couldn't be parsed as JSON, treating as template: ${String(err)}`,
+      );
+    }
+  }
+
   if (contentType) {
     // For JSON content type
     if (typeof parsedPrompt === 'object' && parsedPrompt !== null) {
       // If parser returned an object, merge it with config body
-      return Object.assign({}, configBody || {}, parsedPrompt);
+      return Object.assign({}, actualConfigBody || {}, parsedPrompt);
     }
     // Otherwise process the config body with parsed prompt
-    return processJsonBody(configBody as Record<string, any> | any[], {
+    return processJsonBody(actualConfigBody as Record<string, any> | any[], {
       ...vars,
       prompt: parsedPrompt,
     });
   }
   // For non-JSON content type, process as text
-  return processTextBody(configBody as string, {
+  return processTextBody(actualConfigBody as string, {
     ...vars,
     prompt: parsedPrompt,
   });
@@ -1161,7 +1070,7 @@ export async function createValidateStatus(
   validator: string | ((status: number) => boolean) | undefined,
 ): Promise<(status: number) => boolean> {
   if (!validator) {
-    return (status: number) => true;
+    return (_status: number) => true;
   }
 
   if (typeof validator === 'function') {
@@ -1415,11 +1324,16 @@ export class HttpProvider implements ApiProvider {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
     }
     this.url = this.config.url || url;
-    this.transformResponse = createTransformResponse(
+
+    // Pre-load any file:// references before passing to transform functions
+    // This ensures httpTransforms.ts doesn't need to import from ../esm
+    this.transformResponse = loadTransformModule(
       this.config.transformResponse || this.config.responseParser,
-    );
+    ).then(createTransformResponse);
     this.sessionParser = createSessionParser(this.config.sessionParser);
-    this.transformRequest = createTransformRequest(this.config.transformRequest);
+    this.transformRequest = loadTransformModule(this.config.transformRequest).then(
+      createTransformRequest,
+    );
     this.validateStatus = createValidateStatus(this.config.validateStatus);
 
     // Initialize HTTPS agent if TLS configuration is provided
@@ -1634,6 +1548,16 @@ export class HttpProvider implements ApiProvider {
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
     const headers = await this.getHeaders(defaultHeaders, vars);
+
+    // Add W3C Trace Context headers if provided
+    if (context?.traceparent) {
+      headers.traceparent = context.traceparent;
+      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
+    }
+    if (context?.tracestate) {
+      headers.tracestate = context.tracestate;
+    }
+
     this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
@@ -1695,13 +1619,16 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
-      ...(method !== 'GET' && {
-        body: contentTypeIsJson(headers)
-          ? typeof renderedConfig.body === 'string'
-            ? renderedConfig.body // Already a JSON string, use as-is
-            : JSON.stringify(renderedConfig.body) // Object, needs stringifying
-          : String(renderedConfig.body)?.trim(),
-      }),
+      ...(method !== 'GET' &&
+        renderedConfig.body != null && {
+          body: contentTypeIsJson(headers)
+            ? typeof renderedConfig.body === 'string'
+              ? renderedConfig.body // Already a JSON string, use as-is
+              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
+            : typeof renderedConfig.body === 'string'
+              ? renderedConfig.body.trim()
+              : String(renderedConfig.body),
+        }),
     };
 
     // Add HTTPS agent as dispatcher if configured
@@ -1710,31 +1637,52 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    const response = await fetchWithCache(
-      url,
-      fetchOptions,
-      REQUEST_TIMEOUT_MS,
-      'text',
-      context?.bustCache ?? context?.debug,
-      this.config.maxRetries,
-    );
-
-    if (!(await this.validateStatus)(response.status)) {
-      throw new Error(
-        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
-      );
+    let data,
+      cached = false,
+      status,
+      statusText,
+      responseHeaders,
+      latencyMs: number | undefined;
+    try {
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        headers: responseHeaders,
+        latencyMs,
+      } = await fetchWithCache(
+        url,
+        fetchOptions,
+        REQUEST_TIMEOUT_MS,
+        'text',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      ));
+    } catch (err) {
+      throw err;
     }
-    logger.debug(
-      `[HTTP Provider]: Response (HTTP ${response.status}): ${safeJsonStringify(response.data)}`,
-    );
+
+    if (!(await this.validateStatus)(status)) {
+      throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
+    }
+    logger.debug(`[HTTP Provider]: Response (HTTP ${status}) received`, {
+      length: typeof data === 'string' ? data.length : undefined,
+      cached,
+    });
 
     const ret: ProviderResponse = {};
-    ret.raw = response.data;
+    ret.raw = data;
+    ret.latencyMs = latencyMs;
+    ret.cached = cached;
     ret.metadata = {
       http: {
-        status: response.status,
-        statusText: response.statusText,
-        headers: sanitizeObject(response.headers, { context: 'response headers' }),
+        status,
+        statusText,
+        headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
+        ...(context?.debug && {
+          requestHeaders: sanitizeObject(renderedConfig.headers, { context: 'request headers' }),
+        }),
       },
     };
     if (context?.debug) {
@@ -1742,7 +1690,7 @@ export class HttpProvider implements ApiProvider {
       ret.metadata.finalRequestBody = renderedConfig.body;
     }
 
-    const rawText = response.data as string;
+    const rawText = data as string;
     let parsedData;
     try {
       parsedData = JSON.parse(rawText);
@@ -1754,17 +1702,19 @@ export class HttpProvider implements ApiProvider {
       const sessionId =
         this.sessionParser == null
           ? undefined
-          : (await this.sessionParser)({ headers: response.headers, body: parsedData ?? rawText });
+          : (await this.sessionParser)({ headers: responseHeaders, body: parsedData ?? rawText });
       if (sessionId) {
         ret.sessionId = sessionId;
       }
     } catch (err) {
       logger.error(
-        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(response.headers, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
+        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(responseHeaders, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
       );
       throw err;
     }
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
+      response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
+    });
 
     return this.processResponseWithTokenEstimation(
       ret,
@@ -1789,10 +1739,14 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
-    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, {
+    // JSON-escape all string variables for safe substitution in raw request body
+    // This prevents control characters and quotes from breaking JSON strings
+    const escapedVars = escapeJsonVariables({
       ...vars,
       prompt: transformedPrompt,
     });
+
+    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
@@ -1803,6 +1757,15 @@ export class HttpProvider implements ApiProvider {
 
     // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
     delete parsedRequest.headers['content-length'];
+
+    // Add W3C Trace Context headers if provided
+    if (context?.traceparent) {
+      parsedRequest.headers.traceparent = context.traceparent;
+      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
+    }
+    if (context?.tracestate) {
+      parsedRequest.headers.tracestate = context.tracestate;
+    }
 
     logger.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
@@ -1816,7 +1779,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
-      ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
+      ...(parsedRequest.body?.text && { body: parsedRequest.body.text.trim() }),
     };
 
     // Add HTTPS agent as dispatcher if configured
@@ -1825,24 +1788,42 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    const response = await fetchWithCache(
-      url,
-      fetchOptions,
-      REQUEST_TIMEOUT_MS,
-      'text',
-      context?.debug,
-      this.config.maxRetries,
-    );
-
-    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
-
-    if (!(await this.validateStatus)(response.status)) {
-      throw new Error(
-        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
-      );
+    let data,
+      cached = false,
+      status,
+      statusText,
+      responseHeaders,
+      latencyMs: number | undefined;
+    try {
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        headers: responseHeaders,
+        latencyMs,
+      } = await fetchWithCache(
+        url,
+        fetchOptions,
+        REQUEST_TIMEOUT_MS,
+        'text',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      ));
+    } catch (err) {
+      throw err;
     }
 
-    const rawText = response.data as string;
+    logger.debug('[HTTP Provider]: Response received', {
+      length: typeof data === 'string' ? data.length : undefined,
+      cached,
+    });
+
+    if (!(await this.validateStatus)(status)) {
+      throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
+    }
+
+    const rawText = data as string;
     let parsedData;
     try {
       parsedData = JSON.parse(rawText);
@@ -1850,20 +1831,30 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
     const ret: ProviderResponse = {};
+    ret.latencyMs = latencyMs;
+    ret.cached = cached;
     if (context?.debug) {
-      ret.raw = response.data;
+      ret.raw = data;
       ret.metadata = {
-        headers: sanitizeObject(response.headers, { context: 'response headers' }),
+        headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
         // If no transform was applied, show the final raw request body with nunjucks applied
         // Otherwise show the transformed prompt
         transformedRequest: this.config.transformRequest
           ? transformedPrompt
           : parsedRequest.body?.text || renderedRequest.trim(),
         finalRequestBody: parsedRequest.body?.text,
+        http: {
+          status,
+          statusText,
+          headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
+          requestHeaders: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
+        },
       };
     }
 
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
+      response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
+    });
 
     return this.processResponseWithTokenEstimation(
       ret,

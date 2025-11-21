@@ -8,6 +8,7 @@ export const handleAnswerRelevance = async ({
   output,
   prompt,
   test,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof output === 'string',
@@ -15,14 +16,15 @@ export const handleAnswerRelevance = async ({
   );
   invariant(prompt, 'answer-relevance assertion type must have a prompt');
   const input = typeof test?.vars?.query === 'string' ? test.vars.query : prompt;
-  const result = await matchesAnswerRelevance(
-    input,
-    output,
-    (assertion.threshold as number) ?? 0,
-    test.options,
-  );
+
   return {
     assertion,
-    ...result,
+    ...(await matchesAnswerRelevance(
+      input,
+      output,
+      assertion.threshold ?? 0,
+      test.options,
+      providerCallContext,
+    )),
   };
 };

@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -561,5 +562,142 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     logger.error(`Failed to fetch policies from cloud.`);
     logger.error(String(e));
     throw new Error(`Failed to fetch policies from cloud.`);
+  }
+}
+
+/**
+ * Validates linkedTargetId format and existence.
+ * linkedTargetId is a Promptfoo Cloud feature that links custom provider results
+ * to an existing target instead of creating duplicates.
+ *
+ * Validates the prefix and checks existence in cloud. Format validation
+ * (e.g., UUID format) is deferred to the cloud API for simplicity.
+ *
+ * @param linkedTargetId - The linkedTargetId to validate
+ * @throws Error if validation fails
+ */
+export async function validateLinkedTargetId(linkedTargetId: string): Promise<void> {
+  // Validate format: promptfoo://provider/{id}
+  if (!isCloudProvider(linkedTargetId)) {
+    const apiHost = cloudConfig.getApiHost();
+    const appHost = apiHost.replace('/api', '').replace(':3201', '');
+
+    throw new Error(
+      dedent`
+        Invalid linkedTargetId format: "${linkedTargetId}"
+
+        linkedTargetId must start with "${CLOUD_PROVIDER_PREFIX}" followed by a target ID.
+        Example: ${CLOUD_PROVIDER_PREFIX}12345678-1234-1234-1234-123456789abc
+
+        linkedTargetId links your local provider configuration to a cloud target, allowing you to:
+        - Consolidate findings from multiple eval runs
+        - Track performance and vulnerabilities over time
+        - View comprehensive reporting in the cloud dashboard
+
+        To get a valid linkedTargetId:
+        1. Log in to Promptfoo Cloud: ${appHost}
+        2. Navigate to Targets page: ${appHost}/redteam/targets
+        3. Find the target you want to link to and copy its ID
+        4. Format as: ${CLOUD_PROVIDER_PREFIX}<target-id>
+      `,
+    );
+  }
+
+  // Check existence in cloud (if enabled)
+  if (!cloudConfig.isEnabled()) {
+    logger.warn('[Cloud] linkedTargetId specified but cloud is not configured', {
+      linkedTargetId,
+      suggestion: "Run 'promptfoo auth login' to enable cloud features",
+    });
+    return;
+  }
+
+  const providerId = getCloudDatabaseId(linkedTargetId);
+  try {
+    logger.debug('[Cloud] Validating linkedTargetId exists in cloud', {
+      linkedTargetId,
+      providerId,
+    });
+    await getProviderFromCloud(providerId);
+    logger.debug('[Cloud] linkedTargetId validation successful', {
+      linkedTargetId,
+    });
+  } catch (error) {
+    logger.error('[Cloud] linkedTargetId validation failed', {
+      linkedTargetId,
+      error,
+    });
+    const apiHost = cloudConfig.getApiHost();
+    const appHost = apiHost.replace('/api', '').replace(':3201', '');
+
+    throw new Error(
+      dedent`
+        linkedTargetId not found: "${linkedTargetId}"
+
+        This target doesn't exist in your Promptfoo Cloud organization or you don't have access to it.
+
+        Troubleshooting steps:
+        1. Verify you're logged in to the correct organization
+           Run: promptfoo auth status
+
+        2. Check that the target exists in your cloud dashboard:
+           ${appHost}/redteam/targets
+
+        3. Ensure you have permission to access this target
+           (Targets are scoped to your organization)
+
+        4. Verify the target ID is correct and hasn't been deleted
+      `,
+    );
+  }
+}
+
+/**
+ * Fetches the current organization and optional team context for display.
+ * Returns null if cloud is not enabled or if fetching fails.
+ * @returns Promise resolving to organization name and optional team name, or null
+ */
+export async function getOrgContext(): Promise<{
+  organizationName: string;
+  teamName?: string;
+} | null> {
+  if (!cloudConfig.isEnabled()) {
+    return null;
+  }
+
+  try {
+    const apiHost = cloudConfig.getApiHost();
+    const apiKey = cloudConfig.getApiKey();
+    const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const { organization } = await response.json();
+    const currentTeamId = cloudConfig.getCurrentTeamId(organization.id);
+
+    // Only include team name if it differs from organization name
+    let teamName: string | undefined;
+    if (currentTeamId) {
+      try {
+        const team = await getTeamById(currentTeamId);
+        if (team.name !== organization.name) {
+          teamName = team.name;
+        }
+      } catch {
+        // Team lookup failed, continue without team name
+      }
+    }
+
+    return {
+      organizationName: organization.name,
+      teamName,
+    };
+  } catch {
+    // Silently fail and return null
+    return null;
   }
 }

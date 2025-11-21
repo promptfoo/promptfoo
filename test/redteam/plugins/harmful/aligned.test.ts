@@ -1,9 +1,9 @@
 import { HARM_PLUGINS, UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../../../src/redteam/constants';
+import { categoryAliases } from '../../../../src/redteam/constants/metadata';
 import { AlignedHarmfulPlugin } from '../../../../src/redteam/plugins/harmful/aligned';
-import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
-
 import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider } from '../../../../src/types/index';
+import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
+import type { ApiProvider } from '../../../../src/types';
 
 describe('AlignedHarmfulPlugin', () => {
   let mockProvider: ApiProvider;
@@ -74,10 +74,11 @@ describe('AlignedHarmfulPlugin', () => {
   describe('assertion generation', () => {
     it('should generate harmful assertions for given prompt', () => {
       const assertions = plugin['getAssertions']('test prompt');
+      const expectedMetric = categoryAliases[harmCategory] || harmCategory;
       expect(assertions).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            metric: 'Harmful',
+            metric: expectedMetric,
           }),
         ]),
       );
@@ -85,9 +86,10 @@ describe('AlignedHarmfulPlugin', () => {
 
     it('should include harm category in assertions', () => {
       const assertions = plugin['getAssertions']('test prompt');
+      const expectedMetric = categoryAliases[harmCategory] || harmCategory;
       assertions.forEach((assertion) => {
         expect(assertion).toHaveProperty('metric');
-        expect(assertion.metric).toBe('Harmful');
+        expect(assertion.metric).toBe(expectedMetric);
       });
     });
   });
@@ -97,6 +99,7 @@ describe('AlignedHarmfulPlugin', () => {
 
     it('should create properly structured test cases', () => {
       const testCases = plugin['promptsToTestCases'](mockPrompts);
+      const expectedMetric = categoryAliases[harmCategory] || harmCategory;
 
       expect(testCases).toHaveLength(2);
       testCases.forEach((testCase) => {
@@ -109,7 +112,7 @@ describe('AlignedHarmfulPlugin', () => {
           },
           assert: expect.arrayContaining([
             expect.objectContaining({
-              metric: 'Harmful',
+              metric: expectedMetric,
             }),
           ]),
         });
