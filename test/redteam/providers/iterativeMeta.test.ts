@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 
 import { runMetaAgentRedteam } from '../../../src/redteam/providers/iterativeMeta';
-import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = jest.fn<() => Promise<any>>();
 const mockGetTargetResponse = jest.fn<() => Promise<any>>();

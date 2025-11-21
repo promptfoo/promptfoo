@@ -13,7 +13,7 @@ import type {
   Prompt,
   ProviderResponse,
   TokenUsage,
-} from '../../../types';
+} from '../../../types/index';
 import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';

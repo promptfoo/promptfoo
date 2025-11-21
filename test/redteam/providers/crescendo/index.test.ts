@@ -1,6 +1,6 @@
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { getGraderById } from '../../../../src/redteam/graders';
-import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo';
+import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';

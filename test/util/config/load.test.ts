@@ -10,7 +10,7 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
-import { type UnifiedConfig } from '../../../src/types';
+import { type UnifiedConfig } from '../../../src/types/index';
 import {
   combineConfigs,
   dereferenceConfig,
@@ -89,7 +89,7 @@ jest.mock('../../../src/util/file', () => ({
 }));
 
 jest.mock('../../../src/util/testCaseReader', () => ({
-  readTest: jest.fn().mockImplementation(async (test, basePath, isDefaultTest) => {
+  readTest: jest.fn().mockImplementation(async (test, _basePath, isDefaultTest) => {
     // For defaultTest, just return the test as-is since it doesn't need validation
     if (isDefaultTest) {
       return test;
@@ -234,7 +234,7 @@ describe('combineConfigs', () => {
       .mockImplementation(
         (
           path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+          _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
         ) => {
           if (typeof path === 'string' && path === 'config1.json') {
             return JSON.stringify(config1);
@@ -463,7 +463,7 @@ describe('combineConfigs', () => {
       .mockImplementation(
         (
           path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+          _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
         ) => {
           if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
@@ -519,7 +519,7 @@ describe('combineConfigs', () => {
       .mockImplementation(
         (
           path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+          _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
         ) => {
           if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
