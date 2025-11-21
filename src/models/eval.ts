@@ -1036,7 +1036,54 @@ export default class Eval {
     };
   }
 
+  async getTraces(): Promise<any[]> {
+    try {
+      const { getTraceStore } = await import('../tracing/store');
+      const traceStore = getTraceStore();
+      const tracesData = await traceStore.getTracesByEvaluation(this.id);
+
+      // Transform trace data to match the expected schema
+      return tracesData.map((trace: any) => ({
+        traceId: trace.traceId,
+        evaluationId: trace.evaluationId,
+        testCaseId: trace.testCaseId,
+        metadata: trace.metadata,
+        spans: (trace.spans || []).map((span: any) => {
+          // Calculate duration
+          const durationMs = span.endTime && span.startTime
+            ? (span.endTime - span.startTime) / 1000000
+            : undefined;
+
+          // Map status code
+          const statusCode = span.statusCode === 1 ? 'ok' : span.statusCode === 2 ? 'error' : 'unset';
+
+          return {
+            spanId: span.spanId,
+            parentSpanId: span.parentSpanId,
+            name: span.name,
+            kind: span.kind || 'unspecified',
+            startTime: span.startTime,
+            endTime: span.endTime,
+            durationMs,
+            attributes: span.attributes || {},
+            status: {
+              code: statusCode,
+              message: span.statusMessage,
+            },
+            depth: 0, // Will be calculated on the server side when storing
+            events: span.events || [],
+          };
+        }),
+      }));
+    } catch (error) {
+      logger.debug(`Failed to fetch traces for eval ${this.id}: ${error}`);
+      return [];
+    }
+  }
+
   async toResultsFile(): Promise<ResultsFile> {
+    const traces = await this.getTraces();
+
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
@@ -1045,6 +1092,7 @@ export default class Eval {
       author: this.author || null,
       prompts: this.getPrompts(),
       datasetId: this.datasetId || null,
+      ...(traces.length > 0 && { traces }),
     };
 
     return results;
