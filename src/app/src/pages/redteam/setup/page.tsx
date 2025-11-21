@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import PylonChat from '@app/components/PylonChat';
@@ -598,6 +598,18 @@ export default function RedTeamSetupPage() {
     });
   };
 
+  // Calculate active strategy count (excluding 'basic' with enabled: false)
+  const activeStrategyCount = useMemo(() => {
+    return config.strategies.filter((strategy) => {
+      const id = typeof strategy === 'string' ? strategy : strategy.id;
+      // Skip 'basic' strategy if it has enabled: false
+      if (id === 'basic' && typeof strategy === 'object' && strategy.config?.enabled === false) {
+        return false;
+      }
+      return true;
+    }).length;
+  }, [config.strategies]);
+
   return (
     <UserProvider>
       <Root>
@@ -666,7 +678,7 @@ export default function RedTeamSetupPage() {
                   <StyledTab
                     icon={<StrategyIcon />}
                     iconPosition="start"
-                    label={`Strategies${config.strategies?.length ? ` (${config.strategies.length})` : ''}`}
+                    label={`Strategies${activeStrategyCount ? ` (${activeStrategyCount})` : ''}`}
                     {...a11yProps(4)}
                   />
                   <StyledTab
