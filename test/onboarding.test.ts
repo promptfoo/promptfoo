@@ -56,7 +56,7 @@ jest.mock('../src/redteam/commands/init', () => ({
 jest.mock('../src/envars', () => ({
   getEnvString: jest.fn(),
   getEnvBool: jest.fn(() => false),
-  getEnvInt: jest.fn((key, defaultValue) => defaultValue),
+  getEnvInt: jest.fn((_key, defaultValue) => defaultValue),
 }));
 
 describe('reportProviderAPIKeyWarnings', () => {
