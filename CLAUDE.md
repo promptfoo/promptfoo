@@ -498,6 +498,45 @@ git commit -m "feat(providers): add new provider for XYZ"
 - If unsure about categorization, use Changed
 - ALL dependencies, tests, CI changes must be included (no exemptions)
 
+## Release Process
+
+This project uses [release-please](https://github.com/googleapis/release-please) for automated releases. Release Please automates CHANGELOG generation, version bumps, and GitHub releases based on conventional commits.
+
+### How It Works
+
+1. **Development**: Continue normal development on feature branches, ensuring all changes are documented in CHANGELOG.md under the `[Unreleased]` section
+2. **Release PR**: When changes are merged to main, release-please automatically creates/updates a release PR that:
+   - Moves entries from `[Unreleased]` to a new versioned section in CHANGELOG.md
+   - Updates the version in package.json
+   - Creates a git tag
+3. **Publishing**: When the release PR is merged:
+   - A GitHub release is created automatically
+   - The npm package is published to npm using the NPM_TOKEN secret
+   - No manual version bumps or changelog edits needed
+
+### Version Bumping
+
+Release-please determines version bumps from conventional commit messages in the CHANGELOG:
+
+- **Major** (1.0.0 → 2.0.0): Entries with `!` breaking change indicator (e.g., `feat!:`, `fix!:`)
+- **Minor** (1.0.0 → 1.1.0): Entries starting with `feat:` or `feat(`
+- **Patch** (1.0.0 → 1.0.1): Entries starting with `fix:` or `fix(`, and other types (`chore:`, `docs:`, `refactor:`, etc.)
+
+### Manual Release Steps
+
+The release process is fully automated - no manual steps required. However, if you need to trigger a release:
+
+1. Ensure all changes are merged to main with proper CHANGELOG entries
+2. Release-please will create/update the release PR automatically
+3. Review and merge the release PR
+4. The package will be published automatically
+
+### Configuration Files
+
+- `.release-please-manifest.json` - Tracks the current version
+- `release-please-config.json` - Configures release-please behavior
+- `.github/workflows/release-please.yml` - Creates/updates release PRs and publishes to npm when merged
+
 ## Dependency Management
 
 ### Safe Update Workflow
