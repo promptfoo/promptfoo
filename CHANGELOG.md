@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - feat: migrate to ESM (ECMAScript Modules) with dual ESM/CJS exports (#5594)
 - chore(lint): enforce explicit /index imports in directory paths to prepare for ESM migration (#6263)
+- chore(build): remove TypeScript declaration generation step - tsup handles compilation, removed redundant tsc step that required .js extensions (4e039c32b)
 - chore(webui): improve UI treatment for domain-specific risks in red team setup (#6269)
 - chore(deps): re-generate lock file (#6249)
 - ci(github): add code scan action (#6261)
