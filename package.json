@@ -92,7 +92,7 @@
       "react": "19.2.0",
       "react-dom": "19.2.0"
     },
-    "gaxios": "^6.0.0",
+    "gaxios": "^7.0.0",
     "https-proxy-agent": "^7.0.0",
     "mongoose": {
       "gcp-metadata": "^8.1.2"
