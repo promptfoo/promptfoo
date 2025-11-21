@@ -92,7 +92,7 @@ describe('RunTestSuiteButton', () => {
 
   it('should revert to non-running state and display an error message when the initial API call fails', async () => {
     const errorMessage = 'Failed to submit test suite';
-    (callApi as ReturnType<typeof vi.fn>).mockRejectedValue(new Error(errorMessage));
+    vi.mocked(callApi).mockRejectedValue(new Error(errorMessage));
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],

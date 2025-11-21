@@ -36,7 +36,7 @@
     "@types/react": "19.2.6",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
-    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/coverage-v8": "^4.0.0",
     "ansi-to-html": "^0.7.2",
     "chart.js": "^4.5.1",
     "csv-parse": "^6.1.0",
@@ -61,7 +61,7 @@
     "use-debounce": "^10.0.6",
     "vite": "^7.2.4",
     "vite-plugin-node-polyfills": "^0.24.0",
-    "vitest": "^3.2.4",
+    "vitest": "^4.0.0",
     "zustand": "^5.0.8"
   },
   "dependencies": {

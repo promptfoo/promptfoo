@@ -13,7 +13,7 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('FoundationModelConfiguration', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
 
   const initialTarget: ProviderOptions = {
     id: 'openai:gpt-4o',

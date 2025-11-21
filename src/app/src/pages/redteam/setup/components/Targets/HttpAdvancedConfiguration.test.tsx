@@ -44,7 +44,7 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('HttpAdvancedConfiguration', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
 
   beforeEach(() => {
     mockUpdateCustomTarget = vi.fn();

@@ -378,7 +378,11 @@ describe('EvalOutputCell', () => {
         set: vi.fn(),
       },
     };
-    global.URL = vi.fn(() => mockUrl) as any;
+    global.URL = class MockURL {
+      constructor() {
+        return mockUrl;
+      }
+    } as unknown as typeof URL;
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
@@ -417,7 +421,11 @@ describe('EvalOutputCell', () => {
       },
     };
     const originalURL = global.URL;
-    global.URL = vi.fn(() => mockUrl) as any;
+    global.URL = class MockURL {
+      constructor() {
+        return mockUrl;
+      }
+    } as unknown as typeof URL;
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 

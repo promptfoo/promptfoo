@@ -60,8 +60,8 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('TargetConfiguration', () => {
-  let onNextMock: ReturnType<typeof vi.fn>;
-  let onBackMock: ReturnType<typeof vi.fn>;
+  let onNextMock: () => void;
+  let onBackMock: () => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
