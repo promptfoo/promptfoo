@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added
+### Changed
 
 - feat(webui): add custom policy generation to red team setup (#6181)
 - feat(webui): add strategy test generation to red team setup (#6005)
@@ -38,6 +38,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - chore(deps): bump langchain-core from 0.3.78 to 0.3.80 in /examples/redteam-langchain in the pip group (#6270)
 - chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.933.0 to 3.934.0 (#6254)
 - chore(deps): bump @anthropic-ai/sdk from 0.69.0 to 0.70.0 (#6255)
+
+### Fixed
+
+- fix(python): resolve Windows path compatibility issues in Python provider protocol - changed delimiter from `:` to `|` to avoid conflicts with Windows drive letters (C:, D:, etc.), fixing ENOENT errors and timeouts in Python provider on Windows (#6262)
 
 ## [0.119.8] - 2025-11-18
 
