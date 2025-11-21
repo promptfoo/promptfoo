@@ -18,7 +18,9 @@ import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { evalJobs } from './eval';
+import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import type { Request, Response } from 'express';
+import dedent from 'dedent';
 import { z } from 'zod';
 import {
   ConversationMessageSchema,
@@ -327,6 +329,97 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
 
   res.json({ message: 'Job cancelled' });
 });
+
+redteamRouter.post(
+  '/generate-custom-policy',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { applicationDefinition, existingPolicies } = req.body;
+
+      const provider = new OpenAiChatCompletionProvider('gpt-5-mini-2025-08-07', {
+        config: {
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'policies',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  policies: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        name: { type: 'string' },
+                        text: { type: 'string' },
+                      },
+                      required: ['name', 'text'],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ['policies'],
+                additionalProperties: false,
+              },
+            },
+          },
+          temperature: 0.7,
+        },
+      });
+
+      // Check whether the provider is authenticated
+      if (!provider.isAuthenticated) {
+        throw new Error('Set the OPENAI_API_KEY environment variable to use this feature');
+      }
+
+      const systemPrompt = dedent`
+      You are an expert at defining red teaming policies for AI applications.
+      Your goal is to suggest custom policies (validators) that should be enforced based on the application definition.
+      Return a JSON object with a "policies" array, where each policy has a "name" and "text".
+      The "text" should be a clear, specific instruction for what the AI should not do or should check for.
+      Do not suggest policies that are already in the existing list.
+    `;
+
+      const userPrompt = dedent`
+      Application Definition:
+      ${JSON.stringify(applicationDefinition, null, 2)}
+
+      Existing Policies:
+      ${JSON.stringify(existingPolicies, null, 2)}
+
+      Suggest 3-5 new, unique, and relevant policies.`;
+
+      const response = await provider.callApi(
+        JSON.stringify([
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ]),
+      );
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      let policies = [];
+      try {
+        const output =
+          typeof response.output === 'string' ? JSON.parse(response.output) : response.output;
+        policies = output.policies || [];
+      } catch (e) {
+        logger.error(`Failed to parse generated policies: ${e}`);
+      }
+
+      res.json({ policies });
+    } catch (error) {
+      logger.error(`Error generating policies: ${error}`);
+      res.status(500).json({
+        error: 'Failed to generate policies',
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+);
 
 // NOTE: This comes last, so the other routes take precedence
 redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> => {
