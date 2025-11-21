@@ -12,7 +12,7 @@ import {
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
-} from '../../../src/providers/bedrock';
+} from '../../../src/providers/bedrock/index';
 
 import type {
   BedrockAI21GenerationOptions,
@@ -21,7 +21,7 @@ import type {
   IBedrockModel,
   LlamaMessage,
   TextGenerationOptions,
-} from '../../../src/providers/bedrock';
+} from '../../../src/providers/bedrock/index';
 
 jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
   BedrockRuntime: jest.fn().mockImplementation(() => ({

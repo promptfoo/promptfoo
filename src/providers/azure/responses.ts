@@ -1,16 +1,20 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject, maybeLoadToolsFromExternalFile } from '../../util';
+import { renderVarsInObject, maybeLoadToolsFromExternalFile } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
-import { ResponsesProcessor } from '../responses';
+import { ResponsesProcessor } from '../responses/index';
 import invariant from '../../util/invariant';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { ReasoningEffort } from '../openai/types';
 
 // Azure Responses API uses the v1 preview API version

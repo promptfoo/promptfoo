@@ -7,7 +7,7 @@ import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
-import { ResponsesProcessor } from '../responses';
+import { ResponsesProcessor } from '../responses/index';
 
 import type {
   CallApiContextParams,

@@ -73,7 +73,7 @@ import { PharmacyDrugInteractionPluginGrader } from './plugins/pharmacy/drugInte
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
 import { PlinyGrader } from './plugins/pliny';
-import { PolicyViolationGrader } from './plugins/policy';
+import { PolicyViolationGrader } from './plugins/policy/index';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';

@@ -7,7 +7,7 @@ import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { geminiFormatAndSystemInstructions, normalizeTools } from './util';
