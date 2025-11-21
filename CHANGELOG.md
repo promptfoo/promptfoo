@@ -44,7 +44,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- feat(redteam): add ecommerce plugin pack with 4 security testing plugins (compliance bypass, order fraud, PCI-DSS, price manipulation) for testing e-commerce AI systems (#6168)
+- feat(app): Red Team Strategy Test Generation (#6005)
 - fix(python): resolve Windows path compatibility issues in Python provider protocol - changed delimiter from `:` to `|` to avoid conflicts with Windows drive letters (C:, D:, etc.), fixing ENOENT errors and timeouts in Python provider on Windows (#6262)
+
+### Changed
+
+- chore: Add visibility button for PFX passphrase (#6258)
 
 ## [0.119.8] - 2025-11-18
 
