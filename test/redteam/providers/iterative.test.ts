@@ -3,7 +3,7 @@ import { jest } from '@jest/globals';
 import RedteamIterativeProvider, {
   runRedteamConversation,
 } from '../../../src/redteam/providers/iterative';
-import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = jest.fn<() => Promise<any>>();
 const mockGetTargetResponse = jest.fn<() => Promise<any>>();
