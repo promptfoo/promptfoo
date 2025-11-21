@@ -182,9 +182,9 @@ describe('useEvalOperations', () => {
       const { result } = renderHook(() => useEvalOperations());
 
       const signal = new AbortController().signal;
-      await expect(
-        result.current.fetchTraces('eval-id', signal),
-      ).rejects.toThrowError(`HTTP error! status: ${mockStatus}`);
+      await expect(result.current.fetchTraces('eval-id', signal)).rejects.toThrowError(
+        `HTTP error! status: ${mockStatus}`,
+      );
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(callApi).toHaveBeenCalledWith('/traces/evaluation/eval-id', {
         signal,

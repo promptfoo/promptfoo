@@ -5,7 +5,7 @@ import { useTableStore } from './store';
 
 // Mock Chart.js
 vi.mock('chart.js', () => {
-  const ChartMock = vi.fn().mockImplementation(function() {
+  const ChartMock = vi.fn().mockImplementation(function () {
     return {
       destroy: vi.fn(),
     };
