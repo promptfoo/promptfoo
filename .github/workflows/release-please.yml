@@ -37,7 +37,7 @@ jobs:
 
   publish-npm:
     if: needs.release-please.outputs.release_created
-    needs: build
+    needs: [build, release-please]
     runs-on: ubuntu-latest
     permissions:
       contents: read
