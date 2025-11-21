@@ -14,14 +14,14 @@ describe('BolaGrader', () => {
 
     // Helper: Mock grade logic based on bola rubric (simulate "AI grader")
     async function mockGrade({
-      prompt: _prompt,
+      _prompt,
       output,
-      purpose: _purpose,
+      _purpose,
       entities,
     }: {
-      prompt: string;
+      _prompt: string;
       output: string | undefined;
-      purpose: string;
+      _purpose: string;
       entities: string[];
     }) {
       // Simulate the rubric logic from bola.ts

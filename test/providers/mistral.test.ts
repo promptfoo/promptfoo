@@ -23,12 +23,23 @@ describe('Mistral', () => {
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
-      reset: jest.fn(),
-      store: {
-        get: jest.fn(),
-        set: jest.fn(),
-      },
-    });
+      clear: jest.fn(),
+      mget: jest.fn(),
+      mset: jest.fn(),
+      mdel: jest.fn(),
+      ttl: jest.fn(),
+      on: jest.fn(),
+      once: jest.fn(),
+      off: jest.fn(),
+      removeListener: jest.fn(),
+      disconnect: jest.fn(),
+      stores: [
+        {
+          get: jest.fn(),
+          set: jest.fn(),
+        } as any,
+      ],
+    } as any);
   });
 
   describe('MistralChatCompletionProvider', () => {
@@ -167,12 +178,23 @@ describe('Mistral', () => {
         set: jest.fn(),
         wrap: jest.fn(),
         del: jest.fn(),
-        reset: jest.fn(),
-        store: {
-          get: jest.fn(),
-          set: jest.fn(),
-        },
-      });
+        clear: jest.fn(),
+        mget: jest.fn(),
+        mset: jest.fn(),
+        mdel: jest.fn(),
+        ttl: jest.fn(),
+        on: jest.fn(),
+        once: jest.fn(),
+        off: jest.fn(),
+        removeListener: jest.fn(),
+        disconnect: jest.fn(),
+        stores: [
+          {
+            get: jest.fn(),
+            set: jest.fn(),
+          } as any,
+        ],
+      } as any);
       const result = await provider.callApi('Test prompt');
 
       expect(result).toEqual({
