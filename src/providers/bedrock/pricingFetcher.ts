@@ -18,12 +18,31 @@ export interface BedrockModelPricing {
 }
 
 /**
+ * Module-level cache of pricing fetch promises by region.
+ * This ensures only ONE fetch happens per region, even with concurrent requests.
+ *
+ * Example scenario:
+ * - 10 concurrent requests start with no cache
+ * - All 10 call getPricingData('us-east-1')
+ * - First request creates a fetch promise and stores it in the map
+ * - Requests 2-10 reuse the same promise
+ * - Result: 1 API call instead of 10
+ */
+const pricingFetchPromises = new Map<string, Promise<BedrockPricingData | null>>();
+
+/**
  * Maps Bedrock model IDs to their pricing API model names.
  * The pricing API uses human-readable model names rather than model IDs.
+ *
+ * Handles model IDs with region prefixes (e.g., us.anthropic.claude-3-5-sonnet-20241022-v2:0)
+ * by stripping the prefix before matching.
  */
 export function mapBedrockModelIdToApiName(modelId: string): string {
-  // Extract base model name (remove version suffix)
-  const baseId = modelId.split(':')[0];
+  // Extract base model name (remove version suffix like :0, :1, :2)
+  let baseId = modelId.split(':')[0];
+
+  // Strip region prefix if present (us., eu., apac.)
+  baseId = baseId.replace(/^(us|eu|apac)\./, '');
 
   // Common model mappings
   const mappings: Record<string, string> = {
@@ -50,9 +69,9 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     'meta.llama3-2-1b-instruct-v1': 'Llama 3.2 1B Instruct',
     'meta.llama3-3-70b-instruct-v1': 'Llama 3.3 70B Instruct',
 
-    // Mistral models
-    'mistral.mistral-7b-instruct-v0:2': 'Mistral 7B Instruct',
-    'mistral.mixtral-8x7b-instruct-v0:1': 'Mixtral 8x7B Instruct',
+    // Mistral models (mapping keys without revision suffixes since we strip them above)
+    'mistral.mistral-7b-instruct-v0': 'Mistral 7B Instruct',
+    'mistral.mixtral-8x7b-instruct-v0': 'Mixtral 8x7B Instruct',
     'mistral.mistral-large-2402-v1': 'Mistral Large',
     'mistral.mistral-large-2407-v1': 'Mistral Large 2',
     'mistral.mistral-small-2402-v1': 'Mistral Small',
@@ -70,14 +89,106 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
 }
 
 /**
- * Fetches current Bedrock pricing from AWS Pricing API.
- * This function is called once per evaluation run to get real-time pricing.
+ * Gets pricing data for a region, with caching and coordinated concurrent fetches.
+ * This function ensures only ONE fetch happens per region, even with concurrent requests.
+ *
+ * Flow:
+ * 1. Check persistent cache (file-based cache via getCache())
+ * 2. If cached, return cached data
+ * 3. If not cached, check if a fetch is in progress for this region
+ * 4. If fetch in progress, wait for it
+ * 5. If no fetch in progress, start one and cache the result
  *
  * @param region - AWS region for Bedrock models (e.g., 'us-east-1')
  * @param credentials - AWS credentials for Pricing API access (identity or provider)
  * @returns Promise resolving to pricing data, or null if fetch fails
  */
-export async function fetchBedrockPricing(
+export async function getPricingData(
+  region: string,
+  credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider,
+): Promise<BedrockPricingData | null> {
+  const { getCache, isCacheEnabled } = await import('../../cache');
+  const cache = await getCache();
+  const cacheKey = `bedrock-pricing:${region}`;
+
+  // Check persistent cache first
+  if (isCacheEnabled()) {
+    try {
+      const cachedData = await cache.get(cacheKey);
+      if (cachedData) {
+        const parsed = JSON.parse(cachedData as string);
+        const models = new Map<string, BedrockModelPricing>(
+          parsed.models as Array<[string, BedrockModelPricing]>,
+        );
+        const pricingData = {
+          models,
+          region: parsed.region,
+          fetchedAt: new Date(parsed.fetchedAt),
+        };
+        logger.debug('[Bedrock Pricing]: Using cached pricing data', {
+          region,
+          modelCount: models.size,
+          cachedAt: new Date(parsed.fetchedAt).toISOString(),
+        });
+        return pricingData;
+      }
+    } catch (err) {
+      logger.debug('[Bedrock Pricing]: Failed to parse cached pricing', {
+        error: String(err),
+      });
+    }
+  }
+
+  // No cached data, check if there's already a fetch in progress for this region
+  let fetchPromise = pricingFetchPromises.get(region);
+
+  if (fetchPromise) {
+    logger.debug('[Bedrock Pricing]: Reusing in-flight pricing fetch', { region });
+  } else {
+    // No fetch in progress, start a new one
+    logger.debug('[Bedrock Pricing]: Starting new pricing fetch', { region });
+    fetchPromise = fetchBedrockPricing(region, credentials);
+    pricingFetchPromises.set(region, fetchPromise);
+
+    // Clean up the promise after it completes (success or failure)
+    fetchPromise.finally(() => {
+      pricingFetchPromises.delete(region);
+      logger.debug('[Bedrock Pricing]: Cleared fetch promise from cache', { region });
+    });
+  }
+
+  // Wait for the fetch (either the one we started or one already in progress)
+  const pricingData = await fetchPromise;
+
+  // Cache the result if successful
+  if (pricingData && isCacheEnabled()) {
+    try {
+      const cacheData = JSON.stringify({
+        models: Array.from(pricingData.models.entries()),
+        region: pricingData.region,
+        fetchedAt: pricingData.fetchedAt.toISOString(),
+      });
+      await cache.set(cacheKey, cacheData);
+      logger.debug('[Bedrock Pricing]: Cached pricing data', { region });
+    } catch (err) {
+      logger.debug('[Bedrock Pricing]: Failed to cache pricing data', {
+        error: String(err),
+      });
+    }
+  }
+
+  return pricingData;
+}
+
+/**
+ * Fetches current Bedrock pricing from AWS Pricing API.
+ * Internal function - use getPricingData() instead to get coordinated fetching.
+ *
+ * @param region - AWS region for Bedrock models (e.g., 'us-east-1')
+ * @param credentials - AWS credentials for Pricing API access (identity or provider)
+ * @returns Promise resolving to pricing data, or null if fetch fails
+ */
+async function fetchBedrockPricing(
   region: string,
   credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider,
 ): Promise<BedrockPricingData | null> {
@@ -185,13 +296,12 @@ export async function fetchBedrockPricing(
 }
 
 /**
- * Calculates cost using fetched pricing data, with fallback to static pricing.
+ * Calculates cost using fetched pricing data.
  *
  * @param modelId - Bedrock model ID (e.g., 'anthropic.claude-3-5-sonnet-20241022-v2:0')
  * @param pricingData - Fetched pricing data (or null if fetch failed)
  * @param promptTokens - Number of input tokens
  * @param completionTokens - Number of output tokens
- * @param staticPricing - Static pricing data to use as fallback
  * @returns Cost in dollars, or undefined if no pricing available
  */
 export function calculateCostWithFetchedPricing(
@@ -199,7 +309,6 @@ export function calculateCostWithFetchedPricing(
   pricingData: BedrockPricingData | null | undefined,
   promptTokens: number | undefined,
   completionTokens: number | undefined,
-  staticPricing: { input: number; output: number } | undefined,
 ): number | undefined {
   if (
     promptTokens === undefined ||
@@ -210,43 +319,33 @@ export function calculateCostWithFetchedPricing(
     return undefined;
   }
 
-  let inputCostPerToken: number | undefined;
-  let outputCostPerToken: number | undefined;
-
-  // Try to use fetched pricing first
-  if (pricingData) {
-    const modelName = mapBedrockModelIdToApiName(modelId);
-    const fetchedModelPricing = pricingData.models.get(modelName);
-
-    if (fetchedModelPricing) {
-      inputCostPerToken = fetchedModelPricing.input;
-      outputCostPerToken = fetchedModelPricing.output;
-      logger.debug('[Bedrock Pricing]: Using fetched pricing', {
-        modelId,
-        modelName,
-        inputCostPerToken,
-        outputCostPerToken,
-      });
-    }
+  if (!pricingData) {
+    logger.debug('[Bedrock Pricing]: No pricing data available', {
+      modelId,
+    });
+    return undefined;
   }
 
-  // Fall back to static pricing if fetched pricing not available
-  if (inputCostPerToken === undefined || outputCostPerToken === undefined) {
-    if (staticPricing) {
-      inputCostPerToken = staticPricing.input;
-      outputCostPerToken = staticPricing.output;
-      logger.debug('[Bedrock Pricing]: Using static pricing (fallback)', {
-        modelId,
-        inputCostPerToken,
-        outputCostPerToken,
-      });
-    } else {
-      logger.debug('[Bedrock Pricing]: No pricing available', {
-        modelId,
-      });
-      return undefined;
-    }
+  const modelName = mapBedrockModelIdToApiName(modelId);
+  const fetchedModelPricing = pricingData.models.get(modelName);
+
+  if (!fetchedModelPricing) {
+    logger.debug('[Bedrock Pricing]: No pricing found for model', {
+      modelId,
+      modelName,
+    });
+    return undefined;
   }
+
+  const inputCostPerToken = fetchedModelPricing.input;
+  const outputCostPerToken = fetchedModelPricing.output;
+
+  logger.debug('[Bedrock Pricing]: Using fetched pricing', {
+    modelId,
+    modelName,
+    inputCostPerToken,
+    outputCostPerToken,
+  });
 
   const cost = promptTokens * inputCostPerToken + completionTokens * outputCostPerToken;
 

@@ -9,13 +9,11 @@ import telemetry from '../../telemetry';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { outputFromMessage, parseMessages } from '../anthropic/util';
-import { parseChatPrompt } from '../shared';
-import { calculateBedrockCost, BEDROCK_MODELS_WITH_PRICING } from './pricing';
+import { calculateCost, parseChatPrompt } from '../shared';
 import {
-  fetchBedrockPricing,
+  getPricingData,
   calculateCostWithFetchedPricing,
   type BedrockPricingData,
-  type BedrockModelPricing,
 } from './pricingFetcher';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
@@ -1854,77 +1852,30 @@ export abstract class AwsBedrockGenericProvider {
 
   /**
    * Lazily initializes pricing data from AWS Pricing API.
-   * Called once on the first API call to fetch current pricing.
-   * Checks cache first, then fetches from API if needed.
-   * Falls back to static pricing if fetch fails.
+   * Called once on the first API call. getPricingData() handles caching and
+   * coordinated fetching to prevent duplicate API calls in concurrent scenarios.
    */
   async initializePricingIfNeeded(): Promise<void> {
-    // Only attempt fetch once (undefined means not yet attempted)
+    // Only attempt fetch once per instance (undefined means not yet attempted)
     if (this.pricingData !== undefined) {
       return;
     }
 
     const region = this.getRegion();
-    const cache = await getCache();
-    const cacheKey = `bedrock-pricing:${region}`;
-
-    // Check if we have cached pricing data
-    if (isCacheEnabled()) {
-      try {
-        const cachedData = await cache.get(cacheKey);
-        if (cachedData) {
-          const parsed = JSON.parse(cachedData as string);
-          // Reconstruct Map from cached array with explicit typing
-          const models = new Map<string, BedrockModelPricing>(
-            parsed.models as Array<[string, BedrockModelPricing]>,
-          );
-          this.pricingData = {
-            models,
-            region: parsed.region,
-            fetchedAt: new Date(parsed.fetchedAt),
-          };
-          logger.debug('[Bedrock Pricing]: Using cached pricing data', {
-            region,
-            modelCount: models.size,
-            cachedAt: new Date(parsed.fetchedAt).toISOString(),
-          });
-          return;
-        }
-      } catch (err) {
-        logger.debug('[Bedrock Pricing]: Failed to parse cached pricing', {
-          error: String(err),
-        });
-      }
-    }
-
-    // Fetch from API if not in cache
     const credentials = await this.getCredentials();
-    this.pricingData = await fetchBedrockPricing(region, credentials);
+
+    // getPricingData() handles caching, concurrent fetch coordination, and API calls
+    this.pricingData = await getPricingData(region, credentials);
 
     if (this.pricingData) {
-      logger.debug('[Bedrock Pricing]: Successfully fetched pricing from API', {
+      logger.debug('[Bedrock Pricing]: Pricing data initialized', {
         region,
         modelCount: this.pricingData.models.size,
       });
-
-      // Cache the pricing data
-      if (isCacheEnabled()) {
-        try {
-          const cacheData = JSON.stringify({
-            models: Array.from(this.pricingData.models.entries()),
-            region: this.pricingData.region,
-            fetchedAt: this.pricingData.fetchedAt.toISOString(),
-          });
-          await cache.set(cacheKey, cacheData);
-          logger.debug('[Bedrock Pricing]: Cached pricing data');
-        } catch (err) {
-          logger.debug('[Bedrock Pricing]: Failed to cache pricing data', {
-            error: String(err),
-          });
-        }
-      }
     } else {
-      logger.debug('[Bedrock Pricing]: Pricing fetch failed, using static fallback');
+      logger.debug('[Bedrock Pricing]: Pricing fetch failed, costs will not be calculated', {
+        region,
+      });
     }
   }
 
@@ -2150,27 +2101,24 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
-      // Calculate cost with priority: config.cost > fetched pricing > static pricing
+      // Calculate cost with priority: config.cost > fetched pricing
       let cost: number | undefined;
       if (resolvedConfig.cost !== undefined) {
         // Use config override if provided (supports per-prompt cost overrides)
-        cost = calculateBedrockCost(
+        cost = calculateCost(
           this.modelName,
           resolvedConfig,
           tokenUsage.prompt,
           tokenUsage.completion,
+          [], // No static pricing table - config.cost must be set as {input, output}
         );
       } else {
-        // Otherwise use fetched pricing with static fallback
-        const staticModelPricing = BEDROCK_MODELS_WITH_PRICING.find(
-          (m) => m.id === this.modelName,
-        )?.cost;
+        // Otherwise use fetched pricing from AWS Pricing API
         cost = calculateCostWithFetchedPricing(
           this.modelName,
           this.pricingData,
           tokenUsage.prompt,
           tokenUsage.completion,
-          staticModelPricing,
         );
       }
 
