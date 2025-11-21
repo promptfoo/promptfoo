@@ -51,18 +51,28 @@ export async function runDbMigrations(): Promise<void> {
 }
 
 // ESM replacement for require.main === module check
-// Check if BUILD_FORMAT is available at compile time, otherwise check typeof for runtime
-const isESM = typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'esm';
-if (isESM) {
-  const currentModulePath = resolve(fileURLToPath(import.meta.url));
-  const mainModulePath = resolve(process.argv[1]);
-  const isMainModule = currentModulePath === mainModulePath;
-  // Only run if this specific migrate module is being executed directly, not when imported by main.js
-  const isMigrateModuleMainExecution = isMainModule && currentModulePath.endsWith('migrate.js');
-  if (isMigrateModuleMainExecution) {
-    // Run migrations and exit with appropriate code
-    runDbMigrations()
-      .then(() => process.exit(0))
-      .catch(() => process.exit(1));
+// When BUILD_FORMAT is undefined (tsx/direct execution), check import.meta.url
+// When BUILD_FORMAT is defined (bundled), only run if ESM build
+const shouldCheckDirectExecution =
+  typeof BUILD_FORMAT === 'undefined' || BUILD_FORMAT === 'esm';
+
+if (shouldCheckDirectExecution) {
+  try {
+    const currentModulePath = resolve(fileURLToPath(import.meta.url));
+    const mainModulePath = resolve(process.argv[1]);
+    const isMainModule = currentModulePath === mainModulePath;
+    // Only run if this specific migrate module is being executed directly
+    // Matches both migrate.js (bundled) and migrate.ts (direct tsx execution)
+    const isMigrateModuleMainExecution =
+      isMainModule && (currentModulePath.endsWith('migrate.js') || currentModulePath.endsWith('migrate.ts'));
+    if (isMigrateModuleMainExecution) {
+      // Run migrations and exit with appropriate code
+      runDbMigrations()
+        .then(() => process.exit(0))
+        .catch(() => process.exit(1));
+    }
+  } catch (error) {
+    // In CJS context, import.meta.url will fail - that's expected and fine
+    // Migrations will still run when called via API
   }
 }
