@@ -171,9 +171,14 @@ describe('TestCaseGenerateButton', () => {
       });
     });
 
-    it('should close tooltip via onClose handler when tooltip is open', async () => {
+    it('should close tooltip via onClose handler when clicking outside', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />);
+      renderWithTheme(
+        <div>
+          <div data-testid="outside-element">Outside element</div>
+          <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />
+        </div>,
+      );
 
       const iconButton = screen.getByRole('button');
       await user.hover(iconButton);
@@ -182,12 +187,9 @@ describe('TestCaseGenerateButton', () => {
         expect(screen.getByRole('tooltip')).toBeInTheDocument();
       });
 
-      // Simulate tooltip onClose (e.g., when dialog opens)
-      const tooltip = screen.getByRole('tooltip');
-      const tooltipParent = tooltip.closest('[role="tooltip"]')?.parentElement;
-
-      // Trigger mouse leave which calls hideTooltip
-      await user.unhover(iconButton);
+      // Click outside the button, which should trigger Tooltip's onClose handler
+      const outsideElement = screen.getByTestId('outside-element');
+      await user.click(outsideElement);
 
       await waitFor(() => {
         expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
