@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` config instead of removing the strategy, matching documented behavior at https://www.promptfoo.dev/docs/red-team/strategies/basic/
+- fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/)
 - fix(auth): allow CI environments to authenticate with Promptfoo Cloud using API keys — unblocks `jailbreak:meta` strategy in GitHub Actions by recognizing API key auth regardless of CI status (#6273)
 - fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
 - fix(webui): allow thumbs up/down ratings to toggle off and remove manual grading when clicked again (#6260)
