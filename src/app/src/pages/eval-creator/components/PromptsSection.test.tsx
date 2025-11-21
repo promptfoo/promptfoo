@@ -193,27 +193,32 @@ describe('PromptsSection', () => {
     const longLineText = 'This is a very long line of text without any line breaks. '.repeat(1000);
 
     const mockFileReader = {
-      onload: null,
-      readAsText: vi.fn().mockImplementation(function (this: FileReader) {
+      onload: null as ((ev: ProgressEvent<FileReader>) => unknown) | null,
+      readAsText: vi.fn().mockImplementation(function () {
         setTimeout(() => {
-          if (this.onload) {
+          if (mockFileReader.onload) {
             const mockEvent = {
               target: {
                 result: longLineText,
               } as FileReader,
-            };
-            this.onload(mockEvent as any);
+            } as ProgressEvent<FileReader>;
+            mockFileReader.onload(mockEvent);
           }
         }, 0);
       }),
     };
 
-    const MockFileReader = vi.fn(() => mockFileReader) as any;
-    MockFileReader.EMPTY = 0;
-    MockFileReader.LOADING = 1;
-    MockFileReader.DONE = 2;
+    class MockFileReader {
+      static EMPTY = 0;
+      static LOADING = 1;
+      static DONE = 2;
 
-    global.FileReader = MockFileReader;
+      constructor() {
+        Object.assign(this, mockFileReader);
+      }
+    }
+
+    global.FileReader = MockFileReader as unknown as typeof FileReader;
 
     setupStore([]);
 

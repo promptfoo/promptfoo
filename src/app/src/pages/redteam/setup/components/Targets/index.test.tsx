@@ -49,8 +49,8 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('CustomTargetConfiguration - Config Field Handling', () => {
-  let mockUpdateCustomTarget: (...args: any[]) => any;
-  let mockSetRawConfigJson: (...args: any[]) => any;
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
+  let mockSetRawConfigJson: (value: string) => void;
 
   const defaultProps = {
     selectedTarget: {
@@ -185,10 +185,10 @@ describe('updateCustomTarget function behavior', () => {
 });
 
 describe('Targets Component', () => {
-  let mockUpdateConfig: (...args: any[]) => any;
-  let mockRecordEvent: (...args: any[]) => any;
-  let mockOnNext: (...args: any[]) => any;
-  let mockOnBack: (...args: any[]) => any;
+  let mockUpdateConfig: (section: string, value: unknown) => void;
+  let mockRecordEvent: (eventName: string, properties?: Record<string, unknown>) => void;
+  let mockOnNext: () => void;
+  let mockOnBack: () => void;
   let mockCallApi: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {

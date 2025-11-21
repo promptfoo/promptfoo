@@ -81,10 +81,14 @@ describe('TestCasesSection', () => {
       // Mock FileReader
       const mockFileReader = {
         readAsText: vi.fn(),
-        onload: null as any,
+        onload: null as ((ev: ProgressEvent<FileReader>) => unknown) | null,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = class MockFileReader {
+        constructor() {
+          Object.assign(this, mockFileReader);
+        }
+      } as unknown as typeof FileReader;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -101,7 +105,7 @@ describe('TestCasesSection', () => {
       });
 
       // Trigger onload callback with empty content
-      mockFileReader.onload({ target: { result: '' } });
+      mockFileReader.onload?.({ target: { result: '' } } as ProgressEvent<FileReader>);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -149,10 +153,14 @@ describe('TestCasesSection', () => {
       // Mock FileReader
       const mockFileReader = {
         readAsText: vi.fn(),
-        onload: null as any,
+        onload: null as ((ev: ProgressEvent<FileReader>) => unknown) | null,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = class MockFileReader {
+        constructor() {
+          Object.assign(this, mockFileReader);
+        }
+      } as unknown as typeof FileReader;
 
       fireEvent.change(fileInput, { target: { files: [file] } });
 
@@ -162,7 +170,7 @@ describe('TestCasesSection', () => {
       });
 
       // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'some content' } });
+      mockFileReader.onload?.({ target: { result: 'some content' } } as ProgressEvent<FileReader>);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -195,10 +203,14 @@ describe('TestCasesSection', () => {
       // Mock FileReader
       const mockFileReader = {
         readAsText: vi.fn(),
-        onload: null as any,
+        onload: null as ((ev: ProgressEvent<FileReader>) => unknown) | null,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = class MockFileReader {
+        constructor() {
+          Object.assign(this, mockFileReader);
+        }
+      } as unknown as typeof FileReader;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -217,7 +229,9 @@ describe('TestCasesSection', () => {
       });
 
       // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'question,expected\nWhat is 2+2?,4' } });
+      mockFileReader.onload?.({
+        target: { result: 'question,expected\nWhat is 2+2?,4' },
+      } as ProgressEvent<FileReader>);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -252,15 +266,19 @@ describe('TestCasesSection', () => {
         },
       ];
 
-      (yaml.load as any).mockReturnValue(mockYamlData);
+      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
 
       // Mock FileReader
       const mockFileReader = {
         readAsText: vi.fn(),
-        onload: null as any,
+        onload: null as ((ev: ProgressEvent<FileReader>) => unknown) | null,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = class MockFileReader {
+        constructor() {
+          Object.assign(this, mockFileReader);
+        }
+      } as unknown as typeof FileReader;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -277,7 +295,9 @@ describe('TestCasesSection', () => {
       });
 
       // Trigger onload callback
-      mockFileReader.onload({ target: { result: '- description: Math test' } });
+      mockFileReader.onload?.({
+        target: { result: '- description: Math test' },
+      } as ProgressEvent<FileReader>);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -306,15 +326,19 @@ describe('TestCasesSection', () => {
         assert: [{ type: 'contains', value: 'world' }],
       };
 
-      (yaml.load as any).mockReturnValue(mockYamlData);
+      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
 
       // Mock FileReader
       const mockFileReader = {
         readAsText: vi.fn(),
-        onload: null as any,
+        onload: null as ((ev: ProgressEvent<FileReader>) => unknown) | null,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = class MockFileReader {
+        constructor() {
+          Object.assign(this, mockFileReader);
+        }
+      } as unknown as typeof FileReader;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -331,7 +355,9 @@ describe('TestCasesSection', () => {
       });
 
       // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'description: Single test' } });
+      mockFileReader.onload?.({
+        target: { result: 'description: Single test' },
+      } as ProgressEvent<FileReader>);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -372,15 +398,19 @@ describe('TestCasesSection', () => {
         },
       ];
 
-      (yaml.load as any).mockReturnValue(mockYamlData);
+      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
 
       // Mock FileReader
       const mockFileReader = {
         readAsText: vi.fn(),
-        onload: null as any,
+        onload: null as ((ev: ProgressEvent<FileReader>) => unknown) | null,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = class MockFileReader {
+        constructor() {
+          Object.assign(this, mockFileReader);
+        }
+      } as unknown as typeof FileReader;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -397,7 +427,9 @@ describe('TestCasesSection', () => {
       });
 
       // Trigger onload callback
-      mockFileReader.onload({ target: { result: '- description: Test' } });
+      mockFileReader.onload?.({
+        target: { result: '- description: Test' },
+      } as ProgressEvent<FileReader>);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -432,15 +464,19 @@ describe('TestCasesSection', () => {
         null,
       ];
 
-      (yaml.load as any).mockReturnValue(mockYamlData);
+      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
 
       // Mock FileReader
       const mockFileReader = {
         readAsText: vi.fn(),
-        onload: null as any,
+        onload: null as ((ev: ProgressEvent<FileReader>) => unknown) | null,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = class MockFileReader {
+        constructor() {
+          Object.assign(this, mockFileReader);
+        }
+      } as unknown as typeof FileReader;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -457,7 +493,7 @@ describe('TestCasesSection', () => {
       });
 
       // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'invalid' } });
+      mockFileReader.onload?.({ target: { result: 'invalid' } } as ProgressEvent<FileReader>);
 
       await waitFor(() => {
         // The first object is actually valid (it's an object), so we expect a warning about skipped items
@@ -472,15 +508,19 @@ describe('TestCasesSection', () => {
     it('handles YAML file with all invalid test cases', async () => {
       const mockYamlData = ['string instead of object', null, undefined, 123, true];
 
-      (yaml.load as any).mockReturnValue(mockYamlData);
+      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
 
       // Mock FileReader
       const mockFileReader = {
         readAsText: vi.fn(),
-        onload: null as any,
+        onload: null as ((ev: ProgressEvent<FileReader>) => unknown) | null,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = class MockFileReader {
+        constructor() {
+          Object.assign(this, mockFileReader);
+        }
+      } as unknown as typeof FileReader;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -497,7 +537,7 @@ describe('TestCasesSection', () => {
       });
 
       // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'invalid' } });
+      mockFileReader.onload?.({ target: { result: 'invalid' } } as ProgressEvent<FileReader>);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -508,15 +548,19 @@ describe('TestCasesSection', () => {
     });
 
     it('handles invalid YAML format', async () => {
-      (yaml.load as any).mockReturnValue('invalid string');
+      vi.mocked(yaml.load).mockReturnValue('invalid string');
 
       // Mock FileReader
       const mockFileReader = {
         readAsText: vi.fn(),
-        onload: null as any,
+        onload: null as ((ev: ProgressEvent<FileReader>) => unknown) | null,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = class MockFileReader {
+        constructor() {
+          Object.assign(this, mockFileReader);
+        }
+      } as unknown as typeof FileReader;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -533,7 +577,7 @@ describe('TestCasesSection', () => {
       });
 
       // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'invalid yaml' } });
+      mockFileReader.onload?.({ target: { result: 'invalid yaml' } } as ProgressEvent<FileReader>);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -544,7 +588,7 @@ describe('TestCasesSection', () => {
     });
 
     it('handles file parsing errors gracefully', async () => {
-      (yaml.load as any).mockImplementation(() => {
+      vi.mocked(yaml.load).mockImplementation(() => {
         throw new Error('YAML parsing failed');
       });
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -552,10 +596,14 @@ describe('TestCasesSection', () => {
       // Mock FileReader
       const mockFileReader = {
         readAsText: vi.fn(),
-        onload: null as any,
+        onload: null as ((ev: ProgressEvent<FileReader>) => unknown) | null,
       };
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
+      global.FileReader = class MockFileReader {
+        constructor() {
+          Object.assign(this, mockFileReader);
+        }
+      } as unknown as typeof FileReader;
 
       render(<TestCasesSection varsList={[]} />);
 
@@ -572,7 +620,7 @@ describe('TestCasesSection', () => {
       });
 
       // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'bad yaml' } });
+      mockFileReader.onload?.({ target: { result: 'bad yaml' } } as ProgressEvent<FileReader>);
 
       await waitFor(() => {
         expect(consoleSpy).toHaveBeenCalled();
