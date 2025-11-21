@@ -18,49 +18,72 @@ jest.mock('../src/util/fetch/index', () => ({
   fetchWithRetries: jest.fn(),
 }));
 
-// Mock cache-manager-fs-hash to prevent Windows lockfile errors
-jest.mock('cache-manager-fs-hash', () => ({
-  __esModule: true,
-  default: 'mocked-fs-store',
-}));
+// Mock keyv-file to prevent filesystem operations during tests
+jest.mock('keyv-file', () => {
+  return jest.fn().mockImplementation(() => ({
+    get: jest.fn(),
+    set: jest.fn(),
+    delete: jest.fn(),
+    clear: jest.fn(),
+  }));
+});
+
+// Mock keyv
+jest.mock('keyv', () => {
+  return {
+    Keyv: jest.fn().mockImplementation(() => ({
+      get: jest.fn(),
+      set: jest.fn(),
+      delete: jest.fn(),
+      clear: jest.fn(),
+    })),
+  };
+});
 
 const mockFetchWithRetries = jest.mocked(fetchWithRetries);
 
-// Mock cache-manager
-jest.mock('cache-manager', () => ({
-  caching: jest.fn().mockImplementation(({ store }) => {
-    const cache = new Map();
-    // Handle both string 'memory' and any other value (including modules) as fs-hash
-    const storeName = store === 'memory' ? 'memory' : 'fs-hash';
-    return {
-      store: {
-        name: storeName,
-      },
-      get: jest.fn().mockImplementation((key) => cache.get(key)),
-      set: jest.fn().mockImplementation((key, value) => {
-        cache.set(key, value);
-        return Promise.resolve();
-      }),
-      del: jest.fn().mockImplementation((key) => {
-        cache.delete(key);
-        return Promise.resolve();
-      }),
-      reset: jest.fn().mockImplementation(() => {
-        cache.clear();
-        return Promise.resolve();
-      }),
-      wrap: jest.fn().mockImplementation(async (key, fn) => {
-        const existing = cache.get(key);
-        if (existing) {
-          return existing;
-        }
-        const value = await fn();
-        cache.set(key, value);
-        return value;
-      }),
-    };
-  }),
-}));
+// Mock cache-manager v7
+jest.mock('cache-manager', () => {
+  return {
+    createCache: jest.fn().mockImplementation((config = {}) => {
+      const cache = new Map();
+      // Determine store type based on whether stores array has items
+      const storesArray = config.stores || [];
+      const storeName = storesArray.length > 0 ? 'keyv-file' : 'memory';
+      return {
+        stores: [
+          {
+            name: storeName,
+          },
+        ],
+        get: jest.fn().mockImplementation((key) => cache.get(key)),
+        set: jest.fn().mockImplementation((key, value) => {
+          cache.set(key, value);
+          return Promise.resolve();
+        }),
+        del: jest.fn().mockImplementation((key) => {
+          cache.delete(key);
+          return Promise.resolve();
+        }),
+        clear: jest.fn().mockImplementation(() => {
+          cache.clear();
+          return Promise.resolve();
+        }),
+        wrap: jest.fn().mockImplementation(async (key, fn) => {
+          const existing = cache.get(key);
+          if (existing) {
+            return existing;
+          }
+          const value = await fn();
+          if (value !== undefined) {
+            cache.set(key, value);
+          }
+          return value;
+        }),
+      };
+    }),
+  };
+});
 
 const mockFetchWithRetriesResponse = (
   ok: boolean,
@@ -105,14 +128,14 @@ describe('cache configuration', () => {
     process.env.NODE_ENV = 'test';
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    expect(cache.store).toHaveProperty('name', 'memory');
+    expect(cache.stores[0]).toHaveProperty('name', 'memory');
   });
 
   it('should use disk cache in non-test environment', async () => {
     process.env.NODE_ENV = 'production';
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    expect(cache.store).toHaveProperty('name', 'fs-hash');
+    expect(cache.stores[0]).toHaveProperty('name', 'keyv-file');
   });
 
   it('should respect custom cache path', async () => {
@@ -131,7 +154,7 @@ describe('cache configuration', () => {
 
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    expect(cache.store).toHaveProperty('name', 'fs-hash');
+    expect(cache.stores[0]).toHaveProperty('name', 'keyv-file');
   });
 
   it('should handle cache directory creation when it exists', async () => {
