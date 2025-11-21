@@ -1,9 +1,9 @@
+import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { getGraderById } from '../../../../src/redteam/graders';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
-import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
   PromptfooChatCompletionProvider: jest.fn().mockImplementation(() => ({
@@ -808,6 +808,40 @@ describe('CrescendoProvider', () => {
     expect(result.metadata?.crescendoBacktrackCount).toBe(0);
     expect(result.metadata?.crescendoResult).toBe(false);
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
+  });
+
+  it('should surface final target error while preserving mapped output', async () => {
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+    };
+
+    // Attack prompt
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'attack',
+        rationaleBehindJailbreak: 'r',
+        lastResponseSummary: 's',
+      }),
+    });
+
+    // Final target step returns error with mapped output
+    mockTargetProvider.callApi.mockResolvedValue({ output: 'This is 504', error: 'HTTP 504' });
+
+    // Refusal: not a refusal, Eval: not 100 (so result built from lastResponse)
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ value: false, metadata: 0, rationale: 'not refusal' }),
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ value: false, metadata: 50, rationale: 'partial' }),
+      });
+
+    const result = await crescendoProvider.callApi(prompt, context);
+    expect(result.output).toBe('This is 504');
+    expect(result.error).toBe('HTTP 504');
   });
 
   it('should handle purpose from test metadata', async () => {
