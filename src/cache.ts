@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 
-import cacheManager from 'cache-manager';
+import { createCache } from 'cache-manager';
+import { Keyv } from 'keyv';
+import KeyvFile from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
@@ -19,7 +21,7 @@ const cacheType =
 export function getCache() {
   if (!cacheInstance) {
     let cachePath = '';
-    let store: any = 'memory';
+    const stores = [];
 
     if (cacheType === 'disk' && enabled) {
       cachePath =
@@ -28,32 +30,31 @@ export function getCache() {
         logger.info(`Creating cache folder at ${cachePath}.`);
         fs.mkdirSync(cachePath, { recursive: true });
       }
-      // Lazy load fsStore only when disk cache is actually needed.
-      // This prevents module loading errors in tests and handles Windows compatibility issues.
-      // Note: cache-manager-fs-hash depends on lockfile@1.x which uses signal-exit@3.x,
-      // but other dependencies may pull in signal-exit@4.x which has breaking API changes.
-      // If loading fails (common on Windows), we gracefully fall back to memory cache.
+
+      // Try to use disk cache with keyv-file
       try {
-        store = require('cache-manager-fs-hash');
+        const store = new KeyvFile({
+          filename: path.join(cachePath, 'cache.msgpack'),
+        });
+        const keyv = new Keyv({
+          store,
+          ttl: getEnvInt('PROMPTFOO_CACHE_TTL', 60 * 60 * 24 * 14) * 1000, // Convert to ms
+        });
+        stores.push(keyv);
       } catch (err) {
         logger.warn(
           `Failed to load disk cache module (${(err as Error).message}). ` +
             `Using memory cache instead. This is a known limitation on some systems ` +
             `due to dependency compatibility issues and does not affect functionality.`,
         );
-        store = 'memory';
+        // Falls back to memory cache below
       }
     }
 
-    cacheInstance = cacheManager.caching({
-      store,
-      options: {
-        max: getEnvInt('PROMPTFOO_CACHE_MAX_FILE_COUNT', 10_000), // number of files
-        path: cachePath,
-        ttl: getEnvInt('PROMPTFOO_CACHE_TTL', 60 * 60 * 24 * 14), // in seconds, 14 days
-        maxsize: getEnvInt('PROMPTFOO_CACHE_MAX_SIZE', 1e7), // in bytes, 10mb
-        //zip: true, // whether to use gzip compression
-      },
+    cacheInstance = createCache({
+      stores,
+      ttl: getEnvInt('PROMPTFOO_CACHE_TTL', 60 * 60 * 24 * 14) * 1000, // Convert to ms
+      refreshThreshold: 0, // Disable background refresh
     });
   }
   return cacheInstance;
@@ -103,7 +104,7 @@ export async function fetchWithCache<T = any>(
   const copy = Object.assign({}, options);
   delete copy.headers;
   const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
-  const cache = await getCache();
+  const cache = getCache();
 
   let cached = true;
   let errorResponse = null;
@@ -191,7 +192,7 @@ export function disableCache() {
 }
 
 export async function clearCache() {
-  return getCache().reset();
+  return getCache().clear();
 }
 
 export function isCacheEnabled() {
