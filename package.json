@@ -80,19 +80,19 @@
   "overrides": {
     "uri-js": "npm:uri-js-replace",
     "chokidar": "4.0.3",
-    "whatwg-url": "14.2.0",
+    "whatwg-url": "15.1.0",
     "esbuild": "0.27.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-is": "^19.0.0",
     "*": {
-      "whatwg-url": "14.2.0",
+      "whatwg-url": "15.1.0",
       "chokidar": "4.0.3",
       "esbuild": "0.27.0",
       "react": "19.2.0",
       "react-dom": "19.2.0"
     },
-    "gaxios": "^6.0.0",
+    "gaxios": "^7.0.0",
     "https-proxy-agent": "^7.0.0",
     "mongoose": {
       "gcp-metadata": "^8.1.2"
@@ -240,7 +240,7 @@
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
-    "better-sqlite3": "12.4.1",
+    "better-sqlite3": "12.4.5",
     "binary-extensions": "^3.1.0",
     "cache-manager": "^4.1.0",
     "cache-manager-fs-hash": "^3.0.0",
