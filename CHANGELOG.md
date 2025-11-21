@@ -33,7 +33,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Dependencies
 
 - chore(deps): update @biomejs/biome and all platform-specific CLI packages to 2.3.7 (#6307)
-- chore(deps): upgrade cache-manager from v4 to v7; replace cache-manager-fs-hash with keyv-file for improved performance and TypeScript support
 - chore(deps): upgrade http-z to v8 and @swc/core to v1.15.3
 - chore(deps): update dependencies in 12 example projects (#6280)
 - chore(deps): upgrade glob to v13 and mathjs to v15 (#6279)

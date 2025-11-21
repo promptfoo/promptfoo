@@ -53,18 +53,9 @@ jest.mock('../../../src/cache', () => ({
     set: jest.fn(),
     wrap: jest.fn(),
     del: jest.fn(),
-    clear: jest.fn(),
-    mget: jest.fn(),
-    mset: jest.fn(),
-    mdel: jest.fn(),
-    ttl: jest.fn(),
-    on: jest.fn(),
-    once: jest.fn(),
-    off: jest.fn(),
-    removeListener: jest.fn(),
-    disconnect: jest.fn(),
-    stores: [{} as any],
-  } as any),
+    reset: jest.fn(),
+    store: {} as any,
+  }),
   isCacheEnabled: jest.fn(),
 }));
 
@@ -101,18 +92,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
-      clear: jest.fn(),
-      mget: jest.fn(),
-      mset: jest.fn(),
-      mdel: jest.fn(),
-      ttl: jest.fn(),
-      on: jest.fn(),
-      once: jest.fn(),
-      off: jest.fn(),
-      removeListener: jest.fn(),
-      disconnect: jest.fn(),
-      stores: [{} as any],
-    } as any);
+      reset: jest.fn(),
+      store: {} as any,
+    });
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
   });
@@ -461,18 +443,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       set: mockCacheSet,
       wrap: jest.fn(),
       del: jest.fn(),
-      clear: jest.fn(),
-      mget: jest.fn(),
-      mset: jest.fn(),
-      mdel: jest.fn(),
-      ttl: jest.fn(),
-      on: jest.fn(),
-      once: jest.fn(),
-      off: jest.fn(),
-      removeListener: jest.fn(),
-      disconnect: jest.fn(),
-      stores: [{} as any],
-    } as any);
+      reset: jest.fn(),
+      store: {} as any,
+    });
 
     jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
@@ -1019,18 +992,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
-      clear: jest.fn(),
-      mget: jest.fn(),
-      mset: jest.fn(),
-      mdel: jest.fn(),
-      ttl: jest.fn(),
-      on: jest.fn(),
-      once: jest.fn(),
-      off: jest.fn(),
-      removeListener: jest.fn(),
-      disconnect: jest.fn(),
-      stores: [{} as any],
-    } as any);
+      reset: jest.fn(),
+      store: {} as any,
+    });
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
   });
@@ -1309,18 +1273,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
-      clear: jest.fn(),
-      mget: jest.fn(),
-      mset: jest.fn(),
-      mdel: jest.fn(),
-      ttl: jest.fn(),
-      on: jest.fn(),
-      once: jest.fn(),
-      off: jest.fn(),
-      removeListener: jest.fn(),
-      disconnect: jest.fn(),
-      stores: [{} as any],
-    } as any);
+      reset: jest.fn(),
+      store: {} as any,
+    });
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
   });
