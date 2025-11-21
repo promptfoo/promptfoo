@@ -378,7 +378,11 @@ describe('EvalOutputCell', () => {
         set: vi.fn(),
       },
     };
-    global.URL = vi.fn(() => mockUrl) as any;
+    global.URL = class MockURL {
+      constructor() {
+        return mockUrl;
+      }
+    } as unknown as typeof URL;
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
@@ -417,7 +421,11 @@ describe('EvalOutputCell', () => {
       },
     };
     const originalURL = global.URL;
-    global.URL = vi.fn(() => mockUrl) as any;
+    global.URL = class MockURL {
+      constructor() {
+        return mockUrl;
+      }
+    } as unknown as typeof URL;
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
@@ -1299,5 +1307,134 @@ describe('EvalOutputCell cell highlighting styling', () => {
     expect(statusElement?.contains(statusRowElement)).toBe(true);
     expect(statusRowElement?.contains(pillElement)).toBe(true);
     expect(cellElement?.contains(statusElement)).toBe(true);
+  });
+});
+
+describe('EvalOutputCell thumbs up/down toggle functionality', () => {
+  const mockOnRating = vi.fn();
+
+  const createPropsForToggleTest = (): MockEvalOutputCellProps => ({
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    maxTextLength: 100,
+    onRating: mockOnRating,
+    output: {
+      cost: 0,
+      gradingResult: {
+        comment: 'Initial comment',
+        componentResults: [],
+        pass: true,
+        reason: 'Test reason',
+        score: 0.8,
+      },
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: true,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should toggle thumbs up rating to null when clicked again', async () => {
+    const props = createPropsForToggleTest();
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const thumbsUpButton = screen.getByLabelText('Mark test passed (score 1.0)');
+    expect(thumbsUpButton).toBeInTheDocument();
+
+    // First click - set rating to true
+    await userEvent.click(thumbsUpButton);
+    expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Initial comment');
+
+    // Clear the mock to track the next call
+    mockOnRating.mockClear();
+
+    // On second click, it should toggle to null
+    await userEvent.click(thumbsUpButton);
+
+    // The second click should pass null (toggle off behavior)
+    expect(mockOnRating).toHaveBeenCalledWith(null, undefined, 'Initial comment');
+  });
+
+  it('should toggle thumbs down rating to null when clicked again', async () => {
+    const props = createPropsForToggleTest();
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const thumbsDownButton = screen.getByLabelText('Mark test failed (score 0.0)');
+    expect(thumbsDownButton).toBeInTheDocument();
+
+    // First click - set rating to false
+    await userEvent.click(thumbsDownButton);
+    expect(mockOnRating).toHaveBeenCalledWith(false, undefined, 'Initial comment');
+
+    mockOnRating.mockClear();
+
+    // On second click, it should toggle to null
+    await userEvent.click(thumbsDownButton);
+    expect(mockOnRating).toHaveBeenCalledWith(null, undefined, 'Initial comment');
+  });
+
+  it('should allow switching from thumbs up to thumbs down', async () => {
+    const props = createPropsForToggleTest();
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const thumbsUpButton = screen.getByLabelText('Mark test passed (score 1.0)');
+    const thumbsDownButton = screen.getByLabelText('Mark test failed (score 0.0)');
+
+    // Click thumbs up first
+    await userEvent.click(thumbsUpButton);
+    expect(mockOnRating).toHaveBeenNthCalledWith(1, true, undefined, 'Initial comment');
+
+    // Then click thumbs down
+    await userEvent.click(thumbsDownButton);
+    expect(mockOnRating).toHaveBeenNthCalledWith(2, false, undefined, 'Initial comment');
+  });
+
+  it('should preserve comment when toggling rating', async () => {
+    const props = {
+      ...createPropsForToggleTest(),
+      output: {
+        ...createPropsForToggleTest().output,
+        gradingResult: {
+          comment: 'Important comment',
+          componentResults: [],
+          pass: true,
+          reason: 'Test reason',
+          score: 0.8,
+        },
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const thumbsUpButton = screen.getByLabelText('Mark test passed (score 1.0)');
+    await userEvent.click(thumbsUpButton);
+
+    // Verify comment is passed to onRating
+    expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Important comment');
   });
 });
