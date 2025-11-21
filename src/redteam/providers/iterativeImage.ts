@@ -25,7 +25,7 @@ import type {
   ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
 
 interface ImageGenerationOutput {
   prompt: string;

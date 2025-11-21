@@ -8,7 +8,7 @@ import {
 } from '../../redteam/constants';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
 import type { ConversationMessage } from '../../redteam/types';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
 import { sha256 } from '../../util/createHash';
 

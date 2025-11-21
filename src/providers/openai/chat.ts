@@ -315,6 +315,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return { body, config };
   }
 
+  /**
+   * Checks if the provider is authenticated by verifying whether the API key is required and,
+   * if so, whether the API key is set.
+   */
+  get isAuthenticated(): boolean {
+    return this.requiresApiKey() && !!this.getApiKey();
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -323,7 +331,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (this.initializationPromise) {
       await this.initializationPromise;
     }
-    if (this.requiresApiKey() && !this.getApiKey()) {
+    if (!this.isAuthenticated) {
       throw new Error(
         `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`,
       );

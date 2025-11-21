@@ -1,7 +1,7 @@
 import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
 
-import type { Strategy } from '../../../src/redteam/strategies';
-import type { TestCaseWithPlugin } from '../../../src/types';
+import type { Strategy } from '../../../src/redteam/strategies/index';
+import type { TestCaseWithPlugin } from '../../../src/types/index';
 
 describe('addLayerTestCases', () => {
   const mockStrategies: Strategy[] = [
