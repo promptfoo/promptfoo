@@ -34,7 +34,7 @@ describe('fileReference utility functions', () => {
   beforeEach(() => {
     jest.resetAllMocks();
 
-    jest.mocked(logger.debug).mockImplementation((message: string) => {
+    jest.mocked(logger.debug).mockImplementation((_message: string) => {
       return {
         debug: jest.fn(),
         info: jest.fn(),
@@ -43,7 +43,7 @@ describe('fileReference utility functions', () => {
       } as unknown as Logger;
     });
 
-    jest.mocked(logger.error).mockImplementation((message: string) => {
+    jest.mocked(logger.error).mockImplementation((_message: string) => {
       return {
         debug: jest.fn(),
         info: jest.fn(),

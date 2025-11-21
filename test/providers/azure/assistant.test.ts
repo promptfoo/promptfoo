@@ -482,7 +482,7 @@ describe('Azure Assistant Provider', () => {
       const originalFunction = global.Function;
       global.Function = jest.fn().mockImplementation(() => {
         return () =>
-          async function (args: string) {
+          async function (_args: string) {
             return 'string callback result';
           };
       }) as any;

@@ -33,7 +33,7 @@ jest.mock('../../../src/redteam/plugins/unsafebench', () => {
   // Create a mock for the plugin class
   const MockedUnsafeBenchPlugin = jest
     .fn()
-    .mockImplementation((provider, purpose, injectVar, config) => {
+    .mockImplementation((_provider, _purpose, injectVar, config) => {
       // Handle validation of categories in constructor to fix warning test
       if (config?.categories) {
         const invalidCategories = config.categories.filter(

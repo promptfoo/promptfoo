@@ -16,7 +16,7 @@ jest.mock('node:module', () => {
   };
 });
 jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(async (modulePath: string, functionName?: string) => {
+  importModule: jest.fn(async (_modulePath: string, functionName?: string) => {
     const mockModule = {
       default: jest.fn((data) => data.defaultField),
       parseResponse: jest.fn((data) => data.specificField),

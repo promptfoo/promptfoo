@@ -17,7 +17,7 @@ const createMockProvider = (output: string, reason?: string): ApiProvider => ({
 // Mock getAndCheckProvider
 jest.mock('../../src/matchers', () => ({
   ...jest.requireActual('../../src/matchers'),
-  getAndCheckProvider: jest.fn().mockImplementation((type, provider) => {
+  getAndCheckProvider: jest.fn().mockImplementation((_type, provider) => {
     return provider;
   }),
 }));

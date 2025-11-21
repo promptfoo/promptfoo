@@ -36,7 +36,7 @@ describe('xAI Chat Provider', () => {
       this: any,
       prompt: string,
       context?: any,
-      callApiOptions?: any,
+      _callApiOptions?: any,
     ) {
       const config = context?.prompt?.config || {};
       const body: any = {

@@ -16,7 +16,7 @@ jest.mock('../../src/logger', () => ({
 }));
 
 jest.mock('../../src/python/pythonUtils', () => ({
-  runPython: jest.fn().mockImplementation(async (filePath, functionName, args) => {
+  runPython: jest.fn().mockImplementation(async (_filePath, _functionName, args) => {
     const [output] = args;
     return output.toUpperCase() + ' FROM PYTHON';
   }),

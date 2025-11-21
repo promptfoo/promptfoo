@@ -324,7 +324,7 @@ describe('Python file references', () => {
       false,
       'Custom reason',
     ],
-  ])('should handle when the file:// assertion with .py file returns a %s', async (type, pythonOutput, expectedPass, expectedReason) => {
+  ])('should handle when the file:// assertion with .py file returns a %s', async (_type, pythonOutput, expectedPass, expectedReason) => {
     const output = 'Expected output';
     jest.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
 

@@ -29,7 +29,7 @@ jest.mock('../src/cache', () => ({
   getCache: jest.fn(() => ({
     get: jest.fn(),
     set: jest.fn(),
-    wrap: jest.fn((key: any, fn: any) => fn()),
+    wrap: jest.fn((_key: any, fn: any) => fn()),
   })),
 }));
 

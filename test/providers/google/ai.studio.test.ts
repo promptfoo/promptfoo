@@ -916,7 +916,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should load tools from external file and render variables', async () => {
-      const mockRenderString = jest.fn((str, vars) => {
+      const mockRenderString = jest.fn((str, _vars) => {
         if (str.startsWith('file://')) {
           return str;
         }

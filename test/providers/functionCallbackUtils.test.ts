@@ -498,7 +498,7 @@ describe('FunctionCallbackHandler', () => {
       mockMCPClient.getAllTools.mockReturnValue([{ name: 'mcp_tool', description: 'An MCP tool' }]);
 
       const callbacks: FunctionCallbackConfig = {
-        regular_function: async (args: string) => 'callback result',
+        regular_function: async (_args: string) => 'callback result',
       };
       const call = { name: 'regular_function', arguments: '{}' };
       const result = await handler.processCall(call, callbacks);
@@ -519,7 +519,7 @@ describe('FunctionCallbackHandler', () => {
       });
 
       const callbacks: FunctionCallbackConfig = {
-        shared_name: async (args: string) => 'callback result',
+        shared_name: async (_args: string) => 'callback result',
       };
       const call = { name: 'shared_name', arguments: '{}' };
       const result = await handler.processCall(call, callbacks);
@@ -534,7 +534,7 @@ describe('FunctionCallbackHandler', () => {
     it('should work without MCP client (backwards compatibility)', async () => {
       const handlerWithoutMCP = new FunctionCallbackHandler();
       const callbacks: FunctionCallbackConfig = {
-        test_function: async (args: string) => 'no MCP result',
+        test_function: async (_args: string) => 'no MCP result',
       };
       const call = { name: 'test_function', arguments: '{}' };
       const result = await handlerWithoutMCP.processCall(call, callbacks);

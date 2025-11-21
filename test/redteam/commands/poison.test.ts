@@ -119,7 +119,7 @@ describe('poison command', () => {
       };
 
       jest.mocked(fs.readFileSync).mockReturnValue('test content');
-      jest.mocked(path.relative).mockImplementation((from, to) => {
+      jest.mocked(path.relative).mockImplementation((_from, _to) => {
         return 'test.txt';
       });
       jest.mocked(path.dirname).mockReturnValue('output-dir');
@@ -218,7 +218,7 @@ describe('poison command', () => {
         isDirectory: () => false,
       } as fs.Stats);
 
-      jest.mocked(path.relative).mockImplementation((from, to) => 'test.txt');
+      jest.mocked(path.relative).mockImplementation((_from, _to) => 'test.txt');
       jest.mocked(path.dirname).mockReturnValue('output-dir');
       jest.mocked(path.join).mockImplementation((...args) => args.join('/'));
 
@@ -267,7 +267,7 @@ describe('poison command', () => {
 
       jest.mocked(fs.readdirSync).mockReturnValueOnce(['file1.txt'] as any);
       jest.mocked(path.join).mockImplementation((...parts) => parts.join('/'));
-      jest.mocked(path.relative).mockImplementation((from, to) => 'file1.txt');
+      jest.mocked(path.relative).mockImplementation((_from, _to) => 'file1.txt');
       jest.mocked(path.dirname).mockReturnValue('output-dir');
 
       const mockPoisonResponse = {

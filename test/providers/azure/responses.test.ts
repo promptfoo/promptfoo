@@ -2,7 +2,6 @@ import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import { fetchWithCache } from '../../../src/cache';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import fs from 'fs';
-import path from 'path';
 
 // Mock external dependencies
 jest.mock('../../../src/cache');
@@ -13,7 +12,7 @@ const mockFetchWithCache = fetchWithCache as jest.MockedFunction<typeof fetchWit
 const mockMaybeLoadFromExternalFile = maybeLoadFromExternalFile as jest.MockedFunction<
   typeof maybeLoadFromExternalFile
 >;
-const mockFs = fs as jest.Mocked<typeof fs>;
+const _mockFs = fs as jest.Mocked<typeof fs>;
 
 describe('AzureResponsesProvider', () => {
   beforeEach(() => {
