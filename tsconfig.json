@@ -13,8 +13,7 @@
     "resolveJsonModule": true,
     "composite": true,
     "rootDir": ".",
-    "baseUrl": "./",
-    "emitDeclarationOnly": true
+    "baseUrl": "./"
   },
   "ts-node": {
     "swc": true
