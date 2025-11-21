@@ -10,16 +10,6 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import { fetchWithProxy } from '../../util/fetch/index';
-import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
-import { getGoalRubric } from './prompts';
-import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
-
 import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index';
 import type {
   ApiProvider,
@@ -29,9 +19,18 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
+import { fetchWithProxy } from '../../util/fetch/index';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import { getSessionId } from '../util';
+import { getGoalRubric } from './prompts';
 import type { Message } from './shared';
+import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 

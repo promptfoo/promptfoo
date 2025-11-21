@@ -71,7 +71,7 @@ if (shouldCheckDirectExecution) {
         .then(() => process.exit(0))
         .catch(() => process.exit(1));
     }
-  } catch (error) {
+  } catch {
     // In CJS context, import.meta.url will fail - that's expected and fine
     // Migrations will still run when called via API
   }
