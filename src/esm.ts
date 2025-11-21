@@ -2,12 +2,25 @@ import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
+import { readFileSync } from 'node:fs';
+
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
 
 // Import package.json once and export for reuse
-import pkg from '../package.json' with { type: 'json' };
-export { pkg as packageJson };
+// Use readFileSync to avoid import attribute syntax issues in Jest
+function loadPackageJson() {
+  try {
+    // Try ESM approach using import.meta.url
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    return JSON.parse(readFileSync(path.join(currentDir, '../package.json'), 'utf-8'));
+  } catch {
+    // Fall back to CJS __dirname
+    // @ts-ignore - __dirname exists in CJS but not in ESM types
+    return JSON.parse(readFileSync(path.join(__dirname, '../package.json'), 'utf-8'));
+  }
+}
+export const packageJson = loadPackageJson();
 
 /**
  * ESM replacement for __dirname - guarded for dual CJS/ESM builds
