@@ -26,6 +26,8 @@ jobs:
     if: needs.release-please.outputs.release_created
     runs-on: ubuntu-latest
     needs: release-please
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
