@@ -1,7 +1,7 @@
 import {
   EcommercePriceManipulationPlugin,
   EcommercePriceManipulationGrader,
-} from '../../../src/redteam/plugins/ecommercePriceManipulation';
+} from '../../../src/redteam/plugins/ecommerce/ecommercePriceManipulation';
 
 import type { ApiProvider } from '../../../src/types';
 

@@ -1,7 +1,7 @@
 import {
   EcommerceOrderFraudPlugin,
   EcommerceOrderFraudGrader,
-} from '../../../src/redteam/plugins/ecommerceOrderFraud';
+} from '../../../src/redteam/plugins/ecommerce/ecommerceOrderFraud';
 
 import type { ApiProvider } from '../../../src/types';
 

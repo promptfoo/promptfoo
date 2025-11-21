@@ -8,8 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- chore: Add visiblity button for PFX passphrase (#6258)
+- feat(redteam): add ecommerce plugin pack with 4 security testing plugins (compliance bypass, order fraud, PCI-DSS, price manipulation) for testing e-commerce AI systems (#6168)
 - feat(app): Red Team Strategy Test Generation (#6005)
+
+### Changed
+
+- chore: Add visibility button for PFX passphrase (#6258)
 
 ## [0.119.8] - 2025-11-18
 

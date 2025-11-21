@@ -1,7 +1,7 @@
 import {
   EcommerceComplianceBypassPlugin,
   EcommerceComplianceBypassGrader,
-} from '../../../src/redteam/plugins/ecommerceComplianceBypass';
+} from '../../../src/redteam/plugins/ecommerce/ecommerceComplianceBypass';
 
 import type { ApiProvider } from '../../../src/types';
 

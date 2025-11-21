@@ -1,4 +1,4 @@
-import { EcommercePciDssGrader } from '../../../src/redteam/plugins/ecommercePciDss';
+import { EcommercePciDssGrader } from '../../../src/redteam/plugins/ecommerce/ecommercePciDss';
 
 jest.mock('../../../src/util/fetch/index.ts');
 
