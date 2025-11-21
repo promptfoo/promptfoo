@@ -13,7 +13,7 @@ import {
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
-import type { ApiProvider, TestCase } from '../../../src/types';
+import type { ApiProvider, TestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/cliState', () => ({

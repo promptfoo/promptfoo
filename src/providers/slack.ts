@@ -4,7 +4,7 @@ import type {
   ProviderResponse,
   CallApiContextParams,
   CallApiOptionsParams,
-} from '../types';
+} from '../types/index';
 import logger from '../logger';
 
 export interface SlackProviderOptions {

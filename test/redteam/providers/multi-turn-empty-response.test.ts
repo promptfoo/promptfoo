@@ -8,7 +8,7 @@ import type {
   CallApiContextParams,
   AtomicTestCase,
   ProviderResponse,
-} from '../../../src/types';
+} from '../../../src/types/index';
 
 // Mock the shared getTargetResponse to test provider-specific logic
 jest.mock('../../../src/redteam/providers/shared', () => {

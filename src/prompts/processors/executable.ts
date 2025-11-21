@@ -7,7 +7,7 @@ import { getCache, isCacheEnabled } from '../../cache';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 
-import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types';
+import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types/index';
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 

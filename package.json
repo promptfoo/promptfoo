@@ -61,6 +61,8 @@
     "lint:site": "npx @biomejs/biome lint site",
     "lint:src": "npx @biomejs/biome lint src",
     "lint:tests": "npx @biomejs/biome lint test",
+    "lint:index": "node scripts/check-index-imports.js",
+    "lint:index:fix": "node scripts/fix-index-imports.js",
     "lint": "npm run lint:src",
     "local:web": "npm run dev --prefix src/app",
     "local": "tsx src/main.ts",
@@ -83,7 +85,7 @@
     "esbuild": "0.27.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "react-is": "^18.3.1",
+    "react-is": "^19.0.0",
     "*": {
       "whatwg-url": "14.2.0",
       "chokidar": "4.0.3",
@@ -91,7 +93,7 @@
       "react": "19.2.0",
       "react-dom": "19.2.0"
     },
-    "gaxios": "^6.0.0",
+    "gaxios": "^7.0.0",
     "https-proxy-agent": "^7.0.0",
     "mongoose": {
       "gcp-metadata": "^8.1.2"

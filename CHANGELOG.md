@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- chore(lint): enforce explicit /index imports in directory paths to prepare for ESM migration (#6263)
 - chore(webui): improve UI treatment for domain-specific risks in red team setup (#6269)
 - chore(deps): re-generate lock file (#6249)
 - ci(github): add code scan action (#6261)

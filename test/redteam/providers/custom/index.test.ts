@@ -1,9 +1,8 @@
 import { getGraderById } from '../../../../src/redteam/graders';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
+import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
-
-import type { Message } from '../../../../src/redteam/providers/shared';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
   PromptfooChatCompletionProvider: jest.fn().mockImplementation(() => ({

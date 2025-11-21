@@ -20,7 +20,7 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 
-import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types';
+import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,

@@ -1774,10 +1774,10 @@ describe('RedteamGraderBase', () => {
   });
 
   describe('gradingGuidance + graderExamples integration', () => {
-    let testProvider: ApiProvider;
+    let _testProvider: ApiProvider;
 
     beforeEach(() => {
-      testProvider = {
+      _testProvider = {
         callApi: jest.fn().mockResolvedValue({
           output: 'Prompt: test prompt',
         }),

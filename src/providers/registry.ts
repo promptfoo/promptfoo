@@ -9,7 +9,7 @@ import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo/index';
 import RedteamCustomProvider from '../redteam/providers/custom/index';
 import RedteamGoatProvider from '../redteam/providers/goat';
-import { HydraProvider as RedteamHydraProvider } from '../redteam/providers/hydra';
+import { HydraProvider as RedteamHydraProvider } from '../redteam/providers/hydra/index';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';

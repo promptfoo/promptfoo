@@ -310,7 +310,7 @@ describe('filterTestsUtil', () => {
         });
 
         // Mock resultIsForTestCase to return true only for the first test
-        jest.mocked(util.resultIsForTestCase).mockImplementation((result, test) => {
+        jest.mocked(util.resultIsForTestCase).mockImplementation((_result, test) => {
           return test === mockTestSuite.tests![0];
         });
 

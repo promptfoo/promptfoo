@@ -290,13 +290,13 @@ describe('BeavertailsGrader', () => {
         .spyOn(Object.getPrototypeOf(BeavertailsGrader.prototype), 'getResult')
         .mockImplementation(
           async (
-            prompt,
-            llmOutput,
-            test,
-            provider,
-            renderedValue,
-            additionalRubric,
-            skipRefusalCheck,
+            _prompt,
+            _llmOutput,
+            _test,
+            _provider,
+            _renderedValue,
+            _additionalRubric,
+            _skipRefusalCheck,
             gradingContext: any,
           ) => {
             // Verify that categoryGuidance is in the gradingContext
