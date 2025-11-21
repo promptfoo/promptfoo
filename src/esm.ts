@@ -5,18 +5,24 @@ import path from 'node:path';
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
 
-// Global variable defined by build system
-declare const BUILD_FORMAT: string | undefined;
+// Import package.json once and export for reuse
+import pkg from '../package.json' with { type: 'json' };
+export { pkg as packageJson };
 
 /**
  * ESM replacement for __dirname - guarded for dual CJS/ESM builds
+ * This is the canonical way to get the current directory in dual ESM/CJS code.
+ * Use this instead of implementing the try-catch pattern in each file.
  */
 export function getDirectory(): string {
-  // Guard import.meta usage for CJS builds
-  if (process.env.BUILD_FORMAT === 'esm') {
+  try {
+    // Try ESM approach - import.meta.url is only available in ESM
     return path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    // Fall back to CJS __dirname
+    // @ts-ignore - __dirname exists in CJS but not in ESM types
+    return __dirname;
   }
-  return __dirname;
 }
 
 /**

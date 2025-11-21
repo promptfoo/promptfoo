@@ -2,8 +2,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 
 import chalk from 'chalk';
-import pkg from '../../package.json' with { type: 'json' };
-const { version } = pkg;
+import { packageJson } from '../esm';
+const { version } = packageJson;
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { resolveConfigs } from '../util/config/load';

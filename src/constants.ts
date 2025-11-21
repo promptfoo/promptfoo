@@ -1,4 +1,4 @@
-import packageJson from '../package.json' with { type: 'json' };
+import { packageJson } from './esm';
 import { getEnvInt, getEnvString } from './envars';
 
 export * from './providers/constants';

@@ -1,10 +1,9 @@
 ﻿import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'node:url';
+import { getDirectory } from '../esm';
 
-// Use currentDir instead of __dirname to avoid Jest/CJS conflicts
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const currentDir = getDirectory();
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';

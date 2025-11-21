@@ -2,10 +2,8 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { Command } from 'commander';
 
-// Global variable defined by build system
-declare const BUILD_FORMAT: string | undefined;
-import pkg from '../package.json' with { type: 'json' };
-const { version } = pkg;
+import { packageJson } from './esm';
+const { version } = packageJson;
 import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { authCommand } from './commands/auth';
