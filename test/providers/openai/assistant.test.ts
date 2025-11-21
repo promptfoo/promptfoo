@@ -49,7 +49,7 @@ describe('OpenAI Provider', () => {
         apiKey: 'test-key',
         organization: 'test-org',
         functionToolCallbacks: {
-          test_function: async (args: string) => 'Function result',
+          test_function: async (_args: string) => 'Function result',
         },
       },
     });

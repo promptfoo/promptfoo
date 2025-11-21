@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.1/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.7/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -269,7 +269,16 @@
       "includes": ["examples/**/*", "site/**/*"],
       "linter": {
         "rules": {
-          "recommended": false
+          "recommended": false,
+          "correctness": {
+            "noUnusedImports": "off",
+            "noUnusedVariables": "off",
+            "noUnusedFunctionParameters": "off"
+          },
+          "style": {
+            "noRestrictedGlobals": "off",
+            "useBlockStatements": "off"
+          }
         }
       }
     }
