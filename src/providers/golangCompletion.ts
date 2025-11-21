@@ -11,10 +11,14 @@ declare const BUILD_FORMAT: string | undefined;
 // Use currentDir instead of __dirname to avoid Jest/CJS conflicts
 // Guard import.meta usage for dual CJS/ESM builds
 const currentDir = (() => {
-  if (process.env.BUILD_FORMAT === 'esm') {
+  try {
+    // Try ESM approach - import.meta.url is only available in ESM
     return path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    // Fall back to CJS __dirname
+    // @ts-ignore - __dirname exists in CJS but not in ESM types
+    return __dirname;
   }
-  return __dirname;
 })();
 
 import { getCache, isCacheEnabled } from '../cache';

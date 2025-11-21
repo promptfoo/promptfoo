@@ -8,12 +8,14 @@ declare const BUILD_FORMAT: string | undefined;
 // Use currentDir instead of __dirname to avoid Jest/CJS conflicts
 // Guard import.meta usage for dual CJS/ESM builds
 const currentDir = (() => {
-  // Check if BUILD_FORMAT is available at compile time, otherwise check typeof for runtime
-  const isESM = typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'esm';
-  if (isESM) {
+  try {
+    // Try ESM approach - import.meta.url is only available in ESM
     return path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    // Fall back to CJS __dirname
+    // @ts-ignore - __dirname exists in CJS but not in ESM types
+    return __dirname;
   }
-  return __dirname;
 })();
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';

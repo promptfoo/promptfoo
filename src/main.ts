@@ -165,8 +165,9 @@ async function main() {
 }
 
 // ESM replacement for require.main === module check
-if (process.env.BUILD_FORMAT === 'esm') {
-  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
+// Check if this module is being run directly (not imported)
+try {
+  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] || '')) {
     checkNodeVersion();
     main().finally(async () => {
       logger.debug('Shutting down gracefully...');
@@ -174,4 +175,6 @@ if (process.env.BUILD_FORMAT === 'esm') {
       logger.debug('Shutdown complete');
     });
   }
+} catch {
+  // In CJS builds, this will fail silently - CJS entry point is handled differently
 }
