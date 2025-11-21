@@ -60,6 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(webui): apply code splitting using pages as the discriminant (#6194)
 - feat(assertions): add dot product and euclidean distance metrics for similarity assertion - use `similar:dot` and `similar:euclidean` assertion types to match production vector database metrics and support different similarity use cases (#6202)
 - feat(webui): expose Hydra strategy configuration (max turns and stateful toggle) in red team setup UI (#6165)
 - fix(app): aligning risk scores with documentation (#6212)
