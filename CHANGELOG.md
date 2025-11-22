@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - chore(webui): improve UI treatment for domain-specific risks in red team setup (#6269)
 - chore(deps): re-generate lock file (#6249)
 - ci(github): add code scan action (#6261)
+- chore: Update Strategy presets (#6275)
 
 ### Fixed
 
