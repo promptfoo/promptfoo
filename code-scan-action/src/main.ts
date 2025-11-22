@@ -10,13 +10,13 @@ import * as github from '@actions/github';
 import * as fs from 'fs';
 import { generateConfigFile } from './config';
 import { getGitHubContext, getPRFiles } from './github';
+import { prepareComments } from '../../src/codeScan/util/github';
 import {
   type Comment,
   type ScanResponse,
   CodeScanSeverity,
   FileChangeStatus,
   formatSeverity,
-  getSeverityRank,
 } from '../../src/types/codeScan';
 
 async function run(): Promise<void> {
@@ -211,40 +211,12 @@ async function run(): Promise<void> {
       try {
         const octokit = github.getOctokit(githubToken);
 
-        // Sort comments by severity (descending: critical > high > medium > low)
-        const sortedComments = [...comments].sort((a, b) => {
-          const rankA = a.severity ? getSeverityRank(a.severity) : 0;
-          const rankB = b.severity ? getSeverityRank(b.severity) : 0;
-          return rankB - rankA;
-        });
-
-        // Separate line-specific comments from general PR comments
-        // Filter out severity='none' comments - they shouldn't be posted separately
-        const lineComments = sortedComments.filter((c) => c.file && c.finding);
-        const generalComments = sortedComments.filter(
-          (c) => !c.file && c.finding && c.severity !== CodeScanSeverity.NONE,
+        // Prepare comments and review body for posting
+        const { lineComments, generalComments, reviewBody } = prepareComments(
+          comments,
+          review,
+          minimumSeverity,
         );
-
-        // Check if we only have "none" severity comments (i.e., no real vulnerabilities)
-        const hasOnlyNoneSeverity =
-          comments.length > 0 && comments.every((c) => c.severity === CodeScanSeverity.NONE);
-
-        // Construct review body
-        let reviewBody = review || '';
-
-        // If no real vulnerabilities, prepend "All Clear" to review
-        if (hasOnlyNoneSeverity && reviewBody) {
-          reviewBody = '👍 All Clear\n\n' + reviewBody;
-        }
-
-        // Append minimum severity threshold if provided
-        if (minimumSeverity && reviewBody) {
-          const severityFormatted = formatSeverity(
-            minimumSeverity as CodeScanSeverity,
-            'plain',
-          );
-          reviewBody += `\n\n<sub>Minimum severity threshold for this scan: ${severityFormatted} • [Learn more](https://www.promptfoo.dev/docs/code-scanning/)</sub>`;
-        }
 
         // Post review with line-specific comments
         if (lineComments.length > 0 || reviewBody) {
