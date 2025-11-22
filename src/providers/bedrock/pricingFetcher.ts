@@ -58,6 +58,7 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     'amazon.nova-micro-v1': 'Nova Micro',
     'amazon.nova-lite-v1': 'Nova Lite',
     'amazon.nova-pro-v1': 'Nova Pro',
+    'amazon.nova-premier-v1': 'Nova Premier',
 
     // Meta Llama models
     'meta.llama3-1-405b-instruct-v1': 'Llama 3.1 405B Instruct',
@@ -68,12 +69,14 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     'meta.llama3-2-3b-instruct-v1': 'Llama 3.2 3B Instruct',
     'meta.llama3-2-1b-instruct-v1': 'Llama 3.2 1B Instruct',
     'meta.llama3-3-70b-instruct-v1': 'Llama 3.3 70B Instruct',
+    'meta.llama4-scout-17b-instruct-v1': 'Llama 4 Scout 17B',
+    'meta.llama4-maverick-17b-instruct-v1': 'Llama 4 Maverick 17B',
 
     // Mistral models (mapping keys without revision suffixes since we strip them above)
     'mistral.mistral-7b-instruct-v0': 'Mistral 7B Instruct',
     'mistral.mixtral-8x7b-instruct-v0': 'Mixtral 8x7B Instruct',
     'mistral.mistral-large-2402-v1': 'Mistral Large',
-    'mistral.mistral-large-2407-v1': 'Mistral Large 2',
+    'mistral.mistral-large-2407-v1': 'Mistral Large 2407',
     'mistral.mistral-small-2402-v1': 'Mistral Small',
 
     // Cohere models
@@ -83,6 +86,13 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     // AI21 models
     'ai21.jamba-1-5-large-v1': 'Jamba 1.5 Large',
     'ai21.jamba-1-5-mini-v1': 'Jamba 1.5 Mini',
+
+    // DeepSeek models
+    'deepseek.r1-v1': 'R1',
+
+    // OpenAI models
+    'openai.gpt-oss-120b-1': 'gpt-oss-120b',
+    'openai.gpt-oss-20b-1': 'gpt-oss-20b',
   };
 
   return mappings[baseId] || baseId;
@@ -205,78 +215,112 @@ async function fetchBedrockPricing(
       ...(credentials ? { credentials } : {}),
     });
 
-    // Fetch Bedrock pricing products
-    const command = new GetProductsCommand({
-      ServiceCode: 'AmazonBedrock',
-      Filters: [
-        {
-          Type: 'TERM_MATCH',
-          Field: 'regionCode',
-          Value: region,
-        },
-      ],
-      MaxResults: 100, // Get all models in one request
-    });
+    // Fetch ALL pricing products with pagination
+    let allPriceItems: string[] = [];
+    let nextToken: string | undefined;
 
-    // Set 5-second timeout
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Pricing API request timed out after 5 seconds')), 5000);
-    });
+    do {
+      const command = new GetProductsCommand({
+        ServiceCode: 'AmazonBedrock',
+        Filters: [
+          {
+            Type: 'TERM_MATCH',
+            Field: 'regionCode',
+            Value: region,
+          },
+        ],
+        MaxResults: 100,
+        NextToken: nextToken,
+      });
 
-    const response = (await Promise.race([
-      pricingClient.send(command),
-      timeoutPromise,
-    ])) as GetProductsCommandOutput;
+      // Set 10-second timeout per page
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error('Pricing API request timed out after 10 seconds')),
+          10000,
+        );
+      });
+
+      const response = (await Promise.race([
+        pricingClient.send(command),
+        timeoutPromise,
+      ])) as GetProductsCommandOutput;
+
+      if (response.PriceList) {
+        allPriceItems = allPriceItems.concat(response.PriceList);
+      }
+
+      nextToken = response.NextToken;
+    } while (nextToken);
 
     // Parse pricing data
     const models = new Map<string, BedrockModelPricing>();
+    const allModelsFound = new Set<string>();
+    const usageTypeSamples: Record<string, string> = {};
 
-    if (response.PriceList) {
-      for (const priceItem of response.PriceList) {
-        try {
-          const product = JSON.parse(priceItem);
-          const attrs = product.product?.attributes;
+    for (const priceItem of allPriceItems) {
+      try {
+        const product = JSON.parse(priceItem);
+        const attrs = product.product?.attributes;
 
-          if (!attrs || !attrs.model) {
-            continue;
-          }
-
-          const modelName = attrs.model;
-          const inferenceType = attrs.inferenceType || '';
-
-          // Get pricing from OnDemand terms
-          if (product.terms?.OnDemand) {
-            const onDemand = Object.values(product.terms.OnDemand)[0] as any;
-            const priceDim = Object.values(onDemand.priceDimensions)[0] as any;
-            const price = parseFloat(priceDim.pricePerUnit.USD);
-
-            if (!models.has(modelName)) {
-              models.set(modelName, { input: 0, output: 0 });
-            }
-
-            const modelPricing = models.get(modelName)!;
-
-            // Pricing is per 1K tokens, convert to per-token
-            if (inferenceType.toLowerCase().includes('input')) {
-              modelPricing.input = price / 1000;
-            } else if (inferenceType.toLowerCase().includes('output')) {
-              modelPricing.output = price / 1000;
-            }
-          }
-        } catch (err) {
-          logger.debug('[Bedrock Pricing]: Failed to parse price item', {
-            error: String(err),
-          });
+        if (!attrs || !attrs.model) {
           continue;
         }
+
+        const modelName = attrs.model;
+        const inferenceType = attrs.inferenceType || '';
+        const usagetype = attrs.usagetype || '';
+        const feature = attrs.feature || '';
+
+        // Track all models we find (for debugging)
+        allModelsFound.add(modelName);
+
+        // Store sample usagetype for each model (for debugging)
+        if (!usageTypeSamples[modelName]) {
+          usageTypeSamples[modelName] = usagetype;
+        }
+
+        // Only process On-demand Inference pricing
+        if (feature !== 'On-demand Inference') {
+          continue;
+        }
+
+        // Get pricing from OnDemand terms
+        if (product.terms?.OnDemand) {
+          const onDemand = Object.values(product.terms.OnDemand)[0] as any;
+          const priceDim = Object.values(onDemand.priceDimensions)[0] as any;
+          const price = parseFloat(priceDim.pricePerUnit.USD);
+
+          // Only create model entry when we find on-demand pricing
+          if (!models.has(modelName)) {
+            models.set(modelName, { input: 0, output: 0 });
+          }
+
+          const modelPricing = models.get(modelName)!;
+
+          // Pricing is per 1K tokens, convert to per-token
+          if (inferenceType.toLowerCase().includes('input')) {
+            modelPricing.input = price / 1000;
+          } else if (inferenceType.toLowerCase().includes('output')) {
+            modelPricing.output = price / 1000;
+          }
+        }
+      } catch (err) {
+        logger.debug('[Bedrock Pricing]: Failed to parse price item', {
+          error: String(err),
+        });
+        continue;
       }
     }
 
     const duration = Date.now() - startTime;
+
     logger.debug('[Bedrock Pricing]: Successfully fetched pricing', {
       region,
       modelCount: models.size,
       durationMs: duration,
+      allModelsFound: Array.from(allModelsFound).sort(),
+      usageTypeSamples,
     });
 
     return {
@@ -333,6 +377,8 @@ export function calculateCostWithFetchedPricing(
     logger.debug('[Bedrock Pricing]: No pricing found for model', {
       modelId,
       modelName,
+      region: pricingData.region,
+      availableModels: Array.from(pricingData.models.keys()),
     });
     return undefined;
   }
@@ -345,6 +391,8 @@ export function calculateCostWithFetchedPricing(
     modelName,
     inputCostPerToken,
     outputCostPerToken,
+    promptTokens,
+    completionTokens,
   });
 
   const cost = promptTokens * inputCostPerToken + completionTokens * outputCostPerToken;
