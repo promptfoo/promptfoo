@@ -93,6 +93,12 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     // OpenAI models
     'openai.gpt-oss-120b-1': 'gpt-oss-120b',
     'openai.gpt-oss-20b-1': 'gpt-oss-20b',
+
+    // Qwen models
+    'qwen.qwen3-coder-480b-a35b-v1': 'Qwen3 Coder 480B',
+    'qwen.qwen3-coder-30b-a3b-v1': 'Qwen3 Coder 30B',
+    'qwen.qwen3-235b-a22b-2507-v1': 'Qwen3 235B',
+    'qwen.qwen3-32b-v1': 'Qwen3 32B',
   };
 
   return mappings[baseId] || baseId;
@@ -341,19 +347,44 @@ async function fetchBedrockPricing(
 
 /**
  * Fallback pricing for models not yet in AWS Pricing API.
- * Prices from official Anthropic documentation as of November 2025.
+ * Prices from official vendor documentation and third-party sources.
  * Patterns use hyphens to match Bedrock model ID format (e.g., claude-haiku-4-5).
- * @see https://platform.claude.com/docs/en/about-claude/pricing
+ *
+ * Sources:
+ * - Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
+ * - AI21 Jamba: Azure pricing and Artificial Analysis
+ * - Qwen: Estimated based on model size and market rates
+ * - Llama: AWS Bedrock pricing patterns
  */
 const FALLBACK_PRICING: Record<string, BedrockModelPricing> = {
+  // ===== Claude Models =====
   // Claude 4 models (Anthropic official pricing)
-  // Use hyphens to match Bedrock model IDs: claude-opus-4-1, claude-haiku-4-5, etc.
   'claude-opus-4-1': { input: 0.000015, output: 0.000075 },
-  'claude-opus-4-20250514': { input: 0.000015, output: 0.000075 }, // Opus 4 (without .1)
+  'claude-opus-4-20250514': { input: 0.000015, output: 0.000075 },
   'claude-sonnet-4-5': { input: 0.000003, output: 0.000015 },
-  'claude-sonnet-4-20250514': { input: 0.000003, output: 0.000015 }, // Sonnet 4 (without .5)
+  'claude-sonnet-4-20250514': { input: 0.000003, output: 0.000015 },
   'claude-3-7-sonnet': { input: 0.000003, output: 0.000015 },
   'claude-haiku-4-5': { input: 0.000001, output: 0.000005 },
+
+  // Claude 3.5 Sonnet v2 (October 2024 release, same pricing as v1)
+  'claude-3-5-sonnet-20241022-v2': { input: 0.000003, output: 0.000015 },
+  'claude-3-5-sonnet-v2': { input: 0.000003, output: 0.000015 },
+
+  // ===== AI21 Jamba Models =====
+  // From Azure pricing and Artificial Analysis
+  'jamba-1-5-large': { input: 0.000002, output: 0.000008 },
+  'jamba-1-5-mini': { input: 0.0000002, output: 0.0000004 },
+
+  // ===== Qwen Models =====
+  // Estimated based on model size and market rates
+  'qwen3-coder-480b': { input: 0.000003, output: 0.000015 }, // Large coder model
+  'qwen3-coder-30b': { input: 0.000001, output: 0.000005 }, // Medium coder model
+  'qwen3-235b': { input: 0.000002, output: 0.00001 }, // Large general model
+  'qwen3-32b': { input: 0.0000005, output: 0.0000025 }, // Medium general model
+
+  // ===== Llama Models =====
+  // Llama 3.2 3B (between 1B and 11B pricing)
+  'llama3-2-3b': { input: 0.00000015, output: 0.00000015 }, // $0.15 per MTok (estimate)
 };
 
 /**
