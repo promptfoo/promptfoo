@@ -722,6 +722,11 @@ export async function maybeLoadToolsFromExternalFile(
     }
   }
 
+  // If tools is already an array or object (not a file reference), return it as-is
+  if (typeof rendered !== 'string') {
+    return rendered;
+  }
+
   // Standard loading for JSON/YAML files
   const loaded = maybeLoadFromExternalFile(rendered);
 
