@@ -457,7 +457,7 @@ export async function processDiff(
     let files = await discoverChangedFiles(repoPath, base, compare);
 
     if (files.length === 0) {
-      throw new DiffProcessorError('No changed files found');
+      return files;
     }
 
     // Step 2: Filter denylist (early exit)
@@ -466,7 +466,7 @@ export async function processDiff(
     // Count remaining files
     const remainingAfterDenylist = files.filter((f) => !f.skipReason).length;
     if (remainingAfterDenylist === 0) {
-      throw new DiffProcessorError('All files filtered by denylist');
+      return files;
     }
 
     // Step 3: Collect blob sizes and filter large files
@@ -476,7 +476,7 @@ export async function processDiff(
     // Count remaining files
     const remainingAfterSizeFilter = files.filter((f) => !f.skipReason).length;
     if (remainingAfterSizeFilter === 0) {
-      throw new DiffProcessorError('All files filtered by size threshold');
+      return files;
     }
 
     // Step 4: Determine text/binary status
@@ -485,7 +485,7 @@ export async function processDiff(
     // Count remaining files
     const remainingAfterBinaryFilter = files.filter((f) => !f.skipReason).length;
     if (remainingAfterBinaryFilter === 0) {
-      throw new DiffProcessorError('All files filtered as binary');
+      return files;
     }
 
     // Step 5: Generate per-file patches
@@ -494,7 +494,7 @@ export async function processDiff(
     // Final count
     const finalIncludedFiles = files.filter((f) => !f.skipReason && f.patch).length;
     if (finalIncludedFiles === 0) {
-      throw new DiffProcessorError('No files included after processing');
+      return files;
     }
 
     return files;
