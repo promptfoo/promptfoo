@@ -2,8 +2,8 @@ import chalk from 'chalk';
 import { checkNodeVersion } from '../src/checkNodeVersion';
 import logger from '../src/logger';
 
-jest.mock('../package.json', () => ({
-  engines: { node: '>=20.0.1' },
+jest.mock('../src/generated/constants', () => ({
+  ENGINES: { node: '>=20.0.1' },
 }));
 
 const setNodeVersion = (version: string) => {
