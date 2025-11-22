@@ -2,8 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 
 import chalk from 'chalk';
-import { packageJson } from '../esm';
-const { version } = packageJson;
+import { VERSION } from '../generated/constants';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { resolveConfigs } from '../util/config/load';
@@ -20,7 +19,7 @@ interface DebugOptions {
 
 async function doDebug(options: DebugOptions): Promise<void> {
   const debugInfo = {
-    version,
+    version: VERSION,
     platform: {
       os: os.platform(),
       release: os.release(),

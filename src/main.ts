@@ -2,8 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { Command } from 'commander';
 
-import { packageJson } from './esm';
-const { version } = packageJson;
+import { VERSION } from './generated/constants';
 import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { authCommand } from './commands/auth';
@@ -94,7 +93,7 @@ async function main() {
 
   const program = new Command('promptfoo');
   program
-    .version(version)
+    .version(VERSION)
     .showHelpAfterError()
     .showSuggestionAfterError()
     .on('option:*', function () {

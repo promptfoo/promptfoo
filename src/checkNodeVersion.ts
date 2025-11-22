@@ -1,6 +1,5 @@
 import chalk from 'chalk';
-import { packageJson } from './esm';
-const { engines } = packageJson;
+import { ENGINES } from './generated/constants';
 import logger from './logger';
 
 /**
@@ -8,7 +7,7 @@ import logger from './logger';
  * Logs a warning and exits the process if the current Node version is not supported
  */
 export const checkNodeVersion = (): void => {
-  const requiredVersion = engines.node;
+  const requiredVersion = ENGINES.node;
 
   const versionMatch = process.version.match(/^v(\d+)\.(\d+)\.(\d+)/);
   if (!versionMatch) {
