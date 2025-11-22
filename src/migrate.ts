@@ -53,8 +53,7 @@ export async function runDbMigrations(): Promise<void> {
 // ESM replacement for require.main === module check
 // When BUILD_FORMAT is undefined (tsx/direct execution), check import.meta.url
 // When BUILD_FORMAT is defined (bundled), only run if ESM build
-const shouldCheckDirectExecution =
-  typeof BUILD_FORMAT === 'undefined' || BUILD_FORMAT === 'esm';
+const shouldCheckDirectExecution = typeof BUILD_FORMAT === 'undefined' || BUILD_FORMAT === 'esm';
 
 if (shouldCheckDirectExecution) {
   try {
@@ -64,7 +63,8 @@ if (shouldCheckDirectExecution) {
     // Only run if this specific migrate module is being executed directly
     // Matches both migrate.js (bundled) and migrate.ts (direct tsx execution)
     const isMigrateModuleMainExecution =
-      isMainModule && (currentModulePath.endsWith('migrate.js') || currentModulePath.endsWith('migrate.ts'));
+      isMainModule &&
+      (currentModulePath.endsWith('migrate.js') || currentModulePath.endsWith('migrate.ts'));
     if (isMigrateModuleMainExecution) {
       // Run migrations and exit with appropriate code
       runDbMigrations()
