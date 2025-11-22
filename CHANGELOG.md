@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - feat: migrate to ESM (ECMAScript Modules) with dual ESM/CJS exports (#5594)
+- chore(webui): replace emoji icons with Material-UI IconButton components in evaluation results page — action icons now display circular hover effects, color-coded active states (green for pass, red for fail), always-visible icons for better discoverability, and full accessibility support with aria-pressed and aria-label attributes
 - chore(lint): enforce explicit /index imports in directory paths to prepare for ESM migration (#6263)
 - chore(build): remove TypeScript declaration generation step - tsup handles compilation, removed redundant tsc step that required .js extensions (4e039c32b)
 - chore(webui): improve UI treatment for domain-specific risks in red team setup (#6269)
