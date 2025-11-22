@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/)
+- fix(code-scan): exit with code 0 when no files to scan instead of failing - handles cases where no files are changed, all files are filtered by denylist/size/binary detection, or no patches are found (#6316)
 - fix(code-scan): prevent "start line must precede end line" GitHub API error by ensuring start_line is only set when it differs from line - fixes single-line comment highlighting in PR reviews (#6314)
 - fix(auth): allow CI environments to authenticate with Promptfoo Cloud using API keys — unblocks `jailbreak:meta` strategy in GitHub Actions by recognizing API key auth regardless of CI status (#6273)
 - fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
