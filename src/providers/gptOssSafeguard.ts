@@ -69,6 +69,41 @@ export class GptOssSafeguardClient {
   }
 
   /**
+   * Attempts to extract JSON from various response formats
+   */
+  private extractJson(content: string): any {
+    // Try parsing as-is first
+    try {
+      return JSON.parse(content);
+    } catch {
+      // Continue to other methods
+    }
+
+    // Try extracting from markdown code blocks (```json ... ``` or ``` ... ```)
+    const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (codeBlockMatch) {
+      try {
+        return JSON.parse(codeBlockMatch[1].trim());
+      } catch {
+        // Continue to other methods
+      }
+    }
+
+    // Try extracting JSON object from text (look for { ... })
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch {
+        // Continue to other methods
+      }
+    }
+
+    // If all parsing fails, return null
+    return null;
+  }
+
+  /**
    * Formats a policy with reasoning level and output format instructions
    */
   private formatPolicy(policy: string): string {
@@ -122,8 +157,8 @@ ${outputFormatInstructions}`;
       }
 
       case 'simple': {
-        try {
-          const parsed = JSON.parse(content);
+        const parsed = this.extractJson(content);
+        if (parsed && typeof parsed.violation !== 'undefined') {
           return {
             violation: parsed.violation,
             chain_of_thought: chainOfThought,
@@ -133,11 +168,11 @@ ${outputFormatInstructions}`;
             },
             raw_response: rawResponse,
           };
-        } catch (error) {
+        } else {
           logger.warn(
             '[GPT OSS Safeguard] Failed to parse simple JSON response, treating as violation',
             {
-              parseError: error instanceof Error ? error.message : String(error),
+              contentPreview: content.substring(0, 100),
             },
           );
           return {
@@ -150,8 +185,8 @@ ${outputFormatInstructions}`;
       }
 
       case 'detailed': {
-        try {
-          const parsed = JSON.parse(content);
+        const parsed = this.extractJson(content);
+        if (parsed && typeof parsed.violation !== 'undefined') {
           return {
             violation: parsed.violation,
             chain_of_thought: chainOfThought,
@@ -164,11 +199,11 @@ ${outputFormatInstructions}`;
             },
             raw_response: rawResponse,
           };
-        } catch (error) {
+        } else {
           logger.warn(
             '[GPT OSS Safeguard] Failed to parse detailed JSON response, treating as violation',
             {
-              parseError: error instanceof Error ? error.message : String(error),
+              contentPreview: content.substring(0, 100),
             },
           );
           return {
