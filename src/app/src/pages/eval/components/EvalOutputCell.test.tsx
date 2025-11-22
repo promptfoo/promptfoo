@@ -122,7 +122,7 @@ describe('EvalOutputCell', () => {
 
   it('passes metadata correctly to the dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    await userEvent.click(screen.getByText('🔎'));
+    await userEvent.click(screen.getByRole('button', { name: /view output and test details/i }));
 
     const dialogComponent = screen.getByTestId('dialog-component');
     expect(dialogComponent).toBeInTheDocument();
@@ -134,7 +134,7 @@ describe('EvalOutputCell', () => {
 
   it('handles enter key press to open dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    const promptButton = screen.getByText('🔎');
+    const promptButton = screen.getByRole('button', { name: /view output and test details/i });
     expect(promptButton).toBeInTheDocument();
     promptButton.focus();
     await userEvent.keyboard('{enter}');
@@ -149,17 +149,17 @@ describe('EvalOutputCell', () => {
 
   it('handles keyboard navigation between buttons', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    const promptButton = screen.getByText('🔎');
+    const promptButton = screen.getByRole('button', { name: /view output and test details/i });
     expect(promptButton).toBeInTheDocument();
     promptButton.focus();
     await userEvent.tab();
-    expect(document.activeElement).toHaveTextContent('👍');
+    expect(document.activeElement).toHaveAttribute('aria-label', 'Mark test passed');
     await userEvent.tab();
-    expect(document.activeElement).toHaveTextContent('👎');
+    expect(document.activeElement).toHaveAttribute('aria-label', 'Mark test failed');
     await userEvent.tab();
-    expect(document.activeElement).toHaveTextContent('🔢');
+    expect(screen.getByRole('button', { name: /set test score/i })).toHaveFocus();
     await userEvent.tab();
-    expect(document.activeElement).toHaveTextContent('✏️');
+    expect(screen.getByRole('button', { name: /edit comment/i })).toHaveFocus();
   });
 
   it('preserves existing metadata citations', async () => {
@@ -175,7 +175,7 @@ describe('EvalOutputCell', () => {
     };
 
     renderWithProviders(<EvalOutputCell {...propsWithMetadataCitations} />);
-    await userEvent.click(screen.getByText('🔎'));
+    await userEvent.click(screen.getByRole('button', { name: /view output and test details/i }));
 
     const dialogComponent = screen.getByTestId('dialog-component');
     const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
@@ -202,7 +202,7 @@ describe('EvalOutputCell', () => {
   it('combines assertion contexts in comment dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-    await userEvent.click(screen.getByText('✏️'));
+    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Assertion 1 (accuracy): expected value');
@@ -236,7 +236,7 @@ describe('EvalOutputCell', () => {
 
     renderWithProviders(<EvalOutputCell {...propsWithoutMetrics} />);
 
-    await userEvent.click(screen.getByText('✏️'));
+    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Assertion 1 (contains): expected value');
@@ -245,7 +245,7 @@ describe('EvalOutputCell', () => {
   it('handles comment updates', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-    await userEvent.click(screen.getByText('✏️'));
+    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const commentInput = screen.getByRole('textbox');
     await userEvent.clear(commentInput);
@@ -291,7 +291,7 @@ describe('EvalOutputCell', () => {
 
     renderWithProviders(<EvalOutputCell {...propsWithoutResults} />);
 
-    await userEvent.click(screen.getByText('✏️'));
+    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Test output text');
@@ -429,10 +429,10 @@ describe('EvalOutputCell', () => {
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-    const shareButtonWrapper = screen.getByText('🔗').closest('.action');
-    expect(shareButtonWrapper).toBeInTheDocument();
+    const shareButton = screen.getByRole('button', { name: /share output/i });
+    expect(shareButton).toBeInTheDocument();
 
-    await userEvent.click(shareButtonWrapper!);
+    await userEvent.click(shareButton);
 
     expect(mockClipboard.writeText).toHaveBeenCalled();
 
@@ -1364,7 +1364,7 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
     const props = createPropsForToggleTest();
     renderWithProviders(<EvalOutputCell {...props} />);
 
-    const thumbsUpButton = screen.getByLabelText('Mark test passed (score 1.0)');
+    const thumbsUpButton = screen.getByLabelText('Mark test passed');
     expect(thumbsUpButton).toBeInTheDocument();
 
     // First click - set rating to true
@@ -1385,7 +1385,7 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
     const props = createPropsForToggleTest();
     renderWithProviders(<EvalOutputCell {...props} />);
 
-    const thumbsDownButton = screen.getByLabelText('Mark test failed (score 0.0)');
+    const thumbsDownButton = screen.getByLabelText('Mark test failed');
     expect(thumbsDownButton).toBeInTheDocument();
 
     // First click - set rating to false
@@ -1403,8 +1403,8 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
     const props = createPropsForToggleTest();
     renderWithProviders(<EvalOutputCell {...props} />);
 
-    const thumbsUpButton = screen.getByLabelText('Mark test passed (score 1.0)');
-    const thumbsDownButton = screen.getByLabelText('Mark test failed (score 0.0)');
+    const thumbsUpButton = screen.getByLabelText('Mark test passed');
+    const thumbsDownButton = screen.getByLabelText('Mark test failed');
 
     // Click thumbs up first
     await userEvent.click(thumbsUpButton);
@@ -1431,7 +1431,7 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
     };
     renderWithProviders(<EvalOutputCell {...props} />);
 
-    const thumbsUpButton = screen.getByLabelText('Mark test passed (score 1.0)');
+    const thumbsUpButton = screen.getByLabelText('Mark test passed');
     await userEvent.click(thumbsUpButton);
 
     // Verify comment is passed to onRating
