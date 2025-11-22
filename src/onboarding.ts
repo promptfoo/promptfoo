@@ -3,7 +3,6 @@ import path from 'path';
 
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
-import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { getEnvString } from './envars';
@@ -356,6 +355,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     recordOnboardingStep('start');
 
     // Choose use case
+    const { default: select } = await import('@inquirer/select');
     action = await select({
       message: 'What would you like to do?',
       choices: [

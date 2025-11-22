@@ -20,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - ci(github): add code scan action (#6261)
 - chore: Update Strategy presets (#6275)
 
+### Dependencies
+
+- chore(deps): update dependency @inquirer/select to v5 (#6308)
+
 ### Fixed
 
 - fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/)

@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import confirm from '@inquirer/confirm';
-import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { VERSION } from '../constants';
@@ -123,6 +122,7 @@ async function selectExample(): Promise<string> {
     ...examples.map((ex) => ({ name: ex, value: ex })),
   ];
 
+  const { default: select } = await import('@inquirer/select');
   const selectedExample = await select({
     message: 'Choose an example to download:',
     choices,

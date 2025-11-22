@@ -6,7 +6,6 @@ import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
-import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { getDefaultPort } from '../../constants';
@@ -225,6 +224,7 @@ export async function redteamInit(directory: string | undefined) {
       "What's the name of the target you want to red team? (e.g. 'helpdesk-agent', 'customer-service-chatbot')\n",
   });
 
+  const { default: select } = await import('@inquirer/select');
   const redTeamChoice = await select({
     message: 'What would you like to do?',
     choices: [
