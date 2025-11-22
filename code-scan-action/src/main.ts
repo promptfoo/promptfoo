@@ -211,14 +211,6 @@ async function run(): Promise<void> {
       try {
         const octokit = github.getOctokit(githubToken);
 
-        // Construct review body (append minimum severity if provided)
-        let reviewBody = review || '';
-        if (minimumSeverity && reviewBody) {
-          const capitalizedSeverity =
-            minimumSeverity.charAt(0).toUpperCase() + minimumSeverity.slice(1);
-          reviewBody += `\n\n_Minimum severity threshold for this scan: ${capitalizedSeverity}_`;
-        }
-
         // Sort comments by severity (descending: critical > high > medium > low)
         const sortedComments = [...comments].sort((a, b) => {
           const rankA = a.severity ? getSeverityRank(a.severity) : 0;
@@ -227,8 +219,32 @@ async function run(): Promise<void> {
         });
 
         // Separate line-specific comments from general PR comments
+        // Filter out severity='none' comments - they shouldn't be posted separately
         const lineComments = sortedComments.filter((c) => c.file && c.finding);
-        const generalComments = sortedComments.filter((c) => !c.file && c.finding);
+        const generalComments = sortedComments.filter(
+          (c) => !c.file && c.finding && c.severity !== CodeScanSeverity.NONE,
+        );
+
+        // Check if we only have "none" severity comments (i.e., no real vulnerabilities)
+        const hasOnlyNoneSeverity =
+          comments.length > 0 && comments.every((c) => c.severity === CodeScanSeverity.NONE);
+
+        // Construct review body
+        let reviewBody = review || '';
+
+        // If no real vulnerabilities, prepend "All Clear" to review
+        if (hasOnlyNoneSeverity && reviewBody) {
+          reviewBody = '👍 All Clear\n\n' + reviewBody;
+        }
+
+        // Append minimum severity threshold if provided
+        if (minimumSeverity && reviewBody) {
+          const severityFormatted = formatSeverity(
+            minimumSeverity as CodeScanSeverity,
+            'plain',
+          );
+          reviewBody += `\n\n<sub>Minimum severity threshold for this scan: ${severityFormatted} • [Learn more](https://www.promptfoo.dev/docs/code-scanning/)</sub>`;
+        }
 
         // Post review with line-specific comments
         if (lineComments.length > 0 || reviewBody) {
