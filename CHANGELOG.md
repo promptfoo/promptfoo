@@ -74,6 +74,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- refactor(webui): split model audit UI into multi-page architecture with dedicated routes for setup, history, latest results, and individual scans (#5595)
 - fix: exclude source maps from npm package to reduce bundle size by ~22MB (#6235)
 - chore(ci): synchronize package-lock.json to resolve npm ci failures (#6195)
 - chore(ci): increase webui test timeout to 8 minutes in GitHub Actions workflow to prevent CI timeouts (#6201)

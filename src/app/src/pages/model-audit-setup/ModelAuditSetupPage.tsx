@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { callApi } from '@app/utils/api';
 import {
@@ -9,28 +10,27 @@ import {
 import {
   Alert,
   Box,
+  Breadcrumbs,
   CircularProgress,
   Container,
-  Fade,
   IconButton,
   Link,
   Paper,
   Stack,
-  Tab,
-  Tabs,
   Tooltip,
   Typography,
 } from '@mui/material';
-import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
-import ConfigurationTab from './components/ConfigurationTab';
-import HistoryTab from './components/HistoryTab';
-import ResultsTab from './components/ResultsTab';
-import ScannedFilesDialog from './components/ScannedFilesDialog';
-import { useModelAuditStore } from './store';
+import { Link as RouterLink } from 'react-router-dom';
 
-import type { ScanResult } from './ModelAudit.types';
+import AdvancedOptionsDialog from '../model-audit/components/AdvancedOptionsDialog';
+import ConfigurationTab from '../model-audit/components/ConfigurationTab';
+import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
+import { useModelAuditConfigStore } from '../model-audit/stores';
 
-export default function ModelAudit() {
+import type { ScanResult } from '../model-audit/ModelAudit.types';
+
+export default function ModelAuditSetupPage() {
+  const navigate = useNavigate();
   const {
     // State
     paths,
@@ -39,7 +39,6 @@ export default function ModelAudit() {
     scanResults,
     error,
     installationStatus,
-    activeTab,
     showFilesDialog,
     showOptionsDialog,
 
@@ -51,20 +50,24 @@ export default function ModelAudit() {
     setScanResults,
     setError,
     checkInstallation,
-    setActiveTab,
     setShowFilesDialog,
     setShowOptionsDialog,
     addRecentScan,
-    fetchHistoricalScans,
-  } = useModelAuditStore();
+  } = useModelAuditConfigStore();
 
   useEffect(() => {
-    useModelAuditStore.persist.rehydrate();
+    useModelAuditConfigStore.persist.rehydrate();
     // Check installation status immediately after rehydration
     checkInstallation();
-  }, []); // Remove checkInstallation dependency to avoid potential issues
+  }, [checkInstallation]);
 
   const handleScan = async () => {
+    // Validate that at least one path is selected
+    if (paths.length === 0) {
+      setError('Please add at least one path to scan.');
+      return;
+    }
+
     setIsScanning(true);
     setError(null);
 
@@ -88,12 +91,11 @@ export default function ModelAudit() {
       }
 
       setScanResults(data);
-      setActiveTab(1); // Switch to Results tab
       addRecentScan(paths); // Add to recent scans
 
-      // Refresh history to include the new scan if it was persisted
-      if (data.persisted) {
-        fetchHistoricalScans();
+      // If scan was persisted, navigate to the result page
+      if (data.persisted && data.auditId) {
+        navigate(`/model-audit/history/${data.auditId}`);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
@@ -121,13 +123,23 @@ export default function ModelAudit() {
     >
       <Container maxWidth="xl">
         <Paper elevation={0} sx={{ p: { xs: 3, md: 5 }, mb: 4 }}>
+          {/* Breadcrumb Navigation */}
+          <Box sx={{ mb: 3 }}>
+            <Breadcrumbs aria-label="breadcrumb">
+              <Link component={RouterLink} to="/model-audit" underline="hover" color="inherit">
+                Model Audit
+              </Link>
+              <Typography color="text.primary">Setup</Typography>
+            </Breadcrumbs>
+          </Box>
+
           <Stack direction="row" alignItems="center" mb={4}>
             <Box>
               <Typography variant="h4" gutterBottom fontWeight="bold">
-                Model Audit
+                Model Audit Setup
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                Scan ML models for security vulnerabilities.{' '}
+                Configure and run a model security scan.{' '}
                 <Link href="https://www.promptfoo.dev/docs/model-audit/" target="_blank">
                   Learn more
                 </Link>
@@ -168,72 +180,60 @@ export default function ModelAudit() {
             </Box>
           </Stack>
 
-          <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
-            <Tab label="Configuration" />
-            <Tab label="Results" disabled={!scanResults} />
-            <Tab label="History" />
-          </Tabs>
-
           {error && (
-            <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
+            <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
               {error}
             </Alert>
           )}
 
-          <Box sx={{ mt: 3 }}>
-            <Fade in={activeTab === 0} unmountOnExit>
+          {/* Non-persisted results display */}
+          {scanResults && !scanResults.persisted && (
+            <Alert severity="info" sx={{ mb: 3 }}>
               <Box>
-                <ConfigurationTab
-                  paths={paths}
-                  isScanning={isScanning}
-                  onAddPath={(path) => {
-                    setPaths([...paths, path]);
-                  }}
-                  onRemovePath={handleRemovePath}
-                  onShowOptions={() => setShowOptionsDialog(true)}
-                  onScan={handleScan}
-                  error={error}
-                  onClearError={() => setError(null)}
-                  currentWorkingDir={installationStatus.cwd || ''}
-                  installationStatus={installationStatus}
-                />
+                <Typography variant="subtitle2" gutterBottom>
+                  Scan completed successfully!
+                </Typography>
+                <Typography variant="body2">
+                  The scan results are displayed below. To save results for later viewing, enable
+                  persistence in your configuration.
+                </Typography>
               </Box>
-            </Fade>
+            </Alert>
+          )}
 
-            <Fade in={activeTab === 1} unmountOnExit>
-              <Box>
-                {scanResults && (
-                  <ResultsTab
-                    scanResults={scanResults}
-                    onShowFilesDialog={() => setShowFilesDialog(true)}
-                  />
-                )}
-              </Box>
-            </Fade>
-
-            <Fade in={activeTab === 2} unmountOnExit>
-              <Box>
-                <HistoryTab />
-              </Box>
-            </Fade>
-          </Box>
-        </Paper>
-
-        <AdvancedOptionsDialog
-          open={showOptionsDialog}
-          onClose={() => setShowOptionsDialog(false)}
-          scanOptions={scanOptions}
-          onOptionsChange={setScanOptions}
-        />
-
-        {scanResults && (
-          <ScannedFilesDialog
-            open={showFilesDialog}
-            onClose={() => setShowFilesDialog(false)}
-            scanResults={scanResults}
+          <ConfigurationTab
             paths={paths}
+            isScanning={isScanning}
+            onAddPath={(path) => {
+              setPaths([...paths, path]);
+            }}
+            onRemovePath={handleRemovePath}
+            onShowOptions={() => setShowOptionsDialog(true)}
+            onScan={handleScan}
+            error={error}
+            onClearError={() => setError(null)}
+            currentWorkingDir={installationStatus.cwd || ''}
+            installationStatus={installationStatus}
+            scanResults={scanResults}
+            onShowFilesDialog={() => setShowFilesDialog(true)}
           />
-        )}
+
+          <AdvancedOptionsDialog
+            open={showOptionsDialog}
+            onClose={() => setShowOptionsDialog(false)}
+            scanOptions={scanOptions}
+            onOptionsChange={setScanOptions}
+          />
+
+          {scanResults && (
+            <ScannedFilesDialog
+              open={showFilesDialog}
+              onClose={() => setShowFilesDialog(false)}
+              scanResults={scanResults}
+              paths={paths}
+            />
+          )}
+        </Paper>
       </Container>
     </Box>
   );

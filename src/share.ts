@@ -622,7 +622,7 @@ export function getShareableModelAuditUrl(
     ? cloudConfig.getAppUrl()
     : getShareViewBaseUrl() || getDefaultShareViewBaseUrl();
 
-  const fullUrl = `${appBaseUrl}/model-audit/scan/${remoteAuditId}`;
+  const fullUrl = `${appBaseUrl}/model-audit/${remoteAuditId}`;
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }
