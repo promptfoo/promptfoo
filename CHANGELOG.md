@@ -15,13 +15,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- chore(webui): replace emoji icons with Material-UI IconButton components in evaluation results page — action icons now display circular hover effects, color-coded active states (green for pass, red for fail), always-visible icons for better discoverability, and full accessibility support with aria-pressed and aria-label attributes
 - chore(lint): enforce explicit /index imports in directory paths to prepare for ESM migration (#6263)
 - chore(webui): improve UI treatment for domain-specific risks in red team setup (#6269)
 - chore(deps): re-generate lock file (#6249)
 - ci(github): add code scan action (#6261)
+- chore: Update Strategy presets (#6275)
 
 ### Fixed
 
+- fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/)
+- fix(code-scan): prevent "start line must precede end line" GitHub API error by ensuring start_line is only set when it differs from line - fixes single-line comment highlighting in PR reviews (#6314)
 - fix(auth): allow CI environments to authenticate with Promptfoo Cloud using API keys — unblocks `jailbreak:meta` strategy in GitHub Actions by recognizing API key auth regardless of CI status (#6273)
 - fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
 - fix(webui): allow thumbs up/down ratings to toggle off and remove manual grading when clicked again (#6260)
@@ -34,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
+- chore(deps): update @biomejs/biome and all platform-specific CLI packages to 2.3.7 (#6307)
 - chore(deps): upgrade http-z to v8 and @swc/core to v1.15.3
 - chore(deps): update dependencies in 12 example projects (#6280)
 - chore(deps): upgrade glob to v13 and mathjs to v15 (#6279)

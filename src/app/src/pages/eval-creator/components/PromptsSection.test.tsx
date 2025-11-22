@@ -44,6 +44,40 @@ describe('PromptsSection', () => {
     fireEvent.click(addButtonInDialog);
   };
 
+  const createFileReaderMock = (fileContent: string) => {
+    let onloadCallback: ((ev: ProgressEvent<FileReader>) => unknown) | null = null;
+    const readAsTextMock = vi.fn();
+
+    global.FileReader = class MockFileReader {
+      static EMPTY = 0;
+      static LOADING = 1;
+      static DONE = 2;
+
+      onload: ((ev: ProgressEvent<FileReader>) => unknown) | null = null;
+      readAsText = readAsTextMock;
+
+      constructor() {
+        // Capture the onload handler when it's set
+        Object.defineProperty(this, 'onload', {
+          get: () => onloadCallback,
+          set: (value) => {
+            onloadCallback = value;
+          },
+          configurable: true,
+        });
+
+        // Automatically trigger onload after readAsText
+        readAsTextMock.mockImplementation(() => {
+          setTimeout(() => {
+            onloadCallback?.({ target: { result: fileContent } } as ProgressEvent<FileReader>);
+          }, 0);
+        });
+      }
+    } as unknown as typeof FileReader;
+
+    return readAsTextMock;
+  };
+
   it('should display a message indicating no prompts are present when the prompts list is empty', () => {
     setupStore([]);
 
@@ -192,28 +226,7 @@ describe('PromptsSection', () => {
   it('should handle a file with a very long line of text', async () => {
     const longLineText = 'This is a very long line of text without any line breaks. '.repeat(1000);
 
-    const mockFileReader = {
-      onload: null,
-      readAsText: vi.fn().mockImplementation(function (this: FileReader) {
-        setTimeout(() => {
-          if (this.onload) {
-            const mockEvent = {
-              target: {
-                result: longLineText,
-              } as FileReader,
-            };
-            this.onload(mockEvent as any);
-          }
-        }, 0);
-      }),
-    };
-
-    const MockFileReader = vi.fn(() => mockFileReader) as any;
-    MockFileReader.EMPTY = 0;
-    MockFileReader.LOADING = 1;
-    MockFileReader.DONE = 2;
-
-    global.FileReader = MockFileReader;
+    createFileReaderMock(longLineText);
 
     setupStore([]);
 

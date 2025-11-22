@@ -1,15 +1,18 @@
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import { fetchWithCache } from '../../../src/cache';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
+import fs from 'fs';
 
 // Mock external dependencies
 jest.mock('../../../src/cache');
 jest.mock('../../../src/util/file');
+jest.mock('fs');
 
 const mockFetchWithCache = fetchWithCache as jest.MockedFunction<typeof fetchWithCache>;
 const mockMaybeLoadFromExternalFile = maybeLoadFromExternalFile as jest.MockedFunction<
   typeof maybeLoadFromExternalFile
 >;
+const _mockFs = fs as jest.Mocked<typeof fs>;
 
 describe('AzureResponsesProvider', () => {
   beforeEach(() => {
@@ -26,7 +29,7 @@ describe('AzureResponsesProvider', () => {
   });
 
   describe('constructor', () => {
-    it('should create an instance with deployment name', async () => {
+    it('should create an instance with deployment name', () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
       expect(provider).toBeInstanceOf(AzureResponsesProvider);
       expect(provider.deploymentName).toBe('gpt-4.1-test');
@@ -34,43 +37,43 @@ describe('AzureResponsesProvider', () => {
   });
 
   describe('isReasoningModel', () => {
-    it('should identify o1 models as reasoning models', async () => {
+    it('should identify o1 models as reasoning models', () => {
       const provider = new AzureResponsesProvider('o1-preview');
       expect(provider.isReasoningModel()).toBe(true);
     });
 
-    it('should identify o3 models as reasoning models', async () => {
+    it('should identify o3 models as reasoning models', () => {
       const provider = new AzureResponsesProvider('o3-mini');
       expect(provider.isReasoningModel()).toBe(true);
     });
 
-    it('should identify gpt-5 models as reasoning models', async () => {
+    it('should identify gpt-5 models as reasoning models', () => {
       const provider = new AzureResponsesProvider('gpt-5');
       expect(provider.isReasoningModel()).toBe(true);
     });
 
-    it('should not identify gpt-4.1 as reasoning model', async () => {
+    it('should not identify gpt-4.1 as reasoning model', () => {
       const provider = new AzureResponsesProvider('gpt-4.1');
       expect(provider.isReasoningModel()).toBe(false);
     });
   });
 
   describe('supportsTemperature', () => {
-    it('should support temperature for non-reasoning models', async () => {
+    it('should support temperature for non-reasoning models', () => {
       const provider = new AzureResponsesProvider('gpt-4.1');
       expect(provider.supportsTemperature()).toBe(true);
     });
 
-    it('should not support temperature for reasoning models', async () => {
+    it('should not support temperature for reasoning models', () => {
       const provider = new AzureResponsesProvider('o1-preview');
       expect(provider.supportsTemperature()).toBe(false);
     });
   });
 
   describe('getAzureResponsesBody', () => {
-    it('should create correct request body for basic prompt', async () => {
+    it('should create correct request body for basic prompt', () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const body = provider.getAzureResponsesBody('Hello world');
 
       expect(body).toMatchObject({
         model: 'gpt-4.1-test',
@@ -83,7 +86,7 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
-    it('should handle external response_format file loading (fixed double-loading bug)', async () => {
+    it('should handle external response_format file loading (fixed double-loading bug)', () => {
       const mockSchema = {
         type: 'json_schema',
         json_schema: {
@@ -100,7 +103,7 @@ describe('AzureResponsesProvider', () => {
         },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const body = provider.getAzureResponsesBody('Hello world');
 
       expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith('file://test-schema.json');
       expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledTimes(1); // Should only be called once (fix for double-loading)
@@ -112,7 +115,7 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
-    it('should handle inline response_format', async () => {
+    it('should handle inline response_format', () => {
       // For inline schemas, maybeLoadFromExternalFile should return the object unchanged
       mockMaybeLoadFromExternalFile.mockImplementation((input) => input);
 
@@ -133,7 +136,7 @@ describe('AzureResponsesProvider', () => {
         },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const body = provider.getAzureResponsesBody('Hello world');
 
       expect(body.text.format).toMatchObject({
         type: 'json_schema',
@@ -147,22 +150,22 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
-    it('should not include temperature for reasoning models', async () => {
+    it('should not include temperature for reasoning models', () => {
       const provider = new AzureResponsesProvider('o1-preview', {
         config: { temperature: 0.7 },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const body = provider.getAzureResponsesBody('Hello world');
 
       expect(body).not.toHaveProperty('temperature');
     });
 
-    it('should include temperature for non-reasoning models', async () => {
+    it('should include temperature for non-reasoning models', () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: { temperature: 0.7 },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const body = provider.getAzureResponsesBody('Hello world');
 
       expect(body.temperature).toBe(0.7);
     });

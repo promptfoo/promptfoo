@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import Alert from '@mui/material/Alert';
@@ -259,6 +259,13 @@ export const TestCaseGenerateButton: React.FC<{
   } = useApiHealth();
   const isRemoteDisabled = apiHealthStatus !== 'connected';
 
+  // Tooltip component uses controlled state in order to imperatively close it when the Test Case
+  // Generation dialog is rendered (by default it will remain open even after the dialog is closed).
+  const [shouldRenderTooltip, setShouldRenderTooltip] = useState<boolean>(false);
+
+  const showTooltip = () => setShouldRenderTooltip(true);
+  const hideTooltip = () => setShouldRenderTooltip(false);
+
   return (
     <Tooltip
       title={
@@ -266,15 +273,21 @@ export const TestCaseGenerateButton: React.FC<{
           ? 'Requires Promptfoo Cloud connection'
           : tooltipTitle || 'Generate test case'
       }
+      open={shouldRenderTooltip}
+      onClose={hideTooltip}
+      onOpen={showTooltip}
     >
       <span>
         <IconButton
           onClick={(e) => {
             e.stopPropagation();
+            hideTooltip();
             onClick();
           }}
           disabled={disabled || isRemoteDisabled}
           sx={{ color: 'text.secondary' }}
+          onMouseEnter={showTooltip}
+          onMouseLeave={hideTooltip}
         >
           {isGenerating ? (
             <CircularProgress size={size === 'small' ? 16 : 20} />

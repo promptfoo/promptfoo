@@ -10,7 +10,7 @@ jest.mock('../../src/providers/defaults', () => ({
 
 jest.mock('../../src/matchers', () => ({
   ...jest.requireActual('../../src/matchers'),
-  getAndCheckProvider: jest.fn().mockImplementation(async (type, provider, defaultProvider) => {
+  getAndCheckProvider: jest.fn().mockImplementation(async (_type, provider, defaultProvider) => {
     return provider || defaultProvider;
   }),
 }));
