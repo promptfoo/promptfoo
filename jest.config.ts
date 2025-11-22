@@ -5,6 +5,9 @@ const config: Config = {
   coverageDirectory: '.coverage',
   coverageProvider: 'v8',
   extensionsToTreatAsEsm: ['.ts'],
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
   modulePathIgnorePatterns: ['<rootDir>/dist', '<rootDir>/examples', '<rootDir>/node_modules'],
   setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
