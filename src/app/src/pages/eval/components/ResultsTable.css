@@ -131,12 +131,6 @@ table.results-table,
   cursor: zoom-in;
 }
 
-.results-table tr .variable > *,
-.compact.results-table tr .cell > * {
-  /* Header and vars always inline, cells are inline in compact mode. */
-  /*display: inline;*/
-}
-
 .results-table tr .cell .prompt {
   background-color: var(--variable-background-color);
   border: 1px solid var(--border-color);
@@ -172,21 +166,7 @@ table.results-table,
 }
 
 .results-table tr .cell-actions .action {
-  /* using opacity instead of visibility to maintain focus order */
-  opacity: 0;
   line-height: normal;
-}
-
-/* Show all actions on hover */
-.results-table td:hover .cell-actions .action,
-.results-table td:focus-visible .cell-actions .action,
-.results-table td:focus-within .cell-actions .action {
-  opacity: 1;
-}
-
-/* Always show active thumbs */
-.results-table tr .cell-actions .action.active {
-  opacity: 1;
 }
 
 .results-table tr .cell-detail {
@@ -205,8 +185,8 @@ table.results-table,
   color: #888;
 }
 
-/* Allows button to be styled as a span*/
-.results-table tr button.action {
+/* Remove default button styling - but not for MUI IconButton */
+.results-table tr button.action:not(.MuiIconButton-root) {
   background: none;
   color: inherit;
   border: none;
@@ -214,10 +194,6 @@ table.results-table,
   font: inherit;
   appearance: none;
   cursor: pointer;
-}
-
-.results-table tr .cell-actions .action.active {
-  filter: saturate(1.5);
 }
 
 /* Table-within-a-cell, used for markdown tables */
