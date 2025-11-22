@@ -6,7 +6,14 @@ import { getDirectory } from './esm';
 // Global variable defined by build system
 declare const BUILD_FORMAT: string | undefined;
 
-const currentDir = getDirectory();
+// Lazy initialization to avoid module-level side effects in Jest
+let currentDir: string | undefined;
+function getCurrentDir(): string {
+  if (!currentDir) {
+    currentDir = getDirectory();
+  }
+  return currentDir;
+}
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getDb } from './database/index';
@@ -27,15 +34,16 @@ export async function runDbMigrations(): Promise<void> {
         const db = getDb();
 
         // Handle different deployment scenarios for migration folder location
+        const dir = getCurrentDir();
         let migrationsFolder: string;
-        if (currentDir.includes('dist/src')) {
+        if (dir.includes('dist/src')) {
           // When running from bundled server (e.g., dist/src/server/index.js)
           // Navigate to project root and find drizzle folder
-          const projectRoot = currentDir.split('dist/src')[0];
+          const projectRoot = dir.split('dist/src')[0];
           migrationsFolder = path.join(projectRoot, 'drizzle');
         } else {
           // When running from source (e.g., src/migrate.ts)
-          migrationsFolder = path.join(currentDir, '..', 'drizzle');
+          migrationsFolder = path.join(dir, '..', 'drizzle');
         }
 
         logger.debug(`Running database migrations from: ${migrationsFolder}`);
