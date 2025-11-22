@@ -297,7 +297,10 @@ export class OllamaChatProvider implements ApiProvider {
 
     // Handle tools if configured
     if (this.config.tools) {
-      params.tools = maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
+      const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
+      if (loadedTools !== undefined) {
+        params.tools = loadedTools;
+      }
     }
 
     logger.debug('[Ollama Chat] Calling Ollama API', { params });

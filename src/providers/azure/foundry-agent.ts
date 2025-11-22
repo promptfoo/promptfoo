@@ -307,7 +307,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       tool_choice: this.assistantConfig.tool_choice,
       tool_resources: this.assistantConfig.tool_resources,
       tools: JSON.stringify(
-        maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars),
+        await maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars),
       ),
       top_p: this.assistantConfig.top_p,
     })}`;
@@ -384,10 +384,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         runOptions.tool_choice = this.assistantConfig.tool_choice;
       }
       if (this.assistantConfig.tools) {
-        runOptions.tools = maybeLoadToolsFromExternalFile(
+        const loadedTools = await maybeLoadToolsFromExternalFile(
           this.assistantConfig.tools,
           context?.vars,
         );
+        if (loadedTools !== undefined) {
+          runOptions.tools = loadedTools;
+        }
       }
       if (this.assistantConfig.modelName) {
         runOptions.model = this.assistantConfig.modelName;

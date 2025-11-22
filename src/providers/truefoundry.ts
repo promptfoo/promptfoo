@@ -71,12 +71,12 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   /**
    * Override getOpenAiBody to add TrueFoundry-specific headers and body parameters
    */
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ) {
-    const { body, config } = super.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
 
     // Add TrueFoundry-specific headers
     const headers: Record<string, string> = {

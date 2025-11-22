@@ -97,7 +97,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Get the request body and config from parent class
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     // Make the API call to Snowflake Cortex endpoint
     logger.debug('[Snowflake Cortex] Calling API', {

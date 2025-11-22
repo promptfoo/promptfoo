@@ -371,7 +371,12 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
 }
 
 export interface IBedrockModel {
-  params: (config: BedrockOptions, prompt: string, stop: string[], modelName?: string) => any;
+  params: (
+    config: BedrockOptions,
+    prompt: string,
+    stop: string[],
+    modelName?: string,
+  ) => Promise<any>;
   output: (config: BedrockOptions, responseJson: any) => any;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
 }
@@ -501,7 +506,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
   }
 
   return {
-    params: (
+    params: async (
       config: BedrockLlamaGenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -587,7 +592,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
 
 export const BEDROCK_MODEL = {
   AI21: {
-    params: (
+    params: async (
       config: BedrockAI21GenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -653,7 +658,7 @@ export const BEDROCK_MODEL = {
     },
   },
   AMAZON_NOVA: {
-    params: (
+    params: async (
       config: BedrockAmazonNovaGenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -736,7 +741,7 @@ export const BEDROCK_MODEL = {
     },
   },
   CLAUDE_COMPLETION: {
-    params: (
+    params: async (
       config: BedrockClaudeLegacyCompletionOptions,
       prompt: string,
       stop: string[],
@@ -798,7 +803,7 @@ export const BEDROCK_MODEL = {
     },
   },
   CLAUDE_MESSAGES: {
-    params: (
+    params: async (
       config: BedrockClaudeMessagesCompletionOptions,
       prompt: string,
       _stop?: string[],
@@ -874,7 +879,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(
         params,
         'tools',
-        maybeLoadToolsFromExternalFile(config?.tools),
+        await maybeLoadToolsFromExternalFile(config?.tools),
         undefined,
         undefined,
       );
@@ -928,7 +933,7 @@ export const BEDROCK_MODEL = {
     },
   },
   TITAN_TEXT: {
-    params: (
+    params: async (
       config: BedrockTextGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -993,7 +998,7 @@ export const BEDROCK_MODEL = {
   LLAMA3_3: getLlamaModelHandler(LlamaVersion.V3_3),
   LLAMA4: getLlamaModelHandler(LlamaVersion.V4),
   COHERE_COMMAND: {
-    params: (
+    params: async (
       config: BedrockCohereCommandGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1048,7 +1053,7 @@ export const BEDROCK_MODEL = {
     },
   },
   COHERE_COMMAND_R: {
-    params: (
+    params: async (
       config: BedrockCohereCommandRGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1078,7 +1083,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'presence_penalty', config?.presence_penalty);
       addConfigParam(params, 'seed', config?.seed);
       addConfigParam(params, 'return_prompt', config?.return_prompt);
-      addConfigParam(params, 'tools', maybeLoadToolsFromExternalFile(config?.tools));
+      addConfigParam(params, 'tools', await maybeLoadToolsFromExternalFile(config?.tools));
       addConfigParam(params, 'tool_results', config?.tool_results);
       addConfigParam(params, 'stop_sequences', stop);
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
@@ -1108,7 +1113,7 @@ export const BEDROCK_MODEL = {
     },
   },
   DEEPSEEK: {
-    params: (
+    params: async (
       config: BedrockDeepseekGenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -1181,7 +1186,7 @@ ${prompt}
     },
   },
   MISTRAL: {
-    params: (
+    params: async (
       config: BedrockMistralGenerationOptions,
       prompt: string,
       stop: string[],
@@ -1254,7 +1259,7 @@ ${prompt}
     },
   },
   MISTRAL_LARGE_2407: {
-    params: (
+    params: async (
       config: BedrockMistralGenerationOptions,
       prompt: string,
       stop: string[],
@@ -1334,7 +1339,7 @@ ${prompt}
     },
   },
   OPENAI: {
-    params: (
+    params: async (
       config: BedrockOpenAIGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1420,7 +1425,7 @@ ${prompt}
     },
   },
   QWEN: {
-    params: (
+    params: async (
       config: BedrockQwenGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1465,7 +1470,7 @@ ${prompt}
       addConfigParam(
         params,
         'tools',
-        maybeLoadToolsFromExternalFile(config?.tools),
+        await maybeLoadToolsFromExternalFile(config?.tools),
         undefined,
         undefined,
       );
@@ -1934,7 +1939,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(
+    const params = await model.params(
       { ...this.config, ...context?.prompt.config },
       prompt,
       stop,
