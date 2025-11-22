@@ -66,7 +66,10 @@ export const handleIsValidOpenAiToolsCall = async ({
 
   let tools = (provider as OpenAiChatCompletionProvider).config.tools;
   if (tools) {
-    tools = await maybeLoadToolsFromExternalFile(tools, test.vars);
+    const loadedTools = await maybeLoadToolsFromExternalFile(tools, test.vars);
+    if (loadedTools !== undefined) {
+      tools = loadedTools;
+    }
   }
   invariant(
     tools,

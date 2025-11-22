@@ -201,10 +201,13 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         runOptions.tool_choice = this.assistantConfig.tool_choice;
       }
       if (this.assistantConfig.tools) {
-        runOptions.tools = await maybeLoadToolsFromExternalFile(
+        const loadedTools = await maybeLoadToolsFromExternalFile(
           this.assistantConfig.tools,
           context?.vars,
         );
+        if (loadedTools !== undefined) {
+          runOptions.tools = loadedTools;
+        }
       }
       if (this.assistantConfig.modelName) {
         runOptions.model = this.assistantConfig.modelName;
