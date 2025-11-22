@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added
+### Changed
 
 - feat(webui): add custom policy generation to red team setup (#6181)
 - feat(webui): add strategy test generation to red team setup (#6005)
@@ -44,6 +44,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - chore(deps): bump langchain-core from 0.3.78 to 0.3.80 in /examples/redteam-langchain in the pip group (#6270)
 - chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.933.0 to 3.934.0 (#6254)
 - chore(deps): bump @anthropic-ai/sdk from 0.69.0 to 0.70.0 (#6255)
+
+### Documentation
+
+- docs(examples): add TypeScript configuration with dynamic schema generation example showing how to reuse Zod schemas from application code, including automatic schema conversion for different providers (OpenAI/Gemini) (#6171)
+- docs(config): add comprehensive TypeScript configuration documentation to modular-configs guide with examples of sharing code between application and tests (#6171)
 
 ## [0.119.8] - 2025-11-18
 

@@ -1,8 +1,8 @@
 ---
-displayed_sidebar: promptfoo
+sidebar_position: 999
 sidebar_label: Managing Large Configs
 title: Managing Large Promptfoo Configurations
-description: Organize complex promptfoo configurations using modular YAML structures, file imports, and environment-specific settings
+description: Learn how to structure, organize, and modularize large promptfoo configurations for better maintainability and reusability.
 keywords:
   [
     promptfoo configuration,
@@ -51,7 +51,7 @@ defaultTest: file://configs/default-test.yaml
   config:
     temperature: 0.7
     max_tokens: 1000
-- id: claude-sonnet
+- id: claude-3-sonnet
   provider: anthropic:claude-3-5-sonnet-20241022
   config:
     temperature: 0.7
@@ -123,7 +123,7 @@ env: file://configs/env-prod.yaml
     temperature: 0.1
     max_tokens: 500
     requestsPerMinute: 100
-- id: claude-sonnet-prod
+- id: claude-3-sonnet-prod
   provider: # ...
   config:
     temperature: 0.1
@@ -133,8 +133,8 @@ env: file://configs/env-prod.yaml
 
 ```yaml title="configs/env-prod.yaml"
 # Production environment variables
-OPENAI_API_KEY: '{{ env.OPENAI_API_KEY_PROD }}'
-ANTHROPIC_API_KEY: '{{ env.ANTHROPIC_API_KEY_PROD }}'
+OPENAI_API_KEY: ${OPENAI_API_KEY_PROD}
+ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY_PROD}
 LOG_LEVEL: info
 ```
 
@@ -232,6 +232,146 @@ module.exports = {
   tests,
 };
 ```
+
+## TypeScript Configuration
+
+For even more type safety and better integration with your application code, you can use TypeScript configuration files. This enables IDE autocompletion, compile-time checks, and the ability to share types and schemas with your application.
+
+### Basic TypeScript Configuration
+
+Create a `promptfooconfig.ts` file:
+
+```typescript title="promptfooconfig.ts"
+import type { UnifiedConfig } from 'promptfoo';
+
+const config: UnifiedConfig = {
+  description: 'My evaluation suite',
+  prompts: ['Tell me about {{topic}} in {{style}}'],
+  providers: ['openai:gpt-5-mini', 'anthropic:claude-sonnet-4-5-20250929'],
+  tests: [
+    {
+      vars: {
+        topic: 'quantum computing',
+        style: 'simple terms',
+      },
+      assert: [
+        {
+          type: 'contains',
+          value: 'quantum',
+        },
+      ],
+    },
+  ],
+};
+
+export default config;
+```
+
+### Running TypeScript Configs
+
+To run evaluations with TypeScript configs, you need a TypeScript loader. Install one of these options:
+
+```bash
+npm install tsx
+# or
+npm install @swc-node/register
+```
+
+Then run your evaluation:
+
+```bash
+# Using tsx
+NODE_OPTIONS="--import tsx" promptfoo eval -c promptfooconfig.ts
+
+# Using @swc-node/register
+NODE_OPTIONS='--import @swc-node/register/esm-register' promptfoo eval -c promptfooconfig.ts
+```
+
+### Sharing Code with Your Application
+
+TypeScript configs are particularly useful when you need to share types, schemas, or logic with your application:
+
+```typescript title="promptfooconfig.ts"
+import { zodResponseFormat } from 'openai/helpers/zod.mjs';
+import type { UnifiedConfig } from 'promptfoo';
+import { createConversationSchema } from './src/llm/conversation-schema.js';
+
+// Dynamically generate schema based on your application code
+const schema = createConversationSchema('english');
+const responseFormat = zodResponseFormat(schema, 'conversation_response');
+
+const config: UnifiedConfig = {
+  prompts: ['file://prompts/conversation.txt'],
+  providers: [
+    {
+      id: 'openai:gpt-5-mini',
+      config: {
+        response_format: responseFormat,
+      },
+    },
+    {
+      id: 'google:gemini-2.5-flash',
+      config: {
+        generationConfig: {
+          response_mime_type: 'application/json',
+          response_schema: cleanSchemaForGemini(responseFormat.json_schema.schema),
+        },
+      },
+    },
+  ],
+  tests: generateTestsFromSchema(schema),
+};
+
+// Helper function to adapt schemas for different providers
+function cleanSchemaForGemini(schema: any): any {
+  if (typeof schema !== 'object' || schema === null) return schema;
+
+  const cleaned = { ...schema };
+
+  // Remove properties that Gemini doesn't support
+  delete cleaned.additionalProperties;
+  delete cleaned.$schema;
+
+  // Recursively clean nested objects
+  if (cleaned.properties) {
+    cleaned.properties = Object.fromEntries(
+      Object.entries(cleaned.properties).map(([key, value]) => [key, cleanSchemaForGemini(value)]),
+    );
+  }
+
+  if (cleaned.items) {
+    cleaned.items = cleanSchemaForGemini(cleaned.items);
+  }
+
+  return cleaned;
+}
+
+// Generate tests based on your schema
+function generateTestsFromSchema(schema: any) {
+  // Implementation specific to your use case
+  return [
+    // Generated test cases
+  ];
+}
+
+export default config;
+```
+
+### Benefits of TypeScript Configs
+
+1. **Type Safety**: Get compile-time checks and IDE autocompletion for your configuration
+2. **Code Reuse**: Share schemas, types, and validation logic with your application
+3. **Dynamic Generation**: Generate tests programmatically based on your codebase
+4. **Single Source of Truth**: Avoid duplicating schemas between your app and tests
+5. **Refactoring Support**: Rename symbols and refactor with confidence
+6. **Provider Adaptation**: Automatically convert schemas for different providers (OpenAI, Gemini)
+
+This approach is especially valuable when:
+
+- Working with structured outputs or response schemas
+- Building complex evaluation suites that need to stay in sync with your application
+- You want to leverage existing TypeScript types and interfaces
+- You need to perform complex configuration logic that benefits from type checking
 
 ## Conditional Configuration Loading
 
