@@ -272,6 +272,7 @@ export async function runRedteamConversation({
       },
       filters,
       targetProvider,
+      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     const iterationStart = Date.now();

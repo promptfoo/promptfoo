@@ -717,6 +717,7 @@ export class CrescendoProvider implements ApiProvider {
       { ...vars, [this.config.injectVar]: attackPrompt },
       filters,
       provider,
+      [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     try {
