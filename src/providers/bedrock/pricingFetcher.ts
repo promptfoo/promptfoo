@@ -340,6 +340,49 @@ async function fetchBedrockPricing(
 }
 
 /**
+ * Fallback pricing for models not yet in AWS Pricing API.
+ * Prices from official Anthropic documentation as of November 2025.
+ * Patterns use hyphens to match Bedrock model ID format (e.g., claude-haiku-4-5).
+ * @see https://platform.claude.com/docs/en/about-claude/pricing
+ */
+const FALLBACK_PRICING: Record<string, BedrockModelPricing> = {
+  // Claude 4 models (Anthropic official pricing)
+  // Use hyphens to match Bedrock model IDs: claude-opus-4-1, claude-haiku-4-5, etc.
+  'claude-opus-4-1': { input: 0.000015, output: 0.000075 },
+  'claude-opus-4-20250514': { input: 0.000015, output: 0.000075 }, // Opus 4 (without .1)
+  'claude-sonnet-4-5': { input: 0.000003, output: 0.000015 },
+  'claude-sonnet-4-20250514': { input: 0.000003, output: 0.000015 }, // Sonnet 4 (without .5)
+  'claude-3-7-sonnet': { input: 0.000003, output: 0.000015 },
+  'claude-haiku-4-5': { input: 0.000001, output: 0.000005 },
+};
+
+/**
+ * Attempts to find fallback pricing for a model not in AWS Pricing API.
+ * Matches common model name patterns against known pricing.
+ */
+function getFallbackPricing(modelId: string): BedrockModelPricing | undefined {
+  // Normalize model ID: remove region prefix, version suffix
+  const normalized = modelId
+    .replace(/^(us|eu|apac|global|au|jp)\./, '')
+    .replace(/:\d+$/, '')
+    .toLowerCase();
+
+  // Try exact match patterns
+  for (const [pattern, pricing] of Object.entries(FALLBACK_PRICING)) {
+    if (normalized.includes(pattern)) {
+      logger.debug('[Bedrock Pricing]: Using fallback pricing', {
+        modelId,
+        pattern,
+        pricing,
+      });
+      return pricing;
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * Calculates cost using fetched pricing data.
  *
  * @param modelId - Bedrock model ID (e.g., 'anthropic.claude-3-5-sonnet-20241022-v2:0')
@@ -371,20 +414,30 @@ export function calculateCostWithFetchedPricing(
   }
 
   const modelName = mapBedrockModelIdToApiName(modelId);
-  const fetchedModelPricing = pricingData.models.get(modelName);
+  let modelPricing = pricingData.models.get(modelName);
 
-  if (!fetchedModelPricing) {
-    logger.debug('[Bedrock Pricing]: No pricing found for model', {
+  // If not found in API pricing, try fallback pricing
+  if (!modelPricing) {
+    modelPricing = getFallbackPricing(modelId);
+
+    if (!modelPricing) {
+      logger.debug('[Bedrock Pricing]: No pricing found (API or fallback)', {
+        modelId,
+        modelName,
+        region: pricingData.region,
+        availableModels: Array.from(pricingData.models.keys()),
+      });
+      return undefined;
+    }
+
+    logger.debug('[Bedrock Pricing]: Using fallback pricing (not in API)', {
       modelId,
-      modelName,
-      region: pricingData.region,
-      availableModels: Array.from(pricingData.models.keys()),
+      pricing: modelPricing,
     });
-    return undefined;
   }
 
-  const inputCostPerToken = fetchedModelPricing.input;
-  const outputCostPerToken = fetchedModelPricing.output;
+  const inputCostPerToken = modelPricing.input;
+  const outputCostPerToken = modelPricing.output;
 
   logger.debug('[Bedrock Pricing]: Using fetched pricing', {
     modelId,
