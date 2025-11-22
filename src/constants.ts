@@ -1,9 +1,7 @@
-import { packageJson } from './esm';
 import { getEnvInt, getEnvString } from './envars';
 
 export * from './providers/constants';
-
-export const VERSION = packageJson.version;
+export { VERSION } from './generated/constants';
 
 export const DEFAULT_QUERY_LIMIT = 100;
 

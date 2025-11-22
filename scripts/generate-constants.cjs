@@ -4,8 +4,13 @@ const path = require('path');
 // Get the PostHog key from environment
 const posthogKey = process.env.PROMPTFOO_POSTHOG_KEY || '';
 
+// Get the version from package.json
+const packageJson = require('../package.json');
+const version = packageJson.version;
+
 const constantsTemplate = `// This file is auto-generated during build. Do not edit manually.
 // Generated at: ${new Date().toISOString()}
+export const VERSION = '${version}';
 export const POSTHOG_KEY = '${posthogKey}';
 `;
 
