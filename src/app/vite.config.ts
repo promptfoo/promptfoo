@@ -84,6 +84,12 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
     globals: true,
+    // Mock CSS imports for MUI X v8
+    css: {
+      modules: {
+        classNameStrategy: 'non-scoped',
+      },
+    },
     // Suppress known MUI and React Testing Library warnings that don't indicate real problems
     onConsoleLog(log: string, type: 'stdout' | 'stderr'): false | undefined {
       if (type === 'stderr') {
