@@ -106,7 +106,9 @@ describe('OpenAICodexSDKProvider', () => {
 
       new OpenAICodexSDKProvider({ config: { model: 'unknown-model' } });
 
-      expect(warnSpy).toHaveBeenCalledWith('Using unknown model for OpenAI Codex SDK: unknown-model');
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Using unknown model for OpenAI Codex SDK: unknown-model',
+      );
 
       warnSpy.mockRestore();
     });
@@ -191,9 +193,7 @@ describe('OpenAICodexSDKProvider', () => {
         delete process.env.CODEX_API_KEY;
 
         const provider = new OpenAICodexSDKProvider();
-        await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          /OpenAI API key is not set/,
-        );
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(/OpenAI API key is not set/);
       });
     });
 
@@ -252,9 +252,7 @@ describe('OpenAICodexSDKProvider', () => {
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
 
-        await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          /is not a Git repository/,
-        );
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(/is not a Git repository/);
       });
 
       it('should bypass Git check when skip_git_repo_check is true', async () => {

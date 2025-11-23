@@ -4,7 +4,6 @@ import fs from 'fs';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -167,10 +166,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     this.apiKey = this.getApiKey();
     this.providerId = id ?? this.providerId;
 
-    if (
-      this.config.model &&
-      !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)
-    ) {
+    if (this.config.model && !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
     }
 
@@ -266,10 +262,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
   }
 
-  private async getOrCreateThread(
-    config: OpenAICodexSDKConfig,
-    cacheKey?: string,
-  ): Promise<any> {
+  private async getOrCreateThread(config: OpenAICodexSDKConfig, cacheKey?: string): Promise<any> {
     // Resume specific thread
     if (config.thread_id) {
       const cached = this.threads.get(config.thread_id);
