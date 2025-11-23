@@ -1,4 +1,11 @@
-"""User service with intentional bugs for testing."""
+"""User service with intentional bugs for testing.
+
+SECURITY NOTE: This file contains intentional security vulnerabilities for
+testing purposes. It is used to evaluate security scanning capabilities of
+agentic code analysis tools. Do not use in production.
+
+codeql[py/weak-cryptographic-algorithm]: Intentional vulnerability for testing
+"""
 
 import hashlib
 from typing import Dict, List, Optional
@@ -15,6 +22,7 @@ class UserService:
             return False
 
         # BUG: Using MD5 for password hashing (insecure)
+        # codeql[py/weak-cryptographic-algorithm]: Intentional vulnerability for testing
         password_hash = hashlib.md5(password.encode()).hexdigest()
 
         self.users[username] = {
@@ -30,6 +38,7 @@ class UserService:
             return None
 
         # BUG: Timing attack vulnerability - should use constant-time comparison
+        # codeql[py/weak-cryptographic-algorithm]: Intentional vulnerability for testing
         password_hash = hashlib.md5(password.encode()).hexdigest()
         if self.users[username]["password"] == password_hash:
             # BUG: Predictable session token

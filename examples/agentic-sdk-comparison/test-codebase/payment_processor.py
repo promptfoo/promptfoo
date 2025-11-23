@@ -1,4 +1,12 @@
-"""Payment processing module with security issues."""
+"""Payment processing module with security issues.
+
+SECURITY NOTE: This file contains intentional security vulnerabilities for
+testing purposes. It is used to evaluate security scanning capabilities of
+agentic code analysis tools. Do not use in production.
+
+codeql[py/clear-text-logging-sensitive-data]: Intentional vulnerability for testing
+codeql[py/weak-cryptographic-algorithm]: Intentional vulnerability for testing
+"""
 
 import json
 from decimal import Decimal
@@ -23,6 +31,7 @@ class PaymentProcessor:
         }
 
         # BUG: No sanitization before logging
+        # codeql[py/clear-text-logging-sensitive-data]: Intentional vulnerability for testing
         print(f"Processing payment: {json.dumps(transaction)}")
 
         self.transactions.append(transaction)
