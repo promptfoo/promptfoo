@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
@@ -12,10 +12,6 @@ import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
 
-export interface ProviderConfigEditorRef {
-  validate: () => boolean;
-}
-
 interface ProviderConfigEditorProps {
   provider: ProviderOptions;
   setProvider: (provider: ProviderOptions) => void;
@@ -24,10 +20,10 @@ interface ProviderConfigEditorProps {
   setError?: (error: string | null) => void;
   validateAll?: boolean;
   onValidate?: (isValid: boolean) => void;
+  onValidationRequest?: (validator: () => boolean) => void;
   providerType?: string;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
-  ref?: React.Ref<ProviderConfigEditorRef>;
 }
 
 function ProviderConfigEditor({
@@ -38,10 +34,10 @@ function ProviderConfigEditor({
   setError,
   validateAll = false,
   onValidate,
+  onValidationRequest,
   providerType,
   onTargetTested,
   onSessionTested,
-  ref,
 }: ProviderConfigEditorProps) {
   const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -143,7 +139,7 @@ function ProviderConfigEditor({
     setProvider(updatedTarget);
   };
 
-  const validate = (): boolean => {
+  const validate = useCallback((): boolean => {
     const errors: (string | React.ReactNode)[] = [];
 
     if (providerType === 'http') {
@@ -234,17 +230,29 @@ function ProviderConfigEditor({
       onValidate(!hasErrors);
     }
     return !hasErrors;
-  };
-
-  useImperativeHandle(ref, () => ({
-    validate,
-  }));
+  }, [
+    providerType,
+    provider,
+    bodyError,
+    urlError,
+    extensionErrors,
+    setError,
+    onValidate,
+    validateUrl,
+  ]);
 
   useEffect(() => {
     if (validateAll) {
       validate();
     }
-  }, [validateAll, provider, bodyError, urlError, extensionErrors]);
+  }, [validateAll, validate]);
+
+  // Expose the validate function to parent via callback
+  useEffect(() => {
+    if (onValidationRequest) {
+      onValidationRequest(validate);
+    }
+  }, [onValidationRequest, validate]);
 
   return (
     <Box>
