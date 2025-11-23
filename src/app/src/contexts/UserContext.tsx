@@ -17,7 +17,5 @@ export function UserProvider({ children }: { children: ReactNode }) {
     loadUserEmail();
   }, []);
 
-  return (
-    <UserContext.Provider value={{ email, setEmail, isLoading }}>{children}</UserContext.Provider>
-  );
+  return <UserContext value={{ email, setEmail, isLoading }}>{children}</UserContext>;
 }

@@ -84,5 +84,5 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
     return children;
   }
 
-  return <PostHogContext.Provider value={value}>{children}</PostHogContext.Provider>;
+  return <PostHogContext value={value}>{children}</PostHogContext>;
 };

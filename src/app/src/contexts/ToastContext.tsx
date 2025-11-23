@@ -29,7 +29,7 @@ export const ToastProvider = ({ children }: ToastProviderProps) => {
   }, []);
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext value={{ showToast }}>
       {children}
       <Snackbar
         open={open}
@@ -49,6 +49,6 @@ export const ToastProvider = ({ children }: ToastProviderProps) => {
           {message}
         </Alert>
       </Snackbar>
-    </ToastContext.Provider>
+    </ToastContext>
   );
 };
