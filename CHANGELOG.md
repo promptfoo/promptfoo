@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(providers): add OpenAI Codex SDK provider with thread persistence, structured output, and Git-aware operations
 - feat(webui): add custom policy generation to red team setup (#6181)
 - feat(webui): add strategy test generation to red team setup (#6005)
 - feat(webui): add visibility button for PFX passphrase field in red team target configuration (#6258)
