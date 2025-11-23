@@ -4,8 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
-import React from 'react';
+import type { EvaluateTable } from '@promptfoo/types';
 
 vi.mock('@app/utils/api');
 vi.mock('@app/hooks/useToast', () => ({
