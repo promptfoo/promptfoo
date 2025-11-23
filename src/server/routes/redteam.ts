@@ -336,6 +336,16 @@ redteamRouter.post(
     try {
       const { applicationDefinition, existingPolicies } = req.body;
 
+      // Check if OpenAI API key is available before attempting to generate policies
+      // This feature requires an OpenAI API key and has no remote generation fallback
+      if (!process.env.OPENAI_API_KEY) {
+        res.status(400).json({
+          error: 'OpenAI API key required',
+          details: 'Set the OPENAI_API_KEY environment variable to use custom policy generation',
+        });
+        return;
+      }
+
       const provider = new OpenAiChatCompletionProvider('gpt-5-mini-2025-08-07', {
         config: {
           response_format: {
@@ -367,11 +377,6 @@ redteamRouter.post(
           temperature: 0.7,
         },
       });
-
-      // Check whether the provider is authenticated
-      if (!provider.isAuthenticated) {
-        throw new Error('Set the OPENAI_API_KEY environment variable to use this feature');
-      }
 
       const systemPrompt = dedent`
       You are an expert at defining red teaming policies for AI applications.
