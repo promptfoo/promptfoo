@@ -1,0 +1,217 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Agentic SDK comparison with security audit and code generation'
+
+prompts:
+  # Test 1: Structured security audit output (Codex strength)
+  - label: security-audit-structured
+    raw: |
+      You are a security auditor. Analyze the codebase and identify ALL security vulnerabilities.
+
+      Return a JSON object with this exact schema:
+      {
+        "vulnerabilities": [
+          {
+            "file": "filename.py",
+            "line_range": "10-15",
+            "severity": "critical|high|medium|low",
+            "category": "authentication|cryptography|data-exposure|input-validation|other",
+            "issue": "Brief description",
+            "recommendation": "How to fix it"
+          }
+        ],
+        "risk_score": 0-100,
+        "summary": "Overall security assessment"
+      }
+
+  # Test 2: Multi-file codebase understanding (Claude Agent strength)
+  - label: codebase-analysis
+    raw: |
+      Analyze the codebase in the working directory and:
+
+      1. Map out the relationships between files
+      2. Identify the data flow from user creation through payment processing
+      3. List ALL security issues you find across the entire codebase
+      4. Prioritize them by severity
+
+      Be thorough and examine all files.
+
+  # Test 3: Generate secure refactored code (both)
+  - label: generate-secure-user-service
+    raw: |
+      Generate a secure, production-ready version of the UserService class that fixes all security issues.
+
+      Requirements:
+      - Use bcrypt or argon2 for password hashing
+      - Implement constant-time password comparison
+      - Use cryptographically secure session tokens (UUID or secrets.token_urlsafe)
+      - Never return password hashes
+      - Invalidate sessions on user deletion
+      - Add proper type hints
+      - Include docstrings
+
+      Output only the complete, working Python code.
+
+providers:
+  - id: openai:codex-sdk
+    label: codex-gpt-5.1
+    config:
+      model: gpt-5.1-codex
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+      skip_git_repo_check: true
+
+  - id: openai:codex-sdk
+    label: codex-gpt-4o
+    config:
+      model: gpt-4o
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+      skip_git_repo_check: true
+
+  - id: anthropic:claude-agent-sdk
+    label: claude-agent-sonnet
+    config:
+      model: sonnet
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+      # Read-only tools by default: Read, Grep, Glob, LS
+
+defaultTest:
+  options:
+    # Give agents time to analyze the codebase
+    timeout: 60000
+
+tests:
+  - description: Structured security audit with JSON schema
+    vars:
+      __expected_prompt: security-audit-structured
+    assert:
+      - type: is-json
+        metric: Valid JSON
+      - type: javascript
+        value: |
+          // Check for required schema fields
+          const parsed = JSON.parse(output);
+          const hasVulns = Array.isArray(parsed.vulnerabilities);
+          const hasRiskScore = typeof parsed.risk_score === 'number';
+          const hasSummary = typeof parsed.summary === 'string';
+
+          if (!hasVulns || !hasRiskScore || !hasSummary) {
+            return {
+              pass: false,
+              score: 0,
+              reason: `Missing required fields: ${!hasVulns ? 'vulnerabilities' : ''} ${!hasRiskScore ? 'risk_score' : ''} ${!hasSummary ? 'summary' : ''}`
+            };
+          }
+
+          // Count vulnerabilities found
+          const vulnCount = parsed.vulnerabilities.length;
+
+          // Check for key vulnerabilities
+          const foundMD5 = parsed.vulnerabilities.some(v =>
+            v.issue?.toLowerCase().includes('md5') ||
+            v.issue?.toLowerCase().includes('hash')
+          );
+          const foundFloat = parsed.vulnerabilities.some(v =>
+            v.issue?.toLowerCase().includes('float') ||
+            v.issue?.toLowerCase().includes('decimal')
+          );
+          const foundCVV = parsed.vulnerabilities.some(v =>
+            v.issue?.toLowerCase().includes('cvv') ||
+            v.issue?.toLowerCase().includes('pci')
+          );
+
+          const score = (
+            (vulnCount >= 5 ? 0.3 : vulnCount * 0.06) +
+            (foundMD5 ? 0.25 : 0) +
+            (foundFloat ? 0.25 : 0) +
+            (foundCVV ? 0.2 : 0)
+          );
+
+          return {
+            pass: score >= 0.7,
+            score: score,
+            reason: `Found ${vulnCount} vulnerabilities (MD5: ${foundMD5}, Float: ${foundFloat}, CVV: ${foundCVV})`
+          };
+        metric: Security Coverage
+
+  - description: Multi-file codebase understanding and analysis
+    vars:
+      __expected_prompt: codebase-analysis
+    assert:
+      - type: llm-rubric
+        value: |
+          The response should:
+          1. Demonstrate understanding of BOTH files (user_service.py and payment_processor.py)
+          2. Identify at least 5 different security issues across the codebase
+          3. Mention specific line numbers or function names
+          4. Show understanding of how the files might interact in a real system
+        metric: Codebase Understanding
+      - type: javascript
+        value: |
+          const lower = output.toLowerCase();
+
+          // Check for mentions of both files
+          const mentionsUserService = lower.includes('user') || lower.includes('userservice');
+          const mentionsPayment = lower.includes('payment') || lower.includes('paymentprocessor');
+
+          // Check for key security issues
+          const mentionsMD5 = lower.includes('md5');
+          const mentionsFloat = lower.includes('float') || lower.includes('decimal');
+          const mentionsCVV = lower.includes('cvv');
+          const mentionsSession = lower.includes('session');
+          const mentionsTiming = lower.includes('timing');
+
+          const issuesFound = [mentionsMD5, mentionsFloat, mentionsCVV, mentionsSession, mentionsTiming].filter(Boolean).length;
+
+          const score = (
+            (mentionsUserService ? 0.2 : 0) +
+            (mentionsPayment ? 0.2 : 0) +
+            (issuesFound * 0.12)
+          );
+
+          return {
+            pass: score >= 0.7,
+            score: score,
+            reason: `Files: ${mentionsUserService && mentionsPayment ? 'both' : 'partial'}, Issues: ${issuesFound}/5`
+          };
+        metric: Issue Detection
+
+  - description: Generate secure refactored code
+    vars:
+      __expected_prompt: generate-secure-user-service
+    assert:
+      - type: python
+        value: |
+          import re
+
+          # Check for security improvements
+          has_bcrypt_or_argon2 = bool(re.search(r'(bcrypt|argon2)', output.lower()))
+          has_secrets_or_uuid = bool(re.search(r'(secrets\.|uuid)', output.lower()))
+          has_type_hints = bool(re.search(r'def \w+\([^)]*:\s*\w+', output))
+          has_docstrings = '"""' in output or "'''" in output
+
+          # Check that MD5 is removed
+          no_md5 = 'md5' not in output.lower()
+
+          # Check for class definition
+          has_class = 'class UserService' in output
+
+          score = (
+            (has_bcrypt_or_argon2 * 0.3) +
+            (has_secrets_or_uuid * 0.2) +
+            (has_type_hints * 0.15) +
+            (has_docstrings * 0.1) +
+            (no_md5 * 0.15) +
+            (has_class * 0.1)
+          )
+
+          assert score >= 0.7, f"Security improvements insufficient (score: {score:.2f})"
+        metric: Code Security
+      - type: llm-rubric
+        value: |
+          The generated code should:
+          1. Replace MD5 with bcrypt or argon2
+          2. Use cryptographically secure random for session tokens
+          3. Not expose password hashes in return values
+          4. Include proper type hints
+          5. Be syntactically valid Python
+          6. Include implementation of session invalidation
+        metric: Code Quality
