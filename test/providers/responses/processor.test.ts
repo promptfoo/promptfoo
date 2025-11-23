@@ -1,5 +1,4 @@
 import { ResponsesProcessor } from '../../../src/providers/responses/processor';
-import { FunctionCallbackHandler } from '../../../src/providers/functionCallbackUtils';
 
 // Mock dependencies
 jest.mock('../../../src/providers/functionCallbackUtils');

@@ -15,7 +15,7 @@ import type {
   Prompt,
   RedteamFileConfig,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';

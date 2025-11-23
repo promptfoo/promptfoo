@@ -10,7 +10,7 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types';
+import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,
