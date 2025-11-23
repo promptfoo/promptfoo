@@ -25,6 +25,10 @@ import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { preloadCriticalPages } from '@app/utils/preload';
+
+// Note: Component preloading is handled in Navigation component via hover events
+// These static imports ensure pages are included in the build
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
@@ -86,6 +90,11 @@ const router = createBrowserRouter(
 const queryClient = new QueryClient();
 
 function App() {
+  // Start preloading critical pages immediately when app mounts
+  useEffect(() => {
+    preloadCriticalPages().catch(console.warn);
+  }, []);
+
   return (
     <ToastProvider>
       <QueryClientProvider client={queryClient}>

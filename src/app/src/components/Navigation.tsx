@@ -20,6 +20,60 @@ import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
+
+// Preload functions for navigation hover
+const preloadPage = (path: string) => {
+  const getChunkName = (path: string) => {
+    switch (path) {
+      case '/datasets':
+        return 'page-datasets';
+      case '/eval':
+        return 'page-eval';
+      case '/evals':
+        return 'page-evals';
+      case '/eval-creator':
+      case '/setup':
+        return 'page-eval-creator';
+      case '/history':
+        return 'page-history';
+      case '/prompts':
+        return 'page-prompts';
+      case '/model-audit':
+        return 'page-model-audit';
+      case '/redteam/setup':
+      case '/reports':
+        return 'page-redteam';
+      default:
+        return null;
+    }
+  };
+
+  const chunkName = getChunkName(path);
+
+  switch (path) {
+    case '/datasets':
+      return import('../pages/datasets/page');
+    case '/eval':
+      return import('../pages/eval/page');
+    case '/evals':
+      return import('../pages/evals/page');
+    case '/eval-creator':
+    case '/setup':
+      return import('../pages/eval-creator/page');
+    case '/history':
+      return import('../pages/history/page');
+    case '/prompts':
+      return import('../pages/prompts/page');
+    case '/model-audit':
+      return import('../pages/model-audit/page');
+    case '/redteam/setup':
+      return import('../pages/redteam/setup/page');
+    case '/reports':
+      return import('../pages/redteam/report/page');
+    default:
+      return Promise.resolve();
+  }
+};
 import type { ButtonProps } from '@mui/material/Button';
 import type { LinkProps } from 'react-router-dom';
 import './Navigation.css';
@@ -68,8 +122,18 @@ function NavLink({ href, label }: { href: string; label: string }) {
   const location = useLocation();
   const isActive = location.pathname.startsWith(href);
 
+  const handleMouseEnter = () => {
+    // Preload the page chunk on hover
+    preloadPage(href).catch((err) => console.warn(`Failed to preload ${href}:`, err));
+  };
+
   return (
-    <NavButton component={RouterLink} to={href} className={isActive ? 'active' : ''}>
+    <NavButton
+      component={RouterLink}
+      to={href}
+      className={isActive ? 'active' : ''}
+      onMouseEnter={handleMouseEnter}
+    >
       {label}
     </NavButton>
   );
@@ -154,11 +218,13 @@ function CreateDropdown({
       href: '/setup',
       label: 'Eval',
       description: 'Create and configure evaluation tests',
+      preload: () => import('../pages/eval-creator/page'),
     },
     {
       href: '/redteam/setup',
       label: 'Red Team',
       description: 'Set up security testing scenarios',
+      preload: () => import('../pages/redteam/setup/page'),
     },
   ];
 
