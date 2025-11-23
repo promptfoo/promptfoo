@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import { useEffect, useImperativeHandle, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
@@ -27,24 +27,22 @@ interface ProviderConfigEditorProps {
   providerType?: string;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
+  ref?: React.Ref<ProviderConfigEditorRef>;
 }
 
-const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigEditorProps>(
-  (
-    {
-      provider,
-      setProvider,
-      extensions,
-      onExtensionsChange,
-      setError,
-      validateAll = false,
-      onValidate,
-      providerType,
-      onTargetTested,
-      onSessionTested,
-    },
-    ref,
-  ) => {
+function ProviderConfigEditor({
+  provider,
+  setProvider,
+  extensions,
+  onExtensionsChange,
+  setError,
+  validateAll = false,
+  onValidate,
+  providerType,
+  onTargetTested,
+  onSessionTested,
+  ref,
+}: ProviderConfigEditorProps) {
     const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
     const [urlError, setUrlError] = useState<string | null>(null);
     const [rawConfigJson, setRawConfigJson] = useState<string>(
@@ -387,9 +385,6 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         </Box>
       </Box>
     );
-  },
-);
-
-ProviderConfigEditor.displayName = 'ProviderConfigEditor';
+}
 
 export default ProviderConfigEditor;
