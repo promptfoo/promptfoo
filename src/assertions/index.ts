@@ -148,7 +148,7 @@ const ASSERTION_HANDLERS: Record<
   'llm-rubric': handleLlmRubric,
   meteor: async (params: AssertionParams) => {
     try {
-      const { handleMeteorAssertion } = await import('./meteor');
+      const { handleMeteorAssertion } = await import('./meteor.js');
       return handleMeteorAssertion(params);
     } catch (error) {
       if (
@@ -255,7 +255,7 @@ export async function runAssertion({
   // Add trace data if traceId is available
   if (traceId) {
     try {
-      const { getTraceStore } = await import('../tracing/store');
+      const { getTraceStore } = await import('../tracing/store.js');
       const traceStore = getTraceStore();
       const traceData = await traceStore.getTrace(traceId);
       if (traceData) {
@@ -308,7 +308,7 @@ export async function runAssertion({
         }
       } else if (filePath.endsWith('.rb')) {
         try {
-          const { runRuby } = await import('../ruby/rubyUtils');
+          const { runRuby } = await import('../ruby/rubyUtils.js');
           const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
             output,
             context,

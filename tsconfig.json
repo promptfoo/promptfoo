@@ -3,9 +3,9 @@
     "declaration": true,
     "declarationMap": true,
     "esModuleInterop": true,
-    "target": "es2020",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "outDir": "dist",
     "skipLibCheck": true,
     "sourceMap": true,
@@ -31,6 +31,7 @@
     "dist",
     "src/workers/**/*",
     "src/app/**/*",
+    "test/**/*",
     "test/app/**/*",
     "test/site/"
   ]

@@ -14,8 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- feat: migrate to ESM (ECMAScript Modules) with dual ESM/CJS exports (#5594)
 - chore(webui): replace emoji icons with Material-UI IconButton components in evaluation results page — action icons now display circular hover effects, color-coded active states (green for pass, red for fail), always-visible icons for better discoverability, and full accessibility support with aria-pressed and aria-label attributes
 - chore(lint): enforce explicit /index imports in directory paths to prepare for ESM migration (#6263)
+- chore(build): remove TypeScript declaration generation step - tsup handles compilation, removed redundant tsc step that required .js extensions (4e039c32b)
 - chore(webui): improve UI treatment for domain-specific risks in red team setup (#6269)
 - chore(deps): re-generate lock file (#6249)
 - ci(github): add code scan action (#6261)
@@ -23,6 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(tests): use \_\_dirname in CJS context for database migrations to fix Jest test failures (#5594)
+- fix(tests): update checkNodeVersion test to work without mocking generated constants file (#5594)
 - fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/)
 - fix(code-scan): prevent "start line must precede end line" GitHub API error by ensuring start_line is only set when it differs from line - fixes single-line comment highlighting in PR reviews (#6314)
 - fix(auth): allow CI environments to authenticate with Promptfoo Cloud using API keys — unblocks `jailbreak:meta` strategy in GitHub Actions by recognizing API key auth regardless of CI status (#6273)

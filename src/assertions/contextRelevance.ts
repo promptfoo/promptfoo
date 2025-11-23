@@ -40,7 +40,7 @@ export const handleContextRelevance = async ({
   const result = await matchesContextRelevance(
     test.vars.query,
     context,
-    assertion.threshold ?? 0,
+    (assertion.threshold as number) ?? 0,
     test.options,
     providerCallContext,
   );

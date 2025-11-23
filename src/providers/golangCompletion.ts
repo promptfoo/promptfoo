@@ -3,6 +3,19 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import util from 'util';
+import { getDirectory } from '../esm';
+
+// Global variable defined by build system
+declare const BUILD_FORMAT: string | undefined;
+
+// Lazy initialization to avoid module-level side effects in Jest
+let currentDir: string | undefined;
+function getCurrentDir(): string {
+  if (!currentDir) {
+    currentDir = getDirectory();
+  }
+  return currentDir;
+}
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
@@ -128,7 +141,7 @@ export class GolangProvider implements ApiProvider {
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(__dirname, '..', 'golang', 'wrapper.go'), tempWrapperPath);
+        fs.copyFileSync(path.join(getCurrentDir(), '../golang/wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);

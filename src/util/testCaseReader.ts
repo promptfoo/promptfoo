@@ -381,7 +381,7 @@ export async function loadTestsFromGlob(
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      const rawContent = require(testFile);
+      const rawContent = JSON.parse(fs.readFileSync(testFile, 'utf8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {

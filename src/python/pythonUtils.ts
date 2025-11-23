@@ -1,6 +1,16 @@
 ﻿import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { getDirectory } from '../esm';
+
+// Lazy initialization to avoid module-level side effects in Jest
+let currentDir: string | undefined;
+function getCurrentDir(): string {
+  if (!currentDir) {
+    currentDir = getDirectory();
+  }
+  return currentDir;
+}
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
@@ -297,7 +307,7 @@ export async function runPython(
     env: process.env,
     mode: 'binary',
     pythonPath,
-    scriptPath: __dirname,
+    scriptPath: getCurrentDir(),
     // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
     ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
   };
