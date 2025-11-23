@@ -47,12 +47,14 @@ export type BedrockModelFamily =
   | 'llama3_3'
   | 'llama4'
   | 'mistral'
+  | 'mistral_pixtral'
   | 'cohere'
   | 'ai21'
   | 'titan'
   | 'deepseek'
   | 'openai'
-  | 'qwen';
+  | 'qwen'
+  | 'writer';
 
 interface BedrockOptions {
   accessKeyId?: string;
@@ -1540,6 +1542,62 @@ ${prompt}
       };
     },
   },
+  MISTRAL_PIXTRAL: {
+    params: (
+      config: BedrockMistralGenerationOptions,
+      prompt: string,
+      _stop?: string[],
+      _modelName?: string,
+    ) => {
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+      const params: any = {
+        messages,
+      };
+
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        getEnvInt('MISTRAL_MAX_TOKENS'),
+        1024,
+      );
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('MISTRAL_TEMPERATURE'),
+        0,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
+
+      return params;
+    },
+    output: (_config: BedrockOptions, responseJson: any) => {
+      if (responseJson.error) {
+        throw new Error(`Mistral Pixtral API error: ${responseJson.error}`);
+      }
+      return responseJson.choices?.[0]?.message?.content;
+    },
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
+      if (responseJson?.usage) {
+        return {
+          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
+          completion: coerceStrToNum(responseJson.usage.completion_tokens),
+          total: coerceStrToNum(responseJson.usage.total_tokens),
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
+  },
 };
 
 export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
@@ -1672,7 +1730,7 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
     if (!inferenceModelType) {
       throw new Error(
         'Inference profile requires inferenceModelType to be specified in config. ' +
-          'Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen',
+          'Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, mistral_pixtral, cohere, ai21, titan, deepseek, openai, qwen, writer',
       );
     }
 
@@ -1702,6 +1760,8 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
         return BEDROCK_MODEL.LLAMA4;
       case 'mistral':
         return BEDROCK_MODEL.MISTRAL;
+      case 'mistral_pixtral':
+        return BEDROCK_MODEL.MISTRAL_PIXTRAL;
       case 'cohere':
         return BEDROCK_MODEL.COHERE_COMMAND_R;
       case 'ai21':
@@ -1714,6 +1774,8 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
         return BEDROCK_MODEL.OPENAI;
       case 'qwen':
         return BEDROCK_MODEL.QWEN;
+      case 'writer':
+        return BEDROCK_MODEL.OPENAI;
       default:
         throw new Error(`Unknown inference model type: ${inferenceModelType}`);
     }
@@ -1757,6 +1819,9 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
   if (modelName.startsWith('cohere.command')) {
     return BEDROCK_MODEL.COHERE_COMMAND;
   }
+  if (modelName.includes('mistral.pixtral')) {
+    return BEDROCK_MODEL.MISTRAL_PIXTRAL;
+  }
   if (modelName.startsWith('mistral.')) {
     return BEDROCK_MODEL.MISTRAL;
   }
@@ -1765,6 +1830,9 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
   }
   if (modelName.startsWith('qwen.')) {
     return BEDROCK_MODEL.QWEN;
+  }
+  if (modelName.startsWith('writer.')) {
+    return BEDROCK_MODEL.OPENAI;
   }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }

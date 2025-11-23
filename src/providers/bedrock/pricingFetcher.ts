@@ -99,6 +99,16 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     'qwen.qwen3-coder-30b-a3b-v1': 'Qwen3 Coder 30B',
     'qwen.qwen3-235b-a22b-2507-v1': 'Qwen3 235B',
     'qwen.qwen3-32b-v1': 'Qwen3 32B',
+
+    // Writer AI models
+    'writer.palmyra-x4-v1': 'Palmyra X4',
+    'writer.palmyra-x5-v1': 'Palmyra X5',
+
+    // Mistral Pixtral models
+    'mistral.pixtral-large-2502-v1': 'Pixtral Large',
+
+    // DeepSeek v3
+    'deepseek.v3-v1': 'DeepSeek V3',
   };
 
   return mappings[baseId] || baseId;
@@ -355,6 +365,9 @@ async function fetchBedrockPricing(
  * - AI21 Jamba: Azure pricing and Artificial Analysis
  * - Qwen: Estimated based on model size and market rates
  * - Llama: AWS Bedrock pricing patterns
+ * - Writer AI: Estimated based on model capabilities
+ * - Mistral Pixtral: Estimated based on Mistral Large pricing
+ * - DeepSeek v3: Estimated based on model size and capabilities
  */
 const FALLBACK_PRICING: Record<string, BedrockModelPricing> = {
   // ===== Claude Models =====
@@ -385,6 +398,20 @@ const FALLBACK_PRICING: Record<string, BedrockModelPricing> = {
   // ===== Llama Models =====
   // Llama 3.2 3B (between 1B and 11B pricing)
   'llama3-2-3b': { input: 0.00000015, output: 0.00000015 }, // $0.15 per MTok (estimate)
+
+  // ===== Writer AI Models =====
+  // Estimated based on model capabilities and Writer API pricing
+  'palmyra-x4': { input: 0.000001, output: 0.000003 }, // ~$1/$3 per MTok (estimate)
+  'palmyra-x5': { input: 0.000002, output: 0.000006 }, // ~$2/$6 per MTok (estimate)
+
+  // ===== Mistral Pixtral Models =====
+  // Multimodal model pricing (estimated based on Mistral Large pricing)
+  'pixtral-large': { input: 0.000003, output: 0.000009 }, // ~$3/$9 per MTok (estimate)
+
+  // ===== DeepSeek Models =====
+  // DeepSeek v3 (estimated based on model size and capabilities)
+  'deepseek-v3': { input: 0.0000006, output: 0.000002 }, // ~$0.6/$2 per MTok (estimate)
+  'deepseek.v3': { input: 0.0000006, output: 0.000002 }, // Alternative pattern
 };
 
 /**

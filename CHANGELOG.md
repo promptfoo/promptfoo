@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(providers): add support for Writer AI Palmyra X4 and X5 models on AWS Bedrock
+- feat(providers): add support for Mistral Pixtral Large multimodal model on AWS Bedrock with image input capabilities
+- feat(providers): add support for DeepSeek v3 model on AWS Bedrock
 - feat(providers): add automatic cost tracking for AWS Bedrock provider with AWS Pricing API integration, regional caching, and static fallback pricing for 80+ models including Nova, Claude, Llama, Mistral, and more (#6271)
 - feat(webui): add custom policy generation to red team setup (#6181)
 - feat(webui): add strategy test generation to red team setup (#6005)

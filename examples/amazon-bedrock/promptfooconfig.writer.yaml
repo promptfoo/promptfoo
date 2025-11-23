@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Writer Palmyra Models via AWS Bedrock'
+
+prompts:
+  - |
+    You are a helpful AI assistant. Answer the following question concisely and accurately.
+
+    Question: {{question}}
+
+providers:
+  - id: bedrock:writer.palmyra-x4-v1:0
+    label: Writer Palmyra X4
+    config:
+      region: us-west-2
+      max_tokens: 1024
+      temperature: 0.7
+  - id: bedrock:writer.palmyra-x5-v1:0
+    label: Writer Palmyra X5
+    config:
+      region: us-west-2
+      max_tokens: 1024
+      temperature: 0.7
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris
+  - vars:
+      question: Explain the concept of machine learning in simple terms.
+    assert:
+      - type: contains-all
+        value: ['learn', 'data', 'algorithm']
+  - vars:
+      question: 'Solve this step by step: If a train travels 120 miles in 2 hours, what is its average speed?'
+    assert:
+      - type: contains
+        value: '60'
+      - type: contains-any
+        value: ['mph', 'miles per hour']
+      - type: llm-rubric
+        value: 'Response should show step-by-step calculation and arrive at 60 mph'
