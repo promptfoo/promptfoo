@@ -1,6 +1,7 @@
 import fs from 'fs';
 
 import { clearCache, disableCache, enableCache } from '../../src/cache';
+import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 
@@ -18,18 +19,26 @@ const mockThread = {
   runStreamed: mockRunStreamed,
 };
 
-// Mock Codex class - we'll inject this via jest.mock later
+// Mock Codex class
 const MockCodex = jest.fn().mockImplementation(() => ({
   startThread: mockStartThread.mockReturnValue(mockThread),
   resumeThread: mockResumeThread.mockReturnValue(mockThread),
 }));
 
-// Mock the SDK at runtime
-jest.mock('@openai/codex-sdk', () => ({
+// Mock SDK module export
+const mockCodexSDK = {
   __esModule: true,
   Codex: MockCodex,
   Thread: jest.fn(),
-}), { virtual: true });
+};
+
+// Mock the ESM loader to return our mock SDK
+jest.mock('../../src/esm', () => ({
+  importModule: jest.fn(),
+}));
+
+// Mock the SDK package (for type safety)
+jest.mock('@openai/codex-sdk', () => mockCodexSDK, { virtual: true });
 
 // Helper to create mock response matching real SDK format
 const createMockResponse = (
@@ -50,6 +59,7 @@ const createMockResponse = (
 describe('OpenAICodexSDKProvider', () => {
   let statSyncSpy: jest.SpyInstance;
   let existsSyncSpy: jest.SpyInstance;
+  const mockImportModule = jest.mocked(importModule);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -57,6 +67,9 @@ describe('OpenAICodexSDKProvider', () => {
     // Reset mock implementations
     mockStartThread.mockReturnValue(mockThread);
     mockResumeThread.mockReturnValue(mockThread);
+
+    // Mock importModule to return our mock SDK
+    mockImportModule.mockResolvedValue(mockCodexSDK);
 
     // Default mocks
     statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({
@@ -319,6 +332,27 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockStartThread).not.toHaveBeenCalled();
       });
 
+      it('should reuse cached thread when resuming same thread_id', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            thread_id: 'existing-thread-123',
+            persist_threads: true,
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        // First call should resume thread
+        await provider.callApi('Test prompt 1');
+        expect(mockResumeThread).toHaveBeenCalledTimes(1);
+
+        // Second call should use cached thread (not resume again)
+        await provider.callApi('Test prompt 2');
+        expect(mockResumeThread).toHaveBeenCalledTimes(1); // Still 1
+        expect(mockRun).toHaveBeenCalledTimes(2); // But ran twice
+      });
+
       it('should enforce thread pool size limits', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -572,6 +606,114 @@ describe('OpenAICodexSDKProvider', () => {
           codexPathOverride: '/custom/path/to/codex',
         });
       });
+    });
+
+    describe('model configuration', () => {
+      it('should pass model to startThread', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'gpt-4o',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockStartThread).toHaveBeenCalledWith({
+          workingDirectory: undefined,
+          skipGitRepoCheck: false,
+          model: 'gpt-4o',
+        });
+      });
+
+      it('should not include model in startThread if not specified', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockStartThread).toHaveBeenCalledWith({
+          workingDirectory: undefined,
+          skipGitRepoCheck: false,
+        });
+      });
+    });
+
+    describe('API key priority', () => {
+      beforeEach(() => {
+        delete process.env.OPENAI_API_KEY;
+        delete process.env.CODEX_API_KEY;
+      });
+
+      it('should prioritize config apiKey over env vars', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        process.env.OPENAI_API_KEY = 'env-key';
+        const provider = new OpenAICodexSDKProvider({
+          config: { apiKey: 'config-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(MockCodex).toHaveBeenCalledWith({
+          env: expect.objectContaining({
+            OPENAI_API_KEY: 'config-key',
+            CODEX_API_KEY: 'config-key',
+          }),
+        });
+      });
+
+      it('should use CODEX_API_KEY from env if available', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { CODEX_API_KEY: 'codex-env-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(MockCodex).toHaveBeenCalledWith({
+          env: expect.objectContaining({
+            OPENAI_API_KEY: 'codex-env-key',
+            CODEX_API_KEY: 'codex-env-key',
+          }),
+        });
+      });
+    });
+  });
+
+  describe('toString', () => {
+    it('should return provider string representation', () => {
+      const provider = new OpenAICodexSDKProvider();
+      expect(provider.toString()).toBe('[OpenAI Codex SDK Provider]');
+    });
+  });
+
+  describe('cleanup', () => {
+    it('should clear threads map', async () => {
+      mockRun.mockResolvedValue(createMockResponse('Response'));
+
+      const provider = new OpenAICodexSDKProvider({
+        config: { persist_threads: true },
+        env: { OPENAI_API_KEY: 'test-api-key' },
+      });
+
+      // Create a persisted thread
+      await provider.callApi('Test prompt');
+
+      // Verify thread was persisted
+      expect((provider as any).threads.size).toBe(1);
+
+      // Cleanup
+      await provider.cleanup();
+
+      // Verify threads cleared
+      expect((provider as any).threads.size).toBe(0);
     });
   });
 });
