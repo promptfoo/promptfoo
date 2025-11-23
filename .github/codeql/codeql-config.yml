@@ -1,4 +1,0 @@
-name: "CodeQL config"
-
-paths-ignore:
-  - examples/agentic-sdk-comparison/test-codebase/**
