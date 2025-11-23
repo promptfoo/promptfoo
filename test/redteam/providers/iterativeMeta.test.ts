@@ -308,4 +308,179 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(storedResult.assertion).toBeUndefined();
     });
   });
+
+  describe('Privacy protection - excludeTargetOutputFromAgenticAttackGeneration', () => {
+    it('should NOT send target response to cloud when privacy is enabled', async () => {
+      const sensitiveResponse = 'SENSITIVE: Credit Card 4111-1111-1111-1111, SSN 123-45-6789';
+      const cloudRequests: any[] = [];
+      const targetResponses = [sensitiveResponse, 'Target defended'];
+      let targetCallCount = 0;
+
+      // Override mockAgentProvider to capture requests
+      mockAgentProvider.callApi = jest.fn().mockImplementation(async (input: any) => {
+        cloudRequests.push(JSON.parse(input as string));
+        return {
+          output: { result: 'Next attack' },
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        };
+      }) as any;
+
+      // Mock the targetProvider.callApi directly (not mockGetTargetResponse)
+      mockTargetProvider.callApi = jest
+        .fn<() => Promise<ProviderResponse>>()
+        .mockImplementation(async () => {
+          const response = { output: targetResponses[targetCallCount] || 'Default' };
+          targetCallCount++;
+          return response;
+        }) as any;
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 2,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+        excludeTargetOutputFromAgenticAttackGeneration: true, // PRIVACY ON
+      });
+
+      // Should have called cloud agent twice
+      expect(cloudRequests.length).toBe(2);
+
+      // Check the second iteration (which has lastAttempt)
+      const secondRequest = cloudRequests[1];
+      expect(secondRequest.lastAttempt).toBeDefined();
+
+      // The sensitive response should NOT be in the cloud request
+      const allCloudData = JSON.stringify(cloudRequests);
+      expect(allCloudData).not.toContain('4111-1111-1111-1111');
+      expect(allCloudData).not.toContain('123-45-6789');
+
+      // Verify privacy placeholder is used
+      expect(secondRequest.lastAttempt.response).toBe('[Hidden for privacy]');
+
+      // But length should still be included (from actual response length)
+      expect(secondRequest.lastAttempt.responseLength).toBe(sensitiveResponse.length);
+
+      expect(result.metadata.finalIteration).toBe(2);
+    });
+
+    it('should send actual target response when privacy is disabled', async () => {
+      const targetResponse = 'This is the actual response that should be visible';
+      const cloudRequests: any[] = [];
+      const targetResponses = [targetResponse, 'Target defended'];
+      let targetCallCount = 0;
+
+      mockAgentProvider.callApi = jest.fn().mockImplementation(async (input: any) => {
+        cloudRequests.push(JSON.parse(input as string));
+        return {
+          output: { result: 'Next attack' },
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        };
+      }) as any;
+
+      // Mock the targetProvider.callApi directly
+      mockTargetProvider.callApi = jest
+        .fn<() => Promise<ProviderResponse>>()
+        .mockImplementation(async () => {
+          const response = { output: targetResponses[targetCallCount] || 'Default' };
+          targetCallCount++;
+          return response;
+        }) as any;
+
+      await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 2,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+        excludeTargetOutputFromAgenticAttackGeneration: false, // PRIVACY OFF
+      });
+
+      // Check the second iteration
+      const secondRequest = cloudRequests[1];
+      expect(secondRequest.lastAttempt).toBeDefined();
+
+      // The actual response SHOULD be in the cloud request
+      expect(secondRequest.lastAttempt.response).toBe(targetResponse);
+
+      // Verify privacy placeholder was NOT used
+      expect(secondRequest.lastAttempt.response).not.toBe('[Hidden for privacy]');
+    });
+
+    it('should hide sensitive data across multiple iterations', async () => {
+      const sensitiveResponses = [
+        'Iteration 1: API Key abc123xyz',
+        'Iteration 2: Password hunter2',
+        'Iteration 3: Database mongodb://user:pass@host',
+      ];
+      const cloudRequests: any[] = [];
+      let targetCallCount = 0;
+
+      mockAgentProvider.callApi = jest.fn().mockImplementation(async (input: any) => {
+        cloudRequests.push(JSON.parse(input as string));
+        return {
+          output: { result: 'Attack' },
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        };
+      }) as any;
+
+      // Mock the targetProvider.callApi directly (not mockGetTargetResponse)
+      mockTargetProvider.callApi = jest
+        .fn<() => Promise<ProviderResponse>>()
+        .mockImplementation(async () => {
+          const response = { output: sensitiveResponses[targetCallCount] || 'Default' };
+          targetCallCount++;
+          return response;
+        }) as any;
+
+      await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 3,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+        excludeTargetOutputFromAgenticAttackGeneration: true,
+      });
+
+      // Check all cloud requests
+      const allCloudData = JSON.stringify(cloudRequests);
+
+      // NONE of the sensitive data should have leaked
+      expect(allCloudData).not.toContain('abc123xyz');
+      expect(allCloudData).not.toContain('hunter2');
+      expect(allCloudData).not.toContain('mongodb://');
+      expect(allCloudData).not.toContain('API Key');
+      expect(allCloudData).not.toContain('Password');
+    });
+  });
 });
