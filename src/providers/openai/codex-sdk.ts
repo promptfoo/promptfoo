@@ -4,18 +4,18 @@ import fs from 'fs';
 import path from 'path';
 
 import dedent from 'dedent';
-import cliState from '../cliState';
-import { getEnvString } from '../envars';
-import { importModule } from '../esm';
-import logger from '../logger';
+import cliState from '../../cliState';
+import { getEnvString } from '../../envars';
+import { importModule } from '../../esm';
+import logger from '../../logger';
 
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-} from '../types/index';
-import type { EnvOverrides } from '../types/env';
+} from '../../types/index';
+import type { EnvOverrides } from '../../types/env';
 
 /**
  * OpenAI Codex SDK Provider
@@ -103,16 +103,22 @@ export interface OpenAICodexSDKConfig {
 
 /**
  * Helper to load the OpenAI Codex SDK ESM module
- * Uses the same pattern as other providers for resolving npm packages
+ * Uses importModule utility which handles ESM loading in CommonJS environments
  */
 async function loadCodexSDK(): Promise<any> {
   try {
+    // Resolve the package path, then use importModule to load it
+    // The SDK is ESM-only, so we need the importModule utility which uses dynamic-import.cjs
     const basePath =
       cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
     const resolveFrom = path.join(basePath, 'package.json');
     const require = createRequire(resolveFrom);
-    const codexPath = require.resolve('@openai/codex-sdk');
-    return importModule(codexPath);
+
+    // The package only exports ESM, so we construct the direct path
+    // The SDK is installed in node_modules/@openai/codex-sdk/dist/index.js
+    const modulePath = path.join(basePath, 'node_modules', '@openai', 'codex-sdk', 'dist', 'index.js');
+
+    return await importModule(modulePath);
   } catch (err) {
     logger.error(`Failed to load OpenAI Codex SDK: ${err}`);
     if ((err as any).stack) {
@@ -298,6 +304,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const thread = this.codexInstance!.startThread({
       workingDirectory: config.working_dir,
       skipGitRepoCheck: config.skip_git_repo_check ?? false,
+      ...(config.model ? { model: config.model } : {}),
     });
 
     if (config.persist_threads && cacheKey) {
@@ -335,8 +342,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
+    // Extract text from agent_message items for final response
+    const agentMessages = items.filter((i) => i.type === 'agent_message');
+    const finalResponse = agentMessages.length > 0 ? agentMessages.map((i) => i.text).join('\n') : '';
+
     return {
-      finalResponse: items.map((i) => i.content).join('\n'),
+      finalResponse,
       items,
       usage,
     };
@@ -419,9 +430,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       const tokenUsage: ProviderResponse['tokenUsage'] = turn.usage
         ? {
-            prompt: turn.usage.prompt_tokens,
-            completion: turn.usage.completion_tokens,
-            total: turn.usage.total_tokens,
+            prompt: turn.usage.input_tokens + (turn.usage.cached_input_tokens || 0),
+            completion: turn.usage.output_tokens,
+            total:
+              turn.usage.input_tokens +
+              (turn.usage.cached_input_tokens || 0) +
+              turn.usage.output_tokens,
           }
         : undefined;
 

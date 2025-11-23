@@ -221,7 +221,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const { OpenAICodexSDKProvider } = await import('./openai-codex-sdk');
+      const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
       return new OpenAICodexSDKProvider({
         ...providerOptions,
         env: context.env,

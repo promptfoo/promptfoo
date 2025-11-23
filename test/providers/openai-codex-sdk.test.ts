@@ -2,19 +2,9 @@ import fs from 'fs';
 
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import logger from '../../src/logger';
-import { OpenAICodexSDKProvider } from '../../src/providers/openai-codex-sdk';
+import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 
 import type { CallApiContextParams } from '../../src/types/index';
-
-jest.mock('../../src/cliState', () => ({ basePath: '/test/basePath' }));
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(),
-}));
-jest.mock('node:module', () => ({
-  createRequire: jest.fn(() => ({
-    resolve: jest.fn(() => '@openai/codex-sdk'),
-  })),
-}));
 
 const mockRun = jest.fn();
 const mockRunStreamed = jest.fn();
@@ -28,23 +18,30 @@ const mockThread = {
   runStreamed: mockRunStreamed,
 };
 
-// Mock Codex class
+// Mock Codex class - we'll inject this via jest.mock later
 const MockCodex = jest.fn().mockImplementation(() => ({
   startThread: mockStartThread.mockReturnValue(mockThread),
   resumeThread: mockResumeThread.mockReturnValue(mockThread),
 }));
 
-// Helper to create mock response
+// Mock the SDK at runtime
+jest.mock('@openai/codex-sdk', () => ({
+  __esModule: true,
+  Codex: MockCodex,
+  Thread: jest.fn(),
+}), { virtual: true });
+
+// Helper to create mock response matching real SDK format
 const createMockResponse = (
   finalResponse: string,
-  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number },
+  usage?: { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number },
 ) => ({
   finalResponse,
   usage: usage
     ? {
-        prompt_tokens: usage.prompt_tokens ?? 0,
-        completion_tokens: usage.completion_tokens ?? 0,
-        total_tokens: usage.total_tokens ?? 0,
+        input_tokens: usage.input_tokens ?? 0,
+        cached_input_tokens: usage.cached_input_tokens ?? 0,
+        output_tokens: usage.output_tokens ?? 0,
       }
     : undefined,
   items: [],
@@ -57,10 +54,9 @@ describe('OpenAICodexSDKProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    const { importModule } = require('../../src/esm');
-    importModule.mockResolvedValue({
-      Codex: MockCodex,
-    });
+    // Reset mock implementations
+    mockStartThread.mockReturnValue(mockThread);
+    mockResumeThread.mockReturnValue(mockThread);
 
     // Default mocks
     statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({
@@ -142,9 +138,9 @@ describe('OpenAICodexSDKProvider', () => {
       it('should successfully call API with simple prompt', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Test response', {
-            prompt_tokens: 10,
-            completion_tokens: 20,
-            total_tokens: 30,
+            input_tokens: 10,
+            cached_input_tokens: 5,
+            output_tokens: 20,
           }),
         );
 
@@ -156,9 +152,9 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result).toEqual({
           output: 'Test response',
           tokenUsage: {
-            prompt: 10,
+            prompt: 15, // input_tokens + cached_input_tokens (10 + 5)
             completion: 20,
-            total: 30,
+            total: 35, // 10 + 5 + 20
           },
           cost: 0,
           raw: expect.any(String),
@@ -374,11 +370,11 @@ describe('OpenAICodexSDKProvider', () => {
     describe('streaming', () => {
       it('should handle streaming events', async () => {
         const mockEvents = async function* () {
-          yield { type: 'item.completed', item: { content: 'Part 1' } };
-          yield { type: 'item.completed', item: { content: 'Part 2' } };
+          yield { type: 'item.completed', item: { type: 'agent_message', text: 'Part 1' } };
+          yield { type: 'item.completed', item: { type: 'agent_message', text: 'Part 2' } };
           yield {
             type: 'turn.completed',
-            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+            usage: { input_tokens: 10, cached_input_tokens: 5, output_tokens: 20 },
           };
         };
 
@@ -393,15 +389,15 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(result.output).toBe('Part 1\nPart 2');
         expect(result.tokenUsage).toEqual({
-          prompt: 10,
+          prompt: 15, // input_tokens + cached_input_tokens (10 + 5)
           completion: 20,
-          total: 30,
+          total: 35, // 10 + 5 + 20
         });
       });
 
       it('should abort streaming on signal', async () => {
         const mockEvents = async function* () {
-          yield { type: 'item.completed', item: { content: 'Part 1' } };
+          yield { type: 'item.completed', item: { type: 'agent_message', text: 'Part 1' } };
           // Abort will happen here
         };
 
