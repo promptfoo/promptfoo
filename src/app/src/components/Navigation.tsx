@@ -23,32 +23,6 @@ import Logo from './Logo';
 
 // Preload functions for navigation hover
 const preloadPage = (path: string) => {
-  const getChunkName = (path: string) => {
-    switch (path) {
-      case '/datasets':
-        return 'page-datasets';
-      case '/eval':
-        return 'page-eval';
-      case '/evals':
-        return 'page-evals';
-      case '/eval-creator':
-      case '/setup':
-        return 'page-eval-creator';
-      case '/history':
-        return 'page-history';
-      case '/prompts':
-        return 'page-prompts';
-      case '/model-audit':
-        return 'page-model-audit';
-      case '/redteam/setup':
-      case '/reports':
-        return 'page-redteam';
-      default:
-        return null;
-    }
-  };
-
-  const chunkName = getChunkName(path);
 
   switch (path) {
     case '/datasets':
