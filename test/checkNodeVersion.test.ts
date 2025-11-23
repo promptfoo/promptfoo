@@ -39,7 +39,9 @@ describe('checkNodeVersion', () => {
 
     checkNodeVersion();
     expect(logger.warn).toHaveBeenCalledWith(
-      chalk.yellow(`Unexpected Node.js version format: v20. Please use Node.js ${requiredVersion}.`),
+      chalk.yellow(
+        `Unexpected Node.js version format: v20. Please use Node.js ${requiredVersion}.`,
+      ),
     );
   });
 });
