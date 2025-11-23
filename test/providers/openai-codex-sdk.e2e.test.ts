@@ -4,12 +4,22 @@
  * Run with: OPENAI_API_KEY=... npx jest openai-codex-sdk.e2e --runInBand
  */
 
-// Unmock the SDK for E2E tests - we want to use the real implementation
-jest.unmock('@openai/codex-sdk');
-
 import { beforeAll, describe, expect, it } from '@jest/globals';
 import fs from 'fs';
 import path from 'path';
+
+// Check if SDK is available before unmocking
+let hasSdk = false;
+try {
+  require.resolve('@openai/codex-sdk');
+  hasSdk = true;
+  // Only unmock if SDK is actually installed
+  jest.unmock('@openai/codex-sdk');
+} catch {
+  // SDK not installed - tests will be skipped
+  hasSdk = false;
+}
+
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 
 describe('OpenAICodexSDKProvider E2E', () => {
@@ -17,10 +27,12 @@ describe('OpenAICodexSDKProvider E2E', () => {
   const testTimeout = 60000; // 60 seconds for real API calls
 
   // Skip all tests if no API key or SDK not installed
-  const describeOrSkip = hasApiKey ? describe : describe.skip;
+  const describeOrSkip = hasApiKey && hasSdk ? describe : describe.skip;
 
   beforeAll(() => {
-    if (!hasApiKey) {
+    if (!hasSdk) {
+      console.warn('Skipping E2E tests: @openai/codex-sdk not installed');
+    } else if (!hasApiKey) {
       console.warn('Skipping E2E tests: No OPENAI_API_KEY or CODEX_API_KEY found');
     }
   });
