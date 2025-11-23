@@ -4,12 +4,11 @@ Comprehensive comparison of OpenAI Codex SDK and Claude Agent SDK capabilities t
 
 ## Overview
 
-This example demonstrates how different agentic coding assistants approach:
+This example compares how different agentic coding assistants detect security vulnerabilities:
 
-1. **Structured output generation** - Testing JSON schema support
-2. **Multi-file codebase analysis** - Testing file system tool integration
-3. **Security vulnerability detection** - Testing domain knowledge
-4. **Code generation with constraints** - Testing code quality
+**OpenAI Codex SDK** - Uses native JSON schema support (`output_schema`) to return structured vulnerability data
+
+**Claude Agent SDK** - Uses file system tools (Read, Grep, Glob) to analyze code and return natural language findings
 
 ## Test Scenario
 
@@ -37,62 +36,30 @@ The example includes an intentionally vulnerable Python codebase with common sec
 2. **OpenAI Codex SDK (gpt-4o)** - GPT-4o for comparison
 3. **Claude Agent SDK (sonnet)** - Anthropic Claude with tools
 
-## Test Cases
+## How It Works
 
-### 1. Structured Security Audit (JSON Schema)
+The eval uses a single prompt: "Analyze all Python files in the current directory for security vulnerabilities."
 
-**What it tests:**
-- Native JSON schema support (Codex advantage)
-- Structured output generation
-- Vulnerability enumeration
-- Risk scoring
-
-**Expected output schema:**
-```json
-{
-  "vulnerabilities": [
-    {
-      "file": "user_service.py",
-      "line_range": "18-19",
-      "severity": "critical",
-      "category": "cryptography",
-      "issue": "Using MD5 for password hashing",
-      "recommendation": "Use bcrypt or argon2"
-    }
-  ],
-  "risk_score": 85,
-  "summary": "Critical security issues found"
-}
+**Codex SDK configuration** includes `output_schema` to enforce structured JSON output:
+```yaml
+output_schema:
+  type: object
+  required: [vulnerabilities, risk_score, summary]
+  properties:
+    vulnerabilities:
+      type: array
+      items:
+        properties:
+          file: {type: string}
+          severity: {type: string, enum: [critical, high, medium, low]}
+          category: {type: string}
+          issue: {type: string}
+          recommendation: {type: string}
 ```
 
-### 2. Multi-File Codebase Analysis
+**Claude Agent SDK configuration** uses file system tools to analyze code and returns natural language findings.
 
-**What it tests:**
-- File system tool usage (Claude Agent advantage)
-- Cross-file understanding
-- Comprehensive vulnerability detection
-- Prioritization abilities
-
-**Expected capabilities:**
-- Read multiple Python files
-- Map data flow across modules
-- Identify architectural security issues
-- Provide prioritized remediation plan
-
-### 3. Secure Code Generation
-
-**What it tests:**
-- Code generation quality
-- Security best practices knowledge
-- Constraint satisfaction
-- Type safety awareness
-
-**Requirements:**
-- bcrypt/argon2 for password hashing
-- Cryptographically secure session tokens
-- No password hash exposure
-- Proper type hints and docstrings
-- Session invalidation logic
+The test assertion intelligently handles both output formats - validating structured JSON from Codex SDK and checking for security issue mentions in Claude Agent SDK's natural language output.
 
 ## Running the Comparison
 
@@ -108,32 +75,28 @@ npx promptfoo@latest eval -c examples/agentic-sdk-comparison/promptfooconfig.yam
 npx promptfoo@latest view
 ```
 
-## Key Differences Demonstrated
+## Key Differences
 
-| Capability | Codex SDK | Claude Agent SDK |
-|-----------|-----------|------------------|
-| **Structured Output** | Native JSON schema | Prompt-based |
-| **File System Access** | Implicit | Explicit tools (Read/Grep/Glob) |
-| **Response Format** | Predictable structure | Natural language + structured sections |
-| **Speed** | Faster (no tool overhead) | Slower (tool execution) |
-| **Accuracy** | High on structured tasks | High on exploratory tasks |
+| Feature | Codex SDK | Claude Agent SDK |
+|---------|-----------|------------------|
+| **Output Format** | Native JSON schema via `output_schema` | Natural language |
+| **File System** | Implicit (SDK handles file reading) | Explicit tools (Read, Grep, Glob, LS) |
+| **Speed** | Faster (no tool call overhead) | Slower (multiple tool executions) |
+| **Validation** | Schema-enforced structure | Flexible natural language |
 
-## Expected Results
+## What This Example Shows
 
-**Codex SDK advantages:**
-- Cleaner JSON output conforming to schema
-- Faster response times
-- Better structured data for test case 1
+**Codex SDK strengths:**
+- Returns structured JSON matching exact schema
+- Fast execution with no tool overhead
+- Predictable output format for automation
 
-**Claude Agent SDK advantages:**
-- More thorough multi-file analysis
-- Better file discovery and exploration
-- Deeper contextual understanding for test case 2
+**Claude Agent SDK strengths:**
+- Uses file system tools for exploration
+- Returns detailed natural language analysis
+- More flexible output format
 
-**Both should excel at:**
-- Generating secure refactored code
-- Identifying critical vulnerabilities
-- Providing actionable recommendations
+Both should identify the same security issues - the difference is in how they structure and return the findings.
 
 ## Learn More
 
