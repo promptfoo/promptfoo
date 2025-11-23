@@ -23,7 +23,6 @@ import Logo from './Logo';
 
 // Preload functions for navigation hover
 const preloadPage = (path: string) => {
-
   switch (path) {
     case '/datasets':
       return import('../pages/datasets/page');
