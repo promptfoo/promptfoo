@@ -6,16 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added
-
-- feat(webui): add custom policy generation to red team setup (#6181)
-- feat(webui): add strategy test generation to red team setup (#6005)
-- feat(webui): add visibility button for PFX passphrase field in red team target configuration (#6258)
-
 ### Changed
 
-- chore(webui): replace emoji icons with Material-UI IconButton components in evaluation results page — action icons now display circular hover effects, color-coded active states (green for pass, red for fail), always-visible icons for better discoverability, and full accessibility support with aria-pressed and aria-label attributes
+- refactor(webui): migrate to React 19 patterns (#6319)
+- chore(webui): replace emoji icons with Material-UI IconButton components in evaluation results page — action icons now display circular hover effects, color-coded active states (green for pass, red for fail), always-visible icons for better discoverability, and full accessibility support with aria-pressed and aria-label attributes (#6318)
+- chore: Revert "chore(deps): upgrade cache-manager from v4 to v7" (#6311)
 - chore(lint): enforce explicit /index imports in directory paths to prepare for ESM migration (#6263)
+- chore(deps): configure Renovate to track all package.json files (#6282)
 - chore(webui): improve UI treatment for domain-specific risks in red team setup (#6269)
 - chore(deps): re-generate lock file (#6249)
 - ci(github): add code scan action (#6261)
@@ -23,29 +20,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(providers): fix LiteLLM provider API key authentication — reverts to inline authentication check to properly handle providers with `apiKeyRequired: false` and fixes Authorization header to be omitted (instead of sending "Bearer undefined") when no API key is set, resolving "API key is not set" error when using LITELLM_API_KEY environment variable (#6304)
-- fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/)
+- fix(providers): fix LiteLLM provider API key authentication — reverts to inline authentication check to properly handle providers with `apiKeyRequired: false` and fixes Authorization header to be omitted (instead of sending "Bearer undefined") when no API key is set, resolving "API key is not set" error when using LITELLM_API_KEY environment variable (#6322)
+- fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/) (#6313)
 - fix(code-scan): prevent "start line must precede end line" GitHub API error by ensuring start_line is only set when it differs from line - fixes single-line comment highlighting in PR reviews (#6314)
+- fix(app): Test generation tooltips remain visible after dialog is rendered (#6309)
 - fix(auth): allow CI environments to authenticate with Promptfoo Cloud using API keys — unblocks `jailbreak:meta` strategy in GitHub Actions by recognizing API key auth regardless of CI status (#6273)
-- fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
 - fix(webui): allow thumbs up/down ratings to toggle off and remove manual grading when clicked again (#6260)
 - fix(python): resolve Windows path compatibility issues in Python provider protocol - changed delimiter from `:` to `|` to avoid conflicts with Windows drive letters (C:, D:, etc.), fixing ENOENT errors and timeouts in Python provider on Windows (#6262)
 
 ### Documentation
 
+- docs(site): fix broken OpenAI config options link (#6277)
 - docs(readme): update readme with code scanning (#6268)
+- docs(site): rewrite web viewer page (#6264)
 - docs(site): fix duplicate in sidebar (#6259)
 
 ### Dependencies
 
+- fix(deps): update dependency better-sqlite3 to v12.4.6 (#6323)
 - chore(deps): update @biomejs/biome and all platform-specific CLI packages to 2.3.7 (#6307)
-- chore(deps): upgrade http-z to v8 and @swc/core to v1.15.3
+- chore(deps): update vitest monorepo to v4 (major) (#6299)
+- chore(deps): update material-ui monorepo to v8 (major) (#6298)
+- chore(deps): update dependency whatwg-url to v15 (#6297)
+- chore(deps): update dependency recharts to v3 (#6294)
+- chore(deps): update dependency react-markdown to v10 (#6293)
+- chore(deps): update dependency react-is to v19 (#6292)
+- chore(deps): update dependency react-error-boundary to v6 (#6291)
+- chore(deps): update dependency gaxios to v7 (#6288)
+- chore(deps): drop unused uuid types package (#6287)
+- chore(deps): update dependency framer-motion to v12 (#6286)
+- chore(deps): update dependency @types/uuid to v11 (#6285)
+- chore(deps): update dependency esbuild to v0.27.0 (#6283)
+- chore(deps): upgrade http-z to v8 and @swc/core to v1.15.3 (#6281)
 - chore(deps): update dependencies in 12 example projects (#6280)
 - chore(deps): upgrade glob to v13 and mathjs to v15 (#6279)
 - chore(deps): update 67 minor and patch dependencies across all workspaces (#6278)
 - chore(deps): bump langchain-core from 0.3.78 to 0.3.80 in /examples/redteam-langchain in the pip group (#6270)
 - chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.933.0 to 3.934.0 (#6254)
 - chore(deps): bump @anthropic-ai/sdk from 0.69.0 to 0.70.0 (#6255)
+
+## [0.119.9] - 2025-11-20
+
+### Added
+
+- feat(webui): add custom policy generation to red team setup (#6181)
+- feat(webui): add strategy test generation to red team setup (#6005)
+- feat(webui): add visibility button for PFX passphrase field in red team target configuration (#6258)
+
+### Fixed
+
+- fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
 
 ## [0.119.8] - 2025-11-18
 
