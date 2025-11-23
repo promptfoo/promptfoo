@@ -346,9 +346,7 @@ redteamRouter.post(
         return;
       }
 
-      logger.debug('[Custom Policy] Using remote generation', {
-        remoteUrl: remoteGenerationUrl,
-      });
+      logger.debug(`[Custom Policy] Using remote generation: ${remoteGenerationUrl}`);
 
       // Forward to remote endpoint
       const response = await fetchWithProxy(
@@ -371,11 +369,9 @@ redteamRouter.post(
           errorData = { error: 'Remote generation failed', details: errorText };
         }
 
-        logger.error({
-          message: '[Custom Policy] Remote generation failed',
-          status: response.status,
-          error: errorData,
-        });
+        logger.error(
+          `[Custom Policy] Remote generation failed with status ${response.status}: ${JSON.stringify(errorData)}`,
+        );
 
         res.status(response.status).json(errorData);
         return;
@@ -384,10 +380,9 @@ redteamRouter.post(
       const data = await response.json();
       res.json(data);
     } catch (error) {
-      logger.error({
-        message: '[Custom Policy] Error generating policies',
-        error: error instanceof Error ? error.message : String(error),
-      });
+      logger.error(
+        `[Custom Policy] Error generating policies: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
       res.status(500).json({
         error: 'Failed to generate policies',
