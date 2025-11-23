@@ -46,9 +46,10 @@ jest.mock(
   'pdf-parse',
   () => ({
     __esModule: true,
-    default: jest
-      .fn()
-      .mockImplementation((_buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
+    PDFParse: jest.fn().mockImplementation(() => ({
+      getText: jest.fn().mockResolvedValue({ text: 'Extracted PDF text' }),
+      destroy: jest.fn().mockResolvedValue(undefined),
+    })),
   }),
   { virtual: true },
 );
@@ -92,7 +93,7 @@ describe('extractTextFromPDF', () => {
   it('should throw error when pdf-parse is not installed', async () => {
     jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
     const mockPDFParse = jest.requireMock('pdf-parse');
-    mockPDFParse.default.mockImplementationOnce(() => {
+    mockPDFParse.PDFParse.mockImplementationOnce(() => {
       throw new Error("Cannot find module 'pdf-parse'");
     });
 
@@ -104,7 +105,10 @@ describe('extractTextFromPDF', () => {
   it('should handle PDF extraction errors', async () => {
     jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
     const mockPDFParse = jest.requireMock('pdf-parse');
-    mockPDFParse.default.mockRejectedValueOnce(new Error('PDF parsing failed'));
+    mockPDFParse.PDFParse.mockImplementationOnce(() => ({
+      getText: jest.fn().mockRejectedValueOnce(new Error('PDF parsing failed')),
+      destroy: jest.fn().mockResolvedValue(undefined),
+    }));
 
     await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
       'Failed to extract text from PDF test.pdf: PDF parsing failed',
