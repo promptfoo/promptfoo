@@ -12,20 +12,10 @@ vi.mock('./store', () => ({
 
 vi.mock('@mui/material/styles', async (importOriginal) => {
   const original = await importOriginal<typeof import('@mui/material/styles')>();
+  const { createTheme } = original;
   return {
     ...original,
-    useTheme: vi.fn(() => ({
-      palette: {
-        mode: 'light',
-        primary: { main: '#1976d2' },
-        background: { paper: '#fff' },
-        divider: '#ccc',
-        action: { hover: 'rgba(0, 0, 0, 0.04)' },
-        success: { contrastText: '#fff', main: '#2e7d32' },
-        warning: { contrastText: '#fff', main: '#ed6c02' },
-        error: { contrastText: '#fff', main: '#d32f2f' },
-      },
-    })),
+    useTheme: vi.fn(() => createTheme()),
   };
 });
 
