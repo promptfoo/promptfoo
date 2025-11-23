@@ -6,7 +6,7 @@ description: 'Use OpenAI Codex SDK for evals with thread management, structured 
 
 # OpenAI Codex SDK
 
-This provider makes OpenAI's Codex SDK available for evals. The Codex SDK enables agentic code generation and manipulation with thread-based conversations and native JSON schema support.
+This provider makes OpenAI's Codex SDK available for evals. The Codex SDK supports code generation and manipulation with thread-based conversations and JSON schema output.
 
 :::note
 
@@ -57,7 +57,7 @@ export CODEX_API_KEY=your_api_key_here
 
 ### Basic Usage
 
-By default, the Codex SDK runs in the current working directory and requires a Git repository for safety. This helps prevent unrecoverable errors from agentic code modifications.
+By default, the Codex SDK runs in the current working directory and requires a Git repository for safety. This prevents errors from code modifications.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -77,7 +77,7 @@ Specify which OpenAI model to use for code generation:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5
+      model: gpt-5.1-codex
 
 prompts:
   - 'Write a TypeScript function that validates email addresses'
@@ -110,7 +110,7 @@ providers:
     config:
       working_dir: ./temp-workspace
       skip_git_repo_check: true
-      model: gpt-5
+      model: gpt-5.1-codex
 
 prompts:
   - 'Generate a README file for this project'
@@ -143,7 +143,7 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 
 ## Models
 
-The Codex SDK supports OpenAI models including GPT-5, GPT-4, and O-series models:
+The Codex SDK supports OpenAI models. Use `gpt-5.1-codex` for code generation tasks:
 
 ```yaml
 providers:
@@ -155,17 +155,17 @@ providers:
 
 Supported models include:
 
-- `gpt-5.1-codex` - Latest Codex model with enhanced code capabilities
+- `gpt-5.1-codex` - Primary model for code generation (recommended)
 - `gpt-5` - GPT-5 base model
 - `gpt-4o` - GPT-4 Omni
-- `gpt-4o-mini` - Efficient GPT-4 variant
-- `o3-mini` - Reasoning-optimized mini model
+- `gpt-4o-mini` - GPT-4 variant
+- `o3-mini` - Mini reasoning model
 - `o1` - Reasoning model
-- `o1-mini` - Efficient reasoning model
+- `o1-mini` - Mini reasoning model
 
 ### Mini Models
 
-For faster, cost-effective evals, use mini models:
+For faster or lower-cost evals, use mini models:
 
 ```yaml
 providers:
@@ -224,13 +224,13 @@ providers:
 
 ## Structured Output
 
-The Codex SDK has native support for JSON schema output. Specify an `output_schema` to get structured responses:
+The Codex SDK supports JSON schema output. Specify an `output_schema` to get structured responses:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5
+      model: gpt-5.1-codex
       output_schema:
         type: object
         properties:
@@ -272,29 +272,29 @@ providers:
 
 ## Streaming
 
-Enable streaming to receive real-time progress events:
+Enable streaming to receive progress events:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
       enable_streaming: true
-      model: gpt-5
+      model: gpt-5.1-codex
 ```
 
 When streaming is enabled, the provider processes events like `item.completed` and `turn.completed` to build the final response.
 
 ## Git Repository Requirement
 
-By default, the Codex SDK requires a Git repository in the working directory. This prevents unrecoverable errors from agentic code modifications.
+By default, the Codex SDK requires a Git repository in the working directory. This prevents errors from code modifications.
 
 The provider validates:
 
 1. Working directory exists and is accessible
-2. Working directory is actually a directory (not a file)
+2. Working directory is a directory (not a file)
 3. `.git` directory exists in the working directory
 
-If validation fails, you'll see a clear error message explaining the issue.
+If validation fails, you'll see an error message.
 
 To bypass this safety check:
 
@@ -384,7 +384,7 @@ Generate structured bug reports from code:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5
+      model: gpt-5.1-codex
       working_dir: ./test-code
       output_schema:
         type: object
@@ -444,22 +444,22 @@ Each test reuses the same thread, maintaining context.
 
 ## Comparison with Claude Agent SDK
 
-Both providers enable agentic code operations, but have different strengths:
+Both providers support code operations, but have different features:
 
 ### OpenAI Codex SDK
 
 - **Best for**: Code generation, structured output, reasoning tasks
-- **Strengths**: Native JSON schema, thread persistence, GPT-5/O-series models
+- **Features**: JSON schema support, thread persistence, gpt-5.1-codex model
 - **Thread management**: Built-in pooling and resumption
-- **Working directory**: Git repository validation for safety
-- **Configuration**: Simpler, focused on code tasks
+- **Working directory**: Git repository validation
+- **Configuration**: Focused on code tasks
 
 ### Claude Agent SDK
 
 - **Best for**: File manipulation, system commands, MCP integration
-- **Strengths**: Extensive tool permissions, MCP servers, CLAUDE.md support
+- **Features**: Tool permissions, MCP servers, CLAUDE.md support
 - **Thread management**: Temporary directory isolation
-- **Working directory**: Flexible, no Git requirement
+- **Working directory**: No Git requirement
 - **Configuration**: More options for tool permissions and system access
 
 Choose based on your use case:
