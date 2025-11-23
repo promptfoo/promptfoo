@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(providers): fix LiteLLM provider API key authentication — reverts to inline authentication check to properly handle providers with `apiKeyRequired: false` and fixes Authorization header to be omitted (instead of sending "Bearer undefined") when no API key is set, resolving "API key is not set" error when using LITELLM_API_KEY environment variable (#6304)
 - fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/)
 - fix(code-scan): prevent "start line must precede end line" GitHub API error by ensuring start_line is only set when it differs from line - fixes single-line comment highlighting in PR reviews (#6314)
 - fix(auth): allow CI environments to authenticate with Promptfoo Cloud using API keys — unblocks `jailbreak:meta` strategy in GitHub Actions by recognizing API key auth regardless of CI status (#6273)
