@@ -16,13 +16,13 @@ const CountBadge = styled(Badge)`
   }
 `;
 
-const FiltersButton = React.forwardRef<
-  HTMLButtonElement,
-  {
-    appliedFiltersCount: number;
-    onClick: () => void;
-  }
->(({ appliedFiltersCount, onClick }, ref) => {
+interface FiltersButtonProps {
+  appliedFiltersCount: number;
+  onClick: () => void;
+  ref?: React.Ref<HTMLButtonElement>;
+}
+
+function FiltersButton({ appliedFiltersCount, onClick, ref }: FiltersButtonProps) {
   return (
     <Tooltip title="Filters" placement="bottom">
       <IconButton onClick={onClick} ref={ref}>
@@ -31,8 +31,6 @@ const FiltersButton = React.forwardRef<
       </IconButton>
     </Tooltip>
   );
-});
-
-FiltersButton.displayName = 'FiltersButton';
+}
 
 export default FiltersButton;
