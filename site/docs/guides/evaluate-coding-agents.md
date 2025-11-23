@@ -41,12 +41,12 @@ Coding agents have **categorical** capabilities, not gradual ones. You can't pro
 
 Different coding agents excel at different tasks. Here's when to use each:
 
-| Agent Type                           | Best For                             | Structured Output     | File System Access     | Tradeoffs                     |
-| ------------------------------------ | ------------------------------------ | --------------------- | ---------------------- | ----------------------------- |
-| **Plain LLM** (gpt-4, claude-sonnet) | Code review, simple generation       | Manual parsing needed | No                     | Fast, cheap, limited context  |
-| **OpenAI Codex SDK**                 | Security audits, schema-driven tasks | Native JSON schema    | Read-only by default   | High token use, strict output |
+| Agent Type                           | Best For                             | Structured Output     | File System Access     | Tradeoffs                      |
+| ------------------------------------ | ------------------------------------ | --------------------- | ---------------------- | ------------------------------ |
+| **Plain LLM** (gpt-4, claude-sonnet) | Code review, simple generation       | Manual parsing needed | No                     | Fast, cheap, limited context   |
+| **OpenAI Codex SDK**                 | Security audits, schema-driven tasks | Native JSON schema    | Read-only by default   | High token use, strict output  |
 | **Claude Agent SDK**                 | Refactoring, multi-file edits        | Natural language      | Full read/write + bash | Full capabilities, higher cost |
-| **Cursor/Copilot/Aider**             | IDE integration, interactive coding  | IDE-specific          | IDE-controlled         | Interactive, non-automated    |
+| **Cursor/Copilot/Aider**             | IDE integration, interactive coding  | IDE-specific          | IDE-controlled         | Interactive, non-automated     |
 
 ### Quick recommendations
 
@@ -249,14 +249,14 @@ npm run local -- eval -c promptfooconfig.yaml
 
 Real results comparing Codex SDK vs Plain LLM (gpt-4o):
 
-| Metric                       | OpenAI Codex SDK (gpt-4o)               | Plain LLM (gpt-4o)                     |
-| ---------------------------- | --------------------------------------- | -------------------------------------- |
-| Task completion              | **PASS** - Analyzed code                | **FAIL** - Returned Bandit instructions |
-| Vulnerabilities found        | 3 (MD5, CVV logging, data storage)      | N/A (didn't perform analysis)          |
-| Structured output compliance | 100% (enforced by schema)               | N/A (returned text, not JSON)          |
-| Token usage                  | 1,062,383 (1.06M prompt, 2.3K output)   | 767 (41 prompt, 726 output)            |
-| Duration                     | 2m 24s                                  | <5s                                    |
-| Pass rate                    | 100%                                    | 0%                                     |
+| Metric                       | OpenAI Codex SDK (gpt-4o)             | Plain LLM (gpt-4o)                      |
+| ---------------------------- | ------------------------------------- | --------------------------------------- |
+| Task completion              | **PASS** - Analyzed code              | **FAIL** - Returned Bandit instructions |
+| Vulnerabilities found        | 3 (MD5, CVV logging, data storage)    | N/A (didn't perform analysis)           |
+| Structured output compliance | 100% (enforced by schema)             | N/A (returned text, not JSON)           |
+| Token usage                  | 1,062,383 (1.06M prompt, 2.3K output) | 767 (41 prompt, 726 output)             |
+| Duration                     | 2m 24s                                | &lt;5s                                  |
+| Pass rate                    | 100%                                  | 0%                                      |
 
 **Key finding**: Plain LLM fundamentally misunderstood the task, returning instructions on how to use Bandit tool instead of actually analyzing the code. Codex SDK's file system access and structured output enabled it to perform the actual security audit and return actionable results in the required JSON format.
 
@@ -281,11 +281,11 @@ This reveals the fundamental cognitive difference between conversational and age
 
 The evaluation shows a dramatic difference in token distribution:
 
-| | Plain LLM | Codex SDK | Ratio |
-|---|---|---|---|
-| **Prompt tokens** | 41 | 1,060,074 | **25,855x** |
-| **Completion tokens** | 726 | 2,309 | 3.2x |
-| **Total** | 767 | 1,062,383 | 1,385x |
+|                       | Plain LLM | Codex SDK | Ratio       |
+| --------------------- | --------- | --------- | ----------- |
+| **Prompt tokens**     | 41        | 1,060,074 | **25,855x** |
+| **Completion tokens** | 726       | 2,309     | 3.2x        |
+| **Total**             | 767       | 1,062,383 | 1,385x      |
 
 **What this tells us about architecture**:
 
@@ -299,6 +299,7 @@ The 25,000x prompt difference isn't inefficiency - it's the entire codebase bein
 **Key insight**: **Context is the feature**. Coding agents are fundamentally context-heavy, reasoning-light. The intelligence isn't in generating more text - it's in synthesizing from massive context.
 
 This inverts traditional LLM optimization:
+
 - **Chat LLM goal**: Minimize prompt, maximize useful completion
 - **Coding agent goal**: Maximize context, minimize completion to structured output
 
@@ -819,7 +820,7 @@ With schema enforcement, either every field is correct or it fails:
 output_schema:
   type: object
   required: [field1, field2, field3]
-  additionalProperties: false  # Strict enforcement
+  additionalProperties: false # Strict enforcement
 
 # If it returns, it's 100% compliant
 # If it errors, it's 0% compliant
@@ -833,7 +834,6 @@ Test whether agents gracefully handle tasks outside their tier:
 # Test: Ask read-only agent to modify files
 prompts:
   - 'Fix all security issues in the codebase'
-
 # Codex SDK (read-only) should:
 # - Identify issues ✅
 # - NOT attempt to write files ✅
@@ -854,17 +854,19 @@ prompts:
 - ❌ "Mostly correct JSON" (automation breaks on "mostly")
 - ❌ "Pretty good code quality" (subjective, not actionable)
 
-###  Eval design principles
+### Eval design principles
 
 **1. Tasks must require agent capabilities**
 
 Bad test (any LLM can do this):
+
 ```yaml
 prompts:
   - 'Write a function that reverses a string'
 ```
 
 Good test (requires file access):
+
 ```yaml
 prompts:
   - 'Find all functions in the codebase that reverse strings and list their performance characteristics'
@@ -873,12 +875,14 @@ prompts:
 **2. Success must be measurable**
 
 Bad assertion:
+
 ```yaml
 - type: llm-rubric
-  value: 'Is the code high quality?'  # Subjective
+  value: 'Is the code high quality?' # Subjective
 ```
 
 Good assertion:
+
 ```yaml
 - type: javascript
   value: |
@@ -891,7 +895,7 @@ Good assertion:
 
 **3. Include failure modes**
 
-Test what happens when the agent *can't* do the task:
+Test what happens when the agent _can't_ do the task:
 
 ```yaml
 tests:
@@ -947,13 +951,13 @@ prompts:
 
 **Pitfall 2: Forgetting the baseline**
 
-Always include a plain LLM baseline to show *why* agents matter:
+Always include a plain LLM baseline to show _why_ agents matter:
 
 ```yaml
 providers:
-  - openai:codex-sdk       # The agent
-  - openai:gpt-4o         # The baseline (will fail)
-  - anthropic:claude-sonnet  # Another baseline (will also fail)
+  - openai:codex-sdk # The agent
+  - openai:gpt-4o # The baseline (will fail)
+  - anthropic:claude-sonnet # Another baseline (will also fail)
 ```
 
 **Pitfall 3: Ignoring token usage patterns**
