@@ -9,7 +9,12 @@ import telemetry from '../../telemetry';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { outputFromMessage, parseMessages } from '../anthropic/util';
-import { parseChatPrompt } from '../shared';
+import { calculateCost, parseChatPrompt } from '../shared';
+import {
+  getPricingData,
+  calculateCostWithFetchedPricing,
+  type BedrockPricingData,
+} from './pricingFetcher';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
@@ -42,12 +47,14 @@ export type BedrockModelFamily =
   | 'llama3_3'
   | 'llama4'
   | 'mistral'
+  | 'mistral_pixtral'
   | 'cohere'
   | 'ai21'
   | 'titan'
   | 'deepseek'
   | 'openai'
-  | 'qwen';
+  | 'qwen'
+  | 'writer';
 
 interface BedrockOptions {
   accessKeyId?: string;
@@ -62,6 +69,7 @@ interface BedrockOptions {
   showThinking?: boolean;
   endpoint?: string;
   inferenceModelType?: BedrockModelFamily;
+  cost?: number | { input: number; output: number };
 }
 
 export interface TextGenerationOptions {
@@ -1534,6 +1542,62 @@ ${prompt}
       };
     },
   },
+  MISTRAL_PIXTRAL: {
+    params: (
+      config: BedrockMistralGenerationOptions,
+      prompt: string,
+      _stop?: string[],
+      _modelName?: string,
+    ) => {
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+      const params: any = {
+        messages,
+      };
+
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        getEnvInt('MISTRAL_MAX_TOKENS'),
+        1024,
+      );
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('MISTRAL_TEMPERATURE'),
+        0,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
+
+      return params;
+    },
+    output: (_config: BedrockOptions, responseJson: any) => {
+      if (responseJson.error) {
+        throw new Error(`Mistral Pixtral API error: ${responseJson.error}`);
+      }
+      return responseJson.choices?.[0]?.message?.content;
+    },
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
+      if (responseJson?.usage) {
+        return {
+          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
+          completion: coerceStrToNum(responseJson.usage.completion_tokens),
+          total: coerceStrToNum(responseJson.usage.total_tokens),
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
+  },
 };
 
 export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
@@ -1666,7 +1730,7 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
     if (!inferenceModelType) {
       throw new Error(
         'Inference profile requires inferenceModelType to be specified in config. ' +
-          'Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen',
+          'Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, mistral_pixtral, cohere, ai21, titan, deepseek, openai, qwen, writer',
       );
     }
 
@@ -1696,6 +1760,8 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
         return BEDROCK_MODEL.LLAMA4;
       case 'mistral':
         return BEDROCK_MODEL.MISTRAL;
+      case 'mistral_pixtral':
+        return BEDROCK_MODEL.MISTRAL_PIXTRAL;
       case 'cohere':
         return BEDROCK_MODEL.COHERE_COMMAND_R;
       case 'ai21':
@@ -1708,6 +1774,8 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
         return BEDROCK_MODEL.OPENAI;
       case 'qwen':
         return BEDROCK_MODEL.QWEN;
+      case 'writer':
+        return BEDROCK_MODEL.OPENAI;
       default:
         throw new Error(`Unknown inference model type: ${inferenceModelType}`);
     }
@@ -1751,6 +1819,9 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
   if (modelName.startsWith('cohere.command')) {
     return BEDROCK_MODEL.COHERE_COMMAND;
   }
+  if (modelName.includes('mistral.pixtral')) {
+    return BEDROCK_MODEL.MISTRAL_PIXTRAL;
+  }
   if (modelName.startsWith('mistral.')) {
     return BEDROCK_MODEL.MISTRAL;
   }
@@ -1760,6 +1831,9 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
   if (modelName.startsWith('qwen.')) {
     return BEDROCK_MODEL.QWEN;
   }
+  if (modelName.startsWith('writer.')) {
+    return BEDROCK_MODEL.OPENAI;
+  }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }
 
@@ -1768,6 +1842,7 @@ export abstract class AwsBedrockGenericProvider {
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
   config: BedrockOptions;
+  pricingData: BedrockPricingData | null | undefined;
 
   constructor(
     modelName: string,
@@ -1778,6 +1853,9 @@ export abstract class AwsBedrockGenericProvider {
     this.modelName = modelName;
     this.config = config || {};
     this.id = id ? () => id : this.id;
+    // Pricing data starts as undefined (not yet attempted)
+    // Will become BedrockPricingData (success) or null (failed) after first call
+    this.pricingData = undefined;
 
     if (this.config.guardrailIdentifier) {
       telemetry.record('feature_used', {
@@ -1840,7 +1918,39 @@ export abstract class AwsBedrockGenericProvider {
     return undefined;
   }
 
+  /**
+   * Lazily initializes pricing data from AWS Pricing API.
+   * Called once on the first API call. getPricingData() handles caching and
+   * coordinated fetching to prevent duplicate API calls in concurrent scenarios.
+   */
+  async initializePricingIfNeeded(): Promise<void> {
+    // Only attempt fetch once per instance (undefined means not yet attempted)
+    if (this.pricingData !== undefined) {
+      return;
+    }
+
+    const region = this.getRegion();
+    const credentials = await this.getCredentials();
+
+    // getPricingData() handles caching, concurrent fetch coordination, and API calls
+    this.pricingData = await getPricingData(region, credentials);
+
+    if (this.pricingData) {
+      logger.debug('[Bedrock Pricing]: Pricing data initialized', {
+        region,
+        modelCount: this.pricingData.models.size,
+      });
+    } else {
+      logger.debug('[Bedrock Pricing]: Pricing fetch failed, costs will not be calculated', {
+        region,
+      });
+    }
+  }
+
   async getBedrockInstance() {
+    // Initialize pricing data on first call (lazy init)
+    await this.initializePricingIfNeeded();
+
     if (!this.bedrock) {
       let handler;
       const apiKey = this.getApiKey();
@@ -1927,19 +2037,17 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
 
-    let model = getHandlerForModel(this.modelName, { ...this.config, ...context?.prompt.config });
+    // Merge provider config with per-prompt config
+    const resolvedConfig = { ...this.config, ...context?.prompt.config };
+
+    let model = getHandlerForModel(this.modelName, resolvedConfig);
     if (!model) {
       logger.warn(
         `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(
-      { ...this.config, ...context?.prompt.config },
-      prompt,
-      stop,
-      this.modelName,
-    );
+    const params = model.params(resolvedConfig, prompt, stop, this.modelName);
 
     logger.debug('Calling Amazon Bedrock API', { params });
 
@@ -1952,8 +2060,9 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
-          output: model.output(this.config, JSON.parse(cachedResponse as string)),
+          output: model.output(resolvedConfig, JSON.parse(cachedResponse as string)),
           tokenUsage: createEmptyTokenUsage(),
+          cost: 0, // Cache hit - no Bedrock API billing occurred
         };
       }
     }
@@ -2060,9 +2169,31 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
+      // Calculate cost with priority: config.cost > fetched pricing
+      let cost: number | undefined;
+      if (resolvedConfig.cost !== undefined) {
+        // Use config override if provided (supports per-prompt cost overrides)
+        cost = calculateCost(
+          this.modelName,
+          resolvedConfig,
+          tokenUsage.prompt,
+          tokenUsage.completion,
+          [], // No static pricing table - config.cost must be set as {input, output}
+        );
+      } else {
+        // Otherwise use fetched pricing from AWS Pricing API
+        cost = calculateCostWithFetchedPricing(
+          this.modelName,
+          this.pricingData,
+          tokenUsage.prompt,
+          tokenUsage.completion,
+        );
+      }
+
       return {
-        output: model.output(this.config, output),
+        output: model.output(resolvedConfig, output),
         tokenUsage,
+        cost,
         ...(output['amazon-bedrock-guardrailAction']
           ? {
               guardrails: {
