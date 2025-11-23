@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 
-import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
@@ -46,11 +45,13 @@ function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
 }
 
 export default function HistoryPage({ showDatasetColumn = true }: HistoryPageProps) {
-  usePageMeta({ title: 'History', description: 'Evaluation history' });
-
   return (
-    <ErrorBoundary name="History Page">
-      <HistoryPageContent showDatasetColumn={showDatasetColumn} />
-    </ErrorBoundary>
+    <>
+      <title>History | promptfoo</title>
+      <meta name="description" content="Evaluation history" />
+      <ErrorBoundary name="History Page">
+        <HistoryPageContent showDatasetColumn={showDatasetColumn} />
+      </ErrorBoundary>
+    </>
   );
 }
