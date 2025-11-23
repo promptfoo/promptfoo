@@ -106,7 +106,7 @@ export interface OpenAICodexSDKConfig {
  * Helper to load the OpenAI Codex SDK ESM module
  * Uses the same pattern as other providers for resolving npm packages
  */
-async function loadCodexSDK(): Promise<typeof import('@openai/codex-sdk')> {
+async function loadCodexSDK(): Promise<any> {
   try {
     const basePath =
       cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
@@ -150,7 +150,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   apiKey?: string;
 
   private providerId = 'openai:codex-sdk';
-  private codexModule?: typeof import('@openai/codex-sdk');
+  private codexModule?: any;
   private codexInstance?: any;
   private threads: Map<string, any> = new Map();
 
@@ -295,7 +295,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       const poolSize = config.thread_pool_size ?? 1;
       if (this.threads.size >= poolSize) {
         const oldestKey = this.threads.keys().next().value;
-        this.threads.delete(oldestKey);
+        if (oldestKey) {
+          this.threads.delete(oldestKey);
+        }
       }
     }
 
@@ -440,7 +442,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         tokenUsage,
         cost,
         raw,
-        sessionId: thread.id,
+        sessionId: thread.id || 'unknown',
       };
     } catch (error: any) {
       const isAbort = error?.name === 'AbortError' || callOptions?.abortSignal?.aborted;

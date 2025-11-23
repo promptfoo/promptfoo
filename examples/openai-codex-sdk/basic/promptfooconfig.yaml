@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Simple code generation with Codex SDK'
+
+prompts:
+  - 'Write a Python function that calculates the factorial of a number. Output only the code.'
+
+providers:
+  - openai:codex-sdk
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'def factorial'
+      - type: llm-rubric
+        value: 'Should generate working Python code for factorial calculation'
