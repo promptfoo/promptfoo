@@ -72,7 +72,7 @@ describe('ProviderConfigEditor', () => {
         />,
       );
 
-      const isValid = validateFn?.();
+      const isValid = validateFn!();
 
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
@@ -103,7 +103,7 @@ describe('ProviderConfigEditor', () => {
         />,
       );
 
-      const isValid = validateFn?.();
+      const isValid = validateFn!();
 
       expect(isValid).toBe(false);
       expect(mockSetError).toHaveBeenCalledWith('Model ID is required');
@@ -134,7 +134,7 @@ describe('ProviderConfigEditor', () => {
         />,
       );
 
-      const isValid = validateFn?.();
+      const isValid = validateFn!();
 
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
@@ -165,7 +165,7 @@ describe('ProviderConfigEditor', () => {
         />,
       );
 
-      const isValid = validateFn?.();
+      const isValid = validateFn!();
 
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
@@ -297,7 +297,7 @@ describe('ProviderConfigEditor', () => {
       </ThemeProvider>,
     );
 
-    const isValid = validateFn?.();
+    const isValid = validateFn!();
 
     expect(isValid).toBe(true);
     expect(mockSetError).toHaveBeenCalledWith(null);
@@ -417,7 +417,7 @@ describe('ProviderConfigEditor', () => {
       />,
     );
 
-    const isValid = validateFn?.();
+    const isValid = validateFn!();
 
     expect(isValid).toBe(true);
     expect(mockSetError).toHaveBeenCalledWith(null);
@@ -450,7 +450,7 @@ describe('ProviderConfigEditor', () => {
 
     expect(getByTestId('common-config')).toBeInTheDocument();
 
-    const isValid = validateFn?.();
+    const isValid = validateFn!();
     expect(isValid).toBe(true);
     expect(mockSetError).toHaveBeenCalledWith(null);
     expect(mockOnValidate).toHaveBeenCalledWith(true);
