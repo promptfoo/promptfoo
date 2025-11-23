@@ -463,9 +463,16 @@ export const CustomPoliciesSection = () => {
       let errorMessage = 'Failed to generate policies';
 
       if (error instanceof Error) {
-        // Handle network errors
-        if (error.message.includes('fetch') || error.message.includes('network')) {
-          errorMessage = 'Network error. Please check your connection and try again.';
+        // Handle specific error cases
+        if (error.message.includes('Remote generation not configured')) {
+          errorMessage =
+            'Policy generation requires remote generation. Configure PROMPTFOO_REMOTE_GENERATION_URL to enable this feature.';
+        } else if (error.message.includes('Provider not configured')) {
+          errorMessage =
+            'Remote server does not have an LLM provider configured. Contact your administrator.';
+        } else if (error.message.includes('fetch') || error.message.includes('network')) {
+          errorMessage =
+            'Network error connecting to remote server. Please check your connection and try again.';
         } else if (error.message.includes('timeout')) {
           errorMessage = 'Request timed out. Please try again.';
         } else {
