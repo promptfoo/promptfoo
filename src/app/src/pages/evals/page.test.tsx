@@ -20,21 +20,8 @@ vi.mock('react-router-dom', async () => {
 });
 
 describe('EvalsIndexPage', () => {
-  let descriptionMetaTag: HTMLMetaElement;
-  const originalTitle = document.title;
-
   beforeEach(() => {
-    descriptionMetaTag = document.createElement('meta');
-    descriptionMetaTag.name = 'description';
-    descriptionMetaTag.content = 'Initial description';
-    document.head.appendChild(descriptionMetaTag);
-    document.title = 'Initial Title';
     vi.mocked(useNavigate).mockClear();
-  });
-
-  afterEach(() => {
-    document.head.removeChild(descriptionMetaTag);
-    document.title = originalTitle;
   });
 
   it('should navigate to the correct evaluation page when an evaluation is selected in the EvalsDataGrid', () => {
