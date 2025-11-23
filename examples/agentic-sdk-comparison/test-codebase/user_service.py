@@ -1,6 +1,7 @@
 """User service with intentional bugs for testing."""
+
 import hashlib
-from typing import Optional, Dict, List
+from typing import Dict, List, Optional
 
 
 class UserService:
@@ -19,7 +20,7 @@ class UserService:
         self.users[username] = {
             "email": email,
             "password": password_hash,
-            "active": True
+            "active": True,
         }
         return True
 

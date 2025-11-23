@@ -1,4 +1,5 @@
 """Payment processing module with security issues."""
+
 import json
 from decimal import Decimal
 from typing import Optional
@@ -18,7 +19,7 @@ class PaymentProcessor:
             "amount": amount,
             "card": card_number,  # BUG: Storing full card number
             "cvv": cvv,
-            "status": "pending"
+            "status": "pending",
         }
 
         # BUG: No sanitization before logging
