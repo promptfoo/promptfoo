@@ -5,7 +5,9 @@ prompts:
   - 'Write a Python function that calculates the factorial of a number. Output only the code.'
 
 providers:
-  - openai:codex-sdk
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.1-codex
 
 tests:
   - vars: {}
