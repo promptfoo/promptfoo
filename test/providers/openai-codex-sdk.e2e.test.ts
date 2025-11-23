@@ -15,6 +15,8 @@ try {
   hasSdk = true;
   // Only unmock if SDK is actually installed
   jest.unmock('@openai/codex-sdk');
+  // Also unmock the esm module so importModule can load the real SDK
+  jest.unmock('../../src/esm');
 } catch {
   // SDK not installed - tests will be skipped
   hasSdk = false;
