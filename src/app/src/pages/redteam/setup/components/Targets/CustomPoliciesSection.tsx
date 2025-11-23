@@ -354,13 +354,16 @@ export const CustomPoliciesSection = () => {
   };
 
   const handleDeleteSelected = () => {
-    if (rowSelectionModel.ids.size === 0) {
+    if (!rowSelectionModel?.ids || rowSelectionModel.ids.size === 0) {
       return;
     }
     setConfirmDeleteOpen(true);
   };
 
   const handleConfirmDelete = () => {
+    if (!rowSelectionModel?.ids) {
+      return;
+    }
     const otherPlugins = config.plugins.filter((p) =>
       typeof p === 'string' ? true : p.id !== 'policy',
     );
@@ -723,7 +726,7 @@ export const CustomPoliciesSection = () => {
             slots={{ toolbar: CustomToolbar }}
             slotProps={{
               toolbar: {
-                selectedCount: rowSelectionModel.ids.size,
+                selectedCount: rowSelectionModel?.ids?.size ?? 0,
                 onDeleteSelected: handleDeleteSelected,
                 onAddPolicy: handleAddPolicy,
                 onUploadCsv: handleCsvUpload,
@@ -751,13 +754,13 @@ export const CustomPoliciesSection = () => {
       {/* Delete confirmation dialog */}
       <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
         <DialogTitle>
-          Delete {rowSelectionModel.ids.size} polic
-          {rowSelectionModel.ids.size === 1 ? 'y' : 'ies'}?
+          Delete {rowSelectionModel?.ids?.size ?? 0} polic
+          {(rowSelectionModel?.ids?.size ?? 0) === 1 ? 'y' : 'ies'}?
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
             Are you sure you want to delete the selected polic
-            {rowSelectionModel.ids.size === 1 ? 'y' : 'ies'}? This action cannot be undone.
+            {(rowSelectionModel?.ids?.size ?? 0) === 1 ? 'y' : 'ies'}? This action cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>

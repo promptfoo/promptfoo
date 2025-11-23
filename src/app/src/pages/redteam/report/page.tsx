@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 
 import PylonChat from '@app/components/PylonChat';
 import { UserProvider } from '@app/contexts/UserContext';
-import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -15,10 +14,6 @@ export default function ReportPage() {
   const { email, isLoading, fetchEmail } = useUserStore();
   const searchParams = new URLSearchParams(window.location.search);
   const evalId = searchParams.get('evalId');
-  usePageMeta({
-    title: 'Red Team Vulnerability Reports',
-    description: 'View or browse red team results',
-  });
 
   useEffect(() => {
     fetchEmail();
@@ -32,19 +27,23 @@ export default function ReportPage() {
 
   if (isLoading) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1.5,
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '9rem',
-        }}
-      >
-        <CircularProgress size={22} />
-        <Box>Waiting for report data</Box>
-      </Box>
+      <>
+        <title>Red Team Vulnerability Reports | promptfoo</title>
+        <meta name="description" content="View or browse red team results" />
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1.5,
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '9rem',
+          }}
+        >
+          <CircularProgress size={22} />
+          <Box>Waiting for report data</Box>
+        </Box>
+      </>
     );
   }
 
@@ -54,9 +53,13 @@ export default function ReportPage() {
   }
 
   return (
-    <UserProvider>
-      {evalId ? <Report /> : <ReportIndex />}
-      <PylonChat />
-    </UserProvider>
+    <>
+      <title>Red Team Vulnerability Reports | promptfoo</title>
+      <meta name="description" content="View or browse red team results" />
+      <UserProvider>
+        {evalId ? <Report /> : <ReportIndex />}
+        <PylonChat />
+      </UserProvider>
+    </>
   );
 }

@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
-import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
@@ -290,10 +289,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setIsStreaming,
   ]);
 
-  usePageMeta({
-    title: config?.description || evalId || 'Eval',
-    description: 'View evaluation results',
-  });
+  const pageTitle = config?.description || evalId || 'Eval';
 
   /**
    * If and when a table is available, set loaded to true.
@@ -313,39 +309,59 @@ export default function Eval({ fetchId }: EvalOptions) {
   // ================================
 
   if (failed) {
-    return <div className="notice">404 Eval not found</div>;
+    return (
+      <>
+        <title>{pageTitle} | promptfoo</title>
+        <meta name="description" content="View evaluation results" />
+        <div className="notice">404 Eval not found</div>
+      </>
+    );
   }
 
   if (!loaded) {
     return (
-      <div className="notice">
-        <div>
-          <CircularProgress size={22} />
+      <>
+        <title>{pageTitle} | promptfoo</title>
+        <meta name="description" content="View evaluation results" />
+        <div className="notice">
+          <div>
+            <CircularProgress size={22} />
+          </div>
+          <div>Waiting for eval data</div>
         </div>
-        <div>Waiting for eval data</div>
-      </div>
+      </>
     );
   }
 
   if (!table) {
-    return <EmptyState />;
+    return (
+      <>
+        <title>{pageTitle} | promptfoo</title>
+        <meta name="description" content="View evaluation results" />
+        <EmptyState />
+      </>
+    );
   }
 
   // Check if this is a redteam eval
   const isRedteam = config?.redteam !== undefined;
 
   return (
-    <ShiftKeyProvider>
-      {isRedteam && evalId && (
-        <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
-          <EnterpriseBanner evalId={evalId} />
-        </Box>
-      )}
-      <ResultsView
-        defaultEvalId={defaultEvalId}
-        recentEvals={recentEvals}
-        onRecentEvalSelected={handleRecentEvalSelection}
-      />
-    </ShiftKeyProvider>
+    <>
+      <title>{pageTitle} | promptfoo</title>
+      <meta name="description" content="View evaluation results" />
+      <ShiftKeyProvider>
+        {isRedteam && evalId && (
+          <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
+            <EnterpriseBanner evalId={evalId} />
+          </Box>
+        )}
+        <ResultsView
+          defaultEvalId={defaultEvalId}
+          recentEvals={recentEvals}
+          onRecentEvalSelected={handleRecentEvalSelection}
+        />
+      </ShiftKeyProvider>
+    </>
   );
 }

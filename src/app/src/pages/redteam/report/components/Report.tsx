@@ -1,7 +1,6 @@
 import React from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
-import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
@@ -529,26 +528,27 @@ const App = () => {
     return stats;
   }, [hasActiveFilters, filteredCategoryStats, categoryStats, customPolicyIds]);
 
-  usePageMeta({
-    title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
-    description: 'Red team evaluation report',
-  });
+  const pageTitle = `Report: ${evalData?.config.description || evalId || 'Red Team'}`;
 
   if (!evalData || !evalId) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1.5,
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '9rem',
-        }}
-      >
-        <CircularProgress size={22} />
-        <Box>Waiting for report data</Box>
-      </Box>
+      <>
+        <title>{pageTitle} | promptfoo</title>
+        <meta name="description" content="Red team evaluation report" />
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1.5,
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '9rem',
+          }}
+        >
+          <CircularProgress size={22} />
+          <Box>Waiting for report data</Box>
+        </Box>
+      </>
     );
   }
 
@@ -654,6 +654,8 @@ const App = () => {
 
   return (
     <>
+      <title>{pageTitle} | promptfoo</title>
+      <meta name="description" content="Red team evaluation report" />
       <Box
         sx={{
           position: 'fixed',

@@ -8,7 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design
+- refactor(webui): complete React 19 migration - replace usePageMeta hook with native `<title>` and `<meta>` tags across all pages (launcher, datasets, prompts, eval-creator, model-audit, NotFoundPage, redteam setup/report, and eval components) for better React 19 compatibility and idiomatic metadata handling (#6328)
+- refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
 - refactor(webui): adopt React 19 patterns - remove forwardRef wrappers from FiltersButton, QuickFilter, and ProviderConfigEditor components; replace custom usePageMeta hook with native metadata tags in login, history, and evals pages (#6327)
 - refactor(webui): migrate to React 19 patterns (#6319)
 - chore(webui): replace emoji icons with Material-UI IconButton components in evaluation results page — action icons now display circular hover effects, color-coded active states (green for pass, red for fail), always-visible icons for better discoverability, and full accessibility support with aria-pressed and aria-label attributes (#6318)
