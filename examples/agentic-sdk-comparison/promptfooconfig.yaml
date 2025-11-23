@@ -2,14 +2,16 @@
 description: 'Agentic SDK comparison with security audit and code generation'
 
 prompts:
-  - 'Analyze all Python files in the current directory for security vulnerabilities.'
+  - |
+    Analyze all Python files in the current directory for security vulnerabilities.
+    Return your findings in JSON format with: vulnerabilities (array), risk_score (0-100), and summary.
 
 providers:
   # Codex SDK with native JSON schema support
   - id: openai:codex-sdk
-    label: codex-gpt-5.1
+    label: codex-gpt-4o
     config:
-      model: gpt-5.1-codex
+      model: gpt-4o
       working_dir: examples/agentic-sdk-comparison/test-codebase
       skip_git_repo_check: true
       # Native structured output support (Codex strength)
@@ -44,115 +46,52 @@ providers:
           summary:
             type: string
 
-  - id: openai:codex-sdk
-    label: codex-gpt-4o
+  # Plain OpenAI API for comparison (no schema enforcement)
+  - id: openai:gpt-4o
+    label: plain-gpt-4o
     config:
-      model: gpt-4o
-      working_dir: examples/agentic-sdk-comparison/test-codebase
-      skip_git_repo_check: true
-      # Same schema for comparison
-      output_schema:
-        type: object
-        required: [vulnerabilities, risk_score, summary]
-        additionalProperties: false
-        properties:
-          vulnerabilities:
-            type: array
-            items:
-              type: object
-              required: [file, severity, category, issue, recommendation]
-              additionalProperties: false
-              properties:
-                file:
-                  type: string
-                severity:
-                  type: string
-                  enum: [critical, high, medium, low]
-                category:
-                  type: string
-                  enum: [authentication, cryptography, data-exposure, input-validation, other]
-                issue:
-                  type: string
-                recommendation:
-                  type: string
-          risk_score:
-            type: integer
-            minimum: 0
-            maximum: 100
-          summary:
-            type: string
-
-  # Claude Agent SDK with file system tools
-  - id: anthropic:claude-agent-sdk
-    label: claude-agent-sonnet
-    config:
-      model: sonnet
-      working_dir: examples/agentic-sdk-comparison/test-codebase
-      # Read-only tools by default: Read, Grep, Glob, LS
+      temperature: 0
 
 defaultTest:
   options:
     timeout: 90000
 
 tests:
-  # Test focuses on structured output quality
   - description: Find security vulnerabilities
     assert:
-      # Codex SDK returns structured JSON via output_schema
-      # Claude Agent SDK returns natural language
       - type: javascript
         value: |
-          // For Codex SDK (has output_schema), validate JSON structure
+          // Codex SDK returns structured JSON, plain LLM returns text
           if (typeof output === 'object' && output.vulnerabilities) {
-            // Check required fields
-            if (!Array.isArray(output.vulnerabilities) ||
-                typeof output.risk_score !== 'number' ||
-                typeof output.summary !== 'string') {
-              return {
-                pass: false,
-                score: 0,
-                reason: 'Missing required fields in structured output'
-              };
+            // Validate JSON structure
+            const hasStructure = Array.isArray(output.vulnerabilities) &&
+                                typeof output.risk_score === 'number' &&
+                                typeof output.summary === 'string';
+            if (!hasStructure) {
+              return { pass: false, score: 0, reason: 'Invalid JSON structure' };
             }
 
-            // Check for key vulnerabilities
+            // Check for key vulnerabilities (MD5, CVV, passwords)
             const vulns = output.vulnerabilities;
-            const foundMD5 = vulns.some(v =>
-              v.issue?.toLowerCase().includes('md5') ||
-              v.category === 'cryptography'
-            );
-            const foundDataExposure = vulns.some(v =>
-              v.category === 'data-exposure' ||
-              v.issue?.toLowerCase().includes('password') ||
-              v.issue?.toLowerCase().includes('cvv')
-            );
+            const hasCrypto = vulns.some(v => v.category === 'cryptography');
+            const hasDataExposure = vulns.some(v => v.category === 'data-exposure');
 
-            const score = (vulns.length >= 3 ? 0.4 : 0) +
-                         (foundMD5 ? 0.3 : 0) +
-                         (foundDataExposure ? 0.3 : 0);
-
+            const score = (vulns.length >= 3 ? 0.4 : 0) + (hasCrypto ? 0.3 : 0) + (hasDataExposure ? 0.3 : 0);
             return {
               pass: score >= 0.6,
-              score: score,
-              reason: `Found ${vulns.length} vulnerabilities (MD5: ${foundMD5}, Data exposure: ${foundDataExposure})`
+              score,
+              reason: `Found ${vulns.length} vulnerabilities (crypto: ${hasCrypto}, data: ${hasDataExposure})`
             };
           }
 
-          // For Claude Agent SDK (natural language output)
-          const text = typeof output === 'string' ? output : JSON.stringify(output);
-          const lower = text.toLowerCase();
-
-          const mentionsMD5 = lower.includes('md5');
-          const mentionsCVV = lower.includes('cvv');
-          const mentionsFloat = lower.includes('float');
-          const mentionsSession = lower.includes('session');
-
-          const issuesFound = [mentionsMD5, mentionsCVV, mentionsFloat, mentionsSession].filter(Boolean).length;
-          const score = Math.min(issuesFound / 4, 1);
+          // Plain LLM - check mentions of key issues
+          const text = String(output).toLowerCase();
+          const issues = ['md5', 'cvv', 'password', 'session'].filter(term => text.includes(term));
+          const score = Math.min(issues.length / 4, 1);
 
           return {
             pass: score >= 0.5,
-            score: score,
-            reason: `Found ${issuesFound}/4 key security issues`
+            score,
+            reason: `Mentioned ${issues.length}/4 key issues: ${issues.join(', ')}`
           };
         metric: Vulnerability Detection

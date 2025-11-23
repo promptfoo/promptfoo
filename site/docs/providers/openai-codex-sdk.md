@@ -124,22 +124,22 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 
 ## Supported Parameters
 
-| Parameter              | Type     | Description                                      | Default                  |
-| ---------------------- | -------- | ------------------------------------------------ | ------------------------ |
-| `apiKey`               | string   | OpenAI API key                                   | Environment variable     |
-| `working_dir`          | string   | Directory for Codex to operate in                | Current directory        |
-| `model`                | string   | Primary model to use                             | Codex SDK default        |
-| `fallback_model`       | string   | Fallback model if primary fails                  | None                     |
-| `max_tokens`           | number   | Maximum tokens for response                      | Codex SDK default        |
-| `skip_git_repo_check`  | boolean  | Skip Git repository validation                   | false                    |
-| `codex_path_override`  | string   | Custom path to codex binary                      | None                     |
-| `thread_id`            | string   | Resume existing thread from ~/.codex/sessions    | None (creates new)       |
-| `persist_threads`      | boolean  | Keep threads alive between calls                 | false                    |
-| `thread_pool_size`     | number   | Max concurrent threads (when persist_threads)    | 1                        |
-| `output_schema`        | object   | JSON schema for structured responses             | None                     |
-| `cli_env`              | object   | Custom environment variables for Codex CLI       | Inherits from process    |
-| `system_prompt`        | string   | Custom system instructions                       | None                     |
-| `enable_streaming`     | boolean  | Enable streaming events                          | false                    |
+| Parameter             | Type    | Description                                   | Default               |
+| --------------------- | ------- | --------------------------------------------- | --------------------- |
+| `apiKey`              | string  | OpenAI API key                                | Environment variable  |
+| `working_dir`         | string  | Directory for Codex to operate in             | Current directory     |
+| `model`               | string  | Primary model to use                          | Codex SDK default     |
+| `fallback_model`      | string  | Fallback model if primary fails               | None                  |
+| `max_tokens`          | number  | Maximum tokens for response                   | Codex SDK default     |
+| `skip_git_repo_check` | boolean | Skip Git repository validation                | false                 |
+| `codex_path_override` | string  | Custom path to codex binary                   | None                  |
+| `thread_id`           | string  | Resume existing thread from ~/.codex/sessions | None (creates new)    |
+| `persist_threads`     | boolean | Keep threads alive between calls              | false                 |
+| `thread_pool_size`    | number  | Max concurrent threads (when persist_threads) | 1                     |
+| `output_schema`       | object  | JSON schema for structured responses          | None                  |
+| `cli_env`             | object  | Custom environment variables for Codex CLI    | Inherits from process |
+| `system_prompt`       | string  | Custom system instructions                    | None                  |
+| `enable_streaming`    | boolean | Enable streaming events                       | false                 |
 
 ## Models
 
@@ -364,10 +364,10 @@ providers:
 
 prompts:
   - 'Review all TypeScript files in this directory and identify:
-     1. Potential security vulnerabilities
-     2. Performance issues
-     3. Code style violations
-     Return findings in JSON format'
+    1. Potential security vulnerabilities
+    2. Performance issues
+    3. Code style violations
+    Return findings in JSON format'
 
 tests:
   - assert:

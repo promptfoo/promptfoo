@@ -10,6 +10,7 @@ This is an intentionally vulnerable codebase designed to test AI coding assistan
 ## Known Issues
 
 ### user_service.py
+
 - MD5 password hashing (insecure)
 - Timing attack vulnerability in authentication
 - Predictable session tokens
@@ -17,6 +18,7 @@ This is an intentionally vulnerable codebase designed to test AI coding assistan
 - Doesn't invalidate sessions on user deletion
 
 ### payment_processor.py
+
 - Float for currency (precision issues)
 - Stores CVV (PCI-DSS violation)
 - Stores full card numbers

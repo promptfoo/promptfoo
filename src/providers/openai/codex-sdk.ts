@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -111,12 +110,17 @@ async function loadCodexSDK(): Promise<any> {
     // The SDK is ESM-only, so we need the importModule utility which uses dynamic-import.cjs
     const basePath =
       cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
-    const resolveFrom = path.join(basePath, 'package.json');
-    const require = createRequire(resolveFrom);
 
     // The package only exports ESM, so we construct the direct path
     // The SDK is installed in node_modules/@openai/codex-sdk/dist/index.js
-    const modulePath = path.join(basePath, 'node_modules', '@openai', 'codex-sdk', 'dist', 'index.js');
+    const modulePath = path.join(
+      basePath,
+      'node_modules',
+      '@openai',
+      'codex-sdk',
+      'dist',
+      'index.js',
+    );
 
     return await importModule(modulePath);
   } catch (err) {
@@ -344,7 +348,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Extract text from agent_message items for final response
     const agentMessages = items.filter((i) => i.type === 'agent_message');
-    const finalResponse = agentMessages.length > 0 ? agentMessages.map((i) => i.text).join('\n') : '';
+    const finalResponse =
+      agentMessages.length > 0 ? agentMessages.map((i) => i.text).join('\n') : '';
 
     return {
       finalResponse,

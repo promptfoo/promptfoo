@@ -17,6 +17,7 @@ The example includes an intentionally vulnerable Python codebase with common sec
 ### Vulnerabilities Planted
 
 **`user_service.py`:**
+
 - MD5 password hashing (cryptographic weakness)
 - Timing attack vulnerability in authentication
 - Predictable session tokens
@@ -24,6 +25,7 @@ The example includes an intentionally vulnerable Python codebase with common sec
 - Missing session invalidation on user deletion
 
 **`payment_processor.py`:**
+
 - Float for currency calculations (precision loss)
 - PCI-DSS violations (storing CVV and full card numbers)
 - Sensitive data logging without sanitization
@@ -41,6 +43,7 @@ The example includes an intentionally vulnerable Python codebase with common sec
 The eval uses a single prompt: "Analyze all Python files in the current directory for security vulnerabilities."
 
 **Codex SDK configuration** includes `output_schema` to enforce structured JSON output:
+
 ```yaml
 output_schema:
   type: object
@@ -50,11 +53,11 @@ output_schema:
       type: array
       items:
         properties:
-          file: {type: string}
-          severity: {type: string, enum: [critical, high, medium, low]}
-          category: {type: string}
-          issue: {type: string}
-          recommendation: {type: string}
+          file: { type: string }
+          severity: { type: string, enum: [critical, high, medium, low] }
+          category: { type: string }
+          issue: { type: string }
+          recommendation: { type: string }
 ```
 
 **Claude Agent SDK configuration** uses file system tools to analyze code and returns natural language findings.
@@ -77,21 +80,23 @@ npx promptfoo@latest view
 
 ## Key Differences
 
-| Feature | Codex SDK | Claude Agent SDK |
-|---------|-----------|------------------|
-| **Output Format** | Native JSON schema via `output_schema` | Natural language |
-| **File System** | Implicit (SDK handles file reading) | Explicit tools (Read, Grep, Glob, LS) |
-| **Speed** | Faster (no tool call overhead) | Slower (multiple tool executions) |
-| **Validation** | Schema-enforced structure | Flexible natural language |
+| Feature           | Codex SDK                              | Claude Agent SDK                      |
+| ----------------- | -------------------------------------- | ------------------------------------- |
+| **Output Format** | Native JSON schema via `output_schema` | Natural language                      |
+| **File System**   | Implicit (SDK handles file reading)    | Explicit tools (Read, Grep, Glob, LS) |
+| **Speed**         | Faster (no tool call overhead)         | Slower (multiple tool executions)     |
+| **Validation**    | Schema-enforced structure              | Flexible natural language             |
 
 ## What This Example Shows
 
 **Codex SDK strengths:**
+
 - Returns structured JSON matching exact schema
 - Fast execution with no tool overhead
 - Predictable output format for automation
 
 **Claude Agent SDK strengths:**
+
 - Uses file system tools for exploration
 - Returns detailed natural language analysis
 - More flexible output format

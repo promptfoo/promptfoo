@@ -1,6 +1,6 @@
 import fs from 'fs';
 
-import { clearCache, disableCache, enableCache } from '../../src/cache';
+import { clearCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
