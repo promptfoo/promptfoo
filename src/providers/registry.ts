@@ -214,6 +214,21 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) =>
+      providerPath.startsWith('openai:codex-sdk') || providerPath.startsWith('openai:codex'),
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { OpenAICodexSDKProvider } = await import('./openai-codex-sdk');
+      return new OpenAICodexSDKProvider({
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('anthropic:'),
     create: async (
       providerPath: string,
