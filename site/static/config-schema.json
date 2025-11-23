@@ -261,6 +261,9 @@
                             "OPENAI_ORGANIZATION": {
                               "type": "string"
                             },
+                            "CODEX_API_KEY": {
+                              "type": "string"
+                            },
                             "PALM_API_HOST": {
                               "type": "string"
                             },
