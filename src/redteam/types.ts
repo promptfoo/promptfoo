@@ -106,7 +106,12 @@ export type StrategyConfig = z.infer<typeof StrategyConfigSchema>;
 
 export const ConversationMessageSchema = z.object({
   role: z.enum(['assistant', 'user']),
-  content: z.string(),
+  content: z
+    .string()
+    .max(500000, 'Message content too long (max 500,000 characters)')
+    .describe(
+      'Message content - 500K chars (~125K tokens) supports extended AI responses including chain-of-thought reasoning while preventing DoS',
+    ),
 });
 export type ConversationMessage = z.infer<typeof ConversationMessageSchema>;
 
