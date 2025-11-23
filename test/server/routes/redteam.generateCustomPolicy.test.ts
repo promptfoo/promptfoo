@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
-import { fetchWithProxy } from '../../../src/util/fetch';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 import logger from '../../../src/logger';
 
 // Mock dependencies
