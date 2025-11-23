@@ -84,10 +84,12 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
     globals: true,
-    // Mock CSS imports for MUI X v8
-    css: {
-      modules: {
-        classNameStrategy: 'non-scoped',
+    // Enable CSS processing for MUI X v8
+    css: true,
+    // Force vitest to transform MUI packages including CSS imports
+    server: {
+      deps: {
+        inline: ['@mui/x-data-grid', '@mui/x-charts'],
       },
     },
     // Suppress known MUI and React Testing Library warnings that don't indicate real problems
