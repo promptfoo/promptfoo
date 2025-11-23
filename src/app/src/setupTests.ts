@@ -7,6 +7,28 @@ import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-http';
 
+// Mock hooks that use React Query to prevent "No QueryClient set" errors
+import { vi } from 'vitest';
+
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: vi.fn(() => ({
+    data: null,
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  })),
+}));
+
+vi.mock('@app/hooks/useVersionCheck', () => ({
+  useVersionCheck: vi.fn(() => ({
+    versionInfo: null,
+    loading: false,
+    error: null,
+    dismissed: false,
+    dismiss: vi.fn(),
+  })),
+}));
+
 // We can mock the environment variables. For example:
 // process.env.PROMPTFOO_VERSION = '1.0.0';
 

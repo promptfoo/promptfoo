@@ -1,4 +1,6 @@
+import React from 'react';
 import { renderHook, waitFor, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { callApi } from '@app/utils/api';
 import { useVersionCheck } from './useVersionCheck';
@@ -10,14 +12,31 @@ vi.mock('@app/utils/api', () => ({
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
+// Unmock useVersionCheck since this file tests it directly
+vi.unmock('@app/hooks/useVersionCheck');
+
 describe('useVersionCheck', () => {
+  let queryClient: QueryClient;
+
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: 0, // Disable retries for tests
+          gcTime: 0, // Disable garbage collection for tests
+        },
+      },
+    });
   });
 
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+
   it('should initialize with loading=true, error=null, dismissed=false, and versionInfo=null', () => {
-    const { result } = renderHook(() => useVersionCheck());
+    const { result } = renderHook(() => useVersionCheck(), { wrapper });
 
     expect(result.current.loading).toBe(true);
     expect(result.current.error).toBeNull();
@@ -43,7 +62,7 @@ describe('useVersionCheck', () => {
       json: () => Promise.resolve(mockVersionInfo),
     } as Response);
 
-    const { result } = renderHook(() => useVersionCheck());
+    const { result } = renderHook(() => useVersionCheck(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -76,7 +95,7 @@ describe('useVersionCheck', () => {
       json: () => Promise.resolve(mockVersionInfo),
     } as Response);
 
-    const { result } = renderHook(() => useVersionCheck());
+    const { result } = renderHook(() => useVersionCheck(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -105,7 +124,7 @@ describe('useVersionCheck', () => {
 
     const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
 
-    const { result } = renderHook(() => useVersionCheck());
+    const { result } = renderHook(() => useVersionCheck(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.versionInfo).toEqual(mockVersionInfo);
@@ -140,7 +159,7 @@ describe('useVersionCheck', () => {
       json: () => Promise.resolve(mockVersionInfo),
     } as Response);
 
-    const { result, rerender } = renderHook(() => useVersionCheck());
+    const { result, rerender } = renderHook(() => useVersionCheck(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -158,7 +177,7 @@ describe('useVersionCheck', () => {
   it('should handle network errors by setting loading=false and populating the error state', async () => {
     vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
 
-    const { result } = renderHook(() => useVersionCheck());
+    const { result } = renderHook(() => useVersionCheck(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);

@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { callApi } from '@app/utils/api';
+import { useQuery } from '@tanstack/react-query';
 
 interface VersionInfo {
   currentVersion: string;
@@ -25,66 +26,41 @@ interface UseVersionCheckResult {
 const STORAGE_KEY = 'promptfoo:update:dismissedVersion';
 
 export function useVersionCheck(): UseVersionCheckResult {
-  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
   const [dismissed, setDismissed] = useState(false);
-  const isMountedRef = useRef(true);
 
-  useEffect(() => {
-    isMountedRef.current = true;
-
-    const checkVersion = async () => {
-      try {
-        const response = await callApi('/version');
-        if (!response.ok) {
-          throw new Error('Failed to fetch version information');
-        }
-        const data: VersionInfo = await response.json();
-
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setVersionInfo(data);
-
-          // Check if this version update was already dismissed
-          const dismissedVersion = localStorage.getItem(STORAGE_KEY);
-          if (dismissedVersion === data.latestVersion) {
-            setDismissed(true);
-          }
-        }
-      } catch (err) {
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setError(err instanceof Error ? err : new Error('Unknown error'));
-        }
-      } finally {
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setLoading(false);
-        }
+  const query = useQuery<VersionInfo, Error>({
+    queryKey: ['versionCheck'],
+    queryFn: async () => {
+      const response = await callApi('/version');
+      if (!response.ok) {
+        throw new Error('Failed to fetch version information');
       }
-    };
+      return await response.json();
+    },
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes (version doesn't change often)
+  });
 
-    checkVersion();
+  // Check if this version was dismissed (computed from localStorage + query data)
+  const isDismissed = useMemo(() => {
+    if (dismissed) return true;
+    if (!query.data?.latestVersion) return false;
 
-    // Cleanup function to mark component as unmounted
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+    const dismissedVersion = localStorage.getItem(STORAGE_KEY);
+    return dismissedVersion === query.data.latestVersion;
+  }, [dismissed, query.data?.latestVersion]);
 
   const dismiss = () => {
-    if (versionInfo?.latestVersion) {
-      localStorage.setItem(STORAGE_KEY, versionInfo.latestVersion);
+    if (query.data?.latestVersion) {
+      localStorage.setItem(STORAGE_KEY, query.data.latestVersion);
       setDismissed(true);
     }
   };
 
   return {
-    versionInfo,
-    loading,
-    error,
-    dismissed,
+    versionInfo: query.data ?? null,
+    loading: query.isLoading,
+    error: query.error,
+    dismissed: isDismissed,
     dismiss,
   };
 }

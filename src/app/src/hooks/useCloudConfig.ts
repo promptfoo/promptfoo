@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
-
 import { callApi } from '../utils/api';
+import { useQuery } from '@tanstack/react-query';
 
 export type CloudConfigData = {
   appUrl: string;
@@ -11,49 +10,24 @@ export type CloudConfigData = {
  * Loads the current user's cloud config from the API. Useful for getting the Cloud app's URL
  * in order to redirect the user to something in Cloud.
  */
-export default function useCloudConfig(): {
-  data: CloudConfigData | null;
-  isLoading: boolean;
-  error: string | null;
-  refetch: () => void;
-} {
-  const [data, setData] = useState<CloudConfigData | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-
-  /**
-   * Fetches the cloud config from the API.
-   */
-  const fetchCloudConfig = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
+export default function useCloudConfig() {
+  const query = useQuery<CloudConfigData, Error>({
+    queryKey: ['cloudConfig'],
+    queryFn: async () => {
       const response = await callApi('/user/cloud-config');
       if (!response.ok) {
         throw new Error('Failed to fetch cloud config');
       }
-      const responseData = await response.json();
-      setData(responseData);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(errorMessage);
-      console.error('Error fetching cloud config:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  /**
-   * Fetch on mount.
-   */
-  useEffect(() => {
-    fetchCloudConfig();
-  }, []);
+      return await response.json();
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes (config doesn't change often)
+    // retry defaults to 2 in production, can be configured via QueryClient in tests
+  });
 
   return {
-    data,
-    isLoading,
-    error,
-    refetch: fetchCloudConfig,
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    error: query.error?.message ?? null,
+    refetch: query.refetch,
   };
 }
