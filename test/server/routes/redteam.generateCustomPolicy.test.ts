@@ -28,16 +28,13 @@ const generateCustomPolicyHandler = async (req: Request, res: Response): Promise
     logger.debug(`[Custom Policy] Using remote generation: ${remoteGenerationUrl}`);
 
     // Forward to remote endpoint
-    const response = await fetchWithProxy(
-      `${remoteGenerationUrl}/redteam/generate-custom-policy`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ applicationDefinition, existingPolicies }),
+    const response = await fetchWithProxy(`${remoteGenerationUrl}/redteam/generate-custom-policy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-    );
+      body: JSON.stringify({ applicationDefinition, existingPolicies }),
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -121,20 +118,19 @@ describe('redteam - POST /generate-custom-policy', () => {
       await generateCustomPolicyHandler(mockReq as Request, mockRes as Response);
 
       expect(getRemoteGenerationUrl).toHaveBeenCalled();
-      expect(fetchWithProxy).toHaveBeenCalledWith(
-        `${remoteUrl}/redteam/generate-custom-policy`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            applicationDefinition: mockReq.body.applicationDefinition,
-            existingPolicies: mockReq.body.existingPolicies,
-          }),
+      expect(fetchWithProxy).toHaveBeenCalledWith(`${remoteUrl}/redteam/generate-custom-policy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          applicationDefinition: mockReq.body.applicationDefinition,
+          existingPolicies: mockReq.body.existingPolicies,
+        }),
+      });
+      expect(logger.debug).toHaveBeenCalledWith(
+        `[Custom Policy] Using remote generation: ${remoteUrl}`,
       );
-      expect(logger.debug).toHaveBeenCalledWith(`[Custom Policy] Using remote generation: ${remoteUrl}`);
       expect(jsonMock).toHaveBeenCalledWith({ policies: mockPolicies });
       expect(statusMock).not.toHaveBeenCalled();
     });
