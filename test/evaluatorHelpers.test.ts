@@ -48,7 +48,7 @@ jest.mock(
     __esModule: true,
     default: jest
       .fn()
-      .mockImplementation((buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
+      .mockImplementation((_buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
   }),
   { virtual: true },
 );
@@ -242,17 +242,19 @@ describe('renderPrompt', () => {
 
     jest.doMock(
       path.resolve('/path/to/testFunction.js'),
-      () => (varName: any, prompt: any, vars: any) => ({ output: `Dynamic value for ${varName}` }),
+      () => (varName: any, _prompt: any, _vars: any) => ({
+        output: `Dynamic value for ${varName}`,
+      }),
       { virtual: true },
     );
     jest.doMock(
       path.resolve('/path/to/testFunction.cjs'),
-      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
+      () => (varName: any, _prompt: any, _vars: any) => ({ output: `and ${varName}` }),
       { virtual: true },
     );
     jest.doMock(
       path.resolve('/path/to/testFunction.mjs'),
-      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
+      () => (varName: any, _prompt: any, _vars: any) => ({ output: `and ${varName}` }),
       { virtual: true },
     );
 
@@ -273,7 +275,7 @@ describe('renderPrompt', () => {
     jest.doMock(
       path.resolve('/node_modules/@promptfoo/fake/index.js'),
       () => ({
-        testFunction: (varName: any, prompt: any, vars: any) => ({
+        testFunction: (varName: any, _prompt: any, _vars: any) => ({
           output: `Dynamic value for ${varName}`,
         }),
       }),

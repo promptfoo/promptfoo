@@ -1,6 +1,6 @@
 import { RbacGrader, RbacPlugin } from '../../../src/redteam/plugins/rbac';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/util/fetch/index.ts');
 

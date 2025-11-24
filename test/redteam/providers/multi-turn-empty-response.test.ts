@@ -1,6 +1,6 @@
-import { CrescendoProvider } from '../../../src/redteam/providers/crescendo';
+import { CrescendoProvider } from '../../../src/redteam/providers/crescendo/index';
 import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
-import { CustomProvider } from '../../../src/redteam/providers/custom';
+import { CustomProvider } from '../../../src/redteam/providers/custom/index';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
 
 import type {
@@ -8,7 +8,7 @@ import type {
   CallApiContextParams,
   AtomicTestCase,
   ProviderResponse,
-} from '../../../src/types';
+} from '../../../src/types/index';
 
 // Mock the shared getTargetResponse to test provider-specific logic
 jest.mock('../../../src/redteam/providers/shared', () => {
