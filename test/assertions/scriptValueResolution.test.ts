@@ -50,6 +50,17 @@ describe('Script value resolution', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+
+    // Restore importModule mock implementation after reset
+    const { importModule } = jest.requireMock('../../src/esm');
+    importModule.mockImplementation((filePath: string, functionName?: string) => {
+      const mod = require(path.resolve(filePath));
+      if (functionName) {
+        return Promise.resolve(mod[functionName]);
+      }
+      return Promise.resolve(mod);
+    });
+
     cliState.basePath = path.resolve(__dirname, '../fixtures/file-script-assertions');
   });
 

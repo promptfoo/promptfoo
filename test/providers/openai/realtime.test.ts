@@ -103,7 +103,7 @@ describe('OpenAI Realtime Provider', () => {
       );
     });
 
-    it('should generate valid session body', () => {
+    it('should generate valid session body', async () => {
       const config = {
         modalities: ['text'],
         voice: 'echo' as const,
@@ -113,7 +113,7 @@ describe('OpenAI Realtime Provider', () => {
       };
 
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
-      const body = provider.getRealtimeSessionBody();
+      const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
         model: 'gpt-4o-realtime-preview',
@@ -127,7 +127,7 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
-    it('should handle audio configuration', () => {
+    it('should handle audio configuration', async () => {
       const config: OpenAiRealtimeOptions = {
         modalities: ['text', 'audio'],
         voice: 'alloy' as const,
@@ -144,7 +144,7 @@ describe('OpenAI Realtime Provider', () => {
       };
 
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
-      const body = provider.getRealtimeSessionBody();
+      const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
         model: 'gpt-4o-realtime-preview',
