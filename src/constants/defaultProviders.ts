@@ -2,7 +2,7 @@ import type { ProviderOptions } from '../types/providers';
 
 /**
  * Default provider list shown in the eval creator UI.
- * This list can be overridden by server administrators using promptfoo-server.yaml
+ * This list can be overridden by server administrators using ui-providers.yaml
  */
 export const defaultProviders: ProviderOptions[] = (
   [] as (ProviderOptions & { id: string; label?: string })[]
