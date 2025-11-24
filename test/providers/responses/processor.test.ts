@@ -566,5 +566,55 @@ describe('ResponsesProcessor', () => {
       expect(result.raw).toHaveProperty('annotations');
       expect(result.raw.annotations).toEqual([{ url: 'https://example.com', title: 'Example' }]);
     });
+
+    it('should handle non-string id and model gracefully', async () => {
+      const mockData = {
+        id: { nested: 'object' }, // Wrong type - should be string
+        model: 12345, // Wrong type - should be string
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response with invalid types' }],
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 3 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      // Should exclude invalid types from metadata
+      expect(result.metadata).toEqual({});
+    });
+
+    it('should handle non-array annotations gracefully', async () => {
+      const mockData = {
+        id: 'resp_invalidannot',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Response with invalid annotations',
+                annotations: 'not-an-array', // Wrong type - should be array
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      // Should include id and model but exclude invalid annotations
+      expect(result.metadata).toEqual({
+        responseId: 'resp_invalidannot',
+        model: 'gpt-4o',
+      });
+      expect(result.metadata).not.toHaveProperty('annotations');
+    });
   });
 });

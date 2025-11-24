@@ -16,17 +16,17 @@ function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<st
   const metadata: Record<string, any> = {};
 
   // Response ID - for linking to OpenAI dashboard
-  if (data.id) {
+  if (typeof data.id === 'string' && data.id) {
     metadata.responseId = data.id;
   }
 
   // Actual model used - may differ from requested (e.g., gpt-5 -> gpt-5-2025-08-07)
-  if (data.model) {
+  if (typeof data.model === 'string' && data.model) {
     metadata.model = data.model;
   }
 
   // Deep research annotations (citations)
-  if (processedOutput.annotations && processedOutput.annotations.length > 0) {
+  if (Array.isArray(processedOutput.annotations) && processedOutput.annotations.length > 0) {
     metadata.annotations = processedOutput.annotations;
   }
 
@@ -298,7 +298,10 @@ export class ResponsesProcessor {
         if (contentItem.type === 'output_text') {
           content += contentItem.text;
           // Preserve annotations for deep research citations
-          if (contentItem.annotations && contentItem.annotations.length > 0) {
+          if (
+            Array.isArray(contentItem.annotations) &&
+            contentItem.annotations.length > 0
+          ) {
             annotations.push(...contentItem.annotations);
           }
         } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
