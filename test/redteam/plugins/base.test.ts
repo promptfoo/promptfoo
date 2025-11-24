@@ -6,7 +6,12 @@ import {
   RedteamGraderBase,
   RedteamPluginBase,
 } from '../../../src/redteam/plugins/base';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../../src/types';
+import type {
+  ApiProvider,
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+} from '../../../src/types/index';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
 jest.mock('../../../src/matchers', () => ({
@@ -1769,10 +1774,10 @@ describe('RedteamGraderBase', () => {
   });
 
   describe('gradingGuidance + graderExamples integration', () => {
-    let testProvider: ApiProvider;
+    let _testProvider: ApiProvider;
 
     beforeEach(() => {
-      testProvider = {
+      _testProvider = {
         callApi: jest.fn().mockResolvedValue({
           output: 'Prompt: test prompt',
         }),

@@ -1,7 +1,9 @@
-import React, { useCallback, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import { useApiHealth } from '@app/hooks/useApiHealth';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -24,11 +26,13 @@ import {
   GridToolbarContainer,
   useGridApiRef,
 } from '@mui/x-data-grid';
+import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
+import type { PolicyObject } from '@promptfoo/redteam/types';
 import { parse } from 'csv-parse/browser/esm/sync';
-import { makeInlinePolicyId, makeDefaultPolicyName } from '@promptfoo/redteam/plugins/policy/utils';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
+import { PolicySuggestionsSidebar } from './PolicySuggestionsSidebar';
 
 // Augment the toolbar props interface
 declare module '@mui/x-data-grid' {
@@ -123,10 +127,17 @@ function CustomToolbar({
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const toast = useToast();
+  const { recordEvent } = useTelemetry();
   const apiRef = useGridApiRef();
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
-  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
+  const [isGeneratingPolicies, setIsGeneratingPolicies] = useState(false);
+  const [suggestedPolicies, setSuggestedPolicies] = useState<PolicyObject[]>([]);
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>({
+    type: 'include',
+    ids: new Set([]),
+  });
+  const isGeneratingPoliciesRef = useRef(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   // Policy dialog state
@@ -144,6 +155,9 @@ export const CustomPoliciesSection = () => {
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
+
+  // For policy generation, we'll try regardless of Cloud status since it can work with local servers
+  const canGeneratePolicies = Boolean(config.applicationDefinition?.purpose);
 
   // Test case generation state - now from context
   const { generateTestCase, isGenerating: generatingTestCase } = useTestCaseGeneration();
@@ -301,6 +315,11 @@ export const CustomPoliciesSection = () => {
         },
       ];
       updateConfig('plugins', [...otherPlugins, ...newPolicies]);
+      recordEvent('redteam_policy_added', {
+        source: 'manual',
+        policy_name: trimmedName,
+        policy_text: trimmedText,
+      });
       toast.showToast('Policy added successfully', 'success');
     } else {
       // Update existing policy
@@ -335,18 +354,21 @@ export const CustomPoliciesSection = () => {
   };
 
   const handleDeleteSelected = () => {
-    if (rowSelectionModel.length === 0) {
+    if (!rowSelectionModel?.ids || rowSelectionModel.ids.size === 0) {
       return;
     }
     setConfirmDeleteOpen(true);
   };
 
   const handleConfirmDelete = () => {
+    if (!rowSelectionModel?.ids) {
+      return;
+    }
     const otherPlugins = config.plugins.filter((p) =>
       typeof p === 'string' ? true : p.id !== 'policy',
     );
 
-    const selectedIds = new Set(rowSelectionModel as string[]);
+    const selectedIds = rowSelectionModel.ids;
     const remainingPolicies = policyPlugins
       .filter((p) => {
         const policyId =
@@ -368,13 +390,157 @@ export const CustomPoliciesSection = () => {
 
     setPolicyNames(newPolicyNames);
     updateConfig('plugins', [...otherPlugins, ...remainingPolicies]);
-    setRowSelectionModel([]);
+    setRowSelectionModel({ type: 'include', ids: new Set() });
     setConfirmDeleteOpen(false);
   };
 
   const handleCancelDelete = () => {
     setConfirmDeleteOpen(false);
   };
+
+  const handleGeneratePolicies = useCallback(async () => {
+    if (!config.applicationDefinition?.purpose) {
+      return;
+    }
+
+    // Guard against multiple simultaneous requests
+    if (isGeneratingPoliciesRef.current) {
+      return;
+    }
+
+    isGeneratingPoliciesRef.current = true;
+    setIsGeneratingPolicies(true);
+    try {
+      // Get existing policy texts to avoid duplicates (both active and suggested)
+      const existingPolicies = [
+        ...rows.map((row) => row.policyText),
+        ...suggestedPolicies.map((p) => p.text || ''),
+      ];
+
+      const response = await callApi('/redteam/generate-custom-policy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          applicationDefinition: config.applicationDefinition,
+          existingPolicies,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to generate policies';
+        try {
+          const error = await response.json();
+          errorMessage = error.details ?? error.error ?? errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = `Failed to generate policies: ${response.statusText || response.status}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      const generatedPolicies: Array<{ name: string; text: string }> = data.policies || [];
+
+      if (generatedPolicies.length === 0) {
+        toast.showToast(
+          'No policies were generated. Try adjusting your application definition.',
+          'warning',
+        );
+        setSuggestedPolicies([]);
+        return;
+      }
+
+      // Map to PolicyObject with generated IDs
+      const policyObjects: PolicyObject[] = generatedPolicies.map((p) => ({
+        id: makeInlinePolicyId(p.text),
+        text: p.text,
+        name: p.name,
+      }));
+
+      // Store as suggested policies instead of directly adding them
+      setSuggestedPolicies(policyObjects);
+    } catch (error) {
+      console.error('Error generating policies:', error);
+      let errorMessage = 'Failed to generate policies';
+
+      if (error instanceof Error) {
+        // Handle network errors
+        if (error.message.includes('fetch') || error.message.includes('network')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Request timed out. Please try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      } else {
+        errorMessage = 'An unexpected error occurred while generating policies.';
+      }
+
+      toast.showToast(errorMessage, 'error', 7500);
+      setSuggestedPolicies([]);
+    } finally {
+      isGeneratingPoliciesRef.current = false;
+      setIsGeneratingPolicies(false);
+    }
+  }, [config.applicationDefinition, rows, suggestedPolicies, toast]);
+
+  const handleAddSuggestedPolicy = useCallback(
+    (policy: PolicyObject) => {
+      const otherPlugins = config.plugins.filter((p) =>
+        typeof p === 'string' ? true : p.id !== 'policy',
+      );
+
+      const policyId = policy.id || makeInlinePolicyId(policy.text || '');
+      const newPolicy = {
+        id: 'policy',
+        config: {
+          policy: {
+            id: policyId,
+            text: policy.text,
+            name: policy.name,
+          },
+        },
+      };
+
+      const allPolicies = [
+        ...policyPlugins.map((p) => ({
+          id: 'policy',
+          config: { policy: p.config.policy },
+        })),
+        newPolicy,
+      ];
+
+      updateConfig('plugins', [...otherPlugins, ...allPolicies]);
+
+      // Remove from suggested policies
+      setSuggestedPolicies((prev) => prev.filter((p) => p.id !== policy.id));
+
+      recordEvent('redteam_policy_added', {
+        source: 'suggestion',
+        policy_name: policy.name,
+        policy_text: policy.text,
+      });
+      toast.showToast('Policy added successfully', 'success');
+    },
+    [config.plugins, policyPlugins, updateConfig, toast, recordEvent],
+  );
+
+  const handleRemoveSuggestedPolicy = useCallback(
+    (policy: PolicyObject) => {
+      // Remove from suggested policies
+      setSuggestedPolicies((prev) => prev.filter((p) => p.id !== policy.id));
+
+      // Log to PostHog
+      recordEvent('redteam_policy_dismissed', {
+        policy_name: policy.name,
+        policy_text: policy.text,
+        application_description: JSON.stringify(config.applicationDefinition || {}),
+      });
+    },
+    [recordEvent, config.applicationDefinition],
+  );
 
   const handleCsvUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -429,6 +595,10 @@ export const CustomPoliciesSection = () => {
 
           updateConfig('plugins', [...otherPlugins, ...allPolicies]);
 
+          recordEvent('redteam_policies_added_csv', {
+            count: newPolicies.length,
+          });
+
           toast.showToast(
             `Successfully imported ${newPolicies.length} policies from CSV`,
             'success',
@@ -456,23 +626,13 @@ export const CustomPoliciesSection = () => {
       setGeneratingPolicyId(row.id);
 
       await generateTestCase(
-        'policy',
-        {
-          policy: {
-            id: row.id,
-            text: row.policyText,
-            name: row.name,
-          },
+        { id: 'policy', config: { policy: row.policyText }, isStatic: true },
+        { id: 'basic', config: {}, isStatic: true },
+        function onSuccess() {
+          setGeneratingPolicyId(null);
         },
-        {
-          telemetryFeature: 'redteam_policy_generate_test_case',
-          mode: 'result',
-          onSuccess: () => {
-            setGeneratingPolicyId(null);
-          },
-          onError: () => {
-            setGeneratingPolicyId(null);
-          },
+        function onError() {
+          setGeneratingPolicyId(null);
         },
       );
     },
@@ -541,39 +701,66 @@ export const CustomPoliciesSection = () => {
 
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Determine if we should show the suggestions sidebar - show whenever policy generation is possible
+  const showSuggestionsSidebar = canGeneratePolicies;
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} ref={containerRef}>
-      <Box sx={{ height: containerRef.current?.clientHeight ?? 500 }}>
-        <DataGrid
-          apiRef={apiRef}
-          rows={rows}
-          columns={columns}
-          checkboxSelection
-          disableRowSelectionOnClick
-          slots={{ toolbar: CustomToolbar }}
-          slotProps={{
-            toolbar: {
-              selectedCount: rowSelectionModel.length,
-              onDeleteSelected: handleDeleteSelected,
-              onAddPolicy: handleAddPolicy,
-              onUploadCsv: handleCsvUpload,
-              isUploadingCsv,
-            },
-          }}
-          onRowSelectionModelChange={setRowSelectionModel}
-          rowSelectionModel={rowSelectionModel}
-        />
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: showSuggestionsSidebar ? '1fr 380px' : '1fr',
+          gap: 2,
+          height: 600,
+          minHeight: 400,
+        }}
+      >
+        {/* Main table area */}
+        <Box sx={{ height: '100%', minWidth: 0 }}>
+          <DataGrid
+            apiRef={apiRef}
+            rows={rows}
+            columns={columns}
+            checkboxSelection
+            disableRowSelectionOnClick
+            slots={{ toolbar: CustomToolbar }}
+            slotProps={{
+              toolbar: {
+                selectedCount: rowSelectionModel?.ids?.size ?? 0,
+                onDeleteSelected: handleDeleteSelected,
+                onAddPolicy: handleAddPolicy,
+                onUploadCsv: handleCsvUpload,
+                isUploadingCsv,
+              },
+            }}
+            onRowSelectionModelChange={setRowSelectionModel}
+            rowSelectionModel={rowSelectionModel}
+            showToolbar
+          />
+        </Box>
+
+        {/* Suggested Policies Sidebar */}
+        {showSuggestionsSidebar && (
+          <PolicySuggestionsSidebar
+            isGeneratingPolicies={isGeneratingPolicies}
+            suggestedPolicies={suggestedPolicies}
+            onGeneratePolicies={handleGeneratePolicies}
+            onAddSuggestedPolicy={handleAddSuggestedPolicy}
+            onRemoveSuggestedPolicy={handleRemoveSuggestedPolicy}
+          />
+        )}
       </Box>
 
       {/* Delete confirmation dialog */}
       <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
         <DialogTitle>
-          Delete {rowSelectionModel.length} polic{rowSelectionModel.length === 1 ? 'y' : 'ies'}?
+          Delete {rowSelectionModel?.ids?.size ?? 0} polic
+          {(rowSelectionModel?.ids?.size ?? 0) === 1 ? 'y' : 'ies'}?
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
             Are you sure you want to delete the selected polic
-            {rowSelectionModel.length === 1 ? 'y' : 'ies'}? This action cannot be undone.
+            {(rowSelectionModel?.ids?.size ?? 0) === 1 ? 'y' : 'ies'}? This action cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>

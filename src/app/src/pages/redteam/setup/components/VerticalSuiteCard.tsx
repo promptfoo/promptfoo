@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import LockIcon from '@mui/icons-material/Lock';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -43,6 +44,7 @@ export interface VerticalSuite {
   pluginGroups: PluginGroup[];
   complianceFrameworks?: string[];
   color: string;
+  requiresEnterprise?: boolean;
 }
 
 interface VerticalSuiteCardProps {
@@ -53,6 +55,8 @@ interface VerticalSuiteCardProps {
   onGenerateTestCase: (plugin: Plugin) => void;
   isPluginConfigured: (plugin: Plugin) => boolean;
   isPluginDisabled: (plugin: Plugin) => boolean;
+  hasEnterpriseAccess: boolean;
+  onUpgradeClick?: () => void;
 }
 
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
@@ -65,14 +69,18 @@ export default function VerticalSuiteCard({
   onGenerateTestCase,
   isPluginConfigured,
   isPluginDisabled,
+  hasEnterpriseAccess,
+  onUpgradeClick,
 }: VerticalSuiteCardProps) {
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
-  const { isGenerating: generatingTestCase, currentPlugin: generatingPlugin } =
-    useTestCaseGeneration();
+  const { isGenerating: generatingTestCase, plugin: generatingPlugin } = useTestCaseGeneration();
+
+  // Check if this suite is locked (requires enterprise but user doesn't have access)
+  const isLocked = suite.requiresEnterprise && !hasEnterpriseAccess;
 
   // Calculate stats
   const selectedCount = useMemo(
@@ -102,6 +110,9 @@ export default function VerticalSuiteCard({
   const handleToggleAll = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+      if (isLocked) {
+        return;
+      }
       suite.plugins.forEach((plugin) => {
         if (allSelected) {
           if (selectedPlugins.has(plugin)) {
@@ -114,36 +125,60 @@ export default function VerticalSuiteCard({
         }
       });
     },
-    [suite.plugins, allSelected, selectedPlugins, onPluginToggle],
+    [suite.plugins, allSelected, selectedPlugins, onPluginToggle, isLocked],
   );
 
   const handleExpandClick = useCallback(() => {
     setExpanded((prev) => !prev);
   }, []);
 
+  const handleUpgradeClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (onUpgradeClick) {
+        onUpgradeClick();
+      } else {
+        window.open('https://www.promptfoo.dev/pricing/', '_blank');
+      }
+    },
+    [onUpgradeClick],
+  );
+
   return (
     <Paper
       elevation={0}
       sx={{
-        border: '1px solid',
-        borderColor: allSelected
-          ? 'primary.main'
-          : someSelected
-            ? alpha(theme.palette.primary.main, 0.3)
-            : theme.palette.divider,
-        borderRadius: 1.5,
-        overflow: 'hidden',
-        transition: 'all 0.2s ease-in-out',
-        backgroundColor: 'background.paper',
-        '&:hover': {
-          borderColor: allSelected
+        border: '2px solid',
+        borderColor: isLocked
+          ? alpha(theme.palette.warning.main, 0.3)
+          : allSelected
             ? 'primary.main'
             : someSelected
-              ? alpha(theme.palette.primary.main, 0.5)
-              : alpha(theme.palette.primary.main, 0.2),
-          boxShadow: allSelected
-            ? `0 4px 20px ${alpha(theme.palette.primary.main, 0.15)}`
-            : `0 2px 8px ${alpha(theme.palette.action.hover, 0.1)}`,
+              ? alpha(theme.palette.primary.main, 0.3)
+              : theme.palette.divider,
+        borderRadius: 2,
+        overflow: 'hidden',
+        transition: 'all 0.2s ease-in-out',
+        backgroundColor: isLocked
+          ? `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.03)} 0%, ${alpha(theme.palette.background.paper, 1)} 100%)`
+          : 'background.paper',
+        backgroundImage: isLocked
+          ? `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.03)} 0%, transparent 50%)`
+          : 'none',
+        position: 'relative',
+        '&:hover': {
+          borderColor: isLocked
+            ? alpha(theme.palette.warning.main, 0.5)
+            : allSelected
+              ? 'primary.main'
+              : someSelected
+                ? alpha(theme.palette.primary.main, 0.5)
+                : alpha(theme.palette.primary.main, 0.2),
+          boxShadow: isLocked
+            ? `0 4px 16px ${alpha(theme.palette.warning.main, 0.15)}`
+            : allSelected
+              ? `0 4px 20px ${alpha(theme.palette.primary.main, 0.15)}`
+              : `0 2px 8px ${alpha(theme.palette.action.hover, 0.1)}`,
         },
       }}
     >
@@ -151,7 +186,9 @@ export default function VerticalSuiteCard({
       <Box
         sx={{
           p: 3,
-          backgroundColor: alpha(theme.palette.primary.main, 0.02),
+          backgroundColor: isLocked
+            ? alpha(theme.palette.warning.main, 0.04)
+            : alpha(theme.palette.primary.main, 0.02),
           borderBottom: expanded ? `1px solid ${theme.palette.divider}` : 'none',
         }}
       >
@@ -177,6 +214,32 @@ export default function VerticalSuiteCard({
               <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.125rem' }}>
                 {suite.name}
               </Typography>
+              {isLocked && (
+                <Tooltip title="This feature is only available in Promptfoo Enterprise">
+                  <Chip
+                    icon={<LockIcon sx={{ fontSize: '0.875rem !important' }} />}
+                    label="ENTERPRISE"
+                    size="small"
+                    sx={{
+                      height: 24,
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.5px',
+                      bgcolor: 'linear-gradient(135deg, #FFA726 0%, #FB8C00 100%)',
+                      background: 'linear-gradient(135deg, #FFA726 0%, #FB8C00 100%)',
+                      color: '#fff',
+                      border: 'none',
+                      boxShadow: `0 2px 8px ${alpha(theme.palette.warning.main, 0.3)}`,
+                      '& .MuiChip-icon': {
+                        color: '#fff',
+                      },
+                      '& .MuiChip-label': {
+                        px: 1,
+                      },
+                    }}
+                  />
+                </Tooltip>
+              )}
               <Chip
                 label={`${suite.plugins.length} tests`}
                 size="small"
@@ -293,40 +356,96 @@ export default function VerticalSuiteCard({
 
             {/* Actions */}
             <Stack direction="row" spacing={1.5}>
-              <Button
-                variant={allSelected ? 'outlined' : 'contained'}
-                size="small"
-                onClick={handleToggleAll}
-                sx={{
-                  fontWeight: 500,
-                  textTransform: 'none',
-                  px: 2,
-                }}
-              >
-                {allSelected ? 'Deselect All' : `Select All ${suite.plugins.length} Tests`}
-              </Button>
-              <Button
-                variant="text"
-                size="small"
-                endIcon={
-                  <ExpandMoreIcon
+              {isLocked ? (
+                <>
+                  <Tooltip title="View pricing and features">
+                    <Button
+                      variant="contained"
+                      size="medium"
+                      onClick={handleUpgradeClick}
+                      startIcon={<LockIcon sx={{ fontSize: '1.1rem' }} />}
+                      sx={{
+                        fontWeight: 600,
+                        textTransform: 'none',
+                        px: 3,
+                        py: 1,
+                        fontSize: '0.875rem',
+                        background: 'linear-gradient(135deg, #FFA726 0%, #FB8C00 100%)',
+                        color: '#fff',
+                        boxShadow: `0 4px 12px ${alpha(theme.palette.warning.main, 0.4)}`,
+                        border: 'none',
+                        '&:hover': {
+                          background: 'linear-gradient(135deg, #FB8C00 0%, #F57C00 100%)',
+                          boxShadow: `0 6px 16px ${alpha(theme.palette.warning.main, 0.5)}`,
+                          transform: 'translateY(-1px)',
+                        },
+                        transition: 'all 0.2s ease-in-out',
+                      }}
+                    >
+                      Upgrade to Enterprise
+                    </Button>
+                  </Tooltip>
+                  <Button
+                    variant="text"
+                    size="small"
+                    endIcon={
+                      <ExpandMoreIcon
+                        sx={{
+                          transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s',
+                          fontSize: '1.25rem',
+                        }}
+                      />
+                    }
+                    onClick={handleExpandClick}
                     sx={{
-                      transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.2s',
-                      fontSize: '1.25rem',
+                      color: 'text.secondary',
+                      fontWeight: 500,
+                      textTransform: 'none',
+                      px: 1.5,
                     }}
-                  />
-                }
-                onClick={handleExpandClick}
-                sx={{
-                  color: 'text.secondary',
-                  fontWeight: 500,
-                  textTransform: 'none',
-                  px: 1.5,
-                }}
-              >
-                {expanded ? 'Collapse' : 'Expand'}
-              </Button>
+                  >
+                    {expanded ? 'Collapse' : 'View Details'}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant={allSelected ? 'outlined' : 'contained'}
+                    size="small"
+                    onClick={handleToggleAll}
+                    sx={{
+                      fontWeight: 500,
+                      textTransform: 'none',
+                      px: 2,
+                    }}
+                  >
+                    {allSelected ? 'Deselect All' : `Select All ${suite.plugins.length} Tests`}
+                  </Button>
+                  <Button
+                    variant="text"
+                    size="small"
+                    endIcon={
+                      <ExpandMoreIcon
+                        sx={{
+                          transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s',
+                          fontSize: '1.25rem',
+                        }}
+                      />
+                    }
+                    onClick={handleExpandClick}
+                    sx={{
+                      color: 'text.secondary',
+                      fontWeight: 500,
+                      textTransform: 'none',
+                      px: 1.5,
+                    }}
+                  >
+                    {expanded ? 'Collapse' : 'Expand'}
+                  </Button>
+                </>
+              )}
             </Stack>
           </Box>
         </Stack>
@@ -367,14 +486,14 @@ export default function VerticalSuiteCard({
                         key={plugin}
                         variant="outlined"
                         onClick={() => {
-                          if (!pluginDisabled) {
+                          if (!pluginDisabled && !isLocked) {
                             onPluginToggle(plugin);
                           }
                         }}
                         sx={{
                           p: 1.5,
-                          cursor: pluginDisabled ? 'not-allowed' : 'pointer',
-                          opacity: pluginDisabled ? 0.5 : 1,
+                          cursor: pluginDisabled || isLocked ? 'not-allowed' : 'pointer',
+                          opacity: pluginDisabled ? 0.5 : isLocked ? 0.85 : 1,
                           borderColor: isSelected
                             ? hasError
                               ? 'error.main'
@@ -387,27 +506,33 @@ export default function VerticalSuiteCard({
                             : 'transparent',
                           transition: 'all 0.15s ease-in-out',
                           '&:hover': {
-                            borderColor: pluginDisabled
-                              ? 'divider'
-                              : isSelected
-                                ? hasError
-                                  ? 'error.main'
-                                  : 'primary.main'
-                                : alpha(theme.palette.primary.main, 0.3),
-                            bgcolor: pluginDisabled
-                              ? 'transparent'
-                              : isSelected
-                                ? hasError
-                                  ? alpha(theme.palette.error.main, 0.06)
-                                  : alpha(theme.palette.primary.main, 0.06)
-                                : alpha(theme.palette.action.hover, 0.03),
+                            borderColor:
+                              pluginDisabled || isLocked
+                                ? isLocked
+                                  ? alpha(theme.palette.warning.main, 0.2)
+                                  : 'divider'
+                                : isSelected
+                                  ? hasError
+                                    ? 'error.main'
+                                    : 'primary.main'
+                                  : alpha(theme.palette.primary.main, 0.3),
+                            bgcolor:
+                              pluginDisabled || isLocked
+                                ? isLocked
+                                  ? alpha(theme.palette.warning.main, 0.04)
+                                  : 'transparent'
+                                : isSelected
+                                  ? hasError
+                                    ? alpha(theme.palette.error.main, 0.06)
+                                    : alpha(theme.palette.primary.main, 0.06)
+                                  : alpha(theme.palette.action.hover, 0.03),
                           },
                         }}
                       >
                         <Stack direction="row" alignItems="center" spacing={1}>
                           <Checkbox
                             checked={isSelected}
-                            disabled={pluginDisabled}
+                            disabled={pluginDisabled || isLocked}
                             size="small"
                             onClick={(e) => e.stopPropagation()}
                             onChange={() => onPluginToggle(plugin)}
@@ -418,20 +543,23 @@ export default function VerticalSuiteCard({
                             onClick={() => onGenerateTestCase(plugin)}
                             disabled={
                               pluginDisabled ||
+                              isLocked ||
                               apiHealthStatus !== 'connected' ||
                               (generatingTestCase && generatingPlugin === plugin)
                             }
                             isGenerating={generatingTestCase && generatingPlugin === plugin}
                             tooltipTitle={
-                              pluginDisabled
-                                ? 'This plugin requires remote generation'
-                                : apiHealthStatus === 'connected'
-                                  ? `Generate a test case for ${displayNameOverrides[plugin] || plugin}`
-                                  : 'Promptfoo Cloud connection is required for test generation'
+                              isLocked
+                                ? 'This feature requires Promptfoo Enterprise'
+                                : pluginDisabled
+                                  ? 'This plugin requires remote generation'
+                                  : apiHealthStatus === 'connected'
+                                    ? `Generate a test case for ${displayNameOverrides[plugin] || plugin}`
+                                    : 'Promptfoo Cloud connection is required for test generation'
                             }
                           />
 
-                          {isSelected && (
+                          {isSelected && !isLocked && (
                             <Tooltip title={`Configure ${displayNameOverrides[plugin] || plugin}`}>
                               <IconButton
                                 size="small"
