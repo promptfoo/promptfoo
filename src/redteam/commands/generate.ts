@@ -399,11 +399,18 @@ export async function doGenerateRedteam(
   }
 
   // Extract target IDs from the config providers (targets get rewritten to providers)
+  // IDs are used for retry strategy to match failed tests by target ID
   const targetIds: string[] =
     (Array.isArray(resolvedConfig?.providers)
       ? resolvedConfig.providers
           .filter((target) => typeof target !== 'function')
-          .map((target) => (typeof target === 'string' ? target : (target as { id?: string })?.id))
+          .map((target) => {
+            if (typeof target === 'string') {
+              return target; // Use the provider string as ID
+            }
+            const providerObj = target as { id?: string };
+            return providerObj.id;
+          })
           .filter((id): id is string => typeof id === 'string')
       : []) ?? [];
 
