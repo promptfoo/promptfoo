@@ -41,14 +41,16 @@ function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) 
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter
+      <Box
         sx={{
           '& .MuiInputBase-root': {
             borderRadius: 2,
             backgroundColor: theme.palette.background.paper,
           },
         }}
-      />
+      >
+        <GridToolbarQuickFilter />
+      </Box>
     </GridToolbarContainer>
   );
 }
@@ -287,9 +289,9 @@ export default function Prompts({
             },
           }}
           pageSizeOptions={[10, 25, 50, 100]}
+          showToolbar
         />
       </Paper>
-
       {dialogState.open &&
         dialogState.selectedIndex < data.length &&
         data[dialogState.selectedIndex] && (
