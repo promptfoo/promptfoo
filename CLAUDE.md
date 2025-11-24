@@ -530,7 +530,7 @@ PR titles and changelog entries use the same format. When you create a PR:
 
 ## Changelog
 
-All user-facing changes must be documented in `CHANGELOG.md`. The changelog is enforced via GitHub Actions.
+All user-facing changes must be documented in `CHANGELOG.md`.
 
 ### When to Update
 
@@ -551,22 +551,6 @@ Update the changelog for pull requests that change:
 - Build configuration changes
 - Code style/formatting changes
 - CI/CD changes
-
-### Automatic Exemptions
-
-PRs that only modify these files are exempt from changelog requirements:
-
-- Documentation website (`site/`)
-- Root markdown files (README.md, CONTRIBUTING.md, SECURITY.md, CLAUDE.md, AGENTS.md, LICENSE)
-- Dev environment configs (.vscode/, .cursor/, .devcontainer/)
-- Config files (.gitignore, .prettierrc, .rubocop.yml, .ruff.toml, .coderabbit.yaml, etc.)
-
-### Bypass Labels
-
-PRs can bypass changelog requirements with one of these labels:
-
-1. `no-changelog` - For exceptional cases (automated bot PRs, reverts of unmerged changes)
-2. `dependencies` - For automated dependency updates (Dependabot, Renovate, etc.)
 
 ### Changelog Format
 
@@ -727,6 +711,74 @@ git commit -m "feat(providers): add new provider for XYZ"
 - Don't worry about version numbers - focus on the Unreleased section
 - If unsure about categorization, use Changed
 - ALL dependencies, tests, CI changes must be included (no exemptions)
+## Release Process
+
+This project uses [release-please](https://github.com/googleapis/release-please) for automated releases. Release Please automates CHANGELOG generation, version bumps, and GitHub releases based on conventional commits.
+
+### How It Works
+
+1. **Development**: Write code following [conventional commit format](https://www.conventionalcommits.org/) in your commit messages
+2. **Release PR**: When changes are merged to main, release-please automatically creates/updates a release PR that:
+   - Generates CHANGELOG.md entries from commit messages
+   - Determines version bump (major/minor/patch) from commit types
+   - Updates the version in package.json
+   - Creates a git tag
+3. **Publishing**: When the release PR is merged:
+   - A GitHub release is created automatically
+   - The npm package is published to npm using the NPM_TOKEN secret
+   - No manual version bumps or changelog edits needed
+
+### Commit Message Format
+
+Use [conventional commits](https://www.conventionalcommits.org/) format:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Common types:**
+
+- `feat:` - New feature (triggers minor version bump)
+- `fix:` - Bug fix (triggers patch version bump)
+- `feat!:` or `fix!:` - Breaking change (triggers major version bump)
+- `chore:` - Maintenance tasks (triggers patch version bump)
+- `docs:` - Documentation only (triggers patch version bump)
+- `refactor:` - Code refactoring (triggers patch version bump)
+- `test:` - Test updates (triggers patch version bump)
+
+**Examples:**
+
+```bash
+feat(providers): add support for Claude 3.5
+fix(webui): resolve memory leak in eval table
+feat(api)!: remove deprecated provider options
+chore(deps): update dependencies
+```
+
+### Version Bumping
+
+- **Major** (1.0.0 → 2.0.0): Commits with `!` breaking change indicator (e.g., `feat!:`, `fix!:`)
+- **Minor** (1.0.0 → 1.1.0): Commits with `feat:` or `feat(`
+- **Patch** (1.0.0 → 1.0.1): All other types (`fix:`, `chore:`, `docs:`, `refactor:`, `test:`, etc.)
+
+### Release Steps
+
+The release process is fully automated:
+
+1. Merge PRs to main with conventional commit messages
+2. Release-please automatically creates/updates a release PR
+3. Review and merge the release PR
+4. GitHub release is created and npm package is published automatically
+
+### Configuration Files
+
+- `.release-please-manifest.json` - Tracks the current version
+- `release-please-config.json` - Configures release-please behavior
+- `.github/workflows/release-please.yml` - Creates/updates release PRs and publishes to npm when merged
 
 ## Dependency Management
 
