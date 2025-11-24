@@ -35,7 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
-- chore(deps): upgrade cache-manager from v4 to v7 with robust data migration - adds automatic cache format migration with atomic writes, concurrency protection, disk space validation, smart backup management, progress logging for large caches, marker validation for incomplete migrations, and graceful fallback to memory cache on failure; replaces cache-manager-fs-hash with keyv-file backend
+- chore(deps): upgrade cache-manager from v4 to v7 with robust data migration - adds automatic cache format migration with atomic writes, concurrency protection, disk space validation, smart backup management, progress logging for large caches, marker validation for incomplete migrations, and graceful fallback to memory cache on failure; replaces cache-manager-fs-hash with keyv-file backend (#6334)
 
 ### Tests
 
