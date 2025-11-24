@@ -377,12 +377,12 @@ When this config file exists, the eval creator will show only the providers list
 ```yaml title="ui-providers.yaml"
 providers:
   # Simple provider IDs
-  - openai:gpt-4o-mini
+  - openai:gpt-5.1-mini
   - anthropic:messages:claude-haiku-4-5-20251001
 
   # With custom labels
-  - id: openai:gpt-4o
-    label: GPT-4o (Company Approved)
+  - id: openai:gpt-5.1
+    label: GPT-5.1 (Company Approved)
 
   # With default configuration
   - id: anthropic:messages:claude-sonnet-4-5-20250929
@@ -444,7 +444,7 @@ metadata:
 data:
   ui-providers.yaml: |
     providers:
-      - openai:gpt-4o
+      - openai:gpt-5.1
       - anthropic:messages:claude-sonnet-4-5-20250929
 ---
 apiVersion: apps/v1
@@ -516,7 +516,7 @@ Configuration is loaded once on startup and cached for performance.
 ```yaml
 # ui-providers.yaml - NO CREDENTIALS
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-5.1-mini
   # API key comes from OPENAI_API_KEY environment variable
 
   - id: http://internal-api.company.com/v1
@@ -563,7 +563,7 @@ providers:
 
 **Provider ID formats:**
 
-- **OpenAI:** `openai:gpt-4o-mini`, `openai:o3-mini`
+- **OpenAI:** `openai:gpt-5.1`, `openai:gpt-5.1-mini`, `openai:o3-mini`
 - **Anthropic:** `anthropic:messages:claude-sonnet-4-5-20250929`
 - **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`
 - **Azure OpenAI:** `azureopenai:chat:deployment-name`
@@ -684,14 +684,14 @@ docker logs promptfoo_container | grep "YAML"
 
 # ❌ Wrong - inconsistent indentation
 providers:
-- id: openai:gpt-4o
+- id: openai:gpt-5.1
   config:
     temperature: 0.7
    max_tokens: 1000  # Wrong indentation
 
 # ✅ Correct - consistent 2-space indentation
 providers:
-  - id: openai:gpt-4o
+  - id: openai:gpt-5.1
     config:
       temperature: 0.7
       max_tokens: 1000
