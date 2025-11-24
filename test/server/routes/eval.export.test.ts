@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { Request, Response } from 'express';
 
-import type { CompletedPrompt } from '../../../src/types';
+import type { CompletedPrompt } from '../../../src/types/index';
 
 // Mock dependencies first
 jest.mock('../../../src/database', () => ({

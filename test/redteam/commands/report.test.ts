@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { redteamReportCommand } from '../../../src/redteam/commands/report';
 import { startServer } from '../../../src/server/server';
 import telemetry from '../../../src/telemetry';
-import { setupEnv } from '../../../src/util';
+import { setupEnv } from '../../../src/util/index';
 import { setConfigDirectoryPath } from '../../../src/util/config/manage';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../../src/util/server';
 

@@ -6,13 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- feat(providers): add Anthropic structured outputs support with JSON schema outputs via `output_format` parameter and strict tool use via `strict: true` in tool definitions - ensures schema-compliant responses with automatic beta header handling, external file loading, variable rendering, and JSON parsing for Claude Sonnet 4.5 and Claude Opus 4.1 (#6226)
+- feat(cli): add automatic changelog update on version bump with comprehensive error handling (#6252)
+- feat(ci): add JavaScript-based changelog validator replacing bash script for PR number and Unreleased section enforcement (#6252)
+- feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking (#6267)
+- refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
+- chore: Add visiblity button for PFX passphrase (#6258)
+
 ### Fixed
 
 - fix(providers): add data URL support for vision models in Azure, Anthropic, and other providers (#5725)
+- fix(webui): prevent horizontal scrolling in metadata table by adding fixed table layout with explicit column widths and proper word-breaking for long content (#6178)
+- fix(providers): maintain backwards compatibility for annotations in raw provider responses (#6267)
+- fix(cli): restore commandLineOptions support for generateSuggestions, table, and write options (#6190)
+- fix(cli): enable auto-sharing when cloud is enabled by not defaulting config.sharing to false - when sharing is unset in config, it now correctly falls through to cloud auto-share behavior instead of defaulting to disabled (#6190)
+- fix(providers): propagate agent errors in simulated-user provider - fixes issue where errors from sendMessageToAgent() were silently ignored, causing false-positive test results when the target provider fails (#6251)
+- fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
+- fix(assertions): use file-based script output for all assertion types with `file://` references (#6200)
+- fix(cli): respect PROMPTFOO_LOG_DIR environment variable for custom log directory location (#6179)
 
-### Changed
+### Documentation
 
-- chore: Add visiblity button for PFX passphrase (#6258)
+- docs(providers): add comprehensive Anthropic structured outputs documentation covering JSON outputs (`output_format`) and strict tool use (`strict: true`), including usage examples, schema limitations, and feature compatibility (#6226)
+
+### Tests
+
+- test(examples): add structured outputs example demonstrating JSON schema-based responses and strict tool use for Anthropic provider (#6226)
+- test(examples): update tool-use example to include strict mode configuration for Anthropic provider (#6226)
+- test(examples): enhance structured-outputs-config example to demonstrate multi-provider structured outputs with OpenAI and Anthropic, showcasing syntax differences between providers (#6226)
+- test(scripts): add 59 tests for changelog automation scripts covering validation and version update functionality (#6252)
 
 ## [0.119.8] - 2025-11-18
 
