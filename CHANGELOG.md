@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(cli): add automatic changelog update on version bump with comprehensive error handling (#6252)
+- feat(ci): add JavaScript-based changelog validator replacing bash script for PR number and Unreleased section enforcement (#6252)
+
 ### Changed
 
 - feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking (#6267)
@@ -16,6 +21,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(providers): maintain backwards compatibility for annotations in raw provider responses (#6267)
 - fix(cli): restore commandLineOptions support for generateSuggestions, table, and write options (#6190)
 - fix(cli): enable auto-sharing when cloud is enabled by not defaulting config.sharing to false - when sharing is unset in config, it now correctly falls through to cloud auto-share behavior instead of defaulting to disabled (#6190)
+- fix(assertions): use file-based script output for all assertion types with `file://` references (#6200)
+
+### Tests
+
+- test(scripts): add 59 tests for changelog automation scripts covering validation and version update functionality (#6252)
 
 ## [0.119.11] - 2025-11-23
 
@@ -92,8 +102,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(cli): add automatic changelog update on version bump with comprehensive error handling (#6252)
-- feat(ci): add JavaScript-based changelog validator replacing bash script for PR number and Unreleased section enforcement (#6252)
 - feat(webui): add custom policy generation to red team setup (#6181)
 - feat(webui): add strategy test generation to red team setup (#6005)
 - feat(webui): add visibility button for PFX passphrase field in red team target configuration (#6258)
@@ -101,11 +109,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
-- fix(assertions): use file-based script output for all assertion types with `file://` references (#6200)
-
-### Tests
-
-- test(scripts): add 59 tests for changelog automation scripts covering validation and version update functionality (#6252)
 
 ## [0.119.8] - 2025-11-18
 
