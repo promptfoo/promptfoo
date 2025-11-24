@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Features
 
+- feat(redteam): add ecommerce plugin pack with 4 security testing plugins (#6168)
 * changelog automation and validation ([#6252](https://github.com/promptfoo/promptfoo/issues/6252)) ([ee74c4a](https://github.com/promptfoo/promptfoo/commit/ee74c4ae7dc01c35dd52d835a19188f06a334a1a))
 * **providers:** add Anthropic structured outputs support ([#6226](https://github.com/promptfoo/promptfoo/issues/6226)) ([1b1b9d2](https://github.com/promptfoo/promptfoo/commit/1b1b9d274559a5ae7cefba1de0c6a732a3d6cbf0))
 * **providers:** add Claude Opus 4.5 model support ([#6339](https://github.com/promptfoo/promptfoo/issues/6339)) ([65f855d](https://github.com/promptfoo/promptfoo/commit/65f855d57a2d3e0a663ad86260308f899c375dd6))
@@ -152,16 +153,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(webui): add custom policy generation to red team setup (#6181)
 - feat(webui): add strategy test generation to red team setup (#6005)
 - feat(webui): add visibility button for PFX passphrase field in red team target configuration (#6258)
-- feat(redteam): add ecommerce plugin pack with 4 security testing plugins (compliance bypass, order fraud, PCI-DSS, price manipulation) for testing e-commerce AI systems (#6168)
 
 ### Fixed
 
 - fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
 - fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
-
-### Changed
-
-- chore: Add visibility button for PFX passphrase (#6258)
 
 ## [0.119.8] - 2025-11-18
 
