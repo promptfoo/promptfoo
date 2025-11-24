@@ -118,6 +118,73 @@ describe('dataUrl utilities', () => {
     });
   });
 
+  describe('edge cases', () => {
+    it('should handle data URLs with charset parameter', () => {
+      const result = parseDataUrl('data:image/jpeg;charset=utf-8;base64,/9j/test');
+      expect(result).toEqual({
+        mimeType: 'image/jpeg',
+        base64Data: '/9j/test',
+      });
+    });
+
+    it('should handle data URLs with multiple parameters', () => {
+      const result = parseDataUrl('data:image/jpeg;name=photo.jpg;charset=utf-8;base64,/9j/test');
+      expect(result).toEqual({
+        mimeType: 'image/jpeg',
+        base64Data: '/9j/test',
+      });
+    });
+
+    it('should trim whitespace from base64 data', () => {
+      const result = parseDataUrl('data:image/jpeg;base64, /9j/test ');
+      expect(result?.base64Data).toBe('/9j/test');
+    });
+
+    it('should trim whitespace from MIME type', () => {
+      const result = parseDataUrl('data: image/jpeg ;base64,/9j/test');
+      expect(result?.mimeType).toBe('image/jpeg');
+    });
+
+    it('should handle empty base64 data gracefully', () => {
+      const result = parseDataUrl('data:image/jpeg;base64,');
+      expect(result).toBeNull();
+    });
+
+    it('should reject case-insensitive data URLs', () => {
+      expect(isDataUrl('DATA:image/jpeg;base64,test')).toBe(false);
+      expect(isDataUrl('Data:image/jpeg;base64,test')).toBe(false);
+      expect(isDataUrl('dAtA:image/jpeg;base64,test')).toBe(false);
+    });
+
+    it('should reject data URLs with newlines in base64', () => {
+      const result = parseDataUrl('data:image/jpeg;base64,/9j/\n4AAQ\ntest');
+      expect(result).toBeNull();
+    });
+
+    it('should handle very short valid base64 (small GIFs)', () => {
+      // Smallest valid 1x1 GIF is ~35 chars, we support down to 20
+      const smallBase64 = 'R0lGODlhAQABAAAAACw='; // 20 chars
+      const result = parseDataUrl(`data:image/gif;base64,${smallBase64}`);
+      expect(result).toEqual({
+        mimeType: 'image/gif',
+        base64Data: smallBase64,
+      });
+    });
+
+    it('should extract base64 from data URLs with charset parameter', () => {
+      const base64 = '/9j/test';
+      const dataUrl = `data:image/jpeg;charset=utf-8;base64,${base64}`;
+      expect(extractBase64FromDataUrl(dataUrl)).toBe(base64);
+    });
+
+    it('should handle URL-encoded SVG (not supported, should fail gracefully)', () => {
+      const urlEncodedSvg = 'data:image/svg+xml,%3Csvg%3E%3C/svg%3E';
+      expect(parseDataUrl(urlEncodedSvg)).toBeNull();
+      // Should pass through unchanged since it's not recognized as data URL
+      expect(extractBase64FromDataUrl(urlEncodedSvg)).toBe(urlEncodedSvg);
+    });
+  });
+
   describe('extractBase64FromDataUrl', () => {
     it('should extract base64 from JPEG data URL', () => {
       const base64 = '/9j/4AAQSkZJRg';

@@ -557,7 +557,9 @@ function isValidBase64Image(data: string): boolean {
   // Handle both data URLs and raw base64
   const base64Data = isDataUrl(data) ? extractBase64FromDataUrl(data) : data;
 
-  if (!base64Data || base64Data.length < 100) {
+  // Minimum length check: smallest valid GIF is ~35 chars
+  // Set threshold to 20 to allow small images (1x1 pixels, icons, test fixtures)
+  if (!base64Data || base64Data.length < 20) {
     return false;
   }
 

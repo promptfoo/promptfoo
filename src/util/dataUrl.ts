@@ -27,6 +27,24 @@
  * These utilities enable transparent conversion between formats, allowing
  * promptfoo to generate data URLs from file:// inputs while providers
  * automatically convert to their required format.
+ *
+ * ## Limitations and Edge Cases
+ *
+ * **Supported formats:**
+ * - `data:image/jpeg;base64,/9j/...` ✅ Standard format
+ * - `data:image/jpeg;charset=utf-8;base64,/9j/...` ✅ With charset parameter
+ * - `data:image/jpeg;name=photo.jpg;base64,/9j/...` ✅ With filename parameter
+ * - Small images (≥20 chars base64) ✅ Including 1x1 GIFs and icons
+ *
+ * **Not supported:**
+ * - `data:image/svg+xml,%3Csvg%3E` ❌ URL-encoded (only base64 supported)
+ * - `DATA:image/jpeg;base64,...` ❌ Uppercase "data:" (RFC 2397 requires lowercase)
+ * - `data:image/jpeg;base64,/9j/\n4AAQ` ❌ Newlines in base64 (must be single-line)
+ * - Very large files (>100MB) ⚠️ May cause OOM errors
+ *
+ * **Format detection:**
+ * - JPEG, PNG, GIF, WebP, BMP, TIFF, ICO: Magic number detection
+ * - AVIF, HEIC, SVG: Extension-based detection only
  */
 
 export interface ParsedDataUrl {
@@ -50,11 +68,20 @@ export function isDataUrl(value: string): boolean {
 
 /**
  * Parse a data URL into its components
+ *
+ * Handles data URLs with optional parameters (e.g., charset, name):
+ * - `data:image/jpeg;base64,<data>` - Standard format
+ * - `data:image/jpeg;charset=utf-8;base64,<data>` - With charset
+ * - `data:image/jpeg;name=photo.jpg;base64,<data>` - With filename
+ *
  * @param dataUrl Data URL string
  * @returns Parsed components (mimeType and base64Data) or null if invalid
  *
  * @example
  * parseDataUrl("data:image/jpeg;base64,/9j/...")
+ * // { mimeType: "image/jpeg", base64Data: "/9j/..." }
+ *
+ * parseDataUrl("data:image/jpeg;charset=utf-8;base64,/9j/...")
  * // { mimeType: "image/jpeg", base64Data: "/9j/..." }
  *
  * parseDataUrl("invalid") // null
@@ -64,15 +91,16 @@ export function parseDataUrl(dataUrl: string): ParsedDataUrl | null {
     return null;
   }
 
-  // Match: data:<mimeType>;base64,<data>
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  // Match: data:<mimeType>;base64,<data> OR data:<mimeType>;...;base64,<data>
+  // Handles optional parameters like charset, name, etc.
+  const match = dataUrl.match(/^data:([^;,]+)(?:;[^,]*)?;base64,(.+)$/);
   if (!match) {
     return null;
   }
 
   return {
-    mimeType: match[1],
-    base64Data: match[2],
+    mimeType: match[1].trim(),
+    base64Data: match[2].trim(), // Trim whitespace from base64 data
   };
 }
 
