@@ -1,12 +1,6 @@
-import { jest } from '@jest/globals';
-import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
+import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 
-// Mock AWS SDK modules
-jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
-  BedrockAgentRuntimeClient: jest.fn(),
-  InvokeAgentCommand: jest.fn(),
-}));
-
+// Mock cache module
 jest.mock('../../src/cache', () => ({
   getCache: jest.fn(() =>
     Promise.resolve({
@@ -16,6 +10,16 @@ jest.mock('../../src/cache', () => ({
   ),
   isCacheEnabled: jest.fn(() => false),
 }));
+
+// Mock the AWS SDK - this is needed for tests that don't use isolateModules
+jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
+  BedrockAgentRuntimeClient: jest.fn().mockImplementation(() => ({
+    send: jest.fn(),
+  })),
+  InvokeAgentCommand: jest.fn().mockImplementation((input: unknown) => input),
+}));
+
+import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 
 describe('AwsBedrockAgentsProvider', () => {
   beforeEach(() => {
@@ -66,273 +70,265 @@ describe('AwsBedrockAgentsProvider', () => {
         memoryId: 'LONG_TERM_MEMORY',
       };
       const provider = new AwsBedrockAgentsProvider('', { config });
-      // Provider adds default timeout and maxRetries
       expect(provider.config).toMatchObject(config);
     });
   });
 
   describe('callApi', () => {
-    let mockSend: jest.Mock;
-    let provider: AwsBedrockAgentsProvider;
-
-    beforeEach(() => {
-      jest.clearAllMocks();
-
-      // Create a fresh mock for each test
-      mockSend = jest.fn();
-      const {
-        BedrockAgentRuntimeClient,
-        InvokeAgentCommand,
-      } = require('@aws-sdk/client-bedrock-agent-runtime');
-
-      BedrockAgentRuntimeClient.mockImplementation(() => ({
-        send: mockSend,
-      }));
-
-      InvokeAgentCommand.mockImplementation((input: any) => input);
-
-      // Create provider after mocks are set up
-      provider = new AwsBedrockAgentsProvider('test-agent', {
-        config: {
-          agentId: 'test-agent',
-          agentAliasId: 'test-alias',
-          region: 'us-east-1',
-        },
-      });
-    });
-
-    afterEach(() => {
-      jest.clearAllMocks();
-      jest.restoreAllMocks();
-    });
-
     it('should require agentAliasId', async () => {
-      // Create provider without agentAliasId to test error
-      const providerNoAlias = new AwsBedrockAgentsProvider('test-agent', {
+      const provider = new AwsBedrockAgentsProvider('test-agent', {
         config: {
           agentId: 'test-agent',
-          // agentAliasId intentionally missing
         } as any,
       });
 
-      const result = await providerNoAlias.callApi('Test prompt');
+      const result = await provider.callApi('Test prompt');
 
       expect(result.error).toContain('Agent Alias ID is required');
       expect(result.output).toBeUndefined();
     });
 
     it('should successfully invoke agent with text response', async () => {
-      const mockResponse = {
-        completion: (async function* () {
-          yield {
-            chunk: {
-              bytes: new TextEncoder().encode('This is the agent response'),
-            },
-          };
-        })(),
-        sessionId: 'session-abc123',
-        $metadata: {},
-      };
+      // Use isolateModules to get completely fresh module instances
+      await jest.isolateModulesAsync(async () => {
+        const mockSend = jest.fn().mockResolvedValue({
+          completion: (async function* () {
+            yield {
+              chunk: {
+                bytes: new TextEncoder().encode('This is the agent response'),
+              },
+            };
+          })(),
+          sessionId: 'session-abc123',
+          $metadata: {},
+        });
 
-      (mockSend as any).mockResolvedValue(mockResponse as any);
+        jest.doMock('@aws-sdk/client-bedrock-agent-runtime', () => ({
+          BedrockAgentRuntimeClient: jest.fn().mockImplementation(() => ({
+            send: mockSend,
+          })),
+          InvokeAgentCommand: jest.fn().mockImplementation((input: unknown) => input),
+        }));
 
-      const result = await provider.callApi('Test prompt');
+        const { AwsBedrockAgentsProvider: IsolatedProvider } = await import(
+          '../../src/providers/bedrock/agents'
+        );
 
-      expect(result.output).toBe('This is the agent response');
-      expect(result.error).toBeUndefined();
-      expect(result.metadata?.sessionId).toBe('session-abc123');
+        const provider = new IsolatedProvider('test-agent', {
+          config: {
+            agentId: 'test-agent',
+            agentAliasId: 'test-alias',
+            region: 'us-east-1',
+          },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('This is the agent response');
+        expect(result.error).toBeUndefined();
+        expect(result.metadata?.sessionId).toBe('session-abc123');
+        expect(mockSend).toHaveBeenCalled();
+      });
     });
 
     it('should handle agent with tool calls and traces', async () => {
-      provider.config.enableTrace = true;
-
-      const mockResponse = {
-        completion: (async function* () {
-          yield {
-            chunk: {
-              bytes: new TextEncoder().encode('Agent response with tool'),
-            },
-            trace: {
+      await jest.isolateModulesAsync(async () => {
+        const mockSend = jest.fn().mockResolvedValue({
+          completion: (async function* () {
+            yield {
+              chunk: {
+                bytes: new TextEncoder().encode('Agent response with tool'),
+              },
               trace: {
-                orchestrationTrace: {
-                  rationale: {
-                    text: 'Agent reasoning about the task',
-                  },
-                  invocationInput: {
-                    actionGroupInvocationInput: {
-                      actionGroupName: 'calculator',
-                      function: 'add',
+                trace: {
+                  orchestrationTrace: {
+                    rationale: {
+                      text: 'Agent reasoning about the task',
+                    },
+                    invocationInput: {
+                      actionGroupInvocationInput: {
+                        actionGroupName: 'calculator',
+                        function: 'add',
+                      },
                     },
                   },
                 },
               },
-            },
-          };
-          yield {
-            trace: {
+            };
+            yield {
               trace: {
-                actionGroupTrace: {
-                  actionGroupInvocationOutput: {
-                    text: '42',
+                trace: {
+                  actionGroupTrace: {
+                    actionGroupInvocationOutput: {
+                      text: '42',
+                    },
+                  },
+                },
+              },
+            };
+          })(),
+          sessionId: 'session-xyz789',
+          $metadata: {},
+        });
+
+        jest.doMock('@aws-sdk/client-bedrock-agent-runtime', () => ({
+          BedrockAgentRuntimeClient: jest.fn().mockImplementation(() => ({
+            send: mockSend,
+          })),
+          InvokeAgentCommand: jest.fn().mockImplementation((input: unknown) => input),
+        }));
+
+        const { AwsBedrockAgentsProvider: IsolatedProvider } = await import(
+          '../../src/providers/bedrock/agents'
+        );
+
+        const provider = new IsolatedProvider('test-agent', {
+          config: {
+            agentId: 'test-agent',
+            agentAliasId: 'test-alias',
+            region: 'us-east-1',
+            enableTrace: true,
+          },
+        });
+
+        const result = await provider.callApi('Calculate something');
+
+        expect(result.output).toBe('Agent response with tool');
+        expect(result.metadata?.trace).toEqual([
+          {
+            trace: {
+              orchestrationTrace: {
+                rationale: {
+                  text: 'Agent reasoning about the task',
+                },
+                invocationInput: {
+                  actionGroupInvocationInput: {
+                    actionGroupName: 'calculator',
+                    function: 'add',
                   },
                 },
               },
             },
-          };
-        })(),
-        sessionId: 'session-xyz789',
-        $metadata: {},
-      };
-
-      (mockSend as any).mockResolvedValue(mockResponse as any);
-
-      const result = await provider.callApi('Calculate something');
-
-      expect(result.output).toBe('Agent response with tool');
-      // Trace should be the raw array from the agent response
-      expect(result.metadata?.trace).toEqual([
-        {
-          trace: {
-            orchestrationTrace: {
-              rationale: {
-                text: 'Agent reasoning about the task',
-              },
-              invocationInput: {
-                actionGroupInvocationInput: {
-                  actionGroupName: 'calculator',
-                  function: 'add',
+          },
+          {
+            trace: {
+              actionGroupTrace: {
+                actionGroupInvocationOutput: {
+                  text: '42',
                 },
               },
             },
           },
-        },
-        {
-          trace: {
-            actionGroupTrace: {
-              actionGroupInvocationOutput: {
-                text: '42',
-              },
-            },
-          },
-        },
-      ]);
+        ]);
+      });
     });
 
     it('should handle memory configuration', async () => {
-      provider.config.memoryId = 'LONG_TERM_MEMORY';
+      await jest.isolateModulesAsync(async () => {
+        const mockSend = jest.fn().mockResolvedValue({
+          completion: (async function* () {
+            yield {
+              chunk: {
+                bytes: new TextEncoder().encode('Response with memory'),
+              },
+            };
+          })(),
+          sessionId: 'session-mem123',
+          $metadata: {},
+        });
 
-      const mockResponse = {
-        completion: (async function* () {
-          yield {
-            chunk: {
-              bytes: new TextEncoder().encode('Response with memory'),
-            },
-          };
-        })(),
-        sessionId: 'session-mem123',
-        $metadata: {},
-      };
+        jest.doMock('@aws-sdk/client-bedrock-agent-runtime', () => ({
+          BedrockAgentRuntimeClient: jest.fn().mockImplementation(() => ({
+            send: mockSend,
+          })),
+          InvokeAgentCommand: jest.fn().mockImplementation((input: unknown) => input),
+        }));
 
-      (mockSend as any).mockResolvedValue(mockResponse as any);
+        const { AwsBedrockAgentsProvider: IsolatedProvider } = await import(
+          '../../src/providers/bedrock/agents'
+        );
 
-      await provider.callApi('Test with memory');
-
-      // Verify that the provider was configured with memory
-      expect(provider.config.memoryId).toBe('LONG_TERM_MEMORY');
-    });
-
-    it.skip('should handle API errors gracefully', async () => {
-      // TODO: Fix mock isolation issue - test passes in isolation but fails when run with other tests
-      // Override the mock to reject for this test
-      (mockSend as any).mockRejectedValue(new Error('AWS API Error'));
-
-      const result = await provider.callApi('Test prompt');
-
-      expect(result.error).toBeDefined();
-      expect(result.error).toContain('Failed to invoke agent');
-      expect(result.output).toBeUndefined();
-    });
-
-    it.skip('should handle token usage in metadata', async () => {
-      // TODO: Fix mock isolation issue - test passes in isolation but fails when run with other tests
-      // Clear previous mock and set up new response
-      mockSend.mockClear();
-
-      const mockResponse = {
-        completion: (async function* () {
-          yield {
-            chunk: {
-              bytes: new TextEncoder().encode('Response with tokens'),
-            },
-          };
-        })(),
-        sessionId: 'session-token123',
-        $metadata: {
-          usage: {
-            inputTokens: 10,
-            outputTokens: 20,
-            totalTokens: 30,
+        const provider = new IsolatedProvider('test-agent', {
+          config: {
+            agentId: 'test-agent',
+            agentAliasId: 'test-alias',
+            region: 'us-east-1',
+            memoryId: 'LONG_TERM_MEMORY',
           },
-        },
-      };
+        });
 
-      (mockSend as any).mockResolvedValue(mockResponse as any);
+        await provider.callApi('Test with memory');
+        expect(provider.config.memoryId).toBe('LONG_TERM_MEMORY');
+      });
+    });
 
-      const result = await provider.callApi('Test prompt');
+    it('should handle API errors gracefully', async () => {
+      await jest.isolateModulesAsync(async () => {
+        const mockSend = jest.fn().mockRejectedValue(new Error('AWS API Error'));
 
-      // Token usage is not currently extracted from Bedrock Agents responses
-      // as the AWS SDK types don't include usage metadata
-      expect(result.output).toBe('Response with tokens');
+        jest.doMock('@aws-sdk/client-bedrock-agent-runtime', () => ({
+          BedrockAgentRuntimeClient: jest.fn().mockImplementation(() => ({
+            send: mockSend,
+          })),
+          InvokeAgentCommand: jest.fn().mockImplementation((input: unknown) => input),
+        }));
+
+        const { AwsBedrockAgentsProvider: IsolatedProvider } = await import(
+          '../../src/providers/bedrock/agents'
+        );
+
+        const provider = new IsolatedProvider('test-agent', {
+          config: {
+            agentId: 'test-agent',
+            agentAliasId: 'test-alias',
+            region: 'us-east-1',
+          },
+        });
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toBeDefined();
+        expect(result.error).toContain('Failed to invoke agent');
+        expect(result.output).toBeUndefined();
+      });
     });
 
     it('should use session ID from config if provided', async () => {
-      provider.config.sessionId = 'fixed-session-id';
+      await jest.isolateModulesAsync(async () => {
+        const mockSend = jest.fn().mockResolvedValue({
+          completion: (async function* () {
+            yield {
+              chunk: {
+                bytes: new TextEncoder().encode('Response'),
+              },
+            };
+          })(),
+          sessionId: 'response-session-id',
+          $metadata: {},
+        });
 
-      const mockResponse = {
-        completion: (async function* () {
-          yield {
-            chunk: {
-              bytes: new TextEncoder().encode('Response'),
-            },
-          };
-        })(),
-        sessionId: 'response-session-id',
-        $metadata: {},
-      };
+        jest.doMock('@aws-sdk/client-bedrock-agent-runtime', () => ({
+          BedrockAgentRuntimeClient: jest.fn().mockImplementation(() => ({
+            send: mockSend,
+          })),
+          InvokeAgentCommand: jest.fn().mockImplementation((input: unknown) => input),
+        }));
 
-      (mockSend as any).mockResolvedValue(mockResponse as any);
+        const { AwsBedrockAgentsProvider: IsolatedProvider } = await import(
+          '../../src/providers/bedrock/agents'
+        );
 
-      await provider.callApi('Test prompt');
+        const provider = new IsolatedProvider('test-agent', {
+          config: {
+            agentId: 'test-agent',
+            agentAliasId: 'test-alias',
+            region: 'us-east-1',
+            sessionId: 'fixed-session-id',
+          },
+        });
 
-      // Verify that the fixed session ID was used
-      expect(provider.config.sessionId).toBe('fixed-session-id');
-    });
-
-    it.skip('should generate session ID if not provided', async () => {
-      // TODO: Fix mock isolation issue - test passes in isolation but fails when run with other tests
-      // Clear previous mock and set up new response
-      mockSend.mockClear();
-
-      const mockResponse = {
-        completion: (async function* () {
-          yield {
-            chunk: {
-              bytes: new TextEncoder().encode('Response'),
-            },
-          };
-        })(),
-        sessionId: 'generated-session',
-        $metadata: {},
-      };
-
-      (mockSend as any).mockResolvedValue(mockResponse as any);
-
-      const result = await provider.callApi('Test prompt');
-
-      // Verify call was successful
-      expect(result.output).toBe('Response');
-      expect(result.error).toBeUndefined();
-      expect(mockSend).toHaveBeenCalled();
+        await provider.callApi('Test prompt');
+        expect(provider.config.sessionId).toBe('fixed-session-id');
+      });
     });
   });
 
