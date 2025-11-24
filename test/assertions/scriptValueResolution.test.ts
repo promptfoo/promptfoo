@@ -271,6 +271,36 @@ describe('Script value resolution', () => {
         }),
       ).rejects.toThrow(/Script for "equals" assertion returned a function/);
     });
+
+    it('should throw error when script returns boolean for non-script assertion', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      await expect(
+        runAssertion({
+          assertion: {
+            type: 'contains',
+            value: 'file://rubric-generator.js:booleanValue',
+          },
+          test: { vars: {} },
+          providerResponse: baseProviderResponse,
+        }),
+      ).rejects.toThrow(/Script for "contains" assertion returned a boolean/);
+    });
+
+    it('should throw error when script returns GradingResult for non-script assertion', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+
+      await expect(
+        runAssertion({
+          assertion: {
+            type: 'llm-rubric',
+            value: 'file://rubric-generator.js:gradingResultValue',
+          },
+          test: { vars: {}, options: { provider: { id: 'echo' } } },
+          providerResponse: baseProviderResponse,
+        }),
+      ).rejects.toThrow(/Script for "llm-rubric" assertion returned a GradingResult/);
+    });
   });
 
   // REGRESSION TESTS: Ensure javascript/python/ruby assertions still work correctly

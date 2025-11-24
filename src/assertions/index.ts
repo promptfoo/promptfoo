@@ -366,13 +366,36 @@ export async function runAssertion({
       throw new Error(
         `Script for "${assertion.type}" assertion returned a function. ` +
           `Only javascript/python/ruby assertion types can return functions. ` +
-          `For other assertion types, return the expected value (string, number, boolean, or object).`,
+          `For other assertion types, return the expected value (string, number, array, or object).`,
+      );
+    }
+
+    // Validate the script didn't return boolean or GradingResult
+    // These are only valid for javascript/python/ruby assertion types
+    if (typeof valueFromScript === 'boolean') {
+      throw new Error(
+        `Script for "${assertion.type}" assertion returned a boolean. ` +
+          `Only javascript/python/ruby assertion types can return boolean values. ` +
+          `For other assertion types, return the expected value (string, number, array, or object).`,
+      );
+    }
+
+    // Check if it's a GradingResult object (has 'pass' property)
+    if (
+      valueFromScript &&
+      typeof valueFromScript === 'object' &&
+      !Array.isArray(valueFromScript) &&
+      'pass' in valueFromScript
+    ) {
+      throw new Error(
+        `Script for "${assertion.type}" assertion returned a GradingResult. ` +
+          `Only javascript/python/ruby assertion types can return GradingResult objects. ` +
+          `For other assertion types, return the expected value (string, number, array, or object).`,
       );
     }
 
     // Update renderedValue with the script output
-    // Type assertion is safe here because we've excluded javascript/python/ruby types
-    // which are the only assertion types that can return boolean or GradingResult
+    // Type assertion is now safe because we've validated the type
     renderedValue = valueFromScript as AssertionValue;
   }
 

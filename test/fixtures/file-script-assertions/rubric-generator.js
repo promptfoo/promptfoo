@@ -34,6 +34,16 @@ module.exports.undefinedValue = () => undefined;
 // Returns a function (should cause error for non-script assertions)
 module.exports.functionValue = () => () => 'nested function';
 
+// Returns a boolean (should cause error for non-script assertions)
+module.exports.booleanValue = () => true;
+
+// Returns a GradingResult (should cause error for non-script assertions)
+module.exports.gradingResultValue = () => ({
+  pass: true,
+  score: 1,
+  reason: 'This is a grading result',
+});
+
 // Dynamic regex pattern based on context
 module.exports.getPattern = (_output, context) => {
   return context.vars.pattern || '\\d+';
