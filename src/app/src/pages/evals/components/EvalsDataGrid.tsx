@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
@@ -60,23 +60,33 @@ const GridToolbarExport = () => (
   </GridToolbarExportContainer>
 );
 
-const QuickFilter = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>((props, ref) => {
+interface QuickFilterProps extends GridToolbarQuickFilterProps {
+  ref?: React.Ref<HTMLInputElement>;
+}
+
+function QuickFilter({ ref, ...props }: QuickFilterProps) {
   const theme = useTheme();
+
   return (
-    <GridToolbarQuickFilter
-      {...props}
-      inputRef={ref}
+    <Box
       sx={{
         '& .MuiInputBase-root': {
           borderRadius: 2,
           backgroundColor: theme.palette.background.paper,
         },
       }}
-    />
+    >
+      <GridToolbarQuickFilter
+        {...props}
+        slotProps={{
+          root: {
+            inputRef: ref,
+          },
+        }}
+      />
+    </Box>
   );
-});
-
-QuickFilter.displayName = 'QuickFilter';
+}
 
 function CustomToolbar({
   showUtilityButtons,
@@ -165,9 +175,10 @@ export default function EvalsDataGrid({
   const [error, setError] = useState<Error | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
-  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
-    focusedEvalId ? [focusedEvalId] : [],
-  );
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>({
+    type: 'include',
+    ids: focusedEvalId ? new Set([focusedEvalId]) : new Set(),
+  });
 
   /**
    * Fetch evals from the API.
@@ -244,7 +255,7 @@ export default function EvalsDataGrid({
    * @returns A promise that resolves when the evals are deleted.
    */
   const handleDeleteSelected = () => {
-    if (rowSelectionModel.length === 0) {
+    if (rowSelectionModel.ids.size === 0) {
       return;
     }
     setConfirmDeleteOpen(true);
@@ -258,15 +269,15 @@ export default function EvalsDataGrid({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ids: rowSelectionModel }),
+        body: JSON.stringify({ ids: Array.from(rowSelectionModel.ids) }),
       });
 
       if (!res.ok) {
         throw new Error('Failed to delete evals');
       }
 
-      setEvals((prev) => prev.filter((e) => !rowSelectionModel.includes(e.evalId)));
-      setRowSelectionModel([]);
+      setEvals((prev) => prev.filter((e) => !rowSelectionModel.ids.has(e.evalId)));
+      setRowSelectionModel({ type: 'include', ids: new Set() });
       setConfirmDeleteOpen(false);
     } catch (error) {
       console.error('Failed to delete evals:', error);
@@ -471,7 +482,7 @@ export default function EvalsDataGrid({
             showUtilityButtons,
             deletionEnabled,
             focusQuickFilterOnMount,
-            selectedCount: rowSelectionModel.length,
+            selectedCount: rowSelectionModel.ids.size,
             onDeleteSelected: handleDeleteSelected,
           },
           loadingOverlay: {
@@ -529,17 +540,17 @@ export default function EvalsDataGrid({
         }}
         pageSizeOptions={[10, 25, 50, 100]}
         isRowSelectable={(params) => params.id !== focusedEvalId}
+        showToolbar
       />
-
       {/* Delete confirmation dialog */}
       <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
         <DialogTitle>
-          Delete {rowSelectionModel.length} eval{rowSelectionModel.length === 1 ? '' : 's'}?
+          Delete {rowSelectionModel.ids.size} eval{rowSelectionModel.ids.size === 1 ? '' : 's'}?
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
             Are you sure you want to delete the selected eval
-            {rowSelectionModel.length === 1 ? '' : 's'}? This action cannot be undone.
+            {rowSelectionModel.ids.size === 1 ? '' : 's'}? This action cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>

@@ -19,7 +19,7 @@ import type {
   CallApiOptionsParams,
   Prompt,
   ProviderResponse,
-} from '../../../src/types';
+} from '../../../src/types/index';
 import { sleep } from '../../../src/util/time';
 
 jest.mock('../../../src/util/time');

@@ -4,13 +4,17 @@ import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { sleep } from '../../util/time';
 import { toTitleCase } from '../shared';
 import { AzureGenericProvider } from './generic';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { CallbackContext } from '../openai/types';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 

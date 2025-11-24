@@ -1,6 +1,6 @@
 import cliState from '../../src/cliState';
 import { getGradingProvider } from '../../src/matchers';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),
