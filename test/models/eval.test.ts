@@ -175,6 +175,7 @@ describe('evaluator', () => {
             tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
             namedScores: {},
             namedScoresCount: {},
+            cost: 0.007,
           },
         },
       ]);
