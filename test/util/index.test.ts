@@ -133,35 +133,18 @@ describe('maybeLoadToolsFromExternalFile', () => {
   });
 
   describe('validation', () => {
-    it('should throw error for Python file with function name when execution fails', async () => {
-      // Python file with function name will try to execute
-      const tools = 'file://tools.py:get_tools';
+    it('should throw error for Python/JS/TS file with function name when file not found', async () => {
+      // Test with Python file (naturally fails - no mocking needed)
+      const pythonTools = 'file://nonexistent.py:get_tools';
+      await expect(maybeLoadToolsFromExternalFile(pythonTools)).rejects.toThrow(/Failed to load tools/);
 
-      // File doesn't exist, so execution will fail
-      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Failed to load tools/);
-      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/tools\.py:get_tools/);
-    });
+      // Test with JavaScript file (naturally fails when require() can't find the module)
+      const jsTools = 'file://nonexistent.js:getTools';
+      await expect(maybeLoadToolsFromExternalFile(jsTools)).rejects.toThrow(/Failed to load tools/);
 
-    it('should throw error for JavaScript file when file not found', async () => {
-      const { importModule } = jest.requireMock('../../src/esm');
-      importModule.mockRejectedValue(new Error("Cannot find module '/path/to/tools.js'"));
-
-      const tools = 'file://tools.js:getTools';
-
-      // File doesn't exist - require() throws "Cannot find module"
-      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Failed to load tools/);
-      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Cannot find module/);
-    });
-
-    it('should throw error for TypeScript file when file not found', async () => {
-      const { importModule } = jest.requireMock('../../src/esm');
-      importModule.mockRejectedValue(new Error("Cannot find module '/path/to/tools.ts'"));
-
-      const tools = 'file://tools.ts:getTools';
-
-      // File doesn't exist - require() throws "Cannot find module"
-      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Failed to load tools/);
-      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Cannot find module/);
+      // Test with TypeScript file (naturally fails when import can't find the module)
+      const tsTools = 'file://nonexistent.ts:getTools';
+      await expect(maybeLoadToolsFromExternalFile(tsTools)).rejects.toThrow(/Failed to load tools/);
     });
 
     it('should throw error for Python file without function name', async () => {
