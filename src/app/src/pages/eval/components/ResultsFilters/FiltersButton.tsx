@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import { forwardRef } from 'react';
 
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import Badge, { badgeClasses } from '@mui/material/Badge';
