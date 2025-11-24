@@ -1,4 +1,5 @@
 {
+  "bootstrap-sha": "779729198d01eacd9d00b0796d62cc5a16f0ccac",
   "packages": {
     ".": {
       "release-type": "node",
@@ -6,8 +7,7 @@
       "changelog-path": "CHANGELOG.md",
       "extra-files": ["package.json"],
       "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
-      "bootstrap-sha": "779729198d01eacd9d00b0796d62cc5a16f0ccac"
+      "bump-patch-for-minor-pre-major": true
     }
   }
 }
