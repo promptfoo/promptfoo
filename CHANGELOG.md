@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(core): resolve ES Module import error for @apidevtools/json-schema-ref-parser v15 by converting static imports to dynamic imports in config loader and test case reader (#XXXX)
 - fix(redteam): respect excludeTargetOutputFromAgenticAttackGeneration in hydra and meta strategies to prevent target output leaks when organization privacy setting is enabled (#6320)
 - fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/)
 - fix(redteam): prevent template evaluation of adversarial security payloads when using custom Python providers — adds `skipRenderVars` parameter to `renderPrompt()` to allow SSTI, XSS, and other attack payloads to pass through unmodified to custom providers for proper red team testing instead of causing template rendering errors (#6240)
