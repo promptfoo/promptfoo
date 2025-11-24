@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
@@ -60,18 +60,12 @@ const GridToolbarExport = () => (
   </GridToolbarExportContainer>
 );
 
-const QuickFilter = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>((props, ref) => {
-  const theme = useTheme();
-  const inputRef = useRef<HTMLInputElement>(null);
+interface QuickFilterProps extends GridToolbarQuickFilterProps {
+  ref?: React.Ref<HTMLInputElement>;
+}
 
-  useEffect(() => {
-    if (ref && typeof ref !== 'function') {
-      // Forward the ref if it's a RefObject
-      if (inputRef.current) {
-        ref.current = inputRef.current;
-      }
-    }
-  }, [ref]);
+function QuickFilter({ ref, ...props }: QuickFilterProps) {
+  const theme = useTheme();
 
   return (
     <Box
@@ -86,15 +80,13 @@ const QuickFilter = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>((p
         {...props}
         slotProps={{
           root: {
-            inputRef: inputRef,
+            inputRef: ref,
           },
         }}
       />
     </Box>
   );
-});
-
-QuickFilter.displayName = 'QuickFilter';
+}
 
 function CustomToolbar({
   showUtilityButtons,
