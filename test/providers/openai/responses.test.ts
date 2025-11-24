@@ -13,6 +13,10 @@ jest.mock('../../../src/logger', () => ({
   error: jest.fn(),
 }));
 
+jest.mock('../../../src/python/pythonUtils', () => ({
+  runPython: jest.fn(),
+}));
+
 describe('OpenAiResponsesProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
