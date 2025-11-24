@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
 
+### Fixed
+
+- fix(cli): restore commandLineOptions support for generateSuggestions, table, and write options (#6190)
+- fix(cli): enable auto-sharing when cloud is enabled by not defaulting config.sharing to false - when sharing is unset in config, it now correctly falls through to cloud auto-share behavior instead of defaulting to disabled (#6190)
+
 ## [0.119.11] - 2025-11-23
 
 ### Changed
