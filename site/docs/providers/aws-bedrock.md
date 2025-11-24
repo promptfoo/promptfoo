@@ -96,6 +96,14 @@ The `inferenceModelType` config option supports the following values:
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
+  # Claude Opus 4.5 via global inference profile (required for this model)
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-5-20251101-v1:0
+    config:
+      inferenceModelType: 'claude'
+      region: 'us-east-2'
+      max_tokens: 1024
+      temperature: 0.7
+
   # Using an inference profile that routes to Claude models
   - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-profile
     config:
@@ -498,6 +506,8 @@ config:
 ### Claude Models
 
 For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+
+**Note**: Claude Opus 4.5 requires an inference profile ARN. See the [Application Inference Profiles](#application-inference-profiles) section for setup.
 
 ```yaml
 config:
