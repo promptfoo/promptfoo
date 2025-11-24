@@ -126,7 +126,7 @@ describe('maybeLoadToolsFromExternalFile', () => {
   it('should handle array of file paths', async () => {
     const tools = ['file://tools1.json', 'file://tools2.json'];
 
-    maybeLoadToolsFromExternalFile(tools);
+    await maybeLoadToolsFromExternalFile(tools);
 
     expect(fs.existsSync).toHaveBeenCalledTimes(2);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);

@@ -722,7 +722,19 @@ export async function maybeLoadToolsFromExternalFile(
     }
   }
 
-  // If tools is already an array or object (not a file reference), return it as-is
+  // Handle arrays by recursively processing each item
+  if (Array.isArray(rendered)) {
+    const results = await Promise.all(
+      rendered.map((item) => maybeLoadToolsFromExternalFile(item, vars)),
+    );
+    // Flatten if all items are arrays (common case: multiple file:// references)
+    if (results.every((r) => Array.isArray(r))) {
+      return results.flat();
+    }
+    return results;
+  }
+
+  // If tools is already an object (not a file reference), return it as-is
   if (typeof rendered !== 'string') {
     return rendered;
   }
