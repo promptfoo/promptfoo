@@ -336,17 +336,16 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   return (
     <ShiftKeyProvider>
-        {isRedteam && evalId && (
-          <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
-            <EnterpriseBanner evalId={evalId} />
-          </Box>
-        )}
-        <ResultsView
-          defaultEvalId={defaultEvalId}
-          recentEvals={recentEvals}
-          onRecentEvalSelected={handleRecentEvalSelection}
-        />
-      </ShiftKeyProvider>
-    </>
+      {isRedteam && evalId && (
+        <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
+          <EnterpriseBanner evalId={evalId} />
+        </Box>
+      )}
+      <ResultsView
+        defaultEvalId={defaultEvalId}
+        recentEvals={recentEvals}
+        onRecentEvalSelected={handleRecentEvalSelection}
+      />
+    </ShiftKeyProvider>
   );
 }

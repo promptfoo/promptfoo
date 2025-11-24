@@ -1,3 +1,4 @@
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import ModelAudit from './ModelAudit';
 
@@ -6,13 +7,10 @@ function ModelAuditPageContent() {
 }
 
 export default function ModelAuditPage() {
+  usePageMeta({ title: 'Model audit', description: 'Scan models for policy issues' });
   return (
-    <>
-      <title>Model audit | promptfoo</title>
-      <meta name="description" content="Scan models for policy issues" />
-      <ErrorBoundary name="Model Audit Page">
-        <ModelAuditPageContent />
-      </ErrorBoundary>
-    </>
+    <ErrorBoundary name="Model Audit Page">
+      <ModelAuditPageContent />
+    </ErrorBoundary>
   );
 }
