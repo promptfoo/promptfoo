@@ -1298,6 +1298,12 @@ export async function getEvalSummaries(
         return memo + (prompt.metrics?.testFailCount ?? 0);
       }, 0) ?? 0;
 
+    // For pass rate calculation, exclude errors from the denominator
+    const testRunCount =
+      result.prompts?.reduce((memo: number, prompt) => {
+        return memo + (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0);
+      }, 0) ?? 0;
+
     // All prompts should have the same number of test cases:
     const testCounts = result.prompts?.map((p) => {
       return (
@@ -1309,9 +1315,6 @@ export async function getEvalSummaries(
 
     // Derive the number of tests from the first prompt.
     const testCount = testCounts.length > 0 ? testCounts[0] : 0;
-
-    // Test count * prompt count
-    const testRunCount = testCount * (result.prompts?.length ?? 0);
 
     // Construct an array of providers
     const deserializedProviders = [];

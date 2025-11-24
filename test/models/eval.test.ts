@@ -146,6 +146,49 @@ describe('evaluator', () => {
     // Note: Function providers cannot be serialized to the database,
     // so they won't appear in getEvalSummaries() results.
     // The deserialization logic handles them, but they're lost during storage.
+
+    it('should exclude errors from pass rate calculation', async () => {
+      // Create an eval with specific metrics: 2 pass, 3 fail, 5 errors per prompt
+      const evaluation = await Eval.create(
+        {
+          providers: ['test-provider'],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { test: 'value' } }],
+        },
+        [{ raw: 'Test prompt', label: 'Test prompt' }],
+      );
+
+      // Add prompt metrics
+      await evaluation.addPrompts([
+        {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          provider: 'test-provider',
+          metrics: {
+            score: 2,
+            testPassCount: 2,
+            testFailCount: 3,
+            testErrorCount: 5,
+            assertPassCount: 2,
+            assertFailCount: 3,
+            totalLatencyMs: 100,
+            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+            namedScores: {},
+            namedScoresCount: {},
+          },
+        },
+      ]);
+
+      const summaries = await getEvalSummaries();
+      const summary = summaries.find((s) => s.evalId === evaluation.id);
+
+      expect(summary).toBeDefined();
+      // Pass rate should be 2 / (2 + 3) = 40%, excluding the 5 errors from denominator
+      // If errors were included, it would be 2 / (2 + 3 + 5) = 20%
+      expect(summary?.passRate).toBeCloseTo(40, 1);
+      // Total test count should still include errors
+      expect(summary?.numTests).toBe(10);
+    });
   });
 
   describe('delete', () => {
