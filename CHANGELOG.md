@@ -46,7 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(plugins): organize domain-specific risks into vertical suites
+- feat(plugins): organize domain-specific risks into vertical suites (#6215)
 - feat(providers): add Gemini 3 Pro support with thinking configuration (#6241)
 
 ### Fixed
@@ -183,7 +183,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(redteam): pass policy text to intent extraction for custom policy tests, enabling more accurate and self-contained testing objectives that include specific policy requirements (#6116)
 - feat(redteam): add timestamp context to all grading rubrics for time-aware evaluation and temporal context in security assessments (#6110)
 - feat(model-audit): add revision tracking, content hash generation, and deduplication for model scans to prevent re-scanning unchanged models (saving ~99% time and bandwidth); add `--stream` flag to delete downloaded files immediately after scan ([#6058](https://github.com/promptfoo/promptfoo/pull/6058))
-- feat(redteam): add FERPA compliance plugin
+- feat(redteam): add FERPA compliance plugin (#6130)
 
 ### Fixed
 
@@ -207,9 +207,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(redteam): add pharmacy plugins (controlled substance compliance, dosage calculation, drug interaction) and insurance plugins (coverage discrimination, network misinformation, PHI disclosure) (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 - feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#6086)
-- feat(redteam): OpenTelemetry traces feed back into red team strategies
+- feat(redteam): OpenTelemetry traces feed back into red team strategies (#5899)
 - feat(redteam): expand OWASP Agentic preset to cover 8/10 threats with 20 plugins; add 'owasp:agentic:redteam' alias for easy selection (#6099)
-- fix: max concurrency run options override scan template settings
+- fix: max concurrency run options override scan template settings (#6102)
 
 ### Changed
 
@@ -221,7 +221,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - chore(app): larger eval selector dialog (#6063)
 - refactor(app): Adds useApplyFilterFromMetric hook (#6095)
 - refactor(cli): extract duplicated organization context display logic into shared utility function to fix dynamic import issue and improve code maintainability (#6070)
-- chore: make meta-agent a default strategy
+- chore: make meta-agent a default strategy (#6109)
 
 ### Fixed
 
