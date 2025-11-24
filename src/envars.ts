@@ -596,7 +596,12 @@ export function getDefaultMaxEvalTimeMs(
   }
 
   // Calculate default based on eval characteristics
-  return calculateDefaultMaxEvalTimeMs(totalEvalSteps, maxConcurrency, testCaseTimeoutMs, isRedteam);
+  return calculateDefaultMaxEvalTimeMs(
+    totalEvalSteps,
+    maxConcurrency,
+    testCaseTimeoutMs,
+    isRedteam,
+  );
 }
 
 /**

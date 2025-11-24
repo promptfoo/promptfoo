@@ -13,13 +13,7 @@ import { getCache } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
-import {
-  getDefaultMaxEvalTimeMs,
-  getEnvBool,
-  getEnvInt,
-  getEvalTimeoutMs,
-  isCI,
-} from './envars';
+import { getDefaultMaxEvalTimeMs, getEnvBool, getEnvInt, getEvalTimeoutMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { selectMaxScore } from './matchers';
@@ -1338,8 +1332,7 @@ class Evaluator {
     const processEvalStepWithTimeout = async (evalStep: RunEvalOptions, index: number | string) => {
       // Get timeout value from options or environment
       // Use explicit check for undefined to allow timeoutMs=0 to disable timeout
-      const timeoutMs =
-        options.timeoutMs !== undefined ? options.timeoutMs : getEvalTimeoutMs();
+      const timeoutMs = options.timeoutMs !== undefined ? options.timeoutMs : getEvalTimeoutMs();
 
       if (timeoutMs <= 0) {
         // No timeout, process normally

@@ -485,9 +485,7 @@ describe('envars', () => {
     it('should use lower safety multiplier for redteam', () => {
       expect(MAX_EVAL_TIME_REDTEAM_SAFETY_MULTIPLIER).toBe(2);
       expect(MAX_EVAL_TIME_SAFETY_MULTIPLIER).toBe(3);
-      expect(MAX_EVAL_TIME_REDTEAM_SAFETY_MULTIPLIER).toBeLessThan(
-        MAX_EVAL_TIME_SAFETY_MULTIPLIER,
-      );
+      expect(MAX_EVAL_TIME_REDTEAM_SAFETY_MULTIPLIER).toBeLessThan(MAX_EVAL_TIME_SAFETY_MULTIPLIER);
     });
 
     it('should include buffer time', () => {
