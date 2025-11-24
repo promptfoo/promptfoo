@@ -6,7 +6,7 @@ import {
 } from '../../../src/prompts/processors/python';
 import { runPython } from '../../../src/python/pythonUtils';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 jest.mock('fs');
 jest.mock('python-shell');

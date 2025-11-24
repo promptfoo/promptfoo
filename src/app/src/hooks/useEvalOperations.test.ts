@@ -157,15 +157,16 @@ describe('useEvalOperations', () => {
 
       const { result } = renderHook(() => useEvalOperations());
 
+      const signal = new AbortController().signal;
       let traces;
       await act(async () => {
-        traces = await result.current.fetchTraces('eval-123', new AbortController().signal);
+        traces = await result.current.fetchTraces('eval-123', signal);
       });
 
       expect(traces).toEqual([]);
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(callApi).toHaveBeenCalledWith('/traces/evaluation/eval-123', {
-        signal: new AbortController().signal,
+        signal,
       });
     });
 
@@ -180,12 +181,13 @@ describe('useEvalOperations', () => {
 
       const { result } = renderHook(() => useEvalOperations());
 
-      await expect(
-        result.current.fetchTraces('eval-id', new AbortController().signal),
-      ).rejects.toThrowError(`HTTP error! status: ${mockStatus}`);
+      const signal = new AbortController().signal;
+      await expect(result.current.fetchTraces('eval-id', signal)).rejects.toThrowError(
+        `HTTP error! status: ${mockStatus}`,
+      );
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(callApi).toHaveBeenCalledWith('/traces/evaluation/eval-id', {
-        signal: new AbortController().signal,
+        signal,
       });
     });
 

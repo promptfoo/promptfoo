@@ -9,11 +9,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - feat(providers): add Anthropic structured outputs support with JSON schema outputs via `output_format` parameter and strict tool use via `strict: true` in tool definitions - ensures schema-compliant responses with automatic beta header handling, external file loading, variable rendering, and JSON parsing for Claude Sonnet 4.5 and Claude Opus 4.1 (#6226)
+- feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking (#6267)
 
 ### Changed
 
 - chore: Add visiblity button for PFX passphrase (#6258)
 - feat(app): Red Team Strategy Test Generation (#6005)
+- refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
+
+### Fixed
+
+- fix(providers): maintain backwards compatibility for annotations in raw provider responses (#6267)
+- fix(cli): restore commandLineOptions support for generateSuggestions, table, and write options (#6190)
+- fix(cli): enable auto-sharing when cloud is enabled by not defaulting config.sharing to false - when sharing is unset in config, it now correctly falls through to cloud auto-share behavior instead of defaulting to disabled (#6190)
 
 ### Documentation
 
