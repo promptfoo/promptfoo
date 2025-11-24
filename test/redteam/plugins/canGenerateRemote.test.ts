@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../../../src/cache';
-import { Plugins } from '../../../src/redteam/plugins';
+import { Plugins } from '../../../src/redteam/plugins/index';
 import { BeavertailsPlugin } from '../../../src/redteam/plugins/beavertails';
 import { CustomPlugin } from '../../../src/redteam/plugins/custom';
 import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
@@ -10,7 +10,7 @@ import { PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/cliState', () => ({
