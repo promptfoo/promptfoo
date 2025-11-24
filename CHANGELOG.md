@@ -39,7 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
 - fix(assertions): use file-based script output for all assertion types with `file://` references (#6200)
 - fix(cli): respect PROMPTFOO_LOG_DIR environment variable for custom log directory location (#6179)
-- fix(tests): use __dirname in CJS context for database migrations to fix Jest test failures (#5594)
+- fix(tests): use \_\_dirname in CJS context for database migrations to fix Jest test failures (#5594)
 - fix(tests): update checkNodeVersion test to work without mocking generated constants file (#5594)
 
 ### Documentation
