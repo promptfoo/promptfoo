@@ -27,13 +27,6 @@ export const ANTHROPIC_MODELS = [
       output: 75 / 1e6, // $75 / MTok
     },
   })),
-  ...['claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 5 / 1e6, // $5 / MTok
-      output: 25 / 1e6, // $25 / MTok
-    },
-  })),
   ...[
     'claude-sonnet-4-5-20250929',
     'claude-sonnet-4-5-latest',
