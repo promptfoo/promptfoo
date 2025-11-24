@@ -2129,5 +2129,89 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       );
       expect(audioModelProvider.modelName).toBe('gpt-4o-audio-preview-2025-06-03');
     });
+
+    it('should work with apiKeyRequired: false and API key from environment', () => {
+      const originalEnv = process.env.CUSTOM_LOCAL_API_KEY;
+      process.env.CUSTOM_LOCAL_API_KEY = 'test-local-key';
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('local-model', {
+          config: {
+            apiKeyRequired: false,
+            apiKeyEnvar: 'CUSTOM_LOCAL_API_KEY',
+            apiBaseUrl: 'http://localhost:8080/v1',
+          },
+        });
+
+        // Provider should pick up API key from environment
+        expect(provider.getApiKey()).toBe('test-local-key');
+
+        // Provider should not require API key
+        expect(provider.requiresApiKey()).toBe(false);
+      } finally {
+        if (originalEnv !== undefined) {
+          process.env.CUSTOM_LOCAL_API_KEY = originalEnv;
+        } else {
+          delete process.env.CUSTOM_LOCAL_API_KEY;
+        }
+      }
+    });
+
+    it('should work with apiKeyRequired: false and no API key', async () => {
+      // Ensure no API key is set in the environment
+      const originalCustomEnv = process.env.CUSTOM_LOCAL_API_KEY;
+      const originalOpenAIEnv = process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_LOCAL_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('local-model', {
+          config: {
+            apiKeyRequired: false,
+            apiKeyEnvar: 'CUSTOM_LOCAL_API_KEY',
+            apiBaseUrl: 'http://localhost:8080/v1',
+          },
+        });
+
+        // Provider should not have an API key
+        expect(provider.getApiKey()).toBeFalsy();
+
+        // Provider should not require API key
+        expect(provider.requiresApiKey()).toBe(false);
+
+        // Mock successful API response
+        const mockResponse = {
+          data: {
+            choices: [{ message: { content: 'Response without auth' } }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        // Call the API
+        const result = await provider.callApi(
+          JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+        );
+
+        // Verify the call succeeded
+        expect(result.output).toBe('Response without auth');
+        expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+
+        // Verify that the Authorization header was NOT included (should not be "Bearer undefined")
+        const callArgs = mockFetchWithCache.mock.calls[0];
+        const headers = callArgs[1]?.headers as Record<string, string>;
+        expect(headers.Authorization).toBeUndefined();
+      } finally {
+        if (originalCustomEnv !== undefined) {
+          process.env.CUSTOM_LOCAL_API_KEY = originalCustomEnv;
+        }
+        if (originalOpenAIEnv !== undefined) {
+          process.env.OPENAI_API_KEY = originalOpenAIEnv;
+        }
+      }
+    });
   });
 });
