@@ -58,6 +58,10 @@ jest.mock('fs', () => ({
 
 jest.mock('../../src/esm');
 
+jest.mock('../../src/python/pythonUtils', () => ({
+  runPython: jest.fn(),
+}));
+
 jest.mock('../../src/googleSheets', () => ({
   writeCsvToGoogleSheet: jest.fn(),
 }));
@@ -276,6 +280,27 @@ describe('maybeLoadToolsFromExternalFile', () => {
       await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(
         /Available exports: \(none\)/,
       );
+    });
+
+    it('should handle JavaScript syntax errors gracefully', async () => {
+      const { importModule } = jest.requireMock('../../src/esm');
+      const syntaxError = new SyntaxError('Unexpected token )');
+      importModule.mockRejectedValue(syntaxError);
+
+      const tools = 'file://tools.js:getTools';
+      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Failed to load tools/);
+      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Unexpected token/);
+    });
+
+    it('should handle Python syntax errors gracefully', async () => {
+      // Mock runPython to simulate a Python syntax error
+      const { runPython } = await import('../../src/python/pythonUtils');
+      const mockRunPython = runPython as jest.MockedFunction<typeof runPython>;
+      mockRunPython.mockRejectedValue(new Error('SyntaxError: invalid syntax (tools.py, line 2)'));
+
+      const tools = 'file://tools.py:get_tools';
+      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Failed to load tools/);
+      await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/SyntaxError/);
     });
   });
 });
