@@ -3,6 +3,14 @@ description: 'Bedrock Claude Eval'
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
+  # Claude Opus 4.5 requires an inference profile ARN - cannot use direct model ID
+  - id: bedrock:arn:aws:bedrock:us-west-2::inference-profile/global.anthropic.claude-opus-4-5-20251101-v1:0
+    label: Claude Opus 4.5 (via inference profile)
+    config:
+      inferenceModelType: 'claude'
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
   - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
     label: Claude Opus 4.1
     config:
