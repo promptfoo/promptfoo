@@ -1,0 +1,10 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "promptfoo",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": ["package.json"]
+    }
+  }
+}
