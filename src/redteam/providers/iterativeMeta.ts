@@ -221,6 +221,7 @@ export async function runMetaAgentRedteam({
       },
       filters,
       targetProvider,
+      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     logger.debug('[IterativeMeta] Calling target with agent-generated prompt', {

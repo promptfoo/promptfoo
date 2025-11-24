@@ -130,11 +130,25 @@ export function collectFileMetadata(vars: Record<string, string | object>): File
   return fileMetadata;
 }
 
+/**
+ * Renders a prompt template with variable substitution using Nunjucks.
+ *
+ * @param prompt - The prompt template to render
+ * @param vars - Variables to substitute into the template
+ * @param nunjucksFilters - Optional custom Nunjucks filters
+ * @param provider - Optional API provider for context
+ * @param skipRenderVars - Optional array of variable names to skip template rendering for.
+ *                         This is critical for red team testing where injection variables
+ *                         contain attack payloads (e.g., SSTI, XSS) that should NOT be
+ *                         evaluated by Promptfoo's template engine before reaching the target.
+ * @returns The rendered prompt string
+ */
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
+  skipRenderVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
 
@@ -362,7 +376,7 @@ export async function renderPrompt(
     const renderedVars = Object.fromEntries(
       Object.entries(vars).map(([key, value]) => [
         key,
-        typeof value === 'string'
+        typeof value === 'string' && !skipRenderVars?.includes(key)
           ? nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)
           : value,
       ]),
