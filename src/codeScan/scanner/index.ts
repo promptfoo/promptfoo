@@ -24,7 +24,7 @@ import { parseGitHubPr } from '../util/github';
 import { validateOnBranch } from '../git/diff';
 import { processDiff } from '../git/diffProcessor';
 import { extractMetadata } from '../git/metadata';
-import { setupMcpBridge } from '../mcp';
+import { setupMcpBridge } from '../mcp/index';
 import { stopFilesystemMcpServer } from '../mcp/filesystem';
 import type { SocketIoMcpBridge } from '../mcp/transport';
 import { createSocketConnection } from './socket';

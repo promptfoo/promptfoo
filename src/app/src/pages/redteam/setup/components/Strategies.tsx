@@ -105,10 +105,18 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [isRemoteGenerationDisabled],
   );
 
-  const selectedStrategyIds = useMemo(
-    () => config.strategies.map((s) => getStrategyId(s)),
-    [config.strategies],
-  );
+  const selectedStrategyIds = useMemo(() => {
+    return config.strategies
+      .filter((s) => {
+        const id = getStrategyId(s);
+        // Special handling for 'basic' strategy - only consider it selected if enabled !== false
+        if (id === 'basic' && typeof s === 'object' && s.config?.enabled === false) {
+          return false;
+        }
+        return true;
+      })
+      .map((s) => getStrategyId(s));
+  }, [config.strategies]);
 
   // Categorize strategies by type
   const categorizedStrategies = useMemo(() => {
@@ -266,7 +274,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         return;
       }
 
-      const isSelected = config.strategies.some((s) => getStrategyId(s) === strategyId);
+      // Check if strategy is selected (for 'basic', only if enabled !== false)
+      const isSelected = selectedStrategyIds.includes(strategyId);
 
       if (!isSelected) {
         recordEvent('feature_used', {
@@ -279,30 +288,68 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       setSelectedPreset('Custom');
 
       if (isSelected) {
-        // Remove strategy
-        updateConfig(
-          'strategies',
-          config.strategies.filter((s) => getStrategyId(s) !== strategyId),
-        );
-      } else {
-        // Add strategy with stateful config if it's multi-turn
-        const newStrategy: RedteamStrategyObject = {
-          id: strategyId,
-          config: {},
-        };
-
-        if (MULTI_TURN_STRATEGIES.includes(strategyId as any)) {
-          newStrategy.config = { ...newStrategy.config, stateful: isStatefulValue };
-        }
-
-        updateConfig('strategies', [...config.strategies, newStrategy]);
-
-        // Auto-open config dialog for strategies that require configuration
-        if (STRATEGIES_REQUIRING_CONFIG.includes(strategyId)) {
-          setConfigDialog({
-            isOpen: true,
-            selectedStrategy: strategyId,
+        // Special handling for 'basic' strategy
+        // When unchecking, set enabled: false instead of removing it
+        if (strategyId === 'basic') {
+          const updated = config.strategies.map((s) => {
+            if (getStrategyId(s) === 'basic') {
+              return {
+                id: 'basic',
+                config: { ...(typeof s === 'object' ? s.config : {}), enabled: false },
+              };
+            }
+            return s;
           });
+          updateConfig('strategies', updated);
+        } else {
+          // Remove strategy
+          updateConfig(
+            'strategies',
+            config.strategies.filter((s) => getStrategyId(s) !== strategyId),
+          );
+        }
+      } else {
+        // Special handling for 'basic' strategy when enabling
+        if (strategyId === 'basic') {
+          const existingBasic = config.strategies.find((s) => getStrategyId(s) === 'basic');
+
+          if (existingBasic) {
+            // Re-enable existing basic strategy by removing enabled: false or setting enabled: true
+            const updated = config.strategies.map((s) => {
+              if (getStrategyId(s) === 'basic') {
+                // Remove the enabled: false config to return to default enabled state
+                const config = typeof s === 'object' && s.config ? { ...s.config } : {};
+                delete config.enabled;
+                // If config is now empty, just return the id
+                return Object.keys(config).length === 0 ? { id: 'basic' } : { id: 'basic', config };
+              }
+              return s;
+            });
+            updateConfig('strategies', updated);
+          } else {
+            // Add basic strategy if it doesn't exist
+            updateConfig('strategies', [...config.strategies, { id: 'basic' }]);
+          }
+        } else {
+          // Add strategy with stateful config if it's multi-turn
+          const newStrategy: RedteamStrategyObject = {
+            id: strategyId,
+            config: {},
+          };
+
+          if (MULTI_TURN_STRATEGIES.includes(strategyId as any)) {
+            newStrategy.config = { ...newStrategy.config, stateful: isStatefulValue };
+          }
+
+          updateConfig('strategies', [...config.strategies, newStrategy]);
+
+          // Auto-open config dialog for strategies that require configuration
+          if (STRATEGIES_REQUIRING_CONFIG.includes(strategyId)) {
+            setConfigDialog({
+              isOpen: true,
+              selectedStrategy: strategyId,
+            });
+          }
         }
       }
     },
@@ -322,11 +369,35 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       // Once user deselects all, it's definitely "Custom" preset
       setSelectedPreset('Custom');
 
-      // Remove all strategies in the given section
-      updateConfig(
-        'strategies',
-        config.strategies.filter((s) => !strategyIds.includes(getStrategyId(s))),
-      );
+      // Check if 'basic' is in the section being deselected
+      const hasBasic = strategyIds.includes('basic');
+
+      if (hasBasic) {
+        // Special handling for basic strategy - set enabled: false instead of removing
+        const updated = config.strategies.map((s) => {
+          const id = getStrategyId(s);
+          if (id === 'basic') {
+            return {
+              id: 'basic',
+              config: { ...(typeof s === 'object' ? s.config : {}), enabled: false },
+            };
+          }
+          return s;
+        });
+
+        // Remove all other strategies in the section (except basic)
+        const filtered = updated.filter(
+          (s) => !strategyIds.includes(getStrategyId(s)) || getStrategyId(s) === 'basic',
+        );
+
+        updateConfig('strategies', filtered);
+      } else {
+        // Remove all strategies in the given section
+        updateConfig(
+          'strategies',
+          config.strategies.filter((s) => !strategyIds.includes(getStrategyId(s))),
+        );
+      }
     },
     [config.strategies, updateConfig],
   );

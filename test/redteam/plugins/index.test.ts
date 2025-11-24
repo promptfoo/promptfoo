@@ -10,10 +10,10 @@ import {
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../../src/redteam/constants';
-import { Plugins } from '../../../src/redteam/plugins';
+import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
-import type { ApiProvider, TestCase } from '../../../src/types';
+import type { ApiProvider, TestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/cliState', () => ({
