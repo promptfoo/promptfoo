@@ -392,12 +392,13 @@ providers:
       max_tokens: 4096
 
   # Custom HTTP provider (internal gateway)
+  # Use environment variables for credentials (see security note below)
   - id: http://llm-gateway.internal.company.com/v1
     label: Internal LLM Gateway
     config:
       method: POST
       headers:
-        Authorization: Bearer YOUR_TOKEN_HERE
+        Authorization: 'Bearer {{ env.INTERNAL_API_KEY }}'
         Content-Type: application/json
 
   # Cloud providers with regions
@@ -465,7 +466,7 @@ spec:
           image: promptfoo/promptfoo:latest
           volumeMounts:
             - name: config
-              mountPath: /root/.promptfoo/ui-providers.yaml
+              mountPath: /home/promptfoo/.promptfoo/ui-providers.yaml
               subPath: ui-providers.yaml
               readOnly: true
       volumes:
@@ -474,12 +475,35 @@ spec:
             name: promptfoo-ui-providers
 ```
 
-**Notes:**
+**Supported filenames:**
 
-- If no config file exists, all default providers are shown
-- If config exists with providers, ONLY those providers are shown
-- When custom config exists, the "Reference Local Provider" button and "Configure Environment" (API keys) section are hidden
-- Changes require server restart
+- `ui-providers.yaml` (preferred)
+- `ui-providers.yml` (alternate)
+
+:::info Behavior Changes with Custom Config
+
+When `ui-providers.yaml` exists with providers configured:
+
+- **Provider list:** ONLY the providers in your config file are shown (replaces default ~600 providers)
+- **UI changes:**
+  - "Reference Local Provider" button is hidden in eval creator
+  - "Configure Environment" (API keys) section is hidden in redteam setup
+- **Purpose:** Ensures users work within organization-approved providers
+- **Fallback:** If no config file exists, all default providers are shown
+
+:::
+
+:::caution Config Changes Require Restart
+
+Changes to `ui-providers.yaml` require a server restart to take effect:
+
+```bash
+docker restart promptfoo_container
+```
+
+Configuration is loaded once on startup and cached for performance.
+
+:::
 
 **⚠️ Security Warning - Credential Storage:**
 
@@ -510,6 +534,167 @@ docker run -d \
   -e INTERNAL_API_KEY=your-internal-key \
   -v ./promptfoo_data:/home/promptfoo/.promptfoo \
   ghcr.io/promptfoo/promptfoo:latest
+```
+
+### Configuration Schema Reference
+
+**Valid provider configuration fields:**
+
+```yaml
+providers:
+  - id: string # Required - Provider identifier
+    label: string # Optional - Display name in UI
+    config: # Optional - Default provider configuration
+      # Common fields (vary by provider type)
+      temperature: number # Model temperature (0.0-2.0)
+      max_tokens: number # Maximum response length
+      top_p: number # Nucleus sampling parameter
+      top_k: number # Top-k sampling parameter
+
+      # HTTP provider specific
+      method: string # HTTP method (GET, POST, etc.)
+      headers: object # Custom HTTP headers
+      body: object # Request body template
+
+      # Cloud provider specific
+      region: string # AWS region for Bedrock, etc.
+      apiVersion: string # API version to use
+```
+
+**Provider ID formats:**
+
+- **OpenAI:** `openai:gpt-4o-mini`, `openai:o3-mini`
+- **Anthropic:** `anthropic:messages:claude-sonnet-4-5-20250929`
+- **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- **Azure OpenAI:** `azureopenai:chat:deployment-name`
+- **Custom HTTP:** `http://your-api-endpoint.com/v1` or `https://...`
+- **Python/JavaScript:** `python:path/to/script.py`, `javascript:path/to/script.js`
+
+For the complete list of supported providers and their configuration options, see the [Provider Documentation](/docs/providers/).
+
+### Troubleshooting Provider Customization
+
+#### Providers not updating after changing ui-providers.yaml
+
+**Solution:** Restart the Docker container. Configuration is loaded once on startup and cached for performance.
+
+```bash
+# Docker
+docker restart promptfoo_container
+
+# Docker Compose
+docker compose restart
+
+# Kubernetes
+kubectl rollout restart deployment/promptfoo
+```
+
+#### Some providers missing from the list
+
+**Cause:** Invalid provider configuration - providers that fail validation are silently skipped.
+
+**Solution:** Check server logs for validation warnings:
+
+```bash
+# Docker
+docker logs promptfoo_container | grep "Invalid provider"
+
+# Docker Compose
+docker compose logs | grep "Invalid provider"
+
+# Kubernetes
+kubectl logs deployment/promptfoo | grep "Invalid provider"
+```
+
+**Common validation errors:**
+
+- Missing required `id` field
+- Invalid provider ID format (e.g., typo in model name)
+- Malformed YAML syntax (indentation, quotes, etc.)
+- Invalid config fields for that provider type
+
+**Example log output:**
+
+```
+[WARN] Invalid provider configuration in ui-providers.yaml, skipping
+  providerIndex: 2
+  provider: { id: "invalid:model" }
+  validationErrors: [...]
+```
+
+#### How to verify your config is loaded
+
+Check server logs on startup to confirm the config was loaded successfully:
+
+```bash
+docker logs promptfoo_container | grep "Loaded server configuration"
+```
+
+**Expected output:**
+
+```
+[INFO] Loaded server configuration
+  configPath: /home/promptfoo/.promptfoo/ui-providers.yaml
+  providerCount: 5
+```
+
+If you see `providerCount: 0` or no log entry, the config file wasn't found or had no valid providers.
+
+#### Config file not being detected
+
+**Common causes:**
+
+1. **Wrong location** - File must be in the `.promptfoo` directory (same directory as `promptfoo.db`)
+2. **Wrong filename** - Use `ui-providers.yaml` or `ui-providers.yml` (case-sensitive on Linux)
+3. **Volume not mounted** - Ensure Docker volume is correctly mapped to `/home/promptfoo/.promptfoo`
+4. **File permissions** - Container user must be able to read the file
+
+**Verify file location:**
+
+```bash
+# List contents of mounted directory
+docker exec promptfoo_container ls -la /home/promptfoo/.promptfoo/
+
+# Check if config file exists
+docker exec promptfoo_container cat /home/promptfoo/.promptfoo/ui-providers.yaml
+```
+
+#### YAML syntax errors
+
+**Symptoms:** Config not loading, providers still showing defaults
+
+**Solution:** Validate your YAML syntax:
+
+```bash
+# Use a YAML validator (install with: npm install -g yaml-lint)
+yaml-lint ui-providers.yaml
+
+# Or check logs for specific YAML errors
+docker logs promptfoo_container | grep "YAML"
+```
+
+**Common YAML mistakes:**
+
+```yaml
+# ❌ Wrong - missing quotes around URL
+- id: http://api.example.com/v1
+
+# ✅ Correct - quotes around URL or no special characters
+- id: 'http://api.example.com/v1'
+
+# ❌ Wrong - inconsistent indentation
+providers:
+- id: openai:gpt-4o
+  config:
+    temperature: 0.7
+   max_tokens: 1000  # Wrong indentation
+
+# ✅ Correct - consistent 2-space indentation
+providers:
+  - id: openai:gpt-4o
+    config:
+      temperature: 0.7
+      max_tokens: 1000
 ```
 
 ## Specifications
