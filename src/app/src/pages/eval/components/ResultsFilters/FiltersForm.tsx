@@ -376,7 +376,6 @@ function Filter({
       >
         <CloseIcon fontSize="small" />
       </IconButton>
-
       <Box
         sx={{
           display: 'flex',
