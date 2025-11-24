@@ -1,5 +1,5 @@
 import { getDb } from '../../src/database/index';
-import { ResultFailureReason } from '../../src/types';
+import { ResultFailureReason } from '../../src/types/index';
 import { runDbMigrations } from '../../src/migrate';
 import { queryTestIndicesOptimized } from '../../src/models/evalPerformance';
 import EvalFactory from '../factories/evalFactory';

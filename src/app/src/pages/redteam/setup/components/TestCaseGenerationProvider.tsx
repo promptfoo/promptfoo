@@ -518,7 +518,7 @@ export const TestCaseGenerationProvider: React.FC<{
   // ===================================================================
 
   return (
-    <TestCaseGenerationContext.Provider
+    <TestCaseGenerationContext
       value={
         {
           isGenerating,
@@ -544,7 +544,7 @@ export const TestCaseGenerationProvider: React.FC<{
         currentTurn={currentTurn}
         maxTurns={maxTurns}
       />
-    </TestCaseGenerationContext.Provider>
+    </TestCaseGenerationContext>
   );
 };
 

@@ -1,6 +1,6 @@
 import { WebClient } from '@slack/web-api';
 import { SlackProvider } from '../src/providers/slack';
-import type { ApiProvider } from '../src/types';
+import type { ApiProvider } from '../src/types/index';
 
 jest.mock('@slack/web-api');
 

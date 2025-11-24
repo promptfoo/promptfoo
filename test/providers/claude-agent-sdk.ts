@@ -10,7 +10,7 @@ import {
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
-import type { CallApiContextParams } from '../../src/types';
+import type { CallApiContextParams } from '../../src/types/index';
 
 jest.mock('../../src/cliState', () => ({ basePath: '/test/basePath' }));
 jest.mock('../../src/esm', () => ({

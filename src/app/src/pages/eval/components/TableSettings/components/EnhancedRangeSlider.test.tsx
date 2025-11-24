@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import EnhancedRangeSlider from './EnhancedRangeSlider';
@@ -288,10 +288,14 @@ describe('EnhancedRangeSlider', () => {
       const slider = screen.getByRole('slider') as HTMLInputElement;
       fireEvent.change(slider, { target: { value: 60 } });
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
-
-      expect(onChange).toHaveBeenCalledTimes(1);
-      expect(onChange).toHaveBeenCalledWith(60);
+      // Wait for the debounced onChange to be called (150ms debounce + React cycles)
+      await waitFor(
+        () => {
+          expect(onChange).toHaveBeenCalledTimes(1);
+          expect(onChange).toHaveBeenCalledWith(60);
+        },
+        { timeout: 500 },
+      );
     });
   });
 });

@@ -3,11 +3,11 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { neverGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { doRemoteGrading } from '../../src/remoteGrading';
-import { ResultFailureReason } from '../../src/types';
-import { fetchWithProxy } from '../../src/util/fetch';
+import { ResultFailureReason } from '../../src/types/index';
+import { fetchWithProxy } from '../../src/util/fetch/index';
 import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
 
-import type { EvaluateResult, EvaluateSummaryV3 } from '../../src/types';
+import type { EvaluateResult, EvaluateSummaryV3 } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
 
 // Mock dependencies
@@ -17,6 +17,13 @@ jest.mock('../../src/models/eval');
 jest.mock('../../src/redteam/remoteGeneration');
 jest.mock('../../src/remoteGrading');
 jest.mock('../../src/util/fetch');
+jest.mock('../../src/globalConfig/cloud', () => ({
+  cloudConfig: {
+    getApiHost: jest.fn(() => 'https://api.promptfoo.app'),
+    getApiKey: jest.fn(() => 'test-api-key'),
+    isEnabled: jest.fn(() => true),
+  },
+}));
 jest.mock('uuid', () => ({
   v4: jest.fn(() => 'test-uuid-1234'),
 }));
@@ -168,6 +175,7 @@ describe('Provider Test Functions', () => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              Authorization: 'Bearer test-api-key',
             },
             body: JSON.stringify({
               config: mockProvider.config,
