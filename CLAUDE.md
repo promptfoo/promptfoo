@@ -711,6 +711,7 @@ git commit -m "feat(providers): add new provider for XYZ"
 - Don't worry about version numbers - focus on the Unreleased section
 - If unsure about categorization, use Changed
 - ALL dependencies, tests, CI changes must be included (no exemptions)
+
 ## Release Process
 
 This project uses [release-please](https://github.com/googleapis/release-please) for automated releases. Release Please automates CHANGELOG generation, version bumps, and GitHub releases based on conventional commits.
