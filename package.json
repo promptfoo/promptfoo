@@ -243,7 +243,7 @@
     "async": "^3.2.6",
     "better-sqlite3": "12.4.6",
     "binary-extensions": "^3.1.0",
-    "cache-manager": "^4.1.0",
+    "cache-manager": "^7.0.0",
     "cache-manager-fs-hash": "^3.0.0",
     "chalk": "^4.1.2",
     "chokidar": "4.0.3",
