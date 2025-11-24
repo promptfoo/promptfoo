@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(providers): add Claude Opus 4.5 (claude-opus-4-5-20251101) support - state-of-the-art model for coding, agents, and computer use with $5/MTok input and $25/MTok output pricing; includes claude-opus-4-5-latest alias
+- feat(examples): add Claude Opus 4.5 advanced coding example demonstrating complex bug diagnosis, tradeoff analysis, ambiguity handling, and production-quality code generation capabilities
 - feat(util): add support for loading tool definitions from Python/JavaScript files - providers now support dynamic tool generation using `file://tools.py:get_tools` and `file://tools.js:get_tools` syntax, enabling runtime tool definitions based on environment, config, or external APIs (#6272)
 - feat(server): add server-side provider list customization via ui-providers.yaml - enables organizations to define custom provider lists that appear in eval creator and redteam setup UIs; when ui-providers.yaml exists, replaces default ~600 providers with organization-specific options for simplified workflow and security control (#6124)
 - feat(providers): add Anthropic structured outputs support with JSON schema outputs via `output_format` parameter and strict tool use via `strict: true` in tool definitions - ensures schema-compliant responses with automatic beta header handling, external file loading, variable rendering, and JSON parsing for Claude Sonnet 4.5 and Claude Opus 4.1 (#6226)
@@ -37,10 +39,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
+- docs(providers): add Claude Opus 4.5 to Anthropic provider documentation with model details, pricing, and cross-platform availability
 - docs(providers): add comprehensive Anthropic structured outputs documentation covering JSON outputs (`output_format`) and strict tool use (`strict: true`), including usage examples, schema limitations, and feature compatibility (#6226)
 
 ### Tests
 
+- test(providers): add cost calculation tests for Claude Opus 4.5 model with $5/MTok input and $25/MTok output pricing
 - test(examples): add structured outputs example demonstrating JSON schema-based responses and strict tool use for Anthropic provider (#6226)
 - test(examples): update tool-use example to include strict mode configuration for Anthropic provider (#6226)
 - test(examples): enhance structured-outputs-config example to demonstrate multi-provider structured outputs with OpenAI and Anthropic, showcasing syntax differences between providers (#6226)
