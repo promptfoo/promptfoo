@@ -5,7 +5,7 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util/index';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { isValidJson } from '../../util/json';
@@ -18,8 +18,8 @@ import {
   getCandidate,
   getGoogleClient,
   loadCredentials,
-  loadFile,
   mergeParts,
+  normalizeTools,
   resolveProjectId,
 } from './util';
 
@@ -299,7 +299,13 @@ export class VertexChatProvider extends VertexGenericProvider {
     );
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
-    const allTools = [...mcpTools, ...(config.tools ? loadFile(config.tools, context?.vars) : [])];
+    const fileTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : [];
+    const allTools = [
+      ...mcpTools,
+      ...(Array.isArray(fileTools) ? normalizeTools(fileTools) : fileTools ? [fileTools] : []),
+    ];
     // --- End MCP tool injection logic ---
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
