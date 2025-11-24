@@ -46,7 +46,7 @@ function ProviderConfigEditor({
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
 
-  const validateUrl = (url: string, type: 'http' | 'websocket' = 'http'): boolean => {
+  const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
     try {
       const parsedUrl = new URL(url);
       if (type === 'http') {
@@ -58,7 +58,7 @@ function ProviderConfigEditor({
     } catch {
       return false;
     }
-  };
+  }, []);
 
   const updateCustomTarget = (field: string, value: any) => {
     const updatedTarget = { ...provider } as ProviderOptions;
@@ -230,16 +230,7 @@ function ProviderConfigEditor({
       onValidate(!hasErrors);
     }
     return !hasErrors;
-  }, [
-    providerType,
-    provider,
-    bodyError,
-    urlError,
-    extensionErrors,
-    setError,
-    onValidate,
-    validateUrl,
-  ]);
+  }, [providerType, provider, bodyError, extensionErrors, setError, onValidate, validateUrl]);
 
   useEffect(() => {
     if (validateAll) {
