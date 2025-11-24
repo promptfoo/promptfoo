@@ -721,6 +721,30 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with plugins configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const plugins = [
+            { type: 'local' as const, path: './my-plugin' },
+            { type: 'local' as const, path: '/absolute/path/to/plugin' },
+          ];
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              plugins,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              plugins,
+            }),
+          });
+        });
+
         it('with append system prompt', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
