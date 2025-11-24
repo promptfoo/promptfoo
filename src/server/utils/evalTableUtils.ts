@@ -1,7 +1,7 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
-import { ResultFailureReason } from '../../types';
+import { ResultFailureReason } from '../../types/index';
 
-import type { EvaluateTableRow, Prompt } from '../../types';
+import type { EvaluateTableRow, Prompt } from '../../types/index';
 
 /**
  *

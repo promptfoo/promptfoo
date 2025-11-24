@@ -10,7 +10,7 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
-import { type UnifiedConfig } from '../../../src/types';
+import { type UnifiedConfig } from '../../../src/types/index';
 import {
   combineConfigs,
   dereferenceConfig,
