@@ -16,13 +16,14 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { AwsBedrockGenericProvider } from './index';
+import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 
 import type {
   ContentBlock,
   ConverseCommandInput,
   ConverseCommandOutput,
   ConverseStreamCommandInput,
+  GuardrailTrace,
   InferenceConfiguration,
   Message,
   SystemContentBlock,
@@ -32,8 +33,8 @@ import type {
   GuardrailConfiguration,
   PerformanceConfiguration,
   ServiceTier,
-  Trace,
 } from '@aws-sdk/client-bedrock-runtime';
+import type { DocumentType } from '@smithy/types';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
@@ -41,17 +42,9 @@ import type { TokenUsage } from '../../types/shared';
 
 /**
  * Configuration options for the Bedrock Converse API provider
+ * Extends base BedrockOptions with Converse-specific parameters
  */
-export interface BedrockConverseOptions {
-  // AWS Authentication
-  accessKeyId?: string;
-  apiKey?: string;
-  profile?: string;
-  region?: string;
-  secretAccessKey?: string;
-  sessionToken?: string;
-  endpoint?: string;
-
+export interface BedrockConverseOptions extends BedrockOptions {
   // Inference configuration (standard Converse API params)
   maxTokens?: number;
   max_tokens?: number; // Alias for compatibility
@@ -66,7 +59,6 @@ export interface BedrockConverseOptions {
     type: 'enabled';
     budget_tokens: number;
   };
-  showThinking?: boolean;
 
   // Performance configuration
   performanceConfig?: {
@@ -79,11 +71,6 @@ export interface BedrockConverseOptions {
   // Tool configuration
   tools?: BedrockConverseToolConfig[];
   toolChoice?: 'auto' | 'any' | { tool: { name: string } };
-
-  // Guardrails
-  guardrailIdentifier?: string;
-  guardrailVersion?: string;
-  trace?: Trace;
 
   // Additional model-specific parameters
   additionalModelRequestFields?: Record<string, unknown>;
@@ -100,8 +87,8 @@ export interface BedrockConverseToolConfig {
   toolSpec?: {
     name: string;
     description?: string;
-    inputSchema: {
-      json: Record<string, unknown>;
+    inputSchema?: {
+      json: DocumentType;
     };
   };
   // Support for OpenAI-compatible format
@@ -198,9 +185,9 @@ function calculateBedrockConverseCost(
  */
 function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[] {
   return tools.map((tool): Tool => {
-    // Already in Converse format
+    // Already in Converse format - cast to expected type
     if (tool.toolSpec) {
-      return { toolSpec: tool.toolSpec };
+      return { toolSpec: tool.toolSpec } as Tool;
     }
 
     // OpenAI-compatible format
@@ -210,10 +197,10 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
           name: tool.function.name,
           description: tool.function.description,
           inputSchema: {
-            json: tool.function.parameters || {},
+            json: (tool.function.parameters || {}) as DocumentType,
           },
         },
-      };
+      } as Tool;
     }
 
     // Anthropic format
@@ -223,10 +210,10 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
           name: tool.name,
           description: tool.description,
           inputSchema: {
-            json: tool.input_schema || {},
+            json: (tool.input_schema || {}) as DocumentType,
           },
         },
-      };
+      } as Tool;
     }
 
     throw new Error(`Invalid tool configuration: ${JSON.stringify(tool)}`);
@@ -565,14 +552,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     return {
       guardrailIdentifier: String(this.config.guardrailIdentifier),
       guardrailVersion: String(this.config.guardrailVersion || 'DRAFT'),
-      ...(this.config.trace ? { trace: this.config.trace } : {}),
+      ...(this.config.trace ? { trace: this.config.trace as GuardrailTrace } : {}),
     };
   }
 
   /**
    * Build additional model request fields (including thinking config)
    */
-  private buildAdditionalModelRequestFields(): Record<string, unknown> | undefined {
+  private buildAdditionalModelRequestFields(): DocumentType | undefined {
     const fields: Record<string, unknown> = {
       ...(this.config.additionalModelRequestFields || {}),
     };
@@ -582,7 +569,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       fields.thinking = this.config.thinking;
     }
 
-    return Object.keys(fields).length > 0 ? fields : undefined;
+    return Object.keys(fields).length > 0 ? (fields as DocumentType) : undefined;
   }
 
   /**
@@ -612,12 +599,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   /**
    * Main API call using Converse API
    */
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     // Parse the prompt into messages
     const { messages, system } = parseConverseMessages(prompt);
-
-    // Merge config with context config (for future use with additional context params)
-    const _mergedConfig = { ...this.config, ...context?.prompt.config };
 
     // Build the request
     const inferenceConfig = this.buildInferenceConfig();
