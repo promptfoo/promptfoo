@@ -314,7 +314,7 @@ describe('GolangProvider', () => {
 
       mockExecFile.mockImplementation(((
         file: string,
-        args: any[],
+        _args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -384,8 +384,8 @@ describe('GolangProvider', () => {
       } as never);
 
       mockExecFile.mockImplementation(((
-        file: string,
-        args: any[],
+        _file: string,
+        _args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -414,8 +414,8 @@ describe('GolangProvider', () => {
         config: { basePath: '/absolute/path/to' },
       });
       mockExecFile.mockImplementation(((
-        file: string,
-        args: any[],
+        _file: string,
+        _args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -448,7 +448,7 @@ describe('GolangProvider', () => {
       });
       mockExecFile.mockImplementation(((
         file: string,
-        args: any[],
+        _args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -480,7 +480,7 @@ describe('GolangProvider', () => {
       });
       mockExecFile.mockImplementation(((
         file: string,
-        args: any[],
+        _args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -512,7 +512,7 @@ describe('GolangProvider', () => {
       });
       mockExecFile.mockImplementation(((
         file: string,
-        args: any[],
+        _args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -573,8 +573,8 @@ describe('GolangProvider', () => {
       });
 
       mockExecFile.mockImplementation(((
-        file: string,
-        args: any[],
+        _file: string,
+        _args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -604,7 +604,7 @@ describe('GolangProvider', () => {
       });
       mockExecFile.mockImplementation(((
         file: string,
-        args: any[],
+        _args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -791,8 +791,8 @@ describe('GolangProvider', () => {
       });
 
       mockExecFile.mockImplementation(((
-        file: string,
-        args: any[],
+        _file: string,
+        _args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -849,8 +849,8 @@ describe('GolangProvider', () => {
       });
 
       mockExecFile.mockImplementation(((
-        file: string,
-        args: any[],
+        _file: string,
+        _args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {

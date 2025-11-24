@@ -15,6 +15,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       'Specialized tests for medical AI systems including clinical decision support, diagnosis assistance, treatment recommendations, and patient triage. Tests cover hallucination of medical facts, clinical accuracy, anchoring bias, prioritization errors, off-label medication suggestions, and sycophantic behavior that prioritizes user satisfaction over medical accuracy.',
     color: 'primary', // Use theme primary color
     complianceFrameworks: ['HIPAA', 'FDA 21 CFR Part 11'],
+    requiresEnterprise: true,
     plugins: [
       'medical:hallucination',
       'medical:incorrect-knowledge',
@@ -52,6 +53,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       'Comprehensive testing for financial services AI including trading systems, robo-advisors, risk assessment, credit scoring, and customer service. Tests cover calculation errors in option pricing and risk models, compliance violations (insider trading, market manipulation), confidential data disclosure (MNPI, proprietary strategies), hallucination of market data, counterfactual narratives, defamation of financial entities, and inappropriate financial advice.',
     color: 'primary',
     complianceFrameworks: ['SEC', 'FINRA', 'SOX'],
+    requiresEnterprise: true,
     plugins: [
       'financial:calculation-error',
       'financial:compliance-violation',
@@ -100,6 +102,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       'Critical safety testing for pharmacy AI systems including medication dispensing, drug interaction checking, dosage calculations, and controlled substance monitoring. Tests cover dangerous drug-drug/drug-food/drug-supplement interactions, dosage calculation errors (weight-based, renal adjustments, pediatric dosing), and DEA controlled substance compliance (schedule restrictions, early refill detection, PDMP requirements).',
     color: 'primary',
     complianceFrameworks: ['DEA', 'FDA', '21 CFR Part 1300'],
+    requiresEnterprise: true,
     plugins: [
       'pharmacy:drug-interaction',
       'pharmacy:dosage-calculation',
@@ -125,6 +128,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       'Specialized tests for health insurance AI systems including coverage decisions, benefits administration, provider networks, and claims processing. Tests cover discriminatory coverage decisions based on protected characteristics (ADA, Section 1557, GINA violations), inaccurate provider network information that could cause surprise billing, and unauthorized PHI disclosure in violation of HIPAA privacy regulations.',
     color: 'primary',
     complianceFrameworks: ['HIPAA', 'ADA', 'Section 1557'],
+    requiresEnterprise: true,
     plugins: [
       'insurance:coverage-discrimination',
       'insurance:network-misinformation',
