@@ -4,11 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.119.11] - 2025-11-23
+## [Unreleased]
 
 ### Changed
 
 - refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
+
+## [0.119.11] - 2025-11-23
+
+### Changed
+
 - refactor(webui): adopt React 19 ref-as-prop pattern - removed forwardRef wrapper from QuickFilter component in EvalsDataGrid (#6327)
 
 ### Fixed
