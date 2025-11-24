@@ -495,6 +495,111 @@ export function getMaxEvalTimeMs(defaultValue: number = 0): number {
 }
 
 /**
+ * Expected time per test for regular evaluations (1 minute).
+ * Most API calls complete in seconds, but we allow buffer for slower responses.
+ */
+export const EXPECTED_TIME_PER_TEST_MS = 60_000;
+
+/**
+ * Expected time per test for redteam evaluations (5 minutes).
+ * Redteam strategies involve multiple turns/iterations and API calls per test.
+ */
+export const EXPECTED_TIME_PER_REDTEAM_TEST_MS = 300_000;
+
+/**
+ * Safety multiplier for regular evaluations.
+ * Applied to expected time to provide buffer for slow tests.
+ */
+export const MAX_EVAL_TIME_SAFETY_MULTIPLIER = 3;
+
+/**
+ * Safety multiplier for redteam evaluations.
+ * Lower than regular because expected time is already padded for multi-turn strategies.
+ */
+export const MAX_EVAL_TIME_REDTEAM_SAFETY_MULTIPLIER = 2;
+
+/**
+ * Buffer time added to max eval time calculations (1 minute).
+ * Accounts for setup, teardown, and overhead.
+ */
+export const MAX_EVAL_TIME_BUFFER_MS = 60_000;
+
+/**
+ * Calculate a reasonable default maximum evaluation time based on eval characteristics.
+ *
+ * This provides a "swiss cheese" safety layer - the last line of defense to prevent
+ * evaluations from running indefinitely. The calculation considers:
+ * - Number of eval steps and concurrency (determines batch count)
+ * - Expected time per test (longer for redteam due to multi-turn strategies)
+ * - Safety multiplier (provides buffer for slow tests)
+ * - Per-test timeout (caps the worst case)
+ *
+ * @param totalEvalSteps Total number of evaluation steps (tests × providers × prompts × repeat)
+ * @param maxConcurrency Maximum concurrent test executions
+ * @param testCaseTimeoutMs Timeout per individual test case
+ * @param isRedteam Whether this is a redteam evaluation
+ * @returns Calculated max eval time in milliseconds
+ */
+export function calculateDefaultMaxEvalTimeMs(
+  totalEvalSteps: number,
+  maxConcurrency: number,
+  testCaseTimeoutMs: number,
+  isRedteam: boolean = false,
+): number {
+  const batchCount = Math.ceil(totalEvalSteps / Math.max(1, maxConcurrency));
+
+  // Expected time per test - longer for redteam due to multi-turn strategies
+  const expectedTimePerTest = isRedteam
+    ? EXPECTED_TIME_PER_REDTEAM_TEST_MS
+    : EXPECTED_TIME_PER_TEST_MS;
+
+  // Safety multiplier - lower for redteam since expected time is already padded
+  const safetyMultiplier = isRedteam
+    ? MAX_EVAL_TIME_REDTEAM_SAFETY_MULTIPLIER
+    : MAX_EVAL_TIME_SAFETY_MULTIPLIER;
+
+  // Calculate expected total time with safety margin
+  const expectedTime = batchCount * expectedTimePerTest;
+  const safeMaxTime = expectedTime * safetyMultiplier + MAX_EVAL_TIME_BUFFER_MS;
+
+  // Cap at worst case (all tests timeout)
+  const worstCase = batchCount * testCaseTimeoutMs;
+
+  return Math.min(safeMaxTime, worstCase);
+}
+
+/**
+ * Get the default maximum evaluation time, calculating if not explicitly set.
+ *
+ * Priority:
+ * 1. PROMPTFOO_MAX_EVAL_TIME_MS env var (if set, including 0 to disable)
+ * 2. Calculated default based on eval characteristics
+ *
+ * Set PROMPTFOO_MAX_EVAL_TIME_MS=0 to explicitly disable the max eval time limit.
+ *
+ * @param totalEvalSteps Total number of evaluation steps
+ * @param maxConcurrency Maximum concurrent test executions
+ * @param testCaseTimeoutMs Timeout per individual test case
+ * @param isRedteam Whether this is a redteam evaluation
+ * @returns Max eval time in milliseconds, or 0 if disabled
+ */
+export function getDefaultMaxEvalTimeMs(
+  totalEvalSteps: number,
+  maxConcurrency: number,
+  testCaseTimeoutMs: number,
+  isRedteam: boolean = false,
+): number {
+  // Check if explicitly set (including 0 to disable)
+  const explicitValue = getEnvInt('PROMPTFOO_MAX_EVAL_TIME_MS');
+  if (explicitValue !== undefined) {
+    return explicitValue;
+  }
+
+  // Calculate default based on eval characteristics
+  return calculateDefaultMaxEvalTimeMs(totalEvalSteps, maxConcurrency, testCaseTimeoutMs, isRedteam);
+}
+
+/**
  * Check if the application is running in a CI environment.
  * @returns True if running in a CI environment, false otherwise.
  */
