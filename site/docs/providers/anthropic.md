@@ -27,6 +27,7 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                                   | Description                      |
 | -------------------------------------------------------------------------- | -------------------------------- |
+| `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Latest Claude 4.5 Opus model     |
 | `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Latest Claude 4.1 Opus model     |
 | `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Latest Claude 4 Opus model       |
 | `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Latest Claude 4.5 Sonnet model   |
@@ -45,6 +46,7 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                         | AWS Bedrock ([documentation](/docs/providers/aws-bedrock)) | GCP Vertex AI ([documentation](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5-latest)     | anthropic.claude-opus-4-5-20251101-v1:0                    | claude-opus-4-5@20251101                                |
 | Claude 4.1 Opus   | claude-opus-4-1-20250805                              | anthropic.claude-opus-4-1-20250805-v1:0                    | claude-opus-4-1@20250805                                |
 | Claude 4 Opus     | claude-opus-4-20250514 (claude-opus-4-latest)         | anthropic.claude-opus-4-20250514-v1:0                      | claude-opus-4@20250514                                  |
 | Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5-latest) | anthropic.claude-sonnet-4-5-20250929-v1:0                  | claude-sonnet-4-5@20250929                              |
