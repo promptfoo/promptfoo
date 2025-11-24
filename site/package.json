@@ -62,7 +62,7 @@
   "dependencies": {
     "@mui/material": "^7.3.5",
     "@mui/system": "^7.3.5",
-    "@types/react": "19.2.6",
+    "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "react-countup": "^6.5.3",
     "swiper": "^11.2.10"

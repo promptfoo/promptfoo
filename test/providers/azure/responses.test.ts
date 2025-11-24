@@ -71,9 +71,9 @@ describe('AzureResponsesProvider', () => {
   });
 
   describe('getAzureResponsesBody', () => {
-    it('should create correct request body for basic prompt', () => {
+    it('should create correct request body for basic prompt', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
-      const body = provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body).toMatchObject({
         model: 'gpt-4.1-test',
@@ -86,7 +86,7 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
-    it('should handle external response_format file loading (fixed double-loading bug)', () => {
+    it('should handle external response_format file loading (fixed double-loading bug)', async () => {
       const mockSchema = {
         type: 'json_schema',
         json_schema: {
@@ -103,7 +103,7 @@ describe('AzureResponsesProvider', () => {
         },
       });
 
-      const body = provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith('file://test-schema.json');
       expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledTimes(1); // Should only be called once (fix for double-loading)
@@ -115,7 +115,7 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
-    it('should handle inline response_format', () => {
+    it('should handle inline response_format', async () => {
       // For inline schemas, maybeLoadFromExternalFile should return the object unchanged
       mockMaybeLoadFromExternalFile.mockImplementation((input) => input);
 
@@ -136,7 +136,7 @@ describe('AzureResponsesProvider', () => {
         },
       });
 
-      const body = provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.text.format).toMatchObject({
         type: 'json_schema',
@@ -150,22 +150,22 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
-    it('should not include temperature for reasoning models', () => {
+    it('should not include temperature for reasoning models', async () => {
       const provider = new AzureResponsesProvider('o1-preview', {
         config: { temperature: 0.7 },
       });
 
-      const body = provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body).not.toHaveProperty('temperature');
     });
 
-    it('should include temperature for non-reasoning models', () => {
+    it('should include temperature for non-reasoning models', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: { temperature: 0.7 },
       });
 
-      const body = provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.temperature).toBe(0.7);
     });

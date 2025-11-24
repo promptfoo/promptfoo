@@ -275,6 +275,7 @@ describe('combineConfigs', () => {
       commandLineOptions: { verbose: true },
       metadata: {},
       sharing: false,
+      tracing: undefined,
     });
 
     const config2Result = await combineConfigs(['config2.json']);
@@ -309,7 +310,8 @@ describe('combineConfigs', () => {
       outputPath: [],
       commandLineOptions: { verbose: false },
       metadata: {},
-      sharing: false,
+      sharing: undefined,
+      tracing: undefined,
     });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
@@ -353,6 +355,7 @@ describe('combineConfigs', () => {
       commandLineOptions: { verbose: false },
       metadata: {},
       sharing: false,
+      tracing: undefined,
     });
   });
 
@@ -989,7 +992,7 @@ describe('combineConfigs', () => {
     });
   });
 
-  it('should default sharing to false when not defined', async () => {
+  it('should default sharing to undefined when not defined', async () => {
     const config = {
       description: 'test config',
       providers: ['provider1'],
@@ -1006,7 +1009,7 @@ describe('combineConfigs', () => {
       expect.anything(),
     );
 
-    expect(result.sharing).toBe(false);
+    expect(result.sharing).toBeUndefined();
   });
 
   it('should load defaultTest from external file when string starts with file://', async () => {

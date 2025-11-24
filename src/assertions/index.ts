@@ -27,6 +27,7 @@ import {
   type ApiProvider,
   type Assertion,
   type AssertionType,
+  type AssertionValue,
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
@@ -351,6 +352,51 @@ export async function runAssertion({
       }
       return v;
     });
+  }
+
+  // Centralized script output resolution
+  // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
+  // All other types should use the script output as the comparison value
+  const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
+  const baseType = getAssertionBaseType(assertion);
+
+  if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
+    // Validate the script result type - only javascript/python/ruby can return functions
+    if (typeof valueFromScript === 'function') {
+      throw new Error(
+        `Script for "${assertion.type}" assertion returned a function. ` +
+          `Only javascript/python/ruby assertion types can return functions. ` +
+          `For other assertion types, return the expected value (string, number, array, or object).`,
+      );
+    }
+
+    // Validate the script didn't return boolean or GradingResult
+    // These are only valid for javascript/python/ruby assertion types
+    if (typeof valueFromScript === 'boolean') {
+      throw new Error(
+        `Script for "${assertion.type}" assertion returned a boolean. ` +
+          `Only javascript/python/ruby assertion types can return boolean values. ` +
+          `For other assertion types, return the expected value (string, number, array, or object).`,
+      );
+    }
+
+    // Check if it's a GradingResult object (has 'pass' property)
+    if (
+      valueFromScript &&
+      typeof valueFromScript === 'object' &&
+      !Array.isArray(valueFromScript) &&
+      'pass' in valueFromScript
+    ) {
+      throw new Error(
+        `Script for "${assertion.type}" assertion returned a GradingResult. ` +
+          `Only javascript/python/ruby assertion types can return GradingResult objects. ` +
+          `For other assertion types, return the expected value (string, number, array, or object).`,
+      );
+    }
+
+    // Update renderedValue with the script output
+    // Type assertion is now safe because we've validated the type
+    renderedValue = valueFromScript as AssertionValue;
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider

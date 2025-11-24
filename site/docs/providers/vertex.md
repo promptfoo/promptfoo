@@ -40,11 +40,15 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 Anthropic's Claude models are available with the following versions:
 
+**Claude 4.5:**
+
+- `vertex:claude-opus-4-5@20251101` - Claude 4.5 Opus for agentic coding, agents, and computer use
+- `vertex:claude-sonnet-4-5@20250929` - Claude 4.5 Sonnet for agents, coding, and computer use
+- `vertex:claude-haiku-4-5@20251001` - Claude 4.5 Haiku for fast, cost-effective use cases
+
 **Claude 4:**
 
-- `vertex:claude-sonnet-4-5@20250929` - Claude 4.5 Sonnet for agents, coding, and computer use
 - `vertex:claude-opus-4-1@20250805` - Claude 4.1 Opus for complex tasks and agentic search
-- `vertex:claude-haiku-4-5@20251001` - Claude 4.5 Haiku for fast, cost-effective use cases
 - `vertex:claude-opus-4@20250514` - Claude 4 Opus for coding and agent capabilities
 - `vertex:claude-sonnet-4@20250514` - Claude 4 Sonnet balancing performance with speed
 
