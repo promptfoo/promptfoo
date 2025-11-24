@@ -1343,10 +1343,15 @@ class Evaluator {
       const abortController = new AbortController();
       const { signal } = abortController;
 
-      // Add the abort signal to the evalStep
+      // Combine the per-test timeout signal with any existing abort signal (e.g., global maxEvalTimeMs)
+      const combinedSignal = evalStep.abortSignal
+        ? AbortSignal.any([evalStep.abortSignal, signal])
+        : signal;
+
+      // Add the combined abort signal to the evalStep
       const evalStepWithSignal = {
         ...evalStep,
-        abortSignal: signal,
+        abortSignal: combinedSignal,
       };
 
       try {
