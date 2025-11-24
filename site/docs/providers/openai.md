@@ -387,7 +387,7 @@ tools: file://./tools.js:getTools
 tools: file://./tools.ts:getTools
 ```
 
-Python and JavaScript files must export a function that returns the tool definitions array. The function is called synchronously during config loading.
+Python and JavaScript files must export a function that returns the tool definitions array. The function can be synchronous or asynchronous.
 
 :::
 

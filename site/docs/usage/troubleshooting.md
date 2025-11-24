@@ -199,7 +199,7 @@ providers:
       tools: file://./tools.js:getTools
 ```
 
-The function must return a tool definitions array synchronously:
+The function must return a tool definitions array (can be synchronous or asynchronous):
 
 ```python title="tools.py"
 def get_tools():
