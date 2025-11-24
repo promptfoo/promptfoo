@@ -34,13 +34,10 @@ export async function handlePrompt(id: string) {
       'Dataset ID': evl.datasetId.slice(0, 6),
       'Raw score': evl.metrics?.score?.toFixed(2) || '-',
       'Pass rate':
-        evl.metrics &&
-        evl.metrics.testPassCount + evl.metrics.testFailCount + evl.metrics.testErrorCount > 0
+        evl.metrics && evl.metrics.testPassCount + evl.metrics.testFailCount > 0
           ? `${(
               (evl.metrics.testPassCount /
-                (evl.metrics.testPassCount +
-                  evl.metrics.testFailCount +
-                  evl.metrics.testErrorCount)) *
+                (evl.metrics.testPassCount + evl.metrics.testFailCount)) *
                 100
             ).toFixed(2)}%`
           : '-',

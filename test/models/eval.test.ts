@@ -190,6 +190,48 @@ describe('evaluator', () => {
       // Total test count should still include errors
       expect(summary?.numTests).toBe(10);
     });
+
+    it('should handle all errors scenario with zero pass rate', async () => {
+      // Create an eval with only errors: 0 pass, 0 fail, 10 errors
+      const evaluation = await Eval.create(
+        {
+          providers: ['test-provider'],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { test: 'value' } }],
+        },
+        [{ raw: 'Test prompt', label: 'Test prompt' }],
+      );
+
+      await evaluation.addPrompts([
+        {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          provider: 'test-provider',
+          metrics: {
+            score: 0,
+            testPassCount: 0,
+            testFailCount: 0,
+            testErrorCount: 10,
+            assertPassCount: 0,
+            assertFailCount: 0,
+            totalLatencyMs: 100,
+            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+            namedScores: {},
+            namedScoresCount: {},
+            cost: 0.007,
+          },
+        },
+      ]);
+
+      const summaries = await getEvalSummaries();
+      const summary = summaries.find((s) => s.evalId === evaluation.id);
+
+      expect(summary).toBeDefined();
+      // When testRunCount = 0 (only errors), pass rate should be 0 (no division by zero)
+      expect(summary?.passRate).toBe(0);
+      // numTests includes all error tests
+      expect(summary?.numTests).toBe(10);
+    });
   });
 
   describe('delete', () => {
