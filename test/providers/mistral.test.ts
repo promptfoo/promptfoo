@@ -23,11 +23,13 @@ describe('Mistral', () => {
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
-      reset: jest.fn(),
-      store: {
-        get: jest.fn(),
-        set: jest.fn(),
-      },
+      clear: jest.fn(),
+      stores: [
+        {
+          get: jest.fn(),
+          set: jest.fn(),
+        },
+      ] as any,
     });
   });
 

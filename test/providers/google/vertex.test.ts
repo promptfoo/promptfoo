@@ -53,8 +53,8 @@ jest.mock('../../../src/cache', () => ({
     set: jest.fn(),
     wrap: jest.fn(),
     del: jest.fn(),
-    reset: jest.fn(),
-    store: {} as any,
+    clear: jest.fn(),
+    stores: [{}] as any,
   }),
   isCacheEnabled: jest.fn(),
 }));
@@ -92,8 +92,8 @@ describe('VertexChatProvider.callGeminiApi', () => {
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
-      reset: jest.fn(),
-      store: {} as any,
+      clear: jest.fn(),
+      stores: [{}] as any,
     });
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
@@ -992,8 +992,8 @@ describe('VertexChatProvider.callLlamaApi', () => {
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
-      reset: jest.fn(),
-      store: {} as any,
+      clear: jest.fn(),
+      stores: [{}] as any,
     });
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
@@ -1273,8 +1273,8 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
-      reset: jest.fn(),
-      store: {} as any,
+      clear: jest.fn(),
+      stores: [{}] as any,
     });
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
