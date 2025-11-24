@@ -1309,8 +1309,10 @@ class Evaluator {
 
     // Add a wrapper function that implements timeout
     const processEvalStepWithTimeout = async (evalStep: RunEvalOptions, index: number | string) => {
-      // Get timeout value from options or environment, defaults to 0 (no timeout)
-      const timeoutMs = options.timeoutMs || getEvalTimeoutMs();
+      // Get timeout value from options or environment
+      // Use explicit check for undefined to allow timeoutMs=0 to disable timeout
+      const timeoutMs =
+        options.timeoutMs !== undefined ? options.timeoutMs : getEvalTimeoutMs();
 
       if (timeoutMs <= 0) {
         // No timeout, process normally

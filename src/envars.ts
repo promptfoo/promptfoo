@@ -447,13 +447,41 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
 }
 
 /**
+ * Default multiplier applied to REQUEST_TIMEOUT_MS to calculate the test case timeout.
+ * Set to 5 to allow for multiple retries and accommodate multi-turn redteam strategies
+ * (iterative, GOAT, Crescendo, etc.) which may make many API calls per test case.
+ */
+export const EVAL_TIMEOUT_MULTIPLIER = 5;
+
+/**
  * Get the timeout in milliseconds for each individual test case/provider API call.
  * When this timeout is reached, that specific test is marked as an error.
- * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no timeout).
- * @returns The timeout value in milliseconds, or the default value if not set.
+ *
+ * Default behavior: If not explicitly set, calculates a default based on REQUEST_TIMEOUT_MS * 5
+ * (1,500,000ms / 25 minutes by default) to allow for multiple retry cycles and multi-turn
+ * redteam strategies like iterative, GOAT, and Crescendo.
+ *
+ * Set PROMPTFOO_EVAL_TIMEOUT_MS=0 to explicitly disable the timeout.
+ *
+ * @param defaultValue Optional override default. If undefined, uses calculated default.
+ * @returns The timeout value in milliseconds.
  */
-export function getEvalTimeoutMs(defaultValue: number = 0): number {
-  return getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', defaultValue);
+export function getEvalTimeoutMs(defaultValue?: number): number {
+  // Check if PROMPTFOO_EVAL_TIMEOUT_MS is explicitly set (including 0)
+  const explicitValue = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS');
+  if (explicitValue !== undefined) {
+    return explicitValue;
+  }
+
+  // If a default was passed in by the caller, use it
+  if (defaultValue !== undefined) {
+    return defaultValue;
+  }
+
+  // Calculate default: 5x REQUEST_TIMEOUT_MS to allow for retries and multi-turn strategies
+  // REQUEST_TIMEOUT_MS defaults to 300,000ms (5 minutes)
+  const requestTimeout = getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
+  return requestTimeout * EVAL_TIMEOUT_MULTIPLIER;
 }
 
 /**
