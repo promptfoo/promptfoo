@@ -9,9 +9,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking (#6267)
-
-### Changed
-
 - refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
 
 ### Fixed
@@ -106,6 +103,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
+- fix(assertions): use file-based script output for all assertion types with `file://` references (#6200)
 
 ## [0.119.8] - 2025-11-18
 
