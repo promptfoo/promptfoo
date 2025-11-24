@@ -33,11 +33,8 @@ const mockFetchWithRetries = jest.mocked(fetchWithRetries);
 jest.mock('cache-manager', () => ({
   createCache: jest.fn().mockImplementation(({ stores }) => {
     const cache = new Map();
-    // Determine cache type based on whether stores array is empty or has items
-    const cacheType = stores && stores.length > 0 ? 'disk' : 'memory';
     return {
       stores: stores || [],
-      _cacheType: cacheType, // Internal property for testing
       get: jest.fn().mockImplementation((key) => cache.get(key)),
       set: jest.fn().mockImplementation((key, value) => {
         cache.set(key, value);
@@ -60,7 +57,15 @@ jest.mock('cache-manager', () => ({
         cache.set(key, value);
         return value;
       }),
-    };
+      // Add required Cache interface methods
+      mget: jest.fn(),
+      mset: jest.fn(),
+      mdel: jest.fn(),
+      reset: jest.fn(),
+      ttl: jest.fn(),
+      on: jest.fn(),
+      removeAllListeners: jest.fn(),
+    } as any;
   }),
 }));
 
@@ -121,14 +126,16 @@ describe('cache configuration', () => {
     process.env.NODE_ENV = 'test';
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    expect(cache._cacheType).toBe('memory');
+    // In test environment, stores array should be empty (memory cache)
+    expect(cache.stores).toEqual([]);
   });
 
   it('should use disk cache in non-test environment', async () => {
     process.env.NODE_ENV = 'production';
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    expect(cache._cacheType).toBe('disk');
+    // In production, stores array should have at least one store (disk cache)
+    expect(cache.stores.length).toBeGreaterThan(0);
   });
 
   it('should respect custom cache path', async () => {
@@ -147,7 +154,8 @@ describe('cache configuration', () => {
 
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    expect(cache._cacheType).toBe('disk');
+    // Should have disk cache store
+    expect(cache.stores.length).toBeGreaterThan(0);
   });
 
   it('should handle cache directory creation when it exists', async () => {

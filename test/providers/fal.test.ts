@@ -42,7 +42,14 @@ describe('Fal Provider', () => {
           set: jest.fn(),
         },
       ] as any,
-    });
+      mget: jest.fn(),
+      mset: jest.fn(),
+      mdel: jest.fn(),
+      reset: jest.fn(),
+      ttl: jest.fn(),
+      on: jest.fn(),
+      removeAllListeners: jest.fn(),
+    } as any);
   });
 
   afterEach(() => {
@@ -295,13 +302,20 @@ describe('Fal Provider', () => {
           set: jest.fn(),
           wrap: jest.fn(),
           del: jest.fn(),
-          reset: jest.fn(),
-          store: {
+          clear: jest.fn(),
+          stores: [{
             get: jest.fn(),
             set: jest.fn(),
-          },
+          }] as any,
+          mget: jest.fn(),
+          mset: jest.fn(),
+          mdel: jest.fn(),
+          reset: jest.fn(),
+          ttl: jest.fn(),
+          on: jest.fn(),
+          removeAllListeners: jest.fn(),
         };
-        jest.mocked(getCache).mockReturnValue(mockCache);
+        jest.mocked(getCache).mockReturnValue(mockCache as any);
 
         const result = await provider.callApi('test prompt');
 
@@ -322,13 +336,20 @@ describe('Fal Provider', () => {
           set: jest.fn(),
           wrap: jest.fn(),
           del: jest.fn(),
-          reset: jest.fn(),
-          store: {
+          clear: jest.fn(),
+          stores: [{
             get: jest.fn(),
             set: jest.fn(),
-          },
+          }] as any,
+          mget: jest.fn(),
+          mset: jest.fn(),
+          mdel: jest.fn(),
+          reset: jest.fn(),
+          ttl: jest.fn(),
+          on: jest.fn(),
+          removeAllListeners: jest.fn(),
         };
-        jest.mocked(getCache).mockReturnValue(mockCache);
+        jest.mocked(getCache).mockReturnValue(mockCache as any);
 
         const mockResponse = {
           data: {
@@ -359,13 +380,20 @@ describe('Fal Provider', () => {
           set: jest.fn().mockRejectedValue(new Error('Cache error')),
           wrap: jest.fn(),
           del: jest.fn(),
-          reset: jest.fn(),
-          store: {
+          clear: jest.fn(),
+          stores: [{
             get: jest.fn(),
             set: jest.fn(),
-          },
+          }] as any,
+          mget: jest.fn(),
+          mset: jest.fn(),
+          mdel: jest.fn(),
+          reset: jest.fn(),
+          ttl: jest.fn(),
+          on: jest.fn(),
+          removeAllListeners: jest.fn(),
         };
-        jest.mocked(getCache).mockReturnValue(mockCache);
+        jest.mocked(getCache).mockReturnValue(mockCache as any);
 
         const mockResponse = {
           data: {

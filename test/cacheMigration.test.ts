@@ -60,7 +60,7 @@ describe('Cache Migration from v4 to v7', () => {
       expect(newCache.cache).toHaveLength(1);
       expect(newCache.cache[0][0]).toBe('fetch:v2:https://example.com');
       expect(newCache.cache[0][1].value).toBe(JSON.stringify({ data: 'test value' }));
-      expect(newCache.cache[0][1].expire).toBe(futureTime);
+      expect(newCache.cache[0][1].expires).toBe(futureTime);
     });
 
     it('should handle expireTime with [object Object] suffix', () => {
@@ -77,7 +77,7 @@ describe('Cache Migration from v4 to v7', () => {
       expect(result.stats.successCount).toBe(1);
 
       const newCache = readNewCacheFile();
-      expect(newCache.cache[0][1].expire).toBe(futureTime);
+      expect(newCache.cache[0][1].expires).toBe(futureTime);
     });
 
     it('should skip expired entries', () => {

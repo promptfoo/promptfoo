@@ -55,6 +55,13 @@ jest.mock('../../../src/cache', () => ({
     del: jest.fn(),
     clear: jest.fn(),
     stores: [{}] as any,
+    mget: jest.fn(),
+    mset: jest.fn(),
+    mdel: jest.fn(),
+    reset: jest.fn(),
+    ttl: jest.fn(),
+    on: jest.fn(),
+    removeAllListeners: jest.fn(),
   }),
   isCacheEnabled: jest.fn(),
 }));
@@ -94,7 +101,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
       del: jest.fn(),
       clear: jest.fn(),
       stores: [{}] as any,
-    });
+      mget: jest.fn(),
+      mset: jest.fn(),
+      mdel: jest.fn(),
+      reset: jest.fn(),
+      ttl: jest.fn(),
+      on: jest.fn(),
+      removeAllListeners: jest.fn(),
+    } as any);
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
   });
@@ -443,9 +457,16 @@ describe('VertexChatProvider.callGeminiApi', () => {
       set: mockCacheSet,
       wrap: jest.fn(),
       del: jest.fn(),
+      clear: jest.fn(),
+      stores: [{}] as any,
+      mget: jest.fn(),
+      mset: jest.fn(),
+      mdel: jest.fn(),
       reset: jest.fn(),
-      store: {} as any,
-    });
+      ttl: jest.fn(),
+      on: jest.fn(),
+      removeAllListeners: jest.fn(),
+    } as any);
 
     jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
@@ -994,7 +1015,14 @@ describe('VertexChatProvider.callLlamaApi', () => {
       del: jest.fn(),
       clear: jest.fn(),
       stores: [{}] as any,
-    });
+      mget: jest.fn(),
+      mset: jest.fn(),
+      mdel: jest.fn(),
+      reset: jest.fn(),
+      ttl: jest.fn(),
+      on: jest.fn(),
+      removeAllListeners: jest.fn(),
+    } as any);
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
   });
@@ -1275,7 +1303,14 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       del: jest.fn(),
       clear: jest.fn(),
       stores: [{}] as any,
-    });
+      mget: jest.fn(),
+      mset: jest.fn(),
+      mdel: jest.fn(),
+      reset: jest.fn(),
+      ttl: jest.fn(),
+      on: jest.fn(),
+      removeAllListeners: jest.fn(),
+    } as any);
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
   });

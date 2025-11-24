@@ -23,7 +23,7 @@ interface OldCacheEntry {
 
 interface NewCacheEntry {
   value: any;
-  expire?: number;
+  expires?: number; // Keyv uses 'expires' field for TTL
 }
 
 interface MigrationStats {
@@ -314,7 +314,7 @@ function readOldCacheEntries(cachePath: string): {
           // Convert to new format
           const newEntry: NewCacheEntry = {
             value: oldEntry.val,
-            expire: expireTime,
+            expires: expireTime, // Keyv expects 'expires' field
           };
 
           entries.set(oldEntry.key, newEntry);
