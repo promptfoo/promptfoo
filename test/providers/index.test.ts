@@ -1192,6 +1192,37 @@ describe('resolveProvider', () => {
     await expect(resolveProvider(123, mockProviderMap)).rejects.toThrow('Invalid provider type');
   });
 
+  it('should handle function provider', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    const mockFunctionProvider: any = jest.fn(async (prompt: string) => {
+      return { output: `Response for: ${prompt}` };
+    });
+    mockFunctionProvider.label = 'My Custom Provider';
+
+    const result = await resolveProvider(mockFunctionProvider, mockProviderMap);
+
+    expect(result).toBeDefined();
+    expect(typeof result.id).toBe('function');
+    expect(result.id()).toBe('My Custom Provider');
+    expect(result.callApi).toBe(mockFunctionProvider);
+  });
+
+  it('should handle function provider without label', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    const mockFunctionProvider = jest.fn(async (prompt: string) => {
+      return { output: `Response for: ${prompt}` };
+    });
+
+    const result = await resolveProvider(mockFunctionProvider, mockProviderMap);
+
+    expect(result).toBeDefined();
+    expect(typeof result.id).toBe('function');
+    expect(result.id()).toBe('custom-function');
+    expect(result.callApi).toBe(mockFunctionProvider);
+  });
+
   it('should handle empty providerMap gracefully', async () => {
     const { resolveProvider } = await import('../../src/providers');
 
