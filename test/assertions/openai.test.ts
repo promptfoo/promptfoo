@@ -610,7 +610,7 @@ describe('OpenAI assertions', () => {
         },
       ];
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: toolsOutput,
         provider: mockProvider,
@@ -671,7 +671,7 @@ describe('OpenAI assertions', () => {
         callApi: async () => ({ output: '' }),
       } as ApiProvider;
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: toolsOutput,
         provider: fileProvider,
@@ -730,7 +730,7 @@ describe('OpenAI assertions', () => {
         },
       });
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: toolsOutput,
         provider: varProvider,
@@ -766,19 +766,23 @@ describe('OpenAI assertions', () => {
         config: {},
       });
 
-      expect(() =>
-        handleIsValidOpenAiToolsCall({
-          assertion: toolsAssertion,
-          output: toolsOutput,
-          provider: emptyProvider,
-          test: { vars: {} },
-          baseType: toolsAssertion.type,
-          assertionValueContext: mockContext,
-          inverse: false,
-          outputString: JSON.stringify(toolsOutput),
-          providerResponse: { output: toolsOutput },
-        }),
-      ).toThrow('Tools are expected to be an array of objects with a function property');
+      const result = await handleIsValidOpenAiToolsCall({
+        assertion: toolsAssertion,
+        output: toolsOutput,
+        provider: emptyProvider,
+        test: { vars: {} },
+        baseType: toolsAssertion.type,
+        assertionValueContext: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(toolsOutput),
+        providerResponse: { output: toolsOutput },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'No tools configured in provider, but output contains tool calls',
+      });
     });
 
     it('should fail when tool output is not an array', async () => {
@@ -797,7 +801,7 @@ describe('OpenAI assertions', () => {
         },
       });
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: toolsOutput,
         provider: emptyToolsProvider,
@@ -829,7 +833,7 @@ describe('OpenAI assertions', () => {
         },
       ];
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: toolsOutput,
         provider: mockProvider,
@@ -882,7 +886,7 @@ describe('OpenAI assertions', () => {
       // Set up the mock to return processed tools
       mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockTools);
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: toolOutput,
         provider: mockProvider,
@@ -945,7 +949,7 @@ describe('OpenAI assertions', () => {
       ];
       mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockToolsFromFile);
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: toolOutput,
         provider: fileProvider,
@@ -1025,7 +1029,7 @@ describe('OpenAI assertions', () => {
       ];
       mockMaybeLoadToolsFromExternalFile.mockResolvedValue(processedTools);
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: toolOutput,
         provider: varProvider,
@@ -1056,7 +1060,7 @@ describe('OpenAI assertions', () => {
       const mcpOutput =
         'MCP Tool Result (ask_question): React is a JavaScript library for building user interfaces.';
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: mcpOutput,
         provider: mockProvider,
@@ -1079,7 +1083,7 @@ describe('OpenAI assertions', () => {
     it('should fail when MCP tool call has an error', async () => {
       const mcpOutput = 'MCP Tool Error (ask_question): Repository not found';
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: mcpOutput,
         provider: mockProvider,
@@ -1103,7 +1107,7 @@ describe('OpenAI assertions', () => {
       const mcpOutput =
         'MCP Tool Result (read_wiki_structure): Successfully retrieved repository structure.';
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: mcpOutput,
         provider: mockProvider,
@@ -1127,7 +1131,7 @@ describe('OpenAI assertions', () => {
       const mcpOutput =
         'MCP Tool Error (stripe_payment): Authentication failed: Invalid API key provided';
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: mcpOutput,
         provider: mockProvider,
@@ -1155,7 +1159,7 @@ describe('OpenAI assertions', () => {
         Based on this information, TypeScript adds static typing to JavaScript.
       `;
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: mcpOutput,
         provider: mockProvider,
@@ -1182,7 +1186,7 @@ describe('OpenAI assertions', () => {
         Both tools executed successfully.
       `;
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: mcpOutput,
         provider: mockProvider,
@@ -1209,7 +1213,7 @@ describe('OpenAI assertions', () => {
         Mixed results from tools.
       `;
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: mcpOutput,
         provider: mockProvider,
@@ -1232,7 +1236,7 @@ describe('OpenAI assertions', () => {
     it('should handle MCP tool error without tool name match', async () => {
       const mcpOutput = 'MCP Tool Error: General error occurred';
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: mcpOutput,
         provider: mockProvider,
@@ -1255,7 +1259,7 @@ describe('OpenAI assertions', () => {
     it('should handle MCP tool result without tool name match', async () => {
       const mcpOutput = 'MCP Tool Result: General success';
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: mcpOutput,
         provider: mockProvider,
@@ -1287,7 +1291,7 @@ describe('OpenAI assertions', () => {
         },
       ];
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: toolsOutput,
         provider: mockProvider,
@@ -1313,7 +1317,7 @@ describe('OpenAI assertions', () => {
         metadata: { source: 'mcp' },
       };
 
-      const result = handleIsValidOpenAiToolsCall({
+      const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: outputObject,
         provider: mockProvider,

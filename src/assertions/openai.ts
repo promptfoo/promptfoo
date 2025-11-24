@@ -71,12 +71,16 @@ export const handleIsValidOpenAiToolsCall = async ({
       tools = loadedTools;
     }
   }
-  invariant(
-    tools,
-    `Tools are expected to be an array of objects with a function property. Got: ${JSON.stringify(
-      tools,
-    )}`,
-  );
+
+  // Tools must be defined when validating tool calls
+  if (!tools) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'No tools configured in provider, but output contains tool calls',
+      assertion,
+    };
+  }
   try {
     toolsOutput.forEach((toolOutput) => {
       validateFunctionCall(
