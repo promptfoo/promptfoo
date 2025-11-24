@@ -4,12 +4,6 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
-
-### Fixed
-
-- fix(core): resolve ES Module import error for @apidevtools/json-schema-ref-parser v15 by converting static imports to dynamic imports in config loader and test case reader (#XXXX)
-
 ## [0.119.11] - 2025-11-23
 
 ### Changed
