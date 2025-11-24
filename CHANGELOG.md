@@ -22,6 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(providers): maintain backwards compatibility for annotations in raw provider responses (#6267)
 - fix(cli): restore commandLineOptions support for generateSuggestions, table, and write options (#6190)
 - fix(cli): enable auto-sharing when cloud is enabled by not defaulting config.sharing to false - when sharing is unset in config, it now correctly falls through to cloud auto-share behavior instead of defaulting to disabled (#6190)
+- fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
+- fix(assertions): use file-based script output for all assertion types with `file://` references (#6200)
 
 ### Documentation
 
@@ -32,11 +34,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - test(examples): add structured outputs example demonstrating JSON schema-based responses and strict tool use for Anthropic provider (#6226)
 - test(examples): update tool-use example to include strict mode configuration for Anthropic provider (#6226)
 - test(examples): enhance structured-outputs-config example to demonstrate multi-provider structured outputs with OpenAI and Anthropic, showcasing syntax differences between providers (#6226)
-
-### Fixed
-
-- fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
-- fix(assertions): use file-based script output for all assertion types with `file://` references (#6200)
 
 ## [0.119.8] - 2025-11-18
 
