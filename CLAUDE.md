@@ -303,14 +303,23 @@ Always follow this workflow:
 
    If there are formatting errors, fix them.
 
-5. **Push and create PR**:
+5. **Sync with main before pushing**:
+
+   ```bash
+   git fetch origin main
+   git merge origin/main
+   ```
+
+   This ensures your branch is up-to-date with the latest changes and resolves any conflicts before creating the PR.
+
+6. **Push and create PR**:
 
    ```bash
    git push -u origin feature/your-branch-name
    gh pr create --title "Your PR Title" --body "PR description"
    ```
 
-6. **Wait for review and CI checks** before merging
+7. **Wait for review and CI checks** before merging
 
 ## Pull Request Titles
 
