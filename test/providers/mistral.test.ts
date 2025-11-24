@@ -177,10 +177,12 @@ describe('Mistral', () => {
         wrap: jest.fn(),
         del: jest.fn(),
         clear: jest.fn(),
-        stores: [{
-          get: jest.fn(),
-          set: jest.fn(),
-        }] as any,
+        stores: [
+          {
+            get: jest.fn(),
+            set: jest.fn(),
+          },
+        ] as any,
         mget: jest.fn(),
         mset: jest.fn(),
         mdel: jest.fn(),
