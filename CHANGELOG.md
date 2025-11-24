@@ -6,15 +6,102 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking (#6267)
+- refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
+
+### Fixed
+
+- fix(providers): maintain backwards compatibility for annotations in raw provider responses (#6267)
+- fix(cli): restore commandLineOptions support for generateSuggestions, table, and write options (#6190)
+- fix(cli): enable auto-sharing when cloud is enabled by not defaulting config.sharing to false - when sharing is unset in config, it now correctly falls through to cloud auto-share behavior instead of defaulting to disabled (#6190)
+
+## [0.119.11] - 2025-11-23
+
+### Changed
+
+- refactor(webui): adopt React 19 ref-as-prop pattern - removed forwardRef wrapper from QuickFilter component in EvalsDataGrid (#6327)
+
+### Fixed
+
+- fix(redteam): respect excludeTargetOutputFromAgenticAttackGeneration in hydra and meta strategies to prevent target output leaks when organization privacy setting is enabled (#6320)
+- fix(redteam): prevent template evaluation of adversarial security payloads when using custom Python providers — adds `skipRenderVars` parameter to `renderPrompt()` to allow SSTI, XSS, and other attack payloads to pass through unmodified to custom providers for proper red team testing instead of causing template rendering errors (#6240)
+
+### Dependencies
+
+- revert: "fix(deps): update dependency @apidevtools/json-schema-ref-parser to v15" (#6300)
+
+## [0.119.10] - 2025-11-23
+
+### Changed
+
+- refactor(webui): migrate to React 19 patterns (#6319)
+- chore(webui): replace emoji icons with Material-UI IconButton components in evaluation results page — action icons now display circular hover effects, color-coded active states (green for pass, red for fail), always-visible icons for better discoverability, and full accessibility support with aria-pressed and aria-label attributes (#6318)
+- chore: Revert "chore(deps): upgrade cache-manager from v4 to v7" (#6311)
+- chore(lint): enforce explicit /index imports in directory paths to prepare for ESM migration (#6263)
+- chore(deps): configure Renovate to track all package.json files (#6282)
+- chore(webui): improve UI treatment for domain-specific risks in red team setup (#6269)
+- chore(deps): re-generate lock file (#6249)
+- ci(github): add code scan action (#6261)
+- chore: Update Strategy presets (#6275)
+
+### Fixed
+
+- fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/)
+- fix(providers): fix LiteLLM provider API key authentication — reverts to inline authentication check to properly handle providers with `apiKeyRequired: false` and fixes Authorization header to be omitted (instead of sending "Bearer undefined") when no API key is set, resolving "API key is not set" error when using LITELLM_API_KEY environment variable (#6322)
+- fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/) (#6313)
+- fix(code-scan): prevent "start line must precede end line" GitHub API error by ensuring start_line is only set when it differs from line - fixes single-line comment highlighting in PR reviews (#6314)
+- fix(app): Test generation tooltips remain visible after dialog is rendered (#6309)
+- fix(auth): allow CI environments to authenticate with Promptfoo Cloud using API keys — unblocks `jailbreak:meta` strategy in GitHub Actions by recognizing API key auth regardless of CI status (#6273)
+- fix(webui): allow thumbs up/down ratings to toggle off and remove manual grading when clicked again (#6260)
+- fix(python): resolve Windows path compatibility issues in Python provider protocol - changed delimiter from `:` to `|` to avoid conflicts with Windows drive letters (C:, D:, etc.), fixing ENOENT errors and timeouts in Python provider on Windows (#6262)
+
+### Documentation
+
+- docs(site): fix broken OpenAI config options link (#6277)
+- docs(readme): update readme with code scanning (#6268)
+- docs(site): rewrite web viewer page (#6264)
+- docs(site): fix duplicate in sidebar (#6259)
+
+### Dependencies
+
+- fix(deps): update dependency better-sqlite3 to v12.4.6 (#6323)
+- chore(deps): update @biomejs/biome and all platform-specific CLI packages to 2.3.7 (#6307)
+- chore(deps): update vitest monorepo to v4 (major) (#6299)
+- chore(deps): update material-ui monorepo to v8 (major) (#6298)
+- chore(deps): update dependency whatwg-url to v15 (#6297)
+- chore(deps): update dependency recharts to v3 (#6294)
+- chore(deps): update dependency react-markdown to v10 (#6293)
+- chore(deps): update dependency react-is to v19 (#6292)
+- chore(deps): update dependency react-error-boundary to v6 (#6291)
+- chore(deps): update dependency gaxios to v7 (#6288)
+- chore(deps): drop unused uuid types package (#6287)
+- chore(deps): update dependency framer-motion to v12 (#6286)
+- chore(deps): update dependency @types/uuid to v11 (#6285)
+- chore(deps): update dependency esbuild to v0.27.0 (#6283)
+- chore(deps): upgrade http-z to v8 and @swc/core to v1.15.3 (#6281)
+- chore(deps): update dependencies in 12 example projects (#6280)
+- chore(deps): upgrade glob to v13 and mathjs to v15 (#6279)
+- chore(deps): update 67 minor and patch dependencies across all workspaces (#6278)
+- chore(deps): bump langchain-core from 0.3.78 to 0.3.80 in /examples/redteam-langchain in the pip group (#6270)
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.933.0 to 3.934.0 (#6254)
+- chore(deps): bump @anthropic-ai/sdk from 0.69.0 to 0.70.0 (#6255)
+
+## [0.119.9] - 2025-11-20
+
 ### Added
 
 - feat(cli): add automatic changelog update on version bump with comprehensive error handling (#6252)
 - feat(ci): add JavaScript-based changelog validator replacing bash script for PR number and Unreleased section enforcement (#6252)
+- feat(webui): add custom policy generation to red team setup (#6181)
+- feat(webui): add strategy test generation to red team setup (#6005)
+- feat(webui): add visibility button for PFX passphrase field in red team target configuration (#6258)
 
-### Changed
+### Fixed
 
-- chore: Add visiblity button for PFX passphrase (#6258)
-- feat(app): Red Team Strategy Test Generation (#6005)
+- fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
+- fix(assertions): use file-based script output for all assertion types with `file://` references (#6200)
 
 ### Tests
 
@@ -24,7 +111,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(plugins): organize domain-specific risks into vertical suites
+- feat(plugins): organize domain-specific risks into vertical suites (#6215)
 - feat(providers): add Gemini 3 Pro support with thinking configuration (#6241)
 
 ### Fixed
@@ -38,29 +125,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - feat(assertions): add dot product and euclidean distance metrics for similarity assertion - use `similar:dot` and `similar:euclidean` assertion types to match production vector database metrics and support different similarity use cases (#6202)
 - feat(webui): expose Hydra strategy configuration (max turns and stateful toggle) in red team setup UI (#6165)
-- fix(app): aligning risk scores with documentation (#6212)
 - feat(providers): add GPT-5.1 model support including gpt-5.1, gpt-5.1-mini, gpt-5.1-nano, and gpt-5.1-codex with new 'none' reasoning mode for low-latency interactions and configurable verbosity control (#6208)
 - feat(redteam): allow configuring `redteam.frameworks` to limit compliance frameworks surfaced in reports and commands (#6170)
 - feat(webui): add layer strategy configuration UI in red team setup with per-step plugin targeting (#6180)
 - feat(app): Metadata value autocomplete eval filter (#6176)
 - feat(webui): display both total and filtered metrics simultaneously when filters are active, showing "X/Y filtered, Z total" format in evaluation results table for better visibility into filtered vs unfiltered data (#5969)
 - feat(app): eval results filters permalinking (#6196)
-- fix(site): fix missing background color on safari api reference search modal (#6218)
 
 ### Changed
 
-- fix: exclude source maps from npm package to reduce bundle size by ~22MB (#6235)
 - chore(ci): synchronize package-lock.json to resolve npm ci failures (#6195)
 - chore(ci): increase webui test timeout to 8 minutes in GitHub Actions workflow to prevent CI timeouts (#6201)
 - chore(redteam): update foundation model report redteam config to use newer redteam strategies (#6216)
 
 ### Fixed
 
-- fix(providers): correctly handle reasoning field in OpenAI-compatible models like gpt-oss-20b, extracting both reasoning and content instead of only reasoning (#6062)
+- fix: exclude source maps from npm package to reduce bundle size by ~22MB (#6235)
 - fix(redteam): exclude cyberseceval and beavertails static dataset plugins from iterative strategies to prevent wasted compute and silent grading failures during Hydra/Meta/Tree iterations (#6230)
 - fix(mcp): allow colons in eval ID validation for get_evaluation_details tool - fixes rejection of valid eval IDs returned by list_evaluations (e.g., eval-8h1-2025-11-15T14:17:18) by updating regex to accept ISO timestamp format (#6222)
+- fix(site): fix missing background color on safari api reference search modal (#6218)
 - fix(redteam): don't set default 'en' language when no language is configured - prevents unnecessary language modifiers from being passed to meta agent and other iterative strategies, keeping prompts focused on actual task without implied translation requirements (#6214)
+- fix(app): aligning risk scores with documentation (#6212)
 - fix(webui): fix duplicate React key warning in DefaultTestVariables component by implementing counter-based unique ID generation (#6201)
+- fix(providers): correctly handle reasoning field in OpenAI-compatible models like gpt-oss-20b, extracting both reasoning and content instead of only reasoning (#6062)
 - fix(samples): downlevel pem dependency to supported version
 - fix(deps): remove unused dependency on @libsql/client
 - fix(redteam): store rendered grading rubric in assertion.value for agentic strategies to display in UI Value column (#6125)
@@ -161,7 +248,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(redteam): pass policy text to intent extraction for custom policy tests, enabling more accurate and self-contained testing objectives that include specific policy requirements (#6116)
 - feat(redteam): add timestamp context to all grading rubrics for time-aware evaluation and temporal context in security assessments (#6110)
 - feat(model-audit): add revision tracking, content hash generation, and deduplication for model scans to prevent re-scanning unchanged models (saving ~99% time and bandwidth); add `--stream` flag to delete downloaded files immediately after scan ([#6058](https://github.com/promptfoo/promptfoo/pull/6058))
-- feat(redteam): add FERPA compliance plugin
+- feat(redteam): add FERPA compliance plugin (#6130)
 
 ### Fixed
 
@@ -185,31 +272,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(redteam): add pharmacy plugins (controlled substance compliance, dosage calculation, drug interaction) and insurance plugins (coverage discrimination, network misinformation, PHI disclosure) (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 - feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#6086)
-- feat(redteam): OpenTelemetry traces feed back into red team strategies
 - feat(redteam): expand OWASP Agentic preset to cover 8/10 threats with 20 plugins; add 'owasp:agentic:redteam' alias for easy selection (#6099)
-- fix: max concurrency run options override scan template settings
+- feat(redteam): display specific subcategory metrics for harmful plugins (e.g., "Copyright Violations", "Child Exploitation") instead of generic "Harmful" label, enabling granular vulnerability tracking and analysis (#6134)
 
 ### Changed
 
-- feat(redteam): display specific subcategory metrics for harmful plugins (e.g., "Copyright Violations", "Child Exploitation") instead of generic "Harmful" label, enabling granular vulnerability tracking and analysis (#6134)
 - chore(examples): update openai-agents-basic example from weather to D&D dungeon master with gpt-5-mini, comprehensive D&D 5e tools (dice rolling, character stats, inventory), and maxTurns increased to 20 (#6114)
-- fix(python): use REQUEST_TIMEOUT_MS for consistent timeout behavior across providers (300s default, previously 120s) (#6098)
 - refactor(redteam): Prevent early (evaluator-based) exits in Jailbreak, Crescendo, and Custom Strategies (#6047)
 - chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings (#6069)
 - chore(app): larger eval selector dialog (#6063)
 - refactor(app): Adds useApplyFilterFromMetric hook (#6095)
 - refactor(cli): extract duplicated organization context display logic into shared utility function to fix dynamic import issue and improve code maintainability (#6070)
-- chore: make meta-agent a default strategy
 
 ### Fixed
 
+- fix(redteam): max concurrency run options override scan template settings (#6102)
+- fix(python): use REQUEST_TIMEOUT_MS for consistent timeout behavior across providers (300s default, previously 120s) (#6098)
 - fix(providers): selective env var rendering in provider config with full Nunjucks filter support (preserves runtime variables for per-test customization) (#6091)
 - fix(core): handle Nunjucks template variables in URL sanitization to prevent parsing errors when sharing evals; add unit tests covering sanitizer behavior for Nunjucks template URLs (#6089)
 - fix(app): Fixes the metric is defined filter (#6082)
-- fix(webui): handle plugin generation when target URL is not set (#6055)
-- fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
-- fix(evaluator): force uncached provider calls for repeat iterations (#6043)
 - fix(providers): fix Python worker ENOENT errors by ensuring error responses are written before completion signal, improving error messages with function suggestions and fuzzy matching, and removing premature function validation to support embeddings-only and classification-only providers (#6073)
+- fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
+- fix(webui): handle plugin generation when target URL is not set (#6055)
+- fix(evaluator): force uncached provider calls for repeat iterations (#6043)
 
 ### Tests
 
