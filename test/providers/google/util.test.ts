@@ -1761,8 +1761,8 @@ describe('util', () => {
 
           const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
 
-          expect(contents[0].parts[0].inlineData.mimeType).toBe('image/jpeg');
-          expect(contents[0].parts[0].inlineData.data).toBe(base64Data);
+          expect((contents[0].parts[0] as any).inlineData.mimeType).toBe('image/jpeg');
+          expect((contents[0].parts[0] as any).inlineData.data).toBe(base64Data);
         });
       });
     });
