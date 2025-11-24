@@ -3,7 +3,7 @@ import {
   EcommercePriceManipulationGrader,
 } from '../../../src/redteam/plugins/ecommerce/ecommercePriceManipulation';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 jest.mock('../../../src/util/fetch/index.ts');
 

@@ -3,7 +3,7 @@ import {
   EcommerceOrderFraudGrader,
 } from '../../../src/redteam/plugins/ecommerce/ecommerceOrderFraud';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 jest.mock('../../../src/util/fetch/index.ts');
 

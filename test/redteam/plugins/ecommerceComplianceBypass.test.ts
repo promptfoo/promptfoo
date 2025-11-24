@@ -3,7 +3,7 @@ import {
   EcommerceComplianceBypassGrader,
 } from '../../../src/redteam/plugins/ecommerce/ecommerceComplianceBypass';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 jest.mock('../../../src/util/fetch/index.ts');
 
