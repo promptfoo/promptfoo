@@ -33,7 +33,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.10.1",
     "@types/prismjs": "^1.26.5",
-    "@types/react": "19.2.6",
+    "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "@vitest/coverage-v8": "^4.0.0",
