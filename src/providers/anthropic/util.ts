@@ -288,8 +288,8 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
 
       // Check if tool uses strict mode (structured outputs for tools)
       if ('strict' in tool && tool.strict === true) {
-        if (!requiredBetaFeatures.includes('structured-outputs-2025-09-17')) {
-          requiredBetaFeatures.push('structured-outputs-2025-09-17');
+        if (!requiredBetaFeatures.includes('structured-outputs-2025-11-13')) {
+          requiredBetaFeatures.push('structured-outputs-2025-11-13');
         }
       }
     }

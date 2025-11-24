@@ -52,7 +52,7 @@ export interface AnthropicMessageOptions {
   tools?: (Anthropic.Tool | AnthropicToolConfig)[];
   top_k?: number;
   top_p?: number;
-  beta?: string[]; // For features like 'output-128k-2025-02-19', 'web-fetch-2025-09-10', 'structured-outputs-2025-09-17'
+  beta?: string[]; // For features like 'output-128k-2025-02-19', 'web-fetch-2025-09-10', 'structured-outputs-2025-11-13'
   showThinking?: boolean;
   mcp?: MCPConfig;
   output_format?: OutputFormat; // Structured outputs - JSON schema for response format

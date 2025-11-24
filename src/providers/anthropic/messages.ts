@@ -162,8 +162,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     let allBetaFeatures = [...(config.beta || []), ...requiredBetaFeatures];
 
     // Automatically add structured-outputs beta when output_format is used
-    if (processedOutputFormat && !allBetaFeatures.includes('structured-outputs-2025-09-17')) {
-      allBetaFeatures.push('structured-outputs-2025-09-17');
+    if (processedOutputFormat && !allBetaFeatures.includes('structured-outputs-2025-11-13')) {
+      allBetaFeatures.push('structured-outputs-2025-11-13');
     }
 
     // Deduplicate beta features
