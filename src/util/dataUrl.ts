@@ -2,15 +2,31 @@
  * Data URL parsing and manipulation utilities for vision model support
  * Implements RFC 2397 data URL parsing
  *
- * Data URLs have the format: data:<mimeType>;base64,<base64Data>
- * Example: data:image/jpeg;base64,/9j/4AAQSkZJRg...
+ * ## Data URL Format
+ * Data URLs have the format: `data:<mimeType>;base64,<base64Data>`
+ * Example: `data:image/jpeg;base64,/9j/4AAQSkZJRg...`
  *
+ * ## Supported Image Formats
+ * - JPEG/JPG (image/jpeg)
+ * - PNG (image/png)
+ * - GIF (image/gif)
+ * - WebP (image/webp)
+ * - BMP (image/bmp)
+ * - TIFF (image/tiff)
+ * - ICO (image/x-icon)
+ * - AVIF (image/avif)
+ * - HEIC/HEIF (image/heic)
+ * - SVG (image/svg+xml)
+ *
+ * ## Provider Requirements
  * Different vision providers have different requirements:
- * - OpenAI/Azure: Accept data URLs natively
- * - Anthropic: Expects raw base64 with separate media_type field
- * - Google Gemini: Expects raw base64 in inlineData.data field
+ * - **OpenAI/Azure/Ollama**: Accept data URLs natively (no conversion needed)
+ * - **Anthropic**: Expects raw base64 with separate media_type field
+ * - **Google Gemini**: Expects raw base64 in inlineData.data field
  *
- * These utilities enable transparent conversion between formats.
+ * These utilities enable transparent conversion between formats, allowing
+ * promptfoo to generate data URLs from file:// inputs while providers
+ * automatically convert to their required format.
  */
 
 export interface ParsedDataUrl {

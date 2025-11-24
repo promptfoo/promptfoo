@@ -565,12 +565,18 @@ function isValidBase64Image(data: string): boolean {
     // Verify it's valid base64
     Buffer.from(base64Data, 'base64');
 
-    // Check for known image format headers
+    // Check for known image format headers (magic numbers)
     return (
       base64Data.startsWith('/9j/') || // JPEG
       base64Data.startsWith('iVBORw0KGgo') || // PNG
-      base64Data.startsWith('R0lGODlh') || // GIF
-      base64Data.startsWith('UklGR') // WebP
+      base64Data.startsWith('R0lGODlh') || // GIF89a
+      base64Data.startsWith('R0lGODdh') || // GIF87a
+      base64Data.startsWith('UklGR') || // WebP (RIFF)
+      base64Data.startsWith('Qk0') || // BMP
+      base64Data.startsWith('Qk1') || // BMP (alternate)
+      base64Data.startsWith('SUkq') || // TIFF (little-endian)
+      base64Data.startsWith('TU0A') || // TIFF (big-endian)
+      base64Data.startsWith('AAABAA') // ICO
     );
   } catch {
     return false;
@@ -590,10 +596,16 @@ function getMimeTypeFromBase64(base64DataOrUrl: string): string {
     return 'image/jpeg';
   } else if (base64Data.startsWith('iVBORw0KGgo')) {
     return 'image/png';
-  } else if (base64Data.startsWith('R0lGODlh')) {
+  } else if (base64Data.startsWith('R0lGODlh') || base64Data.startsWith('R0lGODdh')) {
     return 'image/gif';
   } else if (base64Data.startsWith('UklGR')) {
     return 'image/webp';
+  } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
+    return 'image/bmp';
+  } else if (base64Data.startsWith('SUkq') || base64Data.startsWith('TU0A')) {
+    return 'image/tiff';
+  } else if (base64Data.startsWith('AAABAA')) {
+    return 'image/x-icon';
   }
   // Default to jpeg for unknown formats
   return 'image/jpeg';

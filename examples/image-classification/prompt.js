@@ -1,16 +1,35 @@
 const dedent = require('dedent');
 
+/**
+ * Detects MIME type from base64 magic numbers
+ *
+ * Note: This is duplicated from src/evaluatorHelpers.ts to keep the example
+ * self-contained and runnable without dependencies on core promptfoo internals.
+ *
+ * Magic numbers (base64-encoded file signatures):
+ * - JPEG: /9j/
+ * - PNG: iVBORw0KGgo
+ * - GIF: R0lGODlh or R0lGODdh
+ * - WebP: UklGR (RIFF)
+ * - BMP: Qk0 or Qk1
+ * - TIFF: SUkq or TU0A
+ * - ICO: AAABAA
+ */
 function getMimeTypeFromBase64(base64Data) {
   if (base64Data.startsWith('/9j/')) {
     return 'image/jpeg';
   } else if (base64Data.startsWith('iVBORw0KGgo')) {
     return 'image/png';
-  } else if (base64Data.startsWith('R0lGODlh')) {
+  } else if (base64Data.startsWith('R0lGODlh') || base64Data.startsWith('R0lGODdh')) {
     return 'image/gif';
   } else if (base64Data.startsWith('UklGR')) {
     return 'image/webp';
   } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
     return 'image/bmp';
+  } else if (base64Data.startsWith('SUkq') || base64Data.startsWith('TU0A')) {
+    return 'image/tiff';
+  } else if (base64Data.startsWith('AAABAA')) {
+    return 'image/x-icon';
   }
   // Fallback to JPEG if no magic number is matched
   return 'image/jpeg';
