@@ -1,4 +1,4 @@
-import React from 'react';
+import { forwardRef } from 'react';
 
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import Badge, { badgeClasses } from '@mui/material/Badge';
@@ -19,18 +19,21 @@ const CountBadge = styled(Badge)`
 interface FiltersButtonProps {
   appliedFiltersCount: number;
   onClick: () => void;
-  ref?: React.Ref<HTMLButtonElement>;
 }
 
-function FiltersButton({ appliedFiltersCount, onClick, ref }: FiltersButtonProps) {
-  return (
-    <Tooltip title="Filters" placement="bottom">
-      <IconButton onClick={onClick} ref={ref}>
-        <FilterAltIcon fontSize="small" />
-        <CountBadge badgeContent={appliedFiltersCount} color="primary" overlap="circular" />
-      </IconButton>
-    </Tooltip>
-  );
-}
+const FiltersButton = forwardRef<HTMLButtonElement, FiltersButtonProps>(
+  ({ appliedFiltersCount, onClick }, ref) => {
+    return (
+      <Tooltip title="Filters" placement="bottom">
+        <IconButton onClick={onClick} ref={ref}>
+          <FilterAltIcon fontSize="small" />
+          <CountBadge badgeContent={appliedFiltersCount} color="primary" overlap="circular" />
+        </IconButton>
+      </Tooltip>
+    );
+  },
+);
+
+FiltersButton.displayName = 'FiltersButton';
 
 export default FiltersButton;

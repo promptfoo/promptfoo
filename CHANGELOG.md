@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
+- refactor(webui): adopt React 19 ref-as-prop pattern - removed forwardRef wrapper from QuickFilter component in EvalsDataGrid (#6327)
 - refactor(webui): migrate to React 19 patterns (#6319)
 - chore(webui): replace emoji icons with Material-UI IconButton components in evaluation results page — action icons now display circular hover effects, color-coded active states (green for pass, red for fail), always-visible icons for better discoverability, and full accessibility support with aria-pressed and aria-label attributes (#6318)
 - chore: Revert "chore(deps): upgrade cache-manager from v4 to v7" (#6311)
@@ -41,7 +42,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
-- chore(deps): update @apidevtools/json-schema-ref-parser to v15 — upgraded from v12 to v15, now using ESM modules with strict RFC 6901 compliance; updated Jest config to transform ESM packages (#6300)
 - fix(deps): update dependency better-sqlite3 to v12.4.6 (#6323)
 - chore(deps): update @biomejs/biome and all platform-specific CLI packages to 2.3.7 (#6307)
 - chore(deps): update vitest monorepo to v4 (major) (#6299)
