@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- refactor(webui): adopt React 19 patterns - remove forwardRef wrappers from FiltersButton, QuickFilter, and ProviderConfigEditor components; replace custom usePageMeta hook with native metadata tags in login, history, and evals pages (#6327)
+- refactor(webui): adopt React 19 ref-as-prop pattern - removed forwardRef wrapper from QuickFilter component in EvalsDataGrid (#6327)
 - refactor(webui): migrate to React 19 patterns (#6319)
 - chore(webui): replace emoji icons with Material-UI IconButton components in evaluation results page — action icons now display circular hover effects, color-coded active states (green for pass, red for fail), always-visible icons for better discoverability, and full accessibility support with aria-pressed and aria-label attributes (#6318)
 - chore: Revert "chore(deps): upgrade cache-manager from v4 to v7" (#6311)

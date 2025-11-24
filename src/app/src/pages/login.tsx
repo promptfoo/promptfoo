@@ -1,6 +1,7 @@
 import { useActionState, useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
@@ -71,6 +72,11 @@ export default function LoginPage() {
   const location = useLocation();
   const { email, isLoading, setEmail, fetchEmail } = useUserStore();
 
+  usePageMeta({
+    title: 'Login to Promptfoo',
+    description: 'Sign in to access your Promptfoo workspace',
+  });
+
   useEffect(() => {
     fetchEmail();
   }, [fetchEmail]);
@@ -113,149 +119,141 @@ export default function LoginPage() {
 
   if (isLoading || (!isLoading && email)) {
     return (
-      <>
-        <title>Login to Promptfoo | promptfoo</title>
-        <meta name="description" content="Sign in to access your Promptfoo workspace" />
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-          <CircularProgress />
-        </Box>
-      </>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+        <CircularProgress />
+      </Box>
     );
   }
 
   return (
-    <>
-      <title>Login to Promptfoo | promptfoo</title>
-      <meta name="description" content="Sign in to access your Promptfoo workspace" />
-      <Container maxWidth="sm">
-        <Box
-          sx={{
-            marginTop: 8,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-          }}
-        >
-          <Paper elevation={3} sx={{ padding: 4, width: '100%' }}>
-            {/* Logo and Header */}
-            <Stack spacing={3} alignItems="center" textAlign="center" mb={4}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <img src={logoPanda} alt="Promptfoo" style={{ width: 40, height: 40 }} />
-                <Typography variant="h4" component="h1" fontWeight={600}>
-                  promptfoo
-                </Typography>
-              </Box>
-
-              <Typography variant="h5" color="text.primary">
-                {new URLSearchParams(location.search).get('type') === 'report'
-                  ? 'View Report'
-                  : 'Welcome to Promptfoo'}
+    <Container maxWidth="sm">
+      <Box
+        sx={{
+          marginTop: 8,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}
+      >
+        <Paper elevation={3} sx={{ padding: 4, width: '100%' }}>
+          {/* Logo and Header */}
+          <Stack spacing={3} alignItems="center" textAlign="center" mb={4}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <img src={logoPanda} alt="Promptfoo" style={{ width: 40, height: 40 }} />
+              <Typography variant="h4" component="h1" fontWeight={600}>
+                promptfoo
               </Typography>
+            </Box>
 
-              <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400 }}>
-                Enter your API token to authenticate.
-                {!new URLSearchParams(location.search).get('type') && (
-                  <>
-                    {' '}
-                    Don't have one?{' '}
-                    <Link
-                      href="https://promptfoo.app/welcome"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Generate your token here
-                    </Link>
-                  </>
-                )}
-              </Typography>
+            <Typography variant="h5" color="text.primary">
+              {new URLSearchParams(location.search).get('type') === 'report'
+                ? 'View Report'
+                : 'Welcome to Promptfoo'}
+            </Typography>
+
+            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400 }}>
+              Enter your API token to authenticate.
+              {!new URLSearchParams(location.search).get('type') && (
+                <>
+                  {' '}
+                  Don't have one?{' '}
+                  <Link
+                    href="https://promptfoo.app/welcome"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Generate your token here
+                  </Link>
+                </>
+              )}
+            </Typography>
+          </Stack>
+
+          {/* Form */}
+          <Box component="form" action={formAction} noValidate>
+            <Stack spacing={3}>
+              <TextField
+                id="apiKey"
+                name="apiKey"
+                label="API Key"
+                type={showApiKey ? 'text' : 'password'}
+                required
+                fullWidth
+                autoFocus
+                autoComplete="new-password"
+                disabled={isPending}
+                error={!!state.error}
+                helperText={state.error}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <KeyIcon color="action" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label="toggle API key visibility"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        edge="end"
+                        size="small"
+                      >
+                        {showApiKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+
+              <TextField
+                id="customUrl"
+                name="customUrl"
+                label="API Host"
+                type="url"
+                fullWidth
+                defaultValue="https://www.promptfoo.app"
+                disabled={isPending}
+                helperText="Change this for private cloud or on-premise deployments"
+              />
+
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                disabled={isPending}
+                sx={{ py: 1.5 }}
+              >
+                {isPending ? <CircularProgress size={24} /> : 'Sign In'}
+              </Button>
             </Stack>
+          </Box>
 
-            {/* Form */}
-            <Box component="form" action={formAction} noValidate>
-              <Stack spacing={3}>
-                <TextField
-                  id="apiKey"
-                  name="apiKey"
-                  label="API Key"
-                  type={showApiKey ? 'text' : 'password'}
-                  required
-                  fullWidth
-                  autoFocus
-                  autoComplete="new-password"
-                  disabled={isPending}
-                  error={!!state.error}
-                  helperText={state.error}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <KeyIcon color="action" />
-                      </InputAdornment>
-                    ),
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          aria-label="toggle API key visibility"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          edge="end"
-                          size="small"
-                        >
-                          {showApiKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                />
+          {/* Help Section */}
+          <Box sx={{ mt: 4, pt: 3, borderTop: 1, borderColor: 'divider' }}>
+            <Stack spacing={2} alignItems="center" textAlign="center">
+              <Typography variant="body2" color="text.secondary">
+                Don't have an API key?
+              </Typography>
 
-                <TextField
-                  id="customUrl"
-                  name="customUrl"
-                  label="API Host"
-                  type="url"
-                  fullWidth
-                  defaultValue="https://www.promptfoo.app"
-                  disabled={isPending}
-                  helperText="Change this for private cloud or on-premise deployments"
-                />
-
-                <Button
-                  type="submit"
-                  fullWidth
-                  variant="contained"
-                  size="large"
-                  disabled={isPending}
-                  sx={{ py: 1.5 }}
-                >
-                  {isPending ? <CircularProgress size={24} /> : 'Sign In'}
-                </Button>
-              </Stack>
-            </Box>
-
-            {/* Help Section */}
-            <Box sx={{ mt: 4, pt: 3, borderTop: 1, borderColor: 'divider' }}>
-              <Stack spacing={2} alignItems="center" textAlign="center">
-                <Typography variant="body2" color="text.secondary">
-                  Don't have an API key?
-                </Typography>
-
-                <Link
-                  href="https://promptfoo.app/welcome"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    textDecoration: 'none',
-                  }}
-                >
-                  Get your API key
-                  <LaunchIcon sx={{ fontSize: 16 }} />
-                </Link>
-              </Stack>
-            </Box>
-          </Paper>
-        </Box>
-      </Container>
-    </>
+              <Link
+                href="https://promptfoo.app/welcome"
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  textDecoration: 'none',
+                }}
+              >
+                Get your API key
+                <LaunchIcon sx={{ fontSize: 16 }} />
+              </Link>
+            </Stack>
+          </Box>
+        </Paper>
+      </Box>
+    </Container>
   );
 }
