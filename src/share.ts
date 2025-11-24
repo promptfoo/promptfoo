@@ -111,7 +111,7 @@ async function sendEvalRecord(
   const jsonData = JSON.stringify(evalDataWithoutResults);
 
   logger.debug(
-    `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts and ${traces.length} traces`,
+    `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts ${traces.length > 0 ? `and trace data` : ''}`,
   );
 
   const response = await fetchWithProxy(url, {

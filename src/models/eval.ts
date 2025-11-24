@@ -19,7 +19,9 @@ import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
+import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -34,6 +36,7 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
+import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
@@ -42,10 +45,8 @@ import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
-import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 
-import type { EvalResultsFilterMode } from '../types/index';
-import { calculateAttackSuccessRate } from '../redteam/metrics';
+import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
 /**
  * Database query result type interfaces
@@ -1036,26 +1037,25 @@ export default class Eval {
     };
   }
 
-  async getTraces(): Promise<any[]> {
+  async getTraces(): Promise<TraceData[]> {
     try {
-      const { getTraceStore } = await import('../tracing/store');
       const traceStore = getTraceStore();
       const tracesData = await traceStore.getTracesByEvaluation(this.id);
 
       // Transform trace data to match the expected schema
-      return tracesData.map((trace: any) => ({
+      return tracesData.map((trace: TraceData) => ({
         traceId: trace.traceId,
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
         metadata: trace.metadata,
         spans: (trace.spans || []).map((span: any) => {
           // Calculate duration
-          const durationMs = span.endTime && span.startTime
-            ? (span.endTime - span.startTime) / 1000000
-            : undefined;
+          const durationMs =
+            span.endTime && span.startTime ? (span.endTime - span.startTime) / 1000000 : undefined;
 
           // Map status code
-          const statusCode = span.statusCode === 1 ? 'ok' : span.statusCode === 2 ? 'error' : 'unset';
+          const statusCode =
+            span.statusCode === 1 ? 'ok' : span.statusCode === 2 ? 'error' : 'unset';
 
           return {
             spanId: span.spanId,

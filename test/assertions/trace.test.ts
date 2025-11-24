@@ -73,6 +73,9 @@ describe('trace assertions', () => {
 
   const mockTraceData: TraceData = {
     traceId: 'test-trace-id',
+    evaluationId: 'test-evaluation-id',
+    testCaseId: 'test-test-case-id',
+    metadata: { test: 'value' },
     spans: [
       {
         spanId: 'span-1',
@@ -160,6 +163,9 @@ describe('trace assertions', () => {
     it('should detect error spans', async () => {
       const traceWithError: TraceData = {
         traceId: 'error-trace',
+        evaluationId: 'test-evaluation-id',
+        testCaseId: 'test-test-case-id',
+        metadata: { test: 'value' },
         spans: [
           ...mockTraceData.spans,
           {
