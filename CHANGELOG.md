@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(providers): add Claude Opus 4.5 model support (`claude-opus-4-5-20251101`) with $5/MTok input and $25/MTok output pricing
+- feat(util): add support for loading tool definitions from Python/JavaScript files - providers now support dynamic tool generation using `file://tools.py:get_tools` and `file://tools.js:get_tools` syntax, enabling runtime tool definitions based on environment, config, or external APIs (#6272)
+- feat(server): add server-side provider list customization via ui-providers.yaml - enables organizations to define custom provider lists that appear in eval creator and redteam setup UIs; when ui-providers.yaml exists, replaces default ~600 providers with organization-specific options for simplified workflow and security control (#6124)
+- feat(providers): add Anthropic structured outputs support with JSON schema outputs via `output_format` parameter and strict tool use via `strict: true` in tool definitions - ensures schema-compliant responses with automatic beta header handling, external file loading, variable rendering, and JSON parsing for Claude Sonnet 4.5 and Claude Opus 4.1 (#6226)
+- feat(webui): add custom policy generation to red team setup (#6181)
+- feat(webui): add strategy test generation to red team setup (#6005)
+- feat(webui): add visibility button for PFX passphrase field in red team target configuration (#6258)
+
+### Changed
+
+- feat(cli): add automatic changelog update on version bump with comprehensive error handling (#6252)
+- feat(ci): add JavaScript-based changelog validator replacing bash script for PR number and Unreleased section enforcement (#6252)
+- feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking (#6267)
+- refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
+
+### Fixed
+
+- fix(code-scan): remove redundant extra PR comment when no vulnerabilities are found (#6317)
+- fix(code-scan): exit with code 0 when no files to scan instead of failing - handles cases where no files are changed, all files are filtered by denylist/size/binary detection, or no patches are found (#6316)
+- fix(providers): add universal data URL support for vision models with edge case handling - automatically converts file:// image inputs to data URLs with transparent provider-specific handling (OpenAI/Azure/Ollama use native data URLs, Anthropic/Google extract base64); includes shared dataUrl utility for RFC 2397 parsing, charset/parameter support, whitespace trimming, small image support (≥20 chars), and comprehensive documentation (#5725)
+- fix(util): add recursive array processing for tool loading - arrays of file:// tool references now processed correctly with Promise.all() and auto-flattening (#6272)
+- fix(webui): prevent horizontal scrolling in metadata table by adding fixed table layout with explicit column widths and proper word-breaking for long content (#6178)
+- fix(providers): maintain backwards compatibility for annotations in raw provider responses (#6267)
+- fix(cli): restore commandLineOptions support for generateSuggestions, table, and write options (#6190)
+- fix(cli): enable auto-sharing when cloud is enabled by not defaulting config.sharing to false - when sharing is unset in config, it now correctly falls through to cloud auto-share behavior instead of defaulting to disabled (#6190)
+- fix(providers): propagate agent errors in simulated-user provider - fixes issue where errors from sendMessageToAgent() were silently ignored, causing false-positive test results when the target provider fails (#6251)
+- fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
+- fix(assertions): use file-based script output for all assertion types with `file://` references (#6200)
+- fix(cli): respect PROMPTFOO_LOG_DIR environment variable for custom log directory location (#6179)
+
+### Documentation
+
+- docs(providers): add comprehensive Anthropic structured outputs documentation covering JSON outputs (`output_format`) and strict tool use (`strict: true`), including usage examples, schema limitations, and feature compatibility (#6226)
+
+### Tests
+
+- test(examples): add structured outputs example demonstrating JSON schema-based responses and strict tool use for Anthropic provider (#6226)
+- test(examples): update tool-use example to include strict mode configuration for Anthropic provider (#6226)
+- test(examples): enhance structured-outputs-config example to demonstrate multi-provider structured outputs with OpenAI and Anthropic, showcasing syntax differences between providers (#6226)
+- test(scripts): add 59 tests for changelog automation scripts covering validation and version update functionality (#6252)
+
+## [0.119.11] - 2025-11-23
+
+### Changed
+
+- refactor(webui): adopt React 19 ref-as-prop pattern - removed forwardRef wrapper from QuickFilter component in EvalsDataGrid (#6327)
+
+### Fixed
+
+- fix(redteam): respect excludeTargetOutputFromAgenticAttackGeneration in hydra and meta strategies to prevent target output leaks when organization privacy setting is enabled (#6320)
+- fix(redteam): prevent template evaluation of adversarial security payloads when using custom Python providers — adds `skipRenderVars` parameter to `renderPrompt()` to allow SSTI, XSS, and other attack payloads to pass through unmodified to custom providers for proper red team testing instead of causing template rendering errors (#6240)
+
+### Dependencies
+
+- revert: "fix(deps): update dependency @apidevtools/json-schema-ref-parser to v15" (#6300)
+
+## [0.119.10] - 2025-11-23
+
 ### Changed
 
 - feat(webui): apply code splitting by pages, preloading eval pages with the app, and preload on hover for other pages (#6194)
@@ -38,7 +98,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
-- chore(deps): update @apidevtools/json-schema-ref-parser to v15 — upgraded from v12 to v15, now using ESM modules with strict RFC 6901 compliance; updated Jest config to transform ESM packages (#6300)
 - fix(deps): update dependency better-sqlite3 to v12.4.6 (#6323)
 - chore(deps): update @biomejs/biome and all platform-specific CLI packages to 2.3.7 (#6307)
 - chore(deps): update vitest monorepo to v4 (major) (#6299)
@@ -72,6 +131,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
+- fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
 
 ## [0.119.8] - 2025-11-18
 
