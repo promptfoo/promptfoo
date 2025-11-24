@@ -40,7 +40,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
-- chore(deps): update @apidevtools/json-schema-ref-parser to v15 — upgraded from v12 to v15, now using ESM modules with strict RFC 6901 compliance; updated Jest config to transform ESM packages (#6300)
 - fix(deps): update dependency better-sqlite3 to v12.4.6 (#6323)
 - chore(deps): update @biomejs/biome and all platform-specific CLI packages to 2.3.7 (#6307)
 - chore(deps): update vitest monorepo to v4 (major) (#6299)
