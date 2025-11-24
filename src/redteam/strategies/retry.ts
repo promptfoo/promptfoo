@@ -47,11 +47,13 @@ async function getFailedTestCases(
 
       try {
         // makeRequest already prepends the apiHost and /api/v1/, so just pass the path
-        const response = await makeRequest('results/failed-tests', 'POST', {
+        // Use GET with query params
+        const queryParams = new URLSearchParams({
           pluginId,
           targetId,
-          limit,
+          limit: String(limit),
         });
+        const response = await makeRequest(`results/failed-tests?${queryParams.toString()}`, 'GET');
 
         if (response.ok) {
           const data = await response.json();
