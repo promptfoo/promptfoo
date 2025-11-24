@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(webui): prevent horizontal scrolling in metadata table by adding fixed table layout with explicit column widths and proper word-breaking for long content (#6178)
 - fix(providers): maintain backwards compatibility for annotations in raw provider responses (#6267)
 - fix(cli): restore commandLineOptions support for generateSuggestions, table, and write options (#6190)
 - fix(cli): enable auto-sharing when cloud is enabled by not defaulting config.sharing to false - when sharing is unset in config, it now correctly falls through to cloud auto-share behavior instead of defaulting to disabled (#6190)
@@ -187,7 +188,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(webui): prevent horizontal scrolling in metadata table by adding fixed table layout with explicit column widths and proper word-breaking for long content (#6178)
 - fix(webui): prevent infinite loop in StrategyConfigDialog useEffect - fixes vitest tests hanging by using stable empty array references for default parameters (#6203)
 - fix(webui): require configuration for layer strategy before allowing navigation in red team setup - layer strategy now shows red border and blocks Next button until steps array is configured, similar to plugins requiring configuration
 - fix(webui): filter hidden metadata keys from metadata filter dropdown - ensures consistent filtering of 'citations' and '\_promptfooFileMetadata' keys across MetadataPanel, EvalOutputPromptDialog, and metadata filter dropdown (#6177)
