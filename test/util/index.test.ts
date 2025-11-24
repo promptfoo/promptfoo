@@ -136,7 +136,9 @@ describe('maybeLoadToolsFromExternalFile', () => {
     it('should throw error for Python/JS/TS file with function name when file not found', async () => {
       // Test with Python file (naturally fails - no mocking needed)
       const pythonTools = 'file://nonexistent.py:get_tools';
-      await expect(maybeLoadToolsFromExternalFile(pythonTools)).rejects.toThrow(/Failed to load tools/);
+      await expect(maybeLoadToolsFromExternalFile(pythonTools)).rejects.toThrow(
+        /Failed to load tools/,
+      );
 
       // Test with JavaScript file (naturally fails when require() can't find the module)
       const jsTools = 'file://nonexistent.js:getTools';
