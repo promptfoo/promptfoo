@@ -671,9 +671,11 @@ export async function maybeLoadToolsFromExternalFile(
 
           if (typeof fn !== 'function') {
             const availableExports = Object.keys(module).filter((k) => k !== 'default');
+            const basePath = cliState.basePath || process.cwd();
             throw new Error(
               `Function "${functionName}" not found in ${filePath}. ` +
-                `Available exports: ${availableExports.length > 0 ? availableExports.join(', ') : '(none)'}`,
+                `Available exports: ${availableExports.length > 0 ? availableExports.join(', ') : '(none)'}\n` +
+                `Resolved from: ${basePath}`,
             );
           }
 
@@ -700,9 +702,11 @@ export async function maybeLoadToolsFromExternalFile(
         return toolDefinitions;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
+        const basePath = cliState.basePath || process.cwd();
         throw new Error(
           `Failed to load tools from ${rendered}:\n${errorMessage}\n\n` +
-            `Make sure the function "${functionName}" exists and returns a valid tool definition array.`,
+            `Make sure the function "${functionName}" exists and returns a valid tool definition array.\n` +
+            `Resolved from: ${basePath}`,
         );
       }
     }
@@ -710,6 +714,7 @@ export async function maybeLoadToolsFromExternalFile(
     // Python/JS file without function name - provide helpful error
     if (filePath.endsWith('.py') || isJavascriptFile(filePath)) {
       const ext = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
+      const basePath = cliState.basePath || process.cwd();
       throw new Error(
         `Cannot load tools from ${rendered}\n` +
           `${ext} files require a function name. Use this format:\n` +
@@ -717,7 +722,8 @@ export async function maybeLoadToolsFromExternalFile(
           `Your ${ext} file should export a function that returns tool definitions:\n` +
           (filePath.endsWith('.py')
             ? `  def get_tools():\n      return [{"type": "function", "function": {...}}]`
-            : `  module.exports.get_tools = () => [{ type: "function", function: {...} }];`),
+            : `  module.exports.get_tools = () => [{ type: "function", function: {...} }];`) +
+          `\n\nResolved from: ${basePath}`,
       );
     }
   }

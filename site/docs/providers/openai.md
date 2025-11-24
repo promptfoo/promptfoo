@@ -389,6 +389,20 @@ tools: file://./tools.ts:getTools
 
 Python and JavaScript files must export a function that returns the tool definitions array. The function can be synchronous or asynchronous.
 
+**Asynchronous example:**
+
+```javascript
+// tools.js - Fetch tool definitions from API at runtime
+export async function getTools() {
+  const apiKey = process.env.INTERNAL_API_KEY;
+  const response = await fetch('https://api.internal.com/tool-definitions', {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  const tools = await response.json();
+  return tools;
+}
+```
+
 :::
 
 ```yaml title="promptfooconfig.yaml"
