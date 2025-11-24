@@ -1,6 +1,7 @@
 import { useActionState, useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
@@ -71,6 +72,11 @@ export default function LoginPage() {
   const location = useLocation();
   const { email, isLoading, setEmail, fetchEmail } = useUserStore();
 
+  usePageMeta({
+    title: 'Login to Promptfoo',
+    description: 'Sign in to access your Promptfoo workspace',
+  });
+
   useEffect(() => {
     fetchEmail();
   }, [fetchEmail]);
@@ -113,21 +119,14 @@ export default function LoginPage() {
 
   if (isLoading || (!isLoading && email)) {
     return (
-      <>
-        <title>Login to Promptfoo | promptfoo</title>
-        <meta name="description" content="Sign in to access your Promptfoo workspace" />
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-          <CircularProgress />
-        </Box>
-      </>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+        <CircularProgress />
+      </Box>
     );
   }
 
   return (
-    <>
-      <title>Login to Promptfoo | promptfoo</title>
-      <meta name="description" content="Sign in to access your Promptfoo workspace" />
-      <Container maxWidth="sm">
+    <Container maxWidth="sm">
         <Box
           sx={{
             marginTop: 8,
@@ -256,6 +255,5 @@ export default function LoginPage() {
           </Paper>
         </Box>
       </Container>
-    </>
   );
 }

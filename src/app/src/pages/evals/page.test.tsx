@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalsIndexPage from './page';
 
 vi.mock('./components/EvalsDataGrid', () => ({
@@ -20,8 +20,21 @@ vi.mock('react-router-dom', async () => {
 });
 
 describe('EvalsIndexPage', () => {
+  let descriptionMetaTag: HTMLMetaElement;
+  const originalTitle = document.title;
+
   beforeEach(() => {
+    descriptionMetaTag = document.createElement('meta');
+    descriptionMetaTag.name = 'description';
+    descriptionMetaTag.content = 'Initial description';
+    document.head.appendChild(descriptionMetaTag);
+    document.title = 'Initial Title';
     vi.mocked(useNavigate).mockClear();
+  });
+
+  afterEach(() => {
+    document.head.removeChild(descriptionMetaTag);
+    document.title = originalTitle;
   });
 
   it('should navigate to the correct evaluation page when an evaluation is selected in the EvalsDataGrid', () => {

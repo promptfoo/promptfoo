@@ -22,9 +22,35 @@ vi.mock('./History', () => ({
 }));
 
 describe('HistoryPage', () => {
+  const originalTitle = document.title;
+
+  beforeEach(() => {
+    const meta = document.createElement('meta');
+    meta.name = 'description';
+    meta.content = 'Default test description';
+    document.head.appendChild(meta);
+
+    const ogTitle = document.createElement('meta');
+    ogTitle.setAttribute('property', 'og:title');
+    ogTitle.content = 'Default OG Title';
+    document.head.appendChild(ogTitle);
+
+    const ogDescription = document.createElement('meta');
+    ogDescription.setAttribute('property', 'og:description');
+    ogDescription.content = 'Default OG Description';
+    document.head.appendChild(ogDescription);
+
+    const ogImage = document.createElement('meta');
+    ogImage.setAttribute('property', 'og:image');
+    ogImage.content = 'Default OG Image';
+    document.head.appendChild(ogImage);
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    document.head.innerHTML = '';
+    document.title = originalTitle;
   });
 
   it("should set the page title to 'History' and description to 'Evaluation history' when rendered", async () => {

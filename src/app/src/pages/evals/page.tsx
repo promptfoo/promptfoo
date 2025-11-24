@@ -1,3 +1,4 @@
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import { alpha } from '@mui/material/styles';
@@ -7,11 +8,10 @@ import EvalsDataGrid from './components/EvalsDataGrid';
 export default function EvalsIndexPage() {
   const navigate = useNavigate();
 
+  usePageMeta({ title: 'Evals', description: 'Browse evaluation runs' });
+
   return (
-    <>
-      <title>Evals | promptfoo</title>
-      <meta name="description" content="Browse evaluation runs" />
-      <Box
+    <Box
         sx={{
           position: 'absolute',
           top: 64,
@@ -45,6 +45,5 @@ export default function EvalsIndexPage() {
           />
         </Paper>
       </Box>
-    </>
   );
 }
