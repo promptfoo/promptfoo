@@ -2089,6 +2089,9 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   }
 }
 
+// Re-export Converse provider
+export { AwsBedrockConverseProvider, type BedrockConverseOptions } from './converse';
+
 export class AwsBedrockEmbeddingProvider
   extends AwsBedrockGenericProvider
   implements ApiEmbeddingProvider

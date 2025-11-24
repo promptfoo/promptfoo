@@ -1,0 +1,899 @@
+/**
+ * AWS Bedrock Converse API Provider
+ *
+ * This provider implements the AWS Bedrock Converse API, which provides a unified
+ * interface for all Bedrock models. It supports:
+ * - Extended thinking (reasoning/ultrathink) for Claude models
+ * - Tool calling with standardized format
+ * - Streaming responses via ConverseStream
+ * - Performance configuration (latency optimization, service tiers)
+ * - Guardrails integration
+ * - Cache token tracking
+ */
+
+import { getCache, isCacheEnabled } from '../../cache';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { AwsBedrockGenericProvider } from './index';
+
+import type {
+  ContentBlock,
+  ConverseCommandInput,
+  ConverseCommandOutput,
+  ConverseStreamCommandInput,
+  InferenceConfiguration,
+  Message,
+  SystemContentBlock,
+  Tool,
+  ToolChoice,
+  ToolConfiguration,
+  GuardrailConfiguration,
+  PerformanceConfiguration,
+  ServiceTier,
+  Trace,
+} from '@aws-sdk/client-bedrock-runtime';
+
+import type { EnvOverrides } from '../../types/env';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
+import type { TokenUsage } from '../../types/shared';
+
+/**
+ * Configuration options for the Bedrock Converse API provider
+ */
+export interface BedrockConverseOptions {
+  // AWS Authentication
+  accessKeyId?: string;
+  apiKey?: string;
+  profile?: string;
+  region?: string;
+  secretAccessKey?: string;
+  sessionToken?: string;
+  endpoint?: string;
+
+  // Inference configuration (standard Converse API params)
+  maxTokens?: number;
+  max_tokens?: number; // Alias for compatibility
+  temperature?: number;
+  topP?: number;
+  top_p?: number; // Alias for compatibility
+  stopSequences?: string[];
+  stop?: string[]; // Alias for compatibility
+
+  // Extended thinking (Claude models)
+  thinking?: {
+    type: 'enabled';
+    budget_tokens: number;
+  };
+  showThinking?: boolean;
+
+  // Performance configuration
+  performanceConfig?: {
+    latency: 'standard' | 'optimized';
+  };
+  serviceTier?: {
+    type: 'priority' | 'default' | 'flex';
+  };
+
+  // Tool configuration
+  tools?: BedrockConverseToolConfig[];
+  toolChoice?: 'auto' | 'any' | { tool: { name: string } };
+
+  // Guardrails
+  guardrailIdentifier?: string;
+  guardrailVersion?: string;
+  trace?: Trace;
+
+  // Additional model-specific parameters
+  additionalModelRequestFields?: Record<string, unknown>;
+  additionalModelResponseFieldPaths?: string[];
+
+  // Streaming
+  streaming?: boolean;
+}
+
+/**
+ * Tool configuration for Converse API
+ */
+export interface BedrockConverseToolConfig {
+  toolSpec?: {
+    name: string;
+    description?: string;
+    inputSchema: {
+      json: Record<string, unknown>;
+    };
+  };
+  // Support for OpenAI-compatible format
+  type?: 'function';
+  function?: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
+  // Support for Anthropic format
+  name?: string;
+  description?: string;
+  input_schema?: Record<string, unknown>;
+}
+
+/**
+ * Bedrock model pricing per 1M tokens
+ * Prices as of late 2024 - may need updates
+ */
+const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }> = {
+  // Claude Opus 4.5
+  'anthropic.claude-opus-4-5': { input: 5, output: 25 },
+  // Claude Opus 4/4.1
+  'anthropic.claude-opus-4': { input: 15, output: 75 },
+  // Claude Sonnet 4/4.5
+  'anthropic.claude-sonnet-4': { input: 3, output: 15 },
+  // Claude Haiku 4.5
+  'anthropic.claude-haiku-4': { input: 1, output: 5 },
+  // Claude 3.x
+  'anthropic.claude-3-opus': { input: 15, output: 75 },
+  'anthropic.claude-3-5-sonnet': { input: 3, output: 15 },
+  'anthropic.claude-3-7-sonnet': { input: 3, output: 15 },
+  'anthropic.claude-3-5-haiku': { input: 0.8, output: 4 },
+  'anthropic.claude-3-haiku': { input: 0.25, output: 1.25 },
+  // Amazon Nova
+  'amazon.nova-micro': { input: 0.035, output: 0.14 },
+  'amazon.nova-lite': { input: 0.06, output: 0.24 },
+  'amazon.nova-pro': { input: 0.8, output: 3.2 },
+  'amazon.nova-premier': { input: 2.5, output: 10 },
+  // Meta Llama
+  'meta.llama3-1-8b': { input: 0.22, output: 0.22 },
+  'meta.llama3-1-70b': { input: 0.99, output: 0.99 },
+  'meta.llama3-1-405b': { input: 5.32, output: 16 },
+  'meta.llama3-2-1b': { input: 0.1, output: 0.1 },
+  'meta.llama3-2-3b': { input: 0.15, output: 0.15 },
+  'meta.llama3-2-11b': { input: 0.35, output: 0.35 },
+  'meta.llama3-2-90b': { input: 2.0, output: 2.0 },
+  'meta.llama3-3-70b': { input: 0.99, output: 0.99 },
+  'meta.llama4': { input: 1.0, output: 3.0 },
+  // Mistral
+  'mistral.mistral-7b': { input: 0.15, output: 0.2 },
+  'mistral.mixtral-8x7b': { input: 0.45, output: 0.7 },
+  'mistral.mistral-large': { input: 4, output: 12 },
+  'mistral.mistral-small': { input: 1, output: 3 },
+  // AI21 Jamba
+  'ai21.jamba-1-5-mini': { input: 0.2, output: 0.4 },
+  'ai21.jamba-1-5-large': { input: 2, output: 8 },
+  // Cohere
+  'cohere.command-r': { input: 0.5, output: 1.5 },
+  'cohere.command-r-plus': { input: 3, output: 15 },
+  // DeepSeek
+  'deepseek.deepseek-r1': { input: 1.35, output: 5.4 },
+  // Qwen
+  'qwen.qwen3': { input: 0.5, output: 1.5 },
+};
+
+/**
+ * Calculate cost based on model and token usage
+ */
+function calculateBedrockConverseCost(
+  modelId: string,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  if (promptTokens === undefined || completionTokens === undefined) {
+    return undefined;
+  }
+
+  // Find matching pricing
+  const normalizedModelId = modelId.toLowerCase();
+  for (const [modelPrefix, pricing] of Object.entries(BEDROCK_CONVERSE_PRICING)) {
+    if (normalizedModelId.includes(modelPrefix)) {
+      const inputCost = (promptTokens / 1_000_000) * pricing.input;
+      const outputCost = (completionTokens / 1_000_000) * pricing.output;
+      return inputCost + outputCost;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Convert various tool formats to Converse API format
+ */
+function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[] {
+  return tools.map((tool): Tool => {
+    // Already in Converse format
+    if (tool.toolSpec) {
+      return { toolSpec: tool.toolSpec };
+    }
+
+    // OpenAI-compatible format
+    if (tool.type === 'function' && tool.function) {
+      return {
+        toolSpec: {
+          name: tool.function.name,
+          description: tool.function.description,
+          inputSchema: {
+            json: tool.function.parameters || {},
+          },
+        },
+      };
+    }
+
+    // Anthropic format
+    if (tool.name) {
+      return {
+        toolSpec: {
+          name: tool.name,
+          description: tool.description,
+          inputSchema: {
+            json: tool.input_schema || {},
+          },
+        },
+      };
+    }
+
+    throw new Error(`Invalid tool configuration: ${JSON.stringify(tool)}`);
+  });
+}
+
+/**
+ * Convert tool choice to Converse API format
+ */
+function convertToolChoiceToConverseFormat(
+  toolChoice: 'auto' | 'any' | { tool: { name: string } },
+): ToolChoice {
+  if (toolChoice === 'auto') {
+    return { auto: {} };
+  }
+  if (toolChoice === 'any') {
+    return { any: {} };
+  }
+  if (typeof toolChoice === 'object' && toolChoice.tool) {
+    return { tool: { name: toolChoice.tool.name } };
+  }
+  return { auto: {} };
+}
+
+/**
+ * Parse prompt into Converse API message format
+ */
+export function parseConverseMessages(prompt: string): {
+  messages: Message[];
+  system?: SystemContentBlock[];
+} {
+  // Try to parse as JSON first
+  try {
+    const parsed = JSON.parse(prompt);
+    if (Array.isArray(parsed)) {
+      const systemMessages: SystemContentBlock[] = [];
+      const messages: Message[] = [];
+
+      for (const msg of parsed) {
+        if (msg.role === 'system') {
+          // System messages go to the system field
+          const content =
+            typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+          systemMessages.push({ text: content });
+        } else if (msg.role === 'user' || msg.role === 'assistant') {
+          // Convert content to ContentBlock format
+          const contentBlocks: ContentBlock[] = [];
+
+          if (typeof msg.content === 'string') {
+            contentBlocks.push({ text: msg.content });
+          } else if (Array.isArray(msg.content)) {
+            for (const block of msg.content) {
+              if (typeof block === 'string') {
+                contentBlocks.push({ text: block });
+              } else if (block.type === 'text') {
+                contentBlocks.push({ text: block.text });
+              } else if (block.type === 'image' || block.image) {
+                // Handle image content
+                const imageData = block.image || block;
+                contentBlocks.push({
+                  image: {
+                    format:
+                      imageData.format || imageData.source?.media_type?.split('/')[1] || 'png',
+                    source: {
+                      bytes:
+                        typeof imageData.source?.data === 'string'
+                          ? Buffer.from(imageData.source.data, 'base64')
+                          : imageData.source?.bytes,
+                    },
+                  },
+                });
+              } else if (block.type === 'tool_use' || block.toolUse) {
+                const toolUseData = block.toolUse || block;
+                contentBlocks.push({
+                  toolUse: {
+                    toolUseId: toolUseData.toolUseId || toolUseData.id,
+                    name: toolUseData.name,
+                    input: toolUseData.input,
+                  },
+                });
+              } else if (block.type === 'tool_result' || block.toolResult) {
+                const toolResultData = block.toolResult || block;
+                contentBlocks.push({
+                  toolResult: {
+                    toolUseId: toolResultData.toolUseId || toolResultData.tool_use_id,
+                    content: Array.isArray(toolResultData.content)
+                      ? toolResultData.content.map((c: any) =>
+                          typeof c === 'string' ? { text: c } : c,
+                        )
+                      : [{ text: String(toolResultData.content) }],
+                    status: toolResultData.status,
+                  },
+                });
+              } else {
+                // Unknown block type, try to convert to text
+                contentBlocks.push({ text: JSON.stringify(block) });
+              }
+            }
+          } else {
+            contentBlocks.push({ text: JSON.stringify(msg.content) });
+          }
+
+          messages.push({
+            role: msg.role,
+            content: contentBlocks,
+          });
+        }
+      }
+
+      return {
+        messages,
+        system: systemMessages.length > 0 ? systemMessages : undefined,
+      };
+    }
+  } catch {
+    // Not JSON, try line-based parsing
+  }
+
+  // Parse as line-based format or plain text
+  const lines = prompt.split('\n');
+  const messages: Message[] = [];
+  let system: SystemContentBlock[] | undefined;
+  let currentRole: 'user' | 'assistant' | null = null;
+  let currentContent: string[] = [];
+
+  const pushMessage = () => {
+    if (currentRole && currentContent.length > 0) {
+      messages.push({
+        role: currentRole,
+        content: [{ text: currentContent.join('\n') }],
+      });
+      currentContent = [];
+    }
+  };
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+
+    if (trimmedLine.toLowerCase().startsWith('system:')) {
+      pushMessage();
+      system = [{ text: trimmedLine.slice(7).trim() }];
+      currentRole = null;
+    } else if (trimmedLine.toLowerCase().startsWith('user:')) {
+      pushMessage();
+      currentRole = 'user';
+      const content = trimmedLine.slice(5).trim();
+      if (content) {
+        currentContent.push(content);
+      }
+    } else if (trimmedLine.toLowerCase().startsWith('assistant:')) {
+      pushMessage();
+      currentRole = 'assistant';
+      const content = trimmedLine.slice(10).trim();
+      if (content) {
+        currentContent.push(content);
+      }
+    } else if (currentRole) {
+      currentContent.push(line);
+    } else {
+      // No role prefix, treat as user message
+      currentRole = 'user';
+      currentContent.push(line);
+    }
+  }
+
+  pushMessage();
+
+  // If no messages were parsed, treat entire prompt as user message
+  if (messages.length === 0) {
+    messages.push({
+      role: 'user',
+      content: [{ text: prompt }],
+    });
+  }
+
+  return { messages, system };
+}
+
+/**
+ * Extract text output from Converse API response content blocks
+ */
+function extractTextFromContentBlocks(
+  content: ContentBlock[],
+  showThinking: boolean = true,
+): string {
+  const parts: string[] = [];
+
+  for (const block of content) {
+    if ('text' in block && block.text) {
+      parts.push(block.text);
+    } else if ('reasoningContent' in block && block.reasoningContent) {
+      // Handle extended thinking content
+      const reasoning = block.reasoningContent;
+      if (showThinking) {
+        if ('reasoningText' in reasoning && reasoning.reasoningText) {
+          const thinkingText = reasoning.reasoningText.text || '';
+          const signature = reasoning.reasoningText.signature || '';
+          parts.push(`<thinking>\n${thinkingText}\n</thinking>`);
+          if (signature) {
+            parts.push(`Signature: ${signature}`);
+          }
+        } else if ('redactedContent' in reasoning && reasoning.redactedContent) {
+          parts.push('<thinking>[Redacted]</thinking>');
+        }
+      }
+    } else if ('toolUse' in block && block.toolUse) {
+      // Format tool use for output
+      parts.push(
+        JSON.stringify({
+          type: 'tool_use',
+          id: block.toolUse.toolUseId,
+          name: block.toolUse.name,
+          input: block.toolUse.input,
+        }),
+      );
+    }
+  }
+
+  return parts.join('\n\n');
+}
+
+/**
+ * AWS Bedrock Converse API Provider
+ */
+export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implements ApiProvider {
+  declare config: BedrockConverseOptions;
+
+  constructor(
+    modelName: string,
+    options: { config?: BedrockConverseOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(modelName, options);
+    this.config = options.config || {};
+
+    // Record telemetry
+    if (this.config.thinking) {
+      telemetry.record('feature_used', {
+        feature: 'extended_thinking',
+        provider: 'bedrock_converse',
+      });
+    }
+    if (this.config.tools) {
+      telemetry.record('feature_used', {
+        feature: 'tool_use',
+        provider: 'bedrock_converse',
+      });
+    }
+  }
+
+  id(): string {
+    return `bedrock:converse:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[AWS Bedrock Converse Provider ${this.modelName}]`;
+  }
+
+  /**
+   * Build the inference configuration from options
+   */
+  private buildInferenceConfig(): InferenceConfiguration | undefined {
+    const maxTokens =
+      this.config.maxTokens ||
+      this.config.max_tokens ||
+      getEnvInt('AWS_BEDROCK_MAX_TOKENS') ||
+      undefined;
+
+    const temperature =
+      this.config.temperature ?? getEnvFloat('AWS_BEDROCK_TEMPERATURE') ?? undefined;
+
+    const topP = this.config.topP || this.config.top_p || getEnvFloat('AWS_BEDROCK_TOP_P');
+
+    let stopSequences = this.config.stopSequences || this.config.stop;
+    if (!stopSequences) {
+      const envStop = getEnvString('AWS_BEDROCK_STOP');
+      if (envStop) {
+        try {
+          stopSequences = JSON.parse(envStop);
+        } catch {
+          // Ignore invalid JSON
+        }
+      }
+    }
+
+    // Only return config if at least one field is set
+    if (
+      maxTokens !== undefined ||
+      temperature !== undefined ||
+      topP !== undefined ||
+      stopSequences
+    ) {
+      return {
+        ...(maxTokens !== undefined ? { maxTokens } : {}),
+        ...(temperature !== undefined ? { temperature } : {}),
+        ...(topP !== undefined ? { topP } : {}),
+        ...(stopSequences ? { stopSequences } : {}),
+      };
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Build the tool configuration from options
+   */
+  private async buildToolConfig(): Promise<ToolConfiguration | undefined> {
+    if (!this.config.tools || this.config.tools.length === 0) {
+      return undefined;
+    }
+
+    // Load tools from external file if needed
+    const tools = await maybeLoadToolsFromExternalFile(this.config.tools);
+    if (!tools || tools.length === 0) {
+      return undefined;
+    }
+
+    const converseTools = convertToolsToConverseFormat(tools);
+    const toolChoice = this.config.toolChoice
+      ? convertToolChoiceToConverseFormat(this.config.toolChoice)
+      : undefined;
+
+    return {
+      tools: converseTools,
+      ...(toolChoice ? { toolChoice } : {}),
+    };
+  }
+
+  /**
+   * Build the guardrail configuration
+   */
+  private buildGuardrailConfig(): GuardrailConfiguration | undefined {
+    if (!this.config.guardrailIdentifier) {
+      return undefined;
+    }
+
+    return {
+      guardrailIdentifier: String(this.config.guardrailIdentifier),
+      guardrailVersion: String(this.config.guardrailVersion || 'DRAFT'),
+      ...(this.config.trace ? { trace: this.config.trace } : {}),
+    };
+  }
+
+  /**
+   * Build additional model request fields (including thinking config)
+   */
+  private buildAdditionalModelRequestFields(): Record<string, unknown> | undefined {
+    const fields: Record<string, unknown> = {
+      ...(this.config.additionalModelRequestFields || {}),
+    };
+
+    // Add thinking configuration for Claude models
+    if (this.config.thinking) {
+      fields.thinking = this.config.thinking;
+    }
+
+    return Object.keys(fields).length > 0 ? fields : undefined;
+  }
+
+  /**
+   * Build performance configuration
+   */
+  private buildPerformanceConfig(): PerformanceConfiguration | undefined {
+    if (!this.config.performanceConfig) {
+      return undefined;
+    }
+    return {
+      latency: this.config.performanceConfig.latency,
+    };
+  }
+
+  /**
+   * Build service tier configuration
+   */
+  private buildServiceTier(): ServiceTier | undefined {
+    if (!this.config.serviceTier) {
+      return undefined;
+    }
+    return {
+      type: this.config.serviceTier.type,
+    };
+  }
+
+  /**
+   * Main API call using Converse API
+   */
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Parse the prompt into messages
+    const { messages, system } = parseConverseMessages(prompt);
+
+    // Merge config with context config (for future use with additional context params)
+    const _mergedConfig = { ...this.config, ...context?.prompt.config };
+
+    // Build the request
+    const inferenceConfig = this.buildInferenceConfig();
+    const toolConfig = await this.buildToolConfig();
+    const guardrailConfig = this.buildGuardrailConfig();
+    const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
+    const performanceConfig = this.buildPerformanceConfig();
+    const serviceTier = this.buildServiceTier();
+
+    const converseInput: ConverseCommandInput = {
+      modelId: this.modelName,
+      messages,
+      ...(system ? { system } : {}),
+      ...(inferenceConfig ? { inferenceConfig } : {}),
+      ...(toolConfig ? { toolConfig } : {}),
+      ...(guardrailConfig ? { guardrailConfig } : {}),
+      ...(additionalModelRequestFields ? { additionalModelRequestFields } : {}),
+      ...(this.config.additionalModelResponseFieldPaths
+        ? { additionalModelResponseFieldPaths: this.config.additionalModelResponseFieldPaths }
+        : {}),
+      ...(performanceConfig ? { performanceConfig } : {}),
+      ...(serviceTier ? { serviceTier } : {}),
+    };
+
+    logger.debug('Calling AWS Bedrock Converse API', {
+      modelId: this.modelName,
+      messageCount: messages.length,
+      hasSystem: !!system,
+      hasTools: !!toolConfig,
+      hasThinking: !!this.config.thinking,
+    });
+
+    // Check cache
+    const cache = await getCache();
+    const cacheKey = `bedrock:converse:${this.modelName}:${JSON.stringify(converseInput)}`;
+
+    if (isCacheEnabled()) {
+      const cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        logger.debug('Returning cached response');
+        const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
+        return this.parseResponse(parsed);
+      }
+    }
+
+    // Make the API call
+    let response: ConverseCommandOutput;
+    try {
+      const bedrockInstance = await this.getBedrockInstance();
+
+      // Import and use ConverseCommand
+      const { ConverseCommand } = await import('@aws-sdk/client-bedrock-runtime');
+      const command = new ConverseCommand(converseInput);
+      response = await bedrockInstance.send(command);
+    } catch (err: any) {
+      const errorMessage = err?.message || String(err);
+      logger.error('Bedrock Converse API error', { error: errorMessage });
+
+      // Provide helpful error messages for common issues
+      if (errorMessage.includes('ValidationException')) {
+        return {
+          error: `Bedrock Converse API validation error: ${errorMessage}. Check that your model supports the Converse API and all parameters are valid.`,
+        };
+      }
+      if (errorMessage.includes('AccessDeniedException')) {
+        return {
+          error: `Bedrock access denied: ${errorMessage}. Ensure you have bedrock:InvokeModel permission and model access is enabled.`,
+        };
+      }
+
+      return {
+        error: `Bedrock Converse API error: ${errorMessage}`,
+      };
+    }
+
+    // Cache the response
+    if (isCacheEnabled()) {
+      try {
+        await cache.set(cacheKey, JSON.stringify(response));
+      } catch (err) {
+        logger.error(`Failed to cache response: ${String(err)}`);
+      }
+    }
+
+    logger.debug('Bedrock Converse API response received', {
+      stopReason: response.stopReason,
+      hasUsage: !!response.usage,
+      hasMetrics: !!response.metrics,
+    });
+
+    return this.parseResponse(response);
+  }
+
+  /**
+   * Parse the Converse API response into ProviderResponse format
+   */
+  private parseResponse(response: ConverseCommandOutput): ProviderResponse {
+    // Extract output text
+    const outputMessage = response.output?.message;
+    const content = outputMessage?.content || [];
+    const showThinking = this.config.showThinking !== false;
+    const output = extractTextFromContentBlocks(content, showThinking);
+
+    // Extract token usage
+    const usage = response.usage;
+    const promptTokens = usage?.inputTokens;
+    const completionTokens = usage?.outputTokens;
+    const totalTokens = usage?.totalTokens;
+    const cacheReadTokens = usage?.cacheReadInputTokens;
+    const cacheWriteTokens = usage?.cacheWriteInputTokens;
+
+    const tokenUsage: Partial<TokenUsage> = {
+      prompt: promptTokens,
+      completion: completionTokens,
+      total: totalTokens || (promptTokens || 0) + (completionTokens || 0),
+      numRequests: 1,
+    };
+
+    // Calculate cost
+    const cost = calculateBedrockConverseCost(this.modelName, promptTokens, completionTokens);
+
+    // Build metadata
+    const metadata: Record<string, unknown> = {};
+
+    // Add latency
+    if (response.metrics?.latencyMs) {
+      metadata.latencyMs = response.metrics.latencyMs;
+    }
+
+    // Add stop reason
+    if (response.stopReason) {
+      metadata.stopReason = response.stopReason;
+    }
+
+    // Add cache token info
+    if (cacheReadTokens !== undefined || cacheWriteTokens !== undefined) {
+      metadata.cacheTokens = {
+        read: cacheReadTokens,
+        write: cacheWriteTokens,
+      };
+    }
+
+    // Add performance config info
+    if (response.performanceConfig) {
+      metadata.performanceConfig = response.performanceConfig;
+    }
+
+    // Add service tier info
+    if (response.serviceTier) {
+      metadata.serviceTier = response.serviceTier;
+    }
+
+    // Add additional model response fields
+    if (response.additionalModelResponseFields) {
+      metadata.additionalModelResponseFields = response.additionalModelResponseFields;
+    }
+
+    // Add trace info if present
+    if (response.trace) {
+      metadata.trace = response.trace;
+    }
+
+    // Check for guardrail intervention
+    const guardrails =
+      response.stopReason === 'guardrail_intervened'
+        ? { flagged: true, reason: 'guardrail_intervened' }
+        : undefined;
+
+    return {
+      output,
+      tokenUsage,
+      ...(cost !== undefined ? { cost } : {}),
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+      ...(guardrails ? { guardrails } : {}),
+    };
+  }
+
+  /**
+   * Streaming API call using ConverseStream
+   */
+  async callApiStreaming(
+    prompt: string,
+    _context?: CallApiContextParams,
+  ): Promise<ProviderResponse & { stream?: AsyncIterable<string> }> {
+    // Parse the prompt into messages
+    const { messages, system } = parseConverseMessages(prompt);
+
+    // Build the request (same as non-streaming)
+    const inferenceConfig = this.buildInferenceConfig();
+    const toolConfig = await this.buildToolConfig();
+    const guardrailConfig = this.buildGuardrailConfig();
+    const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
+    const performanceConfig = this.buildPerformanceConfig();
+    const serviceTier = this.buildServiceTier();
+
+    const converseStreamInput: ConverseStreamCommandInput = {
+      modelId: this.modelName,
+      messages,
+      ...(system ? { system } : {}),
+      ...(inferenceConfig ? { inferenceConfig } : {}),
+      ...(toolConfig ? { toolConfig } : {}),
+      ...(guardrailConfig ? { guardrailConfig } : {}),
+      ...(additionalModelRequestFields ? { additionalModelRequestFields } : {}),
+      ...(performanceConfig ? { performanceConfig } : {}),
+      ...(serviceTier ? { serviceTier } : {}),
+    };
+
+    logger.debug('Calling AWS Bedrock ConverseStream API', {
+      modelId: this.modelName,
+      messageCount: messages.length,
+    });
+
+    try {
+      const bedrockInstance = await this.getBedrockInstance();
+      const { ConverseStreamCommand } = await import('@aws-sdk/client-bedrock-runtime');
+      const command = new ConverseStreamCommand(converseStreamInput);
+      const response = await bedrockInstance.send(command);
+
+      // Collect the full response while also providing a stream
+      let output = '';
+      let reasoning = '';
+      let stopReason: string | undefined;
+      let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
+
+      const showThinking = this.config.showThinking !== false;
+
+      // Process the stream
+      if (response.stream) {
+        for await (const event of response.stream) {
+          if ('contentBlockDelta' in event && event.contentBlockDelta?.delta) {
+            const delta = event.contentBlockDelta.delta;
+            if ('text' in delta && delta.text) {
+              output += delta.text;
+            }
+            if ('reasoningContent' in delta && delta.reasoningContent && showThinking) {
+              const rc = delta.reasoningContent as { text?: string };
+              if (rc.text) {
+                reasoning += rc.text;
+              }
+            }
+          }
+          if ('messageStop' in event && event.messageStop) {
+            stopReason = event.messageStop.stopReason;
+          }
+          if ('metadata' in event && event.metadata?.usage) {
+            usage = event.metadata.usage;
+          }
+        }
+      }
+
+      // Combine reasoning and output
+      const finalOutput = reasoning ? `<thinking>\n${reasoning}\n</thinking>\n\n${output}` : output;
+
+      const tokenUsage: Partial<TokenUsage> = {
+        prompt: usage.inputTokens,
+        completion: usage.outputTokens,
+        total: usage.totalTokens || (usage.inputTokens || 0) + (usage.outputTokens || 0),
+        numRequests: 1,
+      };
+
+      const cost = calculateBedrockConverseCost(
+        this.modelName,
+        usage.inputTokens,
+        usage.outputTokens,
+      );
+
+      return {
+        output: finalOutput,
+        tokenUsage,
+        ...(cost !== undefined ? { cost } : {}),
+        ...(stopReason ? { metadata: { stopReason } } : {}),
+      };
+    } catch (err: any) {
+      return {
+        error: `Bedrock ConverseStream API error: ${err?.message || String(err)}`,
+      };
+    }
+  }
+}
