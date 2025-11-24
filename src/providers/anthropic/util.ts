@@ -3,6 +3,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
 import type { AnthropicToolConfig, WebFetchToolConfig, WebSearchToolConfig } from './types';
+import { parseDataUrl } from '../../util/dataUrl';
 
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
@@ -129,31 +130,17 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
 function processAnthropicImageContent(content: any[]): any[] {
   return content.map((item) => {
     if (item.type === 'image' && item.source && item.source.type === 'base64') {
-      // Check if the data field contains a data URL prefix
-      if (typeof item.source.data === 'string' && item.source.data.startsWith('data:')) {
-        // Extract just the base64 part from data URLs like "data:image/jpeg;base64,/9j/4AAQ..."
-        const [header, base64Data] = item.source.data.split(',', 2);
-        if (base64Data) {
-          // Also extract the media type from the data URL header if not already set
-          if (!item.source.media_type && header.includes(':')) {
-            const mediaType = header.split(':')[1].split(';')[0];
-            return {
-              ...item,
-              source: {
-                ...item.source,
-                media_type: mediaType,
-                data: base64Data,
-              },
-            };
-          }
-          return {
-            ...item,
-            source: {
-              ...item.source,
-              data: base64Data,
-            },
-          };
-        }
+      // Check if the data field contains a data URL and parse it
+      const parsed = parseDataUrl(item.source.data);
+      if (parsed) {
+        return {
+          ...item,
+          source: {
+            ...item.source,
+            media_type: item.source.media_type || parsed.mimeType,
+            data: parsed.base64Data,
+          },
+        };
       }
     }
     return item;

@@ -2,6 +2,7 @@ import Clone from 'rfdc';
 import { z } from 'zod';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
@@ -553,27 +554,38 @@ export function loadFile(
 }
 
 function isValidBase64Image(data: string): boolean {
-  if (!data || data.length < 100) {
+  // Handle both data URLs and raw base64
+  const base64Data = isDataUrl(data) ? extractBase64FromDataUrl(data) : data;
+
+  if (!base64Data || base64Data.length < 100) {
     return false;
   }
 
   try {
     // Verify it's valid base64
-    Buffer.from(data, 'base64');
+    Buffer.from(base64Data, 'base64');
 
     // Check for known image format headers
     return (
-      data.startsWith('/9j/') || // JPEG
-      data.startsWith('iVBORw0KGgo') || // PNG
-      data.startsWith('R0lGODlh') || // GIF
-      data.startsWith('UklGR') // WebP
+      base64Data.startsWith('/9j/') || // JPEG
+      base64Data.startsWith('iVBORw0KGgo') || // PNG
+      base64Data.startsWith('R0lGODlh') || // GIF
+      base64Data.startsWith('UklGR') // WebP
     );
   } catch {
     return false;
   }
 }
 
-function getMimeTypeFromBase64(base64Data: string): string {
+function getMimeTypeFromBase64(base64DataOrUrl: string): string {
+  // Try to extract MIME type from data URL first
+  const parsed = parseDataUrl(base64DataOrUrl);
+  if (parsed) {
+    return parsed.mimeType;
+  }
+
+  // Fallback to magic number detection for raw base64
+  const base64Data = extractBase64FromDataUrl(base64DataOrUrl);
   if (base64Data.startsWith('/9j/')) {
     return 'image/jpeg';
   } else if (base64Data.startsWith('iVBORw0KGgo')) {
@@ -632,10 +644,14 @@ function processImagesInContents(
 
               // Add the image part
               const mimeType = getMimeTypeFromBase64(trimmedLine);
+              // Extract raw base64 data (Google expects raw base64, not data URLs)
+              const base64Data = isDataUrl(trimmedLine)
+                ? extractBase64FromDataUrl(trimmedLine)
+                : trimmedLine;
               processedParts.push({
                 inlineData: {
                   mimeType,
-                  data: trimmedLine,
+                  data: base64Data,
                 },
               });
             } else {

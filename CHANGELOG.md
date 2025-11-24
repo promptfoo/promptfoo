@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(providers): add data URL support for vision models in Azure, Anthropic, and other providers (#5725)
+- fix(providers): add universal data URL support for vision models across all providers - automatically converts file:// image inputs to data URLs with transparent provider-specific handling (OpenAI/Azure/Ollama use native data URLs, Anthropic/Google extract base64); includes shared dataUrl utility for RFC 2397 parsing and 37 new tests (#5725)
 - fix(webui): prevent horizontal scrolling in metadata table by adding fixed table layout with explicit column widths and proper word-breaking for long content (#6178)
 - fix(providers): maintain backwards compatibility for annotations in raw provider responses (#6267)
 - fix(cli): restore commandLineOptions support for generateSuggestions, table, and write options (#6190)
