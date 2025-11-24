@@ -563,7 +563,7 @@ providers:
 
 **Provider ID formats:**
 
-- **OpenAI:** `openai:gpt-5.1`, `openai:gpt-5.1-mini`, `openai:o3-mini`
+- **OpenAI:** `openai:gpt-5.1`, `openai:gpt-5.1-mini`
 - **Anthropic:** `anthropic:messages:claude-sonnet-4-5-20250929`
 - **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`
 - **Azure OpenAI:** `azureopenai:chat:deployment-name`
