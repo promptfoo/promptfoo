@@ -298,10 +298,7 @@ export class ResponsesProcessor {
         if (contentItem.type === 'output_text') {
           content += contentItem.text;
           // Preserve annotations for deep research citations
-          if (
-            Array.isArray(contentItem.annotations) &&
-            contentItem.annotations.length > 0
-          ) {
+          if (Array.isArray(contentItem.annotations) && contentItem.annotations.length > 0) {
             annotations.push(...contentItem.annotations);
           }
         } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
