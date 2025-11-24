@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(code-scan): exit with code 0 when no files to scan instead of failing - handles cases where no files are changed, all files are filtered by denylist/size/binary detection, or no patches are found (#6316)
 - fix(providers): add universal data URL support for vision models with edge case handling - automatically converts file:// image inputs to data URLs with transparent provider-specific handling (OpenAI/Azure/Ollama use native data URLs, Anthropic/Google extract base64); includes shared dataUrl utility for RFC 2397 parsing, charset/parameter support, whitespace trimming, small image support (≥20 chars), and comprehensive documentation (#5725)
 - fix(util): add recursive array processing for tool loading - arrays of file:// tool references now processed correctly with Promise.all() and auto-flattening (#6272)
 - fix(webui): prevent horizontal scrolling in metadata table by adding fixed table layout with explicit column widths and proper word-breaking for long content (#6178)
@@ -77,7 +78,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/)
 - fix(providers): fix LiteLLM provider API key authentication — reverts to inline authentication check to properly handle providers with `apiKeyRequired: false` and fixes Authorization header to be omitted (instead of sending "Bearer undefined") when no API key is set, resolving "API key is not set" error when using LITELLM_API_KEY environment variable (#6322)
 - fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/) (#6313)
 - fix(code-scan): prevent "start line must precede end line" GitHub API error by ensuring start_line is only set when it differs from line - fixes single-line comment highlighting in PR reviews (#6314)
