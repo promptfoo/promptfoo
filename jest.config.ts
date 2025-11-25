@@ -17,6 +17,21 @@ const config: Config = {
     '<rootDir>/examples',
     '<rootDir>/node_modules',
     '<rootDir>/src/app',
+    // These tests are now run with Vitest (npm run test:vitest)
+    '<rootDir>/test/codeScans',
+    '<rootDir>/test/matchers',
+    '<rootDir>/test/database',
+    '<rootDir>/test/site',
+    '<rootDir>/test/testCase',
+    '<rootDir>/test/validators',
+    '<rootDir>/test/utils',
+    '<rootDir>/test/models',
+    '<rootDir>/test/app',
+    '<rootDir>/test/globalConfig',
+    '<rootDir>/test/integrations',
+    '<rootDir>/test/external',
+    '<rootDir>/test/progress',
+    '<rootDir>/test/types',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
@@ -24,7 +39,7 @@ const config: Config = {
   // Transform ESM-only packages in node_modules
   // Use a permissive pattern that transforms most ESM packages
   transformIgnorePatterns: [
-    'node_modules/(?!(@sindresorhus|@apidevtools|execa|strip-final-newline|npm-run-path|path-key|onetime|mimic-fn|human-signals|is-stream|merge-stream|get-stream|is-plain-obj|yocto-queue|figures|is-unicode-supported)/)',
+    'node_modules/(?!(@sindresorhus|execa|strip-final-newline|npm-run-path|path-key|onetime|mimic-fn|human-signals|is-stream|merge-stream|get-stream|is-plain-obj|yocto-queue|figures|is-unicode-supported)/)',
   ],
   // Use a more conservative worker pool configuration to prevent segmentation faults
   maxWorkers: '50%',

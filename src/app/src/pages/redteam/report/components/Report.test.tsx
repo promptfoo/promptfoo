@@ -22,9 +22,6 @@ vi.mock('@app/hooks/useTelemetry', () => ({
     recordEvent: vi.fn(),
   }),
 }));
-vi.mock('@app/hooks/usePageMeta', () => ({
-  usePageMeta: vi.fn(),
-}));
 
 vi.mock('./Overview', () => ({
   default: ({ categoryStats }: { categoryStats: any }) => {

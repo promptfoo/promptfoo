@@ -101,6 +101,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       targetVars,
       context.filters,
       targetProvider,
+      [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     logger.debug(`[AuthoritativeMarkupInjection] Rendered attack prompt`, {
