@@ -9,30 +9,29 @@ import type { ProviderOptions } from '../../types';
 
 vi.mock('./ProviderConfigEditor', () => {
   return {
-    default: React.forwardRef(
-      (
-        props: {
-          providerType?: string;
-          validateAll?: boolean;
-          setError?: (error: string | null) => void;
-        },
-        ref,
-      ) => {
-        const validate = vi.fn(() => true);
-        React.useImperativeHandle(ref, () => ({
-          validate,
-        }));
+    default: (props: {
+      providerType?: string;
+      validateAll?: boolean;
+      setError?: (error: string | null) => void;
+      onValidationRequest?: (validator: () => boolean) => void;
+    }) => {
+      const validate = vi.fn(() => true);
 
-        React.useEffect(() => {
-          if (props.validateAll) {
-            validate();
-            props.setError?.('Validation triggered');
-          }
-        }, [props.validateAll, props.setError, validate]);
+      React.useEffect(() => {
+        if (props.onValidationRequest) {
+          props.onValidationRequest(validate);
+        }
+      }, [props.onValidationRequest]);
 
-        return <div data-testid="provider-config-editor" data-providertype={props.providerType} />;
-      },
-    ),
+      React.useEffect(() => {
+        if (props.validateAll) {
+          validate();
+          props.setError?.('Validation triggered');
+        }
+      }, [props.validateAll, props.setError, validate]);
+
+      return <div data-testid="provider-config-editor" data-providertype={props.providerType} />;
+    },
   };
 });
 

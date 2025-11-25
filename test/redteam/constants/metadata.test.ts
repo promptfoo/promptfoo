@@ -61,7 +61,7 @@ describe('metadata constants', () => {
     });
 
     it('should not include duplicate plugin ids within a category', () => {
-      Object.entries(riskCategories).forEach(([category, plugins]) => {
+      Object.entries(riskCategories).forEach(([_category, plugins]) => {
         const uniquePlugins = new Set(plugins);
         expect(uniquePlugins.size).toBe(plugins.length);
       });

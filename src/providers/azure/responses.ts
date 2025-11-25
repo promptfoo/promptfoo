@@ -1,16 +1,20 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject, maybeLoadToolsFromExternalFile } from '../../util';
+import { renderVarsInObject, maybeLoadToolsFromExternalFile } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
-import { ResponsesProcessor } from '../responses';
+import { ResponsesProcessor } from '../responses/index';
 import invariant from '../../util/invariant';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { ReasoningEffort } from '../openai/types';
 
 // Azure Responses API uses the v1 preview API version
@@ -54,11 +58,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     return !this.isReasoningModel();
   }
 
-  getAzureResponsesBody(
+  async getAzureResponsesBody(
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
-  ): Record<string, any> {
+  ): Promise<Record<string, any>> {
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -138,7 +142,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(config.tools
-        ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
+        ? { tools: await maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
@@ -201,7 +205,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       }
     }
 
-    const body = this.getAzureResponsesBody(prompt, context, callApiOptions);
+    const body = await this.getAzureResponsesBody(prompt, context, callApiOptions);
 
     // Calculate timeout for deep research models
     const isDeepResearchModel = this.deploymentName.includes('deep-research');
