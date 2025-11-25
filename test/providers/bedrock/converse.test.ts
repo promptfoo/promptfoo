@@ -371,7 +371,9 @@ describe('AwsBedrockConverseProvider', () => {
           functionToolCallbacks: {
             calculator: (args: string) => {
               const parsed = JSON.parse(args);
-              return `Result: ${eval(parsed.expression)}`;
+              // Simple addition for test - avoids eval()
+              const [a, b] = parsed.expression.split('+').map(Number);
+              return `Result: ${a + b}`;
             },
           },
         },
