@@ -11,13 +11,10 @@ description: 'Bedrock Converse API - Comprehensive Test Suite'
 # - Performance configuration
 #
 # Model families covered:
-# - Anthropic Claude (3.x, 4.x, 4.5)
+# - Anthropic Claude (3.5, 4.x, 4.5)
 # - Amazon Nova (Micro, Lite, Pro, Premier)
-# - Amazon Titan Text (Lite, Express, Premier)
 # - Meta Llama (3.x, 4.x)
 # - Mistral AI (Small, Large, Pixtral)
-# - AI21 Jamba
-# - Cohere Command R
 # - DeepSeek R1
 # - Qwen3 (including Coder variants)
 # - Writer Palmyra (X4, X5)
@@ -34,12 +31,13 @@ providers:
   # ============================================================================
 
   # Claude Sonnet 4.5 with Extended Thinking
+  # Note: temperature MUST be 1 when thinking is enabled
   - id: bedrock:converse:us.anthropic.claude-sonnet-4-5-20250929-v1:0
     label: Claude Sonnet 4.5 (Thinking)
     config:
       region: us-west-2
       maxTokens: 16000
-      temperature: 0.7
+      temperature: 1
       thinking:
         type: enabled
         budget_tokens: 10000
@@ -112,17 +110,6 @@ providers:
       maxTokens: 1024
 
   # ============================================================================
-  # Amazon Titan Text Models
-  # ============================================================================
-
-  # Titan Text Premier
-  - id: bedrock:converse:amazon.titan-text-premier-v1:0
-    label: Titan Text Premier
-    config:
-      region: us-east-1
-      maxTokens: 3072
-
-  # ============================================================================
   # Meta Llama Models
   # ============================================================================
 
@@ -166,51 +153,13 @@ providers:
   - id: bedrock:converse:mistral.mistral-large-2407-v1:0
     label: Mistral Large 2
     config:
-      region: us-east-1
+      region: us-west-2
       maxTokens: 4096
       temperature: 0.7
 
   # Mistral Small (efficient)
   - id: bedrock:converse:mistral.mistral-small-2402-v1:0
     label: Mistral Small
-    config:
-      region: us-east-1
-      maxTokens: 2048
-      temperature: 0.7
-
-  # ============================================================================
-  # AI21 Jamba Models
-  # ============================================================================
-
-  # Jamba 1.5 Large
-  - id: bedrock:converse:ai21.jamba-1-5-large-v1:0
-    label: AI21 Jamba Large
-    config:
-      region: us-east-1
-      maxTokens: 4096
-
-  # Jamba 1.5 Mini
-  - id: bedrock:converse:ai21.jamba-1-5-mini-v1:0
-    label: AI21 Jamba Mini
-    config:
-      region: us-east-1
-      maxTokens: 2048
-
-  # ============================================================================
-  # Cohere Command R Models
-  # ============================================================================
-
-  # Command R+ (most capable)
-  - id: bedrock:converse:cohere.command-r-plus-v1:0
-    label: Cohere Command R+
-    config:
-      region: us-east-1
-      maxTokens: 4096
-      temperature: 0.7
-
-  # Command R (RAG optimized)
-  - id: bedrock:converse:cohere.command-r-v1:0
-    label: Cohere Command R
     config:
       region: us-east-1
       maxTokens: 2048
@@ -239,7 +188,7 @@ providers:
       maxTokens: 4096
 
   # Qwen3 235B (MoE, 22B active)
-  - id: bedrock:converse:qwen.qwen3-235b-a22b-v1:0
+  - id: bedrock:converse:qwen.qwen3-235b-a22b-2507-v1:0
     label: Qwen3 235B
     config:
       region: us-west-2
@@ -249,25 +198,25 @@ providers:
   - id: bedrock:converse:qwen.qwen3-32b-v1:0
     label: Qwen3 32B
     config:
-      region: us-east-1
+      region: us-west-2
       maxTokens: 4096
 
   # ============================================================================
   # Writer Palmyra Models
   # ============================================================================
 
-  # Palmyra X5 (1M context, enterprise-ready)
-  - id: bedrock:converse:writer.palmyra-x5-v1:0
+  # Palmyra X5 (1M context, enterprise-ready) - requires inference profile
+  - id: bedrock:converse:us.writer.palmyra-x5-v1:0
     label: Writer Palmyra X5
     config:
-      region: us-west-2
+      region: us-east-1
       maxTokens: 4096
 
-  # Palmyra X4 (128K context)
-  - id: bedrock:converse:writer.palmyra-x4-v1:0
+  # Palmyra X4 (128K context) - requires inference profile
+  - id: bedrock:converse:us.writer.palmyra-x4-v1:0
     label: Writer Palmyra X4
     config:
-      region: us-west-2
+      region: us-east-1
       maxTokens: 4096
 
   # ============================================================================
