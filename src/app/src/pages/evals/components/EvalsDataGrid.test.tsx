@@ -885,6 +885,63 @@ describe('EvalsDataGrid', () => {
     alertSpy.mockRestore();
   });
 
+  it('should not show delete button when no evals are selected initially', async () => {
+    // This test verifies that the component handles the initial state correctly
+    // where rowSelectionModel.ids might be empty, preventing undefined access errors
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+    });
+
+    // Verify component renders without error and delete button is not visible
+    // when no evals are selected (selectedCount defaults to 0)
+    expect(screen.queryByTestId('delete-selected-button')).toBeNull();
+  });
+
+  it('should pass selectedCount as 0 to toolbar when no selections exist', async () => {
+    // This test verifies that selectedCount is always a valid number (not undefined)
+    // which validates the null safety fix: rowSelectionModel?.ids?.size ?? 0
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} showUtilityButtons={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+    });
+
+    // Component should render without throwing "Cannot read properties of undefined (reading 'size')"
+    // The toolbar should receive selectedCount=0 and not show the delete button
+    expect(screen.queryByTestId('delete-selected-button')).toBeNull();
+
+    // Select an eval to verify the selection flow works
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
+
+    // Now delete button should appear with correct count
+    const deleteButton = await screen.findByTestId('delete-selected-button');
+    expect(deleteButton).toHaveTextContent('Delete (1)');
+  });
+
   it('should handle deletion failure when eval is in use', async () => {
     const mockResponse = {
       ok: true,
