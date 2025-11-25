@@ -287,6 +287,8 @@ describe('Telemetry', () => {
       expect(mockPostHog).toHaveBeenCalledWith('test-posthog-key', {
         host: 'https://a.promptfoo.app',
         fetch: expect.any(Function),
+        flushAt: 1,
+        flushInterval: 0,
       });
     });
 

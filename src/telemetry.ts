@@ -33,6 +33,7 @@ export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
 let posthogClient: PostHog | null = null;
+let isShuttingDown = false;
 
 function getPostHogClient(): PostHog | null {
   if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('IS_TESTING')) {
@@ -44,6 +45,11 @@ function getPostHogClient(): PostHog | null {
       posthogClient = new PostHog(POSTHOG_KEY, {
         host: EVENTS_ENDPOINT,
         fetch: fetchWithProxy,
+        // Disable automatic flush interval to prevent keeping the event loop alive.
+        // Events are sent immediately via explicit flush() calls after each capture.
+        // See: https://github.com/promptfoo/promptfoo/issues/5893
+        flushAt: 1,
+        flushInterval: 0,
       });
     } catch {
       posthogClient = null;
@@ -58,19 +64,28 @@ export class Telemetry {
   private telemetryDisabledRecorded = false;
   private id: string;
   private email: string | null;
+  private hasIdentified = false;
 
   constructor() {
+    // Get user info eagerly (this doesn't create PostHog client)
     this.id = getUserId();
     this.email = getUserEmail();
-    this.identify().then(() => {
-      // pass
-    });
+    // NOTE: We intentionally do NOT call identify() here.
+    // PostHog client is created lazily on first telemetry event to prevent
+    // keeping the Node.js event loop alive when promptfoo is imported as a library.
+    // See: https://github.com/promptfoo/promptfoo/issues/5893
   }
 
-  async identify() {
-    if (this.disabled || getEnvBool('IS_TESTING')) {
+  /**
+   * Lazily identify the user on the first telemetry event.
+   * This prevents the PostHog client from being created at import time,
+   * which would keep the Node.js event loop alive.
+   */
+  private ensureIdentified(): void {
+    if (this.hasIdentified || this.disabled || getEnvBool('IS_TESTING')) {
       return;
     }
+    this.hasIdentified = true;
 
     const client = getPostHogClient();
     if (client) {
@@ -93,6 +108,14 @@ export class Telemetry {
     }
   }
 
+  /**
+   * @deprecated Use ensureIdentified() instead. This method is kept for backwards
+   * compatibility but now only ensures identification happens (lazy initialization).
+   */
+  async identify() {
+    this.ensureIdentified();
+  }
+
   get disabled() {
     return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
   }
@@ -108,6 +131,8 @@ export class Telemetry {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
+      // Ensure user is identified before recording events
+      this.ensureIdentified();
       this.sendEvent(eventName, properties);
     }
   }
@@ -155,6 +180,12 @@ export class Telemetry {
   }
 
   async shutdown(): Promise<void> {
+    // Guard against multiple shutdown calls (from beforeExit + explicit shutdown in main.ts)
+    if (isShuttingDown) {
+      return;
+    }
+    isShuttingDown = true;
+
     const client = getPostHogClient();
     if (client) {
       try {
@@ -192,4 +223,15 @@ export class Telemetry {
 }
 
 const telemetry = new Telemetry();
+
+// Register cleanup handler as a safety net to ensure PostHog client is properly
+// shut down when the process exits. The primary fix is lazy initialization above
+// (PostHog client is only created on first telemetry event, not at import time).
+// See: https://github.com/promptfoo/promptfoo/issues/5893
+process.once('beforeExit', () => {
+  telemetry.shutdown().catch((error) => {
+    logger.debug(`Telemetry shutdown on beforeExit failed: ${error}`);
+  });
+});
+
 export default telemetry;
