@@ -27,5 +27,5 @@ export const ShiftKeyProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  return <ShiftKeyContext.Provider value={isShiftKeyPressed}>{children}</ShiftKeyContext.Provider>;
+  return <ShiftKeyContext value={isShiftKeyPressed}>{children}</ShiftKeyContext>;
 };

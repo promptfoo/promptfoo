@@ -7,6 +7,10 @@ describe('downloadBlob', () => {
   const clickMock = vi.fn();
 
   beforeEach(() => {
+    createObjectURLMock.mockClear();
+    revokeObjectURLMock.mockClear();
+    clickMock.mockClear();
+
     global.URL.createObjectURL = createObjectURLMock;
     global.URL.revokeObjectURL = revokeObjectURLMock;
 

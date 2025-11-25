@@ -1,3 +1,4 @@
+import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
@@ -6,10 +7,13 @@ import EvalFactory from '../factories/evalFactory';
 
 import type { Prompt } from '../../src/types/index';
 
-jest.mock('../../src/globalConfig/accounts', () => ({
-  ...jest.requireActual('../../src/globalConfig/accounts'),
-  getUserEmail: jest.fn(),
-}));
+vi.mock('../../src/globalConfig/accounts', async () => {
+  const actual = await vi.importActual('../../src/globalConfig/accounts');
+  return {
+    ...actual,
+    getUserEmail: vi.fn(),
+  };
+});
 
 describe('evaluator', () => {
   beforeAll(async () => {
@@ -177,7 +181,7 @@ describe('evaluator', () => {
 
     it('should use default author from getUserEmail when not provided', async () => {
       const mockEmail = 'default@example.com';
-      jest.mocked(getUserEmail).mockReturnValue(mockEmail);
+      vi.mocked(getUserEmail).mockReturnValue(mockEmail);
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
         { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
