@@ -32,6 +32,15 @@ export * from './providers';
 export * from './shared';
 export * from './tracing';
 
+// Extension hook context types for users writing custom extensions
+export type {
+  AfterAllExtensionHookContext,
+  AfterEachExtensionHookContext,
+  BeforeAllExtensionHookContext,
+  BeforeEachExtensionHookContext,
+  ExtensionHookContextMap,
+} from '../evaluatorHelpers';
+
 export type { EnvOverrides };
 
 export const CommandLineOptionsSchema = z.object({
@@ -78,6 +87,9 @@ export const CommandLineOptionsSchema = z.object({
   retryErrors: z.boolean().optional(),
 
   envPath: z.string().optional(),
+
+  // Extension hooks
+  extension: z.array(z.string()).optional(),
 });
 
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;

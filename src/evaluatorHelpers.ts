@@ -20,6 +20,7 @@ import {
   type Prompt,
   type TestCase,
   type TestSuite,
+  type UnifiedConfig,
 } from './types/index';
 import { renderVarsInObject } from './util/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
@@ -499,27 +500,69 @@ export async function renderPrompt(
 // Extension Hooks
 // ================================
 
-type BeforeAllExtensionHookContext = {
+/**
+ * Context passed to beforeAll extension hooks.
+ * Called once before the evaluation starts.
+ */
+export type BeforeAllExtensionHookContext = {
+  /** The test suite configuration (mutable) */
   suite: TestSuite;
 };
 
-type BeforeEachExtensionHookContext = {
+/**
+ * Context passed to beforeEach extension hooks.
+ * Called before each test case is evaluated.
+ */
+export type BeforeEachExtensionHookContext = {
+  /** The test case about to be evaluated (mutable) */
   test: TestCase;
 };
 
-type AfterEachExtensionHookContext = {
+/**
+ * Context passed to afterEach extension hooks.
+ * Called after each test case is evaluated.
+ */
+export type AfterEachExtensionHookContext = {
+  /** The test case that was evaluated */
   test: TestCase;
+  /** The result of the evaluation */
   result: EvaluateResult;
 };
 
-type AfterAllExtensionHookContext = {
+/**
+ * Context passed to afterAll extension hooks.
+ * Called once after all evaluations complete.
+ *
+ * @example
+ * ```javascript
+ * // extension.js
+ * module.exports = {
+ *   afterAll: async (context) => {
+ *     console.log(`Eval ${context.evalId} completed`);
+ *     console.log(`Results: ${context.results.length} tests`);
+ *     // Send to monitoring, database, etc.
+ *   }
+ * };
+ * ```
+ */
+export type AfterAllExtensionHookContext = {
+  /** The test suite configuration */
   suite: TestSuite;
+  /** All evaluation results */
   results: EvalResult[];
+  /** Completed prompts with metrics */
   prompts: CompletedPrompt[];
+  /** Unique identifier for this evaluation run */
+  evalId: string;
+  /** The full evaluation configuration */
+  config: Partial<UnifiedConfig>;
 };
 
-// Maps hook names to their context types.
-type HookContextMap = {
+/**
+ * Maps hook names to their context types.
+ * Used for type-safe extension hook invocation.
+ */
+export type ExtensionHookContextMap = {
   beforeAll: BeforeAllExtensionHookContext;
   beforeEach: BeforeEachExtensionHookContext;
   afterEach: AfterEachExtensionHookContext;
@@ -537,11 +580,11 @@ type HookContextMap = {
  *  - The updated context object, if the extension hook returns a valid context object. The updated context,
  *    if defined, must conform to the type T; otherwise, a validation error is thrown.
  */
-export async function runExtensionHook<HookName extends keyof HookContextMap>(
+export async function runExtensionHook<HookName extends keyof ExtensionHookContextMap>(
   extensions: string[] | null | undefined,
   hookName: HookName,
-  context: HookContextMap[HookName],
-): Promise<HookContextMap[HookName]> {
+  context: ExtensionHookContextMap[HookName],
+): Promise<ExtensionHookContextMap[HookName]> {
   if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
     return context;
   }
@@ -550,7 +593,7 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
     feature: 'extension_hook',
   });
 
-  let updatedContext: HookContextMap[HookName] = { ...context };
+  let updatedContext: ExtensionHookContextMap[HookName] = { ...context };
 
   for (const extension of extensions) {
     invariant(typeof extension === 'string', 'extension must be a string');
