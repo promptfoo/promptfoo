@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import Alert from '@mui/material/Alert';
@@ -13,7 +13,6 @@ import ProviderConfigEditor from './ProviderConfigEditor';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
 import type { ProviderOptions } from '../../types';
-import type { ProviderConfigEditorRef } from './ProviderConfigEditor';
 
 interface TargetConfigurationProps {
   onNext: () => void;
@@ -34,8 +33,12 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
   const [validationErrors, setValidationErrors] = useState<string | null>(null);
   const [shouldValidate, setShouldValidate] = useState<boolean>(false);
 
-  const configEditorRef = useRef<ProviderConfigEditorRef>(null);
+  const validateRef = useRef<(() => boolean) | null>(null);
   const { recordEvent } = useTelemetry();
+
+  const handleValidationRequest = useCallback((validator: () => boolean) => {
+    validateRef.current = validator;
+  }, []);
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_target_configuration' });
@@ -81,8 +84,8 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
     // Enable validation when button is clicked
     setShouldValidate(true);
 
-    // Use the ref to validate
-    const isValid = configEditorRef.current?.validate() ?? false;
+    // Call the validation function
+    const isValid = validateRef.current?.() ?? false;
 
     // Only proceed if there are no errors
     if (isValid && !validationErrors) {
@@ -133,7 +136,6 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
 
         {/* Provider Configuration Section */}
         <ProviderConfigEditor
-          ref={configEditorRef}
           provider={selectedTarget}
           setProvider={handleProviderChange}
           extensions={config.extensions}
@@ -143,6 +145,7 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
           onValidate={() => {
             // Validation errors will be displayed through the handleError function
           }}
+          onValidationRequest={handleValidationRequest}
           providerType={providerType}
         />
 
