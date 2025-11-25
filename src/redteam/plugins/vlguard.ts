@@ -1,4 +1,6 @@
 import dedent from 'dedent';
+import { fetchWithCache } from '../../cache';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
   ImageDatasetGraderBase,
@@ -6,14 +8,16 @@ import {
   type ImageDatasetPluginConfig,
 } from './imageDatasetPluginBase';
 import {
+  fetchImageAsBase64,
   fisherYatesShuffle,
   getStringField,
   ImageDatasetManager,
-  processImageData,
 } from './imageDatasetUtils';
 
 const PLUGIN_ID = 'promptfoo:redteam:vlguard';
 const DATASET_PATH = 'huggingface://datasets/ys-zong/VLGuard?split=train';
+const METADATA_URL = 'https://huggingface.co/datasets/ys-zong/VLGuard/resolve/main/train.json';
+const DATASET_SERVER_URL = 'https://datasets-server.huggingface.co/rows';
 
 // Valid categories in the VLGuard dataset
 // Support both old (lowercase) and new (title case) formats for backwards compatibility
@@ -107,16 +111,37 @@ interface VLGuardPluginConfig extends ImageDatasetPluginConfig {
 }
 
 /**
+ * Metadata record from train.json
+ */
+interface VLGuardMetadataRecord {
+  id: string;
+  image: string; // Relative path like "bad_ads/filename.png"
+  safe: boolean;
+  harmful_category?: string;
+  harmful_subcategory?: string;
+  'instr-resp'?: Array<{
+    instruction?: string;
+    response?: string;
+    safe_instruction?: string;
+    unsafe_instruction?: string;
+  }>;
+}
+
+/**
  * DatasetManager to handle VLGuard dataset caching and filtering
+ * Fetches metadata from train.json and images from HuggingFace
  * @internal - exported for testing purposes only
  */
 export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   private static instance: VLGuardDatasetManager | null = null;
   protected pluginId = 'vlguard';
   protected datasetPath = DATASET_PATH;
-  // Fetch enough records to ensure good category coverage while keeping memory reasonable
-  // Note: This fetches metadata only; actual images are processed with bounded concurrency
+  // Fetch enough metadata records to ensure good category coverage
+  // Images are fetched on-demand with bounded concurrency
   protected fetchLimit = 500;
+
+  // Cache for metadata from train.json
+  private metadataCache: VLGuardMetadataRecord[] | null = null;
 
   private constructor() {
     super();
@@ -138,112 +163,114 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   static clearCache(): void {
     if (VLGuardDatasetManager.instance) {
       VLGuardDatasetManager.instance.datasetCache = null;
+      VLGuardDatasetManager.instance.metadataCache = null;
     }
   }
 
   /**
-   * Process a single record with error handling
+   * Required by base class but not used since we override ensureDatasetLoaded
    */
-  private async processSingleRecord(record: any): Promise<VLGuardInput | null> {
+  protected async processRecords(_records: any[]): Promise<VLGuardInput[]> {
+    throw new Error('processRecords should not be called directly - use ensureDatasetLoaded');
+  }
+
+  /**
+   * Fetch metadata from train.json
+   */
+  private async fetchMetadata(): Promise<VLGuardMetadataRecord[]> {
+    if (this.metadataCache) {
+      return this.metadataCache;
+    }
+
+    logger.debug('[vlguard] Fetching metadata from train.json');
+
+    const hfToken =
+      getEnvString('HF_TOKEN') ||
+      getEnvString('HF_API_TOKEN') ||
+      getEnvString('HUGGING_FACE_HUB_TOKEN');
+
+    const headers: Record<string, string> = {};
+    if (hfToken) {
+      headers.Authorization = `Bearer ${hfToken}`;
+    }
+
     try {
-      // Validate required fields
-      if (!record.image && !record.vars?.image) {
-        logger.warn('[vlguard] Record is missing image data, skipping');
-        return null;
+      const response = await fetchWithCache(METADATA_URL, {
+        headers,
+      });
+
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`Failed to fetch VLGuard metadata: ${response.statusText}`);
       }
 
-      // Process the image data (handle both imagefolder format and vars format)
-      const imageSource = record.image || record.vars?.image;
-      const imageData = await processImageData(imageSource, 'vlguard');
+      const metadata = response.data as VLGuardMetadataRecord[];
+      logger.info(`[vlguard] Loaded ${metadata.length} metadata records from train.json`);
+
+      this.metadataCache = metadata;
+      return metadata;
+    } catch (error) {
+      logger.error(
+        `[vlguard] Error fetching metadata: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Process a single metadata record with its corresponding image URL
+   */
+  private async processSingleRecord(
+    record: VLGuardMetadataRecord,
+    imageUrl: string,
+  ): Promise<VLGuardInput | null> {
+    try {
+      // Fetch the image and convert to base64
+      const imageData = await fetchImageAsBase64(imageUrl, 'vlguard');
       if (!imageData) {
+        logger.warn(`[vlguard] Failed to fetch image for record: ${record.id}`);
         return null;
       }
 
       // Determine if this is a safe or unsafe record
-      const isSafe = record.safe ?? record.vars?.safe ?? false;
+      const isSafe = record.safe ?? false;
 
-      // Extract category and subcategory
-      // For unsafe records, use unsafe_question_category/subcategory or category/subcategory
-      // For safe records with unsafe questions, use unsafe_question_category/subcategory
+      // Extract category and subcategory from metadata
       let category: string;
       let subcategory: string;
       let question: string;
 
       if (isSafe) {
-        // Safe record - look for safe_question_category, safe_question_subcategory
-        // and also check instr-resp array if present
-        const instrResp = record['instr-resp'] || record.vars?.['instr-resp'];
+        // Safe records may have harmful_category/subcategory for context
+        // but the question should be a safe one
+        category = getStringField(record.harmful_category, 'unknown');
+        subcategory = getStringField(record.harmful_subcategory, 'unknown');
 
-        category = getStringField(
-          record.safe_question_category ||
-            record.vars?.safe_question_category ||
-            record.unsafe_question_category ||
-            record.vars?.unsafe_question_category ||
-            record.category ||
-            record.vars?.category,
-          'unknown',
-        );
-        subcategory = getStringField(
-          record.safe_question_subcategory ||
-            record.vars?.safe_question_subcategory ||
-            record.unsafe_question_subcategory ||
-            record.vars?.unsafe_question_subcategory ||
-            record.subcategory ||
-            record.vars?.subcategory,
-          'unknown',
-        );
-
-        // Try to get question from safe_instruction, safe_question, or instr-resp
-        let safeQuestion = getStringField(
-          record.safe_instruction ||
-            record.vars?.safe_instruction ||
-            record.safe_question ||
-            record.vars?.safe_question,
-        );
-
-        // If no direct field, try to extract from instr-resp array
-        if (!safeQuestion && instrResp && typeof instrResp === 'object') {
-          if ('instruction' in instrResp && typeof instrResp.instruction === 'string') {
-            safeQuestion = instrResp.instruction;
-          } else if (
-            'safe_instruction' in instrResp &&
-            typeof instrResp.safe_instruction === 'string'
-          ) {
-            safeQuestion = instrResp.safe_instruction;
-          }
+        // Get safe instruction from instr-resp
+        const instrResp = record['instr-resp'];
+        if (instrResp && Array.isArray(instrResp) && instrResp.length > 0) {
+          // Look for safe_instruction first, then fall back to instruction
+          const firstEntry = instrResp[0];
+          question =
+            firstEntry.safe_instruction ||
+            firstEntry.instruction ||
+            firstEntry.unsafe_instruction ||
+            '';
+        } else {
+          question = '';
         }
-
-        // Fall back to unsafe_question or generic question if no safe question found
-        question =
-          safeQuestion ||
-          getStringField(
-            record.unsafe_question ||
-              record.vars?.unsafe_question ||
-              record.question ||
-              record.vars?.question,
-          );
       } else {
-        // Unsafe record - try multiple field paths
-        category = getStringField(
-          record.category ||
-            record.vars?.category ||
-            record.unsafe_question_category ||
-            record.vars?.unsafe_question_category,
-          'unknown',
-        );
-        subcategory = getStringField(
-          record.subcategory ||
-            record.vars?.subcategory ||
-            record.unsafe_question_subcategory ||
-            record.vars?.unsafe_question_subcategory,
-          'unknown',
-        );
-        question = getStringField(
-          record.unsafe_instruction ||
-            record.vars?.unsafe_instruction ||
-            record.question ||
-            record.vars?.question,
-        );
+        // Unsafe record - use harmful_category/subcategory
+        category = getStringField(record.harmful_category, 'unknown');
+        subcategory = getStringField(record.harmful_subcategory, 'unknown');
+
+        // Get instruction from instr-resp
+        const instrResp = record['instr-resp'];
+        if (instrResp && Array.isArray(instrResp) && instrResp.length > 0) {
+          const firstEntry = instrResp[0];
+          question = firstEntry.instruction || firstEntry.unsafe_instruction || '';
+        } else {
+          question = '';
+        }
       }
 
       return {
@@ -255,16 +282,76 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
       };
     } catch (error) {
       logger.warn(
-        `[vlguard] Error processing record: ${error instanceof Error ? error.message : String(error)}`,
+        `[vlguard] Error processing record ${record.id}: ${error instanceof Error ? error.message : String(error)}`,
       );
       return null;
     }
   }
 
   /**
-   * Process records with bounded concurrency to avoid OOM
+   * Fetch image URLs from the datasets-server API (handles pagination)
    */
-  protected async processRecords(records: any[]): Promise<VLGuardInput[]> {
+  private async fetchImageUrls(totalRows: number): Promise<Map<number, string>> {
+    const hfToken =
+      getEnvString('HF_TOKEN') ||
+      getEnvString('HF_API_TOKEN') ||
+      getEnvString('HUGGING_FACE_HUB_TOKEN');
+
+    const headers: Record<string, string> = {};
+    if (hfToken) {
+      headers.Authorization = `Bearer ${hfToken}`;
+    }
+
+    const imageMap = new Map<number, string>();
+    const PAGE_SIZE = 100; // datasets-server limit
+
+    // Fetch in batches
+    for (let offset = 0; offset < totalRows; offset += PAGE_SIZE) {
+      const length = Math.min(PAGE_SIZE, totalRows - offset);
+      const url = `${DATASET_SERVER_URL}?dataset=ys-zong%2FVLGuard&split=train&config=default&offset=${offset}&length=${length}`;
+
+      try {
+        const response = await fetchWithCache(url, {
+          headers,
+        });
+
+        if (response.status < 200 || response.status >= 300) {
+          logger.warn(
+            `[vlguard] Failed to fetch images at offset ${offset}: ${response.statusText}`,
+          );
+          continue;
+        }
+
+        const data = response.data as {
+          rows: Array<{ row_idx: number; row: { image: { src: string } } }>;
+        };
+
+        for (const { row_idx, row } of data.rows) {
+          if (row.image?.src) {
+            imageMap.set(row_idx, row.image.src);
+          }
+        }
+
+        logger.debug(
+          `[vlguard] Fetched image URLs batch ${Math.floor(offset / PAGE_SIZE) + 1}/${Math.ceil(totalRows / PAGE_SIZE)}`,
+        );
+      } catch (error) {
+        logger.warn(
+          `[vlguard] Error fetching images at offset ${offset}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    return imageMap;
+  }
+
+  /**
+   * Process metadata records with bounded concurrency to avoid OOM
+   */
+  private async processMetadataRecords(
+    records: Array<{ metadata: VLGuardMetadataRecord; rowIndex: number }>,
+    imageMap: Map<number, string>,
+  ): Promise<VLGuardInput[]> {
     const CONCURRENCY_LIMIT = 10; // Process 10 images at a time
     const processedRecords: VLGuardInput[] = [];
 
@@ -272,7 +359,14 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
     for (let i = 0; i < records.length; i += CONCURRENCY_LIMIT) {
       const batch = records.slice(i, i + CONCURRENCY_LIMIT);
       const batchResults = await Promise.all(
-        batch.map((record) => this.processSingleRecord(record)),
+        batch.map(({ metadata, rowIndex }) => {
+          const imageUrl = imageMap.get(rowIndex);
+          if (!imageUrl) {
+            logger.warn(`[vlguard] No image URL for row index ${rowIndex}`);
+            return Promise.resolve(null);
+          }
+          return this.processSingleRecord(metadata, imageUrl);
+        }),
       );
 
       // Filter out nulls and add to results
@@ -286,6 +380,48 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
     }
 
     return processedRecords;
+  }
+
+  /**
+   * Override ensureDatasetLoaded to use our custom metadata fetching
+   */
+  protected async ensureDatasetLoaded(): Promise<void> {
+    if (this.datasetCache) {
+      logger.debug(`[vlguard] Using cached dataset with ${this.datasetCache.length} records`);
+      return;
+    }
+
+    logger.debug('[vlguard] Loading dataset...');
+
+    // Fetch metadata from train.json
+    const metadata = await this.fetchMetadata();
+    logger.info(`[vlguard] Loaded ${metadata.length} metadata records`);
+
+    // Fetch image URLs from datasets-server (the datasets-server has slightly fewer records)
+    // We fetch all available images and match by row index
+    const totalImages = Math.min(metadata.length, 1999); // datasets-server has 1999 rows
+    const imageMap = await this.fetchImageUrls(totalImages);
+    logger.info(`[vlguard] Fetched ${imageMap.size} image URLs from datasets-server`);
+
+    // Create index mapping: metadata records with their row indices
+    // The datasets-server rows are in the same order as train.json entries
+    const indexedRecords: Array<{ metadata: VLGuardMetadataRecord; rowIndex: number }> = [];
+    for (let i = 0; i < metadata.length && i < totalImages; i++) {
+      if (imageMap.has(i)) {
+        indexedRecords.push({ metadata: metadata[i], rowIndex: i });
+      }
+    }
+
+    // Take a sample of records based on fetchLimit
+    const sampleSize = Math.min(this.fetchLimit, indexedRecords.length);
+    const sampledRecords = fisherYatesShuffle([...indexedRecords]).slice(0, sampleSize);
+
+    logger.info(`[vlguard] Processing ${sampledRecords.length} records from dataset`);
+
+    // Process the sampled records (fetch images with bounded concurrency)
+    this.datasetCache = await this.processMetadataRecords(sampledRecords, imageMap);
+
+    logger.info(`[vlguard] Successfully loaded ${this.datasetCache.length} records`);
   }
 
   /**
