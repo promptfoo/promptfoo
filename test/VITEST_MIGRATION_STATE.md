@@ -170,10 +170,10 @@ npm run test:jest
 npm test
 
 # Run specific Vitest directory
-npm run test:vitest -- --run test/matchers
+npm run test:vitest -- test/matchers
 
 # Run specific Jest directory
-npm test -- test/providers
+npm run test:jest -- test/providers
 ```
 
 ## Next Steps for Migration

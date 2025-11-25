@@ -3,7 +3,7 @@ import { API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 
-vi.mock('../../src/util/fetch/index.ts');
+vi.mock('../../src/util/fetch/index');
 vi.mock('../../src/logger');
 vi.mock('../../src/globalConfig/globalConfig');
 
