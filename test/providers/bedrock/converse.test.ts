@@ -180,6 +180,90 @@ describe('AwsBedrockConverseProvider', () => {
     });
   });
 
+  describe('base class methods', () => {
+    it('should return correct region from config', () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'eu-west-1' },
+      });
+      expect(provider.getRegion()).toBe('eu-west-1');
+    });
+
+    it('should return default region when not specified', () => {
+      const originalEnv = process.env.AWS_BEDROCK_REGION;
+      delete process.env.AWS_BEDROCK_REGION;
+
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {},
+      });
+      expect(provider.getRegion()).toBe('us-east-1');
+
+      if (originalEnv) {
+        process.env.AWS_BEDROCK_REGION = originalEnv;
+      }
+    });
+
+    it('should return region from environment variable', () => {
+      const originalEnv = process.env.AWS_BEDROCK_REGION;
+      process.env.AWS_BEDROCK_REGION = 'ap-northeast-1';
+
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {},
+      });
+      expect(provider.getRegion()).toBe('ap-northeast-1');
+
+      if (originalEnv) {
+        process.env.AWS_BEDROCK_REGION = originalEnv;
+      } else {
+        delete process.env.AWS_BEDROCK_REGION;
+      }
+    });
+
+    it('should get credentials from config when accessKeyId and secretAccessKey are provided', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+          secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+          sessionToken: 'session-token-123',
+        },
+      });
+
+      const credentials = await provider.getCredentials();
+      expect(credentials).toEqual({
+        accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        sessionToken: 'session-token-123',
+      });
+    });
+
+    it('should return undefined credentials when API key is used', async () => {
+      const originalEnv = process.env.AWS_BEARER_TOKEN_BEDROCK;
+      process.env.AWS_BEARER_TOKEN_BEDROCK = 'bearer-token-123';
+
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined();
+
+      if (originalEnv) {
+        process.env.AWS_BEARER_TOKEN_BEDROCK = originalEnv;
+      } else {
+        delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      }
+    });
+
+    it('should return undefined credentials when using default credential chain', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined();
+    });
+  });
+
   describe('callApi', () => {
     it('should make Converse API call with basic text prompt', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
@@ -982,6 +1066,334 @@ Third line`;
       }
     });
   });
+
+  describe('parseConverseMessages - advanced content blocks', () => {
+    it('should parse image content with data URL format', () => {
+      const base64Image =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              image: {
+                source: {
+                  bytes: `data:image/png;base64,${base64Image}`,
+                },
+              },
+            },
+          ],
+        },
+      ]);
+
+      const result = parseConverseMessages(prompt);
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].content).toHaveLength(1);
+      expect((result.messages[0].content![0] as any).image).toBeDefined();
+      expect((result.messages[0].content![0] as any).image.format).toBe('png');
+    });
+
+    it('should parse image content with raw base64 bytes', () => {
+      const base64Image =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              image: {
+                format: 'png',
+                source: {
+                  bytes: base64Image,
+                },
+              },
+            },
+          ],
+        },
+      ]);
+
+      const result = parseConverseMessages(prompt);
+
+      expect(result.messages).toHaveLength(1);
+      expect((result.messages[0].content![0] as any).image).toBeDefined();
+    });
+
+    it('should parse image content with Anthropic format (source.data)', () => {
+      const base64Image =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              image: {
+                source: {
+                  type: 'base64',
+                  media_type: 'image/jpeg',
+                  data: base64Image,
+                },
+              },
+            },
+          ],
+        },
+      ]);
+
+      const result = parseConverseMessages(prompt);
+
+      expect(result.messages).toHaveLength(1);
+      expect((result.messages[0].content![0] as any).image).toBeDefined();
+      expect((result.messages[0].content![0] as any).image.format).toBe('jpeg');
+    });
+
+    it('should normalize jpg format to jpeg', () => {
+      const base64Image =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              image: {
+                source: {
+                  bytes: `data:image/jpg;base64,${base64Image}`,
+                },
+              },
+            },
+          ],
+        },
+      ]);
+
+      const result = parseConverseMessages(prompt);
+
+      expect((result.messages[0].content![0] as any).image.format).toBe('jpeg');
+    });
+
+    it('should parse OpenAI image_url format with data URL', () => {
+      const base64Image =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`,
+              },
+            },
+          ],
+        },
+      ]);
+
+      const result = parseConverseMessages(prompt);
+
+      expect(result.messages).toHaveLength(1);
+      expect((result.messages[0].content![0] as any).image).toBeDefined();
+    });
+
+    it('should parse document content with data URL', () => {
+      const base64Doc = Buffer.from('Hello, world!').toString('base64');
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              document: {
+                format: 'txt',
+                name: 'test.txt',
+                source: {
+                  bytes: `data:text/plain;base64,${base64Doc}`,
+                },
+              },
+            },
+          ],
+        },
+      ]);
+
+      const result = parseConverseMessages(prompt);
+
+      expect(result.messages).toHaveLength(1);
+      expect((result.messages[0].content![0] as any).document).toBeDefined();
+      expect((result.messages[0].content![0] as any).document.format).toBe('txt');
+      expect((result.messages[0].content![0] as any).document.name).toBe('test.txt');
+    });
+
+    it('should parse document content with raw base64', () => {
+      const base64Doc = Buffer.from('Hello, world!').toString('base64');
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              document: {
+                format: 'pdf',
+                name: 'document.pdf',
+                source: {
+                  bytes: base64Doc,
+                },
+              },
+            },
+          ],
+        },
+      ]);
+
+      const result = parseConverseMessages(prompt);
+
+      expect((result.messages[0].content![0] as any).document.format).toBe('pdf');
+    });
+
+    it('should handle unknown content block types by converting to text', () => {
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'custom_type',
+              data: 'some custom data',
+            },
+          ],
+        },
+      ]);
+
+      const result = parseConverseMessages(prompt);
+
+      expect(result.messages).toHaveLength(1);
+      expect((result.messages[0].content![0] as any).text).toContain('custom_type');
+    });
+
+    it('should handle string content blocks in array', () => {
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: ['Hello', 'World'],
+        },
+      ]);
+
+      const result = parseConverseMessages(prompt);
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].content).toHaveLength(2);
+      expect((result.messages[0].content![0] as any).text).toBe('Hello');
+      expect((result.messages[0].content![1] as any).text).toBe('World');
+    });
+
+    it('should handle tool_result with array content', () => {
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              toolResult: {
+                toolUseId: 'tool-123',
+                content: ['result line 1', 'result line 2'],
+                status: 'success',
+              },
+            },
+          ],
+        },
+      ]);
+
+      const result = parseConverseMessages(prompt);
+
+      expect(result.messages).toHaveLength(1);
+      expect((result.messages[0].content![0] as any).toolResult).toBeDefined();
+      expect((result.messages[0].content![0] as any).toolResult.content).toHaveLength(2);
+    });
+  });
+
+  describe('tool configuration - edge cases', () => {
+    it('should handle toolChoice "any"', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [{ name: 'test_tool', description: 'Test' }],
+          toolChoice: 'any',
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = jest.requireMock(
+        '@aws-sdk/client-bedrock-runtime',
+      ) as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            toolChoice: { any: {} },
+          }),
+        }),
+      );
+    });
+
+    it('should handle toolSpec format directly', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [
+            {
+              toolSpec: {
+                name: 'native_tool',
+                description: 'A native Converse API tool',
+                inputSchema: {
+                  json: { type: 'object', properties: {} },
+                },
+              },
+            },
+          ],
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = jest.requireMock(
+        '@aws-sdk/client-bedrock-runtime',
+      ) as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            tools: expect.arrayContaining([
+              expect.objectContaining({
+                toolSpec: expect.objectContaining({
+                  name: 'native_tool',
+                }),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('provider methods', () => {
+    it('should return correct toString representation', () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      expect(provider.toString()).toBe(
+        '[AWS Bedrock Converse Provider anthropic.claude-3-5-sonnet-20241022-v2:0]',
+      );
+    });
+  });
+
+  // Note: functionToolCallbacks tests are covered by the existing
+  // "should execute functionToolCallbacks when defined" test in the callApi suite.
+  // Additional edge case tests for callback return types are complex due to mock
+  // isolation issues with the Bedrock client singleton pattern.
 
   describe('streaming', () => {
     // Helper to create async iterable from events array
