@@ -45,7 +45,7 @@ describe('wrapper', () => {
     jest.clearAllMocks();
     jest
       .mocked(validatePythonPath)
-      .mockImplementation((pythonPath: string, isExplicit: boolean): Promise<string> => {
+      .mockImplementation((pythonPath: string, _isExplicit: boolean): Promise<string> => {
         state.cachedPythonPath = pythonPath;
         return Promise.resolve(pythonPath);
       });
@@ -101,7 +101,7 @@ describe('wrapper', () => {
 
       // Configure the module-level mocks with realistic delays to simulate Windows behavior
       // This is critical for testing race conditions that only appear under slow I/O
-      jest.mocked(tryPath).mockImplementation(async (path: string) => {
+      jest.mocked(tryPath).mockImplementation(async (_path: string) => {
         // Simulate slow Windows process spawning and antivirus scanning
         await new Promise((resolve) => setTimeout(resolve, 50));
         return '/usr/bin/python3';

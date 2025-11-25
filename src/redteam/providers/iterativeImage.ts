@@ -25,7 +25,7 @@ import type {
   ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
 
 interface ImageGenerationOutput {
   prompt: string;
@@ -301,6 +301,7 @@ async function runRedteamConversation({
         },
         filters,
         targetProvider,
+        [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
       );
 
       const targetResponse = await getTargetResponse(

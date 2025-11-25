@@ -27,6 +27,7 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                                   | Description                      |
 | -------------------------------------------------------------------------- | -------------------------------- |
+| `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Latest Claude 4.5 Opus model     |
 | `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Latest Claude 4.1 Opus model     |
 | `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Latest Claude 4 Opus model       |
 | `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Latest Claude 4.5 Sonnet model   |
@@ -45,6 +46,7 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                         | AWS Bedrock ([documentation](/docs/providers/aws-bedrock)) | GCP Vertex AI ([documentation](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5-latest)     | anthropic.claude-opus-4-5-20251101-v1:0                    | claude-opus-4-5@20251101                                |
 | Claude 4.1 Opus   | claude-opus-4-1-20250805                              | anthropic.claude-opus-4-1-20250805-v1:0                    | claude-opus-4-1@20250805                                |
 | Claude 4 Opus     | claude-opus-4-20250514 (claude-opus-4-latest)         | anthropic.claude-opus-4-20250514-v1:0                      | claude-opus-4@20250514                                  |
 | Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5-latest) | anthropic.claude-sonnet-4-5-20250929-v1:0                  | claude-sonnet-4-5@20250929                              |
@@ -68,6 +70,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | top_k           | -                     | Only sample from the top K options for each subsequent token      |
 | tools           | -                     | An array of tool or function definitions for the model to call    |
 | tool_choice     | -                     | An object specifying the tool to call                             |
+| output_format   | -                     | JSON schema configuration for structured outputs                  |
 | thinking        | -                     | Configuration for enabling Claude's extended thinking capability  |
 | showThinking    | -                     | Whether to include thinking content in the output (default: true) |
 | headers         | -                     | Additional headers to be sent with the API request                |
@@ -433,6 +436,66 @@ When using extended output:
 
 See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
 
+### Structured Outputs
+
+Structured outputs constrain Claude's responses to a JSON schema. Available for Claude Sonnet 4.5 and Claude Opus 4.1.
+
+#### JSON Outputs
+
+Add `output_format` to get structured responses:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      output_format:
+        type: json_schema
+        schema:
+          type: object
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+          required:
+            - name
+            - email
+          additionalProperties: false
+```
+
+Load schemas from files with `schema: file://path/to/schema.json`.
+
+#### Strict Tool Use
+
+Add `strict: true` to tool definitions for schema-validated parameters:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      tools:
+        - name: get_weather
+          strict: true
+          input_schema:
+            type: object
+            properties:
+              location:
+                type: string
+            required:
+              - location
+            additionalProperties: false
+```
+
+#### Limitations
+
+**Supported:** object, array, string, integer, number, boolean, null, `enum`, `required`, `additionalProperties: false`
+
+**Not supported:** recursive schemas, `minimum`/`maximum`, `minLength`/`maxLength`
+
+**Incompatible with:** citations, message prefilling
+
+See [Anthropic's guide](https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs) and the [structured outputs example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs).
+
 ## Model-Graded Tests
 
 [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` will automatically use Anthropic as the grading provider if `ANTHROPIC_API_KEY` is set and `OPENAI_API_KEY` is not set.
@@ -492,6 +555,7 @@ We provide several example implementations demonstrating Claude's capabilities:
 #### Core Features
 
 - [Tool Use Example](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use) - Shows how to use Claude's tool calling capabilities
+- [Structured Outputs Example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs) - Demonstrates JSON outputs and strict tool use for guaranteed schema compliance
 - [Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision) - Demonstrates using Claude's vision capabilities
 
 #### Model Comparisons & Evaluations

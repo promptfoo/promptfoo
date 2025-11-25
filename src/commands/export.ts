@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
@@ -176,7 +177,9 @@ export function exportCommand(program: Command) {
     .action(async (cmdObj) => {
       try {
         const configDir = getConfigDirectoryPath(true);
-        const logDir = path.join(configDir, 'logs');
+        const logDir = getEnvString('PROMPTFOO_LOG_DIR')
+          ? path.resolve(getEnvString('PROMPTFOO_LOG_DIR')!)
+          : path.join(configDir, 'logs');
 
         if (!fs.existsSync(logDir)) {
           logger.error('No log directory found. Logs have not been created yet.');
