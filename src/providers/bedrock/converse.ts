@@ -271,20 +271,119 @@ export function parseConverseMessages(prompt: string): {
               } else if (block.type === 'text') {
                 contentBlocks.push({ text: block.text });
               } else if (block.type === 'image' || block.image) {
-                // Handle image content
+                // Handle image content - multiple formats supported
                 const imageData = block.image || block;
-                contentBlocks.push({
-                  image: {
-                    format:
-                      imageData.format || imageData.source?.media_type?.split('/')[1] || 'png',
-                    source: {
-                      bytes:
-                        typeof imageData.source?.data === 'string'
-                          ? Buffer.from(imageData.source.data, 'base64')
-                          : imageData.source?.bytes,
+                let bytes: Buffer | undefined;
+                let format: string = 'png';
+
+                // Determine format from various sources
+                if (imageData.format) {
+                  format = imageData.format;
+                } else if (imageData.source?.media_type) {
+                  format = imageData.source.media_type.split('/')[1] || 'png';
+                }
+
+                // Get bytes from various sources
+                if (imageData.source?.bytes) {
+                  const rawBytes = imageData.source.bytes;
+                  if (typeof rawBytes === 'string') {
+                    // Check for data URL format: data:image/jpeg;base64,...
+                    if (rawBytes.startsWith('data:')) {
+                      const matches = rawBytes.match(/^data:image\/([^;]+);base64,(.+)$/);
+                      if (matches) {
+                        format = matches[1] === 'jpg' ? 'jpeg' : matches[1];
+                        bytes = Buffer.from(matches[2], 'base64');
+                      }
+                    } else {
+                      // Assume raw base64 string
+                      bytes = Buffer.from(rawBytes, 'base64');
+                    }
+                  } else if (Buffer.isBuffer(rawBytes)) {
+                    bytes = rawBytes;
+                  }
+                } else if (imageData.source?.data) {
+                  // Anthropic format: {source: {type: 'base64', media_type: '...', data: '...'}}
+                  bytes = Buffer.from(imageData.source.data, 'base64');
+                }
+
+                if (bytes) {
+                  // Normalize format names for Converse API
+                  if (format === 'jpg') {
+                    format = 'jpeg';
+                  }
+                  contentBlocks.push({
+                    image: {
+                      format: format as 'png' | 'jpeg' | 'gif' | 'webp',
+                      source: { bytes },
                     },
-                  },
-                });
+                  });
+                } else {
+                  logger.warn('Could not parse image content block', { block });
+                }
+              } else if (block.type === 'image_url' || block.image_url) {
+                // OpenAI-compatible image_url format
+                const imageUrl = block.image_url?.url || block.url;
+                if (typeof imageUrl === 'string' && imageUrl.startsWith('data:')) {
+                  const matches = imageUrl.match(/^data:image\/([^;]+);base64,(.+)$/);
+                  if (matches) {
+                    const format = matches[1] === 'jpg' ? 'jpeg' : matches[1];
+                    const bytes = Buffer.from(matches[2], 'base64');
+                    contentBlocks.push({
+                      image: {
+                        format: format as 'png' | 'jpeg' | 'gif' | 'webp',
+                        source: { bytes },
+                      },
+                    });
+                  }
+                } else {
+                  logger.warn('Unsupported image_url format (only data URLs supported)', {
+                    imageUrl,
+                  });
+                }
+              } else if (block.type === 'document' || block.document) {
+                // Handle document content
+                const docData = block.document || block;
+                let bytes: Buffer | undefined;
+                const format: string = docData.format || 'txt';
+                const name: string = docData.name || 'document';
+
+                if (docData.source?.bytes) {
+                  const rawBytes = docData.source.bytes;
+                  if (typeof rawBytes === 'string') {
+                    // Check for data URL format
+                    if (rawBytes.startsWith('data:')) {
+                      const matches = rawBytes.match(/^data:[^;]+;base64,(.+)$/);
+                      if (matches) {
+                        bytes = Buffer.from(matches[1], 'base64');
+                      }
+                    } else {
+                      bytes = Buffer.from(rawBytes, 'base64');
+                    }
+                  } else if (Buffer.isBuffer(rawBytes)) {
+                    bytes = rawBytes;
+                  }
+                }
+
+                if (bytes) {
+                  contentBlocks.push({
+                    document: {
+                      format: format as
+                        | 'pdf'
+                        | 'csv'
+                        | 'doc'
+                        | 'docx'
+                        | 'xls'
+                        | 'xlsx'
+                        | 'html'
+                        | 'txt'
+                        | 'md',
+                      name,
+                      source: { bytes },
+                    },
+                  });
+                } else {
+                  logger.warn('Could not parse document content block', { block });
+                }
               } else if (block.type === 'tool_use' || block.toolUse) {
                 const toolUseData = block.toolUse || block;
                 contentBlocks.push({
