@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
+import ErrorBoundary from '@app/components/ErrorBoundary';
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
 import UpdateBanner from '@app/components/UpdateBanner';
@@ -363,12 +364,14 @@ export default function PageShell() {
   return (
     <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
       <PostHogProvider>
-        <Layout>
-          <Navigation onToggleDarkMode={toggleDarkMode} />
-          <UpdateBanner />
-          <Outlet />
-          <PostHogPageViewTracker />
-        </Layout>
+        <ErrorBoundary name="Application">
+          <Layout>
+            <Navigation onToggleDarkMode={toggleDarkMode} />
+            <UpdateBanner />
+            <Outlet />
+            <PostHogPageViewTracker />
+          </Layout>
+        </ErrorBoundary>
       </PostHogProvider>
     </ThemeProvider>
   );

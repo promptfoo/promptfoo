@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { reportReactError } from '@app/utils/globalErrorHandler';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -37,11 +38,8 @@ class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
     this.setState({ errorInfo });
 
-    // Log to console
-    console.error(`Error in ${this.props.name || 'component'}:`, {
-      error,
-      componentStack: errorInfo.componentStack,
-    });
+    // Report to global error handler (logs to console and PostHog)
+    reportReactError(error, errorInfo.componentStack, this.props.name);
   }
 
   private handleReload = (): void => {

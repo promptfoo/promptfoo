@@ -3,7 +3,11 @@ import { createRoot } from 'react-dom/client';
 
 import App from './App';
 import './index.css';
+import { initializeGlobalErrorHandlers } from '@app/utils/globalErrorHandler';
 import { initializeScrollTimelinePolyfill } from '@app/utils/scrollTimelinePolyfill';
+
+// Initialize global error handlers to catch uncaught errors and unhandled rejections
+initializeGlobalErrorHandlers();
 
 // Initialize the scroll-timeline polyfill if needed
 initializeScrollTimelinePolyfill();
