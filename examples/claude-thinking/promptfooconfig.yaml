@@ -3,7 +3,7 @@ description: 'Claude Thinking Example'
 prompts:
   - file://prompts.txt
 providers:
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-5-20250929
     config:
       stream: true # Required for thinking operations
       thinking:

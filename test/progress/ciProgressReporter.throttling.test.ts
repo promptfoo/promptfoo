@@ -1,20 +1,23 @@
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
 import logger from '../../src/logger';
 
 // Mock the logger
-jest.mock('../../src/logger', () => ({
-  info: jest.fn(),
-  error: jest.fn(),
+vi.mock('../../src/logger', () => ({
+  default: {
+    info: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 describe('CIProgressReporter - Error Throttling', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('should throttle rapid error messages', () => {
@@ -34,7 +37,7 @@ describe('CIProgressReporter - Error Throttling', () => {
     expect(logger.error).toHaveBeenCalledTimes(1);
 
     // Advance time by 5 seconds (throttle period)
-    jest.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(5000);
 
     // Next error should be logged
     reporter.error('Error 5');
@@ -47,7 +50,7 @@ describe('CIProgressReporter - Error Throttling', () => {
     reporter.start();
 
     // Simulate long-running evaluation
-    jest.advanceTimersByTime(900000); // 15 minutes
+    vi.advanceTimersByTime(900000); // 15 minutes
     reporter.update(500);
 
     // First error logged
@@ -60,7 +63,7 @@ describe('CIProgressReporter - Error Throttling', () => {
     expect(logger.error).toHaveBeenCalledTimes(1);
 
     // Advance past throttle period
-    jest.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(5000);
     reporter.error('Final error');
     expect(logger.error).toHaveBeenCalledTimes(2);
   });

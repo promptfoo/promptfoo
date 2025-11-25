@@ -25,7 +25,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
-} from '../../../src/types';
+} from '../../../src/types/index';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
 jest.mock('../../../src/providers/openai');
@@ -988,7 +988,7 @@ describe('Stop Reason Logic', () => {
 
     function determineStopReason(
       passed: boolean,
-      currentScore: number,
+      _currentScore: number,
     ): 'GRADER_FAILED' | undefined {
       if (passed === false) {
         return 'GRADER_FAILED';
@@ -1006,7 +1006,7 @@ describe('Stop Reason Logic', () => {
 
     function determineStopReason(
       passed: boolean,
-      currentScore: number,
+      _currentScore: number,
     ): 'GRADER_FAILED' | undefined {
       if (passed === false) {
         return 'GRADER_FAILED';

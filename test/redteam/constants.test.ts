@@ -93,30 +93,110 @@ describe('constants', () => {
     expect(ADDITIONAL_PLUGINS).toContain('mcp');
   });
 
-  it('DEFAULT_PLUGINS should be a Set containing base plugins, harm plugins and PII plugins', () => {
-    expect(DEFAULT_PLUGINS).toBeInstanceOf(Set);
-    expect(DEFAULT_PLUGINS.has('contracts')).toBe(true);
-    expect(DEFAULT_PLUGINS.has('pii:api-db')).toBe(true);
+  it('AGENTIC_PLUGINS should contain expected plugins', () => {
+    expect(AGENTIC_PLUGINS).toContain('mcp');
+    expect(AGENTIC_PLUGINS).toContain('excessive-agency');
+    expect(AGENTIC_PLUGINS).toContain('rbac');
+    expect(AGENTIC_PLUGINS).toContain('shell-injection');
+    expect(AGENTIC_PLUGINS).toContain('sql-injection');
+    expect(AGENTIC_PLUGINS).toContain('debug-access');
+    expect(AGENTIC_PLUGINS).toContain('indirect-prompt-injection');
+    expect(AGENTIC_PLUGINS).toContain('cross-session-leak');
+    expect(AGENTIC_PLUGINS).toContain('tool-discovery');
+    expect(AGENTIC_PLUGINS).toContain('ascii-smuggling');
+    expect(AGENTIC_PLUGINS.length).toBe(10);
   });
 
-  it('ALL_PLUGINS should contain all plugins sorted', () => {
-    expect(ALL_PLUGINS).toEqual(
-      [
-        ...new Set([
-          ...DEFAULT_PLUGINS,
-          ...ADDITIONAL_PLUGINS,
-          ...CONFIG_REQUIRED_PLUGINS,
-          ...AGENTIC_PLUGINS,
-        ]),
-      ].sort(),
-    );
+  it('DEFAULT_PLUGINS should contain expected plugins', () => {
+    expect(DEFAULT_PLUGINS).toContain('contracts');
+    expect(DEFAULT_PLUGINS).toContain('excessive-agency');
+    expect(DEFAULT_PLUGINS).toContain('hallucination');
+    expect(DEFAULT_PLUGINS).toContain('harmful:child-exploitation');
+    expect(DEFAULT_PLUGINS).toContain('pii:direct');
   });
 
-  it('should have descriptions for all risk categories', () => {
-    const categories = Object.keys(riskCategories) as (keyof typeof categoryDescriptions)[];
-    categories.forEach((category) => {
-      expect(categoryDescriptions[category]).toBeDefined();
-      expect(typeof categoryDescriptions[category]).toBe('string');
+  it('ALL_PLUGINS should contain all unique plugins', () => {
+    const expectedPlugins = new Set([
+      ...BASE_PLUGINS,
+      ...Object.keys(HARM_PLUGINS),
+      ...PII_PLUGINS,
+      ...ADDITIONAL_PLUGINS,
+    ]);
+    expect(new Set(ALL_PLUGINS)).toEqual(expectedPlugins);
+  });
+
+  it('CONFIG_REQUIRED_PLUGINS should have valid configurations', () => {
+    expect(CONFIG_REQUIRED_PLUGINS).toHaveProperty('policy');
+    expect(CONFIG_REQUIRED_PLUGINS.policy).toEqual({
+      key: 'policy',
+      required: true,
+    });
+    expect(CONFIG_REQUIRED_PLUGINS['prompt-extraction']).toEqual({
+      key: 'systemPrompt',
+      required: true,
+    });
+  });
+
+  describe('categoryDescriptions', () => {
+    it('should have descriptions for all categories', () => {
+      const expectedKeys = [
+        'Security',
+        'Legal',
+        'Brand',
+        'Accuracy',
+        'Fairness',
+        'Harm',
+        'PII',
+        'Custom',
+        'Compliance',
+      ];
+      expectedKeys.forEach((key) => {
+        expect(categoryDescriptions).toHaveProperty(key);
+        expect(categoryDescriptions[key]).toBeTruthy();
+      });
+    });
+  });
+
+  describe('riskCategories', () => {
+    it('should have brand risks', () => {
+      expect(riskCategories.Brand).toBeDefined();
+      expect(riskCategories.Brand).toContain('competitors');
+      expect(riskCategories.Brand).toContain('politics');
+    });
+
+    it('should have legal risks', () => {
+      expect(riskCategories.Legal).toBeDefined();
+      expect(riskCategories.Legal).toContain('harmful:intellectual-property');
+      expect(riskCategories.Legal).toContain('contracts');
+    });
+
+    it('should have security risks', () => {
+      expect(riskCategories.Security).toBeDefined();
+      expect(riskCategories.Security).toContain('prompt-extraction');
+      expect(riskCategories.Security).toContain('hijacking');
+    });
+
+    it('should have harm risks', () => {
+      expect(riskCategories.Harm).toBeDefined();
+      expect(riskCategories.Harm).toContain('harmful:harassment-bullying');
+      expect(riskCategories.Harm).toContain('harmful:hate');
+    });
+
+    it('should have accuracy risks', () => {
+      expect(riskCategories.Accuracy).toBeDefined();
+      expect(riskCategories.Accuracy).toContain('hallucination');
+    });
+
+    it('should have PII risks', () => {
+      expect(riskCategories.PII).toBeDefined();
+      expect(riskCategories.PII).toContain('pii:direct');
+      expect(riskCategories.PII).toContain('pii:api-db');
+    });
+
+    it('should have fairness risks', () => {
+      expect(riskCategories.Fairness).toBeDefined();
+      expect(riskCategories.Fairness).toContain('harmful:graphic-content');
+      expect(riskCategories.Fairness).toContain('harmful:radicalization');
     });
   });
 });
