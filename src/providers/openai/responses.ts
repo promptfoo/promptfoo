@@ -124,7 +124,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
@@ -208,6 +208,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       textFormat = { ...textFormat, verbosity: config.verbosity };
     }
 
+    // Load tools from external file if needed
+    // Store in variable so we can include in both body and returned config
+    const loadedTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : undefined;
+
     const body = {
       model: this.modelName,
       input,
@@ -218,9 +224,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
-      ...(config.tools
-        ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
-        : {}),
+      ...(loadedTools ? { tools: loadedTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
@@ -250,7 +254,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body.reasoning = config.reasoning;
     }
 
-    return { body, config: { ...config, response_format: responseFormat } };
+    return {
+      body,
+      config: {
+        ...config,
+        tools: loadedTools, // Include loaded tools for downstream validation
+        response_format: responseFormat,
+      },
+    };
   }
 
   async callApi(
@@ -264,7 +275,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       );
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     // Validate deep research models have required tools
     const isDeepResearchModel = this.modelName.includes('deep-research');

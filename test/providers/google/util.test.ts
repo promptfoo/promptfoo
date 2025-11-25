@@ -1544,6 +1544,231 @@ describe('util', () => {
           ]);
         });
       });
+
+      describe('data URL support', () => {
+        it('should handle JPEG data URLs and extract base64', () => {
+          const base64Data = validBase64Image;
+          const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: `Here is an image:\n${dataUrl}\nEnd of image.`,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            image1: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents).toEqual([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: 'Here is an image:',
+                },
+                {
+                  inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: base64Data, // Should extract raw base64
+                  },
+                },
+                {
+                  text: 'End of image.',
+                },
+              ],
+            },
+          ]);
+        });
+
+        it('should handle PNG data URLs', () => {
+          const base64Data =
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAGA5w5EQwA7BHigu/QKBgAAAABJRU5ErkJggg==';
+          const dataUrl = `data:image/png;base64,${base64Data}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: dataUrl,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            image1: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts).toEqual([
+            {
+              inlineData: {
+                mimeType: 'image/png',
+                data: base64Data,
+              },
+            },
+          ]);
+        });
+
+        it('should handle GIF data URLs', () => {
+          const base64Data =
+            'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
+          const dataUrl = `data:image/gif;base64,${base64Data}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: dataUrl,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            image1: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts).toEqual([
+            {
+              inlineData: {
+                mimeType: 'image/gif',
+                data: base64Data,
+              },
+            },
+          ]);
+        });
+
+        it('should handle WebP data URLs', () => {
+          const base64Data =
+            'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vuUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+          const dataUrl = `data:image/webp;base64,${base64Data}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: dataUrl,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            image1: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts).toEqual([
+            {
+              inlineData: {
+                mimeType: 'image/webp',
+                data: base64Data,
+              },
+            },
+          ]);
+        });
+
+        it('should handle mixed data URLs and raw base64', () => {
+          const rawBase64 = validBase64Image;
+          const dataUrlBase64 =
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAGA5w5EQwA7BHigu/QKBgAAAABJRU5ErkJggg==';
+          const dataUrl = `data:image/png;base64,${dataUrlBase64}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: `Raw image:\n${rawBase64}\nData URL image:\n${dataUrl}\nEnd.`,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            rawImage: rawBase64,
+            dataUrlImage: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents).toEqual([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: 'Raw image:',
+                },
+                {
+                  inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: rawBase64,
+                  },
+                },
+                {
+                  text: 'Data URL image:',
+                },
+                {
+                  inlineData: {
+                    mimeType: 'image/png',
+                    data: dataUrlBase64, // Should extract raw base64 from data URL
+                  },
+                },
+                {
+                  text: 'End.',
+                },
+              ],
+            },
+          ]);
+        });
+
+        it('should preserve MIME type from data URL when available', () => {
+          // Test that MIME type from data URL takes precedence over magic number detection
+          const base64Data = validBase64Image;
+          // Use a different MIME type in data URL (though this would be unusual in practice)
+          const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: dataUrl,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            image1: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts[0]).toMatchObject({
+            inlineData: {
+              mimeType: 'image/jpeg',
+              data: base64Data,
+            },
+          });
+        });
+      });
     });
   });
 
