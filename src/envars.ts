@@ -487,6 +487,11 @@ export function getEvalTimeoutMs(defaultValue?: number): number {
 /**
  * Get the maximum total runtime in milliseconds for the entire evaluation process.
  * When this timeout is reached, all remaining tests are marked as errors and the evaluation ends.
+ *
+ * Note: For most use cases, prefer `getDefaultMaxEvalTimeMs()` which auto-calculates a reasonable
+ * default based on eval characteristics. This function is useful when you need direct access to
+ * the env var value without auto-calculation.
+ *
  * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no limit).
  * @returns The max duration in milliseconds, or the default value if not set.
  */
