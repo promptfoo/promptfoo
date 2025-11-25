@@ -44,7 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Changed
+### Added
 
 - feat(providers): add Claude Opus 4.5 support across Anthropic (claude-opus-4-5-20251101, claude-opus-4-5-latest), Google Vertex AI (claude-opus-4-5@20251101), and AWS Bedrock (anthropic.claude-opus-4-5-20251101-v1:0 for all regions) with $5/MTok input and $25/MTok output pricing; includes comprehensive documentation updates, advanced coding example demonstrating bug diagnosis and tradeoff analysis, updated provider examples, and cost calculation tests
 - feat(util): add support for loading tool definitions from Python/JavaScript files - providers now support dynamic tool generation using `file://tools.py:get_tools` and `file://tools.js:get_tools` syntax, enabling runtime tool definitions based on environment, config, or external APIs (#6272)
@@ -173,11 +173,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
 - fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
-
-### Documentation
-
-- docs(examples): add TypeScript configuration with dynamic schema generation example showing how to reuse Zod schemas from application code, including automatic schema conversion for different providers (OpenAI/Gemini) (#6171)
-- docs(config): add comprehensive TypeScript configuration documentation to modular-configs guide with examples of sharing code between application and tests (#6171)
 
 ## [0.119.8] - 2025-11-18
 
