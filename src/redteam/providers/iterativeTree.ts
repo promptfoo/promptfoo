@@ -51,7 +51,7 @@ import type {
   Prompt,
   ProviderResponse,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
 import type { BaseRedteamMetadata } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
@@ -537,6 +537,7 @@ async function runRedteamConversation({
           },
           filters,
           targetProvider,
+          [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
         const targetResponse = await getTargetResponse(
@@ -793,6 +794,7 @@ async function runRedteamConversation({
     },
     filters,
     targetProvider,
+    [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
   );
 
   const finalTargetResponse = await getTargetResponse(

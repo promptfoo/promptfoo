@@ -1,20 +1,21 @@
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { matchesContextRecall } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesContextRecall', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]\n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass when the recall score is above the threshold', async () => {
@@ -22,14 +23,14 @@ describe('matchesContextRecall', () => {
     const groundTruth = 'Ground truth text';
     const threshold = 0.5;
 
-    const mockCallApi = jest.fn().mockImplementation(() => {
+    const mockCallApi = vi.fn().mockImplementation(() => {
       return Promise.resolve({
         output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]\n',
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       });
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesContextRecall(context, groundTruth, threshold)).resolves.toEqual({
       pass: true,
@@ -62,14 +63,14 @@ describe('matchesContextRecall', () => {
     const groundTruth = 'Ground truth text';
     const threshold = 0.9;
 
-    const mockCallApi = jest.fn().mockImplementation(() => {
+    const mockCallApi = vi.fn().mockImplementation(() => {
       return Promise.resolve({
         output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]',
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       });
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesContextRecall(context, groundTruth, threshold)).resolves.toEqual({
       pass: false,
@@ -103,7 +104,7 @@ describe('matchesContextRecall', () => {
       'Paris is the capital of France. The Eiffel Tower is located there. London is the capital of UK.';
     const threshold = 0.6;
 
-    const mockCallApi = jest.fn().mockImplementation(() => {
+    const mockCallApi = vi.fn().mockImplementation(() => {
       return Promise.resolve({
         output:
           'Paris is the capital of France. [Attributed]\nThe Eiffel Tower is located there. [Attributed]\nLondon is the capital of UK. [Not attributed]',
@@ -111,7 +112,7 @@ describe('matchesContextRecall', () => {
       });
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     const result = await matchesContextRecall(context, groundTruth, threshold);
 
@@ -145,7 +146,7 @@ describe('matchesContextRecall', () => {
       const groundTruth = 'Paris is the capital of France. The Eiffel Tower is located there.';
       const threshold = 0.5;
 
-      const mockCallApi = jest.fn().mockImplementation(() => {
+      const mockCallApi = vi.fn().mockImplementation(() => {
         return Promise.resolve({
           output:
             'Paris is the capital of France [Attributed]\nThe Eiffel Tower is located there [Attributed]',
@@ -153,7 +154,7 @@ describe('matchesContextRecall', () => {
         });
       });
 
-      jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
       const result = await matchesContextRecall(contextChunks, groundTruth, threshold);
 
@@ -172,7 +173,7 @@ describe('matchesContextRecall', () => {
       const groundTruth = 'Paris is the capital of France. The Eiffel Tower is located there.';
       const threshold = 0.8;
 
-      const mockCallApi = jest.fn().mockImplementation(() => {
+      const mockCallApi = vi.fn().mockImplementation(() => {
         return Promise.resolve({
           output:
             'Paris is the capital of France [Attributed]\nThe Eiffel Tower is located there [Attributed]',
@@ -180,7 +181,7 @@ describe('matchesContextRecall', () => {
         });
       });
 
-      jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
       const result = await matchesContextRecall(context, groundTruth, threshold);
 

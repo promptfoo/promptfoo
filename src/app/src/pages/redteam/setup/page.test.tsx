@@ -1,4 +1,3 @@
-import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -29,7 +28,6 @@ vi.mock('react-router-dom', async () => {
 });
 
 // Mock hooks
-vi.mock('@app/hooks/usePageMeta', () => ({ usePageMeta: vi.fn() }));
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: vi.fn() }));
 vi.mock('@app/hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('./hooks/useSetupState', () => ({ useSetupState: vi.fn() }));
@@ -55,7 +53,6 @@ vi.mock('./components/Setup', () => ({
   default: () => <div data-testid="setup-modal">Setup</div>,
 }));
 
-const mockedUsePageMeta = usePageMeta as Mock;
 const mockedUseTelemetry = useTelemetry as Mock;
 const mockedUseToast = useToast as Mock;
 const mockedUseSetupState = useSetupState as unknown as Mock;
@@ -83,22 +80,6 @@ describe('RedTeamSetupPage', () => {
       },
       setFullConfig: vi.fn(),
       resetConfig: vi.fn(),
-    });
-  });
-
-  describe('Page Metadata', () => {
-    it("should set the page title to 'Red team setup' and description to 'Configure red team testing' when rendered", () => {
-      render(
-        <MemoryRouter initialEntries={['/redteam/setup']}>
-          <RedTeamSetupPage />
-        </MemoryRouter>,
-      );
-
-      expect(mockedUsePageMeta).toHaveBeenCalledTimes(2);
-      expect(mockedUsePageMeta).toHaveBeenCalledWith({
-        title: 'Red team setup',
-        description: 'Configure red team testing',
-      });
     });
   });
 

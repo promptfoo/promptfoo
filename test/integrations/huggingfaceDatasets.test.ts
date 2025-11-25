@@ -1,3 +1,4 @@
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { getEnvString } from '../../src/envars';
 import {
@@ -5,26 +6,26 @@ import {
   parseDatasetPath,
 } from '../../src/integrations/huggingfaceDatasets';
 
-jest.mock('../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
+vi.mock('../../src/cache', () => ({
+  fetchWithCache: vi.fn(),
 }));
 
-jest.mock('../../src/util/fetch/index.ts', () => ({
-  fetchWithProxy: jest.fn(),
+vi.mock('../../src/util/fetch/index.ts', () => ({
+  fetchWithProxy: vi.fn(),
 }));
 
-jest.mock('../../src/envars', () => ({
-  getEnvString: jest.fn().mockReturnValue(''),
-  isCI: jest.fn().mockReturnValue(false),
+vi.mock('../../src/envars', () => ({
+  getEnvString: vi.fn().mockReturnValue(''),
+  isCI: vi.fn().mockReturnValue(false),
 }));
 
 describe('huggingfaceDatasets', () => {
   beforeEach(() => {
-    jest.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(getEnvString).mockReturnValue('');
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('parseDatasetPath', () => {
@@ -61,7 +62,7 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should fetch and parse dataset with default parameters', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         num_rows_total: 2,
         features: [
@@ -80,7 +81,7 @@ describe('huggingfaceDatasets', () => {
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
-    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
       expect.objectContaining({
         headers: {},
@@ -106,14 +107,14 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should include auth token when HF_TOKEN is set', async () => {
-    jest.mocked(getEnvString).mockImplementation((key) => {
+    vi.mocked(getEnvString).mockImplementation((key) => {
       if (key === 'HF_TOKEN') {
         return 'test-token';
       }
       return '';
     });
 
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         num_rows_total: 1,
         features: [
@@ -129,7 +130,7 @@ describe('huggingfaceDatasets', () => {
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
-    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
       expect.objectContaining({
         headers: {
@@ -140,7 +141,7 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should fall back to HF_API_TOKEN when HF_TOKEN is empty', async () => {
-    jest.mocked(getEnvString).mockImplementation((key) => {
+    vi.mocked(getEnvString).mockImplementation((key) => {
       if (key === 'HF_TOKEN') {
         return '';
       }
@@ -150,7 +151,7 @@ describe('huggingfaceDatasets', () => {
       return '';
     });
 
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         num_rows_total: 1,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -163,7 +164,7 @@ describe('huggingfaceDatasets', () => {
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 1);
 
-    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         headers: {
@@ -174,7 +175,7 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should fall back to HUGGING_FACE_HUB_TOKEN when other tokens are empty', async () => {
-    jest.mocked(getEnvString).mockImplementation((key) => {
+    vi.mocked(getEnvString).mockImplementation((key) => {
       if (key === 'HF_TOKEN') {
         return '';
       }
@@ -187,7 +188,7 @@ describe('huggingfaceDatasets', () => {
       return '';
     });
 
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         num_rows_total: 1,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -200,7 +201,7 @@ describe('huggingfaceDatasets', () => {
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 1);
 
-    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         headers: {
@@ -211,7 +212,7 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should handle custom query parameters', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         num_rows_total: 1,
         features: [
@@ -227,7 +228,7 @@ describe('huggingfaceDatasets', () => {
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?split=train&config=custom');
 
-    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=train&config=custom&offset=0&length=100',
       expect.objectContaining({
         headers: {},
@@ -236,7 +237,7 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should handle pagination', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         num_rows_total: 3,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -247,7 +248,7 @@ describe('huggingfaceDatasets', () => {
       statusText: 'OK',
     } as any);
 
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         num_rows_total: 3,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -260,8 +261,8 @@ describe('huggingfaceDatasets', () => {
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
-    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
-    expect(jest.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
       1,
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
       expect.objectContaining({
@@ -269,7 +270,7 @@ describe('huggingfaceDatasets', () => {
       }),
     );
     // Note: Second call might have different length due to concurrent fetching and remaining calculation
-    expect(jest.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
+    expect(vi.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining('dataset=test%2Fdataset&split=test&config=default&offset=2'),
       expect.objectContaining({
@@ -289,7 +290,7 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should handle API errors by throwing', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: null,
       cached: false,
       status: 404,
@@ -303,12 +304,12 @@ describe('huggingfaceDatasets', () => {
 
   it('should short-circuit and return [] when limit is 0', async () => {
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 0);
-    expect(jest.mocked(fetchWithCache)).not.toHaveBeenCalled();
+    expect(vi.mocked(fetchWithCache)).not.toHaveBeenCalled();
     expect(tests).toEqual([]);
   });
 
   it('should respect user-specified limit parameter (single request optimization)', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         num_rows_total: 5,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -321,7 +322,7 @@ describe('huggingfaceDatasets', () => {
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=2');
 
-    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=2&offset=0&length=2',
       expect.objectContaining({
         headers: {},
@@ -340,7 +341,7 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should handle limit larger than page size', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         num_rows_total: 150,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -353,7 +354,7 @@ describe('huggingfaceDatasets', () => {
       statusText: 'OK',
     } as any);
 
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         num_rows_total: 150,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -368,15 +369,15 @@ describe('huggingfaceDatasets', () => {
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=120');
 
-    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
-    expect(jest.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
       1,
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=120&offset=0&length=100',
       expect.objectContaining({
         headers: {},
       }),
     );
-    expect(jest.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
+    expect(vi.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
       2,
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=120&offset=100&length=20',
       expect.objectContaining({
@@ -397,7 +398,7 @@ describe('huggingfaceDatasets', () => {
 
   describe('performance optimizations', () => {
     it('should use single request optimization for small limits', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           num_rows_total: 1000,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -413,13 +414,13 @@ describe('huggingfaceDatasets', () => {
       const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 50);
 
       // Should only make one request for limits <= 100
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(1);
       expect(tests).toHaveLength(50);
     });
 
     it('should throw error on page fetch failure', async () => {
       // First page succeeds
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           num_rows_total: 300,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -433,7 +434,7 @@ describe('huggingfaceDatasets', () => {
       } as any);
 
       // Second page fails
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: null,
         cached: false,
         status: 500,
@@ -450,7 +451,7 @@ describe('huggingfaceDatasets', () => {
       // Mock a dataset with large rows (>2KB each)
       const largeRow = { text: 'x'.repeat(3000) }; // ~3KB row
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           num_rows_total: 200,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -464,7 +465,7 @@ describe('huggingfaceDatasets', () => {
       } as any);
 
       // Mock all subsequent potential concurrent requests to avoid undefined errors
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: {
           num_rows_total: 200,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -480,10 +481,10 @@ describe('huggingfaceDatasets', () => {
       const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 125);
 
       // Should have made at least one request
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalled();
 
       // First call should be normal page size
-      expect(jest.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
+      expect(vi.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
         1,
         expect.stringContaining('length=100'),
         expect.anything(),
@@ -494,14 +495,14 @@ describe('huggingfaceDatasets', () => {
     });
 
     it('should handle authentication tokens correctly', async () => {
-      jest.mocked(getEnvString).mockImplementation((key) => {
+      vi.mocked(getEnvString).mockImplementation((key) => {
         if (key === 'HF_TOKEN') {
           return 'test-token-123';
         }
         return '';
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           num_rows_total: 10,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -514,7 +515,7 @@ describe('huggingfaceDatasets', () => {
 
       await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 5);
 
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           headers: {
