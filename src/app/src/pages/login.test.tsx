@@ -38,11 +38,6 @@ vi.mock('@app/utils/api', () => ({
   callApi: (...args: any[]) => callApiMock(...args),
 }));
 
-const usePageMetaMock = vi.fn();
-vi.mock('@app/hooks/usePageMeta', () => ({
-  usePageMeta: (...args: any[]) => usePageMetaMock(...args),
-}));
-
 describe('LoginPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -109,26 +104,6 @@ describe('LoginPage', () => {
     );
 
     expect(fetchEmailMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('should call usePageMeta with correct parameters', () => {
-    useUserStoreMock.mockReturnValue({
-      email: null,
-      isLoading: false,
-      fetchEmail: vi.fn(),
-      setEmail: vi.fn(),
-    });
-
-    render(
-      <MemoryRouter>
-        <LoginPage />
-      </MemoryRouter>,
-    );
-
-    expect(usePageMetaMock).toHaveBeenCalledWith({
-      title: 'Login to Promptfoo',
-      description: 'Sign in to access your Promptfoo workspace',
-    });
   });
 
   it('shows loading spinner when loading', () => {

@@ -1,15 +1,16 @@
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { matchesContextRelevance } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should calculate relevance using line-based sentence splitting', async () => {
@@ -19,14 +20,14 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     const threshold = 0.3;
 
     // Mock LLM extracting 1 relevant sentence
-    const mockCallApi = jest.fn().mockImplementation(() => {
+    const mockCallApi = vi.fn().mockImplementation(() => {
       return Promise.resolve({
         output: 'Paris is the capital of France',
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       });
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     const result = await matchesContextRelevance(input, context, threshold);
 
@@ -46,14 +47,14 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     const threshold = 0.5;
 
     // Mock LLM returning insufficient information
-    const mockCallApi = jest.fn().mockImplementation(() => {
+    const mockCallApi = vi.fn().mockImplementation(() => {
       return Promise.resolve({
         output: 'Insufficient Information',
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       });
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     const result = await matchesContextRelevance(input, context, threshold);
 
@@ -71,7 +72,7 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     const threshold = 0.5;
 
     // Mock LLM extracting 3 relevant sentences (with newlines)
-    const mockCallApi = jest.fn().mockImplementation(() => {
+    const mockCallApi = vi.fn().mockImplementation(() => {
       return Promise.resolve({
         output:
           'Paris is the capital of France.\nBerlin is the capital of Germany.\nFrance and Germany are in Europe.',
@@ -79,7 +80,7 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
       });
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     const result = await matchesContextRelevance(input, context, threshold);
 
@@ -111,7 +112,7 @@ This policy will include people transferred into the office under all incoming s
 This policy excludes all staff going on any outgoing structured programs, short term/ permanent transfers, people going out of office under any of the other global mobility programs`;
 
       // Mock LLM extracting multiple relevant lines (formatted with line breaks)
-      const mockCallApi = jest.fn().mockImplementation(() => {
+      const mockCallApi = vi.fn().mockImplementation(() => {
         return Promise.resolve({
           output:
             'All permanent employees i.e. Engineering Team, Business Services Team\nThis policy will include people transferred into the office under all incoming structured programs\nThe scope of this policy covers entitlement and guidelines for all categories of leaves in the office',
@@ -119,7 +120,7 @@ This policy excludes all staff going on any outgoing structured programs, short 
         });
       });
 
-      jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
       const result = await matchesContextRelevance(query, formattedPolicyContext, 0.1);
 
@@ -145,7 +146,7 @@ This policy excludes all staff going on any outgoing structured programs, short 
       const threshold = 0.5;
 
       // Mock LLM extracting 3 relevant chunks out of 4 total (with line breaks)
-      const mockCallApi = jest.fn().mockImplementation(() => {
+      const mockCallApi = vi.fn().mockImplementation(() => {
         return Promise.resolve({
           output:
             'RAG systems improve factual accuracy by incorporating external knowledge sources.\nThey reduce hallucinations in large language models through grounded responses.\nRAG enables up-to-date information retrieval beyond training data cutoffs.',
@@ -153,7 +154,7 @@ This policy excludes all staff going on any outgoing structured programs, short 
         });
       });
 
-      jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
       const result = await matchesContextRelevance(query, contextChunks, threshold);
 
@@ -172,14 +173,14 @@ This policy excludes all staff going on any outgoing structured programs, short 
       const threshold = 0.3;
 
       // Mock LLM extracting 1 relevant sentence
-      const mockCallApi = jest.fn().mockImplementation(() => {
+      const mockCallApi = vi.fn().mockImplementation(() => {
         return Promise.resolve({
           output: 'Paris is the capital of France',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
         });
       });
 
-      jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
       const result = await matchesContextRelevance(query, context, threshold);
 
@@ -197,14 +198,14 @@ This policy excludes all staff going on any outgoing structured programs, short 
       const context = '';
 
       // Mock response for empty context
-      const mockCallApi = jest.fn().mockImplementation(() => {
+      const mockCallApi = vi.fn().mockImplementation(() => {
         return Promise.resolve({
           output: 'Insufficient Information',
           tokenUsage: { total: 5, prompt: 3, completion: 2 },
         });
       });
 
-      jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
       const result = await matchesContextRelevance(query, context, 0.5);
 
@@ -218,14 +219,14 @@ This policy excludes all staff going on any outgoing structured programs, short 
       const query = 'What is the answer?';
       const context = 'The answer is 42.';
 
-      const mockCallApi = jest.fn().mockImplementation(() => {
+      const mockCallApi = vi.fn().mockImplementation(() => {
         return Promise.resolve({
           output: 'The answer is 42',
           tokenUsage: { total: 5, prompt: 3, completion: 2 },
         });
       });
 
-      jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
       const result = await matchesContextRelevance(query, context, 0.5);
 
@@ -237,14 +238,14 @@ This policy excludes all staff going on any outgoing structured programs, short 
       const query = 'Test query';
       const context = 'Fragment without end Proper sentence. Another fragment';
 
-      const mockCallApi = jest.fn().mockImplementation(() => {
+      const mockCallApi = vi.fn().mockImplementation(() => {
         return Promise.resolve({
           output: 'Proper sentence',
           tokenUsage: { total: 5, prompt: 3, completion: 2 },
         });
       });
 
-      jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
       const result = await matchesContextRelevance(query, context, 0.5);
 
