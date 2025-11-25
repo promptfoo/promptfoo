@@ -4,18 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.119.13](https://github.com/promptfoo/promptfoo/compare/promptfoo-v0.119.12...promptfoo-v0.119.13) (2025-11-25)
+
+
+### Features
+
+* ecommerce plugin pack ([#6168](https://github.com/promptfoo/promptfoo/issues/6168)) ([152b1ff](https://github.com/promptfoo/promptfoo/commit/152b1ff3f3fdb6ca43a0a5718d463757f63a1814))
+
+
+### Bug Fixes
+
+* **deps:** bump posthog-node from 5.13.2 to 5.14.0 for sha1-hulud mitigation ([6a44eda](https://github.com/promptfoo/promptfoo/commit/6a44eda819f48273230853cc8692b821f8db14a0))
+
 ## [0.119.12](https://github.com/promptfoo/promptfoo/compare/promptfoo-v0.119.11...promptfoo-v0.119.12) (2025-11-24)
 
 ### Features
 
-- **redteam:** add ecommerce plugin pack with 4 security testing plugins ([#6168](https://github.com/promptfoo/promptfoo/issues/6168))
-- changelog automation and validation ([#6252](https://github.com/promptfoo/promptfoo/issues/6252)) ([ee74c4a](https://github.com/promptfoo/promptfoo/commit/ee74c4ae7dc01c35dd52d835a19188f06a334a1a))
-- **providers:** add Anthropic structured outputs support ([#6226](https://github.com/promptfoo/promptfoo/issues/6226)) ([1b1b9d2](https://github.com/promptfoo/promptfoo/commit/1b1b9d274559a5ae7cefba1de0c6a732a3d6cbf0))
-- **providers:** add Claude Opus 4.5 model support ([#6339](https://github.com/promptfoo/promptfoo/issues/6339)) ([65f855d](https://github.com/promptfoo/promptfoo/commit/65f855d57a2d3e0a663ad86260308f899c375dd6))
-- **providers:** add Claude Opus 4.5 support for Anthropic, Google Vertex AI, and AWS Bedrock ([#6340](https://github.com/promptfoo/promptfoo/issues/6340)) ([95780cb](https://github.com/promptfoo/promptfoo/commit/95780cb32270ec7cca86e5722e204cae321942b5))
-- **providers:** add metadata extraction for OpenAI Responses API ([#6267](https://github.com/promptfoo/promptfoo/issues/6267)) ([f252f33](https://github.com/promptfoo/promptfoo/commit/f252f330f1faed5b8d46f8b32010c81d5f92edf7))
-- **server:** add server-side provider list customization ([#6124](https://github.com/promptfoo/promptfoo/issues/6124)) ([fdb792a](https://github.com/promptfoo/promptfoo/commit/fdb792a2d1908007786571d54a8d7f66fb54940c))
-- **util:** add support for loading tool definitions from Python/JavaScript files ([#6272](https://github.com/promptfoo/promptfoo/issues/6272)) ([41377d0](https://github.com/promptfoo/promptfoo/commit/41377d04d01b8b7abd9955619d29a77c2a8914d5))
+- feat(redteam): add ecommerce plugin pack with 4 security testing plugins (#6168)
+
+* changelog automation and validation ([#6252](https://github.com/promptfoo/promptfoo/issues/6252)) ([ee74c4a](https://github.com/promptfoo/promptfoo/commit/ee74c4ae7dc01c35dd52d835a19188f06a334a1a))
+* **providers:** add Anthropic structured outputs support ([#6226](https://github.com/promptfoo/promptfoo/issues/6226)) ([1b1b9d2](https://github.com/promptfoo/promptfoo/commit/1b1b9d274559a5ae7cefba1de0c6a732a3d6cbf0))
+* **providers:** add Claude Opus 4.5 model support ([#6339](https://github.com/promptfoo/promptfoo/issues/6339)) ([65f855d](https://github.com/promptfoo/promptfoo/commit/65f855d57a2d3e0a663ad86260308f899c375dd6))
+* **providers:** add Claude Opus 4.5 support for Anthropic, Google Vertex AI, and AWS Bedrock ([#6340](https://github.com/promptfoo/promptfoo/issues/6340)) ([95780cb](https://github.com/promptfoo/promptfoo/commit/95780cb32270ec7cca86e5722e204cae321942b5))
+* **providers:** add metadata extraction for OpenAI Responses API ([#6267](https://github.com/promptfoo/promptfoo/issues/6267)) ([f252f33](https://github.com/promptfoo/promptfoo/commit/f252f330f1faed5b8d46f8b32010c81d5f92edf7))
+* **server:** add server-side provider list customization ([#6124](https://github.com/promptfoo/promptfoo/issues/6124)) ([fdb792a](https://github.com/promptfoo/promptfoo/commit/fdb792a2d1908007786571d54a8d7f66fb54940c))
+* **util:** add support for loading tool definitions from Python/JavaScript files ([#6272](https://github.com/promptfoo/promptfoo/issues/6272)) ([41377d0](https://github.com/promptfoo/promptfoo/commit/41377d04d01b8b7abd9955619d29a77c2a8914d5))
 
 ### Bug Fixes
 
@@ -43,12 +56,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- feat: migrate to ESM (ECMAScript Modules) with dual ESM/CJS exports (#5594)
 - feat(cli): add automatic changelog update on version bump with comprehensive error handling (#6252)
 - feat(ci): add JavaScript-based changelog validator replacing bash script for PR number and Unreleased section enforcement (#6252)
 - feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking (#6267)
 - refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
-- chore(build): remove TypeScript declaration generation step - tsup handles compilation, removed redundant tsc step that required .js extensions (#5594)
 
 ### Fixed
 
@@ -64,8 +75,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
 - fix(assertions): use file-based script output for all assertion types with `file://` references (#6200)
 - fix(cli): respect PROMPTFOO_LOG_DIR environment variable for custom log directory location (#6179)
-- fix(tests): use \_\_dirname in CJS context for database migrations to fix Jest test failures (#5594)
-- fix(tests): update checkNodeVersion test to work without mocking generated constants file (#5594)
 
 ### Documentation
 
@@ -77,6 +86,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - test(examples): update tool-use example to include strict mode configuration for Anthropic provider (#6226)
 - test(examples): enhance structured-outputs-config example to demonstrate multi-provider structured outputs with OpenAI and Anthropic, showcasing syntax differences between providers (#6226)
 - test(scripts): add 59 tests for changelog automation scripts covering validation and version update functionality (#6252)
+
+### Dependencies
+
+- fix(deps): bump posthog-node from 5.13.2 to 5.14.0 for sha1-hulud supply-chain attack mitigation (#6349) by @Devdha
 
 ## [0.119.11] - 2025-11-23
 
