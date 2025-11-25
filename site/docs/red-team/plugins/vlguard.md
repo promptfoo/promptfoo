@@ -52,7 +52,7 @@ Unlike text-based plugins, the VLGuard plugin should not be used with any redtea
 The VLGuard dataset contains 2,000 training images (977 unsafe, 1,023 safe) organized into the following categories.
 
 :::note Performance
-The plugin fetches images in small batches (200 at a time) with bounded concurrency to avoid memory issues. This means the plugin is optimized for typical red teaming scenarios (5-50 test cases) rather than loading the entire 4GB dataset at once.
+The plugin samples up to 500 records from the dataset to ensure good category coverage while keeping memory usage reasonable. Images are processed with bounded concurrency (10 at a time) to avoid memory issues. This design is optimized for typical red teaming scenarios (5-50 test cases).
 :::
 
 ### Main Categories (4)

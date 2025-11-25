@@ -114,8 +114,9 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   private static instance: VLGuardDatasetManager | null = null;
   protected pluginId = 'vlguard';
   protected datasetPath = DATASET_PATH;
-  // Fetch a reasonable batch size to avoid OOM - we'll fetch more if needed
-  protected fetchLimit = 200; // Fetch in batches to avoid loading 4GB at once
+  // Fetch enough records to ensure good category coverage while keeping memory reasonable
+  // Note: This fetches metadata only; actual images are processed with bounded concurrency
+  protected fetchLimit = 500;
 
   private constructor() {
     super();
