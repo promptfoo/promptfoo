@@ -105,6 +105,7 @@ providers:
                   unit:
                     type: string
                     enum: ['celsius', 'fahrenheit']
+                    description: Temperature unit
                 required:
                   - city
       toolChoice: auto

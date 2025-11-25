@@ -1064,6 +1064,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
   /**
    * Streaming API call using ConverseStream
+   *
+   * Note: functionToolCallbacks are not executed in streaming mode.
+   * Tool use blocks are captured and returned in the output, but callbacks
+   * are not automatically invoked. Use non-streaming mode if you need
+   * automatic tool callback execution.
    */
   async callApiStreaming(
     prompt: string,

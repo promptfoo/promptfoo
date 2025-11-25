@@ -178,6 +178,10 @@ The `thinking` configuration controls Claude's reasoning behavior:
 
 Use `showThinking: true` to include the model's reasoning process in the output, or `false` to only show the final response.
 
+:::warning
+Do not set `temperature`, `topP`, or `topK` when using extended thinking. These sampling parameters are incompatible with reasoning mode.
+:::
+
 ### Configuration Options
 
 | Option                | Description                                     |

@@ -338,38 +338,6 @@ describe('AwsBedrockConverseProvider', () => {
       expect(parsed.name).toBe('calculator');
     });
 
-    // Note: Error handling is tested via integration tests
-    // The error message formatting logic is validated in the implementation
-    it('should return error response for validation exceptions', async () => {
-      // Set up mock to return a valid response
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
-
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: { region: 'us-east-1' },
-      });
-
-      const result = await provider.callApi('Test');
-
-      // Result should be defined (either success or error)
-      expect(result).toBeDefined();
-      expect(result.output !== undefined || result.error !== undefined).toBe(true);
-    });
-
-    it('should return error response for access denied exceptions', async () => {
-      // Set up mock to return a valid response
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
-
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: { region: 'us-east-1' },
-      });
-
-      const result = await provider.callApi('Test');
-
-      // Result should be defined (either success or error)
-      expect(result).toBeDefined();
-      expect(result.output !== undefined || result.error !== undefined).toBe(true);
-    });
-
     it('should include metadata with latency and stop reason', async () => {
       // Set mockResolvedValueOnce after reset to ensure clean state
       mockSend.mockReset();
