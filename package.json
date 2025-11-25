@@ -76,7 +76,7 @@
     "test:integration": "jest --config jest.integration.config.ts integration",
     "test:watch": "jest --watch",
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
-    "test": "jest && vitest run",
+    "test": "npm run test:jest && npm run test:vitest",
     "tsc": "tsc",
     "mcp": "node dist/src/main.js mcp",
     "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata\" --ignore-dirs=\"dist,site,examples,node_modules\""

@@ -164,10 +164,10 @@ vi.mock('optional-package', () => ({
 npm run test:vitest
 
 # Run Jest tests only
-npm test
+npm run test:jest
 
-# Run both
-npm run test:vitest && npm test
+# Run both (Jest + Vitest)
+npm test
 
 # Run specific Vitest directory
 npm run test:vitest -- --run test/matchers
