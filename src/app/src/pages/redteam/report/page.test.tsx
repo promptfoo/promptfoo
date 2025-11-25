@@ -1,15 +1,10 @@
 import React from 'react';
 
-import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportPage from './page';
-
-vi.mock('@app/hooks/usePageMeta', () => ({
-  usePageMeta: vi.fn(),
-}));
 
 vi.mock('@app/stores/userStore', () => ({
   useUserStore: vi.fn(),
@@ -41,7 +36,6 @@ vi.mock('react-router-dom', async () => {
 
 describe('ReportPage', () => {
   const mockedUseUserStore = vi.mocked(useUserStore);
-  const mockedUsePageMeta = vi.mocked(usePageMeta);
   const mockedUseNavigate = vi.mocked(useNavigate);
   const originalLocation = window.location;
 
@@ -58,29 +52,6 @@ describe('ReportPage', () => {
       isLoading: false,
       fetchEmail: vi.fn(),
     });
-  });
-
-  it("should set page metadata to 'Red Team Vulnerability Reports' when evalId is present", () => {
-    const url = 'http://localhost/reports?evalId=test-eval-123';
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: new URL(url),
-    });
-
-    render(
-      <MemoryRouter>
-        <ReportPage />
-      </MemoryRouter>,
-    );
-
-    expect(mockedUsePageMeta).toHaveBeenCalledTimes(1);
-    expect(mockedUsePageMeta).toHaveBeenCalledWith({
-      title: 'Red Team Vulnerability Reports',
-      description: 'View or browse red team results',
-    });
-
-    expect(screen.getByText('Report Component')).toBeInTheDocument();
-    expect(screen.queryByText('ReportIndex Component')).not.toBeInTheDocument();
   });
 
   it('should render the Report component when evalId is present in the URL search parameters', () => {
@@ -240,11 +211,6 @@ describe('ReportPage', () => {
       </MemoryRouter>,
     );
 
-    expect(mockedUsePageMeta).toHaveBeenCalledTimes(1);
-    expect(mockedUsePageMeta).toHaveBeenCalledWith({
-      title: 'Red Team Vulnerability Reports',
-      description: 'View or browse red team results',
-    });
     expect(screen.getByText('Report Component')).toBeInTheDocument();
     expect(screen.queryByText('ReportIndex Component')).not.toBeInTheDocument();
   });

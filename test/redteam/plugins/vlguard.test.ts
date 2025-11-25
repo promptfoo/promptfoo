@@ -9,7 +9,7 @@ import {
 import * as huggingfaceDatasets from '../../../src/integrations/huggingfaceDatasets';
 import * as fetchModule from '../../../src/util/fetch/index';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/logger');
 jest.mock('../../../src/integrations/huggingfaceDatasets');

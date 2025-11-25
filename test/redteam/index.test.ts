@@ -13,9 +13,9 @@ import {
   resolvePluginConfig,
   synthesize,
 } from '../../src/redteam/index';
-import { Plugins } from '../../src/redteam/plugins';
+import { Plugins } from '../../src/redteam/plugins/index';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
-import { Strategies, validateStrategies } from '../../src/redteam/strategies';
+import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 
