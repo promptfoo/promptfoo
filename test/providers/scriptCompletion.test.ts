@@ -127,7 +127,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle UTF-8 characters in script output', async () => {
     const utf8Output = 'Hello, 世界!';
-    jest.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
+    jest.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
       (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
         null,
         Buffer.from(utf8Output),
@@ -142,7 +142,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle UTF-8 characters in error output', async () => {
     const utf8Error = 'エラー発生';
-    jest.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
+    jest.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
       if (typeof callback === 'function') {
         callback(null, '', Buffer.from(utf8Error));
       }
@@ -182,7 +182,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle script execution errors', async () => {
     const errorMessage = 'Script execution failed';
-    jest.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
+    jest.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
       if (typeof callback === 'function') {
         callback(new Error(errorMessage), '', '');
       }
@@ -194,7 +194,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle empty standard output with error output', async () => {
     const errorOutput = 'Warning: Something went wrong';
-    jest.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
+    jest.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
       if (typeof callback === 'function') {
         callback(null, '', Buffer.from(errorOutput));
       }
@@ -207,7 +207,7 @@ describe('ScriptCompletionProvider', () => {
   it('should strip ANSI escape codes from output', async () => {
     const ansiOutput = '\x1b[31mColored\x1b[0m \x1b[1mBold\x1b[0m';
     const strippedOutput = 'Colored Bold';
-    jest.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
+    jest.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
       if (typeof callback === 'function') {
         callback(null, Buffer.from(ansiOutput), '');
       }

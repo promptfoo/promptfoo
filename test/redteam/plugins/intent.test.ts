@@ -5,7 +5,7 @@ import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
 
-import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),

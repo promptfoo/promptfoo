@@ -5,7 +5,7 @@ import {
   type CallApiContextParams,
   type ProviderResponse,
   ResultFailureReason,
-} from '../../../src/types';
+} from '../../../src/types/index';
 
 import type * as TokenUsageUtilsModule from '../../../src/util/tokenUsageUtils';
 
