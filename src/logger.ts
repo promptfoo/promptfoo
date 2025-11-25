@@ -180,10 +180,13 @@ export function isDebugEnabled(): boolean {
 
 /**
  * Creates log directory and cleans up old log files
+ * Respects PROMPTFOO_LOG_DIR environment variable to customize log location
  */
 function setupLogDirectory(): string {
   const configDir = getConfigDirectoryPath(true);
-  const logDir = path.join(configDir, 'logs');
+  const logDir = getEnvString('PROMPTFOO_LOG_DIR')
+    ? path.resolve(getEnvString('PROMPTFOO_LOG_DIR')!)
+    : path.join(configDir, 'logs');
 
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });

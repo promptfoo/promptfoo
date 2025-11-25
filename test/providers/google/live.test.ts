@@ -5,7 +5,7 @@ import WebSocket from 'ws';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import { fetchJson, GoogleLiveProvider, tryGetThenPost } from '../../../src/providers/google/live';
-import * as fetchModule from '../../../src/util/fetch';
+import * as fetchModule from '../../../src/util/fetch/index';
 
 // Mock setTimeout globally to speed up tests
 const originalSetTimeout = global.setTimeout;

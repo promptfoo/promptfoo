@@ -95,6 +95,7 @@ const redTeamSidebar = [
           'red-team/plugins/coppa',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
+          'red-team/plugins/ecommerce',
           'red-team/plugins/ferpa',
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
@@ -407,7 +408,7 @@ const sidebars = {
       link: {
         type: 'generated-index',
       },
-      items: [...redTeamSidebar, { type: 'doc', id: 'guides/llm-redteaming' }],
+      items: redTeamSidebar,
     },
     {
       type: 'category',

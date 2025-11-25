@@ -1,9 +1,9 @@
 import { filterTestsByResults } from '../../../src/commands/eval/filterTestsUtil';
 import Eval from '../../../src/models/eval';
-import { ResultFailureReason } from '../../../src/types';
-import * as util from '../../../src/util';
+import { ResultFailureReason } from '../../../src/types/index';
+import * as util from '../../../src/util/index';
 
-import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types';
+import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index';
 
 jest.mock('../../../src/models/eval', () => ({
   findById: jest.fn(),
@@ -310,7 +310,7 @@ describe('filterTestsUtil', () => {
         });
 
         // Mock resultIsForTestCase to return true only for the first test
-        jest.mocked(util.resultIsForTestCase).mockImplementation((result, test) => {
+        jest.mocked(util.resultIsForTestCase).mockImplementation((_result, test) => {
           return test === mockTestSuite.tests![0];
         });
 

@@ -10,7 +10,7 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
-import { type UnifiedConfig } from '../../../src/types';
+import { type UnifiedConfig } from '../../../src/types/index';
 import {
   combineConfigs,
   dereferenceConfig,
@@ -89,7 +89,7 @@ jest.mock('../../../src/util/file', () => ({
 }));
 
 jest.mock('../../../src/util/testCaseReader', () => ({
-  readTest: jest.fn().mockImplementation(async (test, basePath, isDefaultTest) => {
+  readTest: jest.fn().mockImplementation(async (test, _basePath, isDefaultTest) => {
     // For defaultTest, just return the test as-is since it doesn't need validation
     if (isDefaultTest) {
       return test;
@@ -234,7 +234,7 @@ describe('combineConfigs', () => {
       .mockImplementation(
         (
           path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+          _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
         ) => {
           if (typeof path === 'string' && path === 'config1.json') {
             return JSON.stringify(config1);
@@ -288,6 +288,7 @@ describe('combineConfigs', () => {
       commandLineOptions: { verbose: true },
       metadata: {},
       sharing: false,
+      tracing: undefined,
     });
 
     const config2Result = await combineConfigs(['config2.json']);
@@ -322,7 +323,8 @@ describe('combineConfigs', () => {
       outputPath: [],
       commandLineOptions: { verbose: false },
       metadata: {},
-      sharing: false,
+      sharing: undefined,
+      tracing: undefined,
     });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
@@ -366,6 +368,7 @@ describe('combineConfigs', () => {
       commandLineOptions: { verbose: false },
       metadata: {},
       sharing: false,
+      tracing: undefined,
     });
   });
 
@@ -463,7 +466,7 @@ describe('combineConfigs', () => {
       .mockImplementation(
         (
           path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+          _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
         ) => {
           if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
@@ -519,7 +522,7 @@ describe('combineConfigs', () => {
       .mockImplementation(
         (
           path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+          _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
         ) => {
           if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
@@ -1002,7 +1005,7 @@ describe('combineConfigs', () => {
     });
   });
 
-  it('should default sharing to false when not defined', async () => {
+  it('should default sharing to undefined when not defined', async () => {
     const config = {
       description: 'test config',
       providers: ['provider1'],
@@ -1019,7 +1022,7 @@ describe('combineConfigs', () => {
       expect.anything(),
     );
 
-    expect(result.sharing).toBe(false);
+    expect(result.sharing).toBeUndefined();
   });
 
   it('should load defaultTest from external file when string starts with file://', async () => {

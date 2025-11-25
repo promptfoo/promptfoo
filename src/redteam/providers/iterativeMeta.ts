@@ -15,7 +15,7 @@ import type {
   Prompt,
   RedteamFileConfig,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
@@ -72,6 +72,7 @@ export async function runMetaAgentRedteam({
   targetProvider,
   test,
   vars,
+  excludeTargetOutputFromAgenticAttackGeneration = false,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -84,6 +85,7 @@ export async function runMetaAgentRedteam({
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
+  excludeTargetOutputFromAgenticAttackGeneration?: boolean;
 }): Promise<{
   output: string;
   metadata: IterativeMetaMetadata;
@@ -145,11 +147,15 @@ export async function runMetaAgentRedteam({
       goal,
       purpose: test?.metadata?.purpose,
       modifiers: test?.metadata?.modifiers,
+      excludeTargetOutputFromAgenticAttackGeneration,
       lastAttempt:
         i > 0 && lastResponse && redteamHistory[i - 1]
           ? {
               prompt: redteamHistory[i - 1].prompt,
-              response: lastResponse.output,
+              // Conditionally exclude target response for privacy
+              response: excludeTargetOutputFromAgenticAttackGeneration
+                ? '[Hidden for privacy]'
+                : lastResponse.output,
               responseLength: lastResponse.output.length,
               graderPassed: redteamHistory[i - 1].graderPassed || false,
               graderReason: storedGraderResult?.reason,
@@ -215,6 +221,7 @@ export async function runMetaAgentRedteam({
       },
       filters,
       targetProvider,
+      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     logger.debug('[IterativeMeta] Calling target with agent-generated prompt', {
@@ -351,6 +358,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
   private readonly injectVar: string;
   private readonly numIterations: number;
   private readonly gradingProvider: RedteamFileConfig['provider'];
+  private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
 
   constructor(readonly config: Record<string, string | object>) {
     logger.debug('[IterativeMeta] Constructor config', {
@@ -361,6 +369,10 @@ class RedteamIterativeMetaProvider implements ApiProvider {
 
     this.numIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 10);
+
+    this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
+      config.excludeTargetOutputFromAgenticAttackGeneration,
+    );
 
     // Meta-agent strategy requires cloud
     if (!shouldGenerateRemote()) {
@@ -418,6 +430,8 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       context,
       options,
       test: context.test,
+      excludeTargetOutputFromAgenticAttackGeneration:
+        this.excludeTargetOutputFromAgenticAttackGeneration,
     });
   }
 }
