@@ -1,26 +1,52 @@
 import { spawn } from 'child_process';
 
 import chalk from 'chalk';
+import { z } from 'zod';
 import { getAuthor } from '../globalConfig/accounts';
+import logger from '../logger';
 import ModelAudit from '../models/modelAudit';
 import { checkModelAuditUpdates } from '../updates';
-import type { Command } from 'commander';
-
-import type { ModelAuditScanResults } from '../types/modelAudit';
-import { parseModelAuditArgs, DEPRECATED_OPTIONS_MAP } from '../util/modelAuditCliParser';
 import {
   getHuggingFaceMetadata,
   isHuggingFaceModel,
   parseHuggingFaceModel,
 } from '../util/huggingfaceMetadata';
-import logger from '../logger';
-import { z } from 'zod';
+import { DEPRECATED_OPTIONS_MAP, parseModelAuditArgs } from '../util/modelAuditCliParser';
+import type { Command } from 'commander';
+
+import type { ModelAuditScanResults } from '../types/modelAudit';
 
 export async function checkModelAuditInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
     const proc = spawn('modelaudit', ['--version']);
     proc.on('error', () => resolve(false));
     proc.on('close', (code) => resolve(code === 0 || code === 1));
+  });
+}
+
+/**
+ * Get the installed modelaudit version.
+ * @returns The version string (e.g., "0.2.16") or null if not available
+ */
+export async function getModelAuditVersion(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const proc = spawn('modelaudit', ['--version']);
+    let stdout = '';
+
+    proc.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    proc.on('error', () => resolve(null));
+    proc.on('close', (code) => {
+      if (code === 0 || code === 1) {
+        // Parse "modelaudit, version X.Y.Z" format
+        const match = stdout.match(/version\s+(\d+\.\d+\.\d+)/i);
+        resolve(match ? match[1] : null);
+      } else {
+        resolve(null);
+      }
+    });
   });
 }
 
@@ -119,13 +145,22 @@ export function modelScanCommand(program: Command): void {
       // Check for modelaudit updates
       await checkModelAuditUpdates();
 
+      // Get the current modelaudit version for tracking and deduplication
+      const currentScannerVersion = await getModelAuditVersion();
+      if (currentScannerVersion) {
+        logger.debug(`Using modelaudit version: ${currentScannerVersion}`);
+      }
+
       // When saving to database (default), always use JSON format internally
       // Note: --no-write flag sets options.write to false
       const saveToDatabase = options.write === undefined || options.write === true;
 
+      // Track existing audit to update (when re-scanning or using --force)
+      let existingAuditToUpdate: ModelAudit | null = null;
+
       // Check for duplicate scans (HuggingFace models only, before download)
-      // Only check if saving to database and not forcing
-      if (saveToDatabase && !options.force && paths.length === 1) {
+      // When --force is used, we still need to find existing record to update (avoid unique constraint)
+      if (saveToDatabase && paths.length === 1) {
         const modelPath = paths[0];
         if (isHuggingFaceModel(modelPath)) {
           try {
@@ -137,17 +172,47 @@ export function modelScanCommand(program: Command): void {
               // Check if already scanned with this revision
               const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
               if (existing) {
-                logger.info(chalk.yellow('✓ Model already scanned'));
-                logger.info(`  Model: ${modelId}`);
-                logger.info(`  Revision: ${metadata.sha}`);
-                logger.info(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
-                logger.info(`  Scan ID: ${existing.id}`);
-                logger.info(
-                  `\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`,
-                );
-                logger.info(chalk.green(`  promptfoo view ${existing.id}`));
-                process.exitCode = 0;
-                return;
+                if (options.force) {
+                  // --force: always rescan and update existing record
+                  logger.debug(`Re-scanning (--force): ${modelId}`);
+                  existingAuditToUpdate = existing;
+                } else {
+                  // Check if scanner version has changed - rescan if newer version available
+                  const existingScannerVersion = existing.scannerVersion;
+                  if (
+                    currentScannerVersion &&
+                    existingScannerVersion &&
+                    currentScannerVersion !== existingScannerVersion
+                  ) {
+                    logger.debug(
+                      `Re-scanning: modelaudit upgraded from ${existingScannerVersion} to ${currentScannerVersion}`,
+                    );
+                    // Mark for update instead of create
+                    existingAuditToUpdate = existing;
+                  } else if (!existingScannerVersion && currentScannerVersion) {
+                    // Previous scan didn't record version, rescan to capture it
+                    logger.debug(
+                      `Re-scanning: previous scan missing version info (now using ${currentScannerVersion})`,
+                    );
+                    // Mark for update instead of create
+                    existingAuditToUpdate = existing;
+                  } else {
+                    logger.info(chalk.yellow('✓ Model already scanned'));
+                    logger.info(`  Model: ${modelId}`);
+                    logger.info(`  Revision: ${metadata.sha}`);
+                    if (existingScannerVersion) {
+                      logger.info(`  Scanner version: ${existingScannerVersion}`);
+                    }
+                    logger.info(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
+                    logger.info(`  Scan ID: ${existing.id}`);
+                    logger.info(
+                      `\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`,
+                    );
+                    logger.info(chalk.green(`  promptfoo view ${existing.id}`));
+                    process.exitCode = 0;
+                    return;
+                  }
+                }
               }
             }
           } catch (error) {
@@ -289,13 +354,25 @@ export function modelScanCommand(program: Command): void {
               }
             }
 
-            // Create audit record in database
-            const audit = await ModelAudit.create({
-              name: options.name || `Model scan ${new Date().toISOString()}`,
-              author: getAuthor() || undefined,
-              modelPath: paths.join(', '),
-              results,
-              metadata: {
+            // Create or update audit record in database
+            let audit: ModelAudit;
+            if (existingAuditToUpdate) {
+              // Update existing record with new scan results
+              existingAuditToUpdate.results = results;
+              existingAuditToUpdate.checks = results.checks || null;
+              existingAuditToUpdate.issues = results.issues || null;
+              existingAuditToUpdate.hasErrors = Boolean(
+                results.has_errors ||
+                  (results.issues &&
+                    results.issues.some(
+                      (issue) => issue.severity === 'critical' || issue.severity === 'error',
+                    )),
+              );
+              existingAuditToUpdate.totalChecks = results.total_checks ?? null;
+              existingAuditToUpdate.passedChecks = results.passed_checks ?? null;
+              existingAuditToUpdate.failedChecks = results.failed_checks ?? null;
+              existingAuditToUpdate.scannerVersion = currentScannerVersion || null;
+              existingAuditToUpdate.metadata = {
                 paths,
                 options: {
                   blacklist: options.blacklist,
@@ -310,10 +387,41 @@ export function modelScanCommand(program: Command): void {
                   progress: options.progress,
                   stream: options.stream,
                 },
-              },
-              // Revision tracking
-              ...revisionInfo,
-            });
+              };
+              if (revisionInfo.contentHash) {
+                existingAuditToUpdate.contentHash = revisionInfo.contentHash;
+              }
+              await existingAuditToUpdate.save();
+              audit = existingAuditToUpdate;
+            } else {
+              // Create new audit record
+              audit = await ModelAudit.create({
+                name: options.name || `Model scan ${new Date().toISOString()}`,
+                author: getAuthor() || undefined,
+                modelPath: paths.join(', '),
+                results,
+                metadata: {
+                  paths,
+                  options: {
+                    blacklist: options.blacklist,
+                    timeout: cliOptions.timeout,
+                    maxSize: options.maxSize,
+                    verbose: options.verbose,
+                    sbom: options.sbom,
+                    strict: options.strict,
+                    dryRun: options.dryRun,
+                    cache: options.cache,
+                    quiet: options.quiet,
+                    progress: options.progress,
+                    stream: options.stream,
+                  },
+                },
+                // Revision tracking
+                ...revisionInfo,
+                // Scanner version tracking
+                scannerVersion: currentScannerVersion || undefined,
+              });
+            }
 
             // Display summary to user (unless they requested JSON format)
             if (options.format !== 'json') {
@@ -371,6 +479,12 @@ export function modelScanCommand(program: Command): void {
                 `\nScanned ${results.files_scanned ?? 0} files (${((results.bytes_scanned ?? 0) / 1024 / 1024).toFixed(2)} MB)`,
               );
               logger.info(`Duration: ${((results.duration ?? 0) / 1000).toFixed(2)} seconds`);
+              if (currentScannerVersion) {
+                logger.debug(`Scanner version: ${currentScannerVersion}`);
+              }
+              if (existingAuditToUpdate) {
+                logger.debug(`Updated existing audit record: ${audit.id}`);
+              }
               logger.info(chalk.green(`\n✓ Results saved to database with ID: ${audit.id}`));
             }
 
