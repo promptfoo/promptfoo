@@ -747,6 +747,26 @@ class Evaluator {
     const maxEvalTimeMs =
       options.maxEvalTimeMs ??
       getDefaultMaxEvalTimeMs(estimatedTotalSteps, maxConcurrency, testCaseTimeoutMs, isRedteam);
+
+    // Log timeout configuration for debugging
+    if (maxEvalTimeMs > 0) {
+      const estimatedEndTime = new Date(startTime + maxEvalTimeMs);
+      const formatDuration = (ms: number) => {
+        const minutes = Math.floor(ms / 60000);
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        return hours > 0 ? `${hours}h ${remainingMinutes}m` : `${minutes}m`;
+      };
+      logger.debug(
+        `[Evaluator] Timeout configuration: maxEvalTime=${formatDuration(maxEvalTimeMs)}, ` +
+          `perTestTimeout=${formatDuration(testCaseTimeoutMs)}, ` +
+          `estimatedSteps=${estimatedTotalSteps}, concurrency=${maxConcurrency}, ` +
+          `isRedteam=${isRedteam}, estimatedEndTime=${estimatedEndTime.toISOString()}`,
+      );
+    } else {
+      logger.debug('[Evaluator] Timeout disabled (maxEvalTimeMs=0)');
+    }
+
     let evalTimedOut = false;
     let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
