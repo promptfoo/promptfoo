@@ -2,28 +2,30 @@
  * Git Metadata Tests
  */
 
+import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 import { extractMetadata } from '../../../src/codeScan/git/metadata';
 import { GitMetadataError } from '../../../src/types/codeScan';
 import type { SimpleGit } from 'simple-git';
 
-// Mock simple-git
-jest.mock('simple-git');
+// Define a partial mock type for the SimpleGit methods we use
+type MockSimpleGit = Pick<SimpleGit, 'log' | 'revparse'> & {
+  log: Mock;
+  revparse: Mock;
+};
+
+// Mock simple-git with a factory that returns a mock instance
+const mockGit: MockSimpleGit = {
+  log: vi.fn(),
+  revparse: vi.fn(),
+};
+
+vi.mock('simple-git', () => ({
+  default: vi.fn(() => mockGit),
+}));
 
 describe('Git Metadata', () => {
-  let mockGit: jest.Mocked<SimpleGit>;
-
   beforeEach(() => {
-    jest.clearAllMocks();
-
-    // Create a mock SimpleGit instance
-    mockGit = {
-      log: jest.fn(),
-      revparse: jest.fn(),
-    } as unknown as jest.Mocked<SimpleGit>;
-
-    // Mock the default import
-    const simpleGit = require('simple-git');
-    simpleGit.default = jest.fn(() => mockGit);
+    vi.clearAllMocks();
   });
 
   describe('extractMetadata', () => {
