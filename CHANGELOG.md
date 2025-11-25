@@ -78,6 +78,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - test(examples): enhance structured-outputs-config example to demonstrate multi-provider structured outputs with OpenAI and Anthropic, showcasing syntax differences between providers (#6226)
 - test(scripts): add 59 tests for changelog automation scripts covering validation and version update functionality (#6252)
 
+### Dependencies
+
+- fix(deps): bump posthog-node from 5.13.2 to 5.14.0 for sha1-hulud supply-chain attack mitigation (#6349) by @Devdha
+
 ## [0.119.11] - 2025-11-23
 
 ### Changed

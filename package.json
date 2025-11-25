@@ -281,7 +281,7 @@
     "opener": "^1.5.2",
     "ora": "^5.4.1",
     "pem": "^1.15.1",
-    "posthog-node": "^5.13.2",
+    "posthog-node": "^5.14.0",
     "proxy-agent": "^6.5.0",
     "proxy-from-env": "^1.1.0",
     "python-shell": "^5.0.0",
