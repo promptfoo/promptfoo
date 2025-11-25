@@ -184,15 +184,19 @@ export class Telemetry {
     if (isShuttingDown) {
       return;
     }
-    isShuttingDown = true;
 
     const client = getPostHogClient();
-    if (client) {
-      try {
-        await client.shutdown();
-      } catch (error) {
-        logger.debug(`PostHog shutdown error: ${error}`);
-      }
+    if (!client) {
+      // No client to shut down - don't set the flag so future shutdowns work
+      // if telemetry becomes enabled (e.g., in test harnesses)
+      return;
+    }
+
+    isShuttingDown = true;
+    try {
+      await client.shutdown();
+    } catch (error) {
+      logger.debug(`PostHog shutdown error: ${error}`);
     }
   }
 

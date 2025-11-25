@@ -236,7 +236,7 @@ describe('Telemetry', () => {
     );
   });
 
-  it('should not initialize PostHog client when telemetry is disabled', async () => {
+  it('should not send user events when telemetry is disabled', async () => {
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
 
     jest.resetModules();
@@ -248,11 +248,18 @@ describe('Telemetry', () => {
     }));
 
     const telemetryModule = await import('../src/telemetry');
-    const telemetryInstance = telemetryModule.default;
+    const { Telemetry: TelemetryClass, default: telemetryInstance } = telemetryModule;
+
+    // Create spy on the dynamically imported class (not the statically imported one)
+    const localSendEventSpy = jest.spyOn(TelemetryClass.prototype as any, 'sendEvent');
 
     telemetryInstance.record('eval_ran', { foo: 'bar' });
 
-    expect(sendEventSpy).toHaveBeenCalledTimes(0);
+    // When telemetry is disabled, sendEvent is called with the "telemetry disabled" event
+    // but NOT with the user's event ('eval_ran')
+    expect(localSendEventSpy).toHaveBeenCalledWith('feature_used', { feature: 'telemetry disabled' });
+    expect(localSendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
+    localSendEventSpy.mockRestore();
   });
 
   describe('PostHog client initialization', () => {
