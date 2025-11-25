@@ -4,11 +4,11 @@ Last updated: 2025-11-24
 
 ## Current Progress
 
-| Metric | Count | Percentage |
-|--------|-------|------------|
-| Vitest tests | 902 | 10.6% |
-| Jest tests | 7,573 | 89.4% |
-| **Total tests** | **8,475** | 100% |
+| Metric          | Count     | Percentage |
+| --------------- | --------- | ---------- |
+| Vitest tests    | 902       | 10.6%      |
+| Jest tests      | 7,573     | 89.4%      |
+| **Total tests** | **8,475** | 100%       |
 
 ## Migrated Directories (Vitest)
 
@@ -55,27 +55,30 @@ These directories still run with Jest (415 test files):
 When migrating a test file from Jest to Vitest:
 
 ### 1. Add Vitest imports
+
 ```typescript
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 ```
 
 ### 2. Replace Jest mocking with Vitest equivalents
-| Jest | Vitest |
-|------|--------|
-| `jest.mock()` | `vi.mock()` |
-| `jest.fn()` | `vi.fn()` |
-| `jest.mocked()` | `vi.mocked()` |
-| `jest.spyOn()` | `vi.spyOn()` |
-| `jest.resetAllMocks()` | `vi.resetAllMocks()` |
-| `jest.clearAllMocks()` | `vi.clearAllMocks()` |
-| `jest.useFakeTimers()` | `vi.useFakeTimers()` |
-| `jest.useRealTimers()` | `vi.useRealTimers()` |
+
+| Jest                         | Vitest                     |
+| ---------------------------- | -------------------------- |
+| `jest.mock()`                | `vi.mock()`                |
+| `jest.fn()`                  | `vi.fn()`                  |
+| `jest.mocked()`              | `vi.mocked()`              |
+| `jest.spyOn()`               | `vi.spyOn()`               |
+| `jest.resetAllMocks()`       | `vi.resetAllMocks()`       |
+| `jest.clearAllMocks()`       | `vi.clearAllMocks()`       |
+| `jest.useFakeTimers()`       | `vi.useFakeTimers()`       |
+| `jest.useRealTimers()`       | `vi.useRealTimers()`       |
 | `jest.advanceTimersByTime()` | `vi.advanceTimersByTime()` |
-| `jest.getTimerCount()` | `vi.getTimerCount()` |
-| `jest.resetModules()` | `vi.resetModules()` |
-| `jest.doMock()` | `vi.doMock()` |
+| `jest.getTimerCount()`       | `vi.getTimerCount()`       |
+| `jest.resetModules()`        | `vi.resetModules()`        |
+| `jest.doMock()`              | `vi.doMock()`              |
 
 ### 3. Handle `jest.requireActual()` (async in Vitest)
+
 ```typescript
 // Jest
 jest.mock('module', () => ({
@@ -94,12 +97,14 @@ vi.mock('module', async () => {
 ```
 
 ### 4. Replace Jest globals
-| Jest | Vitest |
-|------|--------|
-| `fail()` | `expect.fail()` |
+
+| Jest             | Vitest                         |
+| ---------------- | ------------------------------ |
+| `fail()`         | `expect.fail()`                |
 | `jest.Mock` type | `vi.Mock` or use `vi.mocked()` |
 
 ### 5. Mock default exports (different pattern)
+
 ```typescript
 // Jest
 jest.mock('../../src/logger', () => ({
@@ -117,11 +122,14 @@ vi.mock('../../src/logger', () => ({
 ```
 
 ### 6. Update config files
+
 - Add directory to `vitest.config.ts` include array
 - Add directory to `jest.config.ts` testPathIgnorePatterns array
 
 ### 7. Mocking uninstalled/optional dependencies (vi.hoisted with class)
+
 When mocking packages that aren't installed (like optional dependencies), use `vi.hoisted()` with a proper class mock:
+
 ```typescript
 // Create mocks using vi.hoisted() - these are available in vi.mock() factories
 const mocks = vi.hoisted(() => {
