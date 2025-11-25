@@ -255,7 +255,7 @@ export default function EvalsDataGrid({
    * @returns A promise that resolves when the evals are deleted.
    */
   const handleDeleteSelected = () => {
-    if (rowSelectionModel.ids.size === 0) {
+    if (!rowSelectionModel?.ids?.size) {
       return;
     }
     setConfirmDeleteOpen(true);
@@ -269,14 +269,14 @@ export default function EvalsDataGrid({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ids: Array.from(rowSelectionModel.ids) }),
+        body: JSON.stringify({ ids: Array.from(rowSelectionModel?.ids ?? []) }),
       });
 
       if (!res.ok) {
         throw new Error('Failed to delete evals');
       }
 
-      setEvals((prev) => prev.filter((e) => !rowSelectionModel.ids.has(e.evalId)));
+      setEvals((prev) => prev.filter((e) => !rowSelectionModel?.ids?.has(e.evalId)));
       setRowSelectionModel({ type: 'include', ids: new Set() });
       setConfirmDeleteOpen(false);
     } catch (error) {
@@ -482,7 +482,7 @@ export default function EvalsDataGrid({
             showUtilityButtons,
             deletionEnabled,
             focusQuickFilterOnMount,
-            selectedCount: rowSelectionModel.ids.size,
+            selectedCount: rowSelectionModel?.ids?.size ?? 0,
             onDeleteSelected: handleDeleteSelected,
           },
           loadingOverlay: {
@@ -545,12 +545,13 @@ export default function EvalsDataGrid({
       {/* Delete confirmation dialog */}
       <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
         <DialogTitle>
-          Delete {rowSelectionModel.ids.size} eval{rowSelectionModel.ids.size === 1 ? '' : 's'}?
+          Delete {rowSelectionModel?.ids?.size ?? 0} eval
+          {(rowSelectionModel?.ids?.size ?? 0) === 1 ? '' : 's'}?
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
             Are you sure you want to delete the selected eval
-            {rowSelectionModel.ids.size === 1 ? '' : 's'}? This action cannot be undone.
+            {(rowSelectionModel?.ids?.size ?? 0) === 1 ? '' : 's'}? This action cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
