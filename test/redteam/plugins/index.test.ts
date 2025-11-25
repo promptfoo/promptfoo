@@ -1,3 +1,4 @@
+import type { FetchWithCacheResult } from '../../../src/cache';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import {
@@ -9,12 +10,10 @@ import {
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../../src/redteam/constants';
-import { Plugins } from '../../../src/redteam/plugins';
+import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
-
-import type { FetchWithCacheResult } from '../../../src/cache';
-import type { ApiProvider, TestCase } from '../../../src/types';
+import type { ApiProvider, TestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/cliState', () => ({
@@ -23,8 +22,15 @@ jest.mock('../../../src/cliState', () => ({
 }));
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
+  getRemoteHealthUrl: jest.fn().mockReturnValue('http://test-health-url'),
   neverGenerateRemote: jest.fn().mockReturnValue(false),
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
+}));
+jest.mock('../../../src/util/apiHealth', () => ({
+  checkRemoteHealth: jest.fn().mockResolvedValue({
+    status: 'OK',
+    message: 'API is healthy',
+  }),
 }));
 
 // Helper function to create mock fetch responses
@@ -245,7 +251,10 @@ describe('Plugins', () => {
       expect(result).toHaveLength(1);
       expect(result![0].assert).toBeDefined();
       expect(result![0].assert).toEqual([
-        { metric: 'Harmful', type: 'promptfoo:redteam:harmful:misinformation-disinformation' },
+        {
+          metric: 'Misinformation & Disinformation - Harmful lies and propaganda',
+          type: 'promptfoo:redteam:harmful:misinformation-disinformation',
+        },
       ]);
     });
 

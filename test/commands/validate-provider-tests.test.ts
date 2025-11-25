@@ -4,10 +4,7 @@ import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
-import {
-  testHTTPProviderConnectivity,
-  testProviderSession,
-} from '../../src/validators/testProvider';
+import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
 
 import type { UnifiedConfig } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
@@ -75,7 +72,7 @@ describe('Validate Command Provider Tests', () => {
   describe('Provider testing with -t flag (specific target)', () => {
     it('should test HTTP provider with comprehensive tests when -t flag is provided and connectivity passes', async () => {
       jest.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
-      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
+      jest.mocked(testProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Connectivity test passed',
         providerResponse: { output: 'test' },
@@ -98,7 +95,7 @@ describe('Validate Command Provider Tests', () => {
           },
         },
       });
-      expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
+      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
       expect(testProviderSession).toHaveBeenCalledWith(mockHttpProvider, undefined, {
         skipConfigValidation: true,
       });
@@ -108,7 +105,7 @@ describe('Validate Command Provider Tests', () => {
 
     it('should skip session test when connectivity test fails', async () => {
       jest.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
-      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
+      jest.mocked(testProviderConnectivity).mockResolvedValue({
         success: false,
         message: 'Connection failed',
         error: 'Network error',
@@ -118,10 +115,35 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
-      expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
+      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
       expect(testProviderSession).not.toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('Skipping session management test'),
+      );
+    });
+
+    it('should skip session test when target is not stateful (stateful=false)', async () => {
+      const mockNonStatefulHttpProvider: ApiProvider = {
+        id: () => 'http://example.com',
+        callApi: jest.fn(),
+        config: { stateful: false },
+        constructor: { name: 'HttpProvider' },
+      } as any;
+
+      jest.mocked(loadApiProvider).mockResolvedValue(mockNonStatefulHttpProvider);
+      jest.mocked(testProviderConnectivity).mockResolvedValue({
+        success: true,
+        message: 'Connectivity test passed',
+        providerResponse: { output: 'test' },
+        transformedRequest: {},
+      });
+
+      await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
+
+      expect(testProviderConnectivity).toHaveBeenCalledWith(mockNonStatefulHttpProvider);
+      expect(testProviderSession).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Skipping session management test (target is not stateful)'),
       );
     });
 
@@ -132,7 +154,7 @@ describe('Validate Command Provider Tests', () => {
 
       expect(loadApiProvider).toHaveBeenCalledWith('echo');
       expect(mockEchoProvider.callApi).toHaveBeenCalledWith('Hello, world!', expect.any(Object));
-      expect(testHTTPProviderConnectivity).not.toHaveBeenCalled();
+      expect(testProviderConnectivity).not.toHaveBeenCalled();
       expect(testProviderSession).not.toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Connectivity test passed'));
     });
@@ -274,7 +296,7 @@ describe('Validate Command Provider Tests', () => {
       } as any;
 
       jest.mocked(loadApiProvider).mockResolvedValue(mockHttpProviderById);
-      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
+      jest.mocked(testProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Test passed',
         providerResponse: { output: 'test' },
@@ -288,7 +310,7 @@ describe('Validate Command Provider Tests', () => {
       await doValidateTarget({ target: 'http://custom-api.com' }, defaultConfig);
 
       // Should call HTTP-specific tests for providers with http:// id
-      expect(testHTTPProviderConnectivity).toHaveBeenCalled();
+      expect(testProviderConnectivity).toHaveBeenCalled();
       expect(testProviderSession).toHaveBeenCalled();
     });
   });

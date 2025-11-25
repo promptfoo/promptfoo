@@ -9,8 +9,9 @@ import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
-import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
-import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { evaluate } from '../evaluator';
+import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -45,6 +46,7 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types/index';
+import { EMAIL_OK_STATUS } from '../types/email';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -389,8 +391,14 @@ export async function doEval(
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
-      await promptForEmailUnverified();
-      await checkEmailStatusOrExit();
+      // Prompt for email until we get a valid one
+      // Other status problems apart from bad emails (like 'exceeded_limit') just log and exit
+      let hasValidEmail = false;
+      while (!hasValidEmail) {
+        const { emailNeedsValidation } = await promptForEmailUnverified();
+        const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
+        hasValidEmail = res === EMAIL_OK_STATUS;
+      }
     }
 
     if (!resumeEval) {
@@ -433,7 +441,7 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    if (!resumeEval && cmdObj.generateSuggestions) {
+    if (!resumeEval && (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions)) {
       options.generateSuggestions = true;
     }
     // load scenarios or tests from an external file
@@ -528,16 +536,38 @@ export async function doEval(
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
-    // Check for explicit disable signals first
-    const hasExplicitDisable =
-      cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
+    // Determine sharing with explicit precedence handling
+    let wantsToShare: boolean;
+    if (
+      cmdObj.share === false ||
+      cmdObj.noShare === true ||
+      getEnvBool('PROMPTFOO_DISABLE_SHARING')
+    ) {
+      // Explicit disable via CLI or env var takes highest priority
+      wantsToShare = false;
+    } else if (cmdObj.share === true) {
+      // Explicit enable via CLI
+      wantsToShare = true;
+    } else if (commandLineOptions?.share !== undefined) {
+      // Config file commandLineOptions.share (can be true or false)
+      wantsToShare = commandLineOptions.share;
+    } else if (config.sharing !== undefined) {
+      // Config file sharing setting (can be false, true, or object)
+      wantsToShare = Boolean(config.sharing);
+    } else {
+      // Default: auto-share when cloud is enabled
+      wantsToShare = cloudConfig.isEnabled();
+    }
 
-    const wantsToShare = hasExplicitDisable
-      ? false
-      : cmdObj.share || config.sharing || cloudConfig.isEnabled();
+    const canShareEval = isSharingEnabled(evalRecord);
 
-    const shareableUrl =
-      wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
+    logger.debug(`Wants to share: ${wantsToShare}`);
+    logger.debug(`Can share eval: ${canShareEval}`);
+
+    const shareableUrl = wantsToShare && canShareEval ? await createShareableUrl(evalRecord) : null;
+
+    logger.debug(`Shareable URL: ${shareableUrl}`);
+
     if (shareableUrl) {
       evalRecord.shared = true;
     }

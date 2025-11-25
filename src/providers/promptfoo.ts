@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+
 import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -8,9 +9,7 @@ import {
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
 } from '../redteam/remoteGeneration';
-import { fetchWithRetries } from '../util/fetch/index';
-import { REQUEST_TIMEOUT_MS } from './shared';
-
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -19,7 +18,8 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
+import { fetchWithRetries } from '../util/fetch/index';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
@@ -137,7 +137,9 @@ interface PromptfooChatCompletionOptions {
     | 'iterative:image'
     | 'iterative:tree'
     | 'judge'
-    | 'blocking-question-analysis';
+    | 'blocking-question-analysis'
+    | 'meta-agent-decision'
+    | 'hydra-decision';
 }
 
 /**

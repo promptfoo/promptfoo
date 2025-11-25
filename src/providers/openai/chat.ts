@@ -184,7 +184,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
@@ -217,7 +217,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
     const fileTools = config.tools
-      ? maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []
+      ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
@@ -283,7 +283,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
         this.modelName.startsWith('o4') ||
-        this.modelName.startsWith('gpt-5'))
+        this.modelName.startsWith('gpt-5') ||
+        this.modelName.startsWith('gpt-oss'))
     ) {
       body.reasoning_effort = config.reasoning_effort;
     }
@@ -328,18 +329,19 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data, status, statusText;
     let cached = false;
+    let latencyMs: number | undefined;
     try {
-      ({ data, cached, status, statusText } = await fetchWithCache(
+      ({ data, cached, status, statusText, latencyMs } = await fetchWithCache(
         `${this.getApiUrl()}/chat/completions`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
             ...config.headers,
           },
@@ -359,6 +361,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           return {
             output: errorMessage,
             tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            latencyMs,
             isRefusal: true,
             guardrails: {
               flagged: true,
@@ -390,6 +393,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         return {
           output: message.refusal,
           tokenUsage: getTokenUsage(data, cached),
+          cached,
+          latencyMs,
           isRefusal: true,
           ...(finishReason && { finishReason }),
           guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
@@ -401,6 +406,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         return {
           output: message.content || 'Content filtered by provider',
           tokenUsage: getTokenUsage(data, cached),
+          cached,
+          latencyMs,
           isRefusal: true,
           finishReason: FINISH_REASON_MAP.content_filter,
           guardrails: {
@@ -409,9 +416,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
+      let reasoning = '';
       let output = '';
       if (message.reasoning) {
-        output = message.reasoning;
+        reasoning = message.reasoning;
+        output = message.content;
       } else if (message.content && (message.function_call || message.tool_calls)) {
         if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
           output = message.content;
@@ -438,6 +447,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         } catch (error) {
           logger.error(`Failed to parse JSON output: ${error}`);
         }
+      }
+      // Handle reasoning as thinking content if present and showThinking is enabled
+      if (reasoning && (this.config.showThinking ?? true)) {
+        output = `Thinking: ${reasoning}\n\n${output}`;
       }
 
       // Handle function tool callbacks
@@ -533,6 +546,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             output: results.join('\n'),
             tokenUsage: getTokenUsage(data, cached),
             cached,
+            latencyMs,
             logProbs,
             ...(finishReason && { finishReason }),
             cost: calculateOpenAICost(
@@ -569,6 +583,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           },
           tokenUsage: getTokenUsage(data, cached),
           cached,
+          latencyMs,
           logProbs,
           ...(finishReason && { finishReason }),
           cost: calculateOpenAICost(
@@ -587,6 +602,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output,
         tokenUsage: getTokenUsage(data, cached),
         cached,
+        latencyMs,
         logProbs,
         ...(finishReason && { finishReason }),
         cost: calculateOpenAICost(

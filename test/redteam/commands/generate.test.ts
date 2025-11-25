@@ -5,7 +5,7 @@ import * as yaml from 'js-yaml';
 import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
-import { synthesize } from '../../../src/redteam';
+import { synthesize } from '../../../src/redteam/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
@@ -17,7 +17,7 @@ import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
 
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 jest.mock('fs');
 jest.mock('../../../src/redteam');
@@ -181,7 +181,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: undefined,
         plugins: expect.any(Array),
         prompts: [],
@@ -306,7 +305,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: undefined,
         purpose: 'Test purpose',
         plugins: expect.any(Array),
@@ -374,7 +372,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: 1,
         plugins: expect.arrayContaining([
           expect.objectContaining({ id: 'competitors', numTests: 1 }),
@@ -443,7 +440,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: 5,
         plugins: expect.arrayContaining([
           expect.objectContaining({ id: 'contracts', numTests: 5 }),
@@ -574,7 +570,6 @@ describe('doGenerateRedteam', () => {
         strategies: [],
         abortSignal: undefined,
         delay: undefined,
-        language: undefined,
         maxConcurrency: undefined,
         numTests: undefined,
       }),

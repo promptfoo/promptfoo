@@ -12,7 +12,7 @@ import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { Gauge } from '@mui/x-charts/Gauge';
+import { Gauge, gaugeClasses } from '@mui/x-charts/Gauge';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -108,17 +108,18 @@ const RiskCard = ({
                 value={progressValue}
                 // @ts-ignore
                 max={100}
-                thickness={10}
-                arc={{
-                  startAngle: -90,
-                  endAngle: 90,
-                  color: 'primary.main',
-                }}
+                innerRadius="80%"
+                outerRadius="100%"
+                startAngle={-90}
+                endAngle={90}
                 text={Number.isNaN(progressValue) ? '-' : `${Math.round(progressValue)}%`}
-                sx={{
+                sx={(theme) => ({
                   width: '100%',
                   height: '100%',
-                }}
+                  [`& .${gaugeClasses.valueArc}`]: {
+                    fill: theme.palette.primary.main,
+                  },
+                })}
               />
             </Box>
             <Typography
@@ -181,9 +182,9 @@ const RiskCard = ({
                             {`${Math.round(percentage * 100)}%`}
                           </Typography>
                         ) : percentage >= pluginPassRateThreshold ? (
-                          <CheckCircleIcon className="risk-card-icon-passed" />
+                          <CheckCircleIcon className="risk-card-icon-passed" color="success" />
                         ) : (
-                          <CancelIcon className="risk-card-icon-failed" />
+                          <CancelIcon className="risk-card-icon-failed" color="error" />
                         )}
                         <ArrowForwardIosIcon
                           className="risk-card-expand-icon print-hide"

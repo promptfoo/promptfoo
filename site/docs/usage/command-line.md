@@ -137,10 +137,11 @@ Initialize a new project with dummy files.
 
 Start a browser UI for visualization of results.
 
-| Option                | Description                             |
-| --------------------- | --------------------------------------- |
-| `-p, --port <number>` | Port number for the local server        |
-| `-y, --yes`           | Skip confirmation and auto-open the URL |
+| Option                | Description                               |
+| --------------------- | ----------------------------------------- |
+| `-p, --port <number>` | Port number for the local server          |
+| `-y, --yes`           | Skip confirmation and auto-open the URL   |
+| `-n, --no`            | Skip confirmation and do not open the URL |
 
 If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory, run `promptfoo view [directory]`.
 
@@ -279,6 +280,8 @@ Collect and zip log files for debugging purposes.
 | `-o, --output <filepath>` | Output path for the compressed log file              |
 
 This command creates a compressed tar.gz archive containing your promptfoo log files, making it easy to share them for debugging purposes. If no output path is specified, it will generate a timestamped filename automatically.
+
+Log files are stored in `~/.promptfoo/logs` by default. To use a custom log directory, set the `PROMPTFOO_LOG_DIR` environment variable.
 
 ## `promptfoo validate`
 
@@ -716,6 +719,7 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_AJV_STRICT_MODE`           | If set, disables AJV strict mode for JSON schema validation                                                                                                                                                                                                                       |                               |
 | `PROMPTFOO_DISABLE_CONVERSATION_VAR`          | Prevents the `_conversation` variable from being set                                                                                                                                                                                                                              |                               |
 | `PROMPTFOO_DISABLE_ERROR_LOG`                 | Prevents error logs from being written to a file                                                                                                                                                                                                                                  |                               |
+| `PROMPTFOO_DISABLE_DEBUG_LOG`                 | Prevents debug logs from being written to a file                                                                                                                                                                                                                                  |                               |
 | `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`           | If set, disables smart variable substitution within JSON prompts                                                                                                                                                                                                                  |                               |
 | `PROMPTFOO_DISABLE_OBJECT_STRINGIFY`          | Disable object stringification in templates. When false (default), objects are stringified to prevent `[object Object]` issues. When true, allows direct property access (e.g., `{{output.property}}`).                                                                           | `false`                       |
 | `PROMPTFOO_DISABLE_REF_PARSER`                | Prevents JSON schema dereferencing                                                                                                                                                                                                                                                |                               |
@@ -725,7 +729,7 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_TEMPLATING`                | Disables Nunjucks template processing                                                                                                                                                                                                                                             | `false`                       |
 | `PROMPTFOO_DISABLE_VAR_EXPANSION`             | Prevents Array-type vars from being expanded into multiple test cases                                                                                                                                                                                                             |                               |
 | `PROMPTFOO_FAILED_TEST_EXIT_CODE`             | Override the exit code when there is at least 1 test case failure or when the pass rate is below PROMPTFOO_PASS_RATE_THRESHOLD                                                                                                                                                    | 100                           |
-| `PROMPTFOO_LOG_DIR`                           | Directory to write error logs                                                                                                                                                                                                                                                     | `.`                           |
+| `PROMPTFOO_LOG_DIR`                           | Directory to write log files (both debug and error logs). Overrides the default `~/.promptfoo/logs` directory.                                                                                                                                                                    | `~/.promptfoo/logs`           |
 | `PROMPTFOO_PASS_RATE_THRESHOLD`               | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 100% (no failures allowed)                                                                                                                                                                           | 100                           |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`              | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior.                                                                                                                                  |                               |
 | `PROMPTFOO_SHARE_CHUNK_SIZE`                  | Number of results to send in each chunk. This is used to estimate the size of the results and to determine the number of chunks to send.                                                                                                                                          |                               |

@@ -10,6 +10,7 @@ description: Debug and resolve common promptfoo issues with solutions for memory
 Before troubleshooting specific issues, you can access detailed logs to help diagnose problems:
 
 - **View logs directly**: Log files are stored in your config directory at `~/.promptfoo/logs` by default
+- **Custom log directory**: Set the `PROMPTFOO_LOG_DIR` environment variable to write logs to a different directory (e.g., `PROMPTFOO_LOG_DIR=./logs promptfoo eval`)
 - **Export logs for sharing**: Use `promptfoo export logs` to create a compressed archive of your log files for debugging or support
 
 ## Out of memory error
@@ -180,6 +181,75 @@ defaultTest:
           apiHost: xxx.openai.azure.com
 ```
 
+## Python/JavaScript tool files require function name
+
+If you see errors like `Python files require a function name` when loading tools from Python or JavaScript files, you need to specify the function name that returns the tool definitions.
+
+### Solution
+
+Python and JavaScript tool files must specify a function name using the `file://path:function_name` format:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-4.1-mini
+    config:
+      # Correct - specifies function name
+      tools: file://./tools.py:get_tools
+      # or for JavaScript/TypeScript
+      tools: file://./tools.js:getTools
+```
+
+The function must return a tool definitions array (can be synchronous or asynchronous):
+
+```python title="tools.py"
+def get_tools():
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_current_weather",
+                "description": "Get the current weather in a given location",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The city and state, e.g. San Francisco, CA"
+                        }
+                    },
+                    "required": ["location"]
+                }
+            }
+        }
+    ]
+```
+
+```javascript title="tools.js"
+function getTools() {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'get_current_weather',
+        description: 'Get the current weather in a given location',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: {
+              type: 'string',
+              description: 'The city and state, e.g. San Francisco, CA',
+            },
+          },
+          required: ['location'],
+        },
+      },
+    },
+  ];
+}
+
+module.exports = { getTools };
+```
+
 ## How to triage stuck evals
 
 When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. Here's how to fix them:
@@ -339,11 +409,8 @@ Remember that promptfoo runs your Python script in a separate process, so some s
 
 ## Finding log files
 
-promptfoo logs errors to `${PROMPTFOO_LOG_DIR}/promptfoo-errors.log` by default.
-`PROMPTFOO_LOG_DIR` defaults to the current working directory, so the log file
-is created next to where you run your command.
+Promptfoo logs errors and verbose logs to `~/.promptfoo/logs` by default.
 
-Set `PROMPTFOO_DISABLE_ERROR_LOG=true` to turn off file logging, or change the
-location by setting `PROMPTFOO_LOG_DIR` to a different directory.
+Change the location by setting `PROMPTFOO_LOG_DIR` to a different directory.
 
-Increase verbosity by running commands with `LOG_LEVEL=debug`.
+For each run an error log and a debug log will be created.

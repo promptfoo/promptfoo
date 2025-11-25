@@ -4,6 +4,7 @@ import { fromError } from 'zod-validation-error';
 import { getEnvBool } from '../../envars';
 import {
   checkEmailStatus,
+  clearUserEmail,
   getUserEmail,
   getUserId,
   setUserEmail,
@@ -73,9 +74,21 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
-userRouter.get('/email/status', async (_req: Request, res: Response): Promise<void> => {
+userRouter.put('/email/clear', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const result = await checkEmailStatus();
+    clearUserEmail();
+    res.json({ success: true, message: 'Email cleared' });
+  } catch (error) {
+    logger.error(`Error clearing email: ${error}`);
+    res.status(500).json({ error: 'Failed to clear email' });
+  }
+});
+
+userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Extract validate query parameter
+    const validate = req.query.validate === 'true';
+    const result = await checkEmailStatus({ validate });
 
     res.json(
       ApiSchemas.User.EmailStatus.Response.parse({

@@ -10,10 +10,16 @@ import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
 import { CcaGrader } from './plugins/contextComplianceAttack';
 import { ContractsGrader } from './plugins/contracts';
+import { CoppaGrader } from './plugins/compliance/coppa';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
+import { EcommerceComplianceBypassGrader } from './plugins/ecommerce/ecommerceComplianceBypass';
+import { EcommerceOrderFraudGrader } from './plugins/ecommerce/ecommerceOrderFraud';
+import { EcommercePciDssGrader } from './plugins/ecommerce/ecommercePciDss';
+import { EcommercePriceManipulationGrader } from './plugins/ecommerce/ecommercePriceManipulation';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
+import { FerpaGrader } from './plugins/compliance/ferpa';
 import { FinancialCalculationErrorPluginGrader } from './plugins/financial/financialCalculationError';
 import { FinancialComplianceViolationPluginGrader } from './plugins/financial/financialComplianceViolation';
 import { FinancialConfidentialDisclosurePluginGrader } from './plugins/financial/financialConfidentialDisclosure';
@@ -24,6 +30,7 @@ import { FinancialHallucinationPluginGrader } from './plugins/financial/financia
 import { FinancialImpartialityPluginGrader } from './plugins/financial/financialImpartiality';
 import { FinancialMisconductPluginGrader } from './plugins/financial/financialMisconduct';
 import { FinancialSycophancyPluginGrader } from './plugins/financial/financialSycophancy';
+import { GoalMisalignmentGrader } from './plugins/goalMisalignment';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmbenchGrader } from './plugins/harmbench';
 import {
@@ -52,6 +59,9 @@ import {
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
+import { InsuranceCoverageDiscriminationPluginGrader } from './plugins/insurance/coverageDiscrimination';
+import { InsuranceNetworkMisinformationPluginGrader } from './plugins/insurance/networkMisinformation';
+import { InsurancePhiDisclosurePluginGrader } from './plugins/insurance/phiDisclosure';
 import { IntentGrader } from './plugins/intent';
 import { MCPPluginGrader } from './plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from './plugins/medical/medicalAnchoringBias';
@@ -61,10 +71,13 @@ import { MedicalOffLabelUsePluginGrader } from './plugins/medical/medicalOffLabe
 import { MedicalPrioritizationErrorPluginGrader } from './plugins/medical/medicalPrioritizationError';
 import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophancy';
 import { OffTopicPluginGrader } from './plugins/offTopic';
+import { PharmacyControlledSubstanceCompliancePluginGrader } from './plugins/pharmacy/controlledSubstanceCompliance';
+import { PharmacyDosageCalculationPluginGrader } from './plugins/pharmacy/dosageCalculation';
+import { PharmacyDrugInteractionPluginGrader } from './plugins/pharmacy/drugInteraction';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
 import { PlinyGrader } from './plugins/pliny';
-import { PolicyViolationGrader } from './plugins/policy';
+import { PolicyViolationGrader } from './plugins/policy/index';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
@@ -79,6 +92,7 @@ import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import { UnverifiableClaimsGrader } from './plugins/unverifiableClaims';
 import { VLGuardGrader } from './plugins/vlguard';
+import { WordplayGrader } from './plugins/wordplay';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
@@ -96,10 +110,16 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:cca': new CcaGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
+  'promptfoo:redteam:coppa': new CoppaGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
+  'promptfoo:redteam:ecommerce:compliance-bypass': new EcommerceComplianceBypassGrader(),
+  'promptfoo:redteam:ecommerce:order-fraud': new EcommerceOrderFraudGrader(),
+  'promptfoo:redteam:ecommerce:pci-dss': new EcommercePciDssGrader(),
+  'promptfoo:redteam:ecommerce:price-manipulation': new EcommercePriceManipulationGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:ferpa': new FerpaGrader(),
   'promptfoo:redteam:financial:calculation-error': new FinancialCalculationErrorPluginGrader(),
   'promptfoo:redteam:financial:compliance-violation':
     new FinancialComplianceViolationPluginGrader(),
@@ -112,6 +132,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:financial:impartiality': new FinancialImpartialityPluginGrader(),
   'promptfoo:redteam:financial:misconduct': new FinancialMisconductPluginGrader(),
   'promptfoo:redteam:financial:sycophancy': new FinancialSycophancyPluginGrader(),
+  'promptfoo:redteam:goal-misalignment': new GoalMisalignmentGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
   'promptfoo:redteam:harmful': new HarmfulGrader(),
@@ -145,6 +166,11 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:hijacking': new HijackingGrader(),
   'promptfoo:redteam:imitation': new ImitationGrader(),
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
+  'promptfoo:redteam:insurance:coverage-discrimination':
+    new InsuranceCoverageDiscriminationPluginGrader(),
+  'promptfoo:redteam:insurance:network-misinformation':
+    new InsuranceNetworkMisinformationPluginGrader(),
+  'promptfoo:redteam:insurance:phi-disclosure': new InsurancePhiDisclosurePluginGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
   'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
@@ -154,6 +180,10 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritizationErrorPluginGrader(),
   'promptfoo:redteam:medical:sycophancy': new MedicalSycophancyPluginGrader(),
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
+  'promptfoo:redteam:pharmacy:controlled-substance-compliance':
+    new PharmacyControlledSubstanceCompliancePluginGrader(),
+  'promptfoo:redteam:pharmacy:dosage-calculation': new PharmacyDosageCalculationPluginGrader(),
+  'promptfoo:redteam:pharmacy:drug-interaction': new PharmacyDrugInteractionPluginGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
   'promptfoo:redteam:pii': new PiiGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),
@@ -176,6 +206,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
   'promptfoo:redteam:unverifiable-claims': new UnverifiableClaimsGrader(),
   'promptfoo:redteam:vlguard': new VLGuardGrader(),
+  'promptfoo:redteam:wordplay': new WordplayGrader(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {

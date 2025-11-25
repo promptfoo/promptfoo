@@ -1,9 +1,9 @@
-import { type Message, SimulatedUser } from '../../providers/simulatedUser';
 import { REDTEAM_SIMULATED_USER_TASK_ID } from '../../providers/promptfoo';
+import { type Message, SimulatedUser } from '../../providers/simulatedUser';
 import invariant from '../../util/invariant';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 
-import type { ProviderResponse, TokenUsage } from '../../types';
+import type { ProviderResponse, TokenUsage } from '../../types/index';
 
 const PROVIDER_ID = 'promptfoo:redteam:mischievous-user';
 
@@ -38,6 +38,7 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
     messages: Message[],
     tokenUsage: TokenUsage,
     finalTargetResponse: ProviderResponse,
+    sessionId: string,
   ) {
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
@@ -46,8 +47,10 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
         redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
         messages,
         redteamHistory: messagesToRedteamHistory(messages),
+        sessionId,
       },
       guardrails: finalTargetResponse.guardrails,
+      sessionId,
     };
   }
 }

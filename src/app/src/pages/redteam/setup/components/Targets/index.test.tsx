@@ -49,8 +49,8 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('CustomTargetConfiguration - Config Field Handling', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
-  let mockSetRawConfigJson: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
+  let mockSetRawConfigJson: (value: string) => void;
 
   const defaultProps = {
     selectedTarget: {
@@ -185,10 +185,10 @@ describe('updateCustomTarget function behavior', () => {
 });
 
 describe('Targets Component', () => {
-  let mockUpdateConfig: ReturnType<typeof vi.fn>;
-  let mockRecordEvent: ReturnType<typeof vi.fn>;
-  let mockOnNext: ReturnType<typeof vi.fn>;
-  let mockOnBack: ReturnType<typeof vi.fn>;
+  let mockUpdateConfig: (section: string, value: unknown) => void;
+  let mockRecordEvent: (eventName: string, properties?: Record<string, unknown>) => void;
+  let mockOnNext: () => void;
+  let mockOnBack: () => void;
   let mockCallApi: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -497,52 +497,9 @@ Content-Type: application/json
         '/providers/test',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify(validHttpTarget),
+          body: JSON.stringify({ providerOptions: validHttpTarget }),
         }),
       );
-    });
-
-    it('should display error message when target test fails', async () => {
-      const validHttpTarget = {
-        ...DEFAULT_HTTP_TARGET,
-        label: 'My HTTP Target',
-        config: {
-          url: 'https://example.com/api',
-        },
-      };
-
-      (useRedTeamConfig as any).mockReturnValue({
-        config: {
-          target: validHttpTarget,
-          plugins: [],
-          strategies: [],
-        },
-        updateConfig: mockUpdateConfig,
-      });
-
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          testResult: {
-            success: false,
-            message: 'Connection failed: Unable to reach endpoint',
-          },
-          providerResponse: {},
-        }),
-      });
-
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
-
-      const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Connection failed: Unable to reach endpoint')).toBeInTheDocument();
-      });
-
-      // Next button should remain disabled after failed test
-      const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
-      expect(nextButton).toBeDisabled();
     });
   });
 

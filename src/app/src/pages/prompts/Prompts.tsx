@@ -41,14 +41,16 @@ function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) 
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter
+      <Box
         sx={{
           '& .MuiInputBase-root': {
             borderRadius: 2,
             backgroundColor: theme.palette.background.paper,
           },
         }}
-      />
+      >
+        <GridToolbarQuickFilter />
+      </Box>
     </GridToolbarContainer>
   );
 }
@@ -102,9 +104,18 @@ export default function Prompts({
       {
         field: 'id',
         headerName: 'ID',
-        flex: 1,
-        minWidth: 100,
+        flex: 0.5,
+        minWidth: 80,
         valueFormatter: (value: ServerPromptWithMetadata['id']) => value.toString().slice(0, 6),
+      },
+      {
+        field: 'label',
+        headerName: 'Label',
+        flex: 1.5,
+        minWidth: 200,
+        valueGetter: (_value, row: ServerPromptWithMetadata) => {
+          return row.prompt.label || row.prompt.display || row.prompt.raw;
+        },
       },
       {
         field: 'prompt',
@@ -145,7 +156,7 @@ export default function Prompts({
       {
         field: 'count',
         headerName: '# Evals',
-        flex: 1,
+        flex: 0.5,
         minWidth: 80,
       },
     ],
@@ -278,9 +289,9 @@ export default function Prompts({
             },
           }}
           pageSizeOptions={[10, 25, 50, 100]}
+          showToolbar
         />
       </Paper>
-
       {dialogState.open &&
         dialogState.selectedIndex < data.length &&
         data[dialogState.selectedIndex] && (

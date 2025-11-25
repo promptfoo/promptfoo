@@ -25,7 +25,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
-} from '../../../src/types';
+} from '../../../src/types/index';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
 jest.mock('../../../src/providers/openai');
@@ -52,6 +52,62 @@ describe('RedteamIterativeProvider', () => {
       const attackerPrompt = nunjucksEng.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal });
       expect(result.redteamSystemPrompt).toBe(attackerPrompt);
       expect(result.judgeSystemPrompt).toBe(JUDGE_SYSTEM_PROMPT);
+    });
+
+    it('should include modifiers in system prompts when provided', () => {
+      const goal = 'test goal';
+      const purpose = 'test purpose';
+      const modifiers = {
+        testGenerationInstructions: 'Generate prompts as invoice notes',
+        language: 'Spanish',
+      };
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, purpose, false, modifiers);
+
+      // Verify modifiers are included in the system prompt
+      expect(result.redteamSystemPrompt).toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).toContain('<Modifiers>');
+      expect(result.redteamSystemPrompt).toContain(
+        'testGenerationInstructions: Generate prompts as invoice notes',
+      );
+      expect(result.redteamSystemPrompt).toContain('language: Spanish');
+      expect(result.redteamSystemPrompt).toContain('Rewrite ALL prompts to fully comply');
+    });
+
+    it('should include modifiers with cloud attacker prompt', () => {
+      const goal = 'test goal';
+      const modifiers = {
+        testGenerationInstructions: 'Use merchant terminology',
+      };
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, undefined, true, modifiers);
+
+      // Verify modifiers are included in cloud attacker prompt
+      expect(result.redteamSystemPrompt).toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).toContain(
+        'testGenerationInstructions: Use merchant terminology',
+      );
+    });
+
+    it('should not include modifiers section when modifiers are empty', () => {
+      const goal = 'test goal';
+      const modifiers = {};
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, undefined, false, modifiers);
+
+      // Should not contain the modifiers section
+      expect(result.redteamSystemPrompt).not.toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).not.toContain('<Modifiers>');
+    });
+
+    it('should not include modifiers section when modifiers are undefined', () => {
+      const goal = 'test goal';
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, undefined, false, undefined);
+
+      // Should not contain the modifiers section
+      expect(result.redteamSystemPrompt).not.toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).not.toContain('<Modifiers>');
     });
   });
 
@@ -753,7 +809,7 @@ describe('Tree Structure and Metadata', () => {
       attempts: 10,
       highestScore: 8,
       redteamFinalPrompt: 'final prompt',
-      stoppingReason: 'TARGET_SCORE' as const,
+      stoppingReason: 'GRADER_FAILED' as const,
       treeOutputs: JSON.stringify([
         {
           depth: 0,
@@ -830,7 +886,7 @@ describe('runRedteamConversation with transformVars', () => {
     expect(uniqueSessionIds.size).toBe(sessionIds.length);
 
     // Verify the pattern of generated prompts
-    targetPrompts.forEach((prompt, index) => {
+    targetPrompts.forEach((prompt, _index) => {
       expect(prompt).toMatch(/Session session-\d+-\w+ - prompt\d+/);
     });
   });
@@ -925,20 +981,17 @@ describe('Stored Grader Results', () => {
   });
 });
 
-describe('Enhanced Stop Reason Logic', () => {
-  it('should prioritize GRADER_FAILED over TARGET_SCORE', () => {
+describe('Stop Reason Logic', () => {
+  it('prioritizes GRADER_FAILED regardless of score', () => {
     const graderPassed = false;
-    const score = 10; // Would normally trigger TARGET_SCORE
+    const score = 10;
 
-    // Simulate the priority logic from the actual code
     function determineStopReason(
       passed: boolean,
-      currentScore: number,
-    ): 'TARGET_SCORE' | 'GRADER_FAILED' | undefined {
+      _currentScore: number,
+    ): 'GRADER_FAILED' | undefined {
       if (passed === false) {
         return 'GRADER_FAILED';
-      } else if (currentScore >= 10) {
-        return 'TARGET_SCORE';
       }
       return undefined;
     }
@@ -947,82 +1000,36 @@ describe('Enhanced Stop Reason Logic', () => {
     expect(stopReason).toBe('GRADER_FAILED');
   });
 
-  it('should use TARGET_SCORE when grader passes', () => {
+  it('returns undefined when grader passes even for high scores', () => {
     const graderPassed = true;
     const score = 10;
 
     function determineStopReason(
       passed: boolean,
-      currentScore: number,
-    ): 'TARGET_SCORE' | 'GRADER_FAILED' | undefined {
+      _currentScore: number,
+    ): 'GRADER_FAILED' | undefined {
       if (passed === false) {
         return 'GRADER_FAILED';
-      } else if (currentScore >= 10) {
-        return 'TARGET_SCORE';
       }
       return undefined;
     }
 
     const stopReason = determineStopReason(graderPassed, score);
-    expect(stopReason).toBe('TARGET_SCORE');
+    expect(stopReason).toBeUndefined();
   });
 
-  it('should create synthetic grader result when judge triggers early exit', () => {
+  it('does not synthesize grader results when judge hits target score', () => {
     const score = 10;
     const explanation = 'High scoring jailbreak detected';
-    let storedGraderResult: GradingResult | undefined = undefined;
+    const storedGraderResult: GradingResult | undefined = undefined;
 
-    // Simulate the synthetic grader result creation logic
+    // New behavior: judge-only success does not create a synthetic grader result
     if (score >= 10 && !storedGraderResult) {
-      storedGraderResult = {
-        pass: false,
-        score: 0,
-        reason: explanation || 'Jailbreak goal achieved',
-      };
+      // no-op
     }
 
-    expect(storedGraderResult).toBeDefined();
-    expect(storedGraderResult?.pass).toBe(false);
-    expect(storedGraderResult?.score).toBe(0);
-    expect(storedGraderResult?.reason).toBe('High scoring jailbreak detected');
-  });
-
-  it('should use default reason when explanation is not provided', () => {
-    const score = 10;
-    const explanation: string | undefined = undefined;
-    let storedGraderResult: GradingResult | undefined = undefined;
-
-    if (score >= 10 && !storedGraderResult) {
-      storedGraderResult = {
-        pass: false,
-        score: 0,
-        reason: explanation || 'Jailbreak goal achieved',
-      };
-    }
-
-    expect(storedGraderResult?.reason).toBe('Jailbreak goal achieved');
-  });
-
-  it('should not overwrite existing storedGraderResult', () => {
-    const score = 10;
-    const explanation = 'Judge explanation';
-    let storedGraderResult: GradingResult = {
-      pass: false,
-      score: 0.9,
-      reason: 'Original grader result',
-    };
-
-    // Should not overwrite existing result
-    if (score >= 10 && !storedGraderResult) {
-      storedGraderResult = {
-        pass: false,
-        score: 0,
-        reason: explanation || 'Jailbreak goal achieved',
-      };
-    }
-
-    expect(storedGraderResult.reason).toBe('Original grader result');
-    expect(storedGraderResult.score).toBe(0.9);
+    expect(storedGraderResult).toBeUndefined();
+    expect(explanation).toBe('High scoring jailbreak detected');
   });
 });
 
@@ -1235,6 +1242,102 @@ describe('Token Counting', () => {
       total: 100,
       prompt: 60,
       numRequests: 1,
+    });
+  });
+
+  describe('Rubric Storage', () => {
+    it('should store rendered rubric in storedGraderResult.assertion.value', () => {
+      const mockRenderedRubric = '<rubric>Rendered policy evaluation criteria</rubric>';
+      const mockGraderResult: {
+        pass: boolean;
+        score: number;
+        reason: string;
+        assertion?: any;
+      } = {
+        pass: false,
+        score: 0,
+        reason: 'Policy violation detected',
+      };
+
+      const testCase: AtomicTestCase = {
+        vars: {},
+        assert: [
+          {
+            type: 'promptfoo:redteam:policy',
+            metric: 'PolicyViolation:test',
+          },
+        ],
+        metadata: {
+          pluginId: 'policy',
+          goal: 'Test goal',
+        },
+      };
+
+      // Test the pattern used in iterativeTree for storing rubric
+      const storedResult = {
+        ...mockGraderResult,
+        assertion: mockGraderResult.assertion
+          ? { ...mockGraderResult.assertion, value: mockRenderedRubric }
+          : testCase.assert?.[0] &&
+              'type' in testCase.assert[0] &&
+              (testCase.assert[0] as any).type !== 'assert-set'
+            ? { ...testCase.assert[0], value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeDefined();
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:policy');
+    });
+
+    it('should handle grade.assertion when present', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResultWithAssertion = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+        assertion: {
+          type: 'promptfoo:redteam:harmful' as const,
+          metric: 'Harmful',
+          value: 'old value',
+        },
+      };
+
+      const storedResult = {
+        ...mockGraderResultWithAssertion,
+        assertion: mockGraderResultWithAssertion.assertion
+          ? { ...mockGraderResultWithAssertion.assertion, value: mockRenderedRubric }
+          : undefined,
+      };
+
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:harmful');
+      expect(storedResult.assertion?.metric).toBe('Harmful');
+    });
+
+    it('should not create assertion for AssertionSet', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResult = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+      };
+
+      const assertionSet = {
+        type: 'assert-set' as const,
+        assert: [{ type: 'contains' as const, value: 'test' }],
+      };
+
+      const storedResult = {
+        ...mockGraderResult,
+        assertion:
+          assertionSet && 'type' in assertionSet && assertionSet.type !== 'assert-set'
+            ? { ...assertionSet, value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeUndefined();
+      expect(storedResult.pass).toBe(false);
     });
   });
 

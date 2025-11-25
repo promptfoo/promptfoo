@@ -11,7 +11,7 @@ import { getProviderFromCloud } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
-import { testHTTPProviderConnectivity, testProviderSession } from '../validators/testProvider';
+import { testProviderConnectivity, testProviderSession } from '../validators/testProvider';
 import type { Command } from 'commander';
 
 import type { UnifiedConfig } from '../types/index';
@@ -125,16 +125,21 @@ async function testHttpProvider(provider: ApiProvider): Promise<void> {
 
   // Test 1: Connectivity
   logger.info('Testing basic connectivity...');
-  const connectivityResult = await testHTTPProviderConnectivity(provider);
+  const connectivityResult = await testProviderConnectivity(provider);
   displayTestResult(connectivityResult, 'Connectivity test');
 
-  // Test 2: Session management (only if connectivity test passed)
+  // Test 2: Session management (only if connectivity test passed and target is stateful)
   if (connectivityResult.success) {
-    logger.info('\nTesting session management...');
-    const sessionResult = await testProviderSession(provider, undefined, {
-      skipConfigValidation: true,
-    });
-    displayTestResult(sessionResult, 'Session test');
+    // Check if the provider is explicitly configured as non-stateful
+    if (provider.config?.stateful === false) {
+      logger.info(chalk.dim('\nSkipping session management test (target is not stateful)'));
+    } else {
+      logger.info('\nTesting session management...');
+      const sessionResult = await testProviderSession(provider, undefined, {
+        skipConfigValidation: true,
+      });
+      displayTestResult(sessionResult, 'Session test');
+    }
   } else {
     logger.info(chalk.dim('\nSkipping session management test (connectivity test failed)'));
   }

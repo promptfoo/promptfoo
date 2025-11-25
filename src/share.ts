@@ -8,7 +8,11 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { checkCloudPermissions, makeRequest as makeCloudRequest } from './util/cloud';
+import {
+  checkCloudPermissions,
+  getOrgContext,
+  makeRequest as makeCloudRequest,
+} from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 
 import type Eval from './models/eval';
@@ -436,6 +440,15 @@ export async function createShareableUrl(
     return null;
   }
 
+  // Show org/team context before uploading (only when cloud is enabled)
+  const orgContext = await getOrgContext();
+  if (orgContext) {
+    const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
+    logger.info(
+      `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
+    );
+  }
+
   // 1. Handle email collection
   await handleEmailCollection(evalRecord);
 
@@ -555,6 +568,13 @@ export async function createShareableModelAuditUrl(
       passedChecks: auditRecord.passedChecks,
       failedChecks: auditRecord.failedChecks,
       metadata: auditRecord.metadata,
+      // Revision tracking fields for deduplication
+      modelId: auditRecord.modelId,
+      revisionSha: auditRecord.revisionSha,
+      contentHash: auditRecord.contentHash,
+      modelSource: auditRecord.modelSource,
+      sourceLastModified: auditRecord.sourceLastModified,
+      scannerVersion: auditRecord.scannerVersion,
     };
 
     // Log payload size for debugging large model audits

@@ -44,7 +44,7 @@ providers:
         effort: minimal
 ```
 
-The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts#L14-L32), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
+The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts#L112-L185), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -191,6 +191,71 @@ providers:
   - id: openai:chat:gpt-4.1-nano-2025-04-14 # Nano
 ```
 
+### GPT-5.1
+
+GPT-5.1 is OpenAI's newest flagship model, part of the GPT-5 model family. It excels at coding and agentic tasks with improved steerability, a new `none` reasoning mode for faster responses, and new tools for coding use cases.
+
+#### Available Models
+
+| Model         | Description                                        | Best For                                    |
+| ------------- | -------------------------------------------------- | ------------------------------------------- |
+| gpt-5.1       | Latest flagship model                              | Complex reasoning and broad world knowledge |
+| gpt-5.1-mini  | Cost-optimized reasoning                           | Balanced speed, cost, and capability        |
+| gpt-5.1-nano  | High-throughput model                              | Simple instruction-following tasks          |
+| gpt-5.1-codex | Specialized for coding tasks in Codex environments | Agentic coding workflows                    |
+
+#### Key Features
+
+GPT-5.1 introduces several improvements over GPT-5:
+
+- **`none` reasoning mode**: New lowest reasoning setting for low-latency interactions (default setting)
+- **Increased steerability**: Better control over personality, tone, and output format
+- **Configurable verbosity**: Control output length with `low`, `medium`, or `high` settings (default: `medium`)
+
+#### Usage Examples
+
+Fast, low-latency responses:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.1
+    config:
+      reasoning:
+        effort: 'none' # Default setting - no reasoning tokens
+      verbosity: 'low' # Concise outputs
+```
+
+Complex coding and reasoning tasks:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.1
+    config:
+      reasoning:
+        effort: 'high' # Maximum reasoning for complex tasks
+      verbosity: 'medium' # Balanced output length
+      max_output_tokens: 4096
+```
+
+#### Reasoning Modes
+
+GPT-5.1 supports four reasoning effort levels:
+
+- **`none`** (default): No reasoning tokens, fastest responses, similar to non-reasoning models
+- **`low`**: Minimal reasoning for straightforward tasks
+- **`medium`**: Balanced reasoning for moderate complexity
+- **`high`**: Maximum reasoning for complex problem-solving
+
+#### Migration from GPT-5
+
+GPT-5.1 with default settings (`none` reasoning) is designed as a drop-in replacement for GPT-5. Key differences:
+
+- GPT-5.1 defaults to `none` reasoning effort (GPT-5 defaulted to `minimal`)
+- GPT-5.1 has better-calibrated reasoning token consumption
+- Improved instruction-following and output formatting
+
+For tasks requiring reasoning, start with `medium` effort and increase to `high` if needed.
+
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
 
 Reasoning models, like `o1`, `o3`, `o3-pro`, `o3-mini`, and `o4-mini`, are large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem-solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
@@ -209,7 +274,7 @@ providers:
 Unlike standard models that use `max_tokens`, reasoning models use:
 
 - `max_completion_tokens` to control the total tokens generated (both reasoning and visible output)
-- `reasoning` to control how thoroughly the model thinks before responding (with `effort`: low, medium, high)
+- `reasoning` to control how thoroughly the model thinks before responding (with `effort`: none (GPT-5.1 only), low, medium, high)
 
 #### How Reasoning Models Work
 
@@ -306,6 +371,39 @@ To set `tools` on an OpenAI provider, use the provider's `config` key. The model
 2. A message with tool calls: `{content: '...', tool_calls: [{type: 'function', function: {...}}]}`
 
 Tools can be defined inline or loaded from an external file:
+
+:::info Supported file formats
+
+Tools can be loaded from external files in multiple formats:
+
+```yaml
+# Static data files
+tools: file://./tools.yaml
+tools: file://./tools.json
+
+# Dynamic tool definitions from code (requires function name)
+tools: file://./tools.py:get_tools
+tools: file://./tools.js:getTools
+tools: file://./tools.ts:getTools
+```
+
+Python and JavaScript files must export a function that returns the tool definitions array. The function can be synchronous or asynchronous.
+
+**Asynchronous example:**
+
+```javascript
+// tools.js - Fetch tool definitions from API at runtime
+export async function getTools() {
+  const apiKey = process.env.INTERNAL_API_KEY;
+  const response = await fetch('https://api.internal.com/tool-definitions', {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  const tools = await response.json();
+  return tools;
+}
+```
+
+:::
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -498,6 +596,12 @@ tests:
 ### Loading tools/functions from a file
 
 Instead of duplicating function definitions across multiple configurations, you can reference an external YAML (or JSON) file that contains your functions. This allows you to maintain a single source of truth for your functions, which is particularly useful if you have multiple versions or regular changes to definitions.
+
+:::tip
+
+Tool definitions can be loaded from JSON, YAML, Python, or JavaScript files. For Python/JS files, specify a function name that returns the tool definitions: `file://tools.py:get_tools`
+
+:::
 
 To load your functions from a file, specify the file path in your provider configuration like so:
 
@@ -822,6 +926,88 @@ In the web UI, audio outputs display with an embedded player and transcript. For
 
 ```bash
 npx promptfoo@latest init --example openai-audio
+```
+
+### Audio transcription
+
+OpenAI provides dedicated transcription models for converting speech to text. These models charge per minute of audio rather than per token.
+
+**Available transcription models:**
+
+| Model                       | Description                          | Cost per minute |
+| --------------------------- | ------------------------------------ | --------------- |
+| `whisper-1`                 | Original Whisper transcription model | $0.006          |
+| `gpt-4o-transcribe`         | GPT-4o optimized for transcription   | $0.006          |
+| `gpt-4o-mini-transcribe`    | Faster, more cost-effective option   | $0.003          |
+| `gpt-4o-transcribe-diarize` | Identifies different speakers        | $0.006          |
+
+To use transcription models, specify the provider format `openai:transcription:<model name>`:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - file://sample-audio.mp3
+
+providers:
+  - id: openai:transcription:whisper-1
+    config:
+      language: en # Optional: specify language for better accuracy
+      temperature: 0 # Optional: 0 for more deterministic output
+
+  - id: openai:transcription:gpt-4o-transcribe
+    config:
+      language: en
+      prompt: This is a technical discussion about AI and machine learning.
+
+  - id: openai:transcription:gpt-4o-transcribe-diarize
+    config:
+      num_speakers: 2 # Optional: expected number of speakers
+      speaker_labels: ['Alice', 'Bob'] # Optional: provide speaker names
+
+tests:
+  - assert:
+      - type: contains
+        value: expected transcript content
+```
+
+#### Transcription configuration options
+
+| Parameter                 | Description                               | Options                |
+| ------------------------- | ----------------------------------------- | ---------------------- |
+| `language`                | Language of the audio (ISO-639-1)         | e.g., 'en', 'es', 'fr' |
+| `prompt`                  | Context to improve transcription accuracy | Any text string        |
+| `temperature`             | Controls randomness (0-1)                 | Number between 0 and 1 |
+| `timestamp_granularities` | Get word or segment-level timestamps      | ['word', 'segment']    |
+| `num_speakers`            | Expected number of speakers (diarization) | Number                 |
+| `speaker_labels`          | Names for speakers (diarization)          | Array of strings       |
+
+Supported audio formats include MP3, MP4, MPEG, MPGA, M4A, WAV, and WEBM.
+
+#### Diarization example
+
+The diarization model identifies different speakers in the audio:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - file://interview.mp3
+
+providers:
+  - id: openai:transcription:gpt-4o-transcribe-diarize
+    config:
+      num_speakers: 2
+      speaker_labels: ['Interviewer', 'Guest']
+
+tests:
+  - assert:
+      - type: contains
+        value: Interviewer
+      - type: contains
+        value: Guest
+```
+
+For a complete working example, see the [OpenAI audio transcription example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-audio-transcription) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-audio-transcription
 ```
 
 ## Realtime API Models
@@ -1299,6 +1485,45 @@ Deep research models require high `max_output_tokens` values (50,000+) and long 
 The `web_search_preview` tool is **required** for deep research models. The provider will return an error if this tool is not configured.
 :::
 
+### GPT-5-pro Timeout Configuration
+
+GPT-5-pro is a long-running model that often requires extended timeouts due to its advanced reasoning capabilities. Like deep research models, GPT-5-pro **automatically** receives a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
+
+**Automatic timeout behavior:**
+
+- GPT-5-pro automatically gets a 10-minute timeout (600,000ms) - **no configuration needed**
+- If you need longer, set `PROMPTFOO_EVAL_TIMEOUT_MS` (e.g., 900000 for 15 minutes)
+- `REQUEST_TIMEOUT_MS` is **ignored** for GPT-5-pro (the automatic timeout takes precedence)
+
+**Most users won't need any timeout configuration** - the automatic 10-minute timeout is sufficient for most GPT-5-pro requests.
+
+**If you experience timeouts, configure this:**
+
+```bash
+# Only if you need more than the automatic 10 minutes
+export PROMPTFOO_EVAL_TIMEOUT_MS=1200000   # 20 minutes
+
+# For infrastructure reliability (recommended)
+export PROMPTFOO_RETRY_5XX=true            # Retry 502 Bad Gateway errors
+export PROMPTFOO_REQUEST_BACKOFF_MS=10000  # Longer retry backoff
+
+# Reduce concurrency to avoid rate limits
+promptfoo eval --max-concurrency 2
+```
+
+**Common GPT-5-pro errors and solutions:**
+
+If you encounter errors with GPT-5-pro:
+
+1. **Request timed out** - If GPT-5-pro needs more than the automatic 10 minutes, set `PROMPTFOO_EVAL_TIMEOUT_MS=1200000` (20 minutes)
+2. **502 Bad Gateway** - Enable `PROMPTFOO_RETRY_5XX=true` to retry Cloudflare/OpenAI infrastructure timeouts
+3. **getaddrinfo ENOTFOUND** - Transient DNS errors; reduce concurrency with `--max-concurrency 2`
+4. **Upstream connection errors** - OpenAI load balancer issues; increase backoff with `PROMPTFOO_REQUEST_BACKOFF_MS=10000`
+
+:::tip
+GPT-5-pro automatically gets a 10-minute timeout - you likely don't need any timeout configuration. If you see infrastructure errors (502, DNS failures), enable `PROMPTFOO_RETRY_5XX=true` and reduce concurrency.
+:::
+
 ### Sending Images in Prompts
 
 The Responses API supports structured prompts with text and image inputs. Example:
@@ -1356,7 +1581,7 @@ providers:
   - id: openai:responses:gpt-4.1
     config:
       apiHost: 'your-resource.openai.azure.com'
-      apiKey: '${AZURE_API_KEY}'
+      apiKey: '{{ env.AZURE_API_KEY }}' # or set OPENAI_API_KEY env var
       temperature: 0.7
       instructions: 'You are a helpful assistant.'
       response_format: file://./response-schema.json
@@ -1390,15 +1615,15 @@ To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY
 
 ## Agents SDK Integration
 
-Promptfoo supports evaluation of OpenAI's Agents SDK, which enables building multi-agent systems with specialized agents, handoffs, and persistent context. You can integrate the Agents SDK as a [Python provider](./python.md).
+Test multi-turn agentic workflows with the [OpenAI Agents provider](/docs/providers/openai-agents). This provider supports the [@openai/agents](https://github.com/openai/openai-agents-js) SDK with tools, handoffs, and tracing.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - file://agent_provider.py:call_api
+  - openai:agents:my-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      tools: file://./tools/support-tools.ts
+      maxTurns: 10
 ```
 
-For a complete working example of an airline customer service system with multiple agents, see the [OpenAI Agents SDK example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) or initialize it with:
-
-```bash
-npx promptfoo@latest init --example openai-agents
-```
+See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full configuration options and examples.

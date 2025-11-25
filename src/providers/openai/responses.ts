@@ -7,7 +7,7 @@ import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
-import { ResponsesProcessor } from '../responses';
+import { ResponsesProcessor } from '../responses/index';
 
 import type {
   CallApiContextParams,
@@ -46,6 +46,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5-mini-2025-08-07',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
+    // GPT-5.1 models
+    'gpt-5.1',
+    'gpt-5.1-mini',
+    'gpt-5.1-nano',
+    'gpt-5.1-codex',
     // Audio models
     'gpt-audio',
     'gpt-audio-2025-08-28',
@@ -119,7 +124,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
@@ -198,6 +203,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       textFormat = { format: { type: 'text' } };
     }
 
+    // Add verbosity for GPT-5.1 models if configured
+    if (this.modelName.startsWith('gpt-5') && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
+    }
+
+    // Load tools from external file if needed
+    // Store in variable so we can include in both body and returned config
+    const loadedTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : undefined;
+
     const body = {
       model: this.modelName,
       input,
@@ -208,9 +224,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
-      ...(config.tools
-        ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
-        : {}),
+      ...(loadedTools ? { tools: loadedTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
@@ -240,7 +254,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body.reasoning = config.reasoning;
     }
 
-    return { body, config: { ...config, response_format: responseFormat } };
+    return {
+      body,
+      config: {
+        ...config,
+        tools: loadedTools, // Include loaded tools for downstream validation
+        response_format: responseFormat,
+      },
+    };
   }
 
   async callApi(
@@ -254,7 +275,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       );
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     // Validate deep research models have required tools
     const isDeepResearchModel = this.modelName.includes('deep-research');
@@ -279,18 +300,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     }
 
-    // Calculate timeout for deep research models
+    // Calculate timeout for long-running models (deep research and gpt-5-pro)
     let timeout = REQUEST_TIMEOUT_MS;
-    if (isDeepResearchModel) {
-      // For deep research models, use PROMPTFOO_EVAL_TIMEOUT_MS if set,
+    const isLongRunningModel = isDeepResearchModel || this.modelName.includes('gpt-5-pro');
+    if (isLongRunningModel) {
+      // For long-running models, use PROMPTFOO_EVAL_TIMEOUT_MS if set,
       // otherwise default to 10 minutes (600,000ms)
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
       if (evalTimeout > 0) {
         timeout = evalTimeout;
       } else {
-        timeout = 600_000; // 10 minutes default for deep research
+        timeout = 600_000; // 10 minutes default for long-running models
       }
-      logger.debug(`Using timeout of ${timeout}ms for deep research model ${this.modelName}`);
+      logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
     }
 
     let data, status, statusText;

@@ -1,4 +1,4 @@
-import { synthesize } from '../../../src/redteam';
+import { synthesize } from '../../../src/redteam/index';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import * as configModule from '../../../src/util/config/load';
 

@@ -1,9 +1,10 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
-import * as ReactDOM from 'react-dom';
+import * as ReactDOM from 'react-dom/client';
+import { v4 as uuidv4 } from 'uuid';
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({
@@ -16,11 +17,6 @@ vi.mock('./Citations', () => ({
 
 vi.mock('./DebuggingPanel', () => {
   const MockDebuggingPanel = vi.fn((props) => {
-    if (props.onTraceSectionVisibilityChange) {
-      queueMicrotask(() => {
-        props.onTraceSectionVisibilityChange(false);
-      });
-    }
     return (
       <div data-testid="mock-debugging-panel" data-prompt-index={props.promptIndex}>
         Mock DebuggingPanel
@@ -36,7 +32,13 @@ const mockOnClose = vi.fn();
 const mockAddFilter = vi.fn();
 const mockResetFilters = vi.fn();
 const mockReplayEvaluation = vi.fn();
-const mockFetchTraces = vi.fn();
+const mockFetchTraces = vi.fn().mockResolvedValue([
+  {
+    traceId: 'trace-1',
+    testCaseId: 'test-case-id',
+    spans: [{ spanId: 'span-1', name: 'test-span' }],
+  },
+]);
 
 const mockCloudConfig = {
   appUrl: 'https://cloud.example.com',
@@ -76,28 +78,41 @@ const defaultProps = {
 describe('EvalOutputPromptDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Note: Do NOT use vi.useFakeTimers() here - it breaks component rendering
   });
 
-  it('renders with the correct title', () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
-    expect(screen.getByText('Details: test-provider')).toBeInTheDocument();
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('displays prompt content', () => {
+  it('renders with the correct title', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    expect(screen.getByText('Prompt')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Details: test-provider')).toBeInTheDocument();
+    });
+  });
+
+  it('displays prompt content', async () => {
+    render(<EvalOutputPromptDialog {...defaultProps} />);
+    await waitFor(() => {
+      expect(screen.getByText('Prompt')).toBeInTheDocument();
+    });
     expect(screen.getByText('Test prompt')).toBeInTheDocument();
   });
 
-  it('displays output when provided', () => {
+  it('displays output when provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    expect(screen.getByText('Original Output')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Original Output')).toBeInTheDocument();
+    });
     expect(screen.getByText('Test output')).toBeInTheDocument();
   });
 
   it('displays assertion results table with metrics when provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    });
     expect(screen.getByText('Metric')).toBeInTheDocument();
     expect(screen.getByText('contains')).toBeInTheDocument();
     expect(screen.getByText('✅')).toBeInTheDocument();
@@ -117,13 +132,17 @@ describe('EvalOutputPromptDialog', () => {
       ],
     };
     render(<EvalOutputPromptDialog {...propsWithoutMetrics} />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    });
     expect(screen.queryByText('Metric')).not.toBeInTheDocument();
   });
 
   it('displays metadata table when provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
     expect(screen.getByText('Metadata')).toBeInTheDocument();
     expect(screen.getByText('testKey')).toBeInTheDocument();
     expect(screen.getByText('testValue')).toBeInTheDocument();
@@ -167,7 +186,9 @@ describe('EvalOutputPromptDialog', () => {
 
     render(<EvalOutputPromptDialog {...defaultProps} />);
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    });
 
     // Trigger the hover event on the value cell to make the copy button visible
     const valueCell = screen.getByText('expected value').closest('td');
@@ -200,13 +221,15 @@ describe('EvalOutputPromptDialog', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithLongValue} />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    });
     const truncatedCell = screen.getByText(/^a+\.\.\.$/);
     await userEvent.click(truncatedCell);
     expect(screen.getByText(longValue)).toBeInTheDocument();
   });
 
-  it('displays the Citations component when citations are in metadata', () => {
+  it('displays the Citations component when citations are in metadata', async () => {
     const propsWithCitations = {
       ...defaultProps,
       metadata: {
@@ -224,7 +247,9 @@ describe('EvalOutputPromptDialog', () => {
       },
     };
 
-    render(<EvalOutputPromptDialog {...propsWithCitations} />);
+    await act(async () => {
+      render(<EvalOutputPromptDialog {...propsWithCitations} />);
+    });
 
     // Check if Citations component is rendered with correct props
     const citationsComponent = screen.getByTestId('citations-component');
@@ -235,8 +260,10 @@ describe('EvalOutputPromptDialog', () => {
     expect(passedCitations).toEqual(propsWithCitations.metadata.citations);
   });
 
-  it('does not display the Citations component when no citations in metadata', () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+  it('does not display the Citations component when no citations in metadata', async () => {
+    await act(async () => {
+      render(<EvalOutputPromptDialog {...defaultProps} />);
+    });
     expect(screen.queryByTestId('citations-component')).not.toBeInTheDocument();
   });
 
@@ -252,7 +279,9 @@ describe('EvalOutputPromptDialog', () => {
     render(<EvalOutputPromptDialog {...propsWithCitations} />);
 
     // Regular metadata should be in the table
-    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
     expect(screen.getByText('regularKey')).toBeInTheDocument();
     expect(screen.getByText('regular value')).toBeInTheDocument();
 
@@ -305,29 +334,43 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('handles unmounting during drawer transition', async () => {
+    // This test needs fake timers to control transition timing
+    vi.useFakeTimers();
+
     const container = document.createElement('div');
     document.body.appendChild(container);
 
     const transitionDuration = { enter: 320, exit: 250 };
 
-    ReactDOM.render(<EvalOutputPromptDialog {...defaultProps} />, container);
+    const root = ReactDOM.createRoot(container);
+    root.render(<EvalOutputPromptDialog {...defaultProps} />);
 
-    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
-
-    act(() => {
-      ReactDOM.unmountComponentAtNode(container);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
     });
 
-    await act(() => new Promise((resolve) => setTimeout(resolve, transitionDuration.enter)));
+    act(() => {
+      root.unmount();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(transitionDuration.enter);
+    });
 
     expect(true).toBe(true);
 
     document.body.removeChild(container);
+    vi.useRealTimers();
   });
 
   it('passes the promptIndex prop to DebuggingPanel when provided', async () => {
     const promptIndex = 5;
     render(<EvalOutputPromptDialog {...defaultProps} promptIndex={promptIndex} />);
+
+    // Wait for traces tab to be available
+    await waitFor(() => {
+      expect(screen.getByText('Traces')).toBeInTheDocument();
+    });
 
     const tracesTab = screen.getByText('Traces');
     await userEvent.click(tracesTab);
@@ -336,45 +379,49 @@ describe('EvalOutputPromptDialog', () => {
       expect.objectContaining({
         promptIndex: promptIndex,
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
-  it('passes undefined promptIndex to DebuggingPanel when promptIndex is not provided', () => {
+  it('passes undefined promptIndex to DebuggingPanel when promptIndex is not provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} promptIndex={undefined} />);
 
+    // Wait for traces tab to be available
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /traces/i })).toBeInTheDocument();
+    });
+
     const tracesTab = screen.getByRole('tab', { name: /traces/i });
-    fireEvent.click(tracesTab);
+    await act(async () => {
+      fireEvent.click(tracesTab);
+    });
 
     const debuggingPanel = screen.getByTestId('mock-debugging-panel');
     expect(debuggingPanel.getAttribute('data-prompt-index')).toBeNull();
   });
 
-  it('passes promptIndex to DebuggingPanel when testIndex is undefined', () => {
+  it('passes promptIndex to DebuggingPanel when testIndex is undefined', async () => {
     const promptIndex = 1;
     render(
       <EvalOutputPromptDialog {...defaultProps} testIndex={undefined} promptIndex={promptIndex} />,
     );
 
+    // Wait for traces tab to be available
+    await waitFor(() => {
+      expect(screen.getByText('Traces')).toBeInTheDocument();
+    });
+
     const tracesTab = screen.getByText('Traces');
-    fireEvent.click(tracesTab);
+    await act(async () => {
+      fireEvent.click(tracesTab);
+    });
 
     expect(MockDebuggingPanel).toHaveBeenCalledWith(
       expect.objectContaining({
         promptIndex: promptIndex,
       }),
-      expect.anything(),
+      undefined,
     );
-  });
-
-  it('hides trace section but keeps Traces tab visible when onTraceSectionVisibilityChange is called with false', async () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    expect(screen.queryByTestId('mock-debugging-panel')).not.toBeInTheDocument();
-
-    expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
   });
 
   it('displays the main tab label as "Prompt" when there is no output content', () => {
@@ -434,21 +481,35 @@ describe('EvalOutputPromptDialog', () => {
     expect(screen.getByText('Original Output')).toBeInTheDocument();
   });
 
-  it('should transition PromptEditor from read-only to editable when evaluationId is updated', async () => {
-    const { rerender } = render(
-      <EvalOutputPromptDialog {...defaultProps} evaluationId={undefined} />,
-    );
-
-    expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
-
+  it('should show Edit & Replay button when readOnly is false (default)', async () => {
     await act(async () => {
-      rerender(<EvalOutputPromptDialog {...defaultProps} evaluationId="test-eval-id" />);
+      render(<EvalOutputPromptDialog {...defaultProps} />);
     });
 
     expect(screen.getByLabelText('Edit & Replay')).toBeInTheDocument();
   });
 
-  it('displays OutputsPanel and labels tab as "Prompt & Output" when metadata contains citations but no other output', () => {
+  it('should hide Edit & Replay button when readOnly is true', async () => {
+    await act(async () => {
+      render(<EvalOutputPromptDialog {...defaultProps} readOnly={true} />);
+    });
+
+    expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
+  });
+
+  it('should transition PromptEditor from read-only to editable when readOnly prop changes', async () => {
+    const { rerender } = render(<EvalOutputPromptDialog {...defaultProps} readOnly={true} />);
+
+    expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
+
+    await act(async () => {
+      rerender(<EvalOutputPromptDialog {...defaultProps} readOnly={false} />);
+    });
+
+    expect(screen.getByLabelText('Edit & Replay')).toBeInTheDocument();
+  });
+
+  it('displays OutputsPanel and labels tab as "Prompt & Output" when metadata contains citations but no other output', async () => {
     const propsWithCitations = {
       ...defaultProps,
       output: undefined,
@@ -467,7 +528,9 @@ describe('EvalOutputPromptDialog', () => {
       },
     };
 
-    render(<EvalOutputPromptDialog {...propsWithCitations} />);
+    await act(async () => {
+      render(<EvalOutputPromptDialog {...propsWithCitations} />);
+    });
 
     expect(screen.getByText('Prompt & Output')).toBeInTheDocument();
 
@@ -550,20 +613,15 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
     const cell = screen.getByText(/^a+\.\.\.$/);
 
     // First click to expand
-    await act(async () => {
-      await user.click(cell);
-    });
+    await user.click(cell);
+
     expect(screen.getByText(longValue)).toBeInTheDocument();
 
-    // Wait just over the double-click threshold (300ms)
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 301));
-    });
+    // Wait just over the double-click threshold (300ms) using real delay
+    await new Promise((resolve) => setTimeout(resolve, 310));
 
-    // Second click should keep it expanded
-    await act(async () => {
-      await user.click(cell);
-    });
+    // Second click should keep it expanded (not counted as double-click)
+    await user.click(cell);
 
     expect(screen.getByText(longValue)).toBeInTheDocument();
   });
@@ -600,11 +658,13 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
 });
 
 describe('EvalOutputPromptDialog dependency injection', () => {
-  let user: ReturnType<typeof userEvent.setup>;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    user = userEvent.setup();
+    // Note: Do NOT use vi.useFakeTimers() here - it causes component rendering issues
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   it('should work without dependencies (graceful degradation)', async () => {
@@ -620,14 +680,10 @@ describe('EvalOutputPromptDialog dependency injection', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithoutDependencies} />);
-    await act(async () => {
-      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
-    });
+    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
 
     const filterButton = screen.getByLabelText('Filter by testKey');
-    await act(async () => {
-      await user.click(filterButton);
-    });
+    await userEvent.click(filterButton);
 
     // Should close dialog without errors
     expect(mockOnClose).toHaveBeenCalledTimes(1);
@@ -646,14 +702,10 @@ describe('EvalOutputPromptDialog dependency injection', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithCustomFilters} />);
-    await act(async () => {
-      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
-    });
+    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
 
     const filterButton = screen.getByLabelText('Filter by customField');
-    await act(async () => {
-      await user.click(filterButton);
-    });
+    await userEvent.click(filterButton);
 
     expect(customResetFilters).toHaveBeenCalledTimes(1);
     expect(customAddFilter).toHaveBeenCalledWith({
@@ -678,14 +730,10 @@ describe('EvalOutputPromptDialog dependency injection', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithObjectMetadata} />);
-    await act(async () => {
-      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
-    });
+    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
 
     const filterButton = screen.getByLabelText('Filter by objectField');
-    await act(async () => {
-      await user.click(filterButton);
-    });
+    await userEvent.click(filterButton);
 
     expect(customAddFilter).toHaveBeenCalledWith({
       type: 'metadata',
@@ -707,16 +755,12 @@ describe('EvalOutputPromptDialog dependency injection', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithoutFilterFunctions} />);
-    await act(async () => {
-      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
-    });
+    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
 
     const filterButton = screen.getByLabelText('Filter by key');
 
     // Should not throw error
-    await act(async () => {
-      await user.click(filterButton);
-    });
+    await userEvent.click(filterButton);
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
@@ -823,7 +867,7 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
 });
 
 describe('EvalOutputPromptDialog cloud config', () => {
-  it('should pass cloudConfig to MetadataPanel', async () => {
+  it('Should not render policy link if policy is not reusable', async () => {
     const customCloudConfig = {
       appUrl: 'https://custom.cloud.com',
       isEnabled: true,
@@ -843,7 +887,30 @@ describe('EvalOutputPromptDialog cloud config', () => {
     });
 
     // Check that policy link is rendered (MetadataPanel uses cloudConfig)
-    expect(screen.getByText('View policy in Promptfoo Cloud')).toBeInTheDocument();
+    expect(screen.queryByTestId('pf-cloud-policy-detail-link')).not.toBeInTheDocument();
+  });
+
+  it('Should not render policy link if policy is not reusable', async () => {
+    const customCloudConfig = {
+      appUrl: 'https://custom.cloud.com',
+      isEnabled: true,
+    };
+    const propsWithCustomConfig = {
+      ...defaultProps,
+      cloudConfig: customCloudConfig,
+      metadata: {
+        policyName: 'Test Policy',
+        policyId: uuidv4(),
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCustomConfig} />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    // Check that policy link is rendered (MetadataPanel uses cloudConfig)
+    expect(screen.getByTestId('pf-cloud-policy-detail-link')).toBeInTheDocument();
   });
 
   it('should work without cloudConfig', async () => {
@@ -863,5 +930,92 @@ describe('EvalOutputPromptDialog cloud config', () => {
     // Should just show the policy name without link
     expect(screen.getByText('Test Policy')).toBeInTheDocument();
     expect(screen.queryByText('View policy in Promptfoo Cloud')).not.toBeInTheDocument();
+  });
+});
+
+describe('EvalOutputPromptDialog traces tab visibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Use real timers here - fake timers prevent the component from rendering
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should show Traces tab when fetchTraces returns trace data', async () => {
+    const propsWithTraces = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: vi.fn().mockResolvedValue([
+        {
+          traceId: 'trace-1',
+          testCaseId: 'test-case-id',
+          spans: [{ spanId: 'span-1', name: 'test-span' }],
+        },
+      ]),
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithTraces} />);
+
+    // Wait for traces to be fetched
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
+    });
+  });
+
+  it('should hide Traces tab when fetchTraces returns empty array', async () => {
+    const propsWithoutTraces = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: vi.fn().mockResolvedValue([]),
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutTraces} />);
+
+    // Wait for component to render and verify no Traces tab
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Prompt & Output' })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when fetchTraces is not provided', () => {
+    const propsWithoutFetchTraces = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: undefined,
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutFetchTraces} />);
+
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when evaluationId is not provided', () => {
+    const propsWithoutEvaluationId = {
+      ...defaultProps,
+      evaluationId: undefined,
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutEvaluationId} />);
+
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when fetchTraces fails', async () => {
+    const propsWithFailedFetch = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: vi.fn().mockRejectedValue(new Error('Fetch failed')),
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithFailedFetch} />);
+
+    // Wait for component to render and verify no Traces tab
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Prompt & Output' })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
   });
 });

@@ -6,40 +6,57 @@ description: Use Google Vertex AI models including Gemini, Claude, Llama, and sp
 
 # Google Vertex
 
-The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, PaLM (Bison), Llama, Claude, and specialized models for text, code, and embeddings.
+The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, Llama, Claude, and specialized models for text, code, and embeddings.
 
 ## Available Models
 
-### Latest Gemini Models
+### Gemini Models
 
-- `vertex:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding (2M context)
-- `vertex:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
-- `vertex:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
-- `vertex:gemini-2.5-flash-preview-09-2025` - Newest Gemini 2.5 Flash preview release featuring enhanced quality improvements
-- `vertex:gemini-2.5-flash-lite-preview-09-2025` - Latest Flash Lite preview release with further cost and latency optimizations
-- `vertex:gemini-flash-latest` - Alias for `vertex:gemini-2.5-flash-preview-09-2025`
-- `vertex:gemini-flash-lite-latest` - Alias for `vertex:gemini-2.5-flash-lite-preview-09-2025`
-- `vertex:gemini-2.0-pro` - Strongest model quality, especially for code & world knowledge with 2M context window
-- `vertex:gemini-2.0-flash-thinking-exp` - Enhanced reasoning capabilities with thinking process in responses
-- `vertex:gemini-2.0-flash-001` - Workhorse model for all daily tasks with strong overall performance and real-time streaming
-- `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput
-- `vertex:gemini-1.5-flash` - Fast and efficient for high-volume, quality, cost-effective applications
+**Gemini 2.5:**
+
+- `vertex:gemini-2.5-pro` - Enhanced reasoning, coding, and multimodal understanding with 2M context
+- `vertex:gemini-2.5-flash` - Fast model with enhanced reasoning and thinking capabilities
+- `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
+- `vertex:gemini-2.5-flash-preview-09-2025` - Preview: Enhanced quality improvements
+- `vertex:gemini-2.5-flash-lite-preview-09-2025` - Preview: Cost and latency optimizations
+
+**Gemini 2.0:**
+
+- `vertex:gemini-2.0-pro` - Experimental: Strong model quality for code and world knowledge with 2M context
+- `vertex:gemini-2.0-flash-001` - Multimodal model for daily tasks with strong performance and real-time streaming
+- `vertex:gemini-2.0-flash-exp` - Experimental: Enhanced capabilities
+- `vertex:gemini-2.0-flash-thinking-exp` - Experimental: Reasoning with thinking process in responses
+- `vertex:gemini-2.0-flash-lite-preview-02-05` - Preview: Cost-effective for high throughput
+- `vertex:gemini-2.0-flash-lite-001` - Preview: Optimized for cost efficiency and low latency
+
+**Gemini 1.5:**
+
 - `vertex:gemini-1.5-pro` - Strong performance for text/chat with long-context understanding
-- `vertex:gemini-1.5-pro-latest` - Latest Gemini 1.5 Pro model with same capabilities as gemini-1.5-pro
-- `vertex:gemini-1.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
+- `vertex:gemini-1.5-pro-latest` - Same capabilities as gemini-1.5-pro
+- `vertex:gemini-1.5-flash` - Fast and efficient for high-volume, cost-effective applications
+- `vertex:gemini-1.5-flash-8b` - Compact model for high-volume, lower complexity tasks
 
 ### Claude Models
 
 Anthropic's Claude models are available with the following versions:
 
-- `vertex:claude-opus-4-1@20250805` - Latest Claude 4.1 Opus model
-- `vertex:claude-opus-4@20250514` - Claude 4 Opus model
-- `vertex:claude-sonnet-4@20250514` - Claude 4 Sonnet model
-- `vertex:claude-3-7-sonnet@20250219` - Claude 3.7 Sonnet model
-- `vertex:claude-3-haiku@20240307` - Fast Claude 3 Haiku
-- `vertex:claude-3-opus@20240229` - Claude 3 Opus (Public Preview)
-- `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku
-- `vertex:claude-3-5-sonnet-v2@20241022` - Claude 3.5 Sonnet
+**Claude 4.5:**
+
+- `vertex:claude-opus-4-5@20251101` - Claude 4.5 Opus for agentic coding, agents, and computer use
+- `vertex:claude-sonnet-4-5@20250929` - Claude 4.5 Sonnet for agents, coding, and computer use
+- `vertex:claude-haiku-4-5@20251001` - Claude 4.5 Haiku for fast, cost-effective use cases
+
+**Claude 4:**
+
+- `vertex:claude-opus-4-1@20250805` - Claude 4.1 Opus for complex tasks and agentic search
+- `vertex:claude-opus-4@20250514` - Claude 4 Opus for coding and agent capabilities
+- `vertex:claude-sonnet-4@20250514` - Claude 4 Sonnet balancing performance with speed
+
+**Claude 3:**
+
+- `vertex:claude-3-7-sonnet@20250219` - Claude 3.7 Sonnet with extended thinking for complex problem-solving
+- `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku optimized for speed and affordability
+- `vertex:claude-3-haiku@20240307` - Claude 3 Haiku for basic queries and vision tasks
 
 :::info
 Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
@@ -47,19 +64,31 @@ Claude models require explicit access enablement through the [Vertex AI Model Ga
 
 Note: Claude models support up to 200,000 tokens context length and include built-in safety features.
 
-### Llama Models (Preview)
+### Llama Models
 
 Meta's Llama models are available through Vertex AI with the following versions:
 
-- `vertex:llama4-scout-instruct-maas` - Llama 4 Scout 17B (16 experts) with 10M context
-- `vertex:llama4-maverick-instruct-maas` - Llama 4 Maverick 17B (128 experts) with 1M context
-- `vertex:llama-3.3-70b-instruct-maas` - Latest Llama 3.3 70B model (Preview)
-- `vertex:llama-3.2-90b-vision-instruct-maas` - Vision-capable Llama 3.2 90B (Preview)
-- `vertex:llama-3.1-405b-instruct-maas` - Llama 3.1 405B (GA)
-- `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B (Preview)
-- `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B (Preview)
+**Llama 4:**
 
-Note: Llama models support built-in safety features through Llama Guard. Llama 4 models support up to 10M tokens context length (Scout) and 1M tokens (Maverick) and are natively multimodal, supporting both text and image inputs.
+- `vertex:llama4-scout-instruct-maas` - Llama 4 Scout (17B active, 109B total with 16 experts) for retrieval and reasoning with 10M context
+- `vertex:llama4-maverick-instruct-maas` - Llama 4 Maverick (17B active, 400B total with 128 experts) with 1M context, natively multimodal
+
+**Llama 3.3:**
+
+- `vertex:llama-3.3-70b-instruct-maas` - Llama 3.3 70B for text applications
+- `vertex:llama-3.3-8b-instruct-maas` - Llama 3.3 8B for efficient text generation
+
+**Llama 3.2:**
+
+- `vertex:llama-3.2-90b-vision-instruct-maas` - Llama 3.2 90B with vision capabilities
+
+**Llama 3.1:**
+
+- `vertex:llama-3.1-405b-instruct-maas` - Llama 3.1 405B
+- `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B
+- `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B
+
+Note: All Llama models support built-in safety features through Llama Guard. Llama 4 models are natively multimodal with support for both text and image inputs.
 
 #### Llama Configuration Example
 
@@ -93,28 +122,15 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 - `vertex:codegemma` - Lightweight code generation and completion model
 - `vertex:paligemma` - Lightweight vision-language model for image tasks
 
-### PaLM 2 (Bison) Models
-
-Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)](https://cloud.google.com/vertex-ai/generative-ai/docs/legacy/legacy-models) and it's recommended to migrate to the Gemini models.
-
-- `vertex:chat-bison[@001|@002]` - Chat model
-- `vertex:chat-bison-32k[@001|@002]` - Extended context chat
-- `vertex:codechat-bison[@001|@002]` - Code-specialized chat
-- `vertex:codechat-bison-32k[@001|@002]` - Extended context code chat
-- `vertex:text-bison[@001|@002]` - Text completion
-- `vertex:text-unicorn[@001]` - Specialized text model
-- `vertex:code-bison[@001|@002]` - Code completion
-- `vertex:code-bison-32k[@001|@002]` - Extended context code completion
-
 ### Embedding Models
 
 - `vertex:textembedding-gecko@001` - Text embeddings (3,072 tokens, 768d)
 - `vertex:textembedding-gecko@002` - Text embeddings (2,048 tokens, 768d)
 - `vertex:textembedding-gecko@003` - Text embeddings (2,048 tokens, 768d)
-- `vertex:text-embedding-004` - Latest text embeddings (2,048 tokens, ≤768d)
-- `vertex:text-embedding-005` - Latest text embeddings (2,048 tokens, ≤768d)
+- `vertex:text-embedding-004` - Text embeddings (2,048 tokens, ≤768d)
+- `vertex:text-embedding-005` - Text embeddings (2,048 tokens, ≤768d)
 - `vertex:textembedding-gecko-multilingual@001` - Multilingual embeddings (2,048 tokens, 768d)
-- `vertex:text-multilingual-embedding-002` - Latest multilingual embeddings (2,048 tokens, ≤768d)
+- `vertex:text-multilingual-embedding-002` - Multilingual embeddings (2,048 tokens, ≤768d)
 - `vertex:multimodalembedding` - Multimodal embeddings for text, image, and video
 
 ### Image Generation Models

@@ -238,9 +238,7 @@ describe('Share Command', () => {
       expect(Eval.latest).toHaveBeenCalledWith();
       expect(ModelAudit.latest).toHaveBeenCalledWith();
       expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false);
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Sharing latest model audit'),
-      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Sharing model audit'));
     });
 
     it('should share most recent eval when it is newer than model audit', async () => {
@@ -269,7 +267,7 @@ describe('Share Command', () => {
       expect(Eval.latest).toHaveBeenCalledWith();
       expect(ModelAudit.latest).toHaveBeenCalledWith();
       expect(createShareableUrl).toHaveBeenCalledWith(mockEval, false);
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Sharing latest eval'));
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Sharing eval'));
     });
 
     it('should handle scan- prefixed model audit not found', async () => {
