@@ -8,7 +8,7 @@ import {
   normalizeApostrophes,
   removePrefix,
 } from '../../src/redteam/util';
-import type { CallApiContextParams, ProviderResponse } from '../../src/types';
+import type { CallApiContextParams, ProviderResponse } from '../../src/types/index';
 
 jest.mock('../../src/cache');
 

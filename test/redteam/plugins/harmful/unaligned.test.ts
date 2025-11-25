@@ -8,7 +8,7 @@ import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmfu
 import { getHarmfulTests } from '../../../../src/redteam/plugins/harmful/unaligned';
 
 import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider } from '../../../../src/types';
+import type { ApiProvider } from '../../../../src/types/index';
 
 jest.mock('../../../../src/envars');
 
