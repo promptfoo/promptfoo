@@ -6,7 +6,7 @@ import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
 import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration';
 
-import type { CallApiContextParams, ProviderResponse, RunEvalOptions } from '../types';
+import type { CallApiContextParams, ProviderResponse, RunEvalOptions } from '../types/index';
 
 /**
  * Normalizes different types of apostrophes to a standard single quote

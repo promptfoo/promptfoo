@@ -10,9 +10,9 @@ import type { EnvOverrides } from '../../src/types/env';
 jest.mock('../../src/providers/openai');
 jest.mock('../../src/envars', () => ({
   getEnvString: jest.fn(),
-  getEnvBool: jest.fn((key: string, defaultValue: boolean) => defaultValue),
-  getEnvInt: jest.fn((key: string, defaultValue: number) => defaultValue),
-  getEnvFloat: jest.fn((key: string, defaultValue: number) => defaultValue),
+  getEnvBool: jest.fn((_key: string, defaultValue: boolean) => defaultValue),
+  getEnvInt: jest.fn((_key: string, defaultValue: number) => defaultValue),
+  getEnvFloat: jest.fn((_key: string, defaultValue: number) => defaultValue),
   getEvalTimeoutMs: jest.fn((defaultValue: number) => defaultValue),
   getMaxEvalTimeMs: jest.fn((defaultValue: number) => defaultValue),
   isCI: jest.fn(() => false),

@@ -9,6 +9,7 @@
  * will be inaccurate!
  */
 
+import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
 import EvalFactory from '../factories/evalFactory';
@@ -29,7 +30,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   /**

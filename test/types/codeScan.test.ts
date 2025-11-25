@@ -2,6 +2,7 @@
  * CodeScan Types Tests
  */
 
+import { describe, it, expect } from 'vitest';
 import { CodeScanSeverity, validateSeverity } from '../../src/types/codeScan';
 import { ZodError } from 'zod';
 
@@ -77,7 +78,7 @@ describe('validateSeverity', () => {
     it('should provide meaningful error message', () => {
       try {
         validateSeverity('invalid');
-        fail('Expected ZodError to be thrown');
+        expect.fail('Expected ZodError to be thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(ZodError);
         const zodError = error as ZodError;

@@ -1,7 +1,7 @@
 import { fetchWithProxy } from './util/fetch/index';
 import { getEnvString } from './envars';
 import logger from './logger';
-import type { CsvRow } from './types';
+import type { CsvRow } from './types/index';
 import fs from 'fs';
 import crypto from 'crypto';
 import type { ConfidentialClientApplication } from '@azure/msal-node';

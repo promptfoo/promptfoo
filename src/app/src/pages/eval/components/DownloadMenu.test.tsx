@@ -148,7 +148,7 @@ describe('DownloadMenu', () => {
       },
     );
 
-    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+    vi.mocked(useResultsViewStore).mockReturnValue({
       table: mockTable,
       config: mockConfig,
       evalId: mockEvalId,
@@ -248,7 +248,7 @@ describe('DownloadMenu', () => {
   });
 
   it('handles malformed output structures in DPO JSON export without crashing', async () => {
-    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+    vi.mocked(useResultsViewStore).mockReturnValue({
       table: {
         ...mockTable,
         body: [
@@ -278,7 +278,7 @@ describe('DownloadMenu', () => {
   });
 
   it('shows a toast when evalId is not available', async () => {
-    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+    vi.mocked(useResultsViewStore).mockReturnValue({
       table: mockTable,
       config: mockConfig,
       evalId: null,
@@ -295,7 +295,7 @@ describe('DownloadMenu', () => {
   });
 
   it('handles null gradingResult in downloadHumanEvalTestCases without crashing', async () => {
-    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+    vi.mocked(useResultsViewStore).mockReturnValue({
       table: {
         ...mockTable,
         body: [
@@ -325,7 +325,7 @@ describe('DownloadMenu', () => {
   });
 
   it('handles deeply nested null properties in outputs without crashing', () => {
-    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+    vi.mocked(useResultsViewStore).mockReturnValue({
       table: {
         ...mockTable,
         body: [
@@ -387,7 +387,7 @@ describe('DownloadMenu', () => {
   });
 
   it('shows an error toast when clipboard API fails', async () => {
-    (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockImplementationOnce(() =>
+    vi.mocked(navigator.clipboard.writeText).mockImplementationOnce(() =>
       Promise.reject(new Error('Clipboard write failed')),
     );
 
@@ -404,7 +404,7 @@ describe('DownloadMenu', () => {
 
   describe('Failed Tests Config Button disabled state', () => {
     it('disables the button when table is null', async () => {
-      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      vi.mocked(useResultsViewStore).mockReturnValue({
         table: null,
         config: mockConfig,
         evalId: mockEvalId,
@@ -418,7 +418,7 @@ describe('DownloadMenu', () => {
     });
 
     it('disables the button when table.body is null', async () => {
-      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      vi.mocked(useResultsViewStore).mockReturnValue({
         table: {
           head: mockTable.head,
           body: null as any,
@@ -435,7 +435,7 @@ describe('DownloadMenu', () => {
     });
 
     it('disables the button when table.body is undefined', async () => {
-      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      vi.mocked(useResultsViewStore).mockReturnValue({
         table: {
           head: mockTable.head,
           body: undefined as any,
@@ -452,7 +452,7 @@ describe('DownloadMenu', () => {
     });
 
     it('disables the button when all tests pass', async () => {
-      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      vi.mocked(useResultsViewStore).mockReturnValue({
         table: {
           ...mockTable,
           body: [
@@ -481,7 +481,7 @@ describe('DownloadMenu', () => {
 
     it('enables the button when there are failed tests', async () => {
       // Using the default mockTable which has failed tests
-      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      vi.mocked(useResultsViewStore).mockReturnValue({
         table: mockTable,
         config: mockConfig,
         evalId: mockEvalId,
@@ -495,7 +495,7 @@ describe('DownloadMenu', () => {
     });
 
     it('handles edge case with empty body array', async () => {
-      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      vi.mocked(useResultsViewStore).mockReturnValue({
         table: {
           ...mockTable,
           body: [],

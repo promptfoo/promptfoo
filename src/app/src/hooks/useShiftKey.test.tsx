@@ -7,7 +7,7 @@ import { useShiftKey } from './useShiftKey';
 
 const createWrapper = (shiftKeyValue: boolean) => {
   return ({ children }: { children: ReactNode }) => (
-    <ShiftKeyContext.Provider value={shiftKeyValue}>{children}</ShiftKeyContext.Provider>
+    <ShiftKeyContext value={shiftKeyValue}>{children}</ShiftKeyContext>
   );
 };
 
