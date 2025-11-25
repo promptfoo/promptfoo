@@ -60,6 +60,7 @@ export type VulnerabilityType =
   | 'bias'
   | 'criminal'
   | 'custom'
+  | 'ecommerce'
   | 'financial'
   | 'harmful'
   | 'insurance'
@@ -400,7 +401,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'criminal',
+    vulnerabilityType: 'ecommerce',
   },
   {
     category: 'Security and Access Control',
@@ -414,7 +415,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'security',
+    vulnerabilityType: 'ecommerce',
   },
   {
     category: 'Compliance and Legal',
@@ -428,7 +429,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'privacy',
+    vulnerabilityType: 'ecommerce',
   },
   {
     category: 'Security and Access Control',
@@ -443,7 +444,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'security',
+    vulnerabilityType: 'ecommerce',
   },
   {
     category: 'Brand',
