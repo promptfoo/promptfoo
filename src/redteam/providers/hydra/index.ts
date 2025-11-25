@@ -13,7 +13,7 @@ import type {
   Prompt,
   ProviderResponse,
   TokenUsage,
-} from '../../../types';
+} from '../../../types/index';
 import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
@@ -61,6 +61,7 @@ interface HydraConfig {
   maxTurns?: number;
   maxBacktracks?: number;
   stateful?: boolean;
+  excludeTargetOutputFromAgenticAttackGeneration?: boolean;
 }
 
 export class HydraProvider implements ApiProvider {
@@ -71,6 +72,7 @@ export class HydraProvider implements ApiProvider {
   private readonly maxTurns: number;
   private readonly maxBacktracks: number;
   private readonly stateful: boolean;
+  private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private conversationHistory: Message[] = [];
   private sessionId?: string;
 
@@ -81,6 +83,8 @@ export class HydraProvider implements ApiProvider {
     this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
     this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
     this.stateful = config.stateful ?? false;
+    this.excludeTargetOutputFromAgenticAttackGeneration =
+      config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
 
     if (this.stateful && this.maxBacktracks > 0) {
       logger.warn('[Hydra] Backtracking disabled in stateful mode');
@@ -104,6 +108,8 @@ export class HydraProvider implements ApiProvider {
       maxBacktracks: this.maxBacktracks,
       stateful: this.stateful,
       injectVar: this.injectVar,
+      excludeTargetOutputFromAgenticAttackGeneration:
+        this.excludeTargetOutputFromAgenticAttackGeneration,
     });
   }
 
@@ -201,6 +207,15 @@ export class HydraProvider implements ApiProvider {
       logger.debug(`[Hydra] Turn ${turn}/${this.maxTurns}`);
 
       // Build request for cloud agent
+      // Conditionally exclude target outputs from conversation history for privacy
+      const conversationHistoryForCloud = this.excludeTargetOutputFromAgenticAttackGeneration
+        ? this.conversationHistory.map((msg) =>
+            msg.role === 'assistant'
+              ? { ...msg, content: '[Response hidden for privacy - grader feedback provided]' }
+              : msg,
+          )
+        : this.conversationHistory;
+
       const cloudRequest = {
         task: 'hydra-decision',
         testRunId,
@@ -209,7 +224,7 @@ export class HydraProvider implements ApiProvider {
         goal,
         purpose: test?.metadata?.purpose,
         modifiers: test?.metadata?.modifiers,
-        conversationHistory: this.conversationHistory,
+        conversationHistory: conversationHistoryForCloud,
         lastGraderResult:
           turn > 1 && storedGraderResult
             ? {
@@ -219,6 +234,8 @@ export class HydraProvider implements ApiProvider {
             : undefined,
         stateful: this.stateful,
         maxTurns: this.maxTurns,
+        excludeTargetOutputFromAgenticAttackGeneration:
+          this.excludeTargetOutputFromAgenticAttackGeneration,
       };
 
       // Get next message from cloud
@@ -237,11 +254,11 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (agentResp.error) {
-        console.log(
-          `[HYDRA-CLI-ERROR] Turn ${turn}, testRunId: ${testRunId}, error:`,
-          agentResp.error,
-        );
-        logger.info('[Hydra] Agent provider error', { turn, error: agentResp.error });
+        logger.error('[Hydra] Agent provider error', {
+          turn,
+          testRunId,
+          error: agentResp.error,
+        });
         continue;
       }
 
@@ -287,6 +304,7 @@ export class HydraProvider implements ApiProvider {
           },
           filters,
           targetProvider,
+          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
       } else {
         // Stateless: send full conversation history as JSON
@@ -299,6 +317,7 @@ export class HydraProvider implements ApiProvider {
           },
           filters,
           targetProvider,
+          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
         if (isValidJson(samplePrompt)) {
@@ -332,55 +351,33 @@ export class HydraProvider implements ApiProvider {
       lastTargetResponse = targetResponse;
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
-      // Only log detailed info when there's a problem (no output)
-      if (!targetResponse.output) {
-        console.log('🎯 [HYDRA] Target response received (NO OUTPUT):', {
-          turn,
-          hasOutput: !!targetResponse.output,
-          outputType: typeof targetResponse.output,
-          outputLength: targetResponse.output?.length,
-          output: targetResponse.output,
-          hasError: !!targetResponse.error,
-          error: targetResponse.error,
-          fullResponse: targetResponse,
-        });
-      }
-
       logger.debug('[Hydra] Received target response', {
         turn,
         responseLength: targetResponse.output?.length,
       });
 
       if (targetResponse.error) {
-        console.log('❌ [HYDRA] Target error detected:', {
-          turn,
-          error: targetResponse.error,
-        });
         logger.info('[Hydra] Target error', { turn, error: targetResponse.error });
         continue;
       }
 
       if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
-        console.log('⚠️ [HYDRA] Malformed target response - missing output property:', {
+        logger.info('[Hydra] Malformed target response - missing output', {
           turn,
           responseKeys: Object.keys(targetResponse),
-          fullResponse: targetResponse,
         });
-        logger.info('[Hydra] Malformed target response - missing output', { turn });
         continue;
       }
 
       if (!targetResponse.output || !targetResponse.output.trim()) {
-        console.log('🚫 [HYDRA] Empty target response detected:', {
+        logger.info('[Hydra] Empty target response', {
           turn,
           outputIsNull: targetResponse.output === null,
           outputIsUndefined: targetResponse.output === undefined,
           outputIsEmptyString: targetResponse.output === '',
           outputValue: targetResponse.output,
           outputTrimmed: targetResponse.output?.trim(),
-          fullResponse: targetResponse,
         });
-        logger.info('[Hydra] Empty target response', { turn });
         // Replace empty output with marker so agent knows target refused
         targetResponse.output = '[Target provided empty response - likely refused]';
       }
@@ -401,14 +398,12 @@ export class HydraProvider implements ApiProvider {
       const isRefusal = isBasicRefusal(targetResponse.output);
 
       if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
-        console.log('⏪ [HYDRA] Backtracking due to refusal:', {
+        logger.debug('[Hydra] Response rejected (basic refusal), backtracking...', {
           turn,
           backtrackCount: backtrackCount + 1,
           maxBacktracks: this.maxBacktracks,
           conversationLengthBefore: this.conversationHistory.length,
         });
-
-        logger.debug('[Hydra] Response rejected (basic refusal), backtracking...');
         backtrackCount++;
 
         // Remove last user + assistant messages
@@ -417,19 +412,18 @@ export class HydraProvider implements ApiProvider {
           this.conversationHistory.pop(); // Remove user
         }
 
-        console.log('⏪ [HYDRA] After backtracking:', {
+        logger.debug('[Hydra] After backtracking state', {
           turn,
           backtrackCount,
-          conversationLengthAfter: this.conversationHistory.length,
+          conversationLength: this.conversationHistory.length,
           willDecrementTurn: turn > 1,
         });
 
         if (backtrackCount >= this.maxBacktracks) {
-          console.log('🛑 [HYDRA] Max backtracks reached, stopping:', {
+          logger.debug(`[Hydra] Max backtracks (${this.maxBacktracks}) reached. Exiting loop.`, {
             backtrackCount,
             maxBacktracks: this.maxBacktracks,
           });
-          logger.debug(`[Hydra] Max backtracks (${this.maxBacktracks}) reached. Exiting loop.`);
           stopReason = 'Max backtracks reached';
           break;
         }
@@ -472,13 +466,6 @@ export class HydraProvider implements ApiProvider {
 
       // Check if vulnerability was achieved
       if (graderResult?.pass === false) {
-        console.log('💥 [HYDRA] VULNERABILITY ACHIEVED!', {
-          turn,
-          message: nextMessage,
-          response: targetResponse.output,
-          graderReason: graderResult.reason,
-        });
-
         vulnerabilityAchieved = true;
         successfulAttacks.push({
           turn,
@@ -487,7 +474,7 @@ export class HydraProvider implements ApiProvider {
         });
         stopReason = 'Grader failed';
 
-        logger.info('[Hydra] Vulnerability achieved!', { turn });
+        logger.debug('[Hydra] Vulnerability achieved!', { turn });
         break;
       }
     }

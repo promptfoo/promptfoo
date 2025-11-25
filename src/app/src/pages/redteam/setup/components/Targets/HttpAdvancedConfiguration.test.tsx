@@ -44,7 +44,7 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('HttpAdvancedConfiguration', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
 
   beforeEach(() => {
     mockUpdateCustomTarget = vi.fn();
@@ -79,29 +79,29 @@ describe('HttpAdvancedConfiguration', () => {
       },
     ];
 
-    it.each(testCases)(
-      'should render toggle switch as $expectedChecked when $description',
-      ({ config, expectedChecked }) => {
-        const selectedTarget: ProviderOptions = {
-          id: 'http-provider',
-          config: config as ProviderOptions['config'],
-        };
+    it.each(testCases)('should render toggle switch as $expectedChecked when $description', ({
+      config,
+      expectedChecked,
+    }) => {
+      const selectedTarget: ProviderOptions = {
+        id: 'http-provider',
+        config: config as ProviderOptions['config'],
+      };
 
-        renderWithTheme(
-          <HttpAdvancedConfiguration
-            selectedTarget={selectedTarget}
-            updateCustomTarget={mockUpdateCustomTarget}
-          />,
-        );
+      renderWithTheme(
+        <HttpAdvancedConfiguration
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
 
-        // Click on Token Estimation tab
-        const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
-        fireEvent.click(tokenEstimationTab);
+      // Click on Token Estimation tab
+      const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
+      fireEvent.click(tokenEstimationTab);
 
-        const toggleSwitch = screen.getByLabelText('Enable token estimation') as HTMLInputElement;
-        expect(toggleSwitch.checked).toBe(expectedChecked);
-      },
-    );
+      const toggleSwitch = screen.getByLabelText('Enable token estimation') as HTMLInputElement;
+      expect(toggleSwitch.checked).toBe(expectedChecked);
+    });
   });
 
   it("should update selectedTarget.config.tokenEstimation to { enabled: true, multiplier: 1.3 } when the 'Enable token estimation' switch is toggled on", () => {

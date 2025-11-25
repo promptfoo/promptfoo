@@ -13,8 +13,18 @@ import {
   DEFAULT_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
 } from '@promptfoo/redteam/constants';
-
+import { TestCaseGenerateButton } from './../TestCaseDialog';
+import { useTestCaseGeneration } from './../TestCaseGenerationProvider';
 import type { StrategyCardData } from './types';
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useCallback, useMemo } from 'react';
+import { type StrategyConfig, type RedteamStrategyObject } from '@promptfoo/redteam/types';
+
+const TEST_GENERATION_PLUGIN = 'harmful:hate';
+
+// Strategies that do not support test case generation
+// These strategies will have the test case generation button disabled in the UI
+const STRATEGIES_WITHOUT_TEST_CASE_GENERATION = ['retry', 'other-encodings'] as const;
 
 interface StrategyItemProps {
   strategy: StrategyCardData;
@@ -23,6 +33,7 @@ interface StrategyItemProps {
   onConfigClick: (id: string) => void;
   isDisabled: boolean;
   isRemoteGenerationDisabled: boolean;
+  isConfigured?: boolean;
 }
 
 export function StrategyItem({
@@ -32,10 +43,72 @@ export function StrategyItem({
   onConfigClick,
   isDisabled,
   isRemoteGenerationDisabled,
+  isConfigured = true,
 }: StrategyItemProps) {
-  const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
+  const { config } = useRedTeamConfig();
 
-  const handleToggle = () => {
+  const {
+    generateTestCase,
+    isGenerating: generatingTestCase,
+    strategy: currentStrategy,
+  } = useTestCaseGeneration();
+
+  const strategyConfig = useMemo(() => {
+    return (
+      (
+        config.strategies.find(
+          (s) => typeof s === 'object' && 'id' in s && s!.id === strategy.id,
+        ) as RedteamStrategyObject
+      )?.config ?? {}
+    );
+  }, [config, strategy.id]) as StrategyConfig;
+
+  const requiresConfig = isSelected && !isConfigured;
+
+  const hasSettingsButton =
+    requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any));
+
+  const isTestCaseGenerationDisabled = STRATEGIES_WITHOUT_TEST_CASE_GENERATION.includes(
+    strategy.id as any,
+  );
+
+  const { tooltipTitle, settingsTooltipTitle } = useMemo(() => {
+    if (requiresConfig) {
+      const reason =
+        strategy.id === 'custom'
+          ? 'Strategy text is required'
+          : strategy.id === 'simba'
+            ? 'At least one goal is required'
+            : 'Configuration is required';
+      const configRequiredTooltip = `Configuration required: ${reason}. Click the settings icon to configure.`;
+
+      return {
+        tooltipTitle: configRequiredTooltip,
+        settingsTooltipTitle: configRequiredTooltip,
+      };
+    }
+
+    if (isTestCaseGenerationDisabled) {
+      return {
+        tooltipTitle: `Test case generation is not available for ${strategy.name} strategy.`,
+        settingsTooltipTitle: 'Configure strategy settings',
+      };
+    }
+
+    return {
+      tooltipTitle: `Generate an example test case using the ${strategy.name} Strategy.`,
+      settingsTooltipTitle: 'Configure strategy settings',
+    };
+  }, [requiresConfig, strategy.id, strategy.name, isTestCaseGenerationDisabled]);
+
+  const handleTestCaseGeneration = useCallback(async () => {
+    await generateTestCase(
+      { id: TEST_GENERATION_PLUGIN, config: {}, isStatic: true },
+      { id: strategy.id, config: strategyConfig, isStatic: false },
+    );
+  }, [strategyConfig, generateTestCase, strategy.id]);
+
+  const handleToggle = useCallback(() => {
     // If selecting simba for the first time, auto-open config dialog
     if (strategy.id === 'simba' && !isSelected && !isDisabled) {
       onToggle(strategy.id);
@@ -44,7 +117,7 @@ export function StrategyItem({
     } else {
       onToggle(strategy.id);
     }
-  };
+  }, [strategy.id, isSelected, isDisabled, onToggle, onConfigClick]);
 
   return (
     <Paper
@@ -56,20 +129,24 @@ export function StrategyItem({
         cursor: isDisabled ? 'not-allowed' : 'pointer',
         userSelect: 'none',
         opacity: isDisabled ? 0.5 : 1,
-        border: isSelected ? `1px solid ${theme.palette.primary.main}` : undefined,
+        border: isSelected
+          ? `1px solid ${requiresConfig ? theme.palette.error.main : theme.palette.primary.main}`
+          : undefined,
         backgroundColor: isDisabled
           ? theme.palette.action.disabledBackground
           : isSelected
-            ? alpha(theme.palette.primary.main, 0.04)
+            ? alpha(requiresConfig ? theme.palette.error.main : theme.palette.primary.main, 0.04)
             : theme.palette.background.paper,
         transition: 'all 0.2s ease-in-out',
         '&:hover': {
           backgroundColor: isDisabled
             ? theme.palette.action.disabledBackground
             : isSelected
-              ? alpha(theme.palette.primary.main, 0.08)
+              ? alpha(requiresConfig ? theme.palette.error.main : theme.palette.primary.main, 0.08)
               : alpha(theme.palette.action.hover, 0.04),
         },
+        p: 1,
+        gap: 2,
       })}
     >
       {/* Checkbox container */}
@@ -77,7 +154,6 @@ export function StrategyItem({
         sx={{
           display: 'flex',
           alignItems: 'center',
-          pl: 1,
         }}
       >
         <Checkbox
@@ -93,30 +169,7 @@ export function StrategyItem({
       </Box>
 
       {/* Content container */}
-      <Box sx={{ flex: 1, p: 2, minWidth: 0, position: 'relative' }}>
-        {/* Settings button - positioned absolutely in the top-right corner */}
-        {hasSettingsButton && (
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onConfigClick(strategy.id);
-            }}
-            sx={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              opacity: 0.6,
-              '&:hover': {
-                opacity: 1,
-                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-              },
-            }}
-          >
-            <SettingsOutlinedIcon fontSize="small" />
-          </IconButton>
-        )}
-
+      <Box sx={{ flex: 1, py: 2, minWidth: 0, position: 'relative' }}>
         {/* Title and badges section - add right padding when settings button is present */}
         <Box
           sx={{
@@ -185,6 +238,47 @@ export function StrategyItem({
         <Typography variant="body2" color="text.secondary">
           {strategy.description}
         </Typography>
+      </Box>
+
+      {/* Secondary Actions Container */}
+      <Box>
+        <TestCaseGenerateButton
+          onClick={handleTestCaseGeneration}
+          disabled={
+            isDisabled || generatingTestCase || requiresConfig || isTestCaseGenerationDisabled
+          }
+          isGenerating={generatingTestCase && currentStrategy === strategy.id}
+          size="small"
+          tooltipTitle={tooltipTitle}
+        />
+
+        {/* Settings button - positioned absolutely in the top-right corner */}
+        {hasSettingsButton && (
+          <Tooltip title={settingsTooltipTitle}>
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                onConfigClick(strategy.id);
+              }}
+              sx={(theme) => {
+                const needsConfig = isSelected && requiresConfig;
+                return {
+                  opacity: requiresConfig ? 1 : 0.6,
+                  color: needsConfig ? theme.palette.error.main : 'inherit',
+                  '&:hover': {
+                    opacity: 1,
+                    backgroundColor: needsConfig
+                      ? alpha(theme.palette.error.main, 0.1)
+                      : alpha(theme.palette.primary.main, 0.08),
+                  },
+                };
+              }}
+            >
+              <SettingsOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
     </Paper>
   );

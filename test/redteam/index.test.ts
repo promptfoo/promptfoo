@@ -13,9 +13,9 @@ import {
   resolvePluginConfig,
   synthesize,
 } from '../../src/redteam/index';
-import { Plugins } from '../../src/redteam/plugins';
+import { Plugins } from '../../src/redteam/plugins/index';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
-import { Strategies, validateStrategies } from '../../src/redteam/strategies';
+import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 
@@ -1618,6 +1618,79 @@ describe('Language configuration', () => {
       const languages = result.testCases.map((tc) => tc.metadata?.language);
       const uniqueLanguages = [...new Set(languages)];
       expect(uniqueLanguages.length).toBe(1); // Only one language used
+    });
+
+    it('should not include language in config when no language is specified', async () => {
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      jest.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      await synthesize({
+        // No language specified
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      // Verify action was called with config that does NOT contain language property
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.not.objectContaining({
+            language: expect.anything(),
+          }),
+        }),
+      );
+    });
+
+    it('should not include language in modifiers when no language is specified', async () => {
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      jest.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      await synthesize({
+        // No language specified
+        numTests: 1,
+        plugins: [
+          {
+            id: 'test-plugin',
+            numTests: 1,
+            config: {
+              modifiers: {
+                tone: 'aggressive',
+              },
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      // Verify modifiers don't contain language
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            modifiers: expect.objectContaining({
+              tone: 'aggressive',
+            }),
+          }),
+        }),
+      );
+
+      // Get the actual config that was passed
+      const actualConfig = mockPluginAction.mock.calls[0][0].config;
+
+      // Verify language is not in the config at all
+      expect(actualConfig).not.toHaveProperty('language');
+
+      // Verify modifiers don't have language key
+      expect(actualConfig.modifiers).not.toHaveProperty('language');
     });
 
     it('should pass testGenerationInstructions through modifiers to plugin action', async () => {

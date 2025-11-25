@@ -54,6 +54,9 @@ import type { LocalPluginConfig } from '../types';
 import { useTestCaseGeneration } from './TestCaseGenerationProvider';
 import { TestCaseGenerateButton } from './TestCaseDialog';
 import { useApiHealth } from '@app/hooks/useApiHealth';
+import useCloudConfig from '@app/hooks/useCloudConfig';
+import VerticalSuiteCard from './VerticalSuiteCard';
+import { VERTICAL_SUITES, DOMAIN_SPECIFIC_PLUGINS } from './verticalSuites';
 
 const ErrorFallback = ({ error }: { error: Error }) => (
   <div role="alert">
@@ -83,7 +86,7 @@ export default function PluginsTab({
   recentlyUsedPlugins,
   onUserInteraction,
   isRemoteGenerationDisabled,
-}: PluginsTabProps): JSX.Element {
+}: PluginsTabProps): React.ReactElement {
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
   const toast = useToast();
@@ -111,11 +114,15 @@ export default function PluginsTab({
     data: { status: apiHealthStatus },
   } = useApiHealth();
 
+  // Check if user has enterprise access (cloud enabled)
+  const { data: cloudConfig } = useCloudConfig();
+  const hasEnterpriseAccess = cloudConfig?.isEnabled ?? false;
+
   // Test case generation state - now from context
   const {
     generateTestCase,
     isGenerating: generatingTestCase,
-    currentPlugin: generatingPlugin,
+    plugin: generatingPlugin,
   } = useTestCaseGeneration();
 
   // Presets
@@ -234,6 +241,12 @@ export default function PluginsTab({
     [recentlyUsedPlugins.length, selectedPlugins.size, categoryFilters],
   );
 
+  // Check if we're showing domain-specific category
+  const showingDomainSpecific = useMemo(
+    () => selectedCategory === 'Domain-Specific Risks',
+    [selectedCategory],
+  );
+
   // Get all plugins with categories
   const allPluginsWithCategories = useMemo(() => {
     const pluginsWithCategories: Array<{ plugin: Plugin; category: string }> = [];
@@ -274,8 +287,11 @@ export default function PluginsTab({
           plugins
             .filter((plugin) => plugin !== 'intent' && plugin !== 'policy')
             .forEach((plugin) => {
-              if (!pluginsWithCategories.some((p) => p.plugin === plugin)) {
-                pluginsWithCategories.push({ plugin, category });
+              // Skip domain-specific plugins when rendering flat list
+              if (!DOMAIN_SPECIFIC_PLUGINS.includes(plugin)) {
+                if (!pluginsWithCategories.some((p) => p.plugin === plugin)) {
+                  pluginsWithCategories.push({ plugin, category });
+                }
               }
             });
         }
@@ -372,13 +388,13 @@ export default function PluginsTab({
       }
       // Directly generate test case
       else {
-        await generateTestCase(plugin, pluginConfig[plugin] || {}, {
-          telemetryFeature: 'redteam_plugin_generate_test_case',
-          mode: 'result',
-        });
+        await generateTestCase(
+          { id: plugin, config: pluginConfig[plugin] ?? {}, isStatic: false },
+          { id: 'basic', config: {}, isStatic: true },
+        );
       }
     },
-    [pluginConfig],
+    [pluginConfig, generateTestCase],
   );
 
   const handleConfigClick = useCallback((plugin: Plugin) => {
@@ -474,131 +490,107 @@ export default function PluginsTab({
             </Box>
           </Stack>
 
-          {/* Bulk selection actions */}
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: 2,
-              mb: 2,
-              '& > *': {
-                color: 'primary.main',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                textDecoration: 'none',
-                '&:hover': {
-                  textDecoration: 'underline',
+          {/* Bulk selection actions - hide for domain-specific view */}
+          {!showingDomainSpecific && (
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 2,
+                mb: 2,
+                '& > *': {
+                  color: 'primary.main',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  textDecoration: 'none',
+                  '&:hover': {
+                    textDecoration: 'underline',
+                  },
                 },
-              },
-            }}
-          >
-            <Box
-              component="span"
-              onClick={() => {
-                onUserInteraction();
-                filteredPlugins.forEach(({ plugin }) => {
-                  if (!selectedPlugins.has(plugin)) {
-                    handlePluginToggle(plugin);
-                  }
-                });
               }}
             >
-              Select all
+              <Box
+                component="span"
+                onClick={() => {
+                  onUserInteraction();
+                  filteredPlugins.forEach(({ plugin }) => {
+                    if (!selectedPlugins.has(plugin)) {
+                      handlePluginToggle(plugin);
+                    }
+                  });
+                }}
+              >
+                Select all
+              </Box>
+              <Box
+                component="span"
+                onClick={() => {
+                  onUserInteraction();
+                  filteredPlugins.forEach(({ plugin }) => {
+                    if (selectedPlugins.has(plugin)) {
+                      handlePluginToggle(plugin);
+                    }
+                  });
+                }}
+              >
+                Select none
+              </Box>
             </Box>
-            <Box
-              component="span"
-              onClick={() => {
-                onUserInteraction();
-                filteredPlugins.forEach(({ plugin }) => {
-                  if (selectedPlugins.has(plugin)) {
-                    handlePluginToggle(plugin);
-                  }
-                });
-              }}
-            >
-              Select none
-            </Box>
-          </Box>
+          )}
+
+          {/* Domain-Specific Vertical Suites */}
+          {showingDomainSpecific && (
+            <Stack spacing={3} sx={{ mb: 3 }}>
+              {VERTICAL_SUITES.map((suite) => (
+                <VerticalSuiteCard
+                  key={suite.id}
+                  suite={suite}
+                  selectedPlugins={selectedPlugins}
+                  onPluginToggle={handlePluginToggle}
+                  onConfigClick={handleConfigClick}
+                  onGenerateTestCase={handleGenerateTestCase}
+                  isPluginConfigured={isPluginConfigured}
+                  isPluginDisabled={isPluginDisabled}
+                  hasEnterpriseAccess={hasEnterpriseAccess}
+                  onUpgradeClick={() => {
+                    recordEvent('feature_used', {
+                      feature: 'redteam_config_enterprise_upgrade_clicked',
+                      source: 'vertical_suite_card',
+                    });
+                    window.open('https://www.promptfoo.dev/pricing/', '_blank');
+                  }}
+                />
+              ))}
+            </Stack>
+          )}
 
           {/* Plugin list */}
-          <Stack spacing={1} sx={{ mb: 3 }}>
-            {filteredPlugins.map(({ plugin, category }) => {
-              const pluginDisabled = isPluginDisabled(plugin);
-              return (
-                <Paper
-                  key={plugin}
-                  variant="outlined"
-                  onClick={() => {
-                    if (pluginDisabled) {
-                      toast.showToast(
-                        'This plugin requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
-                        'error',
-                      );
-                      return;
-                    }
-                    handlePluginToggle(plugin);
-                  }}
-                  sx={{
-                    border: '1px solid',
-                    borderColor: (() => {
+          {!showingDomainSpecific && (
+            <Stack spacing={1} sx={{ mb: 3 }}>
+              {filteredPlugins.map(({ plugin, category }) => {
+                const pluginDisabled = isPluginDisabled(plugin);
+                return (
+                  <Paper
+                    key={plugin}
+                    variant="outlined"
+                    onClick={() => {
                       if (pluginDisabled) {
-                        return 'action.disabled';
+                        toast.showToast(
+                          'This plugin requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
+                          'error',
+                        );
+                        return;
                       }
-                      if (selectedPlugins.has(plugin)) {
-                        // Show red border if missing required config
-                        if (
-                          PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                          !isPluginConfigured(plugin)
-                        ) {
-                          return 'error.main';
-                        }
-                        return 'primary.main';
-                      }
-                      return theme.palette.divider;
-                    })(),
-                    borderRadius: 1,
-                    cursor: pluginDisabled ? 'not-allowed' : 'pointer',
-                    opacity: pluginDisabled ? 0.5 : 1,
-                    bgcolor: (theme) => {
-                      if (pluginDisabled) {
-                        return 'action.disabledBackground';
-                      }
-                      if (selectedPlugins.has(plugin)) {
-                        // Show red background if plugin is selected but missing required config
-                        if (
-                          PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                          !isPluginConfigured(plugin)
-                        ) {
-                          return alpha(theme.palette.error.main, 0.08);
-                        }
-                        return alpha(theme.palette.primary.main, 0.08);
-                      }
-                      return 'transparent';
-                    },
-                    '&:hover': {
-                      bgcolor: (theme) => {
-                        if (pluginDisabled) {
-                          return 'action.disabledBackground';
-                        }
-                        if (selectedPlugins.has(plugin)) {
-                          // Show red hover if plugin is selected but missing required config
-                          if (
-                            PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                            !isPluginConfigured(plugin)
-                          ) {
-                            return alpha(theme.palette.error.main, 0.12);
-                          }
-                          return alpha(theme.palette.primary.main, 0.12);
-                        }
-                        return alpha(theme.palette.common.black, 0.04);
-                      },
-                      cursor: pluginDisabled ? 'not-allowed' : 'pointer',
+                      handlePluginToggle(plugin);
+                    }}
+                    sx={{
+                      border: '1px solid',
                       borderColor: (() => {
                         if (pluginDisabled) {
                           return 'action.disabled';
                         }
                         if (selectedPlugins.has(plugin)) {
-                          // Keep red border on hover if missing config
+                          // Show red border if missing required config
                           if (
                             PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
                             !isPluginConfigured(plugin)
@@ -607,147 +599,203 @@ export default function PluginsTab({
                           }
                           return 'primary.main';
                         }
-                        return theme.palette.action.hover;
+                        return theme.palette.divider;
                       })(),
-                    },
-                    p: 2,
-                    transition: 'all 0.2s ease-in-out',
-                    display: 'flex',
-                    alignItems: 'center',
-                    width: '100%',
-                    ...(selectedPlugins.has(plugin) && {
-                      boxShadow: (theme) =>
-                        PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin)
-                          ? `0 2px 8px ${alpha(theme.palette.error.main, 0.15)}`
-                          : `0 2px 8px ${alpha(theme.palette.primary.main, 0.15)}`,
-                    }),
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', mr: 2, flexShrink: 0 }}>
-                    <Checkbox
-                      checked={selectedPlugins.has(plugin)}
-                      disabled={pluginDisabled}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handlePluginToggle(plugin);
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                      color="primary"
-                      size="small"
-                      aria-label={displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                    />
-                    <TestCaseGenerateButton
-                      onClick={() => handleGenerateTestCase(plugin)}
-                      disabled={
-                        pluginDisabled ||
-                        apiHealthStatus !== 'connected' ||
-                        (generatingTestCase && generatingPlugin === plugin)
-                      }
-                      isGenerating={generatingTestCase && generatingPlugin === plugin}
-                      tooltipTitle={
-                        pluginDisabled
-                          ? 'This plugin reqiures remote generation'
-                          : apiHealthStatus === 'connected'
-                            ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
-                            : 'Promptfoo Cloud connection is required for test generation'
-                      }
-                    />
-                    {/* Config button - available for all plugins (gradingGuidance is universal) */}
-                    {selectedPlugins.has(plugin) && (
-                      <Tooltip
-                        title={`Configure ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
-                      >
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleConfigClick(plugin);
-                          }}
-                          sx={{
-                            color:
+                      borderRadius: 1,
+                      cursor: pluginDisabled ? 'not-allowed' : 'pointer',
+                      opacity: pluginDisabled ? 0.5 : 1,
+                      bgcolor: (theme) => {
+                        if (pluginDisabled) {
+                          return 'action.disabledBackground';
+                        }
+                        if (selectedPlugins.has(plugin)) {
+                          // Show red background if plugin is selected but missing required config
+                          if (
+                            PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                            !isPluginConfigured(plugin)
+                          ) {
+                            return alpha(theme.palette.error.main, 0.08);
+                          }
+                          return alpha(theme.palette.primary.main, 0.08);
+                        }
+                        return 'transparent';
+                      },
+                      '&:hover': {
+                        bgcolor: (theme) => {
+                          if (pluginDisabled) {
+                            return 'action.disabledBackground';
+                          }
+                          if (selectedPlugins.has(plugin)) {
+                            // Show red hover if plugin is selected but missing required config
+                            if (
                               PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
                               !isPluginConfigured(plugin)
-                                ? 'error.main'
-                                : 'text.secondary',
-                            ml: 0.5,
-                          }}
-                        >
-                          <SettingsOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Box>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                      <Typography
-                        variant="body1"
-                        sx={{
-                          fontWeight: 500,
+                            ) {
+                              return alpha(theme.palette.error.main, 0.12);
+                            }
+                            return alpha(theme.palette.primary.main, 0.12);
+                          }
+                          return alpha(theme.palette.common.black, 0.04);
+                        },
+                        cursor: pluginDisabled ? 'not-allowed' : 'pointer',
+                        borderColor: (() => {
+                          if (pluginDisabled) {
+                            return 'action.disabled';
+                          }
+                          if (selectedPlugins.has(plugin)) {
+                            // Keep red border on hover if missing config
+                            if (
+                              PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                              !isPluginConfigured(plugin)
+                            ) {
+                              return 'error.main';
+                            }
+                            return 'primary.main';
+                          }
+                          return theme.palette.action.hover;
+                        })(),
+                      },
+                      p: 2,
+                      transition: 'all 0.2s ease-in-out',
+                      display: 'flex',
+                      alignItems: 'center',
+                      width: '100%',
+                      ...(selectedPlugins.has(plugin) && {
+                        boxShadow: (theme) =>
+                          PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin)
+                            ? `0 2px 8px ${alpha(theme.palette.error.main, 0.15)}`
+                            : `0 2px 8px ${alpha(theme.palette.primary.main, 0.15)}`,
+                      }),
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', mr: 2, flexShrink: 0 }}>
+                      <Checkbox
+                        checked={selectedPlugins.has(plugin)}
+                        disabled={pluginDisabled}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handlePluginToggle(plugin);
                         }}
-                      >
-                        {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                      </Typography>
-
-                      {/* Badge for plugins requiring remote generation */}
-                      {pluginDisabled && isRemoteGenerationDisabled && (
-                        <Tooltip title="This plugin requires remote generation. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.">
-                          <Typography
-                            variant="caption"
-                            sx={(theme) => ({
-                              fontSize: '0.7rem',
-                              color: 'error.main',
-                              fontWeight: 500,
-                              backgroundColor: alpha(theme.palette.error.main, 0.08),
-                              px: 0.5,
-                              py: 0.25,
-                              borderRadius: 0.5,
-                              border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
-                            })}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        color="primary"
+                        size="small"
+                        aria-label={
+                          displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                        }
+                      />
+                      <TestCaseGenerateButton
+                        onClick={() => handleGenerateTestCase(plugin)}
+                        disabled={
+                          pluginDisabled ||
+                          apiHealthStatus !== 'connected' ||
+                          (generatingTestCase && generatingPlugin === plugin)
+                        }
+                        isGenerating={generatingTestCase && generatingPlugin === plugin}
+                        tooltipTitle={
+                          pluginDisabled
+                            ? 'This plugin reqiures remote generation'
+                            : apiHealthStatus === 'connected'
+                              ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
+                              : 'Promptfoo Cloud connection is required for test generation'
+                        }
+                      />
+                      {/* Config button - available for all plugins (gradingGuidance is universal) */}
+                      {selectedPlugins.has(plugin) && (
+                        <Tooltip
+                          title={`Configure ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
+                        >
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConfigClick(plugin);
+                            }}
+                            sx={{
+                              color:
+                                PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                                !isPluginConfigured(plugin)
+                                  ? 'error.main'
+                                  : 'text.secondary',
+                              ml: 0.5,
+                            }}
                           >
-                            Remote generation required
-                          </Typography>
+                            <SettingsOutlinedIcon fontSize="small" />
+                          </IconButton>
                         </Tooltip>
                       )}
                     </Box>
-                    {subCategoryDescriptions[plugin] && (
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {subCategoryDescriptions[plugin]}
-                      </Typography>
-                    )}
-                  </Box>
-                  <Box sx={{ flexShrink: 0 }}>
-                    {category === 'Recently Used' && (
-                      <Chip label="Recently Used" size="small" color="info" variant="outlined" />
-                    )}
-                    {hasSpecificPluginDocumentation(plugin) && (
-                      <Tooltip title="View documentation">
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            window.open(getPluginDocumentationUrl(plugin), '_blank');
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        <Typography
+                          variant="body1"
+                          sx={{
+                            fontWeight: 500,
                           }}
-                          sx={{ ml: 1 }}
                         >
-                          <HelpOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Box>
-                </Paper>
-              );
-            })}
-          </Stack>
+                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                        </Typography>
+
+                        {/* Badge for plugins requiring remote generation */}
+                        {pluginDisabled && isRemoteGenerationDisabled && (
+                          <Tooltip title="This plugin requires remote generation. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.">
+                            <Typography
+                              variant="caption"
+                              sx={(theme) => ({
+                                fontSize: '0.7rem',
+                                color: 'error.main',
+                                fontWeight: 500,
+                                backgroundColor: alpha(theme.palette.error.main, 0.08),
+                                px: 0.5,
+                                py: 0.25,
+                                borderRadius: 0.5,
+                                border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
+                              })}
+                            >
+                              Remote generation required
+                            </Typography>
+                          </Tooltip>
+                        )}
+                      </Box>
+                      {subCategoryDescriptions[plugin] && (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {subCategoryDescriptions[plugin]}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Box sx={{ flexShrink: 0 }}>
+                      {category === 'Recently Used' && (
+                        <Chip label="Recently Used" size="small" color="info" variant="outlined" />
+                      )}
+                      {hasSpecificPluginDocumentation(plugin) && (
+                        <Tooltip title="View documentation">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(getPluginDocumentationUrl(plugin), '_blank');
+                            }}
+                            sx={{ ml: 1 }}
+                          >
+                            <HelpOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </Paper>
+                );
+              })}
+            </Stack>
+          )}
 
           {/* Plugin config dialog */}
           <PluginConfigDialog

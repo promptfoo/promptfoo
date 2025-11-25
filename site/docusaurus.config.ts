@@ -98,7 +98,7 @@ const config: Config = {
           process.env.NODE_ENV === 'development'
             ? undefined
             : {
-                trackingID: 'G-3TS8QLZQ93',
+                trackingID: ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171'],
                 anonymizeIP: true,
               },
       } satisfies Preset.Options,
@@ -233,6 +233,13 @@ const config: Config = {
         { to: '/docs/intro/', label: 'Docs', position: 'left' },
         { to: '/pricing/', label: 'Pricing', position: 'left' },
         {
+          to: '/contact/',
+          position: 'right',
+          'aria-label': 'Book a Demo',
+          label: 'Book a Demo',
+          className: 'header-book-demo-link',
+        },
+        {
           to: 'https://promptfoo.app',
           position: 'right',
           'aria-label': 'Promptfoo App',
@@ -282,7 +289,7 @@ const config: Config = {
             },
             {
               label: 'Status',
-              href: 'https://status.promptfoo.dev',
+              href: 'https://status.promptfoo.app/',
             },
           ],
         },

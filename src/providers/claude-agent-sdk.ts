@@ -20,7 +20,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 /**
@@ -61,10 +61,19 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
  */
 async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-agent-sdk')> {
   try {
-    const require = createRequire(path.resolve(cliState.basePath || ''));
+    // Use a file path for createRequire to ensure proper module resolution
+    // createRequire needs an absolute path, not a relative one
+    const basePath =
+      cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
+    const resolveFrom = path.join(basePath, 'package.json');
+    const require = createRequire(resolveFrom);
     const claudeCodePath = require.resolve('@anthropic-ai/claude-agent-sdk');
     return importModule(claudeCodePath);
-  } catch {
+  } catch (err) {
+    logger.error(`Failed to load Claude Agent SDK: ${err}`);
+    if ((err as any).stack) {
+      logger.error((err as any).stack);
+    }
     throw new Error(
       dedent`The @anthropic-ai/claude-agent-sdk package is required but not installed.
 

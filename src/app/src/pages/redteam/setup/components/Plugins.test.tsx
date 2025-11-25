@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -842,7 +842,9 @@ describe('Plugins', () => {
       expect(document.activeElement).toBe(pluginsTab);
 
       // Simulate keyboard navigation (Tab key to move to next tab)
-      fireEvent.keyDown(pluginsTab, { key: 'ArrowRight' });
+      await act(async () => {
+        fireEvent.keyDown(pluginsTab, { key: 'ArrowRight' });
+      });
 
       // Focus should move to Custom Prompts tab (MUI Tabs handles this internally)
       // Note: Testing actual keyboard navigation might require more sophisticated testing setup

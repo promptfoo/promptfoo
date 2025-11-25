@@ -60,6 +60,7 @@ export type VulnerabilityType =
   | 'bias'
   | 'criminal'
   | 'custom'
+  | 'ecommerce'
   | 'financial'
   | 'harmful'
   | 'insurance'
@@ -386,6 +387,64 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for bypassing age, geographic, and regulatory restrictions on e-commerce products',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/ecommerce/',
+    name: 'E-commerce Compliance Bypass',
+    pluginId: 'ecommerce:compliance-bypass',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'ecommerce',
+  },
+  {
+    category: 'Security and Access Control',
+    description: 'Tests for order fraud, transaction manipulation, and return/refund policy abuse',
+    label: 'security',
+    link: '/docs/red-team/plugins/ecommerce/',
+    name: 'E-commerce Order Fraud',
+    pluginId: 'ecommerce:order-fraud',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'ecommerce',
+  },
+  {
+    category: 'Compliance and Legal',
+    description: 'Tests for PCI DSS violations and payment card data exposure',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/ecommerce/',
+    name: 'E-commerce PCI DSS',
+    pluginId: 'ecommerce:pci-dss',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'ecommerce',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests for unauthorized pricing changes, discount abuse, and promotional policy violations',
+    label: 'security',
+    link: '/docs/red-team/plugins/ecommerce/',
+    name: 'E-commerce Price Manipulation',
+    pluginId: 'ecommerce:price-manipulation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'ecommerce',
   },
   {
     category: 'Brand',
@@ -762,7 +821,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful content',
+    vulnerabilityType: 'harmful',
     isRemote: true,
   },
   {
@@ -987,7 +1046,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful content',
+    vulnerabilityType: 'harmful',
     isRemote: true,
   },
   {

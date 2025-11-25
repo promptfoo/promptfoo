@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { strategyDisplayNames } from '../constants';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types';
+import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
 export async function addSimbaTestCases(
   testCases: TestCaseWithPlugin[],

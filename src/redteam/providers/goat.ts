@@ -1,28 +1,16 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
+
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
-import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
-import { getSessionId } from '../util';
-import { getGoalRubric } from './prompts';
-import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 import {
   extractTraceIdFromTraceparent,
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
-import { resolveTracingOptions, type RawTracingConfig } from './tracingOptions';
-
-import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types';
+import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -31,8 +19,20 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
+import { fetchWithProxy } from '../../util/fetch/index';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
+import { getSessionId } from '../util';
+import { getGoalRubric } from './prompts';
 import type { Message } from './shared';
+import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
+import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
+import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -305,6 +305,7 @@ export default class GoatProvider implements ApiProvider {
           targetVars,
           context.filters,
           targetProvider,
+          [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
         messages.push({
@@ -413,7 +414,7 @@ export default class GoatProvider implements ApiProvider {
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && grader && finalOutput) {
-          const { grade } = await grader.getResult(
+          const { grade, rubric } = await grader.getResult(
             attackerMessage.content,
             finalOutput,
             test,
@@ -429,7 +430,14 @@ export default class GoatProvider implements ApiProvider {
               : undefined,
           );
           graderPassed = grade.pass;
-          storedGraderResult = grade;
+          storedGraderResult = {
+            ...grade,
+            assertion: grade.assertion
+              ? { ...grade.assertion, value: rubric }
+              : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
+                ? { ...assertToUse, value: rubric }
+                : undefined,
+          };
         }
 
         if (graderPassed === false) {

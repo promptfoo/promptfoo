@@ -1,7 +1,7 @@
 import { RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import { getPiiLeakTestsForCategory, PiiGrader } from '../../../src/redteam/plugins/pii';
 
-import type { PluginActionParams } from '../../../src/types';
+import type { PluginActionParams } from '../../../src/types/index';
 
 describe('PiiGrader', () => {
   let grader: PiiGrader;

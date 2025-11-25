@@ -42,6 +42,7 @@ import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
+import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 
 import type { EvalResultsFilterMode } from '../types/index';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
@@ -109,6 +110,8 @@ export interface VarKeyResult {
   key: string;
 }
 
+const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
@@ -174,6 +177,50 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
       // Log error but return empty array to prevent breaking the UI
       logger.error(
         `Error fetching metadata keys for eval ${evalId} and comparisons [${comparisonEvalIds.join(', ')}]: ${error}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Queries all unique metadata values for a given metadata key.
+   * @param evalId - The ID of the eval to get the metadata values from.
+   * @param key - The key of the metadata to get the values from.
+   * @returns An array of unique metadata values.
+   */
+  static getMetadataValuesFromEval(evalId: string, key: string): string[] {
+    const db = getDb();
+    const trimmedKey = key.trim();
+    if (!trimmedKey) {
+      return [];
+    }
+
+    try {
+      const escapedKey = escapeJsonPathKey(trimmedKey);
+      const jsonPath = `$."${escapedKey}"`;
+
+      const query = sql`
+        SELECT DISTINCT
+          json_extract(${evalResultsTable.metadata}, ${jsonPath}) AS value
+        FROM ${evalResultsTable}
+        WHERE ${evalResultsTable.evalId} = ${evalId}
+          AND ${evalResultsTable.metadata} IS NOT NULL
+          AND ${evalResultsTable.metadata} != '{}'
+          AND json_valid(${evalResultsTable.metadata})
+          AND json_extract(${evalResultsTable.metadata}, ${jsonPath}) IS NOT NULL
+        ORDER BY value
+        LIMIT 1000
+      `;
+
+      const rows = db.all<{ value: string }>(query);
+      const values = rows
+        .map(({ value }) => String(value).trim())
+        .filter((value) => Boolean(value && value.length > 0));
+
+      return Array.from(new Set(values));
+    } catch (error) {
+      logger.error(
+        `Error fetching metadata values for eval ${evalId} and key ${trimmedKey}: ${error instanceof Error ? error.message : String(error)}`,
       );
       return [];
     }
@@ -521,18 +568,20 @@ export default class Eval {
   }
 
   /**
-   * Private helper method to build filter conditions and query for test indices
+   * CRITICAL: Builds the WHERE SQL clause for filtering results.
+   * This is the single source of truth for all filtering logic.
+   * Used by both queryTestIndices() (pagination) and getFilteredMetrics().
+   *
+   * Any changes to filter logic MUST be made here to ensure consistency
+   * between displayed rows and calculated metrics.
+   *
+   * @returns SQL WHERE clause string (without "WHERE" keyword)
    */
-  private async queryTestIndices(opts: {
-    offset?: number;
-    limit?: number;
+  private buildFilterWhereSql(opts: {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
-  }): Promise<{ testIndices: number[]; filteredCount: number }> {
-    const db = getDb();
-    const offset = opts.offset ?? 0;
-    const limit = opts.limit ?? 50;
+  }): string {
     const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
     // Build filter conditions
@@ -616,17 +665,24 @@ export default class Eval {
             // Use a single json_extract call with LENGTH(TRIM()) for better performance
             condition = `LENGTH(TRIM(COALESCE(json_extract(metadata, '$."${escapedField}"'), ''))) > 0`;
           }
-        } else if (type === 'plugin' && operator === 'equals') {
+        } else if (type === 'plugin') {
           const sanitizedValue = sanitizeValue(value);
-          // Is the value a category? e.g. `harmful` or `bias`
-          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
           const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
 
-          // Plugin ID is stored in metadata.pluginId
-          if (isCategory) {
-            condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
-          } else {
-            condition = `${pluginIdPath} = '${sanitizedValue}'`;
+          if (operator === 'equals') {
+            // Plugin ID is stored in metadata.pluginId
+            if (isCategory) {
+              condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
+            } else {
+              condition = `${pluginIdPath} = '${sanitizedValue}'`;
+            }
+          } else if (operator === 'not_equals') {
+            if (isCategory) {
+              condition = `(${pluginIdPath} IS NULL OR (${pluginIdPath} != '${sanitizedValue}' AND ${pluginIdPath} NOT LIKE '${sanitizedValue}:%'))`;
+            } else {
+              condition = `(${pluginIdPath} IS NULL OR ${pluginIdPath} != '${sanitizedValue}')`;
+            }
           }
         } else if (type === 'strategy' && operator === 'equals') {
           const sanitizedValue = sanitizeValue(value);
@@ -711,7 +767,29 @@ export default class Eval {
       conditions.push(`(${searchConditions.join(' OR ')})`);
     }
 
-    const whereSql = conditions.join(' AND ');
+    return conditions.join(' AND ');
+  }
+
+  /**
+   * Private helper method to build filter conditions and query for test indices
+   */
+  private async queryTestIndices(opts: {
+    offset?: number;
+    limit?: number;
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<{ testIndices: number[]; filteredCount: number }> {
+    const db = getDb();
+    const offset = opts.offset ?? 0;
+    const limit = opts.limit ?? 50;
+
+    // CRITICAL: Use single source of truth for WHERE clause
+    const whereSql = this.buildFilterWhereSql({
+      filterMode: opts.filterMode,
+      searchQuery: opts.searchQuery,
+      filters: opts.filters,
+    });
 
     // Get filtered count
     const filteredCountQuery = sql.raw(
@@ -736,6 +814,31 @@ export default class Eval {
     const testIndices = rows.map((row) => row.test_idx);
 
     return { testIndices, filteredCount };
+  }
+
+  /**
+   * CRITICAL: Calculates metrics for filtered results.
+   * Uses the SAME WHERE clause as queryTestIndices() to ensure consistency.
+   *
+   * This method is called from the API route when filters are active to provide
+   * metrics that accurately reflect the filtered dataset.
+   *
+   * @returns Array of PromptMetrics, one per prompt
+   */
+  async getFilteredMetrics(opts: {
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<import('../types').PromptMetrics[]> {
+    // CRITICAL: Use the SAME WHERE clause as queryTestIndices
+    const whereSql = this.buildFilterWhereSql(opts);
+
+    return calculateFilteredMetrics({
+      evalId: this.id,
+      numPrompts: this.prompts.length,
+      whereSql,
+      whereParams: [], // SQLite uses string interpolation in this codebase
+    });
   }
 
   async getTablePage(opts: {

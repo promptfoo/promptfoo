@@ -55,14 +55,31 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * Check if the current deployment is configured as a reasoning model
    */
   protected isReasoningModel(): boolean {
-    return !!this.config.isReasoningModel || !!this.config.o1;
+    // Check explicit config flags first
+    if (this.config.isReasoningModel || this.config.o1) {
+      return true;
+    }
+
+    // Auto-detect reasoning models by deployment name (case-insensitive)
+    // Supports both direct names (o1-preview) and prefixed names (prod-o1-mini)
+    const lowerName = this.deploymentName.toLowerCase();
+    return (
+      lowerName.startsWith('o1') ||
+      lowerName.includes('-o1') ||
+      lowerName.startsWith('o3') ||
+      lowerName.includes('-o3') ||
+      lowerName.startsWith('o4') ||
+      lowerName.includes('-o4') ||
+      lowerName.startsWith('gpt-5') ||
+      lowerName.includes('-gpt-5')
+    );
   }
 
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
-  ): Record<string, any> {
+  ): Promise<Record<string, any>> {
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -116,7 +133,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
     const fileTools = config.tools
-      ? maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []
+      ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
@@ -175,7 +192,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throw new Error('Azure API host must be set.');
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;

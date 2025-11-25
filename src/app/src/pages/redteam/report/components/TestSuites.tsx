@@ -55,7 +55,7 @@ interface TestSuitesProps {
   plugins: RedteamPluginObject[];
   failuresByPlugin?: Record<string, any[]>;
   passesByPlugin?: Record<string, any[]>;
-  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
+  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
   vulnerabilitiesDataGridFilterModel: GridFilterModel;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
 }
@@ -487,8 +487,20 @@ const TestSuites = ({
             onClick={() => {
               const pluginId = params.row.pluginName;
               const plugin = pluginsById[pluginId];
-              const key = plugin?.id === 'policy' ? 'policy' : 'plugin';
-              navigate(`/eval/${evalId}?${key}=${encodeURIComponent(pluginId)}&mode=failures`);
+
+              const filterParam = encodeURIComponent(
+                JSON.stringify([
+                  {
+                    type: plugin?.id === 'policy' ? 'policy' : 'plugin',
+                    operator: 'equals',
+                    value: pluginId,
+                  },
+                ]),
+              );
+
+              // If ASR is 0, show passes
+              const mode = params.row.attackSuccessRate === 0 ? 'passes' : 'failures';
+              navigate(`/eval/${evalId}?filter=${filterParam}&mode=${mode}`);
             }}
           >
             View logs
@@ -571,6 +583,7 @@ const TestSuites = ({
               },
             }}
             slots={{ toolbar: CustomToolbar }}
+            showToolbar
           />
         </Box>
       </Paper>

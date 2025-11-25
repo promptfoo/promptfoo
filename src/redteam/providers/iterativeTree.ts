@@ -51,7 +51,7 @@ import type {
   Prompt,
   ProviderResponse,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
 import type { BaseRedteamMetadata } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
@@ -537,6 +537,7 @@ async function runRedteamConversation({
           },
           filters,
           targetProvider,
+          [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
         const targetResponse = await getTargetResponse(
@@ -633,7 +634,7 @@ async function runRedteamConversation({
                 }
               : { vars: iterationVars };
 
-            const { grade } = await grader.getResult(
+            const { grade, rubric } = await grader.getResult(
               newInjectVar,
               targetResponse.output,
               iterationTest,
@@ -641,7 +642,14 @@ async function runRedteamConversation({
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
             );
-            storedGraderResult = grade;
+            storedGraderResult = {
+              ...grade,
+              assertion: grade.assertion
+                ? { ...grade.assertion, value: rubric }
+                : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
+                  ? { ...assertToUse, value: rubric }
+                  : undefined,
+            };
             graderPassed = grade.pass;
           }
         }
@@ -786,6 +794,7 @@ async function runRedteamConversation({
     },
     filters,
     targetProvider,
+    [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
   );
 
   const finalTargetResponse = await getTargetResponse(

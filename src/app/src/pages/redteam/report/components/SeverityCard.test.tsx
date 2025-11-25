@@ -39,36 +39,38 @@ describe('SeverityCard', () => {
         backgroundColor: 'rgba(46, 125, 50, 0.05)',
         displayName: 'Low',
       },
-    ])(
-      'should render with correct styles for $displayName severity with issues',
-      ({ severity, severityColor, backgroundColor, displayName }) => {
-        const { container } = renderWithProviders(
-          <SeverityCard
-            severity={severity}
-            issueCount={3}
-            navigateOnClick={false}
-            navigateToIssues={mockNavigateToIssues}
-          />,
-        );
+    ])('should render with correct styles for $displayName severity with issues', ({
+      severity,
+      severityColor,
+      backgroundColor,
+      displayName,
+    }) => {
+      const { container } = renderWithProviders(
+        <SeverityCard
+          severity={severity}
+          issueCount={3}
+          navigateOnClick={false}
+          navigateToIssues={mockNavigateToIssues}
+        />,
+      );
 
-        const card = container.querySelector('.MuiCard-root') as HTMLElement;
+      const card = container.querySelector('.MuiCard-root') as HTMLElement;
 
-        // Check border color
-        expect(card).toHaveStyle(`border-left-color: ${severityColor}`);
+      // Check border color
+      expect(card).toHaveStyle(`border-left-color: ${severityColor}`);
 
-        // Check background color with alpha
-        expect(card).toHaveStyle(`background-color: ${backgroundColor}`);
+      // Check background color with alpha
+      expect(card).toHaveStyle(`background-color: ${backgroundColor}`);
 
-        // Check text colors
-        const title = screen.getByText(displayName);
-        const count = screen.getByText('3');
-        const label = screen.getByText('Vulnerabilities');
+      // Check text colors
+      const title = screen.getByText(displayName);
+      const count = screen.getByText('3');
+      const label = screen.getByText('Vulnerabilities');
 
-        expect(title).toHaveStyle(`color: ${severityColor}`);
-        expect(count).toHaveStyle(`color: ${severityColor}`);
-        expect(label).toHaveStyle(`color: ${severityColor}`);
-      },
-    );
+      expect(title).toHaveStyle(`color: ${severityColor}`);
+      expect(count).toHaveStyle(`color: ${severityColor}`);
+      expect(label).toHaveStyle(`color: ${severityColor}`);
+    });
 
     it('should render with disabled styles when no issues', () => {
       const { container } = renderWithProviders(
@@ -126,25 +128,24 @@ describe('SeverityCard', () => {
       { severity: Severity.High, displayName: 'High' },
       { severity: Severity.Medium, displayName: 'Medium' },
       { severity: Severity.Low, displayName: 'Low' },
-    ])(
-      'should call navigateToIssues when clicked with navigateOnClick enabled for $displayName',
-      ({ severity }) => {
-        renderWithProviders(
-          <SeverityCard
-            severity={severity}
-            issueCount={5}
-            navigateOnClick={true}
-            navigateToIssues={mockNavigateToIssues}
-          />,
-        );
+    ])('should call navigateToIssues when clicked with navigateOnClick enabled for $displayName', ({
+      severity,
+    }) => {
+      renderWithProviders(
+        <SeverityCard
+          severity={severity}
+          issueCount={5}
+          navigateOnClick={true}
+          navigateToIssues={mockNavigateToIssues}
+        />,
+      );
 
-        const cardActionArea = screen.getByRole('button');
-        fireEvent.click(cardActionArea);
+      const cardActionArea = screen.getByRole('button');
+      fireEvent.click(cardActionArea);
 
-        expect(mockNavigateToIssues).toHaveBeenCalledTimes(1);
-        expect(mockNavigateToIssues).toHaveBeenCalledWith({ severity });
-      },
-    );
+      expect(mockNavigateToIssues).toHaveBeenCalledTimes(1);
+      expect(mockNavigateToIssues).toHaveBeenCalledWith({ severity });
+    });
 
     it('should not call navigateToIssues when clicked with navigateOnClick disabled', () => {
       renderWithProviders(
@@ -181,28 +182,28 @@ describe('SeverityCard', () => {
       { severity: Severity.High, displayName: 'High' },
       { severity: Severity.Medium, displayName: 'Medium' },
       { severity: Severity.Low, displayName: 'Low' },
-    ])(
-      'should render CardActionArea with correct props when navigateOnClick is true and has issues for $displayName',
-      ({ severity, displayName }) => {
-        renderWithProviders(
-          <SeverityCard
-            severity={severity}
-            issueCount={3}
-            navigateOnClick={true}
-            navigateToIssues={mockNavigateToIssues}
-          />,
-        );
+    ])('should render CardActionArea with correct props when navigateOnClick is true and has issues for $displayName', ({
+      severity,
+      displayName,
+    }) => {
+      renderWithProviders(
+        <SeverityCard
+          severity={severity}
+          issueCount={3}
+          navigateOnClick={true}
+          navigateToIssues={mockNavigateToIssues}
+        />,
+      );
 
-        const cardActionArea = screen.getByRole('button');
+      const cardActionArea = screen.getByRole('button');
 
-        expect(cardActionArea).toHaveAttribute('type', 'button');
-        expect(cardActionArea).toHaveAttribute('tabIndex', '0');
-        expect(cardActionArea).toHaveAttribute(
-          'aria-label',
-          `Filter by ${displayName} vulnerabilities`,
-        );
-      },
-    );
+      expect(cardActionArea).toHaveAttribute('type', 'button');
+      expect(cardActionArea).toHaveAttribute('tabIndex', '0');
+      expect(cardActionArea).toHaveAttribute(
+        'aria-label',
+        `Filter by ${displayName} vulnerabilities`,
+      );
+    });
 
     it('should not render CardActionArea when navigateOnClick is false', () => {
       renderWithProviders(

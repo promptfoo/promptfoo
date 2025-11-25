@@ -1,3 +1,4 @@
+import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
@@ -6,10 +7,13 @@ import EvalFactory from '../factories/evalFactory';
 
 import type { Prompt } from '../../src/types/index';
 
-jest.mock('../../src/globalConfig/accounts', () => ({
-  ...jest.requireActual('../../src/globalConfig/accounts'),
-  getUserEmail: jest.fn(),
-}));
+vi.mock('../../src/globalConfig/accounts', async () => {
+  const actual = await vi.importActual('../../src/globalConfig/accounts');
+  return {
+    ...actual,
+    getUserEmail: vi.fn(),
+  };
+});
 
 describe('evaluator', () => {
   beforeAll(async () => {
@@ -177,7 +181,7 @@ describe('evaluator', () => {
 
     it('should use default author from getUserEmail when not provided', async () => {
       const mockEmail = 'default@example.com';
-      jest.mocked(getUserEmail).mockReturnValue(mockEmail);
+      vi.mocked(getUserEmail).mockReturnValue(mockEmail);
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
         { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
@@ -1150,6 +1154,48 @@ describe('evaluator', () => {
         ],
       });
       expect(strategyEq.testIndices).toEqual([5]);
+    });
+
+    it('filters plugin results with not_equals operator for ids and categories', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 5,
+        resultTypes: ['success'],
+      });
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"pluginId":"bias:toxicity"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"pluginId":"custom-plugin"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+      // Leave test_idx = 3 without pluginId to ensure nulls are included
+
+      const excludeSpecificPlugin = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'plugin',
+            operator: 'not_equals',
+            value: 'custom-plugin',
+          }),
+        ],
+      });
+      expect(excludeSpecificPlugin.testIndices).toEqual([0, 1, 3, 4]);
+
+      const excludeCategory = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'plugin',
+            operator: 'not_equals',
+            value: 'harmful',
+          }),
+        ],
+      });
+      expect(excludeCategory.testIndices).toEqual([1, 2, 3, 4]);
     });
 
     it('filters by explicit severity override', async () => {
