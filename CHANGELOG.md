@@ -20,14 +20,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Features
 
-- **redteam:** add ecommerce plugin pack with 4 security testing plugins ([#6168](https://github.com/promptfoo/promptfoo/issues/6168))
-- changelog automation and validation ([#6252](https://github.com/promptfoo/promptfoo/issues/6252)) ([ee74c4a](https://github.com/promptfoo/promptfoo/commit/ee74c4ae7dc01c35dd52d835a19188f06a334a1a))
-- **providers:** add Anthropic structured outputs support ([#6226](https://github.com/promptfoo/promptfoo/issues/6226)) ([1b1b9d2](https://github.com/promptfoo/promptfoo/commit/1b1b9d274559a5ae7cefba1de0c6a732a3d6cbf0))
-- **providers:** add Claude Opus 4.5 model support ([#6339](https://github.com/promptfoo/promptfoo/issues/6339)) ([65f855d](https://github.com/promptfoo/promptfoo/commit/65f855d57a2d3e0a663ad86260308f899c375dd6))
-- **providers:** add Claude Opus 4.5 support for Anthropic, Google Vertex AI, and AWS Bedrock ([#6340](https://github.com/promptfoo/promptfoo/issues/6340)) ([95780cb](https://github.com/promptfoo/promptfoo/commit/95780cb32270ec7cca86e5722e204cae321942b5))
-- **providers:** add metadata extraction for OpenAI Responses API ([#6267](https://github.com/promptfoo/promptfoo/issues/6267)) ([f252f33](https://github.com/promptfoo/promptfoo/commit/f252f330f1faed5b8d46f8b32010c81d5f92edf7))
-- **server:** add server-side provider list customization ([#6124](https://github.com/promptfoo/promptfoo/issues/6124)) ([fdb792a](https://github.com/promptfoo/promptfoo/commit/fdb792a2d1908007786571d54a8d7f66fb54940c))
-- **util:** add support for loading tool definitions from Python/JavaScript files ([#6272](https://github.com/promptfoo/promptfoo/issues/6272)) ([41377d0](https://github.com/promptfoo/promptfoo/commit/41377d04d01b8b7abd9955619d29a77c2a8914d5))
+- feat(redteam): add ecommerce plugin pack with 4 security testing plugins (#6168)
+
+* changelog automation and validation ([#6252](https://github.com/promptfoo/promptfoo/issues/6252)) ([ee74c4a](https://github.com/promptfoo/promptfoo/commit/ee74c4ae7dc01c35dd52d835a19188f06a334a1a))
+* **providers:** add Anthropic structured outputs support ([#6226](https://github.com/promptfoo/promptfoo/issues/6226)) ([1b1b9d2](https://github.com/promptfoo/promptfoo/commit/1b1b9d274559a5ae7cefba1de0c6a732a3d6cbf0))
+* **providers:** add Claude Opus 4.5 model support ([#6339](https://github.com/promptfoo/promptfoo/issues/6339)) ([65f855d](https://github.com/promptfoo/promptfoo/commit/65f855d57a2d3e0a663ad86260308f899c375dd6))
+* **providers:** add Claude Opus 4.5 support for Anthropic, Google Vertex AI, and AWS Bedrock ([#6340](https://github.com/promptfoo/promptfoo/issues/6340)) ([95780cb](https://github.com/promptfoo/promptfoo/commit/95780cb32270ec7cca86e5722e204cae321942b5))
+* **providers:** add metadata extraction for OpenAI Responses API ([#6267](https://github.com/promptfoo/promptfoo/issues/6267)) ([f252f33](https://github.com/promptfoo/promptfoo/commit/f252f330f1faed5b8d46f8b32010c81d5f92edf7))
+* **server:** add server-side provider list customization ([#6124](https://github.com/promptfoo/promptfoo/issues/6124)) ([fdb792a](https://github.com/promptfoo/promptfoo/commit/fdb792a2d1908007786571d54a8d7f66fb54940c))
+* **util:** add support for loading tool definitions from Python/JavaScript files ([#6272](https://github.com/promptfoo/promptfoo/issues/6272)) ([41377d0](https://github.com/promptfoo/promptfoo/commit/41377d04d01b8b7abd9955619d29a77c2a8914d5))
 
 ### Bug Fixes
 
@@ -45,7 +46,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(eval): add dynamic timeout defaults with layered protection - test case timeout defaults to 5× REQUEST_TIMEOUT_MS (25 minutes) to allow for retries and multi-turn redteam strategies; total eval timeout auto-calculated based on eval size, concurrency, and redteam detection; set either to 0 to disable (#6344)
 - feat(providers): add Claude Opus 4.5 support across Anthropic (claude-opus-4-5-20251101, claude-opus-4-5-latest), Google Vertex AI (claude-opus-4-5@20251101), and AWS Bedrock (anthropic.claude-opus-4-5-20251101-v1:0 for all regions) with $5/MTok input and $25/MTok output pricing; includes comprehensive documentation updates, advanced coding example demonstrating bug diagnosis and tradeoff analysis, updated provider examples, and cost calculation tests
 - feat(util): add support for loading tool definitions from Python/JavaScript files - providers now support dynamic tool generation using `file://tools.py:get_tools` and `file://tools.js:get_tools` syntax, enabling runtime tool definitions based on environment, config, or external APIs (#6272)
 - feat(server): add server-side provider list customization via ui-providers.yaml - enables organizations to define custom provider lists that appear in eval creator and redteam setup UIs; when ui-providers.yaml exists, replaces default ~600 providers with organization-specific options for simplified workflow and security control (#6124)
