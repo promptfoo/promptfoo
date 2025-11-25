@@ -281,6 +281,8 @@ Collect and zip log files for debugging purposes.
 
 This command creates a compressed tar.gz archive containing your promptfoo log files, making it easy to share them for debugging purposes. If no output path is specified, it will generate a timestamped filename automatically.
 
+Log files are stored in `~/.promptfoo/logs` by default. To use a custom log directory, set the `PROMPTFOO_LOG_DIR` environment variable.
+
 ## `promptfoo validate`
 
 Validate a promptfoo configuration file to ensure it follows the correct schema and structure.
@@ -727,7 +729,7 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_TEMPLATING`                | Disables Nunjucks template processing                                                                                                                                                                                                                                             | `false`                       |
 | `PROMPTFOO_DISABLE_VAR_EXPANSION`             | Prevents Array-type vars from being expanded into multiple test cases                                                                                                                                                                                                             |                               |
 | `PROMPTFOO_FAILED_TEST_EXIT_CODE`             | Override the exit code when there is at least 1 test case failure or when the pass rate is below PROMPTFOO_PASS_RATE_THRESHOLD                                                                                                                                                    | 100                           |
-| `PROMPTFOO_LOG_DIR`                           | Directory to write error logs                                                                                                                                                                                                                                                     | `.`                           |
+| `PROMPTFOO_LOG_DIR`                           | Directory to write log files (both debug and error logs). Overrides the default `~/.promptfoo/logs` directory.                                                                                                                                                                    | `~/.promptfoo/logs`           |
 | `PROMPTFOO_PASS_RATE_THRESHOLD`               | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 100% (no failures allowed)                                                                                                                                                                           | 100                           |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`              | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior.                                                                                                                                  |                               |
 | `PROMPTFOO_SHARE_CHUNK_SIZE`                  | Number of results to send in each chunk. This is used to estimate the size of the results and to determine the number of chunks to send.                                                                                                                                          |                               |

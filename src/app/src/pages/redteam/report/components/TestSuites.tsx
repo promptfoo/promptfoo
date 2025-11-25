@@ -583,6 +583,7 @@ const TestSuites = ({
               },
             }}
             slots={{ toolbar: CustomToolbar }}
+            showToolbar
           />
         </Box>
       </Paper>

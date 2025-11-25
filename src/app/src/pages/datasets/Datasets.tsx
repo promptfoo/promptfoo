@@ -42,14 +42,16 @@ function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) 
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter
+      <Box
         sx={{
           '& .MuiInputBase-root': {
             borderRadius: 2,
             backgroundColor: theme.palette.background.paper,
           },
         }}
-      />
+      >
+        <GridToolbarQuickFilter />
+      </Box>
     </GridToolbarContainer>
   );
 }
@@ -331,9 +333,9 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
             },
           }}
           pageSizeOptions={[10, 25, 50, 100]}
+          showToolbar
         />
       </Paper>
-
       {data[dialogState.selectedIndex] && (
         <DatasetDialog
           openDialog={dialogState.open}

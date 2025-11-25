@@ -1434,7 +1434,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       enableCache();
     });
 
-    it('should identify reasoning models correctly', () => {
+    it('should identify reasoning models correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
@@ -1450,7 +1450,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o4MiniProvider['isReasoningModel']()).toBe(true);
     });
 
-    it('should handle temperature support correctly', () => {
+    it('should handle temperature support correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
@@ -1595,7 +1595,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         } as any,
       });
 
-      const { body: o4Body } = o4Provider.getOpenAiBody('Test prompt');
+      const { body: o4Body } = await o4Provider.getOpenAiBody('Test prompt');
       expect(o4Body.reasoning_effort).toBe('medium');
       expect(o4Body.service_tier).toBe('premium');
     });
@@ -1623,7 +1623,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         } as any,
       });
 
-      const { body } = provider.getOpenAiBody('Test prompt');
+      const { body } = await provider.getOpenAiBody('Test prompt');
       expect(body.user).toBe('user-123');
       expect(body.metadata).toEqual({
         project: 'test-project',
@@ -1653,7 +1653,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         } as any,
       });
 
-      const { body } = o1Provider.getOpenAiBody('Test prompt');
+      const { body } = await o1Provider.getOpenAiBody('Test prompt');
       expect(body.reasoning).toEqual({
         effort: 'high',
         summary: 'detailed',
@@ -2093,19 +2093,19 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       await provider.callApi('Test prompt');
     });
 
-    it('should log generic message for unknown chat models', () => {
+    it('should log generic message for unknown chat models', async () => {
       new OpenAiChatCompletionProvider('unknown-model');
 
       expect(mockLogger.debug).toHaveBeenCalledWith('Using unknown chat model: unknown-model');
     });
 
-    it('should not log unknown model message for known OpenAI models', () => {
+    it('should not log unknown model message for known OpenAI models', async () => {
       new OpenAiChatCompletionProvider('gpt-4o-mini');
 
       expect(mockLogger.debug).not.toHaveBeenCalledWith(expect.stringContaining('unknown'));
     });
 
-    it('should support legacy model IDs', () => {
+    it('should support legacy model IDs', async () => {
       // Test legacy GPT-4 models
       const gpt4LegacyProvider = new OpenAiChatCompletionProvider('gpt-4-0314');
       expect(gpt4LegacyProvider.modelName).toBe('gpt-4-0314');
@@ -2128,6 +2128,90 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         'gpt-4o-audio-preview-2025-06-03',
       );
       expect(audioModelProvider.modelName).toBe('gpt-4o-audio-preview-2025-06-03');
+    });
+
+    it('should work with apiKeyRequired: false and API key from environment', () => {
+      const originalEnv = process.env.CUSTOM_LOCAL_API_KEY;
+      process.env.CUSTOM_LOCAL_API_KEY = 'test-local-key';
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('local-model', {
+          config: {
+            apiKeyRequired: false,
+            apiKeyEnvar: 'CUSTOM_LOCAL_API_KEY',
+            apiBaseUrl: 'http://localhost:8080/v1',
+          },
+        });
+
+        // Provider should pick up API key from environment
+        expect(provider.getApiKey()).toBe('test-local-key');
+
+        // Provider should not require API key
+        expect(provider.requiresApiKey()).toBe(false);
+      } finally {
+        if (originalEnv !== undefined) {
+          process.env.CUSTOM_LOCAL_API_KEY = originalEnv;
+        } else {
+          delete process.env.CUSTOM_LOCAL_API_KEY;
+        }
+      }
+    });
+
+    it('should work with apiKeyRequired: false and no API key', async () => {
+      // Ensure no API key is set in the environment
+      const originalCustomEnv = process.env.CUSTOM_LOCAL_API_KEY;
+      const originalOpenAIEnv = process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_LOCAL_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('local-model', {
+          config: {
+            apiKeyRequired: false,
+            apiKeyEnvar: 'CUSTOM_LOCAL_API_KEY',
+            apiBaseUrl: 'http://localhost:8080/v1',
+          },
+        });
+
+        // Provider should not have an API key
+        expect(provider.getApiKey()).toBeFalsy();
+
+        // Provider should not require API key
+        expect(provider.requiresApiKey()).toBe(false);
+
+        // Mock successful API response
+        const mockResponse = {
+          data: {
+            choices: [{ message: { content: 'Response without auth' } }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        // Call the API
+        const result = await provider.callApi(
+          JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+        );
+
+        // Verify the call succeeded
+        expect(result.output).toBe('Response without auth');
+        expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+
+        // Verify that the Authorization header was NOT included (should not be "Bearer undefined")
+        const callArgs = mockFetchWithCache.mock.calls[0];
+        const headers = callArgs[1]?.headers as Record<string, string>;
+        expect(headers.Authorization).toBeUndefined();
+      } finally {
+        if (originalCustomEnv !== undefined) {
+          process.env.CUSTOM_LOCAL_API_KEY = originalCustomEnv;
+        }
+        if (originalOpenAIEnv !== undefined) {
+          process.env.OPENAI_API_KEY = originalOpenAIEnv;
+        }
+      }
     });
   });
 });
