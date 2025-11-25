@@ -15,9 +15,16 @@ import {
 } from './imageDatasetUtils';
 
 const PLUGIN_ID = 'promptfoo:redteam:vlguard';
-const DATASET_PATH = 'huggingface://datasets/ys-zong/VLGuard?split=train';
-const METADATA_URL = 'https://huggingface.co/datasets/ys-zong/VLGuard/resolve/main/train.json';
+const DATASET_BASE_URL = 'https://huggingface.co/datasets/ys-zong/VLGuard/resolve/main';
 const DATASET_SERVER_URL = 'https://datasets-server.huggingface.co/rows';
+
+// Dataset split info (test has 1000 records, train has 1999)
+const SPLIT_INFO = {
+  test: { totalRecords: 1000 },
+  train: { totalRecords: 1999 },
+} as const;
+
+export type VLGuardSplit = keyof typeof SPLIT_INFO;
 
 // Valid categories in the VLGuard dataset
 // Support both old (lowercase) and new (title case) formats for backwards compatibility
@@ -108,6 +115,7 @@ interface VLGuardPluginConfig extends ImageDatasetPluginConfig {
   subcategories?: VLGuardSubcategory[];
   includeUnsafe?: boolean; // Include unsafe records (default: true)
   includeSafe?: boolean; // Include safe records (default: false for backwards compatibility)
+  split?: VLGuardSplit; // Dataset split to use (default: 'test')
 }
 
 /**
@@ -129,19 +137,23 @@ interface VLGuardMetadataRecord {
 
 /**
  * DatasetManager to handle VLGuard dataset caching and filtering
- * Fetches metadata from train.json and images from HuggingFace
+ * Fetches metadata from {split}.json and images from HuggingFace
  * @internal - exported for testing purposes only
  */
 export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   private static instance: VLGuardDatasetManager | null = null;
   protected pluginId = 'vlguard';
-  protected datasetPath = DATASET_PATH;
+  protected datasetPath = `huggingface://datasets/ys-zong/VLGuard`;
   // Fetch enough metadata records to ensure good category coverage
   // Images are fetched on-demand with bounded concurrency
   protected fetchLimit = 500;
 
-  // Cache for metadata from train.json
-  private metadataCache: VLGuardMetadataRecord[] | null = null;
+  // Cache for metadata and processed records, keyed by split
+  private metadataCache: Map<VLGuardSplit, VLGuardMetadataRecord[]> = new Map();
+  private splitCache: Map<VLGuardSplit, VLGuardInput[]> = new Map();
+
+  // Current split being used
+  private currentSplit: VLGuardSplit = 'test';
 
   private constructor() {
     super();
@@ -158,12 +170,27 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   }
 
   /**
+   * Set the split to use for fetching records
+   */
+  setSplit(split: VLGuardSplit): void {
+    this.currentSplit = split;
+  }
+
+  /**
+   * Get the current split
+   */
+  getSplit(): VLGuardSplit {
+    return this.currentSplit;
+  }
+
+  /**
    * Clear the cache - useful for testing
    */
   static clearCache(): void {
     if (VLGuardDatasetManager.instance) {
       VLGuardDatasetManager.instance.datasetCache = null;
-      VLGuardDatasetManager.instance.metadataCache = null;
+      VLGuardDatasetManager.instance.metadataCache.clear();
+      VLGuardDatasetManager.instance.splitCache.clear();
     }
   }
 
@@ -175,14 +202,16 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   }
 
   /**
-   * Fetch metadata from train.json
+   * Fetch metadata from {split}.json
    */
   private async fetchMetadata(): Promise<VLGuardMetadataRecord[]> {
-    if (this.metadataCache) {
-      return this.metadataCache;
+    const cachedMetadata = this.metadataCache.get(this.currentSplit);
+    if (cachedMetadata) {
+      return cachedMetadata;
     }
 
-    logger.debug('[vlguard] Fetching metadata from train.json');
+    const metadataUrl = `${DATASET_BASE_URL}/${this.currentSplit}.json`;
+    logger.debug(`[vlguard] Fetching metadata from ${this.currentSplit}.json`);
 
     const hfToken =
       getEnvString('HF_TOKEN') ||
@@ -195,7 +224,7 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
     }
 
     try {
-      const response = await fetchWithCache(METADATA_URL, {
+      const response = await fetchWithCache(metadataUrl, {
         headers,
       });
 
@@ -204,9 +233,11 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
       }
 
       const metadata = response.data as VLGuardMetadataRecord[];
-      logger.info(`[vlguard] Loaded ${metadata.length} metadata records from train.json`);
+      logger.info(
+        `[vlguard] Loaded ${metadata.length} metadata records from ${this.currentSplit}.json`,
+      );
 
-      this.metadataCache = metadata;
+      this.metadataCache.set(this.currentSplit, metadata);
       return metadata;
     } catch (error) {
       logger.error(
@@ -308,7 +339,7 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
     // Fetch in batches
     for (let offset = 0; offset < totalRows; offset += PAGE_SIZE) {
       const length = Math.min(PAGE_SIZE, totalRows - offset);
-      const url = `${DATASET_SERVER_URL}?dataset=ys-zong%2FVLGuard&split=train&config=default&offset=${offset}&length=${length}`;
+      const url = `${DATASET_SERVER_URL}?dataset=ys-zong%2FVLGuard&split=${this.currentSplit}&config=default&offset=${offset}&length=${length}`;
 
       try {
         const response = await fetchWithCache(url, {
@@ -386,25 +417,30 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
    * Override ensureDatasetLoaded to use our custom metadata fetching
    */
   protected async ensureDatasetLoaded(): Promise<void> {
-    if (this.datasetCache) {
-      logger.debug(`[vlguard] Using cached dataset with ${this.datasetCache.length} records`);
+    // Check if we have cached data for the current split
+    const cachedData = this.splitCache.get(this.currentSplit);
+    if (cachedData) {
+      logger.debug(
+        `[vlguard] Using cached ${this.currentSplit} split with ${cachedData.length} records`,
+      );
+      this.datasetCache = cachedData;
       return;
     }
 
-    logger.debug('[vlguard] Loading dataset...');
+    logger.debug(`[vlguard] Loading ${this.currentSplit} split...`);
 
-    // Fetch metadata from train.json
+    // Fetch metadata from {split}.json
     const metadata = await this.fetchMetadata();
-    logger.info(`[vlguard] Loaded ${metadata.length} metadata records`);
+    logger.info(`[vlguard] Loaded ${metadata.length} metadata records from ${this.currentSplit}`);
 
-    // Fetch image URLs from datasets-server (the datasets-server has slightly fewer records)
-    // We fetch all available images and match by row index
-    const totalImages = Math.min(metadata.length, 1999); // datasets-server has 1999 rows
+    // Fetch image URLs from datasets-server
+    const splitInfo = SPLIT_INFO[this.currentSplit];
+    const totalImages = Math.min(metadata.length, splitInfo.totalRecords);
     const imageMap = await this.fetchImageUrls(totalImages);
     logger.info(`[vlguard] Fetched ${imageMap.size} image URLs from datasets-server`);
 
     // Create index mapping: metadata records with their row indices
-    // The datasets-server rows are in the same order as train.json entries
+    // The datasets-server rows are in the same order as {split}.json entries
     const indexedRecords: Array<{ metadata: VLGuardMetadataRecord; rowIndex: number }> = [];
     for (let i = 0; i < metadata.length && i < totalImages; i++) {
       if (imageMap.has(i)) {
@@ -416,10 +452,13 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
     const sampleSize = Math.min(this.fetchLimit, indexedRecords.length);
     const sampledRecords = fisherYatesShuffle([...indexedRecords]).slice(0, sampleSize);
 
-    logger.info(`[vlguard] Processing ${sampledRecords.length} records from dataset`);
+    logger.info(`[vlguard] Processing ${sampledRecords.length} records from ${this.currentSplit}`);
 
     // Process the sampled records (fetch images with bounded concurrency)
     this.datasetCache = await this.processMetadataRecords(sampledRecords, imageMap);
+
+    // Cache the processed data for this split
+    this.splitCache.set(this.currentSplit, this.datasetCache);
 
     logger.info(`[vlguard] Successfully loaded ${this.datasetCache.length} records`);
   }
@@ -428,6 +467,11 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
    * Get records filtered by category, fetching dataset if needed
    */
   async getFilteredRecords(limit: number, config?: VLGuardPluginConfig): Promise<VLGuardInput[]> {
+    // Set the split from config (default: 'train' for maximum unsafe image coverage)
+    const split = config?.split ?? 'train';
+    this.setSplit(split);
+    logger.debug(`[vlguard] Using ${split} split`);
+
     await this.ensureDatasetLoaded();
 
     if (!this.datasetCache || this.datasetCache.length === 0) {

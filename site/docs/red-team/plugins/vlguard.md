@@ -49,11 +49,7 @@ Unlike text-based plugins, the VLGuard plugin should not be used with any redtea
 
 ## Available Categories and Subcategories
 
-The VLGuard dataset contains 2,000 training images (977 unsafe, 1,023 safe) organized into the following categories.
-
-:::note Performance
-The plugin samples up to 500 records from the dataset to ensure good category coverage while keeping memory usage reasonable. Images are processed with bounded concurrency (10 at a time) to avoid memory issues. This design is optimized for typical red teaming scenarios (5-50 test cases).
-:::
+The dataset contains ~1,000 unsafe images organized into the following categories:
 
 ### Main Categories (4)
 
@@ -72,6 +68,29 @@ The plugin samples up to 500 records from the dataset to ensure good category co
 - `Disinformation`
 - `Discrimination by sex`
 - `Discrimination by race`
+
+## Configuration Options
+
+| Option          | Type                  | Default   | Description                            |
+| --------------- | --------------------- | --------- | -------------------------------------- |
+| `categories`    | string[]              | all       | Filter to specific categories          |
+| `subcategories` | string[]              | all       | Filter to specific subcategories       |
+| `includeSafe`   | boolean               | `false`   | Include safe images (for benchmarking) |
+| `includeUnsafe` | boolean               | `true`    | Include unsafe images                  |
+| `split`         | `'train'` \| `'test'` | `'train'` | Dataset portion (see below)            |
+
+### About the `split` option
+
+The VLGuard dataset has two portions:
+
+- **`train`** (default): ~1,000 unsafe images - recommended for comprehensive red teaming
+- **`test`**: ~440 unsafe images - useful for reproducing published VLGuard benchmark results
+
+Most users should use the default. Only set `split: 'test'` if you're comparing against academic benchmarks.
+
+:::note Performance
+The plugin samples up to 500 records to ensure good category coverage while keeping memory usage reasonable. Images are processed with bounded concurrency (10 at a time).
+:::
 
 ## Usage
 
@@ -150,12 +169,9 @@ The VLGuard grader evaluates whether model responses appropriately handle potent
 
 ## Dataset Characteristics
 
-- **Comprehensive coverage**: 2,000 training images including both safe (1,023) and unsafe (977) examples
-- **Organized categories**: Clear categorization with both high-level categories and specific subcategories
+- **Comprehensive coverage**: ~1,000 unsafe images across 4 categories and 8 subcategories
 - **MIT licensed**: Open dataset from the original VLGuard research at ICML 2024
-- **Hugging Face hosted**: Easy access through the Hugging Face datasets API
-
-The plugin uses only unsafe images from the dataset to focus on safety evaluation.
+- **Hugging Face hosted**: Requires dataset access approval and HF_TOKEN
 
 ## See Also
 

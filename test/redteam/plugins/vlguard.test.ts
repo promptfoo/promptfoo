@@ -148,7 +148,7 @@ describe('VLGuardPlugin', () => {
       ]);
 
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('datasets-server')) {
@@ -216,7 +216,7 @@ describe('VLGuardPlugin', () => {
       ]);
 
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('datasets-server')) {
@@ -249,7 +249,7 @@ describe('VLGuardPlugin', () => {
       ]);
 
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('datasets-server')) {
@@ -271,7 +271,7 @@ describe('VLGuardPlugin', () => {
 
     it('should throw error when no records are found', async () => {
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: [], cached: false } as any;
         }
         if (url.includes('datasets-server')) {
@@ -287,7 +287,7 @@ describe('VLGuardPlugin', () => {
 
     it('should throw error when metadata fetch fails', async () => {
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 401, statusText: 'Unauthorized', data: null, cached: false } as any;
         }
         return { status: 404, data: null, cached: false } as any;
@@ -311,7 +311,7 @@ describe('VLGuardPlugin', () => {
       ]);
 
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('datasets-server')) {
@@ -352,7 +352,7 @@ describe('VLGuardPlugin', () => {
       ]);
 
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('datasets-server')) {
@@ -425,7 +425,7 @@ describe('VLGuardPlugin', () => {
       ]);
 
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('datasets-server')) {
@@ -503,7 +503,7 @@ describe('VLGuardPlugin', () => {
       ];
 
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('datasets-server')) {
@@ -543,7 +543,7 @@ describe('VLGuardPlugin', () => {
       ];
 
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('datasets-server')) {
@@ -585,7 +585,7 @@ describe('VLGuardPlugin', () => {
       ];
 
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('datasets-server')) {
@@ -635,7 +635,7 @@ describe('VLGuardPlugin', () => {
       ];
 
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        if (url.includes('train.json')) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('datasets-server')) {
@@ -655,6 +655,106 @@ describe('VLGuardPlugin', () => {
       expect(tests).toHaveLength(1);
       expect(tests[0].metadata?.category).toBe('Deception');
       expect(tests[0].metadata?.safe).toBe(false);
+    });
+  });
+
+  describe('Split Selection', () => {
+    const mockFetchWithCache = cache.fetchWithCache as jest.MockedFunction<
+      typeof cache.fetchWithCache
+    >;
+    const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as jest.MockedFunction<
+      typeof imageDatasetUtils.fetchImageAsBase64
+    >;
+
+    const createMockDatasetServerResponse = (rowCount: number) => ({
+      rows: Array.from({ length: rowCount }, (_, i) => ({
+        row_idx: i,
+        row: { image: { src: `https://example.com/image${i}.jpg` } },
+      })),
+    });
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      VLGuardDatasetManager.clearCache();
+    });
+
+    it('should default to train split for maximum coverage', async () => {
+      const mockMetadata = [
+        {
+          id: 'train_1',
+          image: 'img1.png',
+          safe: false,
+          harmful_category: 'deception',
+          harmful_subcategory: 'disinformation',
+          'instr-resp': [{ instruction: 'test question' }],
+        },
+      ];
+
+      mockFetchWithCache.mockImplementation(async (url: any) => {
+        // Verify it requests train.json by default (more unsafe images)
+        if (url.includes('train.json') && url.includes('VLGuard')) {
+          return { status: 200, data: mockMetadata, cached: false } as any;
+        }
+        if (url.includes('test.json')) {
+          // Should not be called by default
+          throw new Error('Should not fetch test.json by default');
+        }
+        if (url.includes('datasets-server') && url.includes('split=train')) {
+          return { status: 200, data: createMockDatasetServerResponse(1), cached: false } as any;
+        }
+        return { status: 404, data: null, cached: false } as any;
+      });
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
+      const tests = await plugin.generateTests(1);
+
+      expect(tests).toHaveLength(1);
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('train.json'),
+        expect.any(Object),
+      );
+    });
+
+    it('should use test split when configured', async () => {
+      const mockMetadata = [
+        {
+          id: 'test_1',
+          image: 'img1.png',
+          safe: false,
+          harmful_category: 'privacy',
+          harmful_subcategory: 'personal data',
+          'instr-resp': [{ instruction: 'test question' }],
+        },
+      ];
+
+      mockFetchWithCache.mockImplementation(async (url: any) => {
+        if (url.includes('test.json') && url.includes('VLGuard')) {
+          return { status: 200, data: mockMetadata, cached: false } as any;
+        }
+        if (url.includes('train.json')) {
+          // Should not be called when split=test
+          throw new Error('Should not fetch train.json when split=test');
+        }
+        if (url.includes('datasets-server') && url.includes('split=test')) {
+          return { status: 200, data: createMockDatasetServerResponse(1), cached: false } as any;
+        }
+        return { status: 404, data: null, cached: false } as any;
+      });
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
+        split: 'test',
+      });
+      const tests = await plugin.generateTests(1);
+
+      expect(tests).toHaveLength(1);
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('test.json'),
+        expect.any(Object),
+      );
     });
   });
 });
