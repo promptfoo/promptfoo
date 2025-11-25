@@ -110,20 +110,25 @@ export function reportReactError(
  * Global error handler for uncaught JavaScript errors
  */
 function handleGlobalError(
-  event: ErrorEvent | string,
+  event: Event | string,
   source?: string,
   lineno?: number,
   colno?: number,
   error?: Error,
 ): boolean {
-  // Handle both ErrorEvent and legacy parameters
+  // Handle both Event/ErrorEvent and legacy string parameters
   let actualError: Error;
   let actualSource: string | undefined;
 
   if (event instanceof ErrorEvent) {
     actualError = event.error || new Error(event.message);
     actualSource = event.filename;
+  } else if (event instanceof Event) {
+    // Generic Event - extract what info we can
+    actualError = error || new Error('Unknown error event');
+    actualSource = source;
   } else {
+    // String message (legacy onerror signature)
     actualError = error || new Error(String(event));
     actualSource = source;
   }
