@@ -11,10 +11,15 @@
  * - Cache token tracking
  */
 
+import path from 'path';
+
 import { getCache, isCacheEnabled } from '../../cache';
+import cliState from '../../cliState';
+import { importModule } from '../../esm';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 
@@ -72,6 +77,10 @@ export interface BedrockConverseOptions extends BedrockOptions {
   tools?: BedrockConverseToolConfig[];
   toolChoice?: 'auto' | 'any' | { tool: { name: string } };
 
+  // Function tool callbacks for executing tools locally
+  // Keys are function names, values are file:// references or inline function strings
+  functionToolCallbacks?: Record<string, string | Function>;
+
   // Additional model-specific parameters
   additionalModelRequestFields?: Record<string, unknown>;
   additionalModelResponseFieldPaths?: string[];
@@ -106,7 +115,7 @@ export interface BedrockConverseToolConfig {
 
 /**
  * Bedrock model pricing per 1M tokens
- * Prices as of late 2024 - may need updates
+ * Prices as of 2025 - may need updates
  */
 const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }> = {
   // Claude Opus 4.5
@@ -128,6 +137,10 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   'amazon.nova-lite': { input: 0.06, output: 0.24 },
   'amazon.nova-pro': { input: 0.8, output: 3.2 },
   'amazon.nova-premier': { input: 2.5, output: 10 },
+  // Amazon Titan Text
+  'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
+  'amazon.titan-text-express': { input: 0.8, output: 1.6 },
+  'amazon.titan-text-premier': { input: 0.5, output: 1.5 },
   // Meta Llama
   'meta.llama3-1-8b': { input: 0.22, output: 0.22 },
   'meta.llama3-1-70b': { input: 0.99, output: 0.99 },
@@ -137,12 +150,15 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   'meta.llama3-2-11b': { input: 0.35, output: 0.35 },
   'meta.llama3-2-90b': { input: 2.0, output: 2.0 },
   'meta.llama3-3-70b': { input: 0.99, output: 0.99 },
+  'meta.llama4-scout': { input: 0.17, output: 0.68 },
+  'meta.llama4-maverick': { input: 0.17, output: 0.68 },
   'meta.llama4': { input: 1.0, output: 3.0 },
   // Mistral
   'mistral.mistral-7b': { input: 0.15, output: 0.2 },
   'mistral.mixtral-8x7b': { input: 0.45, output: 0.7 },
   'mistral.mistral-large': { input: 4, output: 12 },
   'mistral.mistral-small': { input: 1, output: 3 },
+  'mistral.pixtral-large': { input: 2, output: 6 },
   // AI21 Jamba
   'ai21.jamba-1-5-mini': { input: 0.2, output: 0.4 },
   'ai21.jamba-1-5-large': { input: 2, output: 8 },
@@ -151,8 +167,19 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   'cohere.command-r-plus': { input: 3, output: 15 },
   // DeepSeek
   'deepseek.deepseek-r1': { input: 1.35, output: 5.4 },
+  'deepseek.r1': { input: 1.35, output: 5.4 },
   // Qwen
+  'qwen.qwen3-32b': { input: 0.2, output: 0.6 },
+  'qwen.qwen3-235b': { input: 0.18, output: 0.54 },
+  'qwen.qwen3-coder-30b': { input: 0.2, output: 0.6 },
+  'qwen.qwen3-coder-480b': { input: 1.5, output: 7.5 },
   'qwen.qwen3': { input: 0.5, output: 1.5 },
+  // Writer Palmyra
+  'writer.palmyra-x5': { input: 0.6, output: 6 },
+  'writer.palmyra-x4': { input: 2.5, output: 10 },
+  // OpenAI GPT-OSS
+  'openai.gpt-oss-120b': { input: 1.0, output: 3.0 },
+  'openai.gpt-oss-20b': { input: 0.3, output: 0.9 },
 };
 
 /**
@@ -539,6 +566,7 @@ function extractTextFromContentBlocks(
  */
 export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implements ApiProvider {
   declare config: BedrockConverseOptions;
+  private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(
     modelName: string,
@@ -568,6 +596,113 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
   toString(): string {
     return `[AWS Bedrock Converse Provider ${this.modelName}]`;
+  }
+
+  /**
+   * Loads a function from an external file
+   * @param fileRef The file reference in the format 'file://path/to/file:functionName'
+   * @returns The loaded function
+   */
+  private async loadExternalFunction(fileRef: string): Promise<Function> {
+    let filePath = fileRef.slice('file://'.length);
+    let functionName: string | undefined;
+
+    if (filePath.includes(':')) {
+      const splits = filePath.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filePath, functionName] = splits;
+      }
+    }
+
+    try {
+      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+      logger.debug(
+        `[Bedrock Converse] Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
+      );
+
+      const requiredModule = await importModule(resolvedPath, functionName);
+
+      if (typeof requiredModule === 'function') {
+        return requiredModule;
+      } else if (
+        requiredModule &&
+        typeof requiredModule === 'object' &&
+        functionName &&
+        functionName in requiredModule
+      ) {
+        const fn = requiredModule[functionName];
+        if (typeof fn === 'function') {
+          return fn;
+        }
+      }
+
+      throw new Error(
+        `Function callback malformed: ${filePath} must export ${
+          functionName
+            ? `a named function '${functionName}'`
+            : 'a function or have a default export as a function'
+        }`,
+      );
+    } catch (error: any) {
+      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+    }
+  }
+
+  /**
+   * Executes a function callback with proper error handling
+   */
+  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
+    try {
+      // Check if we've already loaded this function
+      let callback = this.loadedFunctionCallbacks[functionName];
+
+      // If not loaded yet, try to load it now
+      if (!callback) {
+        const callbackRef = this.config.functionToolCallbacks?.[functionName];
+
+        if (callbackRef && typeof callbackRef === 'string') {
+          const callbackStr: string = callbackRef;
+          if (callbackStr.startsWith('file://')) {
+            callback = await this.loadExternalFunction(callbackStr);
+          } else {
+            callback = new Function('return ' + callbackStr)();
+          }
+
+          // Cache for future use
+          this.loadedFunctionCallbacks[functionName] = callback;
+        } else if (typeof callbackRef === 'function') {
+          callback = callbackRef;
+          this.loadedFunctionCallbacks[functionName] = callback;
+        }
+      }
+
+      if (!callback) {
+        throw new Error(`No callback found for function '${functionName}'`);
+      }
+
+      // Execute the callback
+      logger.debug(`[Bedrock Converse] Executing function '${functionName}' with args: ${args}`);
+      const result = await callback(args);
+
+      // Format the result
+      if (result === undefined || result === null) {
+        return '';
+      } else if (typeof result === 'object') {
+        try {
+          return JSON.stringify(result);
+        } catch (error) {
+          logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
+          return String(result);
+        }
+      } else {
+        return String(result);
+      }
+    } catch (error: any) {
+      logger.error(
+        `[Bedrock Converse] Error executing function '${functionName}': ${error.message || String(error)}`,
+      );
+      throw error;
+    }
   }
 
   /**
@@ -618,13 +753,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   /**
    * Build the tool configuration from options
    */
-  private async buildToolConfig(): Promise<ToolConfiguration | undefined> {
+  private async buildToolConfig(
+    vars?: Record<string, string | object>,
+  ): Promise<ToolConfiguration | undefined> {
     if (!this.config.tools || this.config.tools.length === 0) {
       return undefined;
     }
 
-    // Load tools from external file if needed
-    const tools = await maybeLoadToolsFromExternalFile(this.config.tools);
+    // Load tools from external file with variable rendering if needed
+    const tools = await maybeLoadToolsFromExternalFile(this.config.tools, vars);
     if (!tools || tools.length === 0) {
       return undefined;
     }
@@ -698,13 +835,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   /**
    * Main API call using Converse API
    */
-  async callApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Parse the prompt into messages
     const { messages, system } = parseConverseMessages(prompt);
 
     // Build the request
     const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig();
+    const toolConfig = await this.buildToolConfig(context?.vars);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
@@ -742,7 +879,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        return this.parseResponse(parsed);
+        return await this.parseResponse(parsed);
       }
     }
 
@@ -791,18 +928,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return this.parseResponse(response);
+    return await this.parseResponse(response);
   }
 
   /**
    * Parse the Converse API response into ProviderResponse format
    */
-  private parseResponse(response: ConverseCommandOutput): ProviderResponse {
+  private async parseResponse(response: ConverseCommandOutput): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
     const content = outputMessage?.content || [];
     const showThinking = this.config.showThinking !== false;
-    const output = extractTextFromContentBlocks(content, showThinking);
 
     // Extract token usage
     const usage = response.usage;
@@ -869,6 +1005,54 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         ? { flagged: true, reason: 'guardrail_intervened' }
         : undefined;
 
+    // Handle function tool callbacks if configured
+    if (this.config.functionToolCallbacks) {
+      const toolUseBlocks = content.filter(
+        (block): block is ContentBlock & { toolUse: NonNullable<ContentBlock['toolUse']> } =>
+          'toolUse' in block && block.toolUse !== undefined,
+      );
+
+      if (toolUseBlocks.length > 0) {
+        const results: string[] = [];
+        let hasSuccessfulCallback = false;
+
+        for (const block of toolUseBlocks) {
+          const functionName = block.toolUse.name;
+          if (functionName && this.config.functionToolCallbacks[functionName]) {
+            try {
+              const args =
+                typeof block.toolUse.input === 'string'
+                  ? block.toolUse.input
+                  : JSON.stringify(block.toolUse.input || {});
+              const result = await this.executeFunctionCallback(functionName, args);
+              results.push(result);
+              hasSuccessfulCallback = true;
+            } catch (_error) {
+              // If callback fails, fall back to original behavior
+              logger.debug(
+                `[Bedrock Converse] Function callback failed for ${functionName}, falling back to tool_use output`,
+              );
+              hasSuccessfulCallback = false;
+              break;
+            }
+          }
+        }
+
+        if (hasSuccessfulCallback && results.length > 0) {
+          return {
+            output: results.join('\n'),
+            tokenUsage,
+            ...(cost !== undefined ? { cost } : {}),
+            ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+            ...(guardrails ? { guardrails } : {}),
+          };
+        }
+      }
+    }
+
+    // Default output extraction
+    const output = extractTextFromContentBlocks(content, showThinking);
+
     return {
       output,
       tokenUsage,
@@ -883,14 +1067,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    */
   async callApiStreaming(
     prompt: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
   ): Promise<ProviderResponse & { stream?: AsyncIterable<string> }> {
     // Parse the prompt into messages
     const { messages, system } = parseConverseMessages(prompt);
 
     // Build the request (same as non-streaming)
     const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig();
+    const toolConfig = await this.buildToolConfig(context?.vars);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();

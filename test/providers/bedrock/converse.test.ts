@@ -273,6 +273,71 @@ describe('AwsBedrockConverseProvider', () => {
       expect(parsed.input).toEqual({ expression: '2+2' });
     });
 
+    it('should execute functionToolCallbacks when defined', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [
+            {
+              name: 'calculator',
+              description: 'A calculator',
+              input_schema: { type: 'object', properties: { expression: { type: 'string' } } },
+            },
+          ],
+          functionToolCallbacks: {
+            calculator: (args: string) => {
+              const parsed = JSON.parse(args);
+              return `Result: ${eval(parsed.expression)}`;
+            },
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          toolUse: { id: 'tool-123', name: 'calculator', input: { expression: '2+2' } },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('What is 2+2?');
+
+      // The callback should be executed and return the result
+      expect(result.output).toBe('Result: 4');
+    });
+
+    it('should fall back to tool_use output when callback is not defined for the function', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [
+            {
+              name: 'calculator',
+              description: 'A calculator',
+              input_schema: { type: 'object', properties: { expression: { type: 'string' } } },
+            },
+          ],
+          functionToolCallbacks: {
+            other_function: () => 'other result',
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          toolUse: { id: 'tool-123', name: 'calculator', input: { expression: '2+2' } },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('What is 2+2?');
+
+      // The output should be the tool_use JSON since no callback for 'calculator'
+      const parsed = JSON.parse(result.output as string);
+      expect(parsed.type).toBe('tool_use');
+      expect(parsed.name).toBe('calculator');
+    });
+
     // Note: Error handling is tested via integration tests
     // The error message formatting logic is validated in the implementation
     it('should return error response for validation exceptions', async () => {
@@ -953,21 +1018,32 @@ Third line`;
 
 describe('Model coverage parity', () => {
   const testModels = [
-    // Claude models
+    // Claude models (3.x and 4.x)
     { id: 'anthropic.claude-3-5-sonnet-20241022-v2:0', family: 'claude' },
     { id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', family: 'claude' },
     { id: 'anthropic.claude-3-5-haiku-20241022-v1:0', family: 'claude' },
-    // Nova models
+    { id: 'us.anthropic.claude-opus-4-20250514-v1:0', family: 'claude' },
+    { id: 'us.anthropic.claude-opus-4-1-20250805-v1:0', family: 'claude' },
+    { id: 'us.anthropic.claude-sonnet-4-20250514-v1:0', family: 'claude' },
+    { id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', family: 'claude' },
+    // Amazon Nova models
     { id: 'amazon.nova-lite-v1:0', family: 'nova' },
     { id: 'amazon.nova-pro-v1:0', family: 'nova' },
+    { id: 'amazon.nova-micro-v1:0', family: 'nova' },
     { id: 'us.amazon.nova-premier-v1:0', family: 'nova' },
-    // Llama models
+    // Amazon Titan models
+    { id: 'amazon.titan-text-premier-v1:0', family: 'titan' },
+    { id: 'amazon.titan-text-express-v1', family: 'titan' },
+    { id: 'amazon.titan-text-lite-v1', family: 'titan' },
+    // Llama models (3.x and 4.x)
     { id: 'meta.llama3-3-70b-instruct-v1:0', family: 'llama' },
     { id: 'us.meta.llama3-2-90b-instruct-v1:0', family: 'llama' },
     { id: 'meta.llama4-scout-17b-instruct-v1:0', family: 'llama' },
+    { id: 'meta.llama4-maverick-17b-instruct-v1:0', family: 'llama' },
     // Mistral models
     { id: 'mistral.mistral-large-2407-v1:0', family: 'mistral' },
     { id: 'mistral.mistral-small-2402-v1:0', family: 'mistral' },
+    { id: 'us.mistral.pixtral-large-2502-v1:0', family: 'mistral' },
     // AI21 models
     { id: 'ai21.jamba-1-5-large-v1:0', family: 'ai21' },
     { id: 'ai21.jamba-1-5-mini-v1:0', family: 'ai21' },
@@ -975,9 +1051,18 @@ describe('Model coverage parity', () => {
     { id: 'cohere.command-r-plus-v1:0', family: 'cohere' },
     { id: 'cohere.command-r-v1:0', family: 'cohere' },
     // DeepSeek models
-    { id: 'deepseek.deepseek-r1-v1:0', family: 'deepseek' },
+    { id: 'us.deepseek.r1-v1:0', family: 'deepseek' },
     // Qwen models
     { id: 'qwen.qwen3-32b-v1:0', family: 'qwen' },
+    { id: 'qwen.qwen3-235b-a22b-v1:0', family: 'qwen' },
+    { id: 'qwen.qwen3-coder-480b-a35b-v1:0', family: 'qwen' },
+    { id: 'qwen.qwen3-coder-30b-a3b-v1:0', family: 'qwen' },
+    // Writer Palmyra models
+    { id: 'writer.palmyra-x5-v1:0', family: 'writer' },
+    { id: 'writer.palmyra-x4-v1:0', family: 'writer' },
+    // OpenAI GPT-OSS models
+    { id: 'openai.gpt-oss-120b-1:0', family: 'openai' },
+    { id: 'openai.gpt-oss-20b-1:0', family: 'openai' },
   ];
 
   // Use describe.each for proper test isolation - each test gets its own beforeEach
