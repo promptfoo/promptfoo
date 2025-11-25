@@ -49,7 +49,7 @@ describe('AbstractTool', () => {
   beforeEach(() => {
     // Create a mock MCP server
     mockServer = {
-      tool: jest.fn((name, schema, handler) => {
+      tool: jest.fn((_name, _schema, handler) => {
         toolHandler = handler;
       }),
     } as any;

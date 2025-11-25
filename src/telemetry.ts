@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
 import { POSTHOG_KEY } from './constants/build';
 import { getEnvBool, getEnvString, isCI } from './envars';
-import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
+import { getAuthMethod, getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
 import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
 
@@ -80,6 +80,7 @@ export class Telemetry {
           properties: {
             email: this.email,
             isLoggedIntoCloud: isLoggedIntoCloud(),
+            authMethod: getAuthMethod(),
             isRunningInCi: isCI(),
           },
         });
