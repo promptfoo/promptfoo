@@ -183,9 +183,11 @@ export async function resolveProvider(
     }
     return await loadApiProvider(casted.id, loadOptions);
   } else if (typeof provider === 'function') {
-    return context.env
-      ? await loadApiProvider(provider, { env: context.env })
-      : await loadApiProvider(provider);
+    // Handle function providers directly instead of passing to loadApiProvider
+    return {
+      id: () => provider.label ?? 'custom-function',
+      callApi: provider,
+    };
   } else {
     throw new Error('Invalid provider type');
   }
@@ -270,7 +272,7 @@ export async function loadApiProviders(
         if (typeof provider === 'function') {
           return [
             {
-              id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
+              id: () => provider.label ?? `custom-function-${idx}`,
               callApi: provider,
             },
           ];

@@ -1,9 +1,9 @@
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import { getGraderById } from '../../../../src/redteam/graders';
-import { HydraProvider } from '../../../../src/redteam/providers/hydra';
+import { HydraProvider } from '../../../../src/redteam/providers/hydra/index';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
-import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types';
+import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types/index';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
   PromptfooChatCompletionProvider: jest.fn(),

@@ -4,7 +4,11 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 import { ProviderOptionsSchema } from '../validators/providers';
+<<<<<<< HEAD
 import { fetchWithRetries } from './fetch';
+=======
+import { fetchWithProxy } from './fetch/index';
+>>>>>>> origin/main
 import invariant from './invariant';
 import { checkServerFeatureSupport } from './server';
 

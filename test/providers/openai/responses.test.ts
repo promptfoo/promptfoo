@@ -13,6 +13,10 @@ jest.mock('../../../src/logger', () => ({
   error: jest.fn(),
 }));
 
+jest.mock('../../../src/python/pythonUtils', () => ({
+  runPython: jest.fn(),
+}));
+
 describe('OpenAiResponsesProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -22,7 +26,7 @@ describe('OpenAiResponsesProvider', () => {
     jest.resetAllMocks();
   });
 
-  it('should support various model names', () => {
+  it('should support various model names', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o');
@@ -37,14 +41,14 @@ describe('OpenAiResponsesProvider', () => {
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
   });
 
-  it('should support the latest o-series reasoning models', () => {
+  it('should support the latest o-series reasoning models', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-2025-04-16');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini-2025-04-16');
   });
 
-  it('should support gpt-4.1 and its variants', () => {
+  it('should support gpt-4.1 and its variants', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1-2025-04-14');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1-mini');
@@ -57,7 +61,7 @@ describe('OpenAiResponsesProvider', () => {
     );
   });
 
-  it('should support gpt-5 and its variants', () => {
+  it('should support gpt-5 and its variants', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-chat-latest');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-nano');
@@ -1449,7 +1453,7 @@ describe('OpenAiResponsesProvider', () => {
       });
     });
 
-    it('should handle external file loading for response_format correctly', () => {
+    it('should handle external file loading for response_format correctly', async () => {
       // Test that the provider can be configured with external file syntax
       // This verifies the type handling for external file references
       expect(() => {
@@ -1511,7 +1515,7 @@ describe('OpenAiResponsesProvider', () => {
       });
     });
 
-    it('should accept external file reference syntax for response_format', () => {
+    it('should accept external file reference syntax for response_format', async () => {
       // Test that the provider can be instantiated with external file syntax
       // without throwing type errors (using type assertion as needed)
       expect(() => {
@@ -2394,7 +2398,7 @@ describe('OpenAiResponsesProvider', () => {
 
       // Test the enhanced assertion
       const { handleIsValidOpenAiToolsCall } = await import('../../../src/assertions/openai');
-      const assertionResult = handleIsValidOpenAiToolsCall({
+      const assertionResult = await handleIsValidOpenAiToolsCall({
         assertion: { type: 'is-valid-openai-tools-call' },
         output: result.output,
         provider,
@@ -2454,7 +2458,7 @@ describe('OpenAiResponsesProvider', () => {
 
       // Test the enhanced assertion
       const { handleIsValidOpenAiToolsCall } = await import('../../../src/assertions/openai');
-      const assertionResult = handleIsValidOpenAiToolsCall({
+      const assertionResult = await handleIsValidOpenAiToolsCall({
         assertion: { type: 'is-valid-openai-tools-call' },
         output: result.output,
         provider,
@@ -2468,7 +2472,7 @@ describe('OpenAiResponsesProvider', () => {
     });
   });
 
-  it('should include all expected model names', () => {
+  it('should include all expected model names', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-08-06');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-11-20');
@@ -3012,7 +3016,7 @@ describe('OpenAiResponsesProvider', () => {
       });
     });
 
-    it('should handle external file loading for response_format correctly', () => {
+    it('should handle external file loading for response_format correctly', async () => {
       // Test that the provider can be configured with external file syntax
       // This verifies the type handling for external file references
       expect(() => {
@@ -3074,7 +3078,7 @@ describe('OpenAiResponsesProvider', () => {
       });
     });
 
-    it('should accept external file reference syntax for response_format', () => {
+    it('should accept external file reference syntax for response_format', async () => {
       // Test that the provider can be instantiated with external file syntax
       // without throwing type errors (using type assertion as needed)
       expect(() => {
@@ -3957,7 +3961,7 @@ describe('OpenAiResponsesProvider', () => {
 
       // Test the enhanced assertion
       const { handleIsValidOpenAiToolsCall } = await import('../../../src/assertions/openai');
-      const assertionResult = handleIsValidOpenAiToolsCall({
+      const assertionResult = await handleIsValidOpenAiToolsCall({
         assertion: { type: 'is-valid-openai-tools-call' },
         output: result.output,
         provider,
@@ -4017,7 +4021,7 @@ describe('OpenAiResponsesProvider', () => {
 
       // Test the enhanced assertion
       const { handleIsValidOpenAiToolsCall } = await import('../../../src/assertions/openai');
-      const assertionResult = handleIsValidOpenAiToolsCall({
+      const assertionResult = await handleIsValidOpenAiToolsCall({
         assertion: { type: 'is-valid-openai-tools-call' },
         output: result.output,
         provider,
@@ -4503,6 +4507,104 @@ describe('OpenAiResponsesProvider', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('11');
+    });
+  });
+
+  describe('tool loading from external files', () => {
+    it('should return loaded tools array in config for downstream validation', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ type: 'web_search_preview' }],
+        },
+      });
+
+      const context = { prompt: { raw: 'test', label: 'test' }, vars: {} };
+      const { body, config } = await provider.getOpenAiBody('test prompt', context);
+
+      // Verify tools are returned in both body and config
+      expect(body.tools).toEqual([{ type: 'web_search_preview' }]);
+      expect(config.tools).toEqual([{ type: 'web_search_preview' }]);
+      expect(Array.isArray(config.tools)).toBe(true);
+    });
+
+    it('should return undefined tools when not configured', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const context = { prompt: { raw: 'test', label: 'test' }, vars: {} };
+      const { body, config } = await provider.getOpenAiBody('test prompt', context);
+
+      expect(body.tools).toBeUndefined();
+      expect(config.tools).toBeUndefined();
+    });
+
+    it('should throw clear error for Python tool files', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          tools: 'file://tools.py:get_tools' as any,
+        },
+      });
+
+      const context = { prompt: { raw: 'test', label: 'test' }, vars: {} };
+      await expect(provider.getOpenAiBody('test prompt', context)).rejects.toThrow(
+        /Failed to load tools/,
+      );
+    });
+
+    it('should allow deep-research validation to work with loaded tools', async () => {
+      const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ type: 'web_search_preview' }],
+        },
+      });
+
+      // Mock the API call
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          id: 'resp_123',
+          object: 'response',
+          status: 'completed',
+          model: 'o4-mini-deep-research',
+          output: [
+            {
+              type: 'message',
+              content: [{ type: 'output_text', text: 'Response' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      // This should not throw TypeError because config.tools is now an array
+      const result = await provider.callApi('test');
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return error for deep-research without web_search_preview', async () => {
+      const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'function',
+              function: { name: 'test', parameters: { type: 'object', properties: {} } },
+            },
+          ],
+        },
+      });
+
+      const result = await provider.callApi('test');
+
+      expect(result.error).toContain('requires the web_search_preview tool');
     });
   });
 });
