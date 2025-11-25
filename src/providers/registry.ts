@@ -31,11 +31,8 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
-import {
-  AwsBedrockCompletionProvider,
-  AwsBedrockConverseProvider,
-  AwsBedrockEmbeddingProvider,
-} from './bedrock/index';
+import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
+import { AwsBedrockConverseProvider } from './bedrock/converse';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';

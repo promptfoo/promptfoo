@@ -10,9 +10,6 @@ import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 
-// Re-export the base provider and options
-export { AwsBedrockGenericProvider, type BedrockOptions } from './base';
-
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -1926,9 +1923,6 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     }
   }
 }
-
-// Re-export Converse provider
-export { AwsBedrockConverseProvider, type BedrockConverseOptions } from './converse';
 
 export class AwsBedrockEmbeddingProvider
   extends AwsBedrockGenericProvider
