@@ -174,7 +174,7 @@
     "ts-dedent": "^2.2.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.0",
+    "vitest": "^4.0.14",
     "winston-transport": "^4.9.0",
     "zod-to-json-schema": "^3.25.0"
   },
