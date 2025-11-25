@@ -146,7 +146,9 @@ function handleGlobalError(
  */
 function handleUnhandledRejection(event: PromiseRejectionEvent): void {
   const error =
-    event.reason instanceof Error ? event.reason : new Error(String(event.reason || 'Unknown rejection'));
+    event.reason instanceof Error
+      ? event.reason
+      : new Error(String(event.reason || 'Unknown rejection'));
 
   const errorData = createErrorData(error, 'Promise rejection');
   reportError(errorData, 'unhandledRejection');

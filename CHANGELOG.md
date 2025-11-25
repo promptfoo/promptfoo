@@ -34,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(webui): add comprehensive error handling infrastructure with centralized error utilities (errorHandler.ts), global error handlers for uncaught errors and unhandled promise rejections (globalErrorHandler.ts), and root-level ErrorBoundary in PageShell - includes PostHog error reporting integration and standardized tryCatch/tryCatchSync helpers for consistent error handling across the app
+- feat(webui): add centralized error handling with global error handlers, root-level ErrorBoundary, and PostHog error reporting (#6347)
 - feat(providers): add Claude Opus 4.5 support across Anthropic (claude-opus-4-5-20251101, claude-opus-4-5-latest), Google Vertex AI (claude-opus-4-5@20251101), and AWS Bedrock (anthropic.claude-opus-4-5-20251101-v1:0 for all regions) with $5/MTok input and $25/MTok output pricing; includes comprehensive documentation updates, advanced coding example demonstrating bug diagnosis and tradeoff analysis, updated provider examples, and cost calculation tests
 - feat(util): add support for loading tool definitions from Python/JavaScript files - providers now support dynamic tool generation using `file://tools.py:get_tools` and `file://tools.js:get_tools` syntax, enabling runtime tool definitions based on environment, config, or external APIs (#6272)
 - feat(server): add server-side provider list customization via ui-providers.yaml - enables organizations to define custom provider lists that appear in eval creator and redteam setup UIs; when ui-providers.yaml exists, replaces default ~600 providers with organization-specific options for simplified workflow and security control (#6124)
@@ -52,7 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(webui): add defensive null checks for rowSelectionModel.ids in EvalsDataGrid to prevent undefined access errors during state transitions
+- fix(webui): prevent crash when rowSelectionModel.ids is undefined in EvalsDataGrid during state transitions (#6347)
 - fix(code-scan): remove redundant extra PR comment when no vulnerabilities are found (#6317)
 - fix(code-scan): exit with code 0 when no files to scan instead of failing - handles cases where no files are changed, all files are filtered by denylist/size/binary detection, or no patches are found (#6316)
 - fix(providers): add universal data URL support for vision models with edge case handling - automatically converts file:// image inputs to data URLs with transparent provider-specific handling (OpenAI/Azure/Ollama use native data URLs, Anthropic/Google extract base64); includes shared dataUrl utility for RFC 2397 parsing, charset/parameter support, whitespace trimming, small image support (≥20 chars), and comprehensive documentation (#5725)
@@ -72,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
+- test(webui): add 38 tests for error handling utilities (errorHandler.ts, globalErrorHandler.ts) (#6347)
 - test(examples): add structured outputs example demonstrating JSON schema-based responses and strict tool use for Anthropic provider (#6226)
 - test(examples): update tool-use example to include strict mode configuration for Anthropic provider (#6226)
 - test(examples): enhance structured-outputs-config example to demonstrate multi-provider structured outputs with OpenAI and Anthropic, showcasing syntax differences between providers (#6226)
