@@ -189,13 +189,13 @@ describe('userRouter', () => {
       });
     });
 
-    it('should return 404 when user has no email', async () => {
+    it('should return 200 with null email when user has no email', async () => {
       jest.mocked(globalConfig.getUserEmail).mockReturnValue(null);
 
-      const response = await request(app).get('/api/user/email').expect(404);
+      const response = await request(app).get('/api/user/email').expect(200);
 
       expect(response.body).toEqual({
-        error: 'User not found',
+        email: null,
       });
     });
   });

@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CloudStatusIndicator from './CloudStatusIndicator';
 
-// Mock the useCloudAuth hook
-vi.mock('@app/hooks/useCloudAuth', () => ({
-  useCloudAuth: vi.fn(),
+// Mock the useCloudConfig hook
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: vi.fn(),
 }));
 
 // Mock the useTelemetry hook
@@ -12,11 +12,12 @@ vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: vi.fn(),
 }));
 
-import { useCloudAuth } from '@app/hooks/useCloudAuth';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 
 describe('CloudStatusIndicator', () => {
   const mockRecordEvent = vi.fn();
+  const mockRefetch = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -32,14 +33,11 @@ describe('CloudStatusIndicator', () => {
   });
 
   it('should show loading state', () => {
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: false,
-      hasApiKey: false,
-      appUrl: null,
-      isEnterprise: false,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: null,
       isLoading: true,
       error: null,
-      refetch: vi.fn(),
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -49,14 +47,15 @@ describe('CloudStatusIndicator', () => {
   });
 
   it('should show authenticated state with cloud icon', () => {
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: true,
-      hasApiKey: true,
-      appUrl: 'https://app.promptfoo.app',
-      isEnterprise: false,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: true,
+        appUrl: 'https://app.promptfoo.app',
+        isEnterprise: false,
+      },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -70,14 +69,15 @@ describe('CloudStatusIndicator', () => {
   });
 
   it('should show authenticated state with enterprise', () => {
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: true,
-      hasApiKey: true,
-      appUrl: 'https://enterprise.company.com',
-      isEnterprise: true,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: true,
+        appUrl: 'https://enterprise.company.com',
+        isEnterprise: true,
+      },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -91,14 +91,15 @@ describe('CloudStatusIndicator', () => {
   });
 
   it('should show unauthenticated state with cloud off icon', () => {
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: false,
-      hasApiKey: false,
-      appUrl: null,
-      isEnterprise: false,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -112,14 +113,11 @@ describe('CloudStatusIndicator', () => {
   });
 
   it('should show error state', () => {
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: false,
-      hasApiKey: false,
-      appUrl: null,
-      isEnterprise: false,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: null,
       isLoading: false,
       error: 'Network error',
-      refetch: vi.fn(),
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -134,14 +132,15 @@ describe('CloudStatusIndicator', () => {
 
   it('should open cloud dashboard when authenticated and track telemetry', () => {
     const mockAppUrl = 'https://app.promptfoo.app';
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: true,
-      hasApiKey: true,
-      appUrl: mockAppUrl,
-      isEnterprise: false,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: true,
+        appUrl: mockAppUrl,
+        isEnterprise: false,
+      },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -157,14 +156,15 @@ describe('CloudStatusIndicator', () => {
   });
 
   it('should show dialog when unauthenticated and track telemetry', () => {
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: false,
-      hasApiKey: false,
-      appUrl: null,
-      isEnterprise: false,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -183,14 +183,15 @@ describe('CloudStatusIndicator', () => {
   });
 
   it('should show enterprise dialog when unauthenticated and enterprise', () => {
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: false,
-      hasApiKey: false,
-      appUrl: null,
-      isEnterprise: true,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: true,
+      },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -205,14 +206,15 @@ describe('CloudStatusIndicator', () => {
   });
 
   it('should close dialog when close button is clicked', async () => {
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: false,
-      hasApiKey: false,
-      appUrl: null,
-      isEnterprise: false,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -233,15 +235,11 @@ describe('CloudStatusIndicator', () => {
   });
 
   it('should show error in dialog when there is an error', () => {
-    const errorMessage = 'Network connection failed';
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: false,
-      hasApiKey: false,
-      appUrl: null,
-      isEnterprise: false,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: null,
       isLoading: false,
-      error: errorMessage,
-      refetch: vi.fn(),
+      error: 'Network connection failed',
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -258,14 +256,15 @@ describe('CloudStatusIndicator', () => {
   });
 
   it('should track telemetry when promptfoo.app link is clicked', () => {
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: false,
-      hasApiKey: false,
-      appUrl: null,
-      isEnterprise: false,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -285,14 +284,15 @@ describe('CloudStatusIndicator', () => {
   });
 
   it('should track telemetry when Learn More button is clicked', () => {
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: false,
-      hasApiKey: false,
-      appUrl: null,
-      isEnterprise: false,
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: mockRefetch,
     });
 
     render(<CloudStatusIndicator />);
@@ -313,5 +313,57 @@ describe('CloudStatusIndicator', () => {
       action: 'cloud_learn_more_click',
       source: 'cloud_status_dialog',
     });
+  });
+
+  it('should call refetch when Refresh Status button is clicked', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    // Open dialog
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+
+    // Click Refresh Status button
+    const refreshButton = screen.getByText('Refresh Status');
+    fireEvent.click(refreshButton);
+
+    expect(mockRefetch).toHaveBeenCalled();
+    expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
+      action: 'cloud_status_refresh',
+      source: 'cloud_status_dialog',
+    });
+  });
+
+  it('should disable Refresh Status button while loading', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
+      isLoading: true,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    // Open dialog - need to click first to trigger state change
+    const iconButton = screen.getByRole('button');
+    fireEvent.click(iconButton);
+
+    // Find the Checking... button (which replaces Refresh Status when loading)
+    const checkingButton = screen.getByText('Checking...');
+    expect(checkingButton).toBeDisabled();
   });
 });

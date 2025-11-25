@@ -1,12 +1,12 @@
 import { useState } from 'react';
 
-import { useCloudAuth } from '@app/hooks/useCloudAuth';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import CloudIcon from '@mui/icons-material/Cloud';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import CloudQueueIcon from '@mui/icons-material/CloudQueue';
-import ShareIcon from '@mui/icons-material/Share';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import ShareIcon from '@mui/icons-material/Share';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -22,20 +22,22 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 export default function CloudStatusIndicator() {
-  const { isAuthenticated, appUrl, isLoading, error, isEnterprise } = useCloudAuth();
+  const { data, isLoading, error, refetch } = useCloudConfig();
+  const isAuthenticated = data?.isEnabled ?? false;
+  const appUrl = data?.appUrl ?? null;
+  const isEnterprise = data?.isEnterprise ?? false;
+
   const [showDialog, setShowDialog] = useState(false);
   const { recordEvent } = useTelemetry();
 
   const handleIconClick = () => {
     if (!isAuthenticated) {
-      // Track unauthenticated click
       recordEvent('feature_used', {
         feature: 'cloud_status_icon_click',
         authenticated: false,
       });
       setShowDialog(true);
     } else if (appUrl) {
-      // Track authenticated click
       recordEvent('feature_used', {
         feature: 'cloud_status_icon_click',
         authenticated: true,
@@ -53,6 +55,14 @@ export default function CloudStatusIndicator() {
       action: 'cloud_cta_signup_click',
       source: 'cloud_status_dialog',
     });
+  };
+
+  const handleRefreshClick = () => {
+    recordEvent('webui_action', {
+      action: 'cloud_status_refresh',
+      source: 'cloud_status_dialog',
+    });
+    refetch();
   };
 
   const getTooltipTitle = () => {
@@ -74,10 +84,13 @@ export default function CloudStatusIndicator() {
     if (isLoading) {
       return <CircularProgress size={20} color="inherit" />;
     }
-    if (error || !isAuthenticated) {
-      return <CloudOffIcon />;
+    if (error) {
+      return <CloudOffIcon data-testid="CloudOffIcon" />;
     }
-    return <CloudIcon />;
+    if (isAuthenticated) {
+      return <CloudIcon data-testid="CloudIcon" />;
+    }
+    return <CloudOffIcon data-testid="CloudOffIcon" />;
   };
 
   const getIconColor = () => {
@@ -93,6 +106,9 @@ export default function CloudStatusIndicator() {
     return 'inherit';
   };
 
+  const serviceName = isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud';
+  const teamName = isEnterprise ? 'organization' : 'team';
+
   return (
     <>
       <Tooltip title={getTooltipTitle()}>
@@ -100,6 +116,7 @@ export default function CloudStatusIndicator() {
           onClick={handleIconClick}
           color={getIconColor()}
           size="small"
+          aria-label={getTooltipTitle()}
           sx={{
             '& .MuiSvgIcon-root': {
               fontSize: '1.5rem',
@@ -114,7 +131,7 @@ export default function CloudStatusIndicator() {
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <CloudQueueIcon color="primary" />
-            Connect to {isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud'}
+            Connect to {serviceName}
           </Box>
         </DialogTitle>
         <DialogContent>
@@ -124,9 +141,7 @@ export default function CloudStatusIndicator() {
           <Stack spacing={2} sx={{ mb: 3 }}>
             <Stack direction="row" spacing={1} alignItems="center">
               <ShareIcon fontSize="small" color="primary" />
-              <Typography variant="body2">
-                Share evaluation results with your {isEnterprise ? 'organization' : 'team'}
-              </Typography>
+              <Typography variant="body2">Share evaluation results with your {teamName}</Typography>
             </Stack>
             <Stack direction="row" spacing={1} alignItems="center">
               <DashboardIcon fontSize="small" color="primary" />
@@ -164,7 +179,15 @@ export default function CloudStatusIndicator() {
           </Alert>
 
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert
+              severity="error"
+              sx={{ mb: 2 }}
+              action={
+                <Button color="inherit" size="small" onClick={handleRefreshClick}>
+                  Retry
+                </Button>
+              }
+            >
               Unable to connect to cloud service. Please check your connection and try again.
             </Alert>
           )}
@@ -181,9 +204,14 @@ export default function CloudStatusIndicator() {
           >
             Learn More
           </Button>
-          <Button onClick={handleCloseDialog} variant="contained" color="primary">
-            Close
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button onClick={handleRefreshClick} disabled={isLoading}>
+              {isLoading ? 'Checking...' : 'Refresh Status'}
+            </Button>
+            <Button onClick={handleCloseDialog} variant="contained" color="primary">
+              Close
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
     </>
