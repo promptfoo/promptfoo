@@ -14,6 +14,10 @@ import { CoppaGrader } from './plugins/compliance/coppa';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
+import { EcommerceComplianceBypassGrader } from './plugins/ecommerce/ecommerceComplianceBypass';
+import { EcommerceOrderFraudGrader } from './plugins/ecommerce/ecommerceOrderFraud';
+import { EcommercePciDssGrader } from './plugins/ecommerce/ecommercePciDss';
+import { EcommercePriceManipulationGrader } from './plugins/ecommerce/ecommercePriceManipulation';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { FerpaGrader } from './plugins/compliance/ferpa';
 import { FinancialCalculationErrorPluginGrader } from './plugins/financial/financialCalculationError';
@@ -110,6 +114,10 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
+  'promptfoo:redteam:ecommerce:compliance-bypass': new EcommerceComplianceBypassGrader(),
+  'promptfoo:redteam:ecommerce:order-fraud': new EcommerceOrderFraudGrader(),
+  'promptfoo:redteam:ecommerce:pci-dss': new EcommercePciDssGrader(),
+  'promptfoo:redteam:ecommerce:price-manipulation': new EcommercePriceManipulationGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
   'promptfoo:redteam:ferpa': new FerpaGrader(),
   'promptfoo:redteam:financial:calculation-error': new FinancialCalculationErrorPluginGrader(),
