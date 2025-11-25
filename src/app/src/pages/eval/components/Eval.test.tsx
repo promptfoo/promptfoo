@@ -1,7 +1,7 @@
 import { callApi } from '@app/utils/api';
 import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { EvaluateTable } from '@promptfoo/types';
@@ -89,6 +89,7 @@ const baseMockTableStore = {
 describe('Eval', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
       setComparisonEvalIds: vi.fn(),
@@ -97,6 +98,11 @@ describe('Eval', () => {
       ok: true,
       json: async () => ({ data: [] }),
     } as Response);
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
   });
 
   it('should call resetFilters when mounted with a new fetchId', async () => {
@@ -252,7 +258,7 @@ describe('Eval', () => {
     );
 
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await vi.advanceTimersByTimeAsync(0);
     });
 
     // Should show loading state, NOT empty state
@@ -278,7 +284,7 @@ describe('Eval', () => {
     );
 
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await vi.advanceTimersByTimeAsync(10);
     });
 
     // Should show results view when table exists
@@ -299,7 +305,7 @@ describe('Eval', () => {
     );
 
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await vi.advanceTimersByTimeAsync(0);
     });
 
     expect(queryByText('404 Eval not found')).toBeInTheDocument();
@@ -351,7 +357,7 @@ describe('Eval', () => {
     });
 
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await vi.advanceTimersByTimeAsync(0);
     });
 
     const resultsView = container.querySelector('[data-testid="results-view"]');

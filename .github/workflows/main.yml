@@ -55,8 +55,11 @@ jobs:
         run: |
           npm ci
 
-      - name: Test
-        run: npm run test -- --ci
+      - name: Test (Jest)
+        run: npm run test:jest -- --ci
+
+      - name: Test (Vitest)
+        run: npm run test:vitest
 
   build:
     name: Build on Node ${{ matrix.node }}

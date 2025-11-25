@@ -162,6 +162,9 @@ const mockEvalsWithDifferentDatasets = [
 describe('EvalsDataGrid', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Note: This test file uses real timers because the navigation tests
+    // rely on complex setTimeout patterns in React components.
+    // The global cleanup in setupTests.ts will clear any orphaned timers.
   });
 
   it('should fetch data on initial mount', async () => {
