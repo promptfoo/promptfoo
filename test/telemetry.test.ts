@@ -257,7 +257,9 @@ describe('Telemetry', () => {
 
     // When telemetry is disabled, sendEvent is called with the "telemetry disabled" event
     // but NOT with the user's event ('eval_ran')
-    expect(localSendEventSpy).toHaveBeenCalledWith('feature_used', { feature: 'telemetry disabled' });
+    expect(localSendEventSpy).toHaveBeenCalledWith('feature_used', {
+      feature: 'telemetry disabled',
+    });
     expect(localSendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
     localSendEventSpy.mockRestore();
   });
