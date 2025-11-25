@@ -9,12 +9,7 @@ import telemetry from '../../telemetry';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { outputFromMessage, parseMessages } from '../anthropic/util';
-import { calculateCost, parseChatPrompt } from '../shared';
-import {
-  getPricingData,
-  calculateCostWithFetchedPricing,
-  type BedrockPricingData,
-} from './pricingFetcher';
+import { parseChatPrompt } from '../shared';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
@@ -47,14 +42,12 @@ export type BedrockModelFamily =
   | 'llama3_3'
   | 'llama4'
   | 'mistral'
-  | 'mistral_pixtral'
   | 'cohere'
   | 'ai21'
   | 'titan'
   | 'deepseek'
   | 'openai'
-  | 'qwen'
-  | 'writer';
+  | 'qwen';
 
 interface BedrockOptions {
   accessKeyId?: string;
@@ -69,7 +62,6 @@ interface BedrockOptions {
   showThinking?: boolean;
   endpoint?: string;
   inferenceModelType?: BedrockModelFamily;
-  cost?: number | { input: number; output: number };
 }
 
 export interface TextGenerationOptions {
@@ -379,7 +371,12 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
 }
 
 export interface IBedrockModel {
-  params: (config: BedrockOptions, prompt: string, stop: string[], modelName?: string) => any;
+  params: (
+    config: BedrockOptions,
+    prompt: string,
+    stop: string[],
+    modelName?: string,
+  ) => Promise<any>;
   output: (config: BedrockOptions, responseJson: any) => any;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
 }
@@ -509,7 +506,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
   }
 
   return {
-    params: (
+    params: async (
       config: BedrockLlamaGenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -595,7 +592,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
 
 export const BEDROCK_MODEL = {
   AI21: {
-    params: (
+    params: async (
       config: BedrockAI21GenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -661,7 +658,7 @@ export const BEDROCK_MODEL = {
     },
   },
   AMAZON_NOVA: {
-    params: (
+    params: async (
       config: BedrockAmazonNovaGenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -744,7 +741,7 @@ export const BEDROCK_MODEL = {
     },
   },
   CLAUDE_COMPLETION: {
-    params: (
+    params: async (
       config: BedrockClaudeLegacyCompletionOptions,
       prompt: string,
       stop: string[],
@@ -806,7 +803,7 @@ export const BEDROCK_MODEL = {
     },
   },
   CLAUDE_MESSAGES: {
-    params: (
+    params: async (
       config: BedrockClaudeMessagesCompletionOptions,
       prompt: string,
       _stop?: string[],
@@ -882,7 +879,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(
         params,
         'tools',
-        maybeLoadToolsFromExternalFile(config?.tools),
+        await maybeLoadToolsFromExternalFile(config?.tools),
         undefined,
         undefined,
       );
@@ -936,7 +933,7 @@ export const BEDROCK_MODEL = {
     },
   },
   TITAN_TEXT: {
-    params: (
+    params: async (
       config: BedrockTextGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1001,7 +998,7 @@ export const BEDROCK_MODEL = {
   LLAMA3_3: getLlamaModelHandler(LlamaVersion.V3_3),
   LLAMA4: getLlamaModelHandler(LlamaVersion.V4),
   COHERE_COMMAND: {
-    params: (
+    params: async (
       config: BedrockCohereCommandGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1056,7 +1053,7 @@ export const BEDROCK_MODEL = {
     },
   },
   COHERE_COMMAND_R: {
-    params: (
+    params: async (
       config: BedrockCohereCommandRGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1086,7 +1083,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'presence_penalty', config?.presence_penalty);
       addConfigParam(params, 'seed', config?.seed);
       addConfigParam(params, 'return_prompt', config?.return_prompt);
-      addConfigParam(params, 'tools', maybeLoadToolsFromExternalFile(config?.tools));
+      addConfigParam(params, 'tools', await maybeLoadToolsFromExternalFile(config?.tools));
       addConfigParam(params, 'tool_results', config?.tool_results);
       addConfigParam(params, 'stop_sequences', stop);
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
@@ -1116,7 +1113,7 @@ export const BEDROCK_MODEL = {
     },
   },
   DEEPSEEK: {
-    params: (
+    params: async (
       config: BedrockDeepseekGenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -1189,7 +1186,7 @@ ${prompt}
     },
   },
   MISTRAL: {
-    params: (
+    params: async (
       config: BedrockMistralGenerationOptions,
       prompt: string,
       stop: string[],
@@ -1262,7 +1259,7 @@ ${prompt}
     },
   },
   MISTRAL_LARGE_2407: {
-    params: (
+    params: async (
       config: BedrockMistralGenerationOptions,
       prompt: string,
       stop: string[],
@@ -1342,7 +1339,7 @@ ${prompt}
     },
   },
   OPENAI: {
-    params: (
+    params: async (
       config: BedrockOpenAIGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1428,7 +1425,7 @@ ${prompt}
     },
   },
   QWEN: {
-    params: (
+    params: async (
       config: BedrockQwenGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1473,7 +1470,7 @@ ${prompt}
       addConfigParam(
         params,
         'tools',
-        maybeLoadToolsFromExternalFile(config?.tools),
+        await maybeLoadToolsFromExternalFile(config?.tools),
         undefined,
         undefined,
       );
@@ -1542,62 +1539,6 @@ ${prompt}
       };
     },
   },
-  MISTRAL_PIXTRAL: {
-    params: (
-      config: BedrockMistralGenerationOptions,
-      prompt: string,
-      _stop?: string[],
-      _modelName?: string,
-    ) => {
-      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
-
-      const params: any = {
-        messages,
-      };
-
-      addConfigParam(
-        params,
-        'max_tokens',
-        config?.max_tokens,
-        getEnvInt('MISTRAL_MAX_TOKENS'),
-        1024,
-      );
-      addConfigParam(
-        params,
-        'temperature',
-        config?.temperature,
-        getEnvFloat('MISTRAL_TEMPERATURE'),
-        0,
-      );
-      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
-
-      return params;
-    },
-    output: (_config: BedrockOptions, responseJson: any) => {
-      if (responseJson.error) {
-        throw new Error(`Mistral Pixtral API error: ${responseJson.error}`);
-      }
-      return responseJson.choices?.[0]?.message?.content;
-    },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.usage) {
-        return {
-          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
-          completion: coerceStrToNum(responseJson.usage.completion_tokens),
-          total: coerceStrToNum(responseJson.usage.total_tokens),
-          numRequests: 1,
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
-  },
 };
 
 export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
@@ -1618,6 +1559,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1654,6 +1596,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1669,6 +1612,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1694,6 +1638,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1730,7 +1675,7 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
     if (!inferenceModelType) {
       throw new Error(
         'Inference profile requires inferenceModelType to be specified in config. ' +
-          'Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, mistral_pixtral, cohere, ai21, titan, deepseek, openai, qwen, writer',
+          'Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen',
       );
     }
 
@@ -1760,8 +1705,6 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
         return BEDROCK_MODEL.LLAMA4;
       case 'mistral':
         return BEDROCK_MODEL.MISTRAL;
-      case 'mistral_pixtral':
-        return BEDROCK_MODEL.MISTRAL_PIXTRAL;
       case 'cohere':
         return BEDROCK_MODEL.COHERE_COMMAND_R;
       case 'ai21':
@@ -1774,8 +1717,6 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
         return BEDROCK_MODEL.OPENAI;
       case 'qwen':
         return BEDROCK_MODEL.QWEN;
-      case 'writer':
-        return BEDROCK_MODEL.OPENAI;
       default:
         throw new Error(`Unknown inference model type: ${inferenceModelType}`);
     }
@@ -1819,9 +1760,6 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
   if (modelName.startsWith('cohere.command')) {
     return BEDROCK_MODEL.COHERE_COMMAND;
   }
-  if (modelName.includes('mistral.pixtral')) {
-    return BEDROCK_MODEL.MISTRAL_PIXTRAL;
-  }
   if (modelName.startsWith('mistral.')) {
     return BEDROCK_MODEL.MISTRAL;
   }
@@ -1831,9 +1769,6 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
   if (modelName.startsWith('qwen.')) {
     return BEDROCK_MODEL.QWEN;
   }
-  if (modelName.startsWith('writer.')) {
-    return BEDROCK_MODEL.OPENAI;
-  }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }
 
@@ -1842,7 +1777,6 @@ export abstract class AwsBedrockGenericProvider {
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
   config: BedrockOptions;
-  pricingData: BedrockPricingData | null | undefined;
 
   constructor(
     modelName: string,
@@ -1853,9 +1787,6 @@ export abstract class AwsBedrockGenericProvider {
     this.modelName = modelName;
     this.config = config || {};
     this.id = id ? () => id : this.id;
-    // Pricing data starts as undefined (not yet attempted)
-    // Will become BedrockPricingData (success) or null (failed) after first call
-    this.pricingData = undefined;
 
     if (this.config.guardrailIdentifier) {
       telemetry.record('feature_used', {
@@ -1918,39 +1849,7 @@ export abstract class AwsBedrockGenericProvider {
     return undefined;
   }
 
-  /**
-   * Lazily initializes pricing data from AWS Pricing API.
-   * Called once on the first API call. getPricingData() handles caching and
-   * coordinated fetching to prevent duplicate API calls in concurrent scenarios.
-   */
-  async initializePricingIfNeeded(): Promise<void> {
-    // Only attempt fetch once per instance (undefined means not yet attempted)
-    if (this.pricingData !== undefined) {
-      return;
-    }
-
-    const region = this.getRegion();
-    const credentials = await this.getCredentials();
-
-    // getPricingData() handles caching, concurrent fetch coordination, and API calls
-    this.pricingData = await getPricingData(region, credentials);
-
-    if (this.pricingData) {
-      logger.debug('[Bedrock Pricing]: Pricing data initialized', {
-        region,
-        modelCount: this.pricingData.models.size,
-      });
-    } else {
-      logger.debug('[Bedrock Pricing]: Pricing fetch failed, costs will not be calculated', {
-        region,
-      });
-    }
-  }
-
   async getBedrockInstance() {
-    // Initialize pricing data on first call (lazy init)
-    await this.initializePricingIfNeeded();
-
     if (!this.bedrock) {
       let handler;
       const apiKey = this.getApiKey();
@@ -2037,17 +1936,19 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
 
-    // Merge provider config with per-prompt config
-    const resolvedConfig = { ...this.config, ...context?.prompt.config };
-
-    let model = getHandlerForModel(this.modelName, resolvedConfig);
+    let model = getHandlerForModel(this.modelName, { ...this.config, ...context?.prompt.config });
     if (!model) {
       logger.warn(
         `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(resolvedConfig, prompt, stop, this.modelName);
+    const params = await model.params(
+      { ...this.config, ...context?.prompt.config },
+      prompt,
+      stop,
+      this.modelName,
+    );
 
     logger.debug('Calling Amazon Bedrock API', { params });
 
@@ -2060,9 +1961,8 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
-          output: model.output(resolvedConfig, JSON.parse(cachedResponse as string)),
+          output: model.output(this.config, JSON.parse(cachedResponse as string)),
           tokenUsage: createEmptyTokenUsage(),
-          cost: 0, // Cache hit - no Bedrock API billing occurred
         };
       }
     }
@@ -2169,31 +2069,9 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
-      // Calculate cost with priority: config.cost > fetched pricing
-      let cost: number | undefined;
-      if (resolvedConfig.cost !== undefined) {
-        // Use config override if provided (supports per-prompt cost overrides)
-        cost = calculateCost(
-          this.modelName,
-          resolvedConfig,
-          tokenUsage.prompt,
-          tokenUsage.completion,
-          [], // No static pricing table - config.cost must be set as {input, output}
-        );
-      } else {
-        // Otherwise use fetched pricing from AWS Pricing API
-        cost = calculateCostWithFetchedPricing(
-          this.modelName,
-          this.pricingData,
-          tokenUsage.prompt,
-          tokenUsage.completion,
-        );
-      }
-
       return {
-        output: model.output(resolvedConfig, output),
+        output: model.output(this.config, output),
         tokenUsage,
-        cost,
         ...(output['amazon-bedrock-guardrailAction']
           ? {
               guardrails: {

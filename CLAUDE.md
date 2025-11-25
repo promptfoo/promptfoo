@@ -303,18 +303,234 @@ Always follow this workflow:
 
    If there are formatting errors, fix them.
 
-5. **Push and create PR**:
+5. **Sync with main before pushing**:
+
+   ```bash
+   git fetch origin main
+   git merge origin/main
+   ```
+
+   This ensures your branch is up-to-date with the latest changes and resolves any conflicts before creating the PR.
+
+6. **Push and create PR**:
 
    ```bash
    git push -u origin feature/your-branch-name
    gh pr create --title "Your PR Title" --body "PR description"
    ```
 
-6. **Wait for review and CI checks** before merging
+7. **Wait for review and CI checks** before merging
+
+## Pull Request Titles
+
+Pull request titles must follow Conventional Commits format. PR titles become squash-merge commit messages and changelog entries, so consistency is critical.
+
+### Format
+
+```
+<type>(<scope>): <description>
+<type>(<scope>)!: <description>  # Breaking changes
+```
+
+Optional PR number suffix: `(#1234)`
+
+### Types
+
+- `feat` - New feature or capability
+- `fix` - Bug fix
+- `chore` - Maintenance, upgrades, non-breaking refactors
+- `refactor` - Code refactoring without behavior change
+- `docs` - Documentation only
+- `test` - Test additions or changes
+- `ci` - CI/CD changes
+- `revert` - Revert previous change
+- `perf` - Performance improvement
+
+**Breaking changes:** Add `!` after scope: `feat(api)!:`, `chore(deps)!:`
+
+### Scopes - Priority Order
+
+Choose exactly ONE scope using this priority order:
+
+#### 1. Feature Domains (HIGHEST PRIORITY)
+
+**`redteam` - MANDATORY for ALL redteam-related changes:**
+
+- Redteam plugins, strategies, grading
+- Redteam UI components (setup, report, config dialogs)
+- Redteam CLI commands
+- Redteam server endpoints
+- Redteam documentation
+- Redteam examples
+- **ANY change that mentions or touches redteam functionality**
+
+**Examples:**
+
+```
+feat(redteam): add Hydra multi-turn adversarial strategy
+fix(redteam): fix Basic strategy checkbox in setup UI
+docs(redteam): document Hydra configuration options
+test(redteam): add tests for meta strategy
+chore(redteam): update strategy display names
+```
+
+**Other feature domains:**
+
+- `providers` - Provider implementations and configuration
+- `assertions` - Assertion types and grading logic
+- `eval` or `evaluator` - Core evaluation engine (non-redteam)
+- `api` - Public API surface changes
+
+#### 2. Product Areas (when not redteam and localized)
+
+- `webui` - React app in `src/app/`
+- `cli` - CLI in `src/`
+- `server` - Web server in `src/server/`
+- `site` - Documentation site in `site/`
+
+#### 3. Technical/Infrastructure
+
+- `deps` - Dependency updates
+- `ci` - CI/CD pipelines, GitHub Actions
+- `tests` - Test infrastructure, utilities
+- `build` - Build tooling and configuration
+- `examples` - Non-redteam examples in `examples/`
+
+#### 4. Specialized (as needed)
+
+- `auth`, `cache`, `config`, `python`, `mcp`, `code-scan`
+
+#### 5. No Scope
+
+Use no scope for generic changes:
+
+```
+chore: bump version 0.119.11
+feat: changelog automation
+```
+
+### THE REDTEAM RULE - MANDATORY
+
+**If a PR is redteam-related in ANY way, use `(redteam)` scope. No exceptions.**
+
+This rule applies even if the change is:
+
+- Only in the UI → Still use `(redteam)`
+- Only in the CLI → Still use `(redteam)`
+- Only in docs → Still use `(redteam)`
+- Only in examples → Still use `(redteam)`
+- Only in server endpoints → Still use `(redteam)`
+
+❌ **WRONG:**
+
+```
+fix(webui): fix Basic strategy checkbox in red team setup
+feat(cli): add redteam validate command
+chore(app): improve red team setup dialog
+docs(site): add redteam strategy guide
+```
+
+✅ **CORRECT:**
+
+```
+fix(redteam): fix Basic strategy checkbox in setup UI
+feat(redteam): add validate target CLI command
+chore(redteam): improve setup dialog UX
+docs(redteam): add strategy configuration guide
+```
+
+**Why?** Redteam is a cross-cutting feature domain spanning CLI, webui, server, docs, and examples. Using `(redteam)` consistently makes it easy to find all redteam work in PRs, commits, and changelog.
+
+### Decision Tree for Scope Selection
+
+```
+1. Is this redteam-related?
+   YES → Use (redteam)  [MANDATORY]
+   NO  → Go to 2
+
+2. Is it another feature domain (providers, assertions, eval, api)?
+   YES → Use that domain scope
+   NO  → Go to 3
+
+3. Is it localized to one product area (webui, cli, server, site)?
+   YES → Use that product scope
+   NO  → Go to 4
+
+4. Is it infrastructure (deps, ci, tests, build, examples)?
+   YES → Use that infra scope
+   NO  → Go to 5
+
+5. Use no scope (generic/cross-cutting change)
+```
+
+### Examples
+
+✅ **Good:**
+
+```
+feat(redteam): add FERPA compliance plugin
+fix(redteam): respect privacy settings in meta strategy
+feat(providers): add Gemini 3 Pro support with thinking configuration
+fix(providers): support function providers in assertions
+fix(assertions): use script output for file:// references
+feat(webui): add eval results filter permalinking
+feat(cli): add code-scans run command
+chore(deps): update Material-UI monorepo to v8 (major)
+fix(deps): update dependency better-sqlite3 to v12.4.6
+docs(site): add Portkey integration guide
+test(webui): add tests for evaluation components
+feat(api)!: simplify provider interface
+chore: bump version 0.119.11
+```
+
+❌ **Bad:**
+
+```
+feat: add new redteam thing              # Missing (redteam) scope
+fix(app): provider bug                    # Should be fix(providers)
+fix(webui): red team checkbox             # Should be fix(redteam)
+chore(webui): update dependency           # Should be chore(deps)
+feat(cli): redteam command                # Should be feat(redteam)
+feat: stuff                               # Too vague
+```
+
+### Dependency Updates
+
+- **`fix(deps)`** - Patch versions (security/bug fixes that users need)
+- **`chore(deps)`** - Minor/major upgrades, bulk updates, dev dependencies
+
+```
+fix(deps): update dependency better-sqlite3 to v12.4.6
+chore(deps): update Material-UI monorepo to v8 (major)
+chore(deps): update 76 packages to latest versions
+chore(deps): bump langchain-core in examples/redteam-langchain
+```
+
+### PR Title Checklist
+
+Before creating a PR:
+
+1. ✅ **Is this redteam-related?** → Use `(redteam)` scope (MANDATORY)
+2. ✅ Choose type: feat/fix/chore/docs/test/refactor/ci/revert/perf
+3. ✅ Not redteam? Is it a feature domain (providers/assertions/eval/api)?
+4. ✅ Is it localized to one product area (webui/cli/server/site)?
+5. ✅ Is it infrastructure (deps/ci/tests/build/examples)?
+6. ✅ Breaking change? Add `!` after scope
+7. ✅ Add PR number: `(#1234)`
+8. ✅ Update CHANGELOG.md with same format (see Changelog section below)
+9. ✅ Run `npm run l && npm run f` before committing
+
+### Integration with Changelog
+
+PR titles and changelog entries use the same format. When you create a PR:
+
+1. Title the PR using this convention
+2. Add an entry to `CHANGELOG.md` under `## [Unreleased]` with the same format
+3. See the Changelog section below for detailed changelog guidelines
 
 ## Changelog
 
-All user-facing changes must be documented in `CHANGELOG.md`. The changelog is enforced via GitHub Actions.
+All user-facing changes must be documented in `CHANGELOG.md`.
 
 ### When to Update
 
@@ -335,22 +551,6 @@ Update the changelog for pull requests that change:
 - Build configuration changes
 - Code style/formatting changes
 - CI/CD changes
-
-### Automatic Exemptions
-
-PRs that only modify these files are exempt from changelog requirements:
-
-- Documentation website (`site/`)
-- Root markdown files (README.md, CONTRIBUTING.md, SECURITY.md, CLAUDE.md, AGENTS.md, LICENSE)
-- Dev environment configs (.vscode/, .cursor/, .devcontainer/)
-- Config files (.gitignore, .prettierrc, .rubocop.yml, .ruff.toml, .coderabbit.yaml, etc.)
-
-### Bypass Labels
-
-PRs can bypass changelog requirements with one of these labels:
-
-1. `no-changelog` - For exceptional cases (automated bot PRs, reverts of unmerged changes)
-2. `dependencies` - For automated dependency updates (Dependabot, Renovate, etc.)
 
 ### Changelog Format
 
@@ -409,20 +609,34 @@ Each entry should:
 
 ### Recommended Scopes
 
-Use these standardized scopes for consistency (based on git history analysis):
+Use these standardized scopes for consistency. See the "Pull Request Titles" section above for detailed scope selection guidance.
 
+**Feature domains (use when applicable):**
+
+- **redteam** - MANDATORY for all redteam-related changes (plugins, strategies, UI, CLI, docs, examples)
 - **providers** - Provider implementations (OpenAI, Anthropic, LocalAI, etc.)
-- **webui** - Web interface and viewer
-- **cli** - Command-line interface
 - **assertions** - Assertion types and grading
+- **eval** or **evaluator** - Core evaluation engine (non-redteam)
 - **api** - Public API changes
-- **config** - Configuration handling
-- **deps** - Dependencies (or use Dependencies section)
-- **docs** - Documentation
-- **tests** - Test infrastructure
-- **examples** - Example configurations
-- **redteam** - Red team features (newer versions)
+
+**Product areas (when not redteam and localized):**
+
+- **webui** - Web interface and viewer (React app)
+- **cli** - Command-line interface
+- **server** - Web server
 - **site** - Documentation site
+
+**Infrastructure:**
+
+- **deps** - Dependencies (or use Dependencies section)
+- **ci** - CI/CD pipelines
+- **tests** - Test infrastructure
+- **build** - Build tooling
+- **examples** - Example configurations (non-redteam)
+
+**Specialized:**
+
+- **auth**, **cache**, **config**, **python**, **mcp**, **code-scan** - As needed
 
 ### Categories
 
@@ -497,6 +711,75 @@ git commit -m "feat(providers): add new provider for XYZ"
 - Don't worry about version numbers - focus on the Unreleased section
 - If unsure about categorization, use Changed
 - ALL dependencies, tests, CI changes must be included (no exemptions)
+
+## Release Process
+
+This project uses [release-please](https://github.com/googleapis/release-please) for automated releases. Release Please automates CHANGELOG generation, version bumps, and GitHub releases based on conventional commits.
+
+### How It Works
+
+1. **Development**: Write code following [conventional commit format](https://www.conventionalcommits.org/) in your commit messages
+2. **Release PR**: When changes are merged to main, release-please automatically creates/updates a release PR that:
+   - Generates CHANGELOG.md entries from commit messages
+   - Determines version bump (major/minor/patch) from commit types
+   - Updates the version in package.json
+   - Creates a git tag
+3. **Publishing**: When the release PR is merged:
+   - A GitHub release is created automatically
+   - The npm package is published to npm using the NPM_TOKEN secret
+   - No manual version bumps or changelog edits needed
+
+### Commit Message Format
+
+Use [conventional commits](https://www.conventionalcommits.org/) format:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Common types:**
+
+- `feat:` - New feature (triggers minor version bump)
+- `fix:` - Bug fix (triggers patch version bump)
+- `feat!:` or `fix!:` - Breaking change (triggers major version bump)
+- `chore:` - Maintenance tasks (triggers patch version bump)
+- `docs:` - Documentation only (triggers patch version bump)
+- `refactor:` - Code refactoring (triggers patch version bump)
+- `test:` - Test updates (triggers patch version bump)
+
+**Examples:**
+
+```bash
+feat(providers): add support for Claude 3.5
+fix(webui): resolve memory leak in eval table
+feat(api)!: remove deprecated provider options
+chore(deps): update dependencies
+```
+
+### Version Bumping
+
+- **Major** (1.0.0 → 2.0.0): Commits with `!` breaking change indicator (e.g., `feat!:`, `fix!:`)
+- **Minor** (1.0.0 → 1.1.0): Commits with `feat:` or `feat(`
+- **Patch** (1.0.0 → 1.0.1): All other types (`fix:`, `chore:`, `docs:`, `refactor:`, `test:`, etc.)
+
+### Release Steps
+
+The release process is fully automated:
+
+1. Merge PRs to main with conventional commit messages
+2. Release-please automatically creates/updates a release PR
+3. Review and merge the release PR
+4. GitHub release is created and npm package is published automatically
+
+### Configuration Files
+
+- `.release-please-manifest.json` - Tracks the current version
+- `release-please-config.json` - Configures release-please behavior
+- `.github/workflows/release-please.yml` - Creates/updates release PRs and publishes to npm when merged
 
 ## Dependency Management
 
