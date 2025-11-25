@@ -8,9 +8,9 @@ import {
 } from '../../redteam/constants';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
 import type { ConversationMessage } from '../../redteam/types';
-import { fetchWithProxy } from '../../util/fetch';
-import { extractFirstJsonObject } from '../../util/json';
 import { sha256 } from '../../util/createHash';
+import { fetchWithProxy } from '../../util/fetch/index';
+import { extractFirstJsonObject } from '../../util/json';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';
 
@@ -407,6 +407,9 @@ async function handleHydraStrategy(
     conversationHistory: ctx.conversationHistory,
     stateful,
     maxTurns: ctx.resolvedMaxTurns,
+    excludeTargetOutputFromAgenticAttackGeneration: Boolean(
+      ctx.strategyConfigRecord['excludeTargetOutputFromAgenticAttackGeneration'],
+    ),
   };
 
   const hydraBody = {

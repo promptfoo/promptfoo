@@ -421,14 +421,14 @@ describe('createShareableUrl', () => {
 
       // Set up mock responses
       mockFetch
-        .mockImplementationOnce((url, options) => {
+        .mockImplementationOnce((_url, _options) => {
           // Initial eval data
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({ id: 'mock-eval-id' }),
           });
         })
-        .mockImplementationOnce((url, options) => {
+        .mockImplementationOnce((_url, _options) => {
           // Chunk of results
           return Promise.resolve({
             ok: true,

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 jest.mock('../../../src/logger', () => ({
   debug: jest.fn(),

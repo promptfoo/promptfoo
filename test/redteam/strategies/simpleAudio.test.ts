@@ -5,7 +5,7 @@ import logger from '../../../src/logger';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 // Mock the remoteGeneration module
 jest.mock('../../../src/redteam/remoteGeneration', () => ({

@@ -6,9 +6,60 @@ import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-http';
+import { afterEach, vi } from 'vitest';
+import { cleanup } from '@testing-library/react';
 
 // We can mock the environment variables. For example:
 // process.env.PROMPTFOO_VERSION = '1.0.0';
+
+// Global fetch mock for all tests
+// This provides a default mock that tests can override if needed
+vi.stubGlobal(
+  'fetch',
+  vi.fn((url: string | URL) => {
+    // Default responses for common API endpoints
+    const urlString = typeof url === 'string' ? url : url.toString();
+
+    if (urlString.includes('/api/providers/config-status') || urlString.includes('config-status')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { hasCustomConfig: false },
+        }),
+      } as Response);
+    }
+
+    if (urlString.includes('/api/user/cloud-config') || urlString.includes('cloud-config')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({}),
+      } as Response);
+    }
+
+    if (urlString.includes('/providers') || urlString.includes('/api/providers')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: {
+            hasCustomConfig: false,
+            providers: [],
+          },
+        }),
+      } as Response);
+    }
+
+    // Default fallback for any other fetch calls
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({}),
+      text: async () => '',
+      status: 200,
+      statusText: 'OK',
+    } as Response);
+  }),
+);
 
 /**
  * Global console.error suppression for known test noise patterns.
@@ -45,7 +96,8 @@ const SUPPRESSED_ERROR_PATTERNS = [
   /must be used within a.*Provider/, // 8 occurrences (ToastProvider, ShiftKeyProvider, etc.)
   /Uncaught.*must be used within/, // Wrapped version of above
 
-  // Error boundary messages  /Consider adding an error boundary to your tree/, // React suggestion message
+  // Error boundary messages
+  /Consider adding an error boundary to your tree/, // React suggestion message
 ];
 
 console.error = (...args: any[]) => {
@@ -59,3 +111,37 @@ console.error = (...args: any[]) => {
     originalConsoleError(...args);
   }
 };
+
+/**
+ * Global cleanup after each test to prevent memory leaks and hanging processes.
+ *
+ * This ensures:
+ * 1. All pending timers (setTimeout, setInterval) are cleared
+ * 2. React components are properly unmounted
+ * 3. Any fake timer state is reset
+ *
+ * This prevents tests from hanging due to lingering timers keeping Node's event loop alive.
+ */
+afterEach(() => {
+  // Clean up React Testing Library - unmount all rendered components
+  cleanup();
+
+  // Only run pending timers and clear timers if fake timers are active
+  // This prevents errors when tests switch between real and fake timers
+  try {
+    // Check if fake timers are being used by trying to get pending timers
+    // vi.isFakeTimers() doesn't exist, so we use a try-catch approach
+    vi.runOnlyPendingTimers();
+    vi.clearAllTimers();
+  } catch {
+    // If timers are not mocked (real timers), these calls will throw
+    // This is expected - just skip timer cleanup in this case
+  }
+
+  // Reset to real timers if any test used fake timers but didn't restore
+  // This is safe to call regardless of timer state
+  vi.useRealTimers();
+
+  // Clear all mocks to prevent state leakage between tests
+  vi.clearAllMocks();
+});
