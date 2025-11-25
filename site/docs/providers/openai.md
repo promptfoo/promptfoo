@@ -44,7 +44,7 @@ providers:
         effort: minimal
 ```
 
-The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts#L14-L32), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
+The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts#L112-L185), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -437,6 +437,39 @@ To set `tools` on an OpenAI provider, use the provider's `config` key. The model
 
 Tools can be defined inline or loaded from an external file:
 
+:::info Supported file formats
+
+Tools can be loaded from external files in multiple formats:
+
+```yaml
+# Static data files
+tools: file://./tools.yaml
+tools: file://./tools.json
+
+# Dynamic tool definitions from code (requires function name)
+tools: file://./tools.py:get_tools
+tools: file://./tools.js:getTools
+tools: file://./tools.ts:getTools
+```
+
+Python and JavaScript files must export a function that returns the tool definitions array. The function can be synchronous or asynchronous.
+
+**Asynchronous example:**
+
+```javascript
+// tools.js - Fetch tool definitions from API at runtime
+export async function getTools() {
+  const apiKey = process.env.INTERNAL_API_KEY;
+  const response = await fetch('https://api.internal.com/tool-definitions', {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  const tools = await response.json();
+  return tools;
+}
+```
+
+:::
+
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
@@ -628,6 +661,12 @@ tests:
 ### Loading tools/functions from a file
 
 Instead of duplicating function definitions across multiple configurations, you can reference an external YAML (or JSON) file that contains your functions. This allows you to maintain a single source of truth for your functions, which is particularly useful if you have multiple versions or regular changes to definitions.
+
+:::tip
+
+Tool definitions can be loaded from JSON, YAML, Python, or JavaScript files. For Python/JS files, specify a function name that returns the tool definitions: `file://tools.py:get_tools`
+
+:::
 
 To load your functions from a file, specify the file path in your provider configuration like so:
 

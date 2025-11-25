@@ -15,7 +15,7 @@ import {
   isProviderOptions,
   type RedteamFileConfig,
   type TokenUsage,
-} from '../../types';
+} from '../../types/index';
 import type { TraceContextData } from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';

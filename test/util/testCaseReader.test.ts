@@ -8,7 +8,7 @@ import { getEnvBool, getEnvString } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatasets';
 import logger from '../../src/logger';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import { runPython } from '../../src/python/pythonUtils';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
 import {
