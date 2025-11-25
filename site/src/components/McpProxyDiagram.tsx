@@ -7,7 +7,7 @@ import SecurityIcon from '@mui/icons-material/Security';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
@@ -27,7 +27,7 @@ export default function MCPProxyDiagram() {
         boxShadow: 3,
       }}
     >
-      <Grid container alignItems="center" justifyContent="center">
+      <Grid container spacing={0} alignItems="center" justifyContent="center">
         {/* Left column: Users & Apps */}
         <Grid size={{ xs: 12, sm: 3 }}>
           <Stack

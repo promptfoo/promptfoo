@@ -3,10 +3,10 @@ import * as fs from 'fs';
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import { importModule } from '../../src/esm';
-import { processPrompts, readPrompts, readProviderPromptMap } from '../../src/prompts';
+import { processPrompts, readPrompts, readProviderPromptMap } from '../../src/prompts/index';
 import { maybeFilePath } from '../../src/prompts/utils';
 
-import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
+import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types/index';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -147,25 +147,25 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it.each([['prompts.txt'], 'prompts.txt'])(
-    `should read a single prompt file with input:%p`,
-    async (promptPath) => {
-      jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-      jest.mocked(fs.readFileSync).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
-      jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob.toString()]);
-      await expect(readPrompts(promptPath)).resolves.toEqual([
-        {
-          label: 'prompts.txt: Test prompt 1',
-          raw: 'Test prompt 1',
-        },
-        {
-          label: 'prompts.txt: Test prompt 2',
-          raw: 'Test prompt 2',
-        },
-      ]);
-      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    },
-  );
+  it.each([
+    ['prompts.txt'],
+    'prompts.txt',
+  ])(`should read a single prompt file with input:%p`, async (promptPath) => {
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(fs.readFileSync).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob.toString()]);
+    await expect(readPrompts(promptPath)).resolves.toEqual([
+      {
+        label: 'prompts.txt: Test prompt 1',
+        raw: 'Test prompt 1',
+      },
+      {
+        label: 'prompts.txt: Test prompt 2',
+        raw: 'Test prompt 2',
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+  });
 
   it('should read multiple prompt files', async () => {
     jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
@@ -433,7 +433,7 @@ describe('readPrompts', () => {
 
   it('should read a .js file with named function', async () => {
     const promptPath = 'prompt.js:functionName';
-    const mockFunction = (context: {
+    const mockFunction = (_context: {
       vars: Record<string, string | object>;
       provider?: ApiProvider;
     }) => 'dummy prompt result';

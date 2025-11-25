@@ -1,7 +1,12 @@
-import { runAssertion } from '../../src/assertions';
+import { runAssertion } from '../../src/assertions/index';
 import { getTraceStore } from '../../src/tracing/store';
 
-import type { Assertion, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types';
+import type {
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+} from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
 // Mock the trace store
@@ -9,7 +14,7 @@ jest.mock('../../src/tracing/store');
 
 // Mock Python execution
 jest.mock('../../src/python/wrapper', () => ({
-  runPythonCode: jest.fn((code: string, functionName: string, args: any[]) => {
+  runPythonCode: jest.fn((code: string, _functionName: string, args: any[]) => {
     // Simple Python interpreter mock for our test cases
     const [_output, context] = args;
 

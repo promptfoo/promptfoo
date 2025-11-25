@@ -1,10 +1,10 @@
-import { loadApiProvider } from '../src/providers';
+import { loadApiProvider } from '../src/providers/index';
 import {
   SageMakerCompletionProvider,
   SageMakerEmbeddingProvider,
 } from '../src/providers/sagemaker';
 
-import type { LoadApiProviderContext } from '../src/types';
+import type { LoadApiProviderContext } from '../src/types/index';
 
 // Mock the transform utility
 jest.mock('../src/util/transform', () => ({
@@ -47,7 +47,7 @@ jest.spyOn(global, 'Function').mockImplementation((...args) => {
   // For JavaScript expression evaluation in extractOutput
   if (args.length === 2 && args[0] === 'json') {
     const jsExpression = args[1];
-    return (json: any) => {
+    return (_json: any) => {
       // Handle specific test cases
       if (jsExpression.includes('json.data.nested.value')) {
         return 'Nested data value';

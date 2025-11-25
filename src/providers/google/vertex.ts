@@ -5,7 +5,7 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { isValidJson } from '../../util/json';
@@ -18,8 +18,8 @@ import {
   getCandidate,
   getGoogleClient,
   loadCredentials,
-  loadFile,
   mergeParts,
+  normalizeTools,
   resolveProjectId,
 } from './util';
 
@@ -30,7 +30,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {
@@ -129,7 +129,7 @@ class VertexGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(_prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -165,7 +165,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     return this.callPalm2Api(prompt);
   }
 
-  async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callClaudeApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     const messages = parseChatPrompt(prompt, [
       {
         role: 'user',
@@ -188,8 +188,6 @@ export class VertexChatProvider extends VertexGenericProvider {
       top_k: this.config.top_k || this.config.topK,
       messages,
     };
-
-    logger.debug(`Preparing to call Claude API with body: ${JSON.stringify(body)}`);
 
     const cache = await getCache();
     const cacheKey = `vertex:claude:${this.modelName}:${JSON.stringify(body)}`;
@@ -225,7 +223,6 @@ export class VertexChatProvider extends VertexGenericProvider {
       });
 
       data = res.data as ClaudeResponse;
-      logger.debug(`Claude API response: ${JSON.stringify(data)}`);
     } catch (err) {
       const error = err as GaxiosError;
       if (error.response && error.response.data) {
@@ -302,7 +299,13 @@ export class VertexChatProvider extends VertexGenericProvider {
     );
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
-    const allTools = [...mcpTools, ...(config.tools ? loadFile(config.tools, context?.vars) : [])];
+    const fileTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : [];
+    const allTools = [
+      ...mcpTools,
+      ...(Array.isArray(fileTools) ? normalizeTools(fileTools) : fileTools ? [fileTools] : []),
+    ];
     // --- End MCP tool injection logic ---
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
@@ -350,8 +353,6 @@ export class VertexChatProvider extends VertexGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
-    logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
-
     const cache = await getCache();
     const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
 
@@ -384,7 +385,6 @@ export class VertexChatProvider extends VertexGenericProvider {
           timeout: REQUEST_TIMEOUT_MS,
         });
         data = res.data as GeminiApiResponse;
-        logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
       } catch (err) {
         const geminiError = err as GaxiosError;
         if (
@@ -582,7 +582,6 @@ export class VertexChatProvider extends VertexGenericProvider {
         topK: this.config.topK,
       },
     };
-    logger.debug(`Calling Vertex Palm2 API: ${JSON.stringify(body)}`);
 
     const cache = await getCache();
     const cacheKey = `vertex:palm2:${JSON.stringify(body)}`;
@@ -624,7 +623,6 @@ export class VertexChatProvider extends VertexGenericProvider {
       };
     }
 
-    logger.debug(`Vertex Palm2 API response: ${JSON.stringify(data)}`);
     try {
       if (data.error) {
         return {
@@ -650,7 +648,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
   }
 
-  async callLlamaApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callLlamaApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     // Validate region for Llama models (only available in us-central1)
     const region = this.getRegion();
     if (region !== 'us-central1') {

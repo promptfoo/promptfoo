@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { setLogLevel } from '../src/logger';
 import { addCommonOptionsRecursively } from '../src/main';
-import { setupEnv } from '../src/util';
+import { setupEnv } from '../src/util/index';
 
 // Mock the dependencies
 jest.mock('../src/util', () => ({
@@ -12,6 +12,11 @@ jest.mock('../src/logger', () => ({
   __esModule: true,
   default: { debug: jest.fn() },
   setLogLevel: jest.fn(),
+}));
+
+// Mock code scan commands to avoid ESM import issues with execa
+jest.mock('../src/codeScan', () => ({
+  codeScansCommand: jest.fn(),
 }));
 
 describe('addCommonOptionsRecursively', () => {

@@ -2,7 +2,7 @@ import path from 'path';
 
 import { providerMap } from '../../src/providers/registry';
 
-import type { LoadApiProviderContext } from '../../src/types';
+import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
 jest.mock('../../src/providers/adaline.gateway', () => ({

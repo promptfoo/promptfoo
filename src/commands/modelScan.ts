@@ -2,12 +2,19 @@ import { spawn } from 'child_process';
 
 import chalk from 'chalk';
 import { getAuthor } from '../globalConfig/accounts';
-import logger from '../logger';
 import ModelAudit from '../models/modelAudit';
 import { checkModelAuditUpdates } from '../updates';
 import type { Command } from 'commander';
 
 import type { ModelAuditScanResults } from '../types/modelAudit';
+import { parseModelAuditArgs, DEPRECATED_OPTIONS_MAP } from '../util/modelAuditCliParser';
+import {
+  getHuggingFaceMetadata,
+  isHuggingFaceModel,
+  parseHuggingFaceModel,
+} from '../util/huggingfaceMetadata';
+import logger from '../logger';
+import { z } from 'zod';
 
 export async function checkModelAuditInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -28,59 +35,32 @@ export function modelScanCommand(program: Command): void {
       '-b, --blacklist <patterns...>',
       'Additional blacklist patterns to check against model names',
     )
-    .option('--registry-uri <uri>', 'MLflow registry URI (only used for MLflow model URIs)')
 
     // Output configuration
     .option('-o, --output <path>', 'Output file path (prints to stdout if not specified)')
-    .option('-f, --format <format>', 'Output format (text, json)', 'text')
+    .option('-f, --format <format>', 'Output format (text, json, sarif)', 'text')
     .option('--sbom <path>', 'Write CycloneDX SBOM to the specified file')
     .option('--no-write', 'Do not write results to database')
     .option('--name <name>', 'Name for the audit (when saving to database)')
 
     // Execution control
     .option('-t, --timeout <seconds>', 'Scan timeout in seconds', '300')
-    .option('--max-file-size <bytes>', 'Maximum file size to scan in bytes (0 for unlimited)', '0')
-    .option(
-      '--max-total-size <bytes>',
-      'Maximum total bytes to scan before stopping (0 for unlimited)',
-      '0',
-    )
-
-    // Cloud storage options
-    .option(
-      '--jfrog-api-token <token>',
-      'JFrog API token for authentication (can also use JFROG_API_TOKEN env var)',
-    )
-    .option(
-      '--jfrog-access-token <token>',
-      'JFrog access token for authentication (can also use JFROG_ACCESS_TOKEN env var)',
-    )
-    .option(
-      '--max-download-size <size>',
-      'Maximum download size for cloud storage (e.g., 500MB, 2GB)',
-    )
-    .option('--no-cache', 'Do not use cache for downloaded cloud storage files')
-    .option(
-      '--cache-dir <path>',
-      'Directory for caching downloaded files (default: ~/.modelaudit/cache)',
-    )
-    .option('--preview', 'Preview what would be downloaded without actually downloading')
-    .option('--all-files', 'Download all files from directories (default: selective)')
-    .option('--stream', 'Use streaming analysis for large cloud files (experimental)')
+    .option('--max-size <size>', 'Override auto-detected size limits (e.g., 10GB, 500MB)')
 
     // Scanning behavior
-    .option('--skip-files', 'Skip non-model file types during directory scans')
-    .option('--strict-license', 'Fail scan when incompatible or deprecated licenses are detected')
-    .option('--no-large-model-support', 'Disable optimized scanning for large models (≈10GB+)')
-
-    // Progress reporting
-    .option('--no-progress', 'Disable progress reporting for large model scans')
-    .option('--progress-log <path>', 'Write progress information to log file')
-    .option('--progress-format <format>', 'Progress display format (tqdm, simple, json)', 'tqdm')
-    .option('--progress-interval <seconds>', 'Progress update interval in seconds', '2.0')
+    .option(
+      '--strict',
+      'Strict mode: fail on warnings, scan all file types, strict license validation',
+    )
+    .option('--dry-run', 'Preview what would be scanned/downloaded without actually doing it')
+    .option('--no-cache', 'Force disable caching (overrides smart detection)')
+    .option('--quiet', 'Silence detection messages')
+    .option('--progress', 'Force enable progress reporting (auto-detected by default)')
+    .option('--stream', 'Scan and delete downloaded files immediately after scan')
 
     // Miscellaneous
     .option('-v, --verbose', 'Enable verbose output')
+    .option('--force', 'Force scan even if model was already scanned')
 
     .action(async (paths: string[], options) => {
       if (!paths || paths.length === 0) {
@@ -88,6 +68,43 @@ export function modelScanCommand(program: Command): void {
           'No paths specified. Please provide at least one model file or directory to scan.',
         );
         process.exit(1);
+      }
+
+      // Check for deprecated options and warn users
+      const deprecatedOptionsUsed = Object.keys(options).filter((opt) => {
+        const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+        return DEPRECATED_OPTIONS_MAP[fullOption] !== undefined;
+      });
+
+      if (deprecatedOptionsUsed.length > 0) {
+        deprecatedOptionsUsed.forEach((opt) => {
+          const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+          const replacement = DEPRECATED_OPTIONS_MAP[fullOption];
+          if (replacement) {
+            logger.warn(
+              `⚠️  Warning: The '${fullOption}' option is deprecated. Please use '${replacement}' instead.`,
+            );
+          } else {
+            // Provide specific guidance for common cases
+            if (fullOption === '--jfrog-api-token') {
+              logger.warn(
+                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_API_TOKEN environment variable instead.`,
+              );
+            } else if (fullOption === '--jfrog-access-token') {
+              logger.warn(
+                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_ACCESS_TOKEN environment variable instead.`,
+              );
+            } else if (fullOption === '--registry-uri') {
+              logger.warn(
+                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_URL or MLFLOW_TRACKING_URI environment variable instead.`,
+              );
+            } else {
+              logger.warn(
+                `⚠️  Warning: The '${fullOption}' option is deprecated and has been removed. It may be handled automatically or via environment variables. See documentation for details.`,
+              );
+            }
+          }
+        });
       }
 
       // Check if modelaudit is installed
@@ -102,113 +119,74 @@ export function modelScanCommand(program: Command): void {
       // Check for modelaudit updates
       await checkModelAuditUpdates();
 
-      const args = ['scan', ...paths];
-
-      // Add options
-      if (options.blacklist && options.blacklist.length > 0) {
-        options.blacklist.forEach((pattern: string) => {
-          args.push('--blacklist', pattern);
-        });
-      }
-
       // When saving to database (default), always use JSON format internally
-      const saveToDatabase = options.write !== false;
+      // Note: --no-write flag sets options.write to false
+      const saveToDatabase = options.write === undefined || options.write === true;
+
+      // Check for duplicate scans (HuggingFace models only, before download)
+      // Only check if saving to database and not forcing
+      if (saveToDatabase && !options.force && paths.length === 1) {
+        const modelPath = paths[0];
+        if (isHuggingFaceModel(modelPath)) {
+          try {
+            const metadata = await getHuggingFaceMetadata(modelPath);
+            if (metadata) {
+              const parsed = parseHuggingFaceModel(modelPath);
+              const modelId = parsed ? `${parsed.owner}/${parsed.repo}` : modelPath;
+
+              // Check if already scanned with this revision
+              const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
+              if (existing) {
+                logger.info(chalk.yellow('✓ Model already scanned'));
+                logger.info(`  Model: ${modelId}`);
+                logger.info(`  Revision: ${metadata.sha}`);
+                logger.info(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
+                logger.info(`  Scan ID: ${existing.id}`);
+                logger.info(
+                  `\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`,
+                );
+                logger.info(chalk.green(`  promptfoo view ${existing.id}`));
+                process.exitCode = 0;
+                return;
+              }
+            }
+          } catch (error) {
+            logger.debug(`Failed to check for existing scan: ${error}`);
+            // Continue with scan if metadata fetch fails
+          }
+        }
+      }
       const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
-      args.push('--format', outputFormat);
 
-      if (options.output && !saveToDatabase) {
-        args.push('--output', options.output);
-      }
+      // Prepare options for CLI parser, excluding output when saving to database
+      // Convert string values from Commander to expected types
+      const cliOptions = {
+        ...options,
+        format: outputFormat,
+        output: options.output && !saveToDatabase ? options.output : undefined,
+        timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
+        stream: options.stream,
+      };
 
-      if (options.sbom) {
-        args.push('--sbom', options.sbom);
-      }
+      // Use centralized CLI argument parser with error handling
+      let args: string[];
+      try {
+        const result = parseModelAuditArgs(paths, cliOptions);
+        args = result.args;
 
-      if (options.timeout) {
-        args.push('--timeout', options.timeout);
-      }
-
-      if (options.verbose) {
-        args.push('--verbose');
-      }
-
-      if (options.maxFileSize && options.maxFileSize !== '0') {
-        args.push('--max-file-size', options.maxFileSize);
-      }
-
-      if (options.maxTotalSize && options.maxTotalSize !== '0') {
-        args.push('--max-total-size', options.maxTotalSize);
-      }
-
-      // Cloud storage options
-      if (options.registryUri) {
-        args.push('--registry-uri', options.registryUri);
-      }
-
-      if (options.jfrogApiToken) {
-        args.push('--jfrog-api-token', options.jfrogApiToken);
-      }
-
-      if (options.jfrogAccessToken) {
-        args.push('--jfrog-access-token', options.jfrogAccessToken);
-      }
-
-      if (options.maxDownloadSize) {
-        args.push('--max-download-size', options.maxDownloadSize);
-      }
-
-      if (options.cache === false) {
-        args.push('--no-cache');
-      }
-
-      if (options.cacheDir) {
-        args.push('--cache-dir', options.cacheDir);
-      }
-
-      if (options.preview) {
-        args.push('--preview');
-      }
-
-      if (options.allFiles) {
-        args.push('--all-files');
-      } else {
-        args.push('--selective');
-      }
-
-      if (options.stream) {
-        args.push('--stream');
-      }
-
-      // Scanning behavior
-      if (options.skipFiles) {
-        args.push('--skip-files');
-      } else {
-        args.push('--no-skip-files');
-      }
-
-      if (options.strictLicense) {
-        args.push('--strict-license');
-      }
-
-      if (options.largeModelSupport === false) {
-        args.push('--no-large-model-support');
-      }
-
-      // Progress reporting
-      if (options.progress === false) {
-        args.push('--no-progress');
-      }
-
-      if (options.progressLog) {
-        args.push('--progress-log', options.progressLog);
-      }
-
-      if (options.progressFormat) {
-        args.push('--progress-format', options.progressFormat);
-      }
-
-      if (options.progressInterval) {
-        args.push('--progress-interval', options.progressInterval);
+        // Optional: Handle any unsupported options (though shouldn't occur with our CLI)
+        if (result.unsupportedOptions.length > 0) {
+          logger.warn(`Unsupported options detected: ${result.unsupportedOptions.join(', ')}`);
+        }
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          logger.error('Invalid model audit options provided:');
+          error.errors.forEach((err) => {
+            logger.error(`  - ${err.path.join('.')}: ${err.message}`);
+          });
+          process.exit(1);
+        }
+        throw error;
       }
 
       logger.info(`Running model scan on: ${paths.join(', ')}`);
@@ -276,6 +254,41 @@ export function modelScanCommand(program: Command): void {
 
             const results: ModelAuditScanResults = JSON.parse(jsonOutput);
 
+            // Fetch revision tracking info if HuggingFace model
+            let revisionInfo: {
+              modelId?: string;
+              revisionSha?: string;
+              contentHash?: string;
+              modelSource?: string;
+              sourceLastModified?: number;
+            } = {};
+
+            if (paths.length === 1) {
+              const modelPath = paths[0];
+              if (isHuggingFaceModel(modelPath)) {
+                try {
+                  const metadata = await getHuggingFaceMetadata(modelPath);
+                  if (metadata) {
+                    revisionInfo = {
+                      modelId: metadata.modelId,
+                      revisionSha: metadata.sha,
+                      modelSource: 'huggingface',
+                      sourceLastModified: new Date(metadata.lastModified).getTime(),
+                    };
+                  }
+                } catch (error) {
+                  logger.debug(`Failed to fetch revision info: ${error}`);
+                }
+              }
+
+              // Extract content_hash from modelaudit output if available
+              // modelaudit generates content hash during scan for deduplication
+              if (results.content_hash) {
+                logger.debug(`Using content_hash from modelaudit output: ${results.content_hash}`);
+                revisionInfo.contentHash = results.content_hash;
+              }
+            }
+
             // Create audit record in database
             const audit = await ModelAudit.create({
               name: options.name || `Model scan ${new Date().toISOString()}`,
@@ -286,38 +299,29 @@ export function modelScanCommand(program: Command): void {
                 paths,
                 options: {
                   blacklist: options.blacklist,
-                  timeout: options.timeout,
-                  maxFileSize: options.maxFileSize,
-                  maxTotalSize: options.maxTotalSize,
+                  timeout: cliOptions.timeout,
+                  maxSize: options.maxSize,
                   verbose: options.verbose,
                   sbom: options.sbom,
-                  registryUri: options.registryUri,
-                  jfrogApiToken: options.jfrogApiToken ? '***' : undefined, // Mask sensitive data
-                  jfrogAccessToken: options.jfrogAccessToken ? '***' : undefined, // Mask sensitive data
-                  maxDownloadSize: options.maxDownloadSize,
+                  strict: options.strict,
+                  dryRun: options.dryRun,
                   cache: options.cache,
-                  cacheDir: options.cacheDir,
-                  preview: options.preview,
-                  allFiles: options.allFiles,
-                  stream: options.stream,
-                  skipFiles: options.skipFiles,
-                  strictLicense: options.strictLicense,
-                  largeModelSupport: options.largeModelSupport,
+                  quiet: options.quiet,
                   progress: options.progress,
-                  progressLog: options.progressLog,
-                  progressFormat: options.progressFormat,
-                  progressInterval: options.progressInterval,
+                  stream: options.stream,
                 },
               },
+              // Revision tracking
+              ...revisionInfo,
             });
 
             // Display summary to user (unless they requested JSON format)
             if (options.format !== 'json') {
-              console.log('\n' + chalk.bold('Model Audit Summary'));
-              console.log('=' + '='.repeat(50));
+              logger.info('\n' + chalk.bold('Model Audit Summary'));
+              logger.info('=' + '='.repeat(50));
 
               if (results.has_errors || (results.failed_checks ?? 0) > 0) {
-                console.log(chalk.yellow(`⚠  Found ${results.failed_checks || 0} issues`));
+                logger.info(chalk.yellow(`⚠  Found ${results.failed_checks || 0} issues`));
 
                 // Show issues grouped by severity
                 if (results.issues && results.issues.length > 0) {
@@ -342,32 +346,32 @@ export function modelScanCommand(program: Command): void {
                           : severity === 'warning'
                             ? chalk.yellow
                             : chalk.blue;
-                      console.log(
+                      logger.info(
                         `\n${color.bold(severity.toUpperCase())} (${severityIssues.length}):`,
                       );
                       severityIssues.slice(0, 5).forEach((issue) => {
-                        console.log(`  • ${issue.message}`);
+                        logger.info(`  • ${issue.message}`);
                         if (issue.location) {
-                          console.log(`    ${chalk.gray(issue.location)}`);
+                          logger.info(`    ${chalk.gray(issue.location)}`);
                         }
                       });
                       if (severityIssues.length > 5) {
-                        console.log(`  ${chalk.gray(`... and ${severityIssues.length - 5} more`)}`);
+                        logger.info(`  ${chalk.gray(`... and ${severityIssues.length - 5} more`)}`);
                       }
                     }
                   });
                 }
               } else {
-                console.log(
+                logger.info(
                   chalk.green(`✓ No issues found. ${results.passed_checks || 0} checks passed.`),
                 );
               }
 
-              console.log(
-                `\nScanned ${results.files_scanned ?? 0} files (${(results.bytes_scanned ?? 0 / 1024 / 1024).toFixed(2)} MB)`,
+              logger.info(
+                `\nScanned ${results.files_scanned ?? 0} files (${((results.bytes_scanned ?? 0) / 1024 / 1024).toFixed(2)} MB)`,
               );
-              console.log(`Duration: ${(results.duration ?? 0 / 1000).toFixed(2)} seconds`);
-              console.log(chalk.green(`\n✓ Results saved to database with ID: ${audit.id}`));
+              logger.info(`Duration: ${((results.duration ?? 0) / 1000).toFixed(2)} seconds`);
+              logger.info(chalk.green(`\n✓ Results saved to database with ID: ${audit.id}`));
             }
 
             // Save to file if requested
@@ -380,7 +384,9 @@ export function modelScanCommand(program: Command): void {
             process.exit(code || 0);
           } catch (error) {
             logger.error(`Failed to parse or save scan results: ${error}`);
-            logger.debug(`Raw output: ${stdout}`);
+            if (options.verbose) {
+              logger.error(`Raw output: ${stdout}`);
+            }
             process.exit(1);
           }
         });

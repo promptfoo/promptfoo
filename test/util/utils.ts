@@ -1,4 +1,4 @@
-import type { ApiProvider, ProviderResponse } from '../../src/types';
+import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
 export class TestGrader implements ApiProvider {
   async callApi(): Promise<ProviderResponse> {
@@ -45,4 +45,8 @@ export function createMockResponse(
     },
   } as Response;
   return mockResponse;
+}
+
+export function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;]*m/g, '');
 }

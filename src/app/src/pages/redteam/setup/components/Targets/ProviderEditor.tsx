@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
@@ -14,7 +14,6 @@ import ProviderConfigEditor from './ProviderConfigEditor';
 import ProviderTypeSelector from './ProviderTypeSelector';
 
 import type { ProviderOptions } from '../../types';
-import type { ProviderConfigEditorRef } from './ProviderConfigEditor';
 
 export function defaultHttpTarget(): ProviderOptions {
   return {
@@ -43,12 +42,12 @@ interface ProviderProps {
     disableNameField?: boolean;
     disableTitle?: boolean;
     actionButtonText?: string;
-    defaultRequestTransform?: string;
-    hideErrors?: boolean;
     disableModelSelection?: boolean;
   };
   setError?: (error: string | null) => void;
   validateAll?: boolean; // Flag to force validation of all fields
+  onTargetTested?: (success: boolean) => void;
+  onSessionTested?: (success: boolean) => void;
 }
 
 export default function ProviderEditor({
@@ -61,6 +60,8 @@ export default function ProviderEditor({
   opts = {},
   setError,
   validateAll = false,
+  onTargetTested,
+  onSessionTested,
 }: ProviderProps) {
   const theme = useTheme();
   const {
@@ -69,17 +70,19 @@ export default function ProviderEditor({
     disableTitle = false,
     actionButtonText,
     availableProviderIds,
-    defaultRequestTransform,
     disableModelSelection = false,
-    hideErrors = false,
   } = opts;
 
-  const configEditorRef = useRef<ProviderConfigEditorRef>(null);
+  const validateRef = useRef<(() => boolean) | null>(null);
   const [validationErrors, setValidationErrors] = useState<string | null>(null);
   const [shouldValidate, setShouldValidate] = useState<boolean>(false);
   const [providerType, setProviderType] = useState<string | undefined>(
     getProviderType(provider?.id) ?? availableProviderIds?.[0],
   );
+
+  const handleValidationRequest = useCallback((validator: () => boolean) => {
+    validateRef.current = validator;
+  }, []);
 
   // Sync providerType with provider changes
   useEffect(() => {
@@ -152,22 +155,19 @@ export default function ProviderEditor({
 
       {/* Provider Configuration Section */}
       <ProviderConfigEditor
-        ref={configEditorRef}
         provider={provider}
         setProvider={setProvider}
         extensions={extensions}
         onExtensionsChange={onExtensionsChange}
-        opts={{
-          defaultRequestTransform,
-          hideErrors,
-          disableModelSelection,
-        }}
         setError={handleError}
         validateAll={validateAll || shouldValidate}
-        onValidate={(isValid) => {
+        onValidate={() => {
           // Validation errors will be displayed through the handleError function
         }}
+        onValidationRequest={handleValidationRequest}
         providerType={providerType}
+        onTargetTested={onTargetTested}
+        onSessionTested={onSessionTested}
       />
 
       <Box
@@ -206,8 +206,8 @@ export default function ProviderEditor({
                 // Enable validation when button is clicked
                 setShouldValidate(true);
 
-                // Use the ref to validate
-                const isValid = configEditorRef.current?.validate() ?? false;
+                // Call the validation function
+                const isValid = validateRef.current?.() ?? false;
 
                 // Only proceed if there are no errors
                 if (isValid && !validationErrors) {

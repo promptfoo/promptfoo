@@ -65,6 +65,47 @@ assert:
 
 For more information on factuality, see the [guide on LLM factuality](/docs/guides/factuality-eval).
 
+## Non-English Evaluation
+
+For multilingual evaluation output with compatible assertion types, use a custom `rubricPrompt`:
+
+```yaml
+defaultTest:
+  options:
+    rubricPrompt: |
+      [
+        {
+          "role": "system",
+          // German: "You evaluate outputs based on criteria. Respond with JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALL responses in German."
+          "content": "Du bewertest Ausgaben nach Kriterien. Antworte mit JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALLE Antworten auf Deutsch."
+        },
+        {
+          "role": "user", 
+          // German: "Output: {{ output }}\nCriterion: {{ rubric }}"
+          "content": "Ausgabe: {{ output }}\nKriterium: {{ rubric }}"
+        }
+      ]
+
+assert:
+  - type: llm-rubric
+    # German: "Responds helpfully"
+    value: 'Antwortet hilfreich'
+  - type: g-eval
+    # German: "Clear and precise"
+    value: 'Klar und präzise'
+  - type: model-graded-closedqa
+    # German: "Gives direct answer"
+    value: 'Gibt direkte Antwort'
+```
+
+This produces German reasoning: `{"reason": "Die Antwort ist hilfreich und klar.", "pass": true, "score": 1.0}`
+
+<!-- German reasoning: "The answer is helpful and clear." -->
+
+**Note:** This approach works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. Other assertions like `factuality` and `context-recall` require specific output formats and need assertion-specific prompts.
+
+For more language options and alternative approaches, see the [llm-rubric language guide](/docs/configuration/expected-outputs/model-graded/llm-rubric#non-english-evaluation).
+
 Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading)):
 
 [![LLM prompt quality evaluation with PASS/FAIL expectations](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)
@@ -521,6 +562,71 @@ tests:
         contextTransform: 'output.documents.map(d => d.text).join(" ")' # Extract documents as context
         threshold: 0.85
 ```
+
+## Common patterns and troubleshooting
+
+### Understanding pass vs. score behavior
+
+Model-graded assertions like `llm-rubric` determine PASS/FAIL using two mechanisms:
+
+1. **Without threshold**: PASS depends only on the grader's `pass` field (defaults to `true` if omitted)
+2. **With threshold**: PASS requires both `pass === true` AND `score >= threshold`
+
+This means a result like `{"pass": true, "score": 0}` will pass without a threshold, but fail with `threshold: 1`.
+
+**Common issue**: Tests show PASS even when scores are low
+
+```yaml
+# ❌ Problem: All tests pass regardless of score
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    # No threshold set - always passes if grader doesn't return explicit pass: false
+```
+
+**Solutions**:
+
+```yaml
+# ✅ Option A: Add threshold to make score drive PASS/FAIL
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    threshold: 1  # Only pass when score >= 1
+
+# ✅ Option B: Have grader control pass explicitly
+assert:
+  - type: llm-rubric
+    value: |
+      Return {"pass": true, "score": 1} if the response is correct
+      Return {"pass": false, "score": 0} if the response is incorrect
+```
+
+### Threshold usage across assertion types
+
+Different assertion types use thresholds differently:
+
+```yaml
+assert:
+  # Similarity-based (0-1 range)
+  - type: context-faithfulness
+    threshold: 0.8 # Requires 80%+ faithfulness
+
+  # Binary scoring (0 or 1)
+  - type: llm-rubric
+    value: 'Is helpful and accurate'
+    threshold: 1 # Requires perfect score
+
+  # Custom scoring (any range)
+  - type: pi
+    value: 'Quality of response'
+    threshold: 0.7
+```
+
+For more details on pass/score semantics, see the [llm-rubric documentation](/docs/configuration/expected-outputs/model-graded/llm-rubric#pass-vs-score-semantics).
 
 ## Other assertion types
 

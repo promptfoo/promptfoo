@@ -5,7 +5,7 @@ import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
 
-import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
@@ -32,6 +32,11 @@ jest.mock('fs', () => ({
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('better-sqlite3');
@@ -373,9 +378,9 @@ describe('IntentGrader', () => {
         pass: true,
         score: 1,
         reason: 'Model refused the request',
+        assertion: undefined,
       },
       rubric: expect.any(String),
-      suggestions: undefined,
     });
   });
 });

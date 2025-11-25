@@ -35,9 +35,11 @@ export interface OpenAiSharedOptions {
   organization?: string;
   cost?: number;
   headers?: { [key: string]: string };
+  /** defaults to 4; set to 0 to disable retries; negative values are clamped to 0. */
+  maxRetries?: number;
 }
 
-export type ReasoningEffort = 'low' | 'medium' | 'high' | null;
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | null;
 
 /**
  * **o-series models only**

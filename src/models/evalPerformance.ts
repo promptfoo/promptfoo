@@ -1,7 +1,19 @@
 import { sql } from 'drizzle-orm';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import logger from '../logger';
+
+import type { EvalResultsFilterMode } from '../types/index';
+
+/** Result from COUNT queries using db.all() - count is always a number in result array */
+interface CountResult {
+  count: number;
+}
+
+/** Result from queries selecting test_idx column */
+interface TestIndexRow {
+  test_idx: number;
+}
 
 interface CountCacheEntry {
   count: number;
@@ -25,7 +37,7 @@ export async function getCachedResultsCount(evalId: string): Promise<number> {
   const start = Date.now();
 
   // Use COUNT(*) with the composite index on (eval_id, test_idx)
-  const result = await db
+  const result = db
     .select({ count: sql<number>`COUNT(DISTINCT test_idx)` })
     .from(evalResultsTable)
     .where(sql`eval_id = ${evalId}`)
@@ -56,7 +68,7 @@ export async function queryTestIndicesOptimized(
   opts: {
     offset?: number;
     limit?: number;
-    filterMode?: string;
+    filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
   },
@@ -64,7 +76,7 @@ export async function queryTestIndicesOptimized(
   const db = getDb();
   const offset = opts.offset ?? 0;
   const limit = opts.limit ?? 50;
-  const mode = opts.filterMode ?? 'all';
+  const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
   // Build base query with efficient filtering
   let baseQuery = sql`eval_id = ${evalId}`;
@@ -76,6 +88,8 @@ export async function queryTestIndicesOptimized(
     baseQuery = sql`${baseQuery} AND success = 0 AND failure_reason != ${2}`;
   } else if (mode === 'passes') {
     baseQuery = sql`${baseQuery} AND success = 1`;
+  } else if (mode === 'highlights') {
+    baseQuery = sql`${baseQuery} AND json_extract(grading_result, '$.comment') LIKE '!highlight%'`;
   }
 
   // For search queries, only search in response field if no filters
@@ -97,7 +111,7 @@ export async function queryTestIndicesOptimized(
     WHERE ${whereClause}
   `;
 
-  const countResult = await db.all<{ count: number }>(countQuery);
+  const countResult = db.all<CountResult>(countQuery);
   const filteredCount = Number(countResult[0]?.count ?? 0);
   logger.debug(`Optimized count query took ${Date.now() - countStart}ms`);
 
@@ -112,7 +126,7 @@ export async function queryTestIndicesOptimized(
     OFFSET ${offset}
   `;
 
-  const rows = await db.all<{ test_idx: number }>(idxQuery);
+  const rows = db.all<TestIndexRow>(idxQuery);
   const testIndices = rows.map((row) => row.test_idx);
   logger.debug(`Optimized index query took ${Date.now() - idxStart}ms`);
 

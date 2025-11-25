@@ -1,8 +1,8 @@
-import { processPrompts } from '../../src/prompts';
+import { processPrompts } from '../../src/prompts/index';
 
 // Mock the python execution
 jest.mock('../../src/python/pythonUtils', () => ({
-  runPython: jest.fn((filePath: string, functionName: string, args: string[]) => {
+  runPython: jest.fn((filePath: string, _functionName: string, _args: string[]) => {
     // Return different responses based on file path
     if (filePath.includes('marketing')) {
       return Promise.resolve(
@@ -58,12 +58,16 @@ jest.mock('glob', () => ({
     }
     return [];
   }),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 
 // Mock importModule for JavaScript files
 jest.mock('../../src/esm', () => ({
   importModule: jest.fn((filePath: string) => {
-    return Promise.resolve(function (context: any) {
+    return Promise.resolve(function (_context: any) {
       return `JS prompt from ${filePath}`;
     });
   }),

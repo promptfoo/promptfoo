@@ -22,19 +22,20 @@ describe('AzureChatCompletionProvider', () => {
       });
     });
 
-    it('should use provider config when no prompt config exists', () => {
+    it('should use provider config when no prompt config exists', async () => {
       const context = {
         prompt: { label: 'test prompt', raw: 'test prompt' },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(body).toMatchObject({
         functions: [{ name: 'provider_func', parameters: {} }],
         max_tokens: 100,
         temperature: 0.5,
       });
     });
 
-    it('should merge prompt config with provider config', () => {
+    it('should merge prompt config with provider config', async () => {
       const context = {
         prompt: {
           config: {
@@ -46,38 +47,41 @@ describe('AzureChatCompletionProvider', () => {
         },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(body).toMatchObject({
         functions: [{ name: 'prompt_func', parameters: {} }],
         max_tokens: 100,
         temperature: 0.7,
       });
     });
 
-    it('should handle undefined prompt config', () => {
+    it('should handle undefined prompt config', async () => {
       const context = {
         prompt: { label: 'test prompt', raw: 'test prompt' },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(body).toMatchObject({
         functions: [{ name: 'provider_func', parameters: {} }],
         max_tokens: 100,
         temperature: 0.5,
       });
     });
 
-    it('should handle empty prompt config', () => {
+    it('should handle empty prompt config', async () => {
       const context = {
         prompt: { config: {}, label: 'test prompt', raw: 'test prompt' },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(body).toMatchObject({
         functions: [{ name: 'provider_func', parameters: {} }],
         max_tokens: 100,
         temperature: 0.5,
       });
     });
 
-    it('should handle complex nested config merging', () => {
+    it('should handle complex nested config merging', async () => {
       const context = {
         prompt: {
           config: {
@@ -89,7 +93,8 @@ describe('AzureChatCompletionProvider', () => {
         },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(body).toMatchObject({
         functions: [{ name: 'provider_func', parameters: {} }],
         max_tokens: 100,
         response_format: { type: 'json_object' },
@@ -98,7 +103,7 @@ describe('AzureChatCompletionProvider', () => {
       });
     });
 
-    it('should handle json_schema response format', () => {
+    it('should handle json_schema response format', async () => {
       const context = {
         prompt: {
           config: {
@@ -123,7 +128,7 @@ describe('AzureChatCompletionProvider', () => {
         },
         vars: {},
       };
-      const { body } = (provider as any).getOpenAiBody('test prompt', context);
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
       expect(body.response_format).toMatchObject({
         type: 'json_schema',
         json_schema: {
@@ -141,7 +146,7 @@ describe('AzureChatCompletionProvider', () => {
       });
     });
 
-    it('should render variables in response format', () => {
+    it('should render variables in response format', async () => {
       const context = {
         prompt: {
           config: {
@@ -166,7 +171,7 @@ describe('AzureChatCompletionProvider', () => {
           schemaName: 'dynamic_schema',
         },
       };
-      const { body } = (provider as any).getOpenAiBody('test prompt', context);
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
       expect(body.response_format.json_schema.name).toBe('dynamic_schema');
     });
   });
@@ -457,7 +462,7 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.output).toBe('Invalid JSON response');
     });
 
-    it('should use correct API URL based on datasources config from prompt', async () => {
+    it('should use correct API URL based on legacy dataSources config from prompt', async () => {
       const mockResponse = {
         id: 'mock-id',
         choices: [
@@ -495,6 +500,46 @@ describe('AzureChatCompletionProvider', () => {
         '/extensions/chat/completions?api-version=2024-custom',
       );
     });
+
+    it('should use correct API URL based on data_sources config from prompt', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'test response',
+            },
+          },
+        ],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt', {
+        prompt: {
+          config: {
+            data_sources: [{ type: 'test' }],
+            apiVersion: '2024-custom',
+          },
+          label: 'test prompt',
+          raw: 'test prompt',
+        },
+        vars: {},
+      });
+
+      // Verify the URL doesn't include the legacy extensions path
+      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).not.toContain('extensions');
+      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+        '/chat/completions?api-version=2024-custom',
+      );
+    });
   });
 
   describe('reasoning models', () => {
@@ -526,7 +571,7 @@ describe('AzureChatCompletionProvider', () => {
       expect((provider as any).isReasoningModel()).toBe(true);
     });
 
-    it('should use max_completion_tokens for reasoning models', () => {
+    it('should use max_completion_tokens for reasoning models', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           isReasoningModel: true,
@@ -534,34 +579,34 @@ describe('AzureChatCompletionProvider', () => {
           max_tokens: 1000,
         },
       });
-      const body = (provider as any).getOpenAiBody('test prompt').body;
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
       expect(body).toHaveProperty('max_completion_tokens', 2000);
       expect(body).not.toHaveProperty('max_tokens');
     });
 
-    it('should use reasoning_effort for reasoning models', () => {
+    it('should use reasoning_effort for reasoning models', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           isReasoningModel: true,
           reasoning_effort: 'high',
         },
       });
-      const body = (provider as any).getOpenAiBody('test prompt').body;
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
       expect(body).toHaveProperty('reasoning_effort', 'high');
     });
 
-    it('should not include temperature for reasoning models', () => {
+    it('should not include temperature for reasoning models', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           isReasoningModel: true,
           temperature: 0.7,
         },
       });
-      const body = (provider as any).getOpenAiBody('test prompt').body;
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
       expect(body).not.toHaveProperty('temperature');
     });
 
-    it('should support variable rendering in reasoning_effort', () => {
+    it('should support variable rendering in reasoning_effort', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           isReasoningModel: true,
@@ -573,7 +618,7 @@ describe('AzureChatCompletionProvider', () => {
         prompt: { label: 'test prompt', raw: 'test prompt' },
         vars: { effort: 'high' as const },
       };
-      const body = (provider as any).getOpenAiBody('test prompt', context).body;
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
       expect(body).toHaveProperty('reasoning_effort', 'high');
     });
   });

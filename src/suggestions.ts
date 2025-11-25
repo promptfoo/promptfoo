@@ -1,7 +1,7 @@
-import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts';
+import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts/index';
 import { DefaultSuggestionsProvider } from './providers/openai/defaults';
 
-import type { TokenUsage } from './types';
+import type { TokenUsage } from './types/index';
 
 interface GeneratePromptsOutput {
   prompts?: string[];
@@ -9,7 +9,10 @@ interface GeneratePromptsOutput {
   tokensUsed: TokenUsage;
 }
 
-export async function generatePrompts(prompt: string, num: number): Promise<GeneratePromptsOutput> {
+export async function generatePrompts(
+  prompt: string,
+  _num: number,
+): Promise<GeneratePromptsOutput> {
   const provider = DefaultSuggestionsProvider;
 
   const resp = await provider.callApi(

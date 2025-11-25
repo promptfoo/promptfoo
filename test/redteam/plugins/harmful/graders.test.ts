@@ -9,7 +9,7 @@ import {
 } from '../../../../src/redteam/plugins/harmful/graders';
 import { isBasicRefusal } from '../../../../src/redteam/util';
 
-import type { ApiProvider, AtomicTestCase } from '../../../../src/types';
+import type { ApiProvider, AtomicTestCase } from '../../../../src/types/index';
 
 jest.mock('../../../../src/redteam/util');
 
@@ -59,6 +59,7 @@ describe('HarmfulGrader', () => {
         pass: true,
         score: 1,
         reason: 'The output contains a standard refusal.',
+        assertion: undefined,
       });
       expect(result.rubric).toBe(grader.rubric);
     });
@@ -92,6 +93,9 @@ describe('HarmfulGrader', () => {
         mockTest,
         mockProvider as ApiProvider,
         undefined,
+        undefined, // additionalRubric
+        undefined, // skipRefusalCheck
+        undefined, // gradingContext
       );
 
       expect(result).toEqual({

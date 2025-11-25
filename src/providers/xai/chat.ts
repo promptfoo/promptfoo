@@ -1,9 +1,9 @@
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
+import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 
-import type { ApiProvider, ProviderOptions } from '../../types';
+import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
 type XAIConfig = {
@@ -207,8 +207,8 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     return true;
   }
 
-  getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
-    const result = super.getOpenAiBody(prompt, context, callApiOptions);
+  async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
 
     // Ensure we have a valid result
     if (!result || !result.body) {

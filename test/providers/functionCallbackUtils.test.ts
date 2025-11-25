@@ -418,4 +418,244 @@ describe('FunctionCallbackHandler', () => {
       }
     });
   });
+
+  describe('MCP Integration', () => {
+    let mockMCPClient: jest.Mocked<any>;
+
+    beforeEach(() => {
+      mockMCPClient = {
+        getAllTools: jest.fn(),
+        callTool: jest.fn(),
+      };
+      handler = new FunctionCallbackHandler(mockMCPClient);
+    });
+
+    it('should execute MCP tool when tool name matches available MCP tools', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'list_resources', description: 'List available resources' },
+        { name: 'get_resource', description: 'Get specific resource' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: 'Resource list: [file1.txt, file2.txt]',
+      });
+
+      const call = { name: 'list_resources', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('list_resources', {});
+      expect(result).toEqual({
+        output: 'MCP Tool Result (list_resources): Resource list: [file1.txt, file2.txt]',
+        isError: false,
+      });
+    });
+
+    it('should handle MCP tool errors gracefully', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'failing_tool', description: 'A tool that fails' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: '',
+        error: 'Tool execution failed: Invalid arguments',
+      });
+
+      const call = { name: 'failing_tool', arguments: '{"invalid": true}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result).toEqual({
+        output: 'MCP Tool Error (failing_tool): Tool execution failed: Invalid arguments',
+        isError: true,
+      });
+    });
+
+    it('should handle MCP client exceptions', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'error_tool', description: 'A tool that throws' },
+      ]);
+      mockMCPClient.callTool.mockRejectedValue(new Error('Connection lost'));
+
+      const call = { name: 'error_tool', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result).toEqual({
+        output: 'MCP Tool Error (error_tool): Connection lost',
+        isError: true,
+      });
+    });
+
+    it('should handle invalid JSON arguments in MCP tools', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'json_tool', description: 'A tool requiring JSON args' },
+      ]);
+
+      const call = { name: 'json_tool', arguments: 'invalid-json' };
+      const result = await handler.processCall(call, {});
+
+      expect(result.isError).toBe(true);
+      expect(result.output).toContain('MCP Tool Error (json_tool)');
+    });
+
+    it('should fall back to function callbacks when tool is not an MCP tool', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'mcp_tool', description: 'An MCP tool' }]);
+
+      const callbacks: FunctionCallbackConfig = {
+        regular_function: async (_args: string) => 'callback result',
+      };
+      const call = { name: 'regular_function', arguments: '{}' };
+      const result = await handler.processCall(call, callbacks);
+
+      expect(mockMCPClient.callTool).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        output: 'callback result',
+        isError: false,
+      });
+    });
+
+    it('should prioritize MCP tools over function callbacks when both exist', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'shared_name', description: 'MCP tool with same name as callback' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: 'MCP tool result',
+      });
+
+      const callbacks: FunctionCallbackConfig = {
+        shared_name: async (_args: string) => 'callback result',
+      };
+      const call = { name: 'shared_name', arguments: '{}' };
+      const result = await handler.processCall(call, callbacks);
+
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('shared_name', {});
+      expect(result).toEqual({
+        output: 'MCP Tool Result (shared_name): MCP tool result',
+        isError: false,
+      });
+    });
+
+    it('should work without MCP client (backwards compatibility)', async () => {
+      const handlerWithoutMCP = new FunctionCallbackHandler();
+      const callbacks: FunctionCallbackConfig = {
+        test_function: async (_args: string) => 'no MCP result',
+      };
+      const call = { name: 'test_function', arguments: '{}' };
+      const result = await handlerWithoutMCP.processCall(call, callbacks);
+
+      expect(result).toEqual({
+        output: 'no MCP result',
+        isError: false,
+      });
+    });
+
+    it('should handle empty arguments string for MCP tools', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'no_args_tool', description: 'Tool with no arguments' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: 'success with no args',
+      });
+
+      const call = { name: 'no_args_tool', arguments: '' };
+      const result = await handler.processCall(call, {});
+
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('no_args_tool', {});
+      expect(result).toEqual({
+        output: 'MCP Tool Result (no_args_tool): success with no args',
+        isError: false,
+      });
+    });
+
+    it('should handle missing arguments property for MCP tools', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'missing_args_tool', description: 'Tool with missing args property' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: 'success with missing args',
+      });
+
+      const call = { name: 'missing_args_tool' }; // No arguments property
+      const result = await handler.processCall(call, {});
+
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('missing_args_tool', {});
+      expect(result).toEqual({
+        output: 'MCP Tool Result (missing_args_tool): success with missing args',
+        isError: false,
+      });
+    });
+
+    it('should format non-string MCP content without [object Object]', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'rich_tool', description: 'Tool with rich content' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: [
+          { type: 'text', text: 'Part A' },
+          { type: 'json', json: { foo: 'bar' } },
+          { type: 'data', data: { key: 'value' } },
+          { type: 'unknown', other: 'stuff' },
+          'plain string part',
+          null,
+          undefined,
+        ],
+      });
+
+      const call = { name: 'rich_tool', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result.isError).toBe(false);
+      expect(result.output).toContain('Part A');
+      expect(result.output).toContain('"foo":"bar"');
+      expect(result.output).toContain('"key":"value"');
+      expect(result.output).toContain('plain string part');
+      expect(result.output).not.toContain('[object Object]');
+    });
+
+    it('should handle object MCP content without [object Object]', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'object_tool', description: 'Tool returning object' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: { type: 'response', data: { result: 'success', count: 42 } },
+      });
+
+      const call = { name: 'object_tool', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result.isError).toBe(false);
+      expect(result.output).toContain('"result":"success"');
+      expect(result.output).toContain('"count":42');
+      expect(result.output).not.toContain('[object Object]');
+    });
+
+    it('should handle null/undefined MCP content gracefully', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'empty_tool', description: 'Tool with empty content' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: null,
+      });
+
+      const call = { name: 'empty_tool', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result.isError).toBe(false);
+      expect(result.output).toBe('MCP Tool Result (empty_tool): ');
+    });
+
+    it('should handle non-object arguments passed directly', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'direct_args_tool', description: 'Tool with direct args' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: 'success with direct args',
+      });
+
+      const call = { name: 'direct_args_tool', arguments: { param: 'value' } }; // Direct object, not string
+      const result = await handler.processCall(call, {});
+
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('direct_args_tool', { param: 'value' });
+      expect(result).toEqual({
+        output: 'MCP Tool Result (direct_args_tool): success with direct args',
+        isError: false,
+      });
+    });
+  });
 });

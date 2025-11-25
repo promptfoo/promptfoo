@@ -8,9 +8,16 @@ export interface ScanPath {
 export interface ScanOptions {
   blacklist: string[];
   timeout: number;
-  maxFileSize?: number;
-  maxTotalSize?: number;
-  verbose: boolean;
+  maxSize?: string; // Replaced maxFileSize/maxTotalSize with single maxSize option
+  verbose?: boolean; // Optional since we handle this automatically in the server
+  format?: 'text' | 'json' | 'sarif';
+  strict?: boolean;
+  dryRun?: boolean;
+  cache?: boolean;
+  quiet?: boolean;
+  progress?: boolean;
+  sbom?: string;
+  output?: string;
   author?: string;
 }
 
@@ -20,6 +27,7 @@ export interface ScanIssue {
   severity: 'error' | 'critical' | 'warning' | 'info' | 'debug';
   message: string;
   location?: string;
+  why?: string;
   details?: Record<string, any> & {
     path?: string;
     files?: string[];

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { stringify } from 'csv-stringify/sync';
@@ -6,9 +7,8 @@ import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
-import * as os from 'os';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
@@ -25,17 +25,21 @@ import {
   OutputFileExtension,
   ResultFailureReason,
   type TestCase,
-} from '../types';
+} from '../types/index';
 import invariant from '../util/invariant';
-import { convertTestResultsToTableRow } from './exportToFile';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
+import { convertTestResultsToTableRow } from './exportToFile/index';
+import { runPython } from '../python/pythonUtils';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { parseFileUrl } from './functions/loadFunction';
+import cliState from '../cliState';
+import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
-import type { Vars } from '../types';
+import type { Vars } from '../types/index';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -212,7 +216,7 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
-    const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
+    const template = fs.readFileSync(path.join(getDirectory(), 'tableOutput.html'), 'utf-8');
     const htmlTable = [
       [
         ...table.head.vars,
@@ -399,6 +403,18 @@ export function providerToIdentifier(
   return undefined;
 }
 
+/**
+ * Filters out runtime-only variables that are added during evaluation
+ * but aren't part of the original test definition
+ */
+function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
+  if (!vars) {
+    return vars;
+  }
+  const { _conversation, ...userVars } = vars;
+  return userVars;
+}
+
 export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
   return deepEqual(vars1, vars2);
 }
@@ -408,7 +424,101 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
     ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
     : true;
 
-  return varsMatch(testCase.vars, result.vars) && providersMatch;
+  // Filter out runtime variables like _conversation when matching
+  // These are added during evaluation but shouldn't affect test matching
+  // Use result.vars (not result.testCase.vars) as it contains the actual vars used during evaluation
+  const resultVars = filterRuntimeVars(result.vars);
+  const testVars = filterRuntimeVars(testCase.vars);
+  return varsMatch(testVars, resultVars) && providersMatch;
+}
+
+/**
+ * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
+ * This allows env vars to be resolved at provider load time while preserving runtime var templates.
+ *
+ * Supports full Nunjucks syntax for env vars including filters and expressions:
+ * - {{ env.VAR_NAME }}
+ * - {{ env['VAR-NAME'] }}
+ * - {{ env["VAR-NAME"] }}
+ * - {{ env.VAR | default('fallback') }}
+ * - {{ env.VAR | upper }}
+ *
+ * Preserves non-env templates for runtime rendering:
+ * - {{ vars.x }} - preserved as literal
+ * - {{ prompt }} - preserved as literal
+ *
+ * Implementation: Uses regex to find env templates, delegates to Nunjucks for rendering.
+ * This ensures full Nunjucks feature support while preserving non-env templates.
+ *
+ * @param obj - The object to process
+ * @returns The object with only env templates rendered
+ */
+export function renderEnvOnlyInObject<T>(obj: T): T {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return obj;
+  }
+
+  if (typeof obj === 'string') {
+    // Prevent ReDoS: Skip regex matching on extremely long strings
+    // The regex pattern has nested quantifiers that can cause exponential backtracking
+    const MAX_STRING_LENGTH = 50000; // Reasonable limit for config strings
+    if (obj.length > MAX_STRING_LENGTH) {
+      logger.warn(
+        `String too long (${obj.length} chars) for template matching. Skipping env var rendering.`,
+      );
+      return obj as unknown as T;
+    }
+
+    const nunjucks = getNunjucksEngine();
+    const envGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
+
+    // Match ALL Nunjucks templates {{ ... }}
+    // The pattern (?:[^}]|\}(?!\}))* matches content that may contain } but not }}
+    return obj.replace(/\{\{(?:[^}]|\}(?!\}))*\}\}/g, (match) => {
+      // Only process templates that reference env
+      if (!match.match(/\benv\.|env\[/)) {
+        return match; // Not an env template, preserve as-is
+      }
+
+      // Extract the variable name to check if it exists
+      const varMatch = match.match(/env\.(\w+)|env\[['"]([^'"]+)['"]\]/);
+      const varName = varMatch?.[1] || varMatch?.[2];
+
+      // Check if template contains a filter (indicated by |)
+      // Filters often handle undefined values (e.g., default filter)
+      const hasFilter = match.includes('|');
+
+      // Render if:
+      // 1. Template has a filter (let Nunjucks handle undefined with filter logic)
+      // 2. Variable exists (even if it's an empty string)
+      if (hasFilter || (varName && varName in envGlobals)) {
+        try {
+          // Use Nunjucks to render the template (supports filters, expressions, etc.)
+          return nunjucks.renderString(match, { env: envGlobals });
+        } catch (_error) {
+          // On render error, preserve the template
+          return match;
+        }
+      }
+
+      // Variable doesn't exist and no filter - preserve template for potential runtime resolution
+      return match;
+    }) as unknown as T;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => renderEnvOnlyInObject(item)) as unknown as T;
+  }
+
+  if (typeof obj === 'object' && obj !== null) {
+    const result: Record<string, unknown> = {};
+    for (const key in obj) {
+      result[key] = renderEnvOnlyInObject((obj as Record<string, unknown>)[key]);
+    }
+    return result as T;
+  }
+
+  return obj;
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
@@ -462,12 +572,19 @@ export function parsePathOrGlob(
   let functionName: string | undefined;
 
   if (filename.includes(':')) {
-    const splits = filename.split(':');
-    if (
-      splits[0] &&
-      (isJavascriptFile(splits[0]) || splits[0].endsWith('.py') || splits[0].endsWith('.go'))
-    ) {
-      [filename, functionName] = splits;
+    // Windows-aware path parsing: check if colon is part of drive letter
+    const lastColonIndex = filename.lastIndexOf(':');
+    if (lastColonIndex > 1) {
+      const pathWithoutFunction = filename.slice(0, lastColonIndex);
+      if (
+        isJavascriptFile(pathWithoutFunction) ||
+        pathWithoutFunction.endsWith('.py') ||
+        pathWithoutFunction.endsWith('.go') ||
+        pathWithoutFunction.endsWith('.rb')
+      ) {
+        functionName = filename.slice(lastColonIndex + 1);
+        filename = pathWithoutFunction;
+      }
     }
   }
 
@@ -481,11 +598,12 @@ export function parsePathOrGlob(
     }
   }
 
-  const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
-  const safeFilename = path.relative(
-    basePath,
-    path.isAbsolute(filename) ? filename : path.resolve(basePath, filename),
-  );
+  // Check for glob patterns in the original path or the resolved path
+  // On Windows, normalize separators for cross-platform glob pattern detection
+  const normalizedFilePath = filePath.replace(/\\/g, '/');
+  const isPathPattern =
+    stats?.isDirectory() || hasMagic(promptPath) || hasMagic(normalizedFilePath);
+  const safeFilename = path.relative(basePath, safeResolve(basePath, filename));
   return {
     extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
     filePath: safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename),
@@ -510,13 +628,151 @@ export function isRunningUnderNpx(): boolean {
  * This function combines renderVarsInObject and maybeLoadFromExternalFile into a single step
  * specifically for handling tools configurations.
  *
+ * Supports loading from JSON, YAML, Python, and JavaScript files.
+ *
  * @param tools - The tools configuration object or array to process.
  * @param vars - Variables to use for rendering.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
+ * @throws {Error} If the loaded tools are in an invalid format
  */
-export function maybeLoadToolsFromExternalFile(
+export async function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, string | object>,
-): any {
-  return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
+): Promise<any> {
+  const rendered = renderVarsInObject(tools, vars);
+
+  // Check if this is a Python/JS file reference with function name
+  // These need special handling to execute the function and get the result
+  if (typeof rendered === 'string' && rendered.startsWith('file://')) {
+    const { filePath, functionName } = parseFileUrl(rendered);
+
+    if (functionName && (filePath.endsWith('.py') || isJavascriptFile(filePath))) {
+      // Execute the function to get tool definitions
+      const fileType = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
+      logger.debug(
+        `[maybeLoadToolsFromExternalFile] Loading tools from ${fileType} file: ${filePath}:${functionName}`,
+      );
+
+      try {
+        let toolDefinitions: any;
+
+        if (filePath.endsWith('.py')) {
+          // Resolve Python path relative to config base directory (same as JavaScript)
+          const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
+          logger.debug(`[maybeLoadToolsFromExternalFile] Resolved Python path: ${absPath}`);
+          toolDefinitions = await runPython(absPath, functionName, []);
+        } else {
+          // Use safeResolve for security (prevents path traversal)
+          const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
+          logger.debug(`[maybeLoadToolsFromExternalFile] Resolved JavaScript path: ${absPath}`);
+
+          const module = await importModule(absPath);
+          const fn = module[functionName] || module.default?.[functionName];
+
+          if (typeof fn !== 'function') {
+            const availableExports = Object.keys(module).filter((k) => k !== 'default');
+            const basePath = cliState.basePath || process.cwd();
+            throw new Error(
+              `Function "${functionName}" not found in ${filePath}. ` +
+                `Available exports: ${availableExports.length > 0 ? availableExports.join(', ') : '(none)'}\n` +
+                `Resolved from: ${basePath}`,
+            );
+          }
+
+          // Call the function - handle both sync and async functions
+          toolDefinitions = await Promise.resolve(fn());
+        }
+
+        // Validate the result - must be array or object, not primitive
+        if (
+          !toolDefinitions ||
+          typeof toolDefinitions === 'string' ||
+          typeof toolDefinitions === 'number' ||
+          typeof toolDefinitions === 'boolean'
+        ) {
+          throw new Error(
+            `Function "${functionName}" must return an array or object of tool definitions, ` +
+              `but returned: ${toolDefinitions === null ? 'null' : typeof toolDefinitions}`,
+          );
+        }
+
+        logger.debug(
+          `[maybeLoadToolsFromExternalFile] Successfully loaded ${Array.isArray(toolDefinitions) ? toolDefinitions.length : 'object'} tools`,
+        );
+        return toolDefinitions;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const basePath = cliState.basePath || process.cwd();
+        throw new Error(
+          `Failed to load tools from ${rendered}:\n${errorMessage}\n\n` +
+            `Make sure the function "${functionName}" exists and returns a valid tool definition array.\n` +
+            `Resolved from: ${basePath}`,
+        );
+      }
+    }
+
+    // Python/JS file without function name - provide helpful error
+    if (filePath.endsWith('.py') || isJavascriptFile(filePath)) {
+      const ext = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
+      const basePath = cliState.basePath || process.cwd();
+      throw new Error(
+        `Cannot load tools from ${rendered}\n` +
+          `${ext} files require a function name. Use this format:\n` +
+          `  tools: file://${filePath}:get_tools\n\n` +
+          `Your ${ext} file should export a function that returns tool definitions:\n` +
+          (filePath.endsWith('.py')
+            ? `  def get_tools():\n      return [{"type": "function", "function": {...}}]`
+            : `  module.exports.get_tools = () => [{ type: "function", function: {...} }];`) +
+          `\n\nResolved from: ${basePath}`,
+      );
+    }
+  }
+
+  // Handle arrays by recursively processing each item
+  if (Array.isArray(rendered)) {
+    const results = await Promise.all(
+      rendered.map((item) => maybeLoadToolsFromExternalFile(item, vars)),
+    );
+    // Flatten if all items are arrays (common case: multiple file:// references)
+    if (results.every((r) => Array.isArray(r))) {
+      return results.flat();
+    }
+    return results;
+  }
+
+  // If tools is already an object (not a file reference), return it as-is
+  if (typeof rendered !== 'string') {
+    return rendered;
+  }
+
+  // Standard loading for JSON/YAML files
+  const loaded = maybeLoadFromExternalFile(rendered);
+
+  // Validate the loaded result - tools must be an array or object, not a string
+  if (loaded !== undefined && loaded !== null && typeof loaded === 'string') {
+    // Unresolved file:// reference
+    if (loaded.startsWith('file://')) {
+      throw new Error(
+        `Failed to load tools from ${loaded}\n` +
+          `Ensure the file exists and contains valid JSON or YAML tool definitions.`,
+      );
+    }
+
+    // Raw file content loaded (e.g., Python code read as text without function name)
+    if (loaded.includes('def ') || loaded.includes('import ')) {
+      throw new Error(
+        `Invalid tools configuration: file appears to contain Python code.\n` +
+          `Python files require a function name. Use this format:\n` +
+          `  tools: file://tools.py:get_tools`,
+      );
+    }
+
+    // Some other invalid string content
+    throw new Error(
+      `Invalid tools configuration: expected an array or object, but got a string.\n` +
+        `If using file://, ensure the file contains valid JSON or YAML tool definitions.`,
+    );
+  }
+
+  return loaded;
 }

@@ -5,7 +5,7 @@ import * as yaml from 'js-yaml';
 import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
-import { synthesize } from '../../../src/redteam';
+import { synthesize } from '../../../src/redteam/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
@@ -14,10 +14,10 @@ import { getConfigFromCloud } from '../../../src/util/cloud';
 import { checkCloudPermissions, ConfigPermissionError } from '../../../src/util/cloud';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
-import { writePromptfooConfig } from '../../../src/util/config/manage';
+import { writePromptfooConfig } from '../../../src/util/config/writer';
 
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 jest.mock('fs');
 jest.mock('../../../src/redteam');
@@ -31,8 +31,13 @@ jest.mock('uuid', () => ({
 }));
 jest.mock('../../../src/util', () => ({
   setupEnv: jest.fn(),
-  isRunningUnderNpx: jest.fn().mockReturnValue(false),
   printBorder: jest.fn(),
+}));
+
+jest.mock('../../../src/util/promptfooCommand', () => ({
+  promptfooCommand: jest.fn().mockReturnValue('promptfoo redteam init'),
+  detectInstaller: jest.fn().mockReturnValue('unknown'),
+  isRunningUnderNpx: jest.fn().mockReturnValue(false),
 }));
 jest.mock('../../../src/util/config/load', () => ({
   combineConfigs: jest.fn(),
@@ -62,6 +67,10 @@ jest.mock('../../../src/util/cloud', () => ({
   isCloudProvider: jest.fn(),
   getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
   checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../../../src/util/config/writer', () => ({
+  writePromptfooConfig: jest.fn(),
 }));
 
 jest.mock('../../../src/cliState', () => ({
@@ -172,7 +181,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: undefined,
         plugins: expect.any(Array),
         prompts: [],
@@ -297,7 +305,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: undefined,
         purpose: 'Test purpose',
         plugins: expect.any(Array),
@@ -365,7 +372,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: 1,
         plugins: expect.arrayContaining([
           expect.objectContaining({ id: 'competitors', numTests: 1 }),
@@ -434,7 +440,6 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        language: undefined,
         numTests: 5,
         plugins: expect.arrayContaining([
           expect.objectContaining({ id: 'contracts', numTests: 5 }),
@@ -565,7 +570,6 @@ describe('doGenerateRedteam', () => {
         strategies: [],
         abortSignal: undefined,
         delay: undefined,
-        language: undefined,
         maxConcurrency: undefined,
         numTests: undefined,
       }),

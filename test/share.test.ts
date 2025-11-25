@@ -67,6 +67,7 @@ jest.mock('../src/globalConfig/accounts', () => ({
 jest.mock('../src/util/cloud', () => ({
   makeRequest: jest.fn(),
   checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
+  getOrgContext: jest.fn().mockResolvedValue(null),
 }));
 
 jest.mock('../src/envars', () => ({
@@ -303,6 +304,7 @@ describe('createShareableUrl', () => {
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
     jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
     jest.mocked(getUserEmail).mockReturnValue('logged-in@example.com');
 
     const mockEval = buildMockEval();
@@ -328,6 +330,7 @@ describe('createShareableUrl', () => {
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
     jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
     const originalId = randomUUID();
     const newId = randomUUID();
@@ -414,17 +417,18 @@ describe('createShareableUrl', () => {
       jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
       // Set up mock responses
       mockFetch
-        .mockImplementationOnce((url, options) => {
+        .mockImplementationOnce((_url, _options) => {
           // Initial eval data
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({ id: 'mock-eval-id' }),
           });
         })
-        .mockImplementationOnce((url, options) => {
+        .mockImplementationOnce((_url, _options) => {
           // Chunk of results
           return Promise.resolve({
             ok: true,

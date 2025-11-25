@@ -44,6 +44,8 @@ This directory contains several example configurations for different Bedrock mod
 - [`promptfooconfig.nova.multimodal.yaml`](promptfooconfig.nova.multimodal.yaml) - Nova with multimodal capabilities
 - [`promptfooconfig.titan-text.yaml`](promptfooconfig.titan-text.yaml) - Titan text generation examples
 - [`promptfooconfig.kb.yaml`](promptfooconfig.kb.yaml) - Knowledge Base RAG example with citations and contextTransform
+- [`promptfooconfig.inference-profiles.yaml`](promptfooconfig.inference-profiles.yaml) - Comprehensive Application Inference Profiles example with multiple model types
+- [`promptfooconfig.inference-profiles-simple.yaml`](promptfooconfig.inference-profiles-simple.yaml) - Simple production-ready inference profile setup for high availability
 - [`promptfooconfig.yaml`](promptfooconfig.yaml) - Combined evaluation across multiple providers
 - [`promptfooconfig.nova-sonic.yaml`](promptfooconfig.nova-sonic.yaml) - Amazon Nova Sonic model for audio
 
@@ -80,6 +82,71 @@ The example includes questions about promptfoo configuration, providers, and eva
 **Note**: You'll need to update the `knowledgeBaseId` with your actual Knowledge Base ID and ensure the Knowledge Base is configured to work with the selected Claude model.
 
 For detailed Knowledge Base setup instructions, see the [AWS Bedrock Knowledge Base Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html).
+
+## Application Inference Profiles Example
+
+The Application Inference Profiles example (`promptfooconfig.inference-profiles.yaml`) demonstrates how to use AWS Bedrock's inference profiles for multi-region failover and cost optimization.
+
+### Key Benefits of Inference Profiles
+
+- **Automatic Failover**: If one region is unavailable, requests automatically route to another region
+- **Cost Optimization**: Routes to the most cost-effective available model
+- **Simplified Management**: Use a single ARN instead of managing multiple model IDs
+- **Cross-Region Availability**: Access models across multiple regions with a single profile
+
+### Configuration Requirements
+
+When using inference profiles, you **must** specify the `inferenceModelType` parameter:
+
+```yaml
+providers:
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+    config:
+      inferenceModelType: 'claude' # Required!
+      region: 'us-east-1'
+      max_tokens: 1024
+```
+
+### Supported Model Types
+
+- `claude` - Anthropic Claude models
+- `nova` - Amazon Nova models
+- `llama` - Defaults to Llama 4
+- `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4` - Specific Llama versions
+- `mistral` - Mistral models
+- `cohere` - Cohere models
+- `ai21` - AI21 models
+- `titan` - Amazon Titan models
+- `deepseek` - DeepSeek models (with thinking capability)
+- `openai` - OpenAI GPT-OSS models
+
+### Running the Examples
+
+We provide two inference profile examples:
+
+1. **Comprehensive Example** (`promptfooconfig.inference-profiles.yaml`):
+
+   ```bash
+   promptfoo eval -c examples/amazon-bedrock/promptfooconfig.inference-profiles.yaml
+   ```
+
+   This includes:
+   - Multiple inference profiles for different model families
+   - Comparison with direct model IDs
+   - Use of inference profiles for grading assertions
+   - Various model-specific configurations
+
+2. **Simple Production Example** (`promptfooconfig.inference-profiles-simple.yaml`):
+   ```bash
+   promptfoo eval -c examples/amazon-bedrock/promptfooconfig.inference-profiles-simple.yaml
+   ```
+   This demonstrates:
+   - A realistic customer support use case
+   - High availability setup with failover
+   - Comparison between inference profile and direct model access
+   - Consistent grading using inference profiles
+
+**Note**: Replace the example ARNs with your actual application inference profile ARNs. To create an inference profile, visit the AWS Bedrock console and navigate to the "Application inference profiles" section.
 
 ## OpenAI Models Example
 

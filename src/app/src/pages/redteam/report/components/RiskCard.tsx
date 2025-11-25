@@ -6,13 +6,13 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { Gauge } from '@mui/x-charts/Gauge';
+import { Gauge, gaugeClasses } from '@mui/x-charts/Gauge';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -23,7 +23,17 @@ import RiskCategoryDrawer from './RiskCategoryDrawer';
 import { useReportStore } from './store';
 import './RiskCard.css';
 
-const RiskCard: React.FC<{
+const RiskCard = ({
+  title,
+  subtitle,
+  progressValue,
+  numTestsPassed,
+  numTestsFailed,
+  testTypes,
+  evalId,
+  failuresByPlugin,
+  passesByPlugin,
+}: {
   title: string;
   subtitle: string;
   progressValue: number;
@@ -39,18 +49,6 @@ const RiskCard: React.FC<{
     string,
     { prompt: string; output: string; gradingResult?: GradingResult }[]
   >;
-  strategyStats: Record<string, { pass: number; total: number }>;
-}> = ({
-  title,
-  subtitle,
-  progressValue,
-  numTestsPassed,
-  numTestsFailed,
-  testTypes,
-  evalId,
-  failuresByPlugin,
-  passesByPlugin,
-  strategyStats,
 }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -79,12 +77,15 @@ const RiskCard: React.FC<{
           }}
         >
           <Grid
-            size={{ xs: 12, md: 6 }}
             style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               textAlign: 'center',
+            }}
+            size={{
+              xs: 12,
+              md: 6,
             }}
           >
             <Typography variant="h5" className="risk-card-title">
@@ -107,17 +108,18 @@ const RiskCard: React.FC<{
                 value={progressValue}
                 // @ts-ignore
                 max={100}
-                thickness={10}
-                arc={{
-                  startAngle: -90,
-                  endAngle: 90,
-                  color: 'primary.main',
-                }}
+                innerRadius="80%"
+                outerRadius="100%"
+                startAngle={-90}
+                endAngle={90}
                 text={Number.isNaN(progressValue) ? '-' : `${Math.round(progressValue)}%`}
-                sx={{
+                sx={(theme) => ({
                   width: '100%',
                   height: '100%',
-                }}
+                  [`& .${gaugeClasses.valueArc}`]: {
+                    fill: theme.palette.primary.main,
+                  },
+                })}
               />
             </Box>
             <Typography
@@ -180,9 +182,9 @@ const RiskCard: React.FC<{
                             {`${Math.round(percentage * 100)}%`}
                           </Typography>
                         ) : percentage >= pluginPassRateThreshold ? (
-                          <CheckCircleIcon className="risk-card-icon-passed" />
+                          <CheckCircleIcon className="risk-card-icon-passed" color="success" />
                         ) : (
-                          <CancelIcon className="risk-card-icon-failed" />
+                          <CancelIcon className="risk-card-icon-failed" color="error" />
                         )}
                         <ArrowForwardIosIcon
                           className="risk-card-expand-icon print-hide"
@@ -212,7 +214,6 @@ const RiskCard: React.FC<{
               const testType = testTypes.find((t) => t.name === selectedCategory);
               return testType?.numFailed ?? 0;
             })()}
-            strategyStats={strategyStats}
           />
         )}
       </CardContent>

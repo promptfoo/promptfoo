@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { formatDataGridDate } from '@app/utils/date';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -41,14 +42,16 @@ function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) 
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter
+      <Box
         sx={{
           '& .MuiInputBase-root': {
             borderRadius: 2,
             backgroundColor: theme.palette.background.paper,
           },
         }}
-      />
+      >
+        <GridToolbarQuickFilter />
+      </Box>
     </GridToolbarContainer>
   );
 }
@@ -117,7 +120,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         headerName: 'Test Cases',
         flex: 1,
         minWidth: 120,
-        valueGetter: (value: DatasetRow['testCases'], row: DatasetRow) => value.length,
+        valueGetter: (value: DatasetRow['testCases']) => value.length,
         renderCell: (params: GridRenderCellParams<DatasetRow>) => `${params.value} test cases`,
       },
       {
@@ -125,7 +128,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         headerName: 'Variables',
         flex: 2,
         minWidth: 200,
-        valueGetter: (value: undefined, row: DatasetRow) => getVariables(row.testCases),
+        valueGetter: (_value: undefined, row: DatasetRow) => getVariables(row.testCases),
       },
       {
         field: 'count',
@@ -138,7 +141,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         headerName: 'Total Prompts',
         flex: 1,
         minWidth: 120,
-        valueGetter: (value: DatasetRow['prompts'], row: DatasetRow) => row.prompts?.length || 0,
+        valueGetter: (_value: DatasetRow['prompts'], row: DatasetRow) => row.prompts?.length || 0,
       },
       {
         field: 'recentEvalDate',
@@ -146,15 +149,11 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         description: 'The date of the most recent eval for this set of test cases',
         flex: 1.5,
         minWidth: 150,
-        renderCell: (params: GridRenderCellParams<DatasetRow>) => {
-          if (!params.value) {
-            return (
-              <Typography variant="body2" color="text.secondary">
-                Unknown
-              </Typography>
-            );
+        valueFormatter: (value: string | number | Date | null | undefined) => {
+          if (!value) {
+            return 'Unknown';
           }
-          return params.value;
+          return formatDataGridDate(value);
         },
       },
       {
@@ -334,9 +333,9 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
             },
           }}
           pageSizeOptions={[10, 25, 50, 100]}
+          showToolbar
         />
       </Paper>
-
       {data[dialogState.selectedIndex] && (
         <DatasetDialog
           openDialog={dialogState.open}

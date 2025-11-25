@@ -11,16 +11,16 @@ import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { loadApiProvider, loadApiProviders } from '../../providers';
+import { loadApiProvider, loadApiProviders } from '../../providers/index';
 import { HttpProvider } from '../../providers/http';
 import telemetry from '../../telemetry';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
-import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
+import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
 
 // ========================================================
 // Schemas
@@ -323,6 +323,7 @@ export function discoverCommand(
       telemetry.record('command_used', {
         name: `redteam ${COMMAND}`,
       });
+      telemetry.record('redteam discover', {});
 
       let config: UnifiedConfig | null = null;
       // Although the providers/targets property supports multiple values, Redteaming only supports

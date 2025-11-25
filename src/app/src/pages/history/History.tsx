@@ -85,14 +85,16 @@ function CustomToolbar() {
         <GridToolbarExport />
       </Box>
       <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter
+      <Box
         sx={{
           '& .MuiInputBase-root': {
             borderRadius: 2,
             backgroundColor: theme.palette.background.paper,
           },
         }}
-      />
+      >
+        <GridToolbarQuickFilter />
+      </Box>
     </GridToolbarContainer>
   );
 }
@@ -118,7 +120,18 @@ export default function History({
         flex: 2,
         minWidth: 120,
         renderCell: (params: GridRenderCellParams<StandaloneEval>) => (
-          <Link to={`/eval?evalId=${params.value || ''}`}>{params.value}</Link>
+          <Link to={`/eval?evalId=${params.value || ''}`} style={{ textDecoration: 'none' }}>
+            <Typography
+              variant="body2"
+              color="primary"
+              fontFamily="monospace"
+              sx={{
+                '&:hover': { textDecoration: 'underline' },
+              }}
+            >
+              {params.value}
+            </Typography>
+          </Link>
         ),
       },
       ...(showDatasetColumn
@@ -129,7 +142,18 @@ export default function History({
               flex: 0.5,
               minWidth: 100,
               renderCell: (params: GridRenderCellParams<StandaloneEval>) => (
-                <Link to={`/datasets?id=${params.value || ''}`}>{params.value?.slice(0, 6)}</Link>
+                <Link to={`/datasets?id=${params.value || ''}`} style={{ textDecoration: 'none' }}>
+                  <Typography
+                    variant="body2"
+                    color="primary"
+                    fontFamily="monospace"
+                    sx={{
+                      '&:hover': { textDecoration: 'underline' },
+                    }}
+                  >
+                    {params.value?.slice(0, 6)}
+                  </Typography>
+                </Link>
               ),
             },
           ]
@@ -146,12 +170,24 @@ export default function History({
         flex: 3,
         minWidth: 200,
         // Ensure proper formatting for export:
-        valueGetter: (value: undefined, row: StandaloneEval) =>
+        valueGetter: (_value: undefined, row: StandaloneEval) =>
           `[${row.promptId?.slice(0, 6)}]: ${row.raw}`,
         renderCell: (params: GridRenderCellParams<StandaloneEval>) => (
           <>
-            <Link to={`/prompts?id=${params.row.promptId || ''}`}>
-              [{params.row.promptId?.slice(0, 6)}]
+            <Link
+              to={`/prompts?id=${params.row.promptId || ''}`}
+              style={{ textDecoration: 'none' }}
+            >
+              <Typography
+                variant="body2"
+                color="primary"
+                fontFamily="monospace"
+                sx={{
+                  '&:hover': { textDecoration: 'underline' },
+                }}
+              >
+                [{params.row.promptId?.slice(0, 6)}]
+              </Typography>
             </Link>
             <span style={{ marginLeft: 4 }}>{params.row.raw}</span>
           </>
@@ -163,7 +199,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) => {
+        valueGetter: (_value: undefined, row: StandaloneEval) => {
           const testPassCount = row.metrics?.testPassCount ?? 0;
           const testFailCount = row.metrics?.testFailCount ?? 0;
           const totalCount = testPassCount + testFailCount;
@@ -177,7 +213,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) => row.metrics?.testPassCount,
+        valueGetter: (_value: undefined, row: StandaloneEval) => row.metrics?.testPassCount,
         valueFormatter: (value: number) => value?.toString() ?? '-',
       },
       {
@@ -186,7 +222,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) =>
+        valueGetter: (_value: undefined, row: StandaloneEval) =>
           (row.metrics?.testFailCount ?? 0) + (row.metrics?.testErrorCount ?? 0),
         renderCell: (params: GridRenderCellParams<StandaloneEval>) => {
           const failCount = params.row.metrics?.testFailCount ?? 0;
@@ -210,7 +246,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value, row) => row.metrics?.score,
+        valueGetter: (_value, row) => row.metrics?.score,
         valueFormatter: (value: number) => value?.toFixed(2) ?? '-',
       },
     ],
@@ -220,6 +256,7 @@ export default function History({
   return (
     <Box
       sx={{
+        position: 'absolute',
         top: 64,
         left: 0,
         right: 0,
@@ -308,7 +345,6 @@ export default function History({
           sx={{
             border: 'none',
             '& .MuiDataGrid-row': {
-              cursor: 'pointer',
               transition: 'background-color 0.2s ease',
               '&:hover': {
                 backgroundColor: 'action.hover',
@@ -323,12 +359,17 @@ export default function History({
               backgroundColor: 'background.default',
               borderColor: 'divider',
             },
+            '& .MuiDataGrid-selectedRow': {
+              backgroundColor: 'action.selected',
+            },
+            '--DataGrid-overlayHeight': '300px',
           }}
           initialState={{
             sorting: {
               sortModel: [{ field: 'createdAt', sort: 'desc' }],
             },
           }}
+          showToolbar
         />
       </Paper>
     </Box>

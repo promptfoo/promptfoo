@@ -131,12 +131,6 @@ table.results-table,
   cursor: zoom-in;
 }
 
-.results-table tr .variable > *,
-.compact.results-table tr .cell > * {
-  /* Header and vars always inline, cells are inline in compact mode. */
-  /*display: inline;*/
-}
-
 .results-table tr .cell .prompt {
   background-color: var(--variable-background-color);
   border: 1px solid var(--border-color);
@@ -160,23 +154,19 @@ table.results-table,
 .results-table tr .cell-actions {
   display: flex;
   gap: 0.5rem;
-  visibility: hidden;
   position: absolute;
-  top: 1.25rem;
+  top: 1rem;
   right: 0.75rem;
   line-height: 0;
   font-size: 1.25rem;
 }
 
-/* Show all actions on hover */
-.results-table .first-prompt-col:hover .cell-actions,
-.results-table .second-prompt-column:hover .cell-actions {
-  visibility: visible;
+.results-table tr .cell-actions [role='tooltip'] {
+  line-height: normal;
 }
 
-/* Always show active thumbs */
-.results-table tr .cell-actions .action.active {
-  visibility: visible !important;
+.results-table tr .cell-actions .action {
+  line-height: normal;
 }
 
 .results-table tr .cell-detail {
@@ -195,12 +185,15 @@ table.results-table,
   color: #888;
 }
 
-.results-table tr .cell-actions .action {
+/* Remove default button styling - but not for MUI IconButton */
+.results-table tr button.action:not(.MuiIconButton-root) {
+  background: none;
+  color: inherit;
+  border: none;
+  padding: 0;
+  font: inherit;
+  appearance: none;
   cursor: pointer;
-}
-
-.results-table tr .cell-actions .action.active span {
-  filter: saturate(1.5);
 }
 
 /* Table-within-a-cell, used for markdown tables */

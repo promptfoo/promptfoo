@@ -9,20 +9,12 @@ import PageShell from './PageShell';
 vi.mock('@mui/material/useMediaQuery');
 
 vi.mock('@app/components/Navigation', () => {
-  const MockNavigation = ({
-    darkMode,
-    onToggleDarkMode,
-  }: {
-    darkMode: boolean;
-    onToggleDarkMode: () => void;
-  }) => {
+  const MockNavigation = ({ onToggleDarkMode }: { onToggleDarkMode: () => void }) => {
     return (
       <div data-testid="navigation-mock">
         <button data-testid="toggle-button" onClick={onToggleDarkMode}>
           Toggle Dark Mode
         </button>
-        <div>Dark Mode: {darkMode ? 'true' : 'false'}</div>
-        <div>darkMode: {String(darkMode)}</div>
       </div>
     );
   };
@@ -93,44 +85,45 @@ describe('PageShell', () => {
         shouldHaveDataTheme: false,
         description: 'light',
       },
-    ])(
-      'should render with $description theme when localStorage has darkMode set to "$storageValue"',
-      async ({ storageValue, expectedMode, shouldHaveDataTheme }) => {
-        localStorage.setItem('darkMode', storageValue);
+    ])('should render with $description theme when localStorage has darkMode set to "$storageValue"', async ({
+      storageValue,
+      expectedMode,
+      shouldHaveDataTheme,
+    }) => {
+      localStorage.setItem('darkMode', storageValue);
 
-        renderPageShell('/', <ThemeDisplay />);
+      renderPageShell('/', <ThemeDisplay />);
 
-        await waitFor(() => {
-          expect(screen.getByTestId('theme-mode')).toHaveTextContent(expectedMode);
-        });
+      await waitFor(() => {
+        expect(screen.getByTestId('theme-mode')).toHaveTextContent(expectedMode);
+      });
 
-        if (shouldHaveDataTheme) {
-          expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-        } else {
-          expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-        }
-      },
-    );
+      if (shouldHaveDataTheme) {
+        expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+      } else {
+        expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+      }
+    });
 
     it.each([
       { darkMode: true, expectedAttribute: 'dark' },
       { darkMode: false, expectedAttribute: null },
-    ])(
-      'should set data-theme="$expectedAttribute" on document element when darkMode is $darkMode',
-      async ({ darkMode, expectedAttribute }) => {
-        localStorage.setItem('darkMode', String(darkMode));
+    ])('should set data-theme="$expectedAttribute" on document element when darkMode is $darkMode', async ({
+      darkMode,
+      expectedAttribute,
+    }) => {
+      localStorage.setItem('darkMode', String(darkMode));
 
-        renderPageShell();
+      renderPageShell();
 
-        await waitFor(() => {
-          if (expectedAttribute) {
-            expect(document.documentElement.getAttribute('data-theme')).toBe(expectedAttribute);
-          } else {
-            expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-          }
-        });
-      },
-    );
+      await waitFor(() => {
+        if (expectedAttribute) {
+          expect(document.documentElement.getAttribute('data-theme')).toBe(expectedAttribute);
+        } else {
+          expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+        }
+      });
+    });
 
     it('should handle hydration mismatch by updating theme based on client-side preference', async () => {
       mockUseMediaQuery.mockReturnValueOnce(true);
@@ -143,22 +136,6 @@ describe('PageShell', () => {
       });
 
       expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-    });
-  });
-
-  it('should pass the correct darkMode value and toggleDarkMode callback to the Navigation component', async () => {
-    localStorage.setItem('darkMode', 'true');
-    renderPageShell();
-
-    await waitFor(() => {
-      expect(screen.getByText('darkMode: true')).toBeInTheDocument();
-    });
-
-    localStorage.setItem('darkMode', 'false');
-    renderPageShell();
-
-    await waitFor(() => {
-      expect(screen.getByText('darkMode: false')).toBeInTheDocument();
     });
   });
 

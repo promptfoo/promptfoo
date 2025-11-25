@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
@@ -14,9 +15,9 @@ import {
   TestSuiteSchema,
   UnifiedConfigSchema,
   VarsSchema,
-} from '../../src/types';
+} from '../../src/types/index';
 
-import type { TestSuite } from '../../src/types';
+import type { TestSuite } from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -159,7 +160,7 @@ describe('isGradingResult', () => {
       { pass: false, score: 0, reason: 'Failed', namedScores: { accuracy: 0 } },
       { pass: true, score: 0.5, reason: 'Partial', tokensUsed: { total: 100 } },
       { pass: true, score: 1, reason: 'Good', componentResults: [] },
-      { pass: false, score: 0, reason: 'Bad', assertion: null },
+      { pass: false, score: 0, reason: 'Bad' },
       { pass: true, score: 1, reason: 'Excellent', comment: 'Great job!' },
     ];
 
@@ -812,7 +813,7 @@ describe('TestSuiteSchema', () => {
       ['file://path/to/file.py:', 'Empty function name'],
       ['file://:function_name', 'Missing file path'],
       ['file://path/to/file.py:function_name:extra_arg', 'Extra argument'],
-    ])('should reject invalid extension path: %s (%s)', (extension, reason) => {
+    ])('should reject invalid extension path: %s (%s)', (extension, _reason) => {
       const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].message).toMatch(/Extension must/);

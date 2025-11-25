@@ -1,6 +1,6 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
-import type { ApiProvider, ProviderOptions } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 /**
@@ -27,9 +27,9 @@ export function createCerebrasProvider(
 
   // Create a custom provider class that overrides the getOpenAiBody method
   class CerebrasProvider extends OpenAiChatCompletionProvider {
-    getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
+    async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
       // Get the body from the parent method
-      const { body, config } = super.getOpenAiBody(prompt, context, callApiOptions);
+      const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
 
       // Cerebras API doesn't support both max_tokens and max_completion_tokens
       // If max_completion_tokens is set, use it and remove max_tokens

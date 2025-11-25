@@ -1,12 +1,12 @@
 import { createScriptBasedProviderFactory } from '../../src/providers/scriptBasedProvider';
 import { getResolvedRelativePath } from '../../src/util/file';
 
-import type { LoadApiProviderContext } from '../../src/types';
+import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
 // Mock the getResolvedRelativePath function
 jest.mock('../../src/util/file', () => ({
-  getResolvedRelativePath: jest.fn((scriptPath, basePath, isCloudConfig) => {
+  getResolvedRelativePath: jest.fn((scriptPath, _basePath, _isCloudConfig) => {
     // For testing, just append '/resolved' to the path
     return `${scriptPath}/resolved`;
   }),

@@ -5,18 +5,23 @@ import Snackbar from '@mui/material/Snackbar';
 import { ToastContext, type ToastProviderProps } from './ToastContextDef';
 import type { AlertColor } from '@mui/material/Alert';
 
-export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
+export const ToastProvider = ({ children }: ToastProviderProps) => {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [severity, setSeverity] = useState<AlertColor>('info');
+  const [duration, setDuration] = useState<number>(2000);
 
-  const showToast = useCallback((message: string, severity: AlertColor = 'info') => {
-    setMessage(message);
-    setSeverity(severity);
-    setOpen(true);
-  }, []);
+  const showToast = useCallback(
+    (message: string, severity: AlertColor = 'info', duration: number = 2000) => {
+      setMessage(message);
+      setSeverity(severity);
+      setDuration(duration);
+      setOpen(true);
+    },
+    [],
+  );
 
-  const handleClose = useCallback((event?: React.SyntheticEvent | Event, reason?: string) => {
+  const handleClose = useCallback((_event?: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {
       return;
     }
@@ -24,11 +29,11 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
   }, []);
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext value={{ showToast }}>
       {children}
       <Snackbar
         open={open}
-        autoHideDuration={2000}
+        autoHideDuration={duration}
         onClose={handleClose}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
@@ -44,6 +49,6 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
           {message}
         </Alert>
       </Snackbar>
-    </ToastContext.Provider>
+    </ToastContext>
   );
 };

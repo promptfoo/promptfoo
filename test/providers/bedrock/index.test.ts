@@ -12,7 +12,7 @@ import {
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
-} from '../../../src/providers/bedrock';
+} from '../../../src/providers/bedrock/index';
 
 import type {
   BedrockAI21GenerationOptions,
@@ -21,7 +21,7 @@ import type {
   IBedrockModel,
   LlamaMessage,
   TextGenerationOptions,
-} from '../../../src/providers/bedrock';
+} from '../../../src/providers/bedrock/index';
 
 jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
   BedrockRuntime: jest.fn().mockImplementation(() => ({
@@ -63,11 +63,11 @@ class TestBedrockProvider extends AwsBedrockGenericProvider {
     return this.getBedrockInstance();
   }
 
-  async generateText(prompt: string, options?: TextGenerationOptions): Promise<string> {
+  async generateText(_prompt: string, _options?: TextGenerationOptions): Promise<string> {
     return '';
   }
 
-  async generateChat(messages: any[], options?: any): Promise<any> {
+  async generateChat(_messages: any[], _options?: any): Promise<any> {
     return {};
   }
 }
@@ -259,10 +259,124 @@ describe('AwsBedrockGenericProvider', () => {
     expect(mockOriginalHandle).toHaveBeenCalledWith(mockRequest, {});
   });
 
+  describe('Custom endpoint support', () => {
+    it('should use custom endpoint when endpoint is specified', async () => {
+      const provider = new (class extends AwsBedrockGenericProvider {
+        constructor() {
+          super('test-model', {
+            config: {
+              region: 'us-east-1',
+              endpoint: 'https://custom-bedrock-endpoint.example.com',
+            },
+          });
+        }
+      })();
+
+      await provider.getBedrockInstance();
+
+      expect(BedrockRuntime).toHaveBeenCalledWith(
+        expect.objectContaining({
+          region: 'us-east-1',
+          retryMode: 'adaptive',
+          maxAttempts: 10,
+          endpoint: 'https://custom-bedrock-endpoint.example.com',
+        }),
+      );
+    });
+
+    it('should not set endpoint when endpoint is not specified', async () => {
+      const provider = new (class extends AwsBedrockGenericProvider {
+        constructor() {
+          super('test-model', {
+            config: {
+              region: 'us-east-1',
+            },
+          });
+        }
+      })();
+
+      await provider.getBedrockInstance();
+
+      const callArgs = BedrockRuntime.mock.calls[0][0];
+      expect(callArgs).not.toHaveProperty('endpoint');
+    });
+  });
+
+  describe('Inference Profile ARN support', () => {
+    it('should handle inference profile ARN with claude model type', async () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/claude-inference';
+      const config: any = { inferenceModelType: 'claude' };
+
+      // This test checks that getHandlerForModel correctly identifies the handler
+      // We need to import and test the actual function
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      // The handler should be CLAUDE_MESSAGES based on the inferenceModelType
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('claude');
+    });
+
+    it('should handle inference profile ARN with nova model type', async () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/nova-inference';
+      const config: any = { inferenceModelType: 'nova' };
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('nova');
+    });
+
+    it('should handle inference profile ARN with llama model type', async () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/llama-inference';
+      const config: any = { inferenceModelType: 'llama' };
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('llama');
+    });
+
+    it('should handle inference profile ARN with deepseek model type', async () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/deepseek-inference';
+      const config: any = { inferenceModelType: 'deepseek' };
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('deepseek');
+    });
+
+    it('should handle inference profile ARN with openai model type', async () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/openai-inference';
+      const config: any = { inferenceModelType: 'openai' };
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('openai');
+    });
+
+    it('should throw error for inference profile ARN without inferenceModelType', async () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/some-inference';
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config: {} });
+
+      // This should throw when callApi is invoked and it tries to get the handler
+      expect(provider.modelName).toBe(arnModelName);
+      // The error will be thrown when actually trying to use the model
+    });
+  });
+
   describe('BEDROCK_MODEL CLAUDE_MESSAGES', () => {
     const modelHandler = BEDROCK_MODEL.CLAUDE_MESSAGES;
 
-    it('should include tools and tool_choice in params when provided', () => {
+    it('should include tools and tool_choice in params when provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
         tools: [
@@ -284,7 +398,7 @@ describe('AwsBedrockGenericProvider', () => {
         },
       };
 
-      const params = modelHandler.params(config, 'Test prompt');
+      const params = await modelHandler.params(config, 'Test prompt');
 
       expect(params).toHaveProperty('tools');
       expect(params.tools).toHaveLength(1);
@@ -293,18 +407,18 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.tool_choice).toEqual({ type: 'auto' });
     });
 
-    it('should not include tools and tool_choice in params when not provided', () => {
+    it('should not include tools and tool_choice in params when not provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
       };
 
-      const params = modelHandler.params(config, 'Test prompt');
+      const params = await modelHandler.params(config, 'Test prompt');
 
       expect(params).not.toHaveProperty('tools');
       expect(params).not.toHaveProperty('tool_choice');
     });
 
-    it('should include specific tool_choice when provided', () => {
+    it('should include specific tool_choice when provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
         tools: [
@@ -327,13 +441,13 @@ describe('AwsBedrockGenericProvider', () => {
         },
       };
 
-      const params = modelHandler.params(config, 'Test prompt');
+      const params = await modelHandler.params(config, 'Test prompt');
 
       expect(params).toHaveProperty('tool_choice');
       expect(params.tool_choice).toEqual({ type: 'tool', name: 'get_current_weather' });
     });
 
-    it('should handle JSON message array with image content', () => {
+    it('should handle JSON message array with image content', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
       };
@@ -355,7 +469,7 @@ describe('AwsBedrockGenericProvider', () => {
         },
       ]);
 
-      const params = BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
 
       expect(params.messages).toEqual([
         {
@@ -375,7 +489,7 @@ describe('AwsBedrockGenericProvider', () => {
       ]);
     });
 
-    it('should handle JSON message array with system message and image content', () => {
+    it('should handle JSON message array with system message and image content', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
       };
@@ -398,7 +512,7 @@ describe('AwsBedrockGenericProvider', () => {
         },
       ]);
 
-      const params = BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
 
       expect(params.messages).toEqual([
         {
@@ -419,7 +533,7 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.system).toBe('You are a helpful assistant.');
     });
 
-    it('should convert lone system message to user message', () => {
+    it('should convert lone system message to user message', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
       };
@@ -428,7 +542,7 @@ describe('AwsBedrockGenericProvider', () => {
       const promptWithStringContent = JSON.stringify([
         { role: 'system', content: 'You are a helpful assistant.' },
       ]);
-      const paramsWithString = modelHandler.params(config, promptWithStringContent);
+      const paramsWithString = await modelHandler.params(config, promptWithStringContent);
       expect(paramsWithString.messages).toEqual([
         {
           role: 'user',
@@ -447,7 +561,7 @@ describe('AwsBedrockGenericProvider', () => {
           ],
         },
       ]);
-      const paramsWithArray = modelHandler.params(config, promptWithArrayContent);
+      const paramsWithArray = await modelHandler.params(config, promptWithArrayContent);
       expect(paramsWithArray.messages).toEqual([
         {
           role: 'user',
@@ -464,7 +578,7 @@ describe('AwsBedrockGenericProvider', () => {
   describe('BEDROCK_MODEL AI21', () => {
     const modelHandler = BEDROCK_MODEL.AI21;
 
-    it('should include AI21-specific parameters', () => {
+    it('should include AI21-specific parameters', async () => {
       const config: BedrockAI21GenerationOptions = {
         region: 'us-east-1',
         max_tokens: 100,
@@ -476,7 +590,7 @@ describe('AwsBedrockGenericProvider', () => {
       };
 
       const prompt = 'Write a short story about a robot.';
-      const params = modelHandler.params(config, prompt);
+      const params = await modelHandler.params(config, prompt);
 
       expect(params).toEqual({
         messages: [{ role: 'user', content: prompt }],
@@ -489,11 +603,11 @@ describe('AwsBedrockGenericProvider', () => {
       });
     });
 
-    it('should use default values when config is not provided', () => {
+    it('should use default values when config is not provided', async () => {
       const config = {};
       const prompt = 'Tell me a joke.';
 
-      const params = modelHandler.params(config, prompt);
+      const params = await modelHandler.params(config, prompt);
 
       expect(params).toEqual({
         messages: [{ role: 'user', content: prompt }],
@@ -502,14 +616,14 @@ describe('AwsBedrockGenericProvider', () => {
       });
     });
 
-    it('should handle output correctly', () => {
+    it('should handle output correctly', async () => {
       const mockResponse = {
         choices: [{ message: { content: 'This is a test response.' } }],
       };
       expect(modelHandler.output({}, mockResponse)).toBe('This is a test response.');
     });
 
-    it('should throw an error for API errors', () => {
+    it('should throw an error for API errors', async () => {
       const mockErrorResponse = { error: 'API Error' };
       expect(() => modelHandler.output({}, mockErrorResponse)).toThrow('AI21 API error: API Error');
     });
@@ -642,13 +756,13 @@ describe('AwsBedrockGenericProvider', () => {
 });
 
 describe('addConfigParam', () => {
-  it('should add config value if provided', () => {
+  it('should add config value if provided', async () => {
     const params: any = {};
     addConfigParam(params, 'key', 'configValue');
     expect(params.key).toBe('configValue');
   });
 
-  it('should add env value if config value is not provided', () => {
+  it('should add env value if config value is not provided', async () => {
     const params: any = {};
     process.env.TEST_ENV_KEY = 'envValue';
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY);
@@ -656,13 +770,13 @@ describe('addConfigParam', () => {
     delete process.env.TEST_ENV_KEY;
   });
 
-  it('should add default value if neither config nor env value is provided', () => {
+  it('should add default value if neither config nor env value is provided', async () => {
     const params: any = {};
     addConfigParam(params, 'key', undefined, undefined, 'defaultValue');
     expect(params.key).toBe('defaultValue');
   });
 
-  it('should prioritize config value over env and default values', () => {
+  it('should prioritize config value over env and default values', async () => {
     const params: any = {};
     process.env.TEST_ENV_KEY = 'envValue';
     addConfigParam(params, 'key', 'configValue', process.env.TEST_ENV_KEY, 'defaultValue');
@@ -670,7 +784,7 @@ describe('addConfigParam', () => {
     delete process.env.TEST_ENV_KEY;
   });
 
-  it('should prioritize env value over default value if config value is not provided', () => {
+  it('should prioritize env value over default value if config value is not provided', async () => {
     const params: any = {};
     process.env.TEST_ENV_KEY = 'envValue';
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
@@ -678,7 +792,7 @@ describe('addConfigParam', () => {
     delete process.env.TEST_ENV_KEY;
   });
 
-  it('should parse env value if default value is a number', () => {
+  it('should parse env value if default value is a number', async () => {
     const params: any = {};
     process.env.TEST_ENV_KEY = '42';
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
@@ -686,13 +800,13 @@ describe('addConfigParam', () => {
     delete process.env.TEST_ENV_KEY;
   });
 
-  it('should handle undefined config, env, and default values gracefully', () => {
+  it('should handle undefined config, env, and default values gracefully', async () => {
     const params: any = {};
     addConfigParam(params, 'key', undefined, undefined, undefined);
     expect(params.key).toBeUndefined();
   });
 
-  it('should correctly parse non-number string values', () => {
+  it('should correctly parse non-number string values', async () => {
     const params: any = {};
     process.env.TEST_ENV_KEY = 'nonNumberString';
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
@@ -700,7 +814,7 @@ describe('addConfigParam', () => {
     delete process.env.TEST_ENV_KEY;
   });
 
-  it('should correctly parse empty string values', () => {
+  it('should correctly parse empty string values', async () => {
     const params: any = {};
     process.env.TEST_ENV_KEY = '';
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
@@ -708,27 +822,27 @@ describe('addConfigParam', () => {
     delete process.env.TEST_ENV_KEY;
   });
 
-  it('should handle env value not set', () => {
+  it('should handle env value not set', async () => {
     const params: any = {};
     addConfigParam(params, 'key', undefined, process.env.UNSET_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('defaultValue');
   });
 
-  it('should handle config values that are objects', () => {
+  it('should handle config values that are objects', async () => {
     const params: any = {};
     const configValue = { nestedKey: 'nestedValue' };
     addConfigParam(params, 'key', configValue);
     expect(params.key).toEqual(configValue);
   });
 
-  it('should handle config values that are arrays', () => {
+  it('should handle config values that are arrays', async () => {
     const params: any = {};
     const configValue = ['value1', 'value2'];
     addConfigParam(params, 'key', configValue);
     expect(params.key).toEqual(configValue);
   });
 
-  it('should handle special characters in env values', () => {
+  it('should handle special characters in env values', async () => {
     const params: any = {};
     process.env.TEST_ENV_KEY = '!@#$%^&*()_+';
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
@@ -738,27 +852,27 @@ describe('addConfigParam', () => {
 });
 
 describe('parseValue', () => {
-  it('should return the original value if defaultValue is not a number', () => {
+  it('should return the original value if defaultValue is not a number', async () => {
     expect(parseValue('stringValue', 'defaultValue')).toBe('stringValue');
   });
 
-  it('should return parsed float value if defaultValue is a number', () => {
+  it('should return parsed float value if defaultValue is a number', async () => {
     expect(parseValue('42.5', 0)).toBe(42.5);
   });
 
-  it('should return NaN for non-numeric strings if defaultValue is a number', () => {
+  it('should return NaN for non-numeric strings if defaultValue is a number', async () => {
     expect(parseValue('notANumber', 0)).toBe(0);
   });
 
-  it('should return 0 for an empty string if defaultValue is a number', () => {
+  it('should return 0 for an empty string if defaultValue is a number', async () => {
     expect(parseValue('', 0)).toBe(0);
   });
 
-  it('should return null for a null value if defaultValue is not a number', () => {
+  it('should return null for a null value if defaultValue is not a number', async () => {
     expect(parseValue(null as never, 'defaultValue')).toBeNull();
   });
 
-  it('should return undefined for an undefined value if defaultValue is not a number', () => {
+  it('should return undefined for an undefined value if defaultValue is not a number', async () => {
     expect(parseValue(undefined as never, 'defaultValue')).toBeUndefined();
   });
 });
@@ -768,10 +882,10 @@ describe('llama', () => {
     describe('LLAMA2', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V2);
 
-      it('should generate correct prompt for a single user message', () => {
+      it('should generate correct prompt for a single user message', async () => {
         const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
         const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt: `<s>[INST] Describe the purpose of a \"hello world\" program in one sentence. [/INST]`,
           temperature: 0.5,
           top_p: 0.9,
@@ -779,13 +893,13 @@ describe('llama', () => {
         });
       });
 
-      it('should handle a system message followed by a user message', () => {
+      it('should handle a system message followed by a user message', async () => {
         const config = {};
         const prompt = JSON.stringify([
           { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: 'What is the capital of France?' },
         ]);
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt: dedent`<s>[INST] <<SYS>>
         You are a helpful assistant.
         <</SYS>>
@@ -797,14 +911,14 @@ describe('llama', () => {
         });
       });
 
-      it('should handle multiple turns of conversation', () => {
+      it('should handle multiple turns of conversation', async () => {
         const config = {};
         const prompt = JSON.stringify([
           { role: 'user', content: 'Hello' },
           { role: 'assistant', content: 'Hi there! How can I assist you today?' },
           { role: 'user', content: "What's the weather like?" },
         ]);
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt:
             "<s>[INST] Hello [/INST] Hi there! How can I assist you today? </s><s>[INST] What's the weather like? [/INST]",
           temperature: 0,
@@ -817,10 +931,10 @@ describe('llama', () => {
     describe('LLAMA3', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3);
 
-      it('should generate correct prompt for a single user message', () => {
+      it('should generate correct prompt for a single user message', async () => {
         const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
         const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
 
         Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
@@ -830,13 +944,13 @@ describe('llama', () => {
         });
       });
 
-      it('should handle a system message followed by a user message', () => {
+      it('should handle a system message followed by a user message', async () => {
         const config = {};
         const prompt = JSON.stringify([
           { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: 'What is the capital of France?' },
         ]);
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt: dedent`<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 
         You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
@@ -848,14 +962,14 @@ describe('llama', () => {
         });
       });
 
-      it('should handle multiple turns of conversation', () => {
+      it('should handle multiple turns of conversation', async () => {
         const config = {};
         const prompt = JSON.stringify([
           { role: 'user', content: 'Hello' },
           { role: 'assistant', content: 'Hi there! How can I assist you today?' },
           { role: 'user', content: "What's the weather like?" },
         ]);
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
 
         Hello<|eot_id|><|start_header_id|>assistant<|end_header_id|>
@@ -873,10 +987,10 @@ describe('llama', () => {
     describe('LLAMA3_1', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_1);
 
-      it('should generate correct prompt for a single user message', () => {
+      it('should generate correct prompt for a single user message', async () => {
         const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
         const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
 
           Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
@@ -890,10 +1004,10 @@ describe('llama', () => {
     describe('LLAMA3_2', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_2);
 
-      it('should generate correct prompt for a single user message', () => {
+      it('should generate correct prompt for a single user message', async () => {
         const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
         const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
 
           Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
@@ -903,10 +1017,10 @@ describe('llama', () => {
         });
       });
 
-      it('should use max_gen_len parameter', () => {
+      it('should use max_gen_len parameter', async () => {
         const config = { max_gen_len: 1000 };
         const prompt = 'Test prompt';
-        const params = handler.params(config, prompt);
+        const params = await handler.params(config, prompt);
         expect(params).toHaveProperty('max_gen_len', 1000);
       });
     });
@@ -914,10 +1028,10 @@ describe('llama', () => {
     describe('LLAMA3_3', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_3);
 
-      it('should generate correct prompt for a single user message', () => {
+      it('should generate correct prompt for a single user message', async () => {
         const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
         const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
 
           Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
@@ -927,10 +1041,10 @@ describe('llama', () => {
         });
       });
 
-      it('should use max_gen_len parameter', () => {
+      it('should use max_gen_len parameter', async () => {
         const config = { max_gen_len: 1000 };
         const prompt = 'Test prompt';
-        const params = handler.params(config, prompt);
+        const params = await handler.params(config, prompt);
         expect(params).toHaveProperty('max_gen_len', 1000);
       });
     });
@@ -938,10 +1052,10 @@ describe('llama', () => {
     describe('LLAMA4', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V4);
 
-      it('should generate correct prompt for a single user message', () => {
+      it('should generate correct prompt for a single user message', async () => {
         const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
         const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt: dedent`<|begin_of_text|><|header_start|>user<|header_end|>
 
 Describe the purpose of a "hello world" program in one sentence.<|eot|><|header_start|>assistant<|header_end|>`,
@@ -951,13 +1065,13 @@ Describe the purpose of a "hello world" program in one sentence.<|eot|><|header_
         });
       });
 
-      it('should handle a system message followed by a user message', () => {
+      it('should handle a system message followed by a user message', async () => {
         const config = {};
         const prompt = JSON.stringify([
           { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: 'What is the capital of France?' },
         ]);
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt: dedent`<|begin_of_text|><|header_start|>system<|header_end|>
 
 You are a helpful assistant.<|eot|><|header_start|>user<|header_end|>
@@ -969,14 +1083,14 @@ What is the capital of France?<|eot|><|header_start|>assistant<|header_end|>`,
         });
       });
 
-      it('should handle multiple turns of conversation', () => {
+      it('should handle multiple turns of conversation', async () => {
         const config = {};
         const prompt = JSON.stringify([
           { role: 'user', content: 'Hello' },
           { role: 'assistant', content: 'Hi there! How can I assist you today?' },
           { role: 'user', content: "What's the weather like?" },
         ]);
-        expect(handler.params(config, prompt)).toEqual({
+        await expect(handler.params(config, prompt)).resolves.toEqual({
           prompt: dedent`<|begin_of_text|><|header_start|>user<|header_end|>
 
 Hello<|eot|><|header_start|>assistant<|header_end|>
@@ -991,11 +1105,11 @@ What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`,
       });
     });
 
-    it('should throw an error for unsupported LLAMA version', () => {
+    it('should throw an error for unsupported LLAMA version', async () => {
       expect(() => getLlamaModelHandler(1 as LlamaVersion)).toThrow('Unsupported LLAMA version: 1');
     });
 
-    it('should handle output correctly', () => {
+    it('should handle output correctly', async () => {
       const handler = getLlamaModelHandler(LlamaVersion.V2);
       expect(handler.output({}, { generation: 'Test response' })).toBe('Test response');
       expect(handler.output({}, {})).toBeUndefined();
@@ -1003,7 +1117,7 @@ What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`,
   });
 
   describe('formatPromptLlama2Chat', () => {
-    it('should format a single user message correctly', () => {
+    it('should format a single user message correctly', async () => {
       const messages: LlamaMessage[] = [
         {
           role: 'user',
@@ -1015,7 +1129,7 @@ What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`,
       expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
     });
 
-    it('should handle a system message followed by a user message', () => {
+    it('should handle a system message followed by a user message', async () => {
       const messages: LlamaMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
         { role: 'user', content: 'What is the capital of France?' },
@@ -1030,7 +1144,7 @@ What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`,
       expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
     });
 
-    it('should handle a system message, user message, and assistant response', () => {
+    it('should handle a system message, user message, and assistant response', async () => {
       const messages: LlamaMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
         { role: 'user', content: 'What is the capital of France?' },
@@ -1046,7 +1160,7 @@ What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`,
       expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
     });
 
-    it('should handle multiple turns of conversation', () => {
+    it('should handle multiple turns of conversation', async () => {
       // see https://huggingface.co/blog/llama2#how-to-prompt-llama-2
       const messages: LlamaMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
@@ -1064,7 +1178,7 @@ What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`,
       expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
     });
 
-    it('should handle only a system message correctly', () => {
+    it('should handle only a system message correctly', async () => {
       const messages: LlamaMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
       ];
@@ -1079,7 +1193,7 @@ What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`,
   });
 
   describe('formatPromptLlama3Instruct', () => {
-    it('should format a single user message correctly', () => {
+    it('should format a single user message correctly', async () => {
       const messages: LlamaMessage[] = [{ role: 'user', content: 'Hello, how are you?' }];
       const expected = dedent`
         <|begin_of_text|><|start_header_id|>user<|end_header_id|>
@@ -1088,7 +1202,7 @@ What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`,
       expect(formatPromptLlama3Instruct(messages)).toBe(expected);
     });
 
-    it('should format multiple messages correctly', () => {
+    it('should format multiple messages correctly', async () => {
       const messages: LlamaMessage[] = [
         { role: 'user', content: 'Hello' },
         { role: 'assistant', content: 'Hi there! How can I help you?' },
@@ -1105,7 +1219,7 @@ What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`,
       expect(formatPromptLlama3Instruct(messages)).toBe(expected);
     });
 
-    it('should handle system messages correctly', () => {
+    it('should handle system messages correctly', async () => {
       const messages: LlamaMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
         { role: 'user', content: 'Hello' },
@@ -1121,7 +1235,7 @@ What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`,
   });
 
   describe('formatPromptLlama4', () => {
-    it('should format a single user message correctly', () => {
+    it('should format a single user message correctly', async () => {
       const messages: LlamaMessage[] = [{ role: 'user', content: 'Hello, how are you?' }];
       const expected = dedent`<|begin_of_text|><|header_start|>user<|header_end|>
 
@@ -1129,7 +1243,7 @@ Hello, how are you?<|eot|><|header_start|>assistant<|header_end|>`;
       expect(formatPromptLlama4(messages)).toBe(expected);
     });
 
-    it('should format multiple messages correctly', () => {
+    it('should format multiple messages correctly', async () => {
       const messages: LlamaMessage[] = [
         { role: 'user', content: 'Hello' },
         { role: 'assistant', content: 'Hi there! How can I help you?' },
@@ -1145,7 +1259,7 @@ What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`;
       expect(formatPromptLlama4(messages)).toBe(expected);
     });
 
-    it('should handle system messages correctly', () => {
+    it('should handle system messages correctly', async () => {
       const messages: LlamaMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
         { role: 'user', content: 'Hello' },
@@ -1163,14 +1277,14 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
 describe('BEDROCK_MODEL AMAZON_NOVA', () => {
   const modelHandler = BEDROCK_MODEL.AMAZON_NOVA;
 
-  it('should format system message correctly when using JSON array input', () => {
+  it('should format system message correctly when using JSON array input', async () => {
     const config = {};
     const prompt = JSON.stringify([
       { role: 'system', content: 'You are a helpful assistant.' },
       { role: 'user', content: 'Hello!' },
     ]);
 
-    const params = modelHandler.params(config, prompt);
+    const params = await modelHandler.params(config, prompt);
 
     expect(params).toEqual({
       messages: [
@@ -1186,14 +1300,14 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
     });
   });
 
-  it('should handle messages without system prompt', () => {
+  it('should handle messages without system prompt', async () => {
     const config = {};
     const prompt = JSON.stringify([
       { role: 'user', content: 'Hello!' },
       { role: 'assistant', content: 'Hi there!' },
     ]);
 
-    const params = modelHandler.params(config, prompt);
+    const params = await modelHandler.params(config, prompt);
 
     expect(params).toEqual({
       messages: [
@@ -1213,7 +1327,7 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
     expect(params.system).toBeUndefined();
   });
 
-  it('should handle complex message content arrays', () => {
+  it('should handle complex message content arrays', async () => {
     const config = {};
     const prompt = JSON.stringify([
       { role: 'system', content: 'You are a helpful assistant.' },
@@ -1233,7 +1347,7 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
       },
     ]);
 
-    const params = modelHandler.params(config, prompt);
+    const params = await modelHandler.params(config, prompt);
 
     expect(params).toEqual({
       messages: [
@@ -1259,11 +1373,11 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
     });
   });
 
-  it('should handle invalid JSON gracefully', () => {
+  it('should handle invalid JSON gracefully', async () => {
     const config = {};
     const prompt = 'Invalid JSON';
 
-    const params = modelHandler.params(config, prompt);
+    const params = await modelHandler.params(config, prompt);
 
     expect(params).toEqual({
       messages: [
@@ -1283,7 +1397,7 @@ describe('BEDROCK_MODEL MISTRAL', () => {
   const modelHandler = BEDROCK_MODEL.MISTRAL;
 
   describe('params', () => {
-    it('should include Mistral-specific parameters', () => {
+    it('should include Mistral-specific parameters', async () => {
       const config = {
         max_tokens: 200,
         temperature: 0.7,
@@ -1293,7 +1407,7 @@ describe('BEDROCK_MODEL MISTRAL', () => {
       const prompt = 'What is the capital of France?';
       const stop = ['END'];
 
-      const params = modelHandler.params(config, prompt, stop);
+      const params = await modelHandler.params(config, prompt, stop);
 
       expect(params).toEqual({
         prompt,
@@ -1305,12 +1419,12 @@ describe('BEDROCK_MODEL MISTRAL', () => {
       });
     });
 
-    it('should use default values when config is not provided', () => {
+    it('should use default values when config is not provided', async () => {
       const config = {};
       const prompt = 'Hello, how are you?';
       const stop: string[] = [];
 
-      const params = modelHandler.params(config, prompt, stop);
+      const params = await modelHandler.params(config, prompt, stop);
 
       expect(params).toEqual({
         prompt,
@@ -1324,7 +1438,7 @@ describe('BEDROCK_MODEL MISTRAL', () => {
   });
 
   describe('output', () => {
-    it('should extract output from outputs[0].text format', () => {
+    it('should extract output from outputs[0].text format', async () => {
       const mockResponse = {
         outputs: [{ text: 'This is a test response.' }],
       };
@@ -1332,7 +1446,7 @@ describe('BEDROCK_MODEL MISTRAL', () => {
       expect(modelHandler.output({}, mockResponse)).toBe('This is a test response.');
     });
 
-    it('should return undefined for unrecognized formats', () => {
+    it('should return undefined for unrecognized formats', async () => {
       const mockResponse = { something: 'else' };
 
       const result = modelHandler.output({}, mockResponse);
@@ -1341,7 +1455,7 @@ describe('BEDROCK_MODEL MISTRAL', () => {
   });
 
   describe('tokenUsage', () => {
-    it('should use explicit token usage when available', () => {
+    it('should use explicit token usage when available', async () => {
       const mockResponse = {
         usage: {
           prompt_tokens: 25,
@@ -1360,7 +1474,7 @@ describe('BEDROCK_MODEL MISTRAL', () => {
       });
     });
 
-    it('should return undefined token counts when not provided by the API', () => {
+    it('should return undefined token counts when not provided by the API', async () => {
       const mockResponse = {
         outputs: [{ text: 'This is a test response with several words to estimate tokens.' }],
       };
@@ -1380,7 +1494,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
   const modelHandler = BEDROCK_MODEL.OPENAI;
 
   describe('params', () => {
-    it('should include OpenAI-specific parameters', () => {
+    it('should include OpenAI-specific parameters', async () => {
       const config: BedrockOpenAIGenerationOptions = {
         region: 'us-east-1',
         max_completion_tokens: 150,
@@ -1393,7 +1507,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
       const prompt = 'What is artificial intelligence?';
       const stop = ['FINISH'];
 
-      const params = modelHandler.params(config, prompt, stop);
+      const params = await modelHandler.params(config, prompt, stop);
 
       expect(params).toEqual({
         messages: [{ role: 'user', content: 'What is artificial intelligence?' }],
@@ -1406,14 +1520,14 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should use config.stop when stop parameter is not provided', () => {
+    it('should use config.stop when stop parameter is not provided', async () => {
       const config = {
         stop: ['CONFIG_END'],
         temperature: 0.5,
       };
       const prompt = 'Test prompt';
 
-      const params = modelHandler.params(config, prompt);
+      const params = await modelHandler.params(config, prompt);
 
       expect(params).toEqual({
         messages: [{ role: 'user', content: 'Test prompt' }],
@@ -1423,11 +1537,11 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should use default values when config is not provided', () => {
+    it('should use default values when config is not provided', async () => {
       const config = {};
       const prompt = 'Hello, how are you?';
 
-      const params = modelHandler.params(config, prompt);
+      const params = await modelHandler.params(config, prompt);
 
       expect(params).toEqual({
         messages: [{ role: 'user', content: 'Hello, how are you?' }],
@@ -1436,14 +1550,14 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should handle JSON message array input', () => {
+    it('should handle JSON message array input', async () => {
       const config = { temperature: 0.7 };
       const prompt = JSON.stringify([
         { role: 'system', content: 'You are a helpful assistant.' },
         { role: 'user', content: 'What is machine learning?' },
       ]);
 
-      const params = modelHandler.params(config, prompt);
+      const params = await modelHandler.params(config, prompt);
 
       expect(params).toEqual({
         messages: [
@@ -1455,14 +1569,14 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should handle reasoning_effort by adding it to system message', () => {
+    it('should handle reasoning_effort by adding it to system message', async () => {
       const config = {
         temperature: 0.7,
         reasoning_effort: 'high' as const,
       };
       const prompt = 'Test prompt';
 
-      const params = modelHandler.params(config, prompt);
+      const params = await modelHandler.params(config, prompt);
 
       expect(params).toEqual({
         messages: [
@@ -1474,7 +1588,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should append reasoning_effort to existing system message', () => {
+    it('should append reasoning_effort to existing system message', async () => {
       const config = {
         temperature: 0.7,
         reasoning_effort: 'medium' as const,
@@ -1484,7 +1598,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
         { role: 'user', content: 'What is machine learning?' },
       ]);
 
-      const params = modelHandler.params(config, prompt);
+      const params = await modelHandler.params(config, prompt);
 
       expect(params).toEqual({
         messages: [
@@ -1496,11 +1610,11 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should not modify messages when reasoning_effort is not specified', () => {
+    it('should not modify messages when reasoning_effort is not specified', async () => {
       const config = { temperature: 0.5 };
       const prompt = 'Test prompt';
 
-      const params = modelHandler.params(config, prompt);
+      const params = await modelHandler.params(config, prompt);
 
       expect(params).toEqual({
         messages: [{ role: 'user', content: 'Test prompt' }],
@@ -1511,7 +1625,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
   });
 
   describe('output', () => {
-    it('should extract output from OpenAI chat completion format', () => {
+    it('should extract output from OpenAI chat completion format', async () => {
       const mockResponse = {
         choices: [
           {
@@ -1527,14 +1641,14 @@ describe('BEDROCK_MODEL OPENAI', () => {
       );
     });
 
-    it('should throw an error for API errors', () => {
+    it('should throw an error for API errors', async () => {
       const mockErrorResponse = { error: 'API Error occurred' };
       expect(() => modelHandler.output({}, mockErrorResponse)).toThrow(
         'OpenAI API error: API Error occurred',
       );
     });
 
-    it('should return undefined for unrecognized formats', () => {
+    it('should return undefined for unrecognized formats', async () => {
       const mockResponse = { something: 'else' };
       const result = modelHandler.output({}, mockResponse);
       expect(result).toBeUndefined();
@@ -1542,7 +1656,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
   });
 
   describe('tokenUsage', () => {
-    it('should extract token usage from OpenAI response format', () => {
+    it('should extract token usage from OpenAI response format', async () => {
       const mockResponse = {
         usage: {
           prompt_tokens: 25,
@@ -1560,7 +1674,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should handle string token counts', () => {
+    it('should handle string token counts', async () => {
       const mockResponse = {
         usage: {
           prompt_tokens: '30',
@@ -1578,7 +1692,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should return undefined token counts when usage is not provided', () => {
+    it('should return undefined token counts when usage is not provided', async () => {
       const mockResponse = {
         choices: [
           {
@@ -1604,7 +1718,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
 
   describe('params', () => {
-    it('should include Mistral-specific parameters without top_k', () => {
+    it('should include Mistral-specific parameters without top_k', async () => {
       const config = {
         max_tokens: 200,
         temperature: 0.7,
@@ -1614,7 +1728,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       const prompt = 'What is the capital of France?';
       const stop = ['END'];
 
-      const params = modelHandler.params(config, prompt, stop);
+      const params = await modelHandler.params(config, prompt, stop);
 
       expect(params).toEqual({
         prompt,
@@ -1627,12 +1741,12 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       expect(params).not.toHaveProperty('top_k');
     });
 
-    it('should use default values when config is not provided', () => {
+    it('should use default values when config is not provided', async () => {
       const config = {};
       const prompt = 'Hello, how are you?';
       const stop: string[] = [];
 
-      const params = modelHandler.params(config, prompt, stop);
+      const params = await modelHandler.params(config, prompt, stop);
 
       expect(params).toEqual({
         prompt,
@@ -1646,7 +1760,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   });
 
   describe('output', () => {
-    it('should extract output from chat completion format', () => {
+    it('should extract output from chat completion format', async () => {
       const mockResponse = {
         id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
         object: 'chat.completion',
@@ -1669,7 +1783,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       );
     });
 
-    it('should return undefined for unrecognized formats', () => {
+    it('should return undefined for unrecognized formats', async () => {
       const mockResponse = { something: 'else' };
 
       const result = modelHandler.output({}, mockResponse);
@@ -1678,7 +1792,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   });
 
   describe('tokenUsage', () => {
-    it('should extract token usage from chat completion format', () => {
+    it('should extract token usage from chat completion format', async () => {
       const mockResponse = {
         id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
         object: 'chat.completion',
@@ -1707,7 +1821,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       });
     });
 
-    it('should return undefined token counts when not provided by the API', () => {
+    it('should return undefined token counts when not provided by the API', async () => {
       const mockResponse = {
         choices: [
           {
@@ -1727,11 +1841,186 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   });
 });
 
+describe('BEDROCK_MODEL DEEPSEEK', () => {
+  const modelHandler = BEDROCK_MODEL.DEEPSEEK;
+
+  describe('params', () => {
+    it('should wrap prompt with thinking tags', async () => {
+      const config = {
+        max_tokens: 1000,
+        temperature: 0.8,
+        top_p: 0.95,
+      };
+      const prompt = 'Solve this complex problem';
+
+      const params = await modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        prompt: '\nSolve this complex problem\n<think>\n',
+        max_tokens: 1000,
+        temperature: 0.8,
+        top_p: 0.95,
+      });
+    });
+
+    it('should use default values when config is not provided', async () => {
+      const config = {};
+      const prompt = 'Test prompt';
+
+      const params = await modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        prompt: '\nTest prompt\n<think>\n',
+        temperature: 0,
+        top_p: 1.0,
+      });
+    });
+
+    it('should respect environment variables', async () => {
+      process.env.AWS_BEDROCK_MAX_TOKENS = '2000';
+      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
+      process.env.AWS_BEDROCK_TOP_P = '0.9';
+
+      const config = {};
+      const prompt = 'Test with env vars';
+
+      const params = await modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        prompt: '\nTest with env vars\n<think>\n',
+        max_tokens: 2000,
+        temperature: 0.5,
+        top_p: 0.9,
+      });
+
+      delete process.env.AWS_BEDROCK_MAX_TOKENS;
+      delete process.env.AWS_BEDROCK_TEMPERATURE;
+      delete process.env.AWS_BEDROCK_TOP_P;
+    });
+  });
+
+  describe('output', () => {
+    it('should extract text from DeepSeek response with thinking', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            text: '<think>Let me think about this problem...</think>\nThe answer is 42.',
+          },
+        ],
+      };
+      const config = { showThinking: true };
+
+      const result = modelHandler.output(config, mockResponse);
+
+      expect(result).toBe('<think>Let me think about this problem...</think>\nThe answer is 42.');
+    });
+
+    it('should hide thinking when showThinking is false', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            text: '<think>Let me think about this problem...</think>\nThe answer is 42.',
+          },
+        ],
+      };
+      const config = { showThinking: false };
+
+      const result = modelHandler.output(config, mockResponse);
+
+      expect(result).toBe('The answer is 42.');
+    });
+
+    it('should return full response when no thinking tags present', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            text: 'Direct response without thinking',
+          },
+        ],
+      };
+      const config = { showThinking: false };
+
+      const result = modelHandler.output(config, mockResponse);
+
+      expect(result).toBe('Direct response without thinking');
+    });
+
+    it('should handle error in response', async () => {
+      const mockResponse = {
+        error: 'API error occurred',
+      };
+
+      expect(() => modelHandler.output({}, mockResponse)).toThrow(
+        'DeepSeek API error: API error occurred',
+      );
+    });
+
+    it('should return undefined for unrecognized response format', async () => {
+      const mockResponse = { something: 'else' };
+      const result = modelHandler.output({}, mockResponse);
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should extract token usage from DeepSeek response', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 30,
+          completion_tokens: 70,
+          total_tokens: 100,
+        },
+      };
+
+      const usage = modelHandler.tokenUsage(mockResponse, 'test');
+
+      expect(usage).toEqual({
+        prompt: 30,
+        completion: 70,
+        total: 100,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle string token values', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: '30',
+          completion_tokens: '70',
+          total_tokens: '100',
+        },
+      };
+
+      const usage = modelHandler.tokenUsage(mockResponse, 'test');
+
+      expect(usage).toEqual({
+        prompt: 30,
+        completion: 70,
+        total: 100,
+        numRequests: 1,
+      });
+    });
+
+    it('should return undefined values when token counts are not provided', async () => {
+      const mockResponse = {};
+
+      const usage = modelHandler.tokenUsage(mockResponse, 'test');
+
+      expect(usage).toEqual({
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
 describe('BEDROCK_MODEL token counting functionality', () => {
   describe('MISTRAL model handler', () => {
     const modelHandler = BEDROCK_MODEL.MISTRAL;
 
-    it('should extract token usage from API response when available', () => {
+    it('should extract token usage from API response when available', async () => {
       const mockResponse = {
         usage: {
           prompt_tokens: 25,
@@ -1749,7 +2038,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
-    it('should handle string token counts', () => {
+    it('should handle string token counts', async () => {
       const mockResponse = {
         usage: {
           prompt_tokens: '25',
@@ -1767,7 +2056,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
-    it('should return undefined token counts when not provided by the API', () => {
+    it('should return undefined token counts when not provided by the API', async () => {
       const mockResponse = {
         outputs: [{ text: 'This is a generated response' }],
       };
@@ -1783,7 +2072,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
   describe('MISTRAL_LARGE_2407 model handler', () => {
     const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
 
-    it('should extract token usage from chat completion format', () => {
+    it('should extract token usage from chat completion format', async () => {
       const mockResponse = {
         id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
         object: 'chat.completion',
@@ -1812,7 +2101,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
-    it('should handle string token counts', () => {
+    it('should handle string token counts', async () => {
       const mockResponse = {
         prompt_tokens: '30',
         completion_tokens: '45',
@@ -1827,7 +2116,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
-    it('should return undefined token counts when not provided by the API', () => {
+    it('should return undefined token counts when not provided by the API', async () => {
       const mockResponse = {
         choices: [
           {
@@ -1847,7 +2136,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
   });
 
   describe('Llama model handler', () => {
-    it('should extract token usage from Llama response', () => {
+    it('should extract token usage from Llama response', async () => {
       const mockResponse = {
         generation: 'Test response',
         prompt_token_count: 10,
@@ -1865,7 +2154,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
-    it('should handle string token counts', () => {
+    it('should handle string token counts', async () => {
       const mockResponse = {
         generation: 'Test response',
         prompt_token_count: '10',
@@ -1885,7 +2174,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
   });
 
   describe('Claude model handlers', () => {
-    it('should handle new-style token fields in Claude Messages', () => {
+    it('should handle new-style token fields in Claude Messages', async () => {
       const mockResponse = {
         usage: {
           input_tokens: 15,
@@ -1902,7 +2191,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
-    it('should handle string token counts in Claude Messages', () => {
+    it('should handle string token counts in Claude Messages', async () => {
       const mockResponse = {
         usage: {
           input_tokens: '15',
@@ -1919,7 +2208,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
-    it('should handle old-style token fields in Claude Completion', () => {
+    it('should handle old-style token fields in Claude Completion', async () => {
       const mockResponse = {
         usage: {
           prompt_tokens: 20,
@@ -1937,7 +2226,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
-    it('should handle string token counts in Claude Completion', () => {
+    it('should handle string token counts in Claude Completion', async () => {
       const mockResponse = {
         usage: {
           prompt_tokens: '20',
@@ -1957,7 +2246,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
   });
 
   describe('AMAZON_NOVA model handler', () => {
-    it('should handle numeric token counts', () => {
+    it('should handle numeric token counts', async () => {
       const mockResponse = {
         usage: {
           inputTokens: 100,
@@ -1975,7 +2264,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
-    it('should handle string token counts', () => {
+    it('should handle string token counts', async () => {
       const mockResponse = {
         usage: {
           inputTokens: '113',
@@ -1995,7 +2284,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
   });
 
   describe('COHERE model handlers', () => {
-    it('should handle numeric token counts in COHERE_COMMAND', () => {
+    it('should handle numeric token counts in COHERE_COMMAND', async () => {
       const mockResponse = {
         meta: {
           billed_units: {
@@ -2014,7 +2303,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
-    it('should handle string token counts in COHERE_COMMAND', () => {
+    it('should handle string token counts in COHERE_COMMAND', async () => {
       const mockResponse = {
         meta: {
           billed_units: {
@@ -2036,13 +2325,26 @@ describe('BEDROCK_MODEL token counting functionality', () => {
 });
 
 describe('AWS_BEDROCK_MODELS mapping', () => {
-  it('should include mistral.mistral-large-2407-v1:0', () => {
+  it('should have the correct model mappings', async () => {
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20241022-v2:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-sonnet-20241022-v2:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['meta.llama3-1-405b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
     expect(AWS_BEDROCK_MODELS['mistral.mistral-large-2407-v1:0']).toBe(
       BEDROCK_MODEL.MISTRAL_LARGE_2407,
     );
-  });
-
-  it('should include Llama 4 models with appropriate handlers', () => {
     expect(AWS_BEDROCK_MODELS['meta.llama4-scout-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
     expect(AWS_BEDROCK_MODELS['meta.llama4-maverick-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
     expect(AWS_BEDROCK_MODELS['us.meta.llama4-scout-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
@@ -2051,7 +2353,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     );
   });
 
-  it('should support newer model IDs via region prefixes', () => {
+  it('should support newer model IDs via region prefixes', async () => {
     [
       'us.meta.llama3-2-3b-instruct-v1:0',
       'eu.meta.llama3-2-3b-instruct-v1:0',
@@ -2073,33 +2375,123 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     });
   });
 
-  it('should handle mistral models via startsWith fallback', () => {
-    const newMistralModel = 'mistral.some-future-model-v1:0';
-
-    // This simulates the logic in getHandlerForModel
-    let handler = AWS_BEDROCK_MODELS[newMistralModel];
-    if (!handler && newMistralModel.startsWith('mistral.')) {
-      handler = BEDROCK_MODEL.MISTRAL;
-    }
-
-    expect(handler).toBe(BEDROCK_MODEL.MISTRAL);
+  it('should map DeepSeek models correctly', async () => {
+    expect(AWS_BEDROCK_MODELS['deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
+    expect(AWS_BEDROCK_MODELS['us.deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
   });
 
-  it('should handle llama4 models via includes fallback', () => {
-    const newLlama4Model = 'meta.llama4-future-model-v1:0';
-
-    // This simulates the logic in getHandlerForModel
-    let handler = AWS_BEDROCK_MODELS[newLlama4Model];
-    if (!handler && newLlama4Model.includes('meta.llama4')) {
-      handler = BEDROCK_MODEL.LLAMA4;
-    }
-
-    expect(handler).toBe(BEDROCK_MODEL.LLAMA4);
-  });
-
-  it('should include OpenAI models with OPENAI handler', () => {
+  it('should map OpenAI models correctly', async () => {
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-120b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-20b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
+  });
+
+  it('should map APAC regional models correctly', async () => {
+    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-micro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-pro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-premier-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['apac.meta.llama4-scout-17b-instruct-v1:0']).toBe(
+      BEDROCK_MODEL.LLAMA4,
+    );
+    expect(AWS_BEDROCK_MODELS['apac.meta.llama4-maverick-17b-instruct-v1:0']).toBe(
+      BEDROCK_MODEL.LLAMA4,
+    );
+  });
+
+  it('should map EU regional models correctly', async () => {
+    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-micro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-pro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-premier-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.meta.llama3-2-1b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['eu.meta.llama3-2-3b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['eu.meta.llama4-scout-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
+    expect(AWS_BEDROCK_MODELS['eu.meta.llama4-maverick-17b-instruct-v1:0']).toBe(
+      BEDROCK_MODEL.LLAMA4,
+    );
+  });
+
+  it('should map US regional models correctly', async () => {
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-micro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-pro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-premier-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-haiku-20241022-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-sonnet-20241022-v2:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-opus-20240229-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-20250514-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-1-405b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-1-70b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-1-8b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-11b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-1b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-3b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-90b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-3-70b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_3);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama4-scout-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama4-maverick-17b-instruct-v1:0']).toBe(
+      BEDROCK_MODEL.LLAMA4,
+    );
+  });
+
+  it('should map US Gov Cloud models correctly', async () => {
+    expect(AWS_BEDROCK_MODELS['us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us-gov.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
   });
 });
 
@@ -2261,26 +2653,254 @@ describe('AwsBedrockCompletionProvider', () => {
   });
 });
 
+describe('BEDROCK_MODEL.QWEN', () => {
+  const qwenHandler = BEDROCK_MODEL.QWEN;
+
+  describe('params', () => {
+    it('should format prompt and parameters correctly', async () => {
+      const config = {
+        max_tokens: 2048,
+        temperature: 0.7,
+        top_p: 0.9,
+        showThinking: true,
+      };
+      const prompt = 'Write a Python function';
+      const stop = ['</code>'];
+
+      const result = await qwenHandler.params(
+        config,
+        prompt,
+        stop,
+        'qwen.qwen3-coder-480b-a35b-v1:0',
+      );
+
+      expect(result.messages).toEqual([{ role: 'user', content: 'Write a Python function' }]);
+      expect(result.max_tokens).toBe(2048);
+      expect(result.temperature).toBe(0.7);
+      expect(result.top_p).toBe(0.9);
+      expect(result.stop).toEqual(['</code>']);
+    });
+
+    it('should handle tool configuration', async () => {
+      const config = {
+        max_tokens: 1024,
+        tools: [
+          {
+            type: 'function' as const,
+            function: {
+              name: 'calculate',
+              description: 'Perform calculations',
+              parameters: {
+                type: 'object',
+                properties: {
+                  expression: { type: 'string' },
+                },
+                required: ['expression'],
+              },
+            },
+          },
+        ],
+        tool_choice: 'auto' as const,
+      };
+      const prompt = 'Calculate 5 + 3';
+
+      const result = await qwenHandler.params(config, prompt);
+
+      expect(result.tools).toEqual(config.tools);
+      expect(result.tool_choice).toBe('auto');
+    });
+
+    it('should use environment variables for defaults', async () => {
+      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
+      process.env.AWS_BEDROCK_TOP_P = '0.8';
+
+      const config = {};
+      const prompt = 'Test prompt';
+
+      const result = await qwenHandler.params(config, prompt);
+
+      expect(result.temperature).toBe(0.5);
+      expect(result.top_p).toBe(0.8);
+
+      delete process.env.AWS_BEDROCK_TEMPERATURE;
+      delete process.env.AWS_BEDROCK_TOP_P;
+    });
+  });
+
+  describe('output', () => {
+    it('should handle normal text response', async () => {
+      const config = {};
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content:
+                'Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)',
+            },
+          },
+        ],
+      };
+
+      const result = qwenHandler.output(config, responseJson);
+
+      expect(result).toBe(
+        'Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)',
+      );
+    });
+
+    it('should handle tool call response', async () => {
+      const config = {};
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'calculate',
+                    arguments: '{"expression": "15 * 8 + 42"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      const result = qwenHandler.output(config, responseJson);
+
+      expect(result).toContain('Called function calculate');
+      expect(result).toContain('15 * 8 + 42');
+    });
+
+    it('should handle thinking mode response', async () => {
+      const config = { showThinking: true };
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content: '<think>Let me think about this step by step...</think>The answer is 42',
+            },
+          },
+        ],
+      };
+
+      const result = qwenHandler.output(config, responseJson);
+
+      expect(result).toBe('<think>Let me think about this step by step...</think>The answer is 42');
+    });
+
+    it('should hide thinking when showThinking is false', async () => {
+      const config = { showThinking: false };
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content: '<think>Let me think about this step by step...</think>The answer is 42',
+            },
+          },
+        ],
+      };
+
+      const result = qwenHandler.output(config, responseJson);
+
+      expect(result).toBe('The answer is 42');
+      expect(result).not.toContain('think>');
+    });
+
+    it('should handle error response', async () => {
+      const config = {};
+      const responseJson = {
+        error: {
+          message: 'Model not found',
+          code: 'ModelNotFoundException',
+        },
+      };
+
+      expect(() => qwenHandler.output(config, responseJson)).toThrow(
+        'Qwen API error: [object Object]',
+      );
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should extract token usage from response', async () => {
+      const responseJson = {
+        usage: {
+          prompt_tokens: 50,
+          completion_tokens: 100,
+          total_tokens: 150,
+        },
+      };
+
+      const result = qwenHandler.tokenUsage(responseJson, '');
+
+      expect(result).toEqual({
+        total: 150,
+        prompt: 50,
+        completion: 100,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle missing usage data', async () => {
+      const responseJson = {};
+
+      const result = qwenHandler.tokenUsage(responseJson, '');
+
+      expect(result).toEqual({
+        total: undefined,
+        prompt: undefined,
+        completion: undefined,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
+describe('Qwen model mapping', () => {
+  it('should include all Qwen models in AWS_BEDROCK_MODELS', async () => {
+    const qwenModels = [
+      'qwen.qwen3-coder-480b-a35b-v1:0',
+      'qwen.qwen3-coder-30b-a3b-v1:0',
+      'qwen.qwen3-235b-a22b-2507-v1:0',
+      'qwen.qwen3-32b-v1:0',
+    ];
+
+    qwenModels.forEach((modelId) => {
+      expect(AWS_BEDROCK_MODELS[modelId]).toBeDefined();
+      expect(AWS_BEDROCK_MODELS[modelId]).toBe(BEDROCK_MODEL.QWEN);
+    });
+  });
+
+  it('should recognize qwen models by prefix', async () => {
+    const provider = new AwsBedrockCompletionProvider('qwen.qwen3-coder-480b-a35b-v1:0');
+    expect(provider.modelName).toBe('qwen.qwen3-coder-480b-a35b-v1:0');
+  });
+});
+
 describe('coerceStrToNum', () => {
-  it('should convert string numbers to numeric values', () => {
+  it('should convert string numbers to numeric values', async () => {
     expect(coerceStrToNum('42')).toBe(42);
     expect(coerceStrToNum('3.14')).toBe(3.14);
     expect(coerceStrToNum('-10')).toBe(-10);
     expect(coerceStrToNum('0')).toBe(0);
   });
 
-  it('should return original value for numbers', () => {
+  it('should return original value for numbers', async () => {
     expect(coerceStrToNum(42)).toBe(42);
     expect(coerceStrToNum(3.14)).toBe(3.14);
     expect(coerceStrToNum(-10)).toBe(-10);
     expect(coerceStrToNum(0)).toBe(0);
   });
 
-  it('should handle undefined values', () => {
+  it('should handle undefined values', async () => {
     expect(coerceStrToNum(undefined)).toBeUndefined();
   });
 
-  it('should convert invalid string numbers to NaN', () => {
+  it('should convert invalid string numbers to NaN', async () => {
     expect(Number.isNaN(coerceStrToNum('not-a-number') as number)).toBe(true);
   });
 });

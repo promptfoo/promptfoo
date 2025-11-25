@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -755,7 +756,7 @@ describe('Error message quality', () => {
       },
     ];
 
-    testCases.forEach(({ config, expectedError, description }) => {
+    testCases.forEach(({ config, expectedError }) => {
       let errorCaught = false;
       let zodError: z.ZodError | null = null;
 

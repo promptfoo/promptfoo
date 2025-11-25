@@ -1,6 +1,6 @@
 import { handleGuardrails } from '../../src/assertions/guardrails';
 
-import type { AssertionParams, AtomicTestCase } from '../../src/types';
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
 describe('handleGuardrail', () => {
   const baseAssertion = {
@@ -19,7 +19,7 @@ describe('handleGuardrail', () => {
   const defaultParams: AssertionParams = {
     assertion: baseAssertion,
     baseType: 'guardrails',
-    context: defaultContext,
+    assertionValueContext: defaultContext,
     inverse: false,
     output: '',
     outputString: '',

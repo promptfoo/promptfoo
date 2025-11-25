@@ -1,8 +1,8 @@
-import React, { forwardRef, useState } from 'react';
+import React, { useState } from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EngineeringIcon from '@mui/icons-material/Engineering';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
@@ -24,10 +24,10 @@ import type { ButtonProps } from '@mui/material/Button';
 import type { LinkProps } from 'react-router-dom';
 import './Navigation.css';
 
-// Create a properly typed forwarded ref component for MUI compatibility
-const RouterLink = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => (
-  <Link ref={ref} {...props} />
-));
+// Create a properly typed ref component for MUI compatibility
+function RouterLink({ ref, ...props }: LinkProps & { ref?: React.Ref<HTMLAnchorElement> }) {
+  return <Link ref={ref} {...props} />;
+}
 RouterLink.displayName = 'RouterLink';
 
 const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
@@ -336,8 +336,8 @@ function EvalsDropdown({
     },
     {
       href: '/reports',
-      label: 'Reports',
-      description: 'View red team reports',
+      label: 'Red Team Vulnerability Reports',
+      description: 'View findings from red teams',
     },
   ];
 
@@ -471,13 +471,7 @@ function EvalsDropdown({
   );
 }
 
-export default function Navigation({
-  darkMode,
-  onToggleDarkMode,
-}: {
-  darkMode: boolean;
-  onToggleDarkMode: () => void;
-}) {
+export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () => void }) {
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);

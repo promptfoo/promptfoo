@@ -54,11 +54,7 @@ const StyledLink = styled(Link)({
   textDecoration: 'none',
 });
 
-const YamlEditorComponent: React.FC<YamlEditorProps> = ({
-  initialConfig,
-  readOnly = false,
-  initialYaml,
-}) => {
+const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: YamlEditorProps) => {
   const darkMode = useTheme().palette.mode === 'dark';
   const [code, setCode] = React.useState('');
   const [originalCode, setOriginalCode] = React.useState('');
@@ -72,7 +68,7 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
     severity?: 'success' | 'error' | 'warning' | 'info';
   }>({ show: false, message: '', severity: 'info' });
 
-  const { getTestSuite, updateConfig } = useStore();
+  const { config, getTestSuite, updateConfig } = useStore();
 
   const parseAndUpdateStore = (yamlContent: string) => {
     try {
@@ -179,6 +175,7 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
     setNotification({ show: true, message: 'Reset to current configuration', severity: 'info' });
   };
 
+  // Initial load effect
   React.useEffect(() => {
     if (initialYaml) {
       const formattedCode = ensureSchemaComment(initialYaml);
@@ -196,6 +193,21 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
     }
     // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
   }, [initialYaml, initialConfig]);
+
+  // Auto-update effect for store changes (only when not editing)
+  React.useEffect(() => {
+    if (!initialYaml && !initialConfig && !isEditing) {
+      const currentConfig = getTestSuite();
+      const formattedCode = formatYamlWithSchema(currentConfig);
+      // Only update if the content has actually changed to avoid cursor jumping
+      if (formattedCode !== code) {
+        setCode(formattedCode);
+        setOriginalCode(formattedCode);
+      }
+    }
+    // Deliberately omitting getTestSuite from dependencies to avoid infinite re-renders
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, isEditing, initialYaml, initialConfig, code]);
 
   // Track unsaved changes
   React.useEffect(() => {

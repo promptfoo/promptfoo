@@ -6,7 +6,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-} from '../../types';
+} from '../../types/index';
 import type { MCPConfig } from './types';
 
 interface MCPProviderOptions {
@@ -56,9 +56,9 @@ export class MCPProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
       // Ensure initialization is complete

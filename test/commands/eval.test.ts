@@ -9,18 +9,21 @@ import {
   showRedteamProviderLabelMissingWarning,
 } from '../../src/commands/eval';
 import { evaluate } from '../../src/evaluator';
-import { checkEmailStatusOrExit, promptForEmailUnverified } from '../../src/globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  promptForEmailUnverified,
+} from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { checkCloudPermissions, ConfigPermissionError } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');
@@ -87,6 +90,8 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    jest.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
 
   it('should create eval command with correct options', () => {
@@ -141,7 +146,7 @@ describe('evalCommand', () => {
     await doEval(cmdObj, config, defaultConfigPath, {});
 
     expect(promptForEmailUnverified).toHaveBeenCalledTimes(1);
-    expect(checkEmailStatusOrExit).toHaveBeenCalledTimes(1);
+    expect(checkEmailStatusAndMaybeExit).toHaveBeenCalledTimes(1);
   });
 
   it('should handle share option when enabled', async () => {
@@ -362,6 +367,8 @@ describe('checkCloudPermissions', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    jest.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
 
   it('should fail when checkCloudPermissions throws an error', async () => {
@@ -641,6 +648,8 @@ describe('doEval with external defaultTest', () => {
       },
       basePath: path.resolve('/'),
     });
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    jest.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
 
   it('should handle grader option with string defaultTest', async () => {
@@ -784,6 +793,389 @@ describe('doEval with external defaultTest', () => {
       }),
       expect.anything(),
       expect.anything(),
+    );
+  });
+});
+
+describe('Sharing Precedence - Comprehensive Test Coverage', () => {
+  const defaultConfigPath = '/path/to/config.yaml';
+  const defaultConfig = {
+    prompts: [],
+    providers: [],
+  } as UnifiedConfig;
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    jest.mocked(isSharingEnabled).mockReturnValue(true);
+    jest.mocked(createShareableUrl).mockResolvedValue('https://example.com/share/123');
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+  });
+
+  describe('Priority 1: Explicit disable (CLI --share=false, --no-share, or env var)', () => {
+    it('should not share when cmdObj.share = false, regardless of other settings', async () => {
+      const cmdObj = { share: false, table: false, write: false };
+      const config = { sharing: true } as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+        commandLineOptions: { share: true },
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).not.toHaveBeenCalled();
+    });
+
+    it('should not share when cmdObj.noShare = true, regardless of other settings', async () => {
+      const cmdObj = { noShare: true, table: false, write: false };
+      const config = { sharing: true } as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+        commandLineOptions: { share: true },
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Priority 2: Explicit enable via CLI --share=true', () => {
+    it('should share when cmdObj.share = true, overriding config.sharing = false', async () => {
+      const cmdObj = { share: true, table: false, write: false };
+      const config = { sharing: false } as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    });
+
+    it('should share when cmdObj.share = true, overriding commandLineOptions.share = false', async () => {
+      const cmdObj = { share: true, table: false, write: false };
+      const config = {} as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+        commandLineOptions: { share: false },
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    });
+  });
+
+  describe('Priority 3: commandLineOptions.share from config file', () => {
+    it('should share when commandLineOptions.share = true, overriding config.sharing = false', async () => {
+      const cmdObj = { table: false, write: false };
+      const config = { sharing: false } as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+        commandLineOptions: { share: true },
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    });
+
+    it('should not share when commandLineOptions.share = false, overriding cloud enabled', async () => {
+      const cmdObj = { table: false, write: false };
+      const config = {} as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+        commandLineOptions: { share: false },
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Priority 4: config.sharing from config file', () => {
+    it('should share when config.sharing = true', async () => {
+      const cmdObj = { table: false, write: false };
+      const config = { sharing: true } as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    });
+
+    it('should not share when config.sharing = false, overriding cloud enabled', async () => {
+      const cmdObj = { table: false, write: false };
+      const config = { sharing: false } as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).not.toHaveBeenCalled();
+    });
+
+    it('should share when config.sharing is an object (custom API URL)', async () => {
+      const cmdObj = { table: false, write: false };
+      const config = { sharing: { apiBaseUrl: 'https://custom.api.url' } } as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    });
+  });
+
+  describe('Priority 5: Default to cloud auto-share when nothing explicitly set', () => {
+    it('should share when cloud is enabled and no other settings are specified', async () => {
+      const cmdObj = { table: false, write: false };
+      const config = {} as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    });
+
+    it('should not share when cloud is disabled and no other settings are specified', async () => {
+      const cmdObj = { table: false, write: false };
+      const config = {} as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Edge cases and complex scenarios', () => {
+    it('should handle config.sharing = undefined explicitly (not just missing)', async () => {
+      const cmdObj = { table: false, write: false };
+      const config = { sharing: undefined } as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    });
+
+    it('should respect commandLineOptions.share = true even when config.sharing = false and cloud disabled', async () => {
+      const cmdObj = { table: false, write: false };
+      const config = { sharing: false } as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+        commandLineOptions: { share: true },
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    });
+
+    it('should not call createShareableUrl when isSharingEnabled returns false', async () => {
+      const cmdObj = { share: true, table: false, write: false };
+      const config = {} as UnifiedConfig;
+      const evalRecord = new Eval(config);
+
+      jest.mocked(isSharingEnabled).mockReturnValue(false);
+      jest.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+      });
+      jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+      await doEval(cmdObj, config, defaultConfigPath, {});
+
+      expect(createShareableUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Full precedence verification matrix', () => {
+    const testMatrix = [
+      // [cmdObj.share, cmdObj.noShare, commandLineOptions.share, config.sharing, cloudEnabled, expectedToShare, description]
+      [false, undefined, undefined, undefined, false, false, 'CLI --share=false blocks everything'],
+      [false, undefined, true, true, true, false, 'CLI --share=false overrides all other enables'],
+      [undefined, true, true, true, true, false, 'CLI --no-share overrides all other enables'],
+      [true, undefined, false, false, false, true, 'CLI --share=true overrides all disables'],
+      [
+        undefined,
+        undefined,
+        true,
+        false,
+        false,
+        true,
+        'commandLineOptions.share=true overrides config.sharing=false',
+      ],
+      [
+        undefined,
+        undefined,
+        false,
+        true,
+        true,
+        false,
+        'commandLineOptions.share=false overrides config and cloud',
+      ],
+      [undefined, undefined, undefined, true, false, true, 'config.sharing=true enables sharing'],
+      [
+        undefined,
+        undefined,
+        undefined,
+        false,
+        true,
+        false,
+        'config.sharing=false blocks cloud auto-share',
+      ],
+      [
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+        true,
+        'cloud enabled auto-shares when nothing set',
+      ],
+      [
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        false,
+        'no sharing when nothing enables it',
+      ],
+    ] as const;
+
+    testMatrix.forEach(
+      ([cmdShare, cmdNoShare, cloShare, cfgShare, cloudEnabled, expectedToShare, description]) => {
+        it(description, async () => {
+          const cmdObj: any = { table: false, write: false };
+          if (cmdShare !== undefined) {
+            cmdObj.share = cmdShare;
+          }
+          if (cmdNoShare !== undefined) {
+            cmdObj.noShare = cmdNoShare;
+          }
+
+          const config = (cfgShare !== undefined ? { sharing: cfgShare } : {}) as UnifiedConfig;
+          const evalRecord = new Eval(config);
+
+          jest.mocked(cloudConfig.isEnabled).mockReturnValue(cloudEnabled);
+          jest.mocked(resolveConfigs).mockResolvedValue({
+            config,
+            testSuite: { prompts: [], providers: [] },
+            basePath: path.resolve('/'),
+            commandLineOptions: cloShare !== undefined ? { share: cloShare } : undefined,
+          });
+          jest.mocked(evaluate).mockResolvedValue(evalRecord);
+
+          await doEval(cmdObj, config, defaultConfigPath, {});
+
+          if (expectedToShare) {
+            expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+          } else {
+            expect(createShareableUrl).not.toHaveBeenCalled();
+          }
+        });
+      },
     );
   });
 });

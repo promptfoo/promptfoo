@@ -1,7 +1,8 @@
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
-import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy';
+import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy/index';
+import { POLICY_METRIC_PREFIX } from '../../../src/redteam/plugins/policy/constants';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
 describe('PolicyPlugin', () => {
   const mockProvider: ApiProvider = {
@@ -88,7 +89,7 @@ describe('PolicyPlugin', () => {
     expect(assertions).toEqual([
       expect.objectContaining({
         type: 'promptfoo:redteam:policy',
-        metric: 'PolicyViolation',
+        metric: `${POLICY_METRIC_PREFIX}:${plugin.policyId}`,
       }),
     ]);
   });
@@ -291,6 +292,9 @@ describe('PolicyViolationGrader', () => {
       }),
       mockProvider,
       undefined,
+      undefined,
+      true,
+      undefined, // gradingContext
     );
   });
 
@@ -333,6 +337,9 @@ describe('PolicyViolationGrader', () => {
       }),
       mockProvider,
       undefined,
+      undefined,
+      true,
+      undefined, // gradingContext
     );
   });
 });

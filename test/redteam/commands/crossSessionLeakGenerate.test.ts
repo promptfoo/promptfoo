@@ -1,4 +1,4 @@
-import { synthesize } from '../../../src/redteam';
+import { synthesize } from '../../../src/redteam/index';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import * as configModule from '../../../src/util/config/load';
 
@@ -10,7 +10,7 @@ jest.mock('../../../src/redteam', () => ({
 jest.mock('../../../src/util/config/load', () => ({
   resolveConfigs: jest.fn(),
 }));
-jest.mock('../../../src/util/config/manage', () => ({
+jest.mock('../../../src/util/config/writer', () => ({
   writePromptfooConfig: jest.fn(),
 }));
 jest.mock('../../../src/providers', () => ({

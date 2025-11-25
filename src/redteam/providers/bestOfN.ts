@@ -5,10 +5,11 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { getSessionId } from '../util';
 
 import type {
   ApiProvider,
@@ -53,20 +54,20 @@ export default class BestOfNProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    logger.debug(`[Best-of-N] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[Best-of-N] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
     const targetProvider: ApiProvider = context.originalProvider;
     const targetTokenUsage = createEmptyTokenUsage();
-
+    const sessionIds: string[] = [];
     try {
       // Get candidate prompts from the server
-      const response = await fetch(getRemoteGenerationUrl(), {
+      const response = await fetchWithProxy(getRemoteGenerationUrl(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -111,10 +112,15 @@ export default class BestOfNProvider implements ApiProvider {
           targetVars,
           context.filters,
           targetProvider,
+          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
         try {
           const response = await targetProvider.callApi(renderedPrompt, context, options);
+          const sessionId = getSessionId(response, context);
+          if (sessionId) {
+            sessionIds.push(sessionId);
+          }
           lastResponse = response;
           accumulateResponseTokenUsage(targetTokenUsage, response);
           currentStep++;
@@ -139,16 +145,26 @@ export default class BestOfNProvider implements ApiProvider {
       }
       if (lastResponse) {
         (lastResponse as ProviderResponse).tokenUsage = targetTokenUsage;
+        (lastResponse as ProviderResponse).metadata = {
+          ...((lastResponse as ProviderResponse).metadata ?? {}),
+          sessionIds,
+        };
       }
       return (
         lastResponse || {
           error: 'All candidates failed',
+          metadata: {
+            sessionIds,
+          },
         }
       );
     } catch (err) {
       logger.error(`[Best-of-N] Error: ${err}`);
       return {
         error: String(err),
+        metadata: {
+          sessionIds,
+        },
       };
     }
   }

@@ -7,37 +7,14 @@ import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
-import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
+import { sanitizeUrl } from '../sanitizer';
+import { monkeyPatchFetch } from './monkeyPatchFetch';
 
-const originalFetch = global.fetch;
-
-// Override global fetch
-global.fetch = async (...args) => {
-  const [url, options] = args;
-
-  const opts = {
-    ...options,
-  };
-
-  if (
-    (typeof url === 'string' && url.startsWith(CLOUD_API_HOST)) ||
-    (url instanceof URL && url.host === CLOUD_API_HOST.replace(/^https?:\/\//, ''))
-  ) {
-    const token = cloudConfig.getApiKey();
-    opts.headers = {
-      ...(options?.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-  }
-
-  // Call the original fetch
-  const response = await originalFetch(url, opts);
-  return response;
-};
+import type { FetchOptions } from './types';
 
 /**
  * Options for configuring TLS in proxy connections
@@ -50,14 +27,6 @@ interface ProxyTlsOptions {
 }
 
 /**
- * Extended options for fetch requests with promptfoo-specific headers
- */
-interface PromptfooRequestInit extends RequestInit {
-  // Make headers type compatible with standard HeadersInit
-  headers?: HeadersInit;
-}
-
-/**
  * Error with additional system information
  */
 interface SystemError extends Error {
@@ -65,49 +34,9 @@ interface SystemError extends Error {
   cause?: unknown;
 }
 
-export function sanitizeUrl(url: string): string {
-  try {
-    // Ensure url is a string and handle edge cases
-    if (typeof url !== 'string' || !url.trim()) {
-      return url;
-    }
-
-    const parsedUrl = new URL(url);
-
-    // Create a copy for sanitization to avoid modifying the original URL
-    // Use href instead of toString() for better cross-platform compatibility
-    const sanitizedUrl = new URL(parsedUrl.href);
-
-    if (sanitizedUrl.username || sanitizedUrl.password) {
-      sanitizedUrl.username = '***';
-      sanitizedUrl.password = '***';
-    }
-
-    // Sanitize query parameters that might contain sensitive data
-    const sensitiveParams =
-      /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
-
-    try {
-      for (const key of Array.from(sanitizedUrl.searchParams.keys())) {
-        if (sensitiveParams.test(key)) {
-          sanitizedUrl.searchParams.set(key, '[REDACTED]');
-        }
-      }
-    } catch (paramError) {
-      // If search params handling fails, continue without sanitizing them
-      logger.debug(`Failed to sanitize URL parameters: ${paramError}`);
-    }
-
-    return sanitizedUrl.toString();
-  } catch (error) {
-    logger.debug(`Failed to sanitize URL: ${error}`);
-    return url;
-  }
-}
-
 export async function fetchWithProxy(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: FetchOptions = {},
 ): Promise<Response> {
   let finalUrl = url;
   let finalUrlString: string | undefined;
@@ -120,7 +49,12 @@ export async function fetchWithProxy(
     finalUrlString = url.url;
   }
 
-  const finalOptions: PromptfooRequestInit = {
+  if (!finalUrlString) {
+    throw new Error('Invalid URL');
+  }
+
+  // This is overridden globally but Node v20 is still complaining so we need to add it here too
+  const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...options,
     headers: {
       ...(options.headers as Record<string, string>),
@@ -193,12 +127,12 @@ export async function fetchWithProxy(
     setGlobalDispatcher(agent);
   }
 
-  return fetch(finalUrl, finalOptions);
+  return await monkeyPatchFetch(finalUrl, finalOptions);
 }
 
 export function fetchWithTimeout(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: FetchOptions = {},
   timeout: number,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
@@ -271,13 +205,15 @@ export async function handleRateLimit(response: Response): Promise<void> {
 /**
  * Fetch with automatic retries and rate limit handling
  */
+export type { FetchOptions } from './types';
+
 export async function fetchWithRetries(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: FetchOptions = {},
   timeout: number,
-  retries: number = 4,
+  maxRetries?: number,
 ): Promise<Response> {
-  const maxRetries = Math.max(0, retries);
+  maxRetries = Math.max(0, maxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
@@ -293,8 +229,9 @@ export async function fetchWithRetries(
 
       if (response && isRateLimited(response)) {
         logger.debug(
-          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${maxRetries}`,
+          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, attempt ${i + 1}/${maxRetries + 1}, waiting before retry...`,
         );
+        lastErrorMessage = `Rate limited: ${response.status} ${response.statusText}`;
         await handleRateLimit(response);
         continue;
       }

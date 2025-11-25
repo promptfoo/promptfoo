@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -24,7 +24,7 @@ jest.mock('../../src/util', () => {
 });
 
 describe('GolangProvider', () => {
-  const mockExec = jest.mocked(exec);
+  const mockExecFile = jest.mocked(execFile);
   const mockGetCache = jest.mocked(getCache);
   const mockIsCacheEnabled = jest.mocked(isCacheEnabled);
   const mockReadFileSync = jest.mocked(fs.readFileSync);
@@ -162,7 +162,15 @@ describe('GolangProvider', () => {
     mockRmSync.mockImplementation(() => undefined);
 
     // Mock exec with proper async behavior
-    mockExec.mockImplementation(((cmd: string, callback: any) => {
+    mockExecFile.mockImplementation(((
+      file: string,
+      args: any,
+      optionsOrCallback: any,
+      maybeCallback?: any,
+    ) => {
+      // Handle both execFile(file, args, callback) and execFile(file, args, options, callback) signatures
+      const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
+
       if (!callback) {
         return {} as any;
       }
@@ -170,9 +178,9 @@ describe('GolangProvider', () => {
       // Use setImmediate to ensure proper async behavior
       setImmediate(() => {
         try {
-          if (cmd.includes('cd') && cmd.includes('go build')) {
+          if (file === 'go' && args[0] === 'build') {
             callback(null, { stdout: '', stderr: '' }, '');
-          } else if (cmd.includes('golang_wrapper')) {
+          } else if (file.includes('golang_wrapper')) {
             callback(null, { stdout: '{"output":"test output"}', stderr: '' }, '');
           } else {
             callback(new Error('test error'), { stdout: '', stderr: '' }, '');
@@ -258,7 +266,7 @@ describe('GolangProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('golang:'));
-      expect(mockExec).not.toHaveBeenCalled();
+      expect(mockExecFile).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result' });
     });
 
@@ -304,12 +312,19 @@ describe('GolangProvider', () => {
       };
       mockGetCache.mockResolvedValue(mockCache as never);
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
         setImmediate(() => {
-          if (cmd.includes('golang_wrapper')) {
+          if (file.includes('golang_wrapper')) {
             callback(null, { stdout: '{"error":"test error in result"}', stderr: '' }, '');
           } else {
             callback(null, { stdout: '', stderr: '' }, '');
@@ -368,7 +383,14 @@ describe('GolangProvider', () => {
         set: jest.fn(),
       } as never);
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        _file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -391,7 +413,14 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        _file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -417,7 +446,14 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -425,7 +461,7 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: cmd.includes('golang_wrapper') ? '{"embedding":[0.1,0.2,0.3]}' : '',
+              stdout: file.includes('golang_wrapper') ? '{"embedding":[0.1,0.2,0.3]}' : '',
               stderr: '',
             },
             '',
@@ -442,7 +478,14 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -450,7 +493,7 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: cmd.includes('golang_wrapper') ? '{"classification":"test_class"}' : '',
+              stdout: file.includes('golang_wrapper') ? '{"classification":"test_class"}' : '',
               stderr: '',
             },
             '',
@@ -467,7 +510,14 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -475,7 +525,7 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: cmd.includes('golang_wrapper') ? '{"output":"test"}' : '',
+              stdout: file.includes('golang_wrapper') ? '{"output":"test"}' : '',
               stderr: 'warning: some go warning',
             },
             '',
@@ -522,7 +572,14 @@ describe('GolangProvider', () => {
         config: { basePath: '/absolute/path/to/subdir' },
       });
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        _file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -545,7 +602,14 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -553,7 +617,7 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: cmd.includes('golang_wrapper') ? 'invalid json' : '',
+              stdout: file.includes('golang_wrapper') ? 'invalid json' : '',
               stderr: '',
             },
             '',
@@ -578,21 +642,27 @@ describe('GolangProvider', () => {
         config: { basePath: '/absolute/path/to' },
       });
 
-      let executedCommand = '';
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      let executedFunctionName = '';
+      mockExecFile.mockImplementation(((
+        file: string,
+        args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
-        if (cmd.includes('golang_wrapper')) {
-          executedCommand = cmd;
+        if (file.includes('golang_wrapper')) {
+          executedFunctionName = args[1]; // args[1] is the function name
         }
         setImmediate(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
         return {} as any;
       }) as any);
 
       await provider.callApi('test prompt');
-      expect(executedCommand).toContain('custom_function');
-      expect(executedCommand.split(' ')[2]).toBe('custom_function');
+      expect(executedFunctionName).toBe('custom_function');
     });
 
     it('should use custom go executable when specified', async () => {
@@ -603,20 +673,27 @@ describe('GolangProvider', () => {
         },
       });
 
-      let buildCommand = '';
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      let buildFile = '';
+      mockExecFile.mockImplementation(((
+        file: string,
+        args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
-        if (cmd.includes('go build')) {
-          buildCommand = cmd;
+        if (args?.[0] === 'build') {
+          buildFile = file;
         }
         setImmediate(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
         return {} as any;
       }) as any);
 
       await provider.callApi('test prompt');
-      expect(buildCommand).toContain('/custom/go build');
+      expect(buildFile).toBe('/custom/go');
     });
 
     it('should handle circular references in args', async () => {
@@ -713,7 +790,14 @@ describe('GolangProvider', () => {
         return undefined;
       });
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        _file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -764,7 +848,14 @@ describe('GolangProvider', () => {
         return undefined;
       });
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        _file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
