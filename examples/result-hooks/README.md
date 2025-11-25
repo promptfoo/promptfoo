@@ -38,12 +38,12 @@ promptfoo eval -x file://alert-on-failure.js:afterAll
 
 Extensions support four lifecycle hooks:
 
-| Hook | When Called | Use Case |
-|------|-------------|----------|
-| `beforeAll` | Before evaluation starts | Modify test suite, validate config |
-| `beforeEach` | Before each test case | Customize test parameters |
-| `afterEach` | After each test case | Process individual results |
-| `afterAll` | After all tests complete | Aggregate results, send reports |
+| Hook         | When Called              | Use Case                           |
+| ------------ | ------------------------ | ---------------------------------- |
+| `beforeAll`  | Before evaluation starts | Modify test suite, validate config |
+| `beforeEach` | Before each test case    | Customize test parameters          |
+| `afterEach`  | After each test case     | Process individual results         |
+| `afterAll`   | After all tests complete | Aggregate results, send reports    |
 
 ## afterAll Context
 
