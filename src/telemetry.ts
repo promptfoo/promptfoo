@@ -64,28 +64,19 @@ export class Telemetry {
   private telemetryDisabledRecorded = false;
   private id: string;
   private email: string | null;
-  private hasIdentified = false;
 
   constructor() {
-    // Get user info eagerly (this doesn't create PostHog client)
     this.id = getUserId();
     this.email = getUserEmail();
-    // NOTE: We intentionally do NOT call identify() here.
-    // PostHog client is created lazily on first telemetry event to prevent
-    // keeping the Node.js event loop alive when promptfoo is imported as a library.
-    // See: https://github.com/promptfoo/promptfoo/issues/5893
+    this.identify().then(() => {
+      // Identify completed
+    });
   }
 
-  /**
-   * Lazily identify the user on the first telemetry event.
-   * This prevents the PostHog client from being created at import time,
-   * which would keep the Node.js event loop alive.
-   */
-  private ensureIdentified(): void {
-    if (this.hasIdentified || this.disabled || getEnvBool('IS_TESTING')) {
+  async identify() {
+    if (this.disabled || getEnvBool('IS_TESTING')) {
       return;
     }
-    this.hasIdentified = true;
 
     const client = getPostHogClient();
     if (client) {
@@ -108,14 +99,6 @@ export class Telemetry {
     }
   }
 
-  /**
-   * @deprecated Use ensureIdentified() instead. This method is kept for backwards
-   * compatibility but now only ensures identification happens (lazy initialization).
-   */
-  async identify() {
-    this.ensureIdentified();
-  }
-
   get disabled() {
     return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
   }
@@ -131,8 +114,6 @@ export class Telemetry {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
-      // Ensure user is identified before recording events
-      this.ensureIdentified();
       this.sendEvent(eventName, properties);
     }
   }
@@ -229,8 +210,8 @@ export class Telemetry {
 const telemetry = new Telemetry();
 
 // Register cleanup handler as a safety net to ensure PostHog client is properly
-// shut down when the process exits. The primary fix is lazy initialization above
-// (PostHog client is only created on first telemetry event, not at import time).
+// shut down when the process exits. The primary fix is disabling PostHog's internal
+// flush timer (flushAt: 1, flushInterval: 0) so it doesn't keep the event loop alive.
 // See: https://github.com/promptfoo/promptfoo/issues/5893
 process.once('beforeExit', () => {
   telemetry.shutdown().catch((error) => {
