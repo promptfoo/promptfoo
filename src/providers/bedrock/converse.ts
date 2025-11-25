@@ -1109,13 +1109,32 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       let stopReason: string | undefined;
       let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
 
+      // Track tool use blocks being streamed
+      const toolUseBlocks: Map<number, { toolUseId?: string; name?: string; input: string }> =
+        new Map();
+
       const showThinking = this.config.showThinking !== false;
 
       // Process the stream
       if (response.stream) {
         for await (const event of response.stream) {
+          // Handle content block start - includes tool use initialization
+          if ('contentBlockStart' in event && event.contentBlockStart) {
+            const blockIndex = event.contentBlockStart.contentBlockIndex ?? 0;
+            const start = event.contentBlockStart.start;
+            if (start && 'toolUse' in start && start.toolUse) {
+              toolUseBlocks.set(blockIndex, {
+                toolUseId: start.toolUse.toolUseId,
+                name: start.toolUse.name,
+                input: '',
+              });
+            }
+          }
+
           if ('contentBlockDelta' in event && event.contentBlockDelta?.delta) {
             const delta = event.contentBlockDelta.delta;
+            const blockIndex = event.contentBlockDelta.contentBlockIndex ?? 0;
+
             if ('text' in delta && delta.text) {
               output += delta.text;
             }
@@ -1123,6 +1142,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               const rc = delta.reasoningContent as { text?: string };
               if (rc.text) {
                 reasoning += rc.text;
+              }
+            }
+            // Handle streaming tool use input
+            if ('toolUse' in delta && delta.toolUse) {
+              const toolBlock = toolUseBlocks.get(blockIndex);
+              if (toolBlock && delta.toolUse.input) {
+                toolBlock.input += delta.toolUse.input;
               }
             }
           }
@@ -1135,8 +1161,39 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         }
       }
 
-      // Combine reasoning and output
-      const finalOutput = reasoning ? `<thinking>\n${reasoning}\n</thinking>\n\n${output}` : output;
+      // Format tool use blocks for output (same as non-streaming)
+      const toolUseParts: string[] = [];
+      for (const [, toolBlock] of toolUseBlocks) {
+        if (toolBlock.name) {
+          let parsedInput: unknown;
+          try {
+            parsedInput = toolBlock.input ? JSON.parse(toolBlock.input) : {};
+          } catch {
+            parsedInput = toolBlock.input;
+          }
+          toolUseParts.push(
+            JSON.stringify({
+              type: 'tool_use',
+              id: toolBlock.toolUseId,
+              name: toolBlock.name,
+              input: parsedInput,
+            }),
+          );
+        }
+      }
+
+      // Combine reasoning, output, and tool use
+      const parts: string[] = [];
+      if (reasoning) {
+        parts.push(`<thinking>\n${reasoning}\n</thinking>`);
+      }
+      if (output) {
+        parts.push(output);
+      }
+      if (toolUseParts.length > 0) {
+        parts.push(...toolUseParts);
+      }
+      const finalOutput = parts.join('\n\n');
 
       const tokenUsage: Partial<TokenUsage> = {
         prompt: usage.inputTokens,

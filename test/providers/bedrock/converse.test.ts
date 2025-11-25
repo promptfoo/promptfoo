@@ -1014,6 +1014,218 @@ Third line`;
       }
     });
   });
+
+  describe('streaming', () => {
+    // Helper to create async iterable from events array
+    async function* createMockStream(events: unknown[]) {
+      for (const event of events) {
+        yield event;
+      }
+    }
+
+    it('should handle streaming text response', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1', streaming: true },
+      });
+
+      const streamEvents = [
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello ' } } },
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'World' } } },
+        { messageStop: { stopReason: 'end_turn' } },
+        { metadata: { usage: { inputTokens: 10, outputTokens: 5 } } },
+      ];
+
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream(streamEvents),
+      });
+
+      const result = await provider.callApiStreaming('Test');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Hello World');
+      expect(result.tokenUsage?.prompt).toBe(10);
+      expect(result.tokenUsage?.completion).toBe(5);
+    });
+
+    it('should handle streaming tool use response', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1', streaming: true },
+      });
+
+      // Tool use is streamed via contentBlockStart (for id/name) and contentBlockDelta (for input)
+      const streamEvents = [
+        {
+          contentBlockStart: {
+            contentBlockIndex: 0,
+            start: {
+              toolUse: {
+                toolUseId: 'tool-123',
+                name: 'get_weather',
+              },
+            },
+          },
+        },
+        {
+          contentBlockDelta: {
+            contentBlockIndex: 0,
+            delta: {
+              toolUse: {
+                input: '{"city":',
+              },
+            },
+          },
+        },
+        {
+          contentBlockDelta: {
+            contentBlockIndex: 0,
+            delta: {
+              toolUse: {
+                input: '"Seattle"}',
+              },
+            },
+          },
+        },
+        { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 20, outputTokens: 15 } } },
+      ];
+
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream(streamEvents),
+      });
+
+      const result = await provider.callApiStreaming('What is the weather in Seattle?');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('tool_use');
+      expect(result.output).toContain('tool-123');
+      expect(result.output).toContain('get_weather');
+      expect(result.output).toContain('Seattle');
+      expect(result.tokenUsage?.prompt).toBe(20);
+      expect(result.tokenUsage?.completion).toBe(15);
+    });
+
+    it('should handle streaming with multiple tool uses', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1', streaming: true },
+      });
+
+      const streamEvents = [
+        // First tool
+        {
+          contentBlockStart: {
+            contentBlockIndex: 0,
+            start: { toolUse: { toolUseId: 'tool-1', name: 'get_time' } },
+          },
+        },
+        {
+          contentBlockDelta: {
+            contentBlockIndex: 0,
+            delta: { toolUse: { input: '{"timezone":"UTC"}' } },
+          },
+        },
+        // Second tool
+        {
+          contentBlockStart: {
+            contentBlockIndex: 1,
+            start: { toolUse: { toolUseId: 'tool-2', name: 'get_weather' } },
+          },
+        },
+        {
+          contentBlockDelta: {
+            contentBlockIndex: 1,
+            delta: { toolUse: { input: '{"city":"NYC"}' } },
+          },
+        },
+        { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 30, outputTokens: 25 } } },
+      ];
+
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream(streamEvents),
+      });
+
+      const result = await provider.callApiStreaming('Get time and weather');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('tool-1');
+      expect(result.output).toContain('get_time');
+      expect(result.output).toContain('tool-2');
+      expect(result.output).toContain('get_weather');
+    });
+
+    it('should handle streaming with mixed text and tool use', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1', streaming: true },
+      });
+
+      const streamEvents = [
+        // Text block first
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Let me check ' } } },
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'the weather.' } } },
+        // Then tool use
+        {
+          contentBlockStart: {
+            contentBlockIndex: 1,
+            start: { toolUse: { toolUseId: 'tool-1', name: 'weather_api' } },
+          },
+        },
+        {
+          contentBlockDelta: {
+            contentBlockIndex: 1,
+            delta: { toolUse: { input: '{"loc":"LA"}' } },
+          },
+        },
+        { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 15, outputTokens: 10 } } },
+      ];
+
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream(streamEvents),
+      });
+
+      const result = await provider.callApiStreaming('Check weather in LA');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('Let me check the weather.');
+      expect(result.output).toContain('weather_api');
+      expect(result.output).toContain('LA');
+    });
+
+    it('should handle streaming with reasoning content', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1', streaming: true, showThinking: true },
+      });
+
+      const streamEvents = [
+        {
+          contentBlockDelta: {
+            contentBlockIndex: 0,
+            delta: { reasoningContent: { text: 'Thinking about this...' } },
+          },
+        },
+        { contentBlockDelta: { contentBlockIndex: 1, delta: { text: 'The answer is 42.' } } },
+        { messageStop: { stopReason: 'end_turn' } },
+        { metadata: { usage: { inputTokens: 20, outputTokens: 30 } } },
+      ];
+
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream(streamEvents),
+      });
+
+      const result = await provider.callApiStreaming('What is the meaning of life?');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('<thinking>');
+      expect(result.output).toContain('Thinking about this...');
+      expect(result.output).toContain('</thinking>');
+      expect(result.output).toContain('The answer is 42.');
+    });
+  });
 });
 
 describe('Model coverage parity', () => {
