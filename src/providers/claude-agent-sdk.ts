@@ -20,7 +20,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 /**

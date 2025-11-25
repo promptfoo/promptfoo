@@ -124,7 +124,8 @@ export class PythonWorker {
 
       // Send CALL command with function name
       // Note: PythonShell.send() adds newline automatically in 'text' mode
-      const command = `CALL:${functionName}:${requestFile}:${responseFile}`;
+      // Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:)
+      const command = `CALL|${functionName}|${requestFile}|${responseFile}`;
       this.process!.send(command);
 
       // Wait for DONE

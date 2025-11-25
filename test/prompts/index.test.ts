@@ -433,7 +433,7 @@ describe('readPrompts', () => {
 
   it('should read a .js file with named function', async () => {
     const promptPath = 'prompt.js:functionName';
-    const mockFunction = (context: {
+    const mockFunction = (_context: {
       vars: Record<string, string | object>;
       provider?: ApiProvider;
     }) => 'dummy prompt result';

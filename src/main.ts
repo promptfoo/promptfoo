@@ -6,7 +6,7 @@ import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
-import { codeScansCommand } from './codeScan';
+import { codeScansCommand } from './codeScan/index';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
@@ -41,7 +41,7 @@ import { handleAutoUpdate, setUpdateHandler } from './updates/handleAutoUpdate';
 import { updateCommand } from './commands/update';
 import { getEnvBool } from './envars';
 import { loadDefaultConfig } from './util/config/default';
-import { printErrorInformation } from './util/errors';
+import { printErrorInformation } from './util/errors/index';
 import { setupEnv } from './util/index';
 
 /**

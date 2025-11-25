@@ -1,6 +1,6 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 import PromptDialog from './PromptDialog';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
@@ -132,6 +132,15 @@ const mockSelectedPromptThreeEvals: ServerPromptWithMetadata = {
 };
 
 describe('PromptDialog', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
   it('should render the dialog with prompt details, prompt text, and eval history when openDialog is true and a valid selectedPrompt is provided', () => {
     const handleClose = vi.fn();
 
@@ -203,7 +212,12 @@ describe('PromptDialog', () => {
 
     expect(writeTextMock).toHaveBeenCalledWith(mockSelectedPromptNoEvals.prompt.raw);
 
-    const snackbar = await screen.findByText('Prompt copied to clipboard');
+    // Advance timers for the async clipboard operation and snackbar to appear
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    const snackbar = screen.getByText('Prompt copied to clipboard');
     expect(snackbar).toBeVisible();
   });
 
@@ -459,7 +473,9 @@ describe('PromptDialog', () => {
     const copyButton = screen.getByLabelText('copy prompt');
     fireEvent.click(copyButton);
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Failed to copy prompt:',
@@ -492,7 +508,9 @@ describe('PromptDialog', () => {
     const copyButton = screen.getByLabelText('copy prompt');
     fireEvent.click(copyButton);
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Failed to copy prompt:',

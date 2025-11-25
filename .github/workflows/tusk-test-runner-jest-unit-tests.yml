@@ -70,7 +70,7 @@ jobs:
 
           testFramework: 'jest'
 
-          testFileRegex: '^test/.*\.test\.(ts|tsx)$'
+          testFileRegex: '^test/.*\.test\.(js|ts|tsx)$'
 
           lintScript: 'npx @biomejs/biome check --write {{file}}'
 

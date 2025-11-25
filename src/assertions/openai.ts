@@ -1,16 +1,15 @@
 import { validateFunctionCall } from '../providers/openai/util';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
-import invariant from '../util/invariant';
 
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import type { AssertionParams, GradingResult } from '../types/index';
 
-export const handleIsValidOpenAiToolsCall = ({
+export const handleIsValidOpenAiToolsCall = async ({
   assertion,
   output,
   provider,
   test,
-}: AssertionParams): GradingResult => {
+}: AssertionParams): Promise<GradingResult> => {
   // Handle MCP tool outputs from Responses API
   const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
 
@@ -66,14 +65,21 @@ export const handleIsValidOpenAiToolsCall = ({
 
   let tools = (provider as OpenAiChatCompletionProvider).config.tools;
   if (tools) {
-    tools = maybeLoadToolsFromExternalFile(tools, test.vars);
+    const loadedTools = await maybeLoadToolsFromExternalFile(tools, test.vars);
+    if (loadedTools !== undefined) {
+      tools = loadedTools;
+    }
   }
-  invariant(
-    tools,
-    `Tools are expected to be an array of objects with a function property. Got: ${JSON.stringify(
-      tools,
-    )}`,
-  );
+
+  // Tools must be defined when validating tool calls
+  if (!tools) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'No tools configured in provider, but output contains tool calls',
+      assertion,
+    };
+  }
   try {
     toolsOutput.forEach((toolOutput) => {
       validateFunctionCall(
