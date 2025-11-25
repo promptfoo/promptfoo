@@ -13,17 +13,15 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 
-export const ProviderOptionsSchema = z
-  .object({
-    id: z.custom<ProviderId>().optional(),
-    label: z.custom<ProviderLabel>().optional(),
-    config: z.any().optional(),
-    prompts: z.array(z.string()).optional(),
-    transform: z.string().optional(),
-    delay: z.number().optional(),
-    env: ProviderEnvOverridesSchema.optional(),
-  })
-  .strict();
+export const ProviderOptionsSchema = z.object({
+  id: z.custom<ProviderId>().optional(),
+  label: z.custom<ProviderLabel>().optional(),
+  config: z.any().optional(),
+  prompts: z.array(z.string()).optional(),
+  transform: z.string().optional(),
+  delay: z.number().optional(),
+  env: ProviderEnvOverridesSchema.optional(),
+});
 
 const CallApiContextParamsSchema = z.object({
   fetchWithCache: z.optional(z.any()),
