@@ -7,12 +7,11 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { outputFromMessage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
-import { AwsBedrockGenericProvider } from './base';
+import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import { novaOutputFromMessage, novaParseMessages } from './util';
-import type { Trace } from '@aws-sdk/client-bedrock-runtime';
 
-// Re-export the base provider
-export { AwsBedrockGenericProvider } from './base';
+// Re-export the base provider and options
+export { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 
 import type {
   ApiEmbeddingProvider,
@@ -48,18 +47,11 @@ export type BedrockModelFamily =
   | 'openai'
   | 'qwen';
 
-interface BedrockOptions {
-  accessKeyId?: string;
-  apiKey?: string;
-  profile?: string;
-  region?: string;
-  secretAccessKey?: string;
-  sessionToken?: string;
-  guardrailIdentifier?: string;
-  guardrailVersion?: string;
-  trace?: Trace;
-  showThinking?: boolean;
-  endpoint?: string;
+/**
+ * Extended Bedrock options for InvokeModel API
+ * Adds inferenceModelType for inference profile support
+ */
+interface BedrockInvokeModelOptions extends BedrockOptions {
   inferenceModelType?: BedrockModelFamily;
 }
 
@@ -1665,7 +1657,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
-function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedrockModel {
+function getHandlerForModel(modelName: string, config?: BedrockInvokeModelOptions): IBedrockModel {
   // Check if it's an inference profile ARN
   if (modelName.includes('arn:') && modelName.includes('inference-profile')) {
     // For inference profiles, use the model type from config to determine handler
