@@ -78,7 +78,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
-- docs: update all examples and documentation to use latest Claude models - migrate from Claude Sonnet 4 (claude-sonnet-4-20250514) to Claude Sonnet 4.5 (claude-sonnet-4-5-20250929), fix missing date suffixes on Claude Opus 4.1 model IDs, and update outdated Claude 3.7 Sonnet references throughout examples and site documentation (#5496)
 - docs(providers): add comprehensive Anthropic structured outputs documentation covering JSON outputs (`output_format`) and strict tool use (`strict: true`), including usage examples, schema limitations, and feature compatibility (#6226)
 
 ### Tests
@@ -174,10 +173,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
 - fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
-
-### Documentation
-
-- docs(examples): update model references in example configurations to latest available models (#5496)
 
 ## [0.119.8] - 2025-11-18
 
