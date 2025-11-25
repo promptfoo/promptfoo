@@ -15,7 +15,7 @@ prompts:
 providers:
   # All providers use the litellm: prefix and connect through the proxy
   - litellm:gpt-4.1
-  - litellm:claude-sonnet-4-20250514
+  - litellm:claude-sonnet-4-5-20250929
   - litellm:gemini-2.5-pro
 
 # Configure embedding provider for similarity assertions

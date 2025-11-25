@@ -5,8 +5,8 @@ prompts:
   - file://prompts.txt
 
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
-    label: Claude Sonnet 4
+  - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    label: Claude Sonnet 4.5
     config:
       region: us-west-2
       max_tokens: 2048

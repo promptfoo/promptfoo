@@ -2,7 +2,7 @@
 description: Red Teaming MCP with tool use capabilities
 
 providers:
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-5-20250929
     config:
       mcp:
         enabled: true

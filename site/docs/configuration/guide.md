@@ -574,7 +574,7 @@ For example, for Claude:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-7-sonnet-20250219
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       thinking:
         type: 'enabled'

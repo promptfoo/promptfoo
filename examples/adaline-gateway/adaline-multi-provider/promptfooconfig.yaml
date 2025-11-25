@@ -6,7 +6,7 @@ prompts:
 
 providers:
   - id: adaline:openai:chat:gpt-5
-  - id: adaline:anthropic:chat:claude-opus-4-1
+  - id: adaline:anthropic:chat:claude-opus-4-1-20250805
   - id: adaline:google:chat:gemini-2.5-pro
 
 tests:

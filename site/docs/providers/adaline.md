@@ -498,7 +498,7 @@ prompts:
   - file://prompt.json
 providers:
   - id: adaline:openai:chat:gpt-5
-  - id: adaline:anthropic:chat:claude-3-opus-20240229
+  - id: adaline:anthropic:chat:claude-opus-4-1-20250805
   - id: adaline:google:chat:gemini-2.5-pro
 
 tests:
