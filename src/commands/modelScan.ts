@@ -16,19 +16,14 @@ import type { Command } from 'commander';
 
 import type { ModelAuditScanResults } from '../types/modelAudit';
 
-export async function checkModelAuditInstalled(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const proc = spawn('modelaudit', ['--version']);
-    proc.on('error', () => resolve(false));
-    proc.on('close', (code) => resolve(code === 0 || code === 1));
-  });
-}
-
 /**
- * Get the installed modelaudit version.
- * @returns The version string (e.g., "0.2.16") or null if not available
+ * Check if modelaudit is installed and get its version.
+ * @returns Object with installed status and version string (e.g., "0.2.16")
  */
-export async function getModelAuditVersion(): Promise<string | null> {
+export async function checkModelAuditInstalled(): Promise<{
+  installed: boolean;
+  version: string | null;
+}> {
   return new Promise((resolve) => {
     const proc = spawn('modelaudit', ['--version']);
     let stdout = '';
@@ -37,14 +32,14 @@ export async function getModelAuditVersion(): Promise<string | null> {
       stdout += data.toString();
     });
 
-    proc.on('error', () => resolve(null));
+    proc.on('error', () => resolve({ installed: false, version: null }));
     proc.on('close', (code) => {
       if (code === 0 || code === 1) {
         // Parse "modelaudit, version X.Y.Z" format
         const match = stdout.match(/version\s+(\d+\.\d+\.\d+)/i);
-        resolve(match ? match[1] : null);
+        resolve({ installed: true, version: match ? match[1] : null });
       } else {
-        resolve(null);
+        resolve({ installed: false, version: null });
       }
     });
   });
@@ -133,8 +128,9 @@ export function modelScanCommand(program: Command): void {
         });
       }
 
-      // Check if modelaudit is installed
-      const isModelAuditInstalled = await checkModelAuditInstalled();
+      // Check if modelaudit is installed and get its version
+      const { installed: isModelAuditInstalled, version: currentScannerVersion } =
+        await checkModelAuditInstalled();
       if (!isModelAuditInstalled) {
         logger.error('ModelAudit is not installed.');
         logger.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
@@ -145,8 +141,6 @@ export function modelScanCommand(program: Command): void {
       // Check for modelaudit updates
       await checkModelAuditUpdates();
 
-      // Get the current modelaudit version for tracking and deduplication
-      const currentScannerVersion = await getModelAuditVersion();
       if (currentScannerVersion) {
         logger.debug(`Using modelaudit version: ${currentScannerVersion}`);
       }
@@ -354,6 +348,24 @@ export function modelScanCommand(program: Command): void {
               }
             }
 
+            // Shared metadata for audit records
+            const auditMetadata = {
+              paths,
+              options: {
+                blacklist: options.blacklist,
+                timeout: cliOptions.timeout,
+                maxSize: options.maxSize,
+                verbose: options.verbose,
+                sbom: options.sbom,
+                strict: options.strict,
+                dryRun: options.dryRun,
+                cache: options.cache,
+                quiet: options.quiet,
+                progress: options.progress,
+                stream: options.stream,
+              },
+            };
+
             // Create or update audit record in database
             let audit: ModelAudit;
             if (existingAuditToUpdate) {
@@ -372,22 +384,8 @@ export function modelScanCommand(program: Command): void {
               existingAuditToUpdate.passedChecks = results.passed_checks ?? null;
               existingAuditToUpdate.failedChecks = results.failed_checks ?? null;
               existingAuditToUpdate.scannerVersion = currentScannerVersion || null;
-              existingAuditToUpdate.metadata = {
-                paths,
-                options: {
-                  blacklist: options.blacklist,
-                  timeout: cliOptions.timeout,
-                  maxSize: options.maxSize,
-                  verbose: options.verbose,
-                  sbom: options.sbom,
-                  strict: options.strict,
-                  dryRun: options.dryRun,
-                  cache: options.cache,
-                  quiet: options.quiet,
-                  progress: options.progress,
-                  stream: options.stream,
-                },
-              };
+              existingAuditToUpdate.metadata = auditMetadata;
+              existingAuditToUpdate.updatedAt = Date.now();
               if (revisionInfo.contentHash) {
                 existingAuditToUpdate.contentHash = revisionInfo.contentHash;
               }
@@ -400,22 +398,7 @@ export function modelScanCommand(program: Command): void {
                 author: getAuthor() || undefined,
                 modelPath: paths.join(', '),
                 results,
-                metadata: {
-                  paths,
-                  options: {
-                    blacklist: options.blacklist,
-                    timeout: cliOptions.timeout,
-                    maxSize: options.maxSize,
-                    verbose: options.verbose,
-                    sbom: options.sbom,
-                    strict: options.strict,
-                    dryRun: options.dryRun,
-                    cache: options.cache,
-                    quiet: options.quiet,
-                    progress: options.progress,
-                    stream: options.stream,
-                  },
-                },
+                metadata: auditMetadata,
                 // Revision tracking
                 ...revisionInfo,
                 // Scanner version tracking
