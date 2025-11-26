@@ -91,13 +91,44 @@ export async function importModule(modulePath: string, functionName?: string) {
     }
     return mod;
   } catch (err) {
-    logger.error(`ESM import failed: ${err}`);
+    const errorMessage = err instanceof Error ? err.message : String(err);
 
-    // If error has a callstack, log it:
+    // Provide helpful guidance for common CJS-in-ESM-context errors
+    if (modulePath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
+      logger.error(`ESM import failed for ${modulePath}: ${errorMessage}`);
+      logger.warn(
+        `This .js file appears to use CommonJS syntax (require/module.exports). ` +
+          `Since promptfoo v0.120.0, .js files are treated as ESM modules by default. ` +
+          `To fix this, either:\n` +
+          `  1. Rename the file to .cjs (e.g., ${modulePath.replace(/\.js$/, '.cjs')})\n` +
+          `  2. Convert the file to use ESM syntax (import/export)\n` +
+          `See: https://promptfoo.dev/docs/configuration/guide/#custom-providers`,
+      );
+    } else {
+      logger.error(`ESM import failed: ${err}`);
+    }
+
+    // Log stack trace for debugging
     if ((err as any).stack) {
       logger.debug((err as any).stack);
     }
 
     throw err;
   }
+}
+
+/**
+ * Detects if an error message indicates a CommonJS module being loaded in ESM context.
+ */
+function isCjsInEsmError(message: string): boolean {
+  const cjsPatterns = [
+    'require is not defined', // Direct require() call
+    'module is not defined', // module.exports usage
+    'exports is not defined', // exports.x usage
+    '__dirname is not defined', // CJS global
+    '__filename is not defined', // CJS global
+    'Cannot use import statement', // Sometimes appears in mixed scenarios
+    'ERR_REQUIRE_ESM', // Node error for requiring ESM
+  ];
+  return cjsPatterns.some((pattern) => message.includes(pattern));
 }
