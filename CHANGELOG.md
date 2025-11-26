@@ -42,6 +42,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### ⚠️ BREAKING CHANGES
+
+- feat(esm)!: migrate from CommonJS to ESM (ECMAScript Modules) (#5594)
+  - **Custom providers**: `.js` files are now treated as ESM by default. If your custom provider uses CommonJS syntax (`require`/`module.exports`), either:
+    1. Rename the file to `.cjs` extension, OR
+    2. Convert to ESM syntax (`import`/`export`)
+  - **Library consumers**: The library now exports both ESM and CJS formats. ESM is the default for `import`, CJS is available via `require('promptfoo')`.
+  - **No action needed** if you only use promptfoo via CLI with YAML configs
+
 ### Added
 
 - feat(providers): add Claude Opus 4.5 support across Anthropic (claude-opus-4-5-20251101, claude-opus-4-5-latest), Google Vertex AI (claude-opus-4-5@20251101), and AWS Bedrock (anthropic.claude-opus-4-5-20251101-v1:0 for all regions) with $5/MTok input and $25/MTok output pricing; includes comprehensive documentation updates, advanced coding example demonstrating bug diagnosis and tradeoff analysis, updated provider examples, and cost calculation tests
@@ -55,6 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- feat(esm): add helpful error messages for CommonJS files loaded as ESM - when a .js file using require/module.exports fails to load, users now see actionable guidance explaining the ESM migration and how to fix their files (#5594)
 - feat(cli): add automatic changelog update on version bump with comprehensive error handling (#6252)
 - feat(ci): add JavaScript-based changelog validator replacing bash script for PR number and Unreleased section enforcement (#6252)
 - feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking (#6267)
