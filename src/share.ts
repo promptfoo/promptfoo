@@ -105,11 +105,13 @@ async function sendEvalRecord(
   url: string,
   headers: Record<string, string>,
 ): Promise<string> {
-  const evalDataWithoutResults = { ...evalRecord, results: [] };
+  // Fetch traces for the eval
+  const traces = await evalRecord.getTraces();
+  const evalDataWithoutResults = { ...evalRecord, results: [], traces };
   const jsonData = JSON.stringify(evalDataWithoutResults);
 
   logger.debug(
-    `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts`,
+    `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts ${traces.length > 0 ? `and trace data` : ''}`,
   );
 
   const response = await fetchWithProxy(url, {
