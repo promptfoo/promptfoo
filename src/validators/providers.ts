@@ -104,11 +104,11 @@ export const ProvidersSchema = z.union([
   z.array(
     z.union([
       z.string(),
+      CallApiFunctionSchema,
       z.record(z.string(), ProviderOptionsSchema),
       ProviderOptionsSchema,
-      CallApiFunctionSchema,
     ]),
   ),
 ]);
 
-export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
+export const ProviderSchema = z.union([z.string(), ApiProviderSchema, ProviderOptionsSchema]);
