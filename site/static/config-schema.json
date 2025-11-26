@@ -38,6 +38,9 @@
                     "type": "string"
                   },
                   {
+                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/1"
+                  },
+                  {
                     "type": "object",
                     "additionalProperties": {
                       "type": "object",
@@ -383,10 +386,7 @@
                     }
                   },
                   {
-                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
-                  },
-                  {
-                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/1"
+                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties"
                   }
                 ]
               }
@@ -505,7 +505,7 @@
                             "type": "string"
                           },
                           {
-                            "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
+                            "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties"
                           },
                           {
                             "type": "object",
@@ -1016,7 +1016,7 @@
         "env": {
           "anyOf": [
             {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties/properties/env"
             },
             {
               "type": "object",
@@ -1093,10 +1093,10 @@
                   "type": "string"
                 },
                 {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider/anyOf/2"
                 },
                 {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider/anyOf/2"
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties"
                 }
               ],
               "description": "Provider used for generating adversarial inputs"
