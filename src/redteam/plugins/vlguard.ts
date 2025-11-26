@@ -144,9 +144,9 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   private static instance: VLGuardDatasetManager | null = null;
   protected pluginId = 'vlguard';
   protected datasetPath = `huggingface://datasets/ys-zong/VLGuard`;
-  // Fetch enough metadata records to ensure good category coverage
+  // Fetch all records - the dataset has ~3000 total (train: 1999, test: 1000)
   // Images are fetched on-demand with bounded concurrency
-  protected fetchLimit = 500;
+  protected fetchLimit = 3000;
 
   // Cache for metadata (keyed by actual split: 'train' or 'test')
   private metadataCache: Map<'train' | 'test', VLGuardMetadataRecord[]> = new Map();
