@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+#
 # Model Armor with Vertex AI Example
 #
 # This example demonstrates testing Gemini models on Vertex AI with Model Armor
@@ -16,7 +18,10 @@
 #
 # Run with: promptfoo eval -c promptfooconfig.vertex.yaml
 
-description: Test Gemini with Model Armor protection on Vertex AI
+description: Test Gemini with Model Armor on Vertex AI
+
+prompts:
+  - '{{prompt}}'
 
 providers:
   # Gemini with Model Armor enabled via template
@@ -39,8 +44,9 @@ providers:
       temperature: 0.7
       maxOutputTokens: 1024
 
-prompts:
-  - '{{prompt}}'
+defaultTest:
+  options:
+    showOutput: true
 
 tests:
   # Benign prompts - both providers should respond normally
@@ -98,8 +104,3 @@ tests:
         config:
           purpose: redteam
         provider: gemini-with-model-armor
-
-# Compare block rates between providers
-defaultTest:
-  options:
-    showOutput: true

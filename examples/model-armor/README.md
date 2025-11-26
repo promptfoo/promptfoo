@@ -1,6 +1,12 @@
-# Google Cloud Model Armor Examples
+# model-armor (Google Cloud Model Armor)
 
 This directory contains examples for testing Google Cloud Model Armor with Promptfoo.
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example model-armor
+```
 
 Model Armor is a managed service that screens LLM prompts and responses for:
 

@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+#
 # Model Armor Direct API Testing Example
 #
 # This example demonstrates testing Google Cloud Model Armor's sanitization API
@@ -10,7 +12,10 @@
 #
 # Run with: promptfoo eval
 
-description: Test Model Armor filters directly via REST API
+description: Test Model Armor filters via REST API
+
+prompts:
+  - '{{prompt}}'
 
 providers:
   - id: https
@@ -77,10 +82,6 @@ providers:
           };
         })()
 
-prompts:
-  - '{{prompt}}'
-
-# Test cases covering all Model Armor filter types
 tests:
   # Benign prompts - should NOT be blocked
   - description: Benign greeting

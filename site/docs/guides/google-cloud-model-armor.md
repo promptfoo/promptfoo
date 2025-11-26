@@ -121,6 +121,9 @@ The most reliable way to test Model Armor is using the direct sanitization API. 
 ```yaml title="promptfooconfig.yaml"
 description: Model Armor template evaluation
 
+prompts:
+  - '{{prompt}}'
+
 providers:
   - id: https
     label: model-armor
@@ -170,9 +173,6 @@ providers:
             }
           };
         })()
-
-prompts:
-  - '{{prompt}}'
 
 tests:
   # Benign prompts - should pass through
@@ -270,6 +270,9 @@ Test different templates side-by-side to understand the security/usability trade
 
 ```yaml title="promptfooconfig.yaml"
 description: Compare Model Armor configurations
+
+prompts:
+  - '{{prompt}}'
 
 providers:
   - id: https
