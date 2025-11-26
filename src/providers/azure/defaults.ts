@@ -5,6 +5,7 @@ export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
 export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
   // GPT-5 Series (Latest Flagship)
+  // Note: Pricing is provisional/estimated based on relative model capabilities
   // =============================================================================
   {
     id: 'gpt-5',
@@ -61,6 +62,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
 
   // =============================================================================
   // GPT-5.1 Series (Newest)
+  // Note: Pricing is provisional/estimated based on relative model capabilities
   // =============================================================================
   {
     id: 'gpt-5.1',

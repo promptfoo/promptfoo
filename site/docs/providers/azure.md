@@ -96,7 +96,7 @@ Azure AI Foundry provides access to models from multiple providers:
 
 | Provider             | Models                                                                                                                                                                                            |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Anthropic Claude** | `claude-opus-4-5-20250929` (Claude Opus 4.5), `claude-sonnet-4-5-20250929` (Claude Sonnet 4.5), `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022`                                         |
+| **Anthropic Claude** | `claude-opus-4-5-20251101` (Claude Opus 4.5), `claude-sonnet-4-5-20250929` (Claude Sonnet 4.5), `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022`                                         |
 | **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct` |
 | **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                         |
 | **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                              |
@@ -773,7 +773,7 @@ Azure AI Foundry provides access to Anthropic Claude models. These models use th
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: azure:chat:claude-opus-4-5-20250929
+  - id: azure:chat:claude-opus-4-5-20251101
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
@@ -785,7 +785,7 @@ Available Claude models on Azure:
 
 | Model                        | Description                              |
 | ---------------------------- | ---------------------------------------- |
-| `claude-opus-4-5-20250929`   | Claude Opus 4.5 - Most capable model     |
+| `claude-opus-4-5-20251101`   | Claude Opus 4.5 - Most capable model     |
 | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 - Balanced performance |
 | `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet                        |
 | `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku - Fast, efficient       |

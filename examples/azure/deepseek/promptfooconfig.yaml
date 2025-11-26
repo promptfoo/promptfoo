@@ -33,7 +33,7 @@ tests:
         If the stations are 280 miles apart, at what time will the trains meet?
     assert:
       - type: contains-any
-        value: ['11:00', '11 AM', '11:00 AM']
+        value: ['11:34', '11:34 AM', '1 hour 34 minutes', '94 minutes']
       - type: llm-rubric
         value: Shows clear step-by-step reasoning
 
