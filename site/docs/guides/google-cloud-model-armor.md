@@ -344,6 +344,18 @@ Model Armor with Vertex AI always evaluates prompts and responses based on your 
 
 When Model Armor blocks a prompt (`blockReason: MODEL_ARMOR`), Promptfoo sets `flaggedInput: true`. When Vertex safety blocks a generated response (`finishReason: SAFETY`), Promptfoo sets `flaggedOutput: true`. This distinction helps you identify whether the issue was with the input prompt or the model's response.
 
+## Google AI Studio
+
+Model Armor does not have native integration with Google AI Studio (`generativelanguage.googleapis.com`). The `modelArmor` configuration option is only supported by the [Vertex AI provider](/docs/providers/vertex/).
+
+However, you can still test Model Armor with AI Studio by using the **sanitization API approach** shown earlier in this guide. The HTTP provider calls Model Armor's sanitization endpoints directly, which works independently of any LLM provider. This approach lets you:
+
+- Test your Model Armor templates against any prompt dataset
+- Validate filter configurations before deploying to production
+- Build CI/CD pipelines that verify template behavior
+
+For production deployments using AI Studio, consider routing requests through [Apigee](https://cloud.google.com/apigee) which has built-in Model Armor integration.
+
 ## CI/CD Integration
 
 Add Model Armor testing to your deployment pipeline:
