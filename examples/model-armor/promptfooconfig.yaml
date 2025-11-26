@@ -52,8 +52,8 @@ providers:
             reasons.push('Malicious URLs');
           }
 
-          // Check CSAM
-          if (filters.csam && filters.csam.csamFilterFilterResult && filters.csam.csamFilterFilterResult.matchState === 'MATCH_FOUND') {
+          // Check CSAM (high severity - always enabled)
+          if (filters.csam && filters.csam.csamFilterResult && filters.csam.csamFilterResult.matchState === 'MATCH_FOUND') {
             reasons.push('CSAM');
           }
 

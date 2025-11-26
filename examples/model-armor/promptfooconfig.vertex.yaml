@@ -1,9 +1,13 @@
 # Model Armor with Vertex AI Example
 #
 # This example demonstrates testing Gemini models on Vertex AI with Model Armor
-# template configuration. Note: Model Armor via Vertex AI currently reports
-# detections but may not actively block requests. For guaranteed blocking,
-# use the direct Model Armor API (promptfooconfig.yaml).
+# template configuration.
+#
+# Model Armor with Vertex AI always evaluates prompts and responses based on
+# your templates and floor settings. If your floor settings are in "inspect only"
+# mode, violations are logged but not blocked. For guaranteed blocking behavior
+# in tests, use the sanitization API directly (promptfooconfig.yaml) or configure
+# your floor settings to "inspect and block".
 #
 # Prerequisites:
 #   1. Set up Vertex AI authentication (gcloud auth application-default login)

@@ -82,13 +82,26 @@ This example:
 - `promptfooconfig.vertex.yaml` - Vertex AI integration with Model Armor
 - `datasets/model-armor-test.csv` - Test dataset with prompts for each filter type
 
+### Using the Dataset
+
+The included CSV dataset contains test prompts for each Model Armor filter type. Load it in your config:
+
+```yaml
+tests: file://datasets/model-armor-test.csv
+```
+
+Each row includes a prompt and expected behavior (benign vs. adversarial).
+
 ## Understanding Results
 
 When Model Armor blocks content, you'll see:
 
 - `guardrails.flagged: true` - Content was flagged
-- `guardrails.flaggedInput: true` - The prompt was flagged
+- `guardrails.flaggedInput: true` - The input prompt was blocked
+- `guardrails.flaggedOutput: true` - The generated response was blocked
 - `guardrails.reason` - Detailed explanation of which filters matched
+
+For debugging, inspect the raw Model Armor response in `metadata.modelArmor`, which contains the full `sanitizationResult` including individual filter states and confidence levels.
 
 For red team testing, use the `guardrails` assertion with `purpose: redteam` to verify that dangerous prompts are correctly blocked.
 
