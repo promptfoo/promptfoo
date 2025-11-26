@@ -913,9 +913,12 @@ tests:
 
 The `guardrails` assertion checks for:
 
-- `flagged: true` - Content was flagged by Model Armor
-- `flaggedInput: true` - The prompt was blocked
+- `flagged: true` - Content was flagged
+- `flaggedInput: true` - The input prompt was blocked (Model Armor `blockReason: MODEL_ARMOR`)
+- `flaggedOutput: true` - The generated response was blocked (Vertex safety `finishReason: SAFETY`)
 - `reason` - Explanation including which filters triggered
+
+This distinction helps you identify whether the issue was with the input prompt or the model's response.
 
 #### Floor Settings
 
