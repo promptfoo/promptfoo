@@ -5,20 +5,56 @@ import path from 'node:path';
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
 
+// Global variable defined by tsup at build time
+// undefined in development (tsx) and Jest tests
+declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
+
 /**
- * ESM replacement for __dirname - guarded for dual CJS/ESM builds
+ * ESM replacement for __dirname - guarded for dual CJS/ESM builds.
+ *
  * This is the canonical way to get the current directory in dual ESM/CJS code.
  * Use this instead of implementing the try-catch pattern in each file.
+ *
+ * Build contexts:
+ * - ESM (production/bundled): BUILD_FORMAT='esm', import.meta.url is valid
+ * - CJS (library build): BUILD_FORMAT='cjs', import.meta.url may be empty, __dirname available
+ * - Development (tsx): BUILD_FORMAT=undefined, import.meta.url is valid
+ * - Jest tests: BUILD_FORMAT=undefined, import.meta is syntax error, __dirname available
+ *
+ * The try-catch is necessary because `import.meta` syntax itself causes a SyntaxError
+ * in CJS environments (Jest, Node require), not just an undefined value.
  */
 export function getDirectory(): string {
-  try {
-    // Try ESM approach - import.meta.url is only available in ESM
-    return path.dirname(fileURLToPath(import.meta.url));
-  } catch {
-    // Fall back to CJS __dirname
-    // @ts-ignore - __dirname exists in CJS but not in ESM types
+  // In bundled CJS builds, skip the ESM path entirely - import.meta.url will be empty
+  if (typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'cjs') {
+    // @ts-ignore - __dirname exists in CJS builds
     return __dirname;
   }
+
+  try {
+    // Try ESM approach - import.meta.url is available in ESM and tsx
+    // This will throw SyntaxError in CJS environments (Jest) where import.meta is invalid syntax
+    const url = import.meta.url;
+    if (url && url !== '') {
+      return path.dirname(fileURLToPath(url));
+    }
+  } catch {
+    // Expected in CJS environments where import.meta syntax is invalid
+    // Fall through to __dirname fallback
+  }
+
+  // Fall back to CJS __dirname (available in Jest tests and CJS builds)
+  // @ts-ignore - __dirname exists in CJS but not in ESM types
+  if (typeof __dirname !== 'undefined') {
+    // @ts-ignore
+    return __dirname;
+  }
+
+  // This should never happen in normal operation
+  throw new Error(
+    'Unable to determine directory: neither import.meta.url nor __dirname available. ' +
+      'This indicates an unsupported module environment.',
+  );
 }
 
 /**
