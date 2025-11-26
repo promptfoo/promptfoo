@@ -351,34 +351,33 @@ export function modelScanCommand(program: Command): void {
               },
             };
 
-            // Shared audit data
-            const auditData = {
-              results,
-              checks: results.checks ?? null,
-              issues: results.issues ?? null,
-              hasErrors: hasErrorsInResults(results),
-              totalChecks: results.total_checks ?? null,
-              passedChecks: results.passed_checks ?? null,
-              failedChecks: results.failed_checks ?? null,
-              scannerVersion: currentScannerVersion ?? null,
-              metadata: auditMetadata,
-            };
-
             // Create or update audit record in database
             let audit: ModelAudit;
             if (existingAuditToUpdate) {
-              Object.assign(existingAuditToUpdate, auditData, {
-                updatedAt: Date.now(),
-                ...(revisionInfo.contentHash && { contentHash: revisionInfo.contentHash }),
-              });
+              // Update existing record with new scan results
+              existingAuditToUpdate.results = results;
+              existingAuditToUpdate.checks = results.checks ?? null;
+              existingAuditToUpdate.issues = results.issues ?? null;
+              existingAuditToUpdate.hasErrors = hasErrorsInResults(results);
+              existingAuditToUpdate.totalChecks = results.total_checks ?? null;
+              existingAuditToUpdate.passedChecks = results.passed_checks ?? null;
+              existingAuditToUpdate.failedChecks = results.failed_checks ?? null;
+              existingAuditToUpdate.scannerVersion = currentScannerVersion ?? null;
+              existingAuditToUpdate.metadata = auditMetadata;
+              existingAuditToUpdate.updatedAt = Date.now();
+              if (revisionInfo.contentHash) {
+                existingAuditToUpdate.contentHash = revisionInfo.contentHash;
+              }
               await existingAuditToUpdate.save();
               audit = existingAuditToUpdate;
             } else {
               audit = await ModelAudit.create({
                 name: options.name || `Model scan ${new Date().toISOString()}`,
-                author: getAuthor() ?? null,
+                author: getAuthor() || undefined,
                 modelPath: paths.join(', '),
-                ...auditData,
+                results,
+                metadata: auditMetadata,
+                scannerVersion: currentScannerVersion || undefined,
                 ...revisionInfo,
               });
             }
