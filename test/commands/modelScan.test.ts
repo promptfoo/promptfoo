@@ -505,64 +505,7 @@ describe('checkModelAuditInstalled', () => {
 
   it('should return installed: false when modelaudit is not installed', async () => {
     const { getModelAuditCurrentVersion } = require('../../src/updates');
-    // getModelAuditCurrentVersion returns null (command failed)
     (getModelAuditCurrentVersion as jest.Mock).mockResolvedValue(null);
-
-    // Fallback spawn check also fails
-    const mockChildProcess = {
-      stdout: { on: jest.fn() },
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'error') {
-          callback(new Error('command not found'));
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as jest.Mock).mockReturnValue(mockChildProcess);
-
-    const result = await checkModelAuditInstalled();
-    expect(result).toEqual({ installed: false, version: null });
-    expect(spawn).toHaveBeenCalledWith('modelaudit', ['--version']);
-  });
-
-  it('should return installed: true with null version when version cannot be parsed but command exists', async () => {
-    const { getModelAuditCurrentVersion } = require('../../src/updates');
-    // getModelAuditCurrentVersion returns null (couldn't parse)
-    (getModelAuditCurrentVersion as jest.Mock).mockResolvedValue(null);
-
-    // But fallback spawn check succeeds (exit code 0)
-    const mockChildProcess = {
-      stdout: { on: jest.fn() },
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'close') {
-          callback(0);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as jest.Mock).mockReturnValue(mockChildProcess);
-
-    const result = await checkModelAuditInstalled();
-    expect(result).toEqual({ installed: true, version: null });
-  });
-
-  it('should return installed: false when process exits with error code', async () => {
-    const { getModelAuditCurrentVersion } = require('../../src/updates');
-    (getModelAuditCurrentVersion as jest.Mock).mockResolvedValue(null);
-
-    const mockChildProcess = {
-      stdout: { on: jest.fn() },
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'close') {
-          callback(2);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as jest.Mock).mockReturnValue(mockChildProcess);
 
     const result = await checkModelAuditInstalled();
     expect(result).toEqual({ installed: false, version: null });

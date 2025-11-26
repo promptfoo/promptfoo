@@ -18,32 +18,23 @@ import type { ModelAuditScanResults } from '../types/modelAudit';
 
 /**
  * Check if modelaudit is installed and get its version.
- * Uses getModelAuditCurrentVersion from updates.ts for version parsing.
- * @returns Object with installed status and version string (e.g., "0.2.16")
  */
 export async function checkModelAuditInstalled(): Promise<{
   installed: boolean;
   version: string | null;
 }> {
   const version = await getModelAuditCurrentVersion();
-  // If we got a version, modelaudit is installed
-  // If null, it could mean not installed OR installed but couldn't parse version
-  if (version !== null) {
-    return { installed: true, version };
-  }
+  return { installed: version !== null, version };
+}
 
-  // Fallback: check if modelaudit command exists (even if version parsing failed)
-  return new Promise((resolve) => {
-    const proc = spawn('modelaudit', ['--version']);
-    proc.on('error', () => resolve({ installed: false, version: null }));
-    proc.on('close', (code) => {
-      if (code === 0 || code === 1) {
-        resolve({ installed: true, version: null });
-      } else {
-        resolve({ installed: false, version: null });
-      }
-    });
-  });
+/**
+ * Determine if scan results contain errors.
+ */
+function hasErrorsInResults(results: ModelAuditScanResults): boolean {
+  return Boolean(
+    results.has_errors ||
+      results.issues?.some((issue) => issue.severity === 'critical' || issue.severity === 'error'),
+  );
 }
 
 export function modelScanCommand(program: Command): void {
@@ -367,43 +358,35 @@ export function modelScanCommand(program: Command): void {
               },
             };
 
+            // Shared audit data
+            const auditData = {
+              results,
+              checks: results.checks ?? null,
+              issues: results.issues ?? null,
+              hasErrors: hasErrorsInResults(results),
+              totalChecks: results.total_checks ?? null,
+              passedChecks: results.passed_checks ?? null,
+              failedChecks: results.failed_checks ?? null,
+              scannerVersion: currentScannerVersion ?? null,
+              metadata: auditMetadata,
+            };
+
             // Create or update audit record in database
             let audit: ModelAudit;
             if (existingAuditToUpdate) {
-              // Update existing record with new scan results
-              existingAuditToUpdate.results = results;
-              existingAuditToUpdate.checks = results.checks || null;
-              existingAuditToUpdate.issues = results.issues || null;
-              existingAuditToUpdate.hasErrors = Boolean(
-                results.has_errors ||
-                  (results.issues &&
-                    results.issues.some(
-                      (issue) => issue.severity === 'critical' || issue.severity === 'error',
-                    )),
-              );
-              existingAuditToUpdate.totalChecks = results.total_checks ?? null;
-              existingAuditToUpdate.passedChecks = results.passed_checks ?? null;
-              existingAuditToUpdate.failedChecks = results.failed_checks ?? null;
-              existingAuditToUpdate.scannerVersion = currentScannerVersion || null;
-              existingAuditToUpdate.metadata = auditMetadata;
-              existingAuditToUpdate.updatedAt = Date.now();
-              if (revisionInfo.contentHash) {
-                existingAuditToUpdate.contentHash = revisionInfo.contentHash;
-              }
+              Object.assign(existingAuditToUpdate, auditData, {
+                updatedAt: Date.now(),
+                ...(revisionInfo.contentHash && { contentHash: revisionInfo.contentHash }),
+              });
               await existingAuditToUpdate.save();
               audit = existingAuditToUpdate;
             } else {
-              // Create new audit record
               audit = await ModelAudit.create({
                 name: options.name || `Model scan ${new Date().toISOString()}`,
-                author: getAuthor() || undefined,
+                author: getAuthor() ?? null,
                 modelPath: paths.join(', '),
-                results,
-                metadata: auditMetadata,
-                // Revision tracking
+                ...auditData,
                 ...revisionInfo,
-                // Scanner version tracking
-                scannerVersion: currentScannerVersion || undefined,
               });
             }
 
