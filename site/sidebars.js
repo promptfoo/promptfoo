@@ -316,6 +316,11 @@ const redTeamSidebar = [
       },
       {
         type: 'doc',
+        label: 'LLM Supply Chain Security',
+        id: 'red-team/llm-supply-chain',
+      },
+      {
+        type: 'doc',
         label: 'Testing Guardrails',
         id: 'guides/testing-guardrails',
       },

@@ -131,11 +131,6 @@ jest.mock('../../src/util/file', () => ({
   }),
 }));
 
-jest.mock('xlsx', () => ({
-  readFile: jest.fn(),
-  utils: { sheet_to_json: jest.fn() },
-}));
-
 // Helper to clear all mocks
 const clearAllMocks = () => {
   jest.clearAllMocks();
@@ -456,83 +451,12 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should read XLSX file and return test cases', async () => {
-    const sheetData = [
-      { var1: 'value1', var2: 'value2', __expected: 'expected1' },
-      { var1: 'value3', var2: 'value4', __expected: 'expected2' },
+    // read-excel-file returns array of arrays where first row is headers
+    const mockRows = [
+      ['var1', 'var2', '__expected'], // headers
+      ['value1', 'value2', 'expected1'], // data row 1
+      ['value3', 'value4', 'expected2'], // data row 2
     ];
-
-    // Mock fs.existsSync to return true for our test file
-    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-
-    // Mock the dynamic import
-    jest.doMock('xlsx', () => ({
-      readFile: jest.fn().mockReturnValue({ SheetNames: ['Sheet1'], Sheets: { Sheet1: {} } }),
-      utils: { sheet_to_json: jest.fn().mockReturnValue(sheetData) },
-    }));
-
-    const result = await readStandaloneTestsFile('test.xlsx');
-
-    const xlsx = await import('xlsx');
-    expect(xlsx.readFile).toHaveBeenCalledWith(expect.stringContaining('test.xlsx'));
-    expect(result).toEqual([
-      {
-        assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
-        description: 'Row #1',
-        options: {},
-        vars: { var1: 'value1', var2: 'value2' },
-      },
-      {
-        assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
-        description: 'Row #2',
-        options: {},
-        vars: { var1: 'value3', var2: 'value4' },
-      },
-    ]);
-
-    // Clean up the mock
-    jest.dontMock('xlsx');
-  });
-
-  it('should throw helpful error when xlsx module is not installed', async () => {
-    // Create a test that validates the error message is properly formatted
-    // when the xlsx module cannot be found
-    const mockError = new Error("Cannot find module 'xlsx'");
-
-    // Mock fs.readFileSync to avoid actual file read
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('mock content'));
-
-    // Create a new instance with mocked xlsx module
-    jest.doMock('xlsx', () => {
-      throw mockError;
-    });
-
-    // Clear module cache to ensure fresh import
-    jest.resetModules();
-
-    try {
-      // Import the module which will attempt to import xlsx
-      const { parseXlsxFile } = await import('../../src/util/xlsx');
-
-      // Attempt to parse a file, which should trigger the error
-      await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
-        'xlsx is not installed. Please install it with: npm install xlsx\n' +
-          'Note: xlsx is an optional peer dependency for reading Excel files.',
-      );
-    } finally {
-      // Clean up
-      jest.dontMock('xlsx');
-      jest.resetModules();
-    }
-  });
-
-  it('should throw error when Excel file has no sheets', async () => {
-    const mockXlsx = {
-      readFile: jest.fn().mockReturnValue({
-        SheetNames: [],
-        Sheets: {},
-      }),
-      utils: { sheet_to_json: jest.fn() },
-    };
 
     // Mock fs module to survive resetModules
     jest.doMock('fs', () => ({
@@ -540,7 +464,92 @@ describe('readStandaloneTestsFile', () => {
       existsSync: jest.fn().mockReturnValue(true),
     }));
 
-    jest.doMock('xlsx', () => mockXlsx);
+    // Mock the dynamic import
+    jest.doMock('read-excel-file/node', () => ({
+      __esModule: true,
+      default: jest.fn().mockResolvedValue(mockRows),
+      readSheetNames: jest.fn().mockResolvedValue(['Sheet1']),
+    }));
+
+    jest.resetModules();
+
+    try {
+      const { readStandaloneTestsFile: freshReadStandaloneTestsFile } = await import(
+        '../../src/util/testCaseReader'
+      );
+
+      const result = await freshReadStandaloneTestsFile('test.xlsx');
+
+      expect(result).toEqual([
+        {
+          assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+          description: 'Row #1',
+          options: {},
+          vars: { var1: 'value1', var2: 'value2' },
+        },
+        {
+          assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+          description: 'Row #2',
+          options: {},
+          vars: { var1: 'value3', var2: 'value4' },
+        },
+      ]);
+    } finally {
+      // Clean up the mock
+      jest.dontMock('read-excel-file/node');
+      jest.dontMock('fs');
+      jest.resetModules();
+    }
+  });
+
+  it('should throw helpful error when read-excel-file module is not installed', async () => {
+    // Create a test that validates the error message is properly formatted
+    // when the read-excel-file module cannot be found
+    const mockError = new Error("Cannot find module 'read-excel-file/node'");
+
+    // Mock fs module to survive resetModules
+    jest.doMock('fs', () => ({
+      ...jest.requireActual('fs'),
+      existsSync: jest.fn().mockReturnValue(true),
+    }));
+
+    // Create a new instance with mocked read-excel-file module
+    jest.doMock('read-excel-file/node', () => {
+      throw mockError;
+    });
+
+    // Clear module cache to ensure fresh import
+    jest.resetModules();
+
+    try {
+      // Import the module which will attempt to import read-excel-file
+      const { parseXlsxFile } = await import('../../src/util/xlsx');
+
+      // Attempt to parse a file, which should trigger the error
+      await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
+        'read-excel-file is not installed. Please install it with: npm install read-excel-file\n' +
+          'Note: read-excel-file is an optional peer dependency for reading Excel files.',
+      );
+    } finally {
+      // Clean up
+      jest.dontMock('read-excel-file/node');
+      jest.dontMock('fs');
+      jest.resetModules();
+    }
+  });
+
+  it('should throw error when Excel file has no sheets', async () => {
+    // Mock fs module to survive resetModules
+    jest.doMock('fs', () => ({
+      ...jest.requireActual('fs'),
+      existsSync: jest.fn().mockReturnValue(true),
+    }));
+
+    jest.doMock('read-excel-file/node', () => ({
+      __esModule: true,
+      default: jest.fn(),
+      readSheetNames: jest.fn().mockResolvedValue([]),
+    }));
     jest.resetModules();
 
     try {
@@ -548,7 +557,7 @@ describe('readStandaloneTestsFile', () => {
 
       await expect(parseXlsxFile('empty.xlsx')).rejects.toThrow('Excel file has no sheets');
     } finally {
-      jest.dontMock('xlsx');
+      jest.dontMock('read-excel-file/node');
       jest.dontMock('fs');
       jest.resetModules();
     }
@@ -559,9 +568,9 @@ describe('readStandaloneTestsFile', () => {
     const path = require('path');
     const exampleFile = path.join(__dirname, '../../examples/simple-csv/tests.xlsx');
 
-    // Only run if xlsx is actually installed (in dev environment)
+    // Only run if read-excel-file is actually installed (in dev environment)
     try {
-      await import('xlsx');
+      await import('read-excel-file/node');
       const fs = require('fs');
 
       if (fs.existsSync(exampleFile)) {
@@ -585,8 +594,8 @@ describe('readStandaloneTestsFile', () => {
         console.log('Skipping integration test - example Excel file not found');
       }
     } catch (error) {
-      // Skip test if xlsx is not installed
-      console.log('Skipping integration test - xlsx not available:', error);
+      // Skip test if read-excel-file is not installed
+      console.log('Skipping integration test - read-excel-file not available:', error);
     }
   });
 
