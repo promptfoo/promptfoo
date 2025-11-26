@@ -4,11 +4,22 @@ This directory contains examples for using Azure AI services with promptfoo, inc
 
 ## Available Examples
 
+### Azure OpenAI
+
 | Example | Description |
 |---------|-------------|
 | [openai](./openai/) | Azure OpenAI chat and vision models |
 | [assistant](./assistant/) | Azure OpenAI Assistants with tools |
 | [foundry-agent](./foundry-agent/) | Azure AI Foundry Agents |
+
+### Third-Party Models (Azure AI Foundry)
+
+| Example | Description |
+|---------|-------------|
+| [claude](./claude/) | Anthropic Claude models (Opus, Sonnet, Haiku) |
+| [llama](./llama/) | Meta Llama models (4, 3.3, 3.1) |
+| [deepseek](./deepseek/) | DeepSeek models including R1 reasoning |
+| [comparison](./comparison/) | Compare models across providers |
 
 ## Quick Start
 
@@ -21,6 +32,12 @@ npx promptfoo@latest init --example azure/assistant
 
 # Azure AI Foundry Agents
 npx promptfoo@latest init --example azure/foundry-agent
+
+# Third-party models
+npx promptfoo@latest init --example azure/claude
+npx promptfoo@latest init --example azure/llama
+npx promptfoo@latest init --example azure/deepseek
+npx promptfoo@latest init --example azure/comparison
 ```
 
 ## Environment Variables
