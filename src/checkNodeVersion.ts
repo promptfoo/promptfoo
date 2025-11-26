@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { ENGINES } from './generated/constants';
+import { ENGINES } from './version';
 import logger from './logger';
 
 /**

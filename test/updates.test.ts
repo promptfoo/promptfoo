@@ -20,8 +20,10 @@ jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 
-jest.mock('../package.json', () => ({
-  version: '0.11.0',
+jest.mock('../src/version', () => ({
+  VERSION: '0.11.0',
+  POSTHOG_KEY: '',
+  ENGINES: { node: '>=20.0.0' },
 }));
 
 import { fetchWithTimeout } from '../src/util/fetch/index';
@@ -32,7 +34,7 @@ import {
   getModelAuditCurrentVersion,
   getModelAuditLatestVersion,
 } from '../src/updates';
-import packageJson from '../package.json' with { type: 'json' };
+import { VERSION } from '../src/version';
 
 beforeEach(() => {
   mockExecAsync = jest.fn();
@@ -92,7 +94,7 @@ describe('checkForUpdates', () => {
   it('should not log an update message if the current version is up to date', async () => {
     jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ latestVersion: packageJson.version }),
+      json: async () => ({ latestVersion: VERSION }),
     } as never);
 
     const result = await checkForUpdates();

@@ -1,4 +1,16 @@
+import { readFileSync } from 'fs';
 import { defineConfig } from 'tsup';
+
+// Read package.json for version constants
+const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
+
+// Build-time constants injected into all builds
+// These replace the __PROMPTFOO_*__ placeholders in src/version.ts
+const versionDefines = {
+  __PROMPTFOO_VERSION__: JSON.stringify(packageJson.version),
+  __PROMPTFOO_POSTHOG_KEY__: JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
+  __PROMPTFOO_ENGINES_NODE__: JSON.stringify(packageJson.engines.node),
+};
 
 export default defineConfig([
   // Server (ESM only) - stable path for workflows
@@ -11,6 +23,7 @@ export default defineConfig([
     shims: true,
     sourcemap: true,
     define: {
+      ...versionDefines,
       BUILD_FORMAT: '"esm"',
       'process.env.BUILD_FORMAT': '"esm"',
     },
@@ -29,6 +42,7 @@ export default defineConfig([
     shims: true, // Provides __dirname, __filename shims automatically
     sourcemap: true,
     define: {
+      ...versionDefines,
       BUILD_FORMAT: '"esm"',
       'process.env.BUILD_FORMAT': '"esm"',
     },
@@ -58,6 +72,7 @@ export default defineConfig([
     sourcemap: true,
     shims: true, // Ensure library ESM build has shims
     define: {
+      ...versionDefines,
       BUILD_FORMAT: '"esm"',
       'process.env.BUILD_FORMAT': '"esm"',
     },
@@ -74,6 +89,7 @@ export default defineConfig([
     outDir: 'dist/src',
     sourcemap: true,
     define: {
+      ...versionDefines,
       BUILD_FORMAT: '"cjs"',
       'process.env.BUILD_FORMAT': '"cjs"',
     },

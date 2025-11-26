@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { Command } from 'commander';
 
-import { VERSION } from './generated/constants';
+import { VERSION } from './version';
 import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { authCommand } from './commands/auth';

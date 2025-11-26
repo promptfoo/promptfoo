@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { checkNodeVersion } from '../src/checkNodeVersion';
-import { ENGINES } from '../src/generated/constants';
+import { ENGINES } from '../src/version';
 import logger from '../src/logger';
 
 const setNodeVersion = (version: string) => {

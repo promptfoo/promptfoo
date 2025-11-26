@@ -1,7 +1,7 @@
 import { getEnvInt, getEnvString } from './envars';
 
 export * from './providers/constants';
-export { VERSION } from './generated/constants';
+export { VERSION } from './version';
 
 export const DEFAULT_QUERY_LIMIT = 100;
 
