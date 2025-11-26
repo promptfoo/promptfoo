@@ -4,19 +4,6 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.119.14](https://github.com/promptfoo/promptfoo/compare/promptfoo-v0.119.13...promptfoo-v0.119.14) (2025-11-26)
-
-### Features
-
-- **redteam:** update VLGuard to use original MIT-licensed dataset ([#5809](https://github.com/promptfoo/promptfoo/issues/5809)) ([dbabbaf](https://github.com/promptfoo/promptfoo/commit/dbabbaf1a4366ca6e5881fe2b30ecfd5aec4174f))
-- Share trace data to promptfoo cloud ([ce251ae](https://github.com/promptfoo/promptfoo/commit/ce251ae5cb16d9f65cf98d89c7ba4ea91778e3c4))
-
-### Bug Fixes
-
-- **deps:** replace xlsx with read-excel-file to fix high severity vulnerability ([#6357](https://github.com/promptfoo/promptfoo/issues/6357)) ([e6e2b98](https://github.com/promptfoo/promptfoo/commit/e6e2b980d71f662258e50832b4967f20de1b0585))
-- prevent Node.js from hanging when importing promptfoo as a library ([#6351](https://github.com/promptfoo/promptfoo/issues/6351)) ([af857a3](https://github.com/promptfoo/promptfoo/commit/af857a3ed37e06d357d85c550b4fa3bf63b5d991))
-- **webui:** resolve Vitest timing issues causing test timeouts ([#6356](https://github.com/promptfoo/promptfoo/issues/6356)) ([353ab11](https://github.com/promptfoo/promptfoo/commit/353ab1183431c98ec2a625d0c8fb3e5a70cba408))
-
 ## [0.119.13](https://github.com/promptfoo/promptfoo/compare/promptfoo-v0.119.12...promptfoo-v0.119.13) (2025-11-25)
 
 ### Features
