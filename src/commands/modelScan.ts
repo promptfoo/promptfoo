@@ -44,8 +44,12 @@ function shouldRescan(
   existingVersion: string | null | undefined,
   currentVersion: string | null,
 ): boolean {
-  if (!currentVersion) return false;
-  if (!existingVersion) return true; // Previous scan missing version
+  if (!currentVersion) {
+    return false;
+  }
+  if (!existingVersion) {
+    return true; // Previous scan missing version
+  }
   return existingVersion !== currentVersion; // Version changed
 }
 
@@ -170,9 +174,9 @@ export function modelScanCommand(program: Command): void {
               logger.debug(`Re-scanning (--force): ${modelId}`);
               existingAuditToUpdate = existing;
             } else if (existing && shouldRescan(existing.scannerVersion, currentScannerVersion)) {
-              const reason = !existing.scannerVersion
-                ? `previous scan missing version info (now using ${currentScannerVersion})`
-                : `modelaudit upgraded from ${existing.scannerVersion} to ${currentScannerVersion}`;
+              const reason = existing.scannerVersion
+                ? `modelaudit upgraded from ${existing.scannerVersion} to ${currentScannerVersion}`
+                : `previous scan missing version info (now using ${currentScannerVersion})`;
               logger.debug(`Re-scanning: ${reason}`);
               existingAuditToUpdate = existing;
             } else if (existing) {
