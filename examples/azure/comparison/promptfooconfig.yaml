@@ -13,7 +13,7 @@ providers:
   - id: azure:chat:gpt-4.1
     label: gpt-4.1
     config:
-      apiHost: '{{ env.AZURE_API_HOST }}'
+      apiHost: 'your-resource.openai.azure.com'
       max_tokens: 1024
       temperature: 0.7
 
@@ -21,7 +21,7 @@ providers:
   - id: azure:chat:claude-sonnet-4-5-20250929
     label: claude-sonnet
     config:
-      apiHost: '{{ env.AZURE_AI_HOST }}'
+      apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 1024
       temperature: 0.7
@@ -30,7 +30,7 @@ providers:
   - id: azure:chat:Llama-3.3-70B-Instruct
     label: llama-3.3
     config:
-      apiHost: '{{ env.AZURE_AI_HOST }}'
+      apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 1024
       temperature: 0.7
@@ -39,7 +39,7 @@ providers:
   - id: azure:chat:Mistral-Large-2411
     label: mistral-large
     config:
-      apiHost: '{{ env.AZURE_AI_HOST }}'
+      apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 1024
       temperature: 0.7

@@ -10,7 +10,7 @@ providers:
   - id: azure:chat:DeepSeek-R1
     label: deepseek-r1
     config:
-      apiHost: '{{ env.AZURE_AI_HOST }}'
+      apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       isReasoningModel: true
       max_completion_tokens: 4096
@@ -20,7 +20,7 @@ providers:
   - id: azure:chat:DeepSeek-V3
     label: deepseek-v3
     config:
-      apiHost: '{{ env.AZURE_AI_HOST }}'
+      apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 4096
       temperature: 0.3

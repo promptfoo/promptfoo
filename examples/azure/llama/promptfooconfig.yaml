@@ -13,7 +13,7 @@ providers:
   - id: azure:chat:Llama-3.3-70B-Instruct
     label: llama-3.3-70b
     config:
-      apiHost: '{{ env.AZURE_AI_HOST }}'
+      apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 2048
       temperature: 0.3
@@ -21,7 +21,7 @@ providers:
   - id: azure:chat:Meta-Llama-3.1-8B-Instruct
     label: llama-3.1-8b
     config:
-      apiHost: '{{ env.AZURE_AI_HOST }}'
+      apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 2048
       temperature: 0.3

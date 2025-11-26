@@ -9,7 +9,7 @@ providers:
   - id: azure:chat:claude-sonnet-4-5-20250929
     label: claude-sonnet-4-5
     config:
-      apiHost: '{{ env.AZURE_AI_HOST }}'
+      apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 1024
       temperature: 0.7
@@ -17,7 +17,7 @@ providers:
   - id: azure:chat:claude-3-5-haiku-20241022
     label: claude-3-5-haiku
     config:
-      apiHost: '{{ env.AZURE_AI_HOST }}'
+      apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 1024
       temperature: 0.7
