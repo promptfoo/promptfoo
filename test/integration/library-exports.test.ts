@@ -5,22 +5,22 @@
  * in both ESM and CJS environments after the build process.
  *
  * Prerequisites: Run `npm run build` before running these tests.
+ *
+ * NOTE: These tests are automatically skipped in CI when the build directory
+ * doesn't exist (CI runs Jest tests before build). They will run in local
+ * development after `npm run build` and in the integration test CI job.
  */
 
 import fs from 'fs';
 import path from 'path';
 
-describe('Library Exports', () => {
-  const distDir = path.resolve(__dirname, '../../dist/src');
+const distDir = path.resolve(__dirname, '../../dist/src');
+const buildExists = fs.existsSync(distDir);
 
-  beforeAll(() => {
-    // Verify the build exists
-    if (!fs.existsSync(distDir)) {
-      throw new Error(
-        'Build directory not found. Run `npm run build` before running integration tests.',
-      );
-    }
-  });
+// Skip all tests if build doesn't exist (e.g., in CI Jest run before build)
+const describeIfBuildExists = buildExists ? describe : describe.skip;
+
+describeIfBuildExists('Library Exports', () => {
 
   describe('Build artifacts', () => {
     it('should have ESM library build (index.js)', () => {
