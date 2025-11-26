@@ -1254,6 +1254,8 @@ describe('VertexChatProvider.callGeminiApi', () => {
       expect(requestData.model_armor_config).toBeUndefined();
     });
 
+    // TODO: This default message is user-facing and can be adjusted for clarity without
+    // breaking behavior semantics (e.g., "Content was blocked by Model Armor policy").
     it('should use default message when blockReasonMessage is not provided', async () => {
       const provider = new VertexChatProvider('gemini-pro', {
         config: {},
