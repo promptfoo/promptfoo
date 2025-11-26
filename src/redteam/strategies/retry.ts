@@ -57,7 +57,12 @@ async function getFailedTestCases(
 
         if (response.ok) {
           const data = await response.json();
-          const cloudTestCases = data.testCases || [];
+          const cloudTestCases = (data.testCases || []).map((testCase: TestCase) => {
+            // Strip the provider from cloud test cases - redteam providers (best-of-n, goat, etc.)
+            // require runtime config (injectVar) that isn't stored in the cloud database.
+            const { provider: _provider, ...testCaseWithoutProvider } = testCase;
+            return testCaseWithoutProvider;
+          });
           allTestCases.push(...cloudTestCases);
 
           logger.debug(
@@ -119,12 +124,15 @@ async function getFailedTestCases(
           const testCase: TestCase =
             typeof r.testCase === 'string' ? JSON.parse(r.testCase) : r.testCase;
 
-          const { options: _options, ...rest } = testCase;
-          const { strategyConfig: _strategyConfig, ...restMetadata } = rest.metadata || {};
+          const { strategyConfig: _strategyConfig, ...restMetadata } = testCase.metadata || {};
+
+          // Strip the provider from retry tests - redteam providers (best-of-n, goat, etc.)
+          // require runtime config (injectVar) that isn't stored in the database.
+          // The eval will use the default target provider instead.
+          const { provider: _provider, ...testCaseWithoutProvider } = testCase;
 
           const result = {
-            ...rest,
-            ...(testCase.provider ? { provider: testCase.provider } : {}),
+            ...testCaseWithoutProvider,
             metadata: {
               ...restMetadata,
               originalEvalId: r.evalId,
@@ -137,8 +145,9 @@ async function getFailedTestCases(
           } as TestCase;
 
           logger.debug(
-            `Retrieved test case - pluginId: ${result.metadata?.pluginId}, strategyId: ${result.metadata?.strategyId}, retry: ${result.metadata?.retry}`,
+            `Retrieved test case - pluginId: ${result.metadata?.pluginId}, strategyId: ${result.metadata?.strategyId}`,
           );
+          logger.debug(`  Prompt: ${JSON.stringify(result.vars?.prompt || result.vars)?.substring(0, 200)}...`);
 
           return result;
         } catch (e) {
@@ -168,7 +177,7 @@ async function getFailedTestCases(
 
 export async function addRetryTestCases(
   testCases: TestCaseWithPlugin[],
-  injectVar: string,
+  _injectVar: string,
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   logger.debug('Adding retry test cases from previous failures');
@@ -206,40 +215,10 @@ export async function addRetryTestCases(
       // Fetch only the number of tests we need for efficiency
       const failedTests = await getFailedTestCases(pluginId, targetId, maxTests);
 
-      // Get provider configuration from an existing test case if available
-      const existingTest = tests.find((t) => t.provider && typeof t.provider === 'object');
-
-      // Ensure each test case has a proper provider configuration
-      const withProvider = failedTests.map((test) => {
-        // If test has a provider in object format already, keep it
-        if (test.provider && typeof test.provider === 'object') {
-          return test;
-        }
-
-        // If test has a string provider, convert it to object format
-        if (test.provider && typeof test.provider === 'string') {
-          return {
-            ...test,
-            provider: {
-              id: test.provider,
-              config: {
-                injectVar,
-              },
-            },
-          };
-        }
-
-        // If no provider, use the one from existing test if available
-        if (existingTest?.provider) {
-          return {
-            ...test,
-            provider: existingTest.provider,
-          };
-        }
-        return test;
-      });
-
-      retryTestCases.push(...withProvider);
+      // Don't add a provider to retry test cases - the eval will use the default target provider.
+      // Redteam providers (best-of-n, goat, etc.) require runtime config (injectVar) that
+      // isn't stored in the database, so we intentionally leave retry tests without a provider.
+      retryTestCases.push(...failedTests);
     }
   }
 
