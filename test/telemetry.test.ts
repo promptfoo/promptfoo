@@ -296,7 +296,6 @@ describe('Telemetry', () => {
       expect(mockPostHog).toHaveBeenCalledWith('test-posthog-key', {
         host: 'https://a.promptfoo.app',
         fetch: expect.any(Function),
-        flushAt: 1,
         flushInterval: 0,
       });
     });
@@ -552,6 +551,90 @@ describe('Telemetry', () => {
         },
         1000,
       );
+    });
+  });
+
+  describe('beforeExit handler registration', () => {
+    const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
+    const TELEMETRY_INSTANCE_KEY = Symbol.for('promptfoo.telemetry.instance');
+
+    beforeEach(() => {
+      // Clear the process-level flags before each test
+      delete (process as unknown as Record<symbol, unknown>)[SHUTDOWN_HANDLER_KEY];
+      delete (process as unknown as Record<symbol, unknown>)[TELEMETRY_INSTANCE_KEY];
+    });
+
+    it('should register beforeExit handler only once across multiple module loads', async () => {
+      const beforeExitListenersBefore = process.listenerCount('beforeExit');
+
+      jest.resetModules();
+      jest.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      }));
+
+      // First import
+      await import('../src/telemetry');
+      const listenersAfterFirst = process.listenerCount('beforeExit');
+
+      jest.resetModules();
+      jest.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      }));
+
+      // Second import
+      await import('../src/telemetry');
+      const listenersAfterSecond = process.listenerCount('beforeExit');
+
+      // Should have added exactly one listener total
+      expect(listenersAfterFirst).toBe(beforeExitListenersBefore + 1);
+      expect(listenersAfterSecond).toBe(listenersAfterFirst);
+    });
+
+    it('should store telemetry instance on process for beforeExit handler', async () => {
+      jest.resetModules();
+      jest.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      }));
+
+      const telemetryModule = await import('../src/telemetry');
+      const telemetryInstance = telemetryModule.default;
+
+      const storedInstance = (process as unknown as Record<symbol, unknown>)[
+        TELEMETRY_INSTANCE_KEY
+      ];
+      expect(storedInstance).toBe(telemetryInstance);
+    });
+
+    it('should update stored instance when module is reloaded', async () => {
+      jest.resetModules();
+      jest.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      }));
+
+      const firstModule = await import('../src/telemetry');
+      const firstInstance = firstModule.default;
+
+      jest.resetModules();
+      jest.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      }));
+
+      const secondModule = await import('../src/telemetry');
+      const secondInstance = secondModule.default;
+
+      // Instances should be different (new module load)
+      expect(firstInstance).not.toBe(secondInstance);
+
+      // Stored instance should be the most recent one
+      const storedInstance = (process as unknown as Record<symbol, unknown>)[
+        TELEMETRY_INSTANCE_KEY
+      ];
+      expect(storedInstance).toBe(secondInstance);
     });
   });
 });

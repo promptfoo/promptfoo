@@ -46,9 +46,10 @@ function getPostHogClient(): PostHog | null {
         host: EVENTS_ENDPOINT,
         fetch: fetchWithProxy,
         // Disable automatic flush interval to prevent keeping the event loop alive.
-        // Events are sent immediately via explicit flush() calls after each capture.
+        // Without this, PostHog's internal setInterval keeps the Node.js event loop
+        // alive indefinitely, causing processes that import promptfoo to hang.
+        // Events are still sent immediately via explicit flush() calls after each capture.
         // See: https://github.com/promptfoo/promptfoo/issues/5893
-        flushAt: 1,
         flushInterval: 0,
       });
     } catch {
@@ -69,7 +70,7 @@ export class Telemetry {
     this.id = getUserId();
     this.email = getUserEmail();
     this.identify().then(() => {
-      // Identify completed
+      // Intentionally empty - fire and forget
     });
   }
 
@@ -209,14 +210,30 @@ export class Telemetry {
 
 const telemetry = new Telemetry();
 
-// Register cleanup handler as a safety net to ensure PostHog client is properly
-// shut down when the process exits. The primary fix is disabling PostHog's internal
-// flush timer (flushAt: 1, flushInterval: 0) so it doesn't keep the event loop alive.
-// See: https://github.com/promptfoo/promptfoo/issues/5893
-process.once('beforeExit', () => {
-  telemetry.shutdown().catch((error) => {
-    logger.debug(`Telemetry shutdown on beforeExit failed: ${error}`);
+// Use Symbol.for to ensure the same symbol across module reloads (e.g., in Jest tests).
+// This prevents MaxListenersExceededWarning when tests use jest.resetModules().
+const TELEMETRY_INSTANCE_KEY = Symbol.for('promptfoo.telemetry.instance');
+const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
+
+// Store telemetry instance on process so the beforeExit handler can access the current instance
+(process as unknown as Record<symbol, unknown>)[TELEMETRY_INSTANCE_KEY] = telemetry;
+
+// Register cleanup handler only once across all module reloads.
+// This is a safety net to ensure PostHog client is properly shut down when the process exits.
+// The primary fix is disabling PostHog's internal flush timer (flushInterval: 0) so it
+// doesn't keep the event loop alive. See: https://github.com/promptfoo/promptfoo/issues/5893
+if (!(process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY]) {
+  (process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY] = true;
+  process.once('beforeExit', () => {
+    const instance = (process as unknown as Record<symbol, Telemetry | undefined>)[
+      TELEMETRY_INSTANCE_KEY
+    ];
+    if (instance) {
+      instance.shutdown().catch(() => {
+        // Silently ignore - logger may be unavailable during shutdown
+      });
+    }
   });
-});
+}
 
 export default telemetry;
