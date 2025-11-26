@@ -18,7 +18,10 @@ function isCloudMode(): boolean {
 export function deduplicateTests(tests: TestCase[]): TestCase[] {
   const seen = new Set<string>();
   return tests.filter((test) => {
-    const key = JSON.stringify(test.vars);
+    // Include strategyId in deduplication key - tests with the same prompt but different
+    // strategies (e.g., plugin-only vs goat) should be considered different test cases
+    const strategyId = test.metadata?.strategyId || 'none';
+    const key = JSON.stringify({ vars: test.vars, strategyId });
     if (seen.has(key)) {
       return false;
     }
