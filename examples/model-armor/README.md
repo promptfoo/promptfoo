@@ -111,6 +111,14 @@ For debugging, inspect the raw Model Armor response in `metadata.modelArmor`, wh
 
 For red team testing, use the `guardrails` assertion with `purpose: redteam` to verify that dangerous prompts are correctly blocked.
 
+## Cleanup
+
+After testing, you can delete the Model Armor template if no longer needed:
+
+```bash
+gcloud model-armor templates delete basic-safety --location=us-central1
+```
+
 ## Learn More
 
 - [Model Armor Overview](https://cloud.google.com/security-command-center/docs/model-armor-overview)

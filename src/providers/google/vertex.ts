@@ -465,7 +465,9 @@ export class VertexChatProvider extends VertexGenericProvider {
                   modelArmor: isModelArmor
                     ? {
                         blockReason: datum.promptFeedback.blockReason,
-                        blockReasonMessage: datum.promptFeedback.blockReasonMessage,
+                        ...(datum.promptFeedback.blockReasonMessage && {
+                          blockReasonMessage: datum.promptFeedback.blockReasonMessage,
+                        }),
                       }
                     : undefined,
                 },
@@ -478,7 +480,9 @@ export class VertexChatProvider extends VertexGenericProvider {
                 modelArmor: isModelArmor
                   ? {
                       blockReason: datum.promptFeedback.blockReason,
-                      blockReasonMessage: datum.promptFeedback.blockReasonMessage,
+                      ...(datum.promptFeedback.blockReasonMessage && {
+                        blockReasonMessage: datum.promptFeedback.blockReasonMessage,
+                      }),
                     }
                   : undefined,
               },

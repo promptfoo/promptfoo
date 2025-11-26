@@ -296,7 +296,7 @@ tests:
 
 ## Measuring Model Armor false positives on benign prompts
 
-Run a dataset of legitimate prompts to catch over-blocking. With the default configuration, the `guardrails` assertion passes when the prompt is **not** flagged by Model Armor. If a benign prompt is incorrectly flagged, the test fails—which is exactly what you want when measuring false positives.
+Run a dataset of legitimate prompts to catch over-blocking. With the default configuration, the `guardrails` assertion passes when the prompt is **not** flagged by Model Armor. If a benign prompt is incorrectly flagged, the test fails—the intended behavior when measuring false positives.
 
 ```yaml
 tests:
