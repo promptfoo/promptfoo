@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import ModelAudit from '../models/modelAudit';
-import { checkModelAuditUpdates } from '../updates';
+import { checkModelAuditUpdates, getModelAuditCurrentVersion } from '../updates';
 import {
   getHuggingFaceMetadata,
   isHuggingFaceModel,
@@ -18,26 +18,27 @@ import type { ModelAuditScanResults } from '../types/modelAudit';
 
 /**
  * Check if modelaudit is installed and get its version.
+ * Uses getModelAuditCurrentVersion from updates.ts for version parsing.
  * @returns Object with installed status and version string (e.g., "0.2.16")
  */
 export async function checkModelAuditInstalled(): Promise<{
   installed: boolean;
   version: string | null;
 }> {
+  const version = await getModelAuditCurrentVersion();
+  // If we got a version, modelaudit is installed
+  // If null, it could mean not installed OR installed but couldn't parse version
+  if (version !== null) {
+    return { installed: true, version };
+  }
+
+  // Fallback: check if modelaudit command exists (even if version parsing failed)
   return new Promise((resolve) => {
     const proc = spawn('modelaudit', ['--version']);
-    let stdout = '';
-
-    proc.stdout?.on('data', (data) => {
-      stdout += data.toString();
-    });
-
     proc.on('error', () => resolve({ installed: false, version: null }));
     proc.on('close', (code) => {
       if (code === 0 || code === 1) {
-        // Parse "modelaudit, version X.Y.Z" format
-        const match = stdout.match(/version\s+(\d+\.\d+\.\d+)/i);
-        resolve({ installed: true, version: match ? match[1] : null });
+        resolve({ installed: true, version: null });
       } else {
         resolve({ installed: false, version: null });
       }
