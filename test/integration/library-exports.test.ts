@@ -21,7 +21,6 @@ const buildExists = fs.existsSync(distDir);
 const describeIfBuildExists = buildExists ? describe : describe.skip;
 
 describeIfBuildExists('Library Exports', () => {
-
   describe('Build artifacts', () => {
     it('should have ESM library build (index.js)', () => {
       const esmPath = path.join(distDir, 'index.js');
