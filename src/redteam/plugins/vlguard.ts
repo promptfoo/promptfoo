@@ -24,7 +24,7 @@ const SPLIT_INFO = {
   train: { totalRecords: 1999 },
 } as const;
 
-export type VLGuardSplit = keyof typeof SPLIT_INFO;
+export type VLGuardSplit = keyof typeof SPLIT_INFO | 'both';
 
 // Valid categories in the VLGuard dataset
 // Support both old (lowercase) and new (title case) formats for backwards compatibility
@@ -148,12 +148,13 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   // Images are fetched on-demand with bounded concurrency
   protected fetchLimit = 500;
 
-  // Cache for metadata and processed records, keyed by split
-  private metadataCache: Map<VLGuardSplit, VLGuardMetadataRecord[]> = new Map();
+  // Cache for metadata (keyed by actual split: 'train' or 'test')
+  private metadataCache: Map<'train' | 'test', VLGuardMetadataRecord[]> = new Map();
+  // Cache for processed records (keyed by configured split: 'train', 'test', or 'both')
   private splitCache: Map<VLGuardSplit, VLGuardInput[]> = new Map();
 
   // Current split being used
-  private currentSplit: VLGuardSplit = 'test';
+  private currentSplit: VLGuardSplit = 'both';
 
   private constructor() {
     super();
@@ -202,16 +203,16 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   }
 
   /**
-   * Fetch metadata from {split}.json
+   * Fetch metadata from a specific split's JSON file
    */
-  private async fetchMetadata(): Promise<VLGuardMetadataRecord[]> {
-    const cachedMetadata = this.metadataCache.get(this.currentSplit);
+  private async fetchMetadataForSplit(split: 'train' | 'test'): Promise<VLGuardMetadataRecord[]> {
+    const cachedMetadata = this.metadataCache.get(split);
     if (cachedMetadata) {
       return cachedMetadata;
     }
 
-    const metadataUrl = `${DATASET_BASE_URL}/${this.currentSplit}.json`;
-    logger.debug(`[vlguard] Fetching metadata from ${this.currentSplit}.json`);
+    const metadataUrl = `${DATASET_BASE_URL}/${split}.json`;
+    logger.debug(`[vlguard] Fetching metadata from ${split}.json`);
 
     const hfToken =
       getEnvString('HF_TOKEN') ||
@@ -233,11 +234,9 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
       }
 
       const metadata = response.data as VLGuardMetadataRecord[];
-      logger.info(
-        `[vlguard] Loaded ${metadata.length} metadata records from ${this.currentSplit}.json`,
-      );
+      logger.info(`[vlguard] Loaded ${metadata.length} metadata records from ${split}.json`);
 
-      this.metadataCache.set(this.currentSplit, metadata);
+      this.metadataCache.set(split, metadata);
       return metadata;
     } catch (error) {
       logger.error(
@@ -320,9 +319,12 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   }
 
   /**
-   * Fetch image URLs from the datasets-server API (handles pagination)
+   * Fetch image URLs from the datasets-server API for a specific split (handles pagination)
    */
-  private async fetchImageUrls(totalRows: number): Promise<Map<number, string>> {
+  private async fetchImageUrlsForSplit(
+    split: 'train' | 'test',
+    totalRows: number,
+  ): Promise<Map<number, string>> {
     const hfToken =
       getEnvString('HF_TOKEN') ||
       getEnvString('HF_API_TOKEN') ||
@@ -339,7 +341,7 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
     // Fetch in batches
     for (let offset = 0; offset < totalRows; offset += PAGE_SIZE) {
       const length = Math.min(PAGE_SIZE, totalRows - offset);
-      const url = `${DATASET_SERVER_URL}?dataset=ys-zong%2FVLGuard&split=${this.currentSplit}&config=default&offset=${offset}&length=${length}`;
+      const url = `${DATASET_SERVER_URL}?dataset=ys-zong%2FVLGuard&split=${split}&config=default&offset=${offset}&length=${length}`;
 
       try {
         const response = await fetchWithCache(url, {
@@ -377,11 +379,10 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   }
 
   /**
-   * Process metadata records with bounded concurrency to avoid OOM
+   * Process metadata records with URLs and bounded concurrency to avoid OOM
    */
-  private async processMetadataRecords(
-    records: Array<{ metadata: VLGuardMetadataRecord; rowIndex: number }>,
-    imageMap: Map<number, string>,
+  private async processMetadataRecordsWithUrls(
+    records: Array<{ metadata: VLGuardMetadataRecord; imageUrl: string }>,
   ): Promise<VLGuardInput[]> {
     const CONCURRENCY_LIMIT = 10; // Process 10 images at a time
     const processedRecords: VLGuardInput[] = [];
@@ -390,10 +391,9 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
     for (let i = 0; i < records.length; i += CONCURRENCY_LIMIT) {
       const batch = records.slice(i, i + CONCURRENCY_LIMIT);
       const batchResults = await Promise.all(
-        batch.map(({ metadata, rowIndex }) => {
-          const imageUrl = imageMap.get(rowIndex);
+        batch.map(({ metadata, imageUrl }) => {
           if (!imageUrl) {
-            logger.warn(`[vlguard] No image URL for row index ${rowIndex}`);
+            logger.warn(`[vlguard] No image URL for record ${metadata.id}`);
             return Promise.resolve(null);
           }
           return this.processSingleRecord(metadata, imageUrl);
@@ -414,6 +414,36 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   }
 
   /**
+   * Load data for a single split and return indexed records with their image map
+   */
+  private async loadSplitData(split: 'train' | 'test'): Promise<{
+    indexedRecords: Array<{
+      metadata: VLGuardMetadataRecord;
+      rowIndex: number;
+      split: 'train' | 'test';
+    }>;
+    imageMap: Map<number, string>;
+  }> {
+    const metadata = await this.fetchMetadataForSplit(split);
+    const splitInfo = SPLIT_INFO[split];
+    const totalImages = Math.min(metadata.length, splitInfo.totalRecords);
+    const imageMap = await this.fetchImageUrlsForSplit(split, totalImages);
+
+    const indexedRecords: Array<{
+      metadata: VLGuardMetadataRecord;
+      rowIndex: number;
+      split: 'train' | 'test';
+    }> = [];
+    for (let i = 0; i < metadata.length && i < totalImages; i++) {
+      if (imageMap.has(i)) {
+        indexedRecords.push({ metadata: metadata[i], rowIndex: i, split });
+      }
+    }
+
+    return { indexedRecords, imageMap };
+  }
+
+  /**
    * Override ensureDatasetLoaded to use our custom metadata fetching
    */
   protected async ensureDatasetLoaded(): Promise<void> {
@@ -429,33 +459,59 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
 
     logger.debug(`[vlguard] Loading ${this.currentSplit} split...`);
 
-    // Fetch metadata from {split}.json
-    const metadata = await this.fetchMetadata();
-    logger.info(`[vlguard] Loaded ${metadata.length} metadata records from ${this.currentSplit}`);
+    let allIndexedRecords: Array<{
+      metadata: VLGuardMetadataRecord;
+      rowIndex: number;
+      split: 'train' | 'test';
+    }> = [];
+    const combinedImageMap = new Map<string, string>(); // key: "split:rowIndex"
 
-    // Fetch image URLs from datasets-server
-    const splitInfo = SPLIT_INFO[this.currentSplit];
-    const totalImages = Math.min(metadata.length, splitInfo.totalRecords);
-    const imageMap = await this.fetchImageUrls(totalImages);
-    logger.info(`[vlguard] Fetched ${imageMap.size} image URLs from datasets-server`);
+    if (this.currentSplit === 'both') {
+      // Fetch from both splits in parallel
+      const [trainData, testData] = await Promise.all([
+        this.loadSplitData('train'),
+        this.loadSplitData('test'),
+      ]);
 
-    // Create index mapping: metadata records with their row indices
-    // The datasets-server rows are in the same order as {split}.json entries
-    const indexedRecords: Array<{ metadata: VLGuardMetadataRecord; rowIndex: number }> = [];
-    for (let i = 0; i < metadata.length && i < totalImages; i++) {
-      if (imageMap.has(i)) {
-        indexedRecords.push({ metadata: metadata[i], rowIndex: i });
+      allIndexedRecords = [...trainData.indexedRecords, ...testData.indexedRecords];
+
+      // Combine image maps with split prefix to avoid index collisions
+      for (const [idx, url] of trainData.imageMap) {
+        combinedImageMap.set(`train:${idx}`, url);
       }
+      for (const [idx, url] of testData.imageMap) {
+        combinedImageMap.set(`test:${idx}`, url);
+      }
+
+      logger.info(
+        `[vlguard] Loaded ${trainData.indexedRecords.length} train + ${testData.indexedRecords.length} test = ${allIndexedRecords.length} total records`,
+      );
+    } else {
+      // Single split
+      const splitData = await this.loadSplitData(this.currentSplit);
+      allIndexedRecords = splitData.indexedRecords;
+
+      for (const [idx, url] of splitData.imageMap) {
+        combinedImageMap.set(`${this.currentSplit}:${idx}`, url);
+      }
+
+      logger.info(`[vlguard] Loaded ${allIndexedRecords.length} records from ${this.currentSplit}`);
     }
 
     // Take a sample of records based on fetchLimit
-    const sampleSize = Math.min(this.fetchLimit, indexedRecords.length);
-    const sampledRecords = fisherYatesShuffle([...indexedRecords]).slice(0, sampleSize);
+    const sampleSize = Math.min(this.fetchLimit, allIndexedRecords.length);
+    const sampledRecords = fisherYatesShuffle([...allIndexedRecords]).slice(0, sampleSize);
 
-    logger.info(`[vlguard] Processing ${sampledRecords.length} records from ${this.currentSplit}`);
+    logger.info(`[vlguard] Processing ${sampledRecords.length} sampled records`);
 
     // Process the sampled records (fetch images with bounded concurrency)
-    this.datasetCache = await this.processMetadataRecords(sampledRecords, imageMap);
+    // Convert to the format expected by processMetadataRecords
+    const recordsWithUrls = sampledRecords.map((r) => ({
+      metadata: r.metadata,
+      imageUrl: combinedImageMap.get(`${r.split}:${r.rowIndex}`) || '',
+    }));
+
+    this.datasetCache = await this.processMetadataRecordsWithUrls(recordsWithUrls);
 
     // Cache the processed data for this split
     this.splitCache.set(this.currentSplit, this.datasetCache);
@@ -467,10 +523,10 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
    * Get records filtered by category, fetching dataset if needed
    */
   async getFilteredRecords(limit: number, config?: VLGuardPluginConfig): Promise<VLGuardInput[]> {
-    // Set the split from config (default: 'train' for maximum unsafe image coverage)
-    const split = config?.split ?? 'train';
+    // Set the split from config (default: 'both' for maximum coverage)
+    const split = config?.split ?? 'both';
     this.setSplit(split);
-    logger.debug(`[vlguard] Using ${split} split`);
+    logger.debug(`[vlguard] Using ${split === 'both' ? 'both splits' : `${split} split`}`);
 
     await this.ensureDatasetLoaded();
 

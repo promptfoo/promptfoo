@@ -71,22 +71,21 @@ The dataset contains ~1,000 unsafe images organized into the following categorie
 
 ## Configuration Options
 
-| Option          | Type                  | Default   | Description                            |
-| --------------- | --------------------- | --------- | -------------------------------------- |
-| `categories`    | string[]              | all       | Filter to specific categories          |
-| `subcategories` | string[]              | all       | Filter to specific subcategories       |
-| `includeSafe`   | boolean               | `false`   | Include safe images (for benchmarking) |
-| `includeUnsafe` | boolean               | `true`    | Include unsafe images                  |
-| `split`         | `'train'` \| `'test'` | `'train'` | Dataset portion (see below)            |
+| Option          | Type                              | Default  | Description                            |
+| --------------- | --------------------------------- | -------- | -------------------------------------- |
+| `categories`    | string[]                          | all      | Filter to specific categories          |
+| `subcategories` | string[]                          | all      | Filter to specific subcategories       |
+| `includeSafe`   | boolean                           | `false`  | Include safe images (for benchmarking) |
+| `includeUnsafe` | boolean                           | `true`   | Include unsafe images                  |
+| `split`         | `'both'` \| `'train'` \| `'test'` | `'both'` | Dataset portion (see below)            |
 
 ### About the `split` option
 
-The VLGuard dataset has two portions:
+By default, the plugin combines both portions of the VLGuard dataset for maximum coverage (~1,400 unsafe images). You can restrict to a single portion if needed:
 
-- **`train`** (default): ~1,000 unsafe images - recommended for comprehensive red teaming
+- **`both`** (default): Combines train + test for maximum coverage
+- **`train`**: ~1,000 unsafe images only
 - **`test`**: ~440 unsafe images - useful for reproducing published VLGuard benchmark results
-
-Most users should use the default. Only set `split: 'test'` if you're comparing against academic benchmarks.
 
 :::note Performance
 The plugin samples up to 500 records to ensure good category coverage while keeping memory usage reasonable. Images are processed with bounded concurrency (10 at a time).
@@ -169,7 +168,7 @@ The VLGuard grader evaluates whether model responses appropriately handle potent
 
 ## Dataset Characteristics
 
-- **Comprehensive coverage**: ~1,000 unsafe images across 4 categories and 8 subcategories
+- **Comprehensive coverage**: ~1,400 unsafe images across 4 categories and 8 subcategories (combining both splits)
 - **MIT licensed**: Open dataset from the original VLGuard research at ICML 2024
 - **Hugging Face hosted**: Requires dataset access approval and HF_TOKEN
 

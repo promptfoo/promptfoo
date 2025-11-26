@@ -167,7 +167,8 @@ describe('VLGuardPlugin', () => {
         return null;
       });
 
-      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
+      // Use single split to avoid duplicate records from both splits
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
       const tests = await plugin.generateTests(2);
 
       expect(tests).toHaveLength(2);
@@ -229,6 +230,7 @@ describe('VLGuardPlugin', () => {
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['Deception'] as any,
+        split: 'train',
       });
       const tests = await plugin.generateTests(1);
 
@@ -262,6 +264,7 @@ describe('VLGuardPlugin', () => {
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['deception'] as any, // Using legacy lowercase
+        split: 'train',
       });
       const tests = await plugin.generateTests(1);
 
@@ -280,7 +283,7 @@ describe('VLGuardPlugin', () => {
         return { status: 404, data: null, cached: false } as any;
       });
 
-      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
 
       await expect(plugin.generateTests(5)).rejects.toThrow('Failed to generate tests');
     });
@@ -293,7 +296,7 @@ describe('VLGuardPlugin', () => {
         return { status: 404, data: null, cached: false } as any;
       });
 
-      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
 
       await expect(plugin.generateTests(5)).rejects.toThrow('Failed to generate tests');
     });
@@ -322,7 +325,7 @@ describe('VLGuardPlugin', () => {
 
       mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
 
-      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
       const tests = await plugin.generateTests(5);
 
       expect(tests).toHaveLength(1);
@@ -372,7 +375,7 @@ describe('VLGuardPlugin', () => {
         return null;
       });
 
-      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
       const tests = await plugin.generateTests(2);
 
       // Should only include the record with successful image fetch
@@ -438,6 +441,7 @@ describe('VLGuardPlugin', () => {
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['Deception', 'Privacy'] as any,
+        split: 'train',
       });
       const tests = await plugin.generateTests(4);
 
@@ -514,7 +518,7 @@ describe('VLGuardPlugin', () => {
 
       mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
 
-      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
       const tests = await plugin.generateTests(10);
 
       // Should only return unsafe images (default behavior)
@@ -556,6 +560,7 @@ describe('VLGuardPlugin', () => {
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         includeSafe: true,
+        split: 'train',
       });
       const tests = await plugin.generateTests(10);
 
@@ -599,6 +604,7 @@ describe('VLGuardPlugin', () => {
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         includeSafe: true,
         includeUnsafe: false,
+        split: 'train',
       });
       const tests = await plugin.generateTests(10);
 
@@ -648,6 +654,7 @@ describe('VLGuardPlugin', () => {
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['Deception'] as any,
+        split: 'train',
       });
       const tests = await plugin.generateTests(10);
 
@@ -678,7 +685,61 @@ describe('VLGuardPlugin', () => {
       VLGuardDatasetManager.clearCache();
     });
 
-    it('should default to train split for maximum coverage', async () => {
+    it('should default to both splits for maximum coverage', async () => {
+      const trainMetadata = [
+        {
+          id: 'train_1',
+          image: 'img1.png',
+          safe: false,
+          harmful_category: 'deception',
+          harmful_subcategory: 'disinformation',
+          'instr-resp': [{ instruction: 'train question' }],
+        },
+      ];
+      const testMetadata = [
+        {
+          id: 'test_1',
+          image: 'img1.png',
+          safe: false,
+          harmful_category: 'privacy',
+          harmful_subcategory: 'personal data',
+          'instr-resp': [{ instruction: 'test question' }],
+        },
+      ];
+
+      mockFetchWithCache.mockImplementation(async (url: any) => {
+        // Should fetch from both train.json and test.json
+        if (url.includes('train.json') && url.includes('VLGuard')) {
+          return { status: 200, data: trainMetadata, cached: false } as any;
+        }
+        if (url.includes('test.json') && url.includes('VLGuard')) {
+          return { status: 200, data: testMetadata, cached: false } as any;
+        }
+        if (url.includes('datasets-server')) {
+          return { status: 200, data: createMockDatasetServerResponse(1), cached: false } as any;
+        }
+        return { status: 404, data: null, cached: false } as any;
+      });
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
+      const tests = await plugin.generateTests(2);
+
+      // Should fetch from both splits
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('train.json'),
+        expect.any(Object),
+      );
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('test.json'),
+        expect.any(Object),
+      );
+      // Should have records from both (may have duplicates filtered, but at least 1)
+      expect(tests.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should use only train split when configured', async () => {
       const mockMetadata = [
         {
           id: 'train_1',
@@ -686,18 +747,16 @@ describe('VLGuardPlugin', () => {
           safe: false,
           harmful_category: 'deception',
           harmful_subcategory: 'disinformation',
-          'instr-resp': [{ instruction: 'test question' }],
+          'instr-resp': [{ instruction: 'train question' }],
         },
       ];
 
       mockFetchWithCache.mockImplementation(async (url: any) => {
-        // Verify it requests train.json by default (more unsafe images)
         if (url.includes('train.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('test.json')) {
-          // Should not be called by default
-          throw new Error('Should not fetch test.json by default');
+          throw new Error('Should not fetch test.json when split=train');
         }
         if (url.includes('datasets-server') && url.includes('split=train')) {
           return { status: 200, data: createMockDatasetServerResponse(1), cached: false } as any;
@@ -707,7 +766,9 @@ describe('VLGuardPlugin', () => {
 
       mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
 
-      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
+        split: 'train',
+      });
       const tests = await plugin.generateTests(1);
 
       expect(tests).toHaveLength(1);
@@ -717,7 +778,7 @@ describe('VLGuardPlugin', () => {
       );
     });
 
-    it('should use test split when configured', async () => {
+    it('should use only test split when configured', async () => {
       const mockMetadata = [
         {
           id: 'test_1',
@@ -734,7 +795,6 @@ describe('VLGuardPlugin', () => {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
         if (url.includes('train.json')) {
-          // Should not be called when split=test
           throw new Error('Should not fetch train.json when split=test');
         }
         if (url.includes('datasets-server') && url.includes('split=test')) {
