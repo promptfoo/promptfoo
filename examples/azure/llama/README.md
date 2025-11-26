@@ -20,14 +20,14 @@ export AZURE_AI_HOST=your-deployment.services.ai.azure.com
 
 ## Available Llama Models
 
-| Model | Description |
-|-------|-------------|
-| `Llama-4-Scout-17B-16E-Instruct` | Llama 4 Scout |
+| Model                                    | Description      |
+| ---------------------------------------- | ---------------- |
+| `Llama-4-Scout-17B-16E-Instruct`         | Llama 4 Scout    |
 | `Llama-4-Maverick-17B-128E-Instruct-FP8` | Llama 4 Maverick |
-| `Llama-3.3-70B-Instruct` | Llama 3.3 70B |
-| `Meta-Llama-3.1-405B-Instruct` | Llama 3.1 405B |
-| `Meta-Llama-3.1-70B-Instruct` | Llama 3.1 70B |
-| `Meta-Llama-3.1-8B-Instruct` | Llama 3.1 8B |
+| `Llama-3.3-70B-Instruct`                 | Llama 3.3 70B    |
+| `Meta-Llama-3.1-405B-Instruct`           | Llama 3.1 405B   |
+| `Meta-Llama-3.1-70B-Instruct`            | Llama 3.1 70B    |
+| `Meta-Llama-3.1-8B-Instruct`             | Llama 3.1 8B     |
 
 ## Running the Example
 

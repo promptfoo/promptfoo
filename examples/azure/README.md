@@ -6,20 +6,20 @@ This directory contains examples for using Azure AI services with promptfoo, inc
 
 ### Azure OpenAI
 
-| Example | Description |
-|---------|-------------|
-| [openai](./openai/) | Azure OpenAI chat and vision models |
-| [assistant](./assistant/) | Azure OpenAI Assistants with tools |
-| [foundry-agent](./foundry-agent/) | Azure AI Foundry Agents |
+| Example                           | Description                         |
+| --------------------------------- | ----------------------------------- |
+| [openai](./openai/)               | Azure OpenAI chat and vision models |
+| [assistant](./assistant/)         | Azure OpenAI Assistants with tools  |
+| [foundry-agent](./foundry-agent/) | Azure AI Foundry Agents             |
 
 ### Third-Party Models (Azure AI Foundry)
 
-| Example | Description |
-|---------|-------------|
-| [claude](./claude/) | Anthropic Claude models (Opus, Sonnet, Haiku) |
-| [llama](./llama/) | Meta Llama models (4, 3.3, 3.1) |
-| [deepseek](./deepseek/) | DeepSeek models including R1 reasoning |
-| [comparison](./comparison/) | Compare models across providers |
+| Example                     | Description                                   |
+| --------------------------- | --------------------------------------------- |
+| [claude](./claude/)         | Anthropic Claude models (Opus, Sonnet, Haiku) |
+| [llama](./llama/)           | Meta Llama models (4, 3.3, 3.1)               |
+| [deepseek](./deepseek/)     | DeepSeek models including R1 reasoning        |
+| [comparison](./comparison/) | Compare models across providers               |
 
 ## Quick Start
 

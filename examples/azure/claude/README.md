@@ -20,12 +20,12 @@ export AZURE_AI_HOST=your-deployment.services.ai.azure.com
 
 ## Available Claude Models
 
-| Model | Description |
-|-------|-------------|
-| `claude-opus-4-5-20250929` | Claude Opus 4.5 - Most capable |
-| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 - Balanced |
-| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet |
-| `claude-3-5-haiku-20241022` | Claude 3.5 Haiku - Fast |
+| Model                        | Description                    |
+| ---------------------------- | ------------------------------ |
+| `claude-opus-4-5-20250929`   | Claude Opus 4.5 - Most capable |
+| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 - Balanced   |
+| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet              |
+| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku - Fast        |
 
 ## Running the Example
 

@@ -20,12 +20,12 @@ export AZURE_AI_HOST=your-deployment.services.ai.azure.com
 
 ## Available DeepSeek Models
 
-| Model | Type | Description |
-|-------|------|-------------|
-| `DeepSeek-R1` | Reasoning | Advanced reasoning model |
-| `DeepSeek-V3` | Chat | Standard chat model |
+| Model                           | Type      | Description               |
+| ------------------------------- | --------- | ------------------------- |
+| `DeepSeek-R1`                   | Reasoning | Advanced reasoning model  |
+| `DeepSeek-V3`                   | Chat      | Standard chat model       |
 | `DeepSeek-R1-Distill-Llama-70B` | Reasoning | Distilled reasoning model |
-| `DeepSeek-R1-Distill-Qwen-32B` | Reasoning | Distilled reasoning model |
+| `DeepSeek-R1-Distill-Qwen-32B`  | Reasoning | Distilled reasoning model |
 
 ## Reasoning Model Configuration
 
@@ -35,9 +35,9 @@ DeepSeek-R1 is a reasoning model that requires special configuration:
 providers:
   - id: azure:chat:DeepSeek-R1
     config:
-      isReasoningModel: true          # Required for reasoning models
-      max_completion_tokens: 4096     # Use instead of max_tokens
-      reasoning_effort: medium        # low, medium, or high
+      isReasoningModel: true # Required for reasoning models
+      max_completion_tokens: 4096 # Use instead of max_tokens
+      reasoning_effort: medium # low, medium, or high
 ```
 
 ## Running the Example

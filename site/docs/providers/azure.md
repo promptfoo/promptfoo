@@ -80,31 +80,31 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 ### OpenAI Models
 
-| Category | Models |
-|----------|--------|
-| **GPT-5 Series** | `gpt-5`, `gpt-5.1`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-chat` |
-| **GPT-4.1 Series** | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` |
-| **GPT-4o Series** | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime` |
-| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini` |
-| **Specialized** | `computer-use-preview`, `gpt-image-1`, `codex-mini-latest` |
-| **Deep Research** | `o3-deep-research`, `o4-mini-deep-research` |
-| **Embeddings** | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002` |
+| Category             | Models                                                                       |
+| -------------------- | ---------------------------------------------------------------------------- |
+| **GPT-5 Series**     | `gpt-5`, `gpt-5.1`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-chat`                 |
+| **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                    |
+| **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                   |
+| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`              |
+| **Specialized**      | `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`                   |
+| **Deep Research**    | `o3-deep-research`, `o4-mini-deep-research`                                  |
+| **Embeddings**       | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002` |
 
 ### Third-Party Models (Azure AI Foundry)
 
 Azure AI Foundry provides access to models from multiple providers:
 
-| Provider | Models |
-|----------|--------|
-| **Anthropic Claude** | `claude-opus-4-5-20250929` (Claude Opus 4.5), `claude-sonnet-4-5-20250929` (Claude Sonnet 4.5), `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` |
-| **Meta Llama** | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct` |
-| **DeepSeek** | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B` |
-| **Mistral** | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407` |
-| **Cohere** | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024` |
-| **Microsoft Phi** | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning` |
-| **xAI Grok** | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212` |
-| **AI21** | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini` |
-| **Core42** | `JAIS-70b-chat`, `Falcon3-7B-Instruct` |
+| Provider             | Models                                                                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anthropic Claude** | `claude-opus-4-5-20250929` (Claude Opus 4.5), `claude-sonnet-4-5-20250929` (Claude Sonnet 4.5), `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022`                                         |
+| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct` |
+| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                         |
+| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                              |
+| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                         |
+| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                         |
+| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                        |
+| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                     |
+| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                            |
 
 For the complete list of 200+ models with pricing, see the [Azure model catalog](https://azure.microsoft.com/en-us/products/ai-services/ai-foundry/).
 
@@ -783,12 +783,12 @@ providers:
 
 Available Claude models on Azure:
 
-| Model | Description |
-|-------|-------------|
-| `claude-opus-4-5-20250929` | Claude Opus 4.5 - Most capable model |
+| Model                        | Description                              |
+| ---------------------------- | ---------------------------------------- |
+| `claude-opus-4-5-20250929`   | Claude Opus 4.5 - Most capable model     |
 | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 - Balanced performance |
-| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet |
-| `claude-3-5-haiku-20241022` | Claude 3.5 Haiku - Fast, efficient |
+| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet                        |
+| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku - Fast, efficient       |
 
 ### Claude Configuration Example
 

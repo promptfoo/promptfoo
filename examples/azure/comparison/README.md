@@ -24,12 +24,12 @@ export AZURE_AI_HOST=your-deployment.services.ai.azure.com
 
 ## Models Compared
 
-| Provider | Model | Label |
-|----------|-------|-------|
-| OpenAI | `gpt-4.1` | gpt-4.1 |
+| Provider  | Model                        | Label         |
+| --------- | ---------------------------- | ------------- |
+| OpenAI    | `gpt-4.1`                    | gpt-4.1       |
 | Anthropic | `claude-sonnet-4-5-20250929` | claude-sonnet |
-| Meta | `Llama-3.3-70B-Instruct` | llama-3.3 |
-| Mistral | `Mistral-Large-2411` | mistral-large |
+| Meta      | `Llama-3.3-70B-Instruct`     | llama-3.3     |
+| Mistral   | `Mistral-Large-2411`         | mistral-large |
 
 ## Running the Example
 
