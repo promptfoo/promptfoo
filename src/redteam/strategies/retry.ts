@@ -60,12 +60,7 @@ async function getFailedTestCases(
 
         if (response.ok) {
           const data = await response.json();
-          const cloudTestCases = (data.testCases || []).map((testCase: TestCase) => {
-            // Strip the provider from cloud test cases - redteam providers (best-of-n, goat, etc.)
-            // require runtime config (injectVar) that isn't stored in the cloud database.
-            const { provider: _provider, ...testCaseWithoutProvider } = testCase;
-            return testCaseWithoutProvider;
-          });
+          const cloudTestCases = data.testCases || [];
           allTestCases.push(...cloudTestCases);
 
           logger.debug(
@@ -129,13 +124,9 @@ async function getFailedTestCases(
 
           const { strategyConfig: _strategyConfig, ...restMetadata } = testCase.metadata || {};
 
-          // Strip the provider from retry tests - redteam providers (best-of-n, goat, etc.)
-          // require runtime config (injectVar) that isn't stored in the database.
-          // The eval will use the default target provider instead.
-          const { provider: _provider, ...testCaseWithoutProvider } = testCase;
-
+          // Keep the provider - we'll reconstruct it with injectVar later in addRetryTestCases
           const result = {
-            ...testCaseWithoutProvider,
+            ...testCase,
             metadata: {
               ...restMetadata,
               originalEvalId: r.evalId,
@@ -178,9 +169,21 @@ async function getFailedTestCases(
   }
 }
 
+// Map of strategy IDs to their provider IDs
+const strategyToProviderId: Record<string, string> = {
+  goat: 'promptfoo:redteam:goat',
+  crescendo: 'promptfoo:redteam:crescendo',
+  'best-of-n': 'promptfoo:redteam:best-of-n',
+  simba: 'promptfoo:redteam:simba',
+  jailbreak: 'promptfoo:redteam:iterative',
+  'jailbreak:tree': 'promptfoo:redteam:iterative:tree',
+  'jailbreak:meta': 'promptfoo:redteam:iterative:meta',
+  'jailbreak:hydra': 'promptfoo:redteam:iterative:hydra',
+};
+
 export async function addRetryTestCases(
   testCases: TestCaseWithPlugin[],
-  _injectVar: string,
+  injectVar: string,
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   logger.debug('Adding retry test cases from previous failures');
@@ -218,10 +221,33 @@ export async function addRetryTestCases(
       // Fetch only the number of tests we need for efficiency
       const failedTests = await getFailedTestCases(pluginId, targetId, maxTests);
 
-      // Don't add a provider to retry test cases - the eval will use the default target provider.
-      // Redteam providers (best-of-n, goat, etc.) require runtime config (injectVar) that
-      // isn't stored in the database, so we intentionally leave retry tests without a provider.
-      retryTestCases.push(...failedTests);
+      // Reconstruct provider with injectVar for agentic strategies
+      const testsWithProvider = failedTests.map((test) => {
+        const strategyId = test.metadata?.strategyId;
+
+        // If this test has an agentic strategy, reconstruct the provider with injectVar
+        if (strategyId && strategyToProviderId[strategyId]) {
+          const providerId = strategyToProviderId[strategyId];
+          logger.debug(`Reconstructing provider for retry test: ${strategyId} -> ${providerId}`);
+
+          return {
+            ...test,
+            provider: {
+              id: providerId,
+              config: {
+                injectVar,
+              },
+            },
+          };
+        }
+
+        // For plugin-only tests or encoding strategies, no provider needed
+        // (they run directly against the target)
+        const { provider: _provider, ...testWithoutProvider } = test;
+        return testWithoutProvider;
+      });
+
+      retryTestCases.push(...testsWithProvider);
     }
   }
 
