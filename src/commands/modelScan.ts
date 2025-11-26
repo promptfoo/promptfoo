@@ -37,6 +37,18 @@ function hasErrorsInResults(results: ModelAuditScanResults): boolean {
   );
 }
 
+/**
+ * Determine if a model should be re-scanned based on version changes.
+ */
+function shouldRescan(
+  existingVersion: string | null | undefined,
+  currentVersion: string | null,
+): boolean {
+  if (!currentVersion) return false;
+  if (!existingVersion) return true; // Previous scan missing version
+  return existingVersion !== currentVersion; // Version changed
+}
+
 export function modelScanCommand(program: Command): void {
   program
     .command('scan-model')
@@ -146,65 +158,42 @@ export function modelScanCommand(program: Command): void {
 
       // Check for duplicate scans (HuggingFace models only, before download)
       // When --force is used, we still need to find existing record to update (avoid unique constraint)
-      if (saveToDatabase && paths.length === 1) {
-        const modelPath = paths[0];
-        if (isHuggingFaceModel(modelPath)) {
-          try {
-            const metadata = await getHuggingFaceMetadata(modelPath);
-            if (metadata) {
-              const parsed = parseHuggingFaceModel(modelPath);
-              const modelId = parsed ? `${parsed.owner}/${parsed.repo}` : modelPath;
+      if (saveToDatabase && paths.length === 1 && isHuggingFaceModel(paths[0])) {
+        try {
+          const metadata = await getHuggingFaceMetadata(paths[0]);
+          if (metadata) {
+            const parsed = parseHuggingFaceModel(paths[0]);
+            const modelId = parsed ? `${parsed.owner}/${parsed.repo}` : paths[0];
+            const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
 
-              // Check if already scanned with this revision
-              const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
-              if (existing) {
-                if (options.force) {
-                  // --force: always rescan and update existing record
-                  logger.debug(`Re-scanning (--force): ${modelId}`);
-                  existingAuditToUpdate = existing;
-                } else {
-                  // Check if scanner version has changed - rescan if newer version available
-                  const existingScannerVersion = existing.scannerVersion;
-                  if (
-                    currentScannerVersion &&
-                    existingScannerVersion &&
-                    currentScannerVersion !== existingScannerVersion
-                  ) {
-                    logger.debug(
-                      `Re-scanning: modelaudit upgraded from ${existingScannerVersion} to ${currentScannerVersion}`,
-                    );
-                    // Mark for update instead of create
-                    existingAuditToUpdate = existing;
-                  } else if (!existingScannerVersion && currentScannerVersion) {
-                    // Previous scan didn't record version, rescan to capture it
-                    logger.debug(
-                      `Re-scanning: previous scan missing version info (now using ${currentScannerVersion})`,
-                    );
-                    // Mark for update instead of create
-                    existingAuditToUpdate = existing;
-                  } else {
-                    logger.info(chalk.yellow('✓ Model already scanned'));
-                    logger.info(`  Model: ${modelId}`);
-                    logger.info(`  Revision: ${metadata.sha}`);
-                    if (existingScannerVersion) {
-                      logger.info(`  Scanner version: ${existingScannerVersion}`);
-                    }
-                    logger.info(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
-                    logger.info(`  Scan ID: ${existing.id}`);
-                    logger.info(
-                      `\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`,
-                    );
-                    logger.info(chalk.green(`  promptfoo view ${existing.id}`));
-                    process.exitCode = 0;
-                    return;
-                  }
-                }
+            if (existing && options.force) {
+              logger.debug(`Re-scanning (--force): ${modelId}`);
+              existingAuditToUpdate = existing;
+            } else if (existing && shouldRescan(existing.scannerVersion, currentScannerVersion)) {
+              const reason = !existing.scannerVersion
+                ? `previous scan missing version info (now using ${currentScannerVersion})`
+                : `modelaudit upgraded from ${existing.scannerVersion} to ${currentScannerVersion}`;
+              logger.debug(`Re-scanning: ${reason}`);
+              existingAuditToUpdate = existing;
+            } else if (existing) {
+              logger.info(chalk.yellow('✓ Model already scanned'));
+              logger.info(`  Model: ${modelId}`);
+              logger.info(`  Revision: ${metadata.sha}`);
+              if (existing.scannerVersion) {
+                logger.info(`  Scanner version: ${existing.scannerVersion}`);
               }
+              logger.info(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
+              logger.info(`  Scan ID: ${existing.id}`);
+              logger.info(
+                `\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`,
+              );
+              logger.info(chalk.green(`  promptfoo view ${existing.id}`));
+              process.exitCode = 0;
+              return;
             }
-          } catch (error) {
-            logger.debug(`Failed to check for existing scan: ${error}`);
-            // Continue with scan if metadata fetch fails
           }
+        } catch (error) {
+          logger.debug(`Failed to check for existing scan: ${error}`);
         }
       }
       const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
