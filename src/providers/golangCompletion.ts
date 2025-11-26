@@ -5,10 +5,16 @@ import path from 'path';
 import util from 'util';
 import { getDirectory } from '../esm';
 
-// Global variable defined by build system
-declare const BUILD_FORMAT: string | undefined;
+/**
+ * BUILD_FORMAT is a compile-time constant injected by tsup during the build process.
+ * @see src/migrate.ts for detailed documentation on BUILD_FORMAT values and usage.
+ */
+declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
 
-// Lazy initialization to avoid module-level side effects in Jest
+/**
+ * Lazy initialization wrapper for getDirectory() to avoid module-level side effects.
+ * @see src/migrate.ts for detailed documentation on why this pattern is used.
+ */
 let currentDir: string | undefined;
 function getCurrentDir(): string {
   if (!currentDir) {

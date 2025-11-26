@@ -3,10 +3,27 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { getDirectory } from './esm';
 
-// Global variable defined by build system
-declare const BUILD_FORMAT: string | undefined;
+/**
+ * BUILD_FORMAT is a compile-time constant injected by tsup during the build process.
+ *
+ * Values:
+ * - 'esm': ESM build (CLI, server, library ESM) - import.meta.url is valid
+ * - 'cjs': CJS build (library CJS only) - __dirname is available, import.meta.url is empty
+ * - undefined: Development mode (tsx) or Jest tests - behavior varies by context
+ *
+ * This constant allows us to make compile-time decisions about which code paths to use,
+ * avoiding runtime checks that may fail due to import.meta syntax errors in CJS.
+ *
+ * @see tsup.config.ts for where BUILD_FORMAT is defined
+ */
+declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
 
-// Lazy initialization to avoid module-level side effects in Jest
+/**
+ * Lazy initialization wrapper for getDirectory() to avoid module-level side effects.
+ *
+ * This is important for Jest tests where module evaluation order matters and
+ * calling getDirectory() at module load time can cause issues with mock setup.
+ */
 let currentDir: string | undefined;
 function getCurrentDir(): string {
   if (!currentDir) {
@@ -58,9 +75,20 @@ export async function runDbMigrations(): Promise<void> {
   });
 }
 
-// ESM replacement for require.main === module check
-// When BUILD_FORMAT is undefined (tsx/direct execution), check import.meta.url
-// When BUILD_FORMAT is defined (bundled), only run if ESM build
+/**
+ * ESM replacement for the CommonJS `require.main === module` pattern.
+ *
+ * This block determines if this module was executed directly (e.g., `tsx src/migrate.ts`)
+ * vs imported as a dependency. If executed directly, it runs migrations and exits.
+ *
+ * Why the BUILD_FORMAT check:
+ * - In CJS builds (BUILD_FORMAT='cjs'), import.meta.url is not available/empty,
+ *   so we skip this check entirely. The CJS build is only used as a library.
+ * - In ESM builds (BUILD_FORMAT='esm') and development (BUILD_FORMAT=undefined),
+ *   we can safely use import.meta.url to detect direct execution.
+ *
+ * The try-catch handles Jest tests where import.meta syntax causes a SyntaxError.
+ */
 const shouldCheckDirectExecution = typeof BUILD_FORMAT === 'undefined' || BUILD_FORMAT === 'esm';
 
 if (shouldCheckDirectExecution) {
@@ -68,11 +96,13 @@ if (shouldCheckDirectExecution) {
     const currentModulePath = resolve(fileURLToPath(import.meta.url));
     const mainModulePath = resolve(process.argv[1]);
     const isMainModule = currentModulePath === mainModulePath;
+
     // Only run if this specific migrate module is being executed directly
     // Matches both migrate.js (bundled) and migrate.ts (direct tsx execution)
     const isMigrateModuleMainExecution =
       isMainModule &&
       (currentModulePath.endsWith('migrate.js') || currentModulePath.endsWith('migrate.ts'));
+
     if (isMigrateModuleMainExecution) {
       // Run migrations and exit with appropriate code
       runDbMigrations()
@@ -80,7 +110,7 @@ if (shouldCheckDirectExecution) {
         .catch(() => process.exit(1));
     }
   } catch {
-    // In CJS context, import.meta.url will fail - that's expected and fine
-    // Migrations will still run when called via API
+    // Expected in CJS environments (Jest) where import.meta syntax is invalid.
+    // Migrations will still run when called programmatically via runDbMigrations().
   }
 }
