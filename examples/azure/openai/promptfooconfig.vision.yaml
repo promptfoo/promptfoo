@@ -25,4 +25,4 @@ tests:
 # Note: If you see 401 errors, ensure:
 # 1. Your AZURE_API_KEY environment variable is set correctly
 # 2. The apiHost matches your Azure OpenAI resource name
-# 3. Your deployment supports vision (GPT-4V, GPT-4 Turbo with Vision, GPT-4.1)
+# 3. Your deployment supports vision (GPT-5.1, GPT-4o, GPT-4.1)
