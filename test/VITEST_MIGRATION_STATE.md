@@ -1,6 +1,6 @@
 # Jest to Vitest Migration State
 
-Last updated: 2025-11-24
+Last updated: 2025-11-27
 
 ## Current Progress
 
@@ -28,6 +28,7 @@ These directories have been fully migrated to Vitest and are listed in `vitest.c
 12. `test/external/` - External assertion/matcher tests
 13. `test/progress/` - Progress reporter tests
 14. `test/types/` - Type validation tests
+15. `test/providers/xai/` - xAI provider tests (chat, image)
 
 ## Remaining Jest Directories
 
@@ -38,7 +39,7 @@ These directories still run with Jest (415 test files):
 - `test/evaluator/`
 - `test/events/`
 - `test/prompts/`
-- `test/providers/` (large - 150+ files)
+- `test/providers/` (large - 150+ files, except xai/ which is migrated)
 - `test/redteam/` (large - many files)
 - `test/server/`
 - `test/share/`
