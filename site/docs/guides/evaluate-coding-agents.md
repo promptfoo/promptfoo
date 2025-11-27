@@ -35,7 +35,7 @@ Coding agents have **categorical** capabilities, not gradual ones. You can't pro
 - **Cannot do**: Depends on sandbox restrictions
 - **Use for**: Refactoring, feature implementation, test generation
 
-**Key insight**: The difference between tiers is binary. Plain LLM either has file access or it doesn't. This isn't about being "better" - it's about having fundamentally different capabilities.
+The difference between tiers is binary - a plain LLM either has file access or it doesn't. This isn't about one being "better," it's about fundamentally different capabilities.
 
 ## Agent types and when to use them
 
@@ -258,24 +258,20 @@ Real results comparing Codex SDK vs Plain LLM (gpt-5.1):
 | Duration                     | 2m 24s                                | &lt;5s                                  |
 | Pass rate                    | 100%                                  | 0%                                      |
 
-**Key finding**: Plain LLM fundamentally misunderstood the task, returning instructions on how to use Bandit tool instead of actually analyzing the code. Codex SDK's file system access and structured output enabled it to perform the actual security audit and return actionable results in the required JSON format.
+The plain LLM returned instructions on how to use Bandit instead of actually analyzing the code. Codex SDK performed the security audit and returned actionable JSON.
 
 ### Why the plain LLM failed
 
-The plain LLM (same underlying model) returned this instead of analyzing the code:
+The plain LLM returned this:
 
 > "To analyze all Python files in a directory for security vulnerabilities and return the findings in JSON format, we can use static code analysis tools like Bandit. Below is a step-by-step guide on how you might achieve this using Python and Bandit:..."
 
-**The task interpretation gap**:
-
 Same prompt, different interpretation:
 
-- **Plain LLM understood**: "Explain how someone would do this task" (meta-instructions)
-- **Codex SDK understood**: "Do this task" (execution)
+- **Plain LLM understood**: "Explain how someone would do this task"
+- **Codex SDK understood**: "Do this task"
 
-This reveals the fundamental cognitive difference between conversational and agentic AI. The plain LLM remained in "assistant mode" - it assumes the human will do the work. Codex SDK operated in "agent mode" - it assumed it should do the work.
-
-**Root cause**: Without file system access, the plain LLM couldn't read files to analyze them. It couldn't execute, so it explained. This demonstrates why agentic SDKs matter - they provide the capabilities that enable execution mode, not just discussion mode.
+Without file system access, the plain LLM couldn't read files to analyze. It couldn't execute, so it explained. This is the core difference between conversational and agentic AI - the agent has the capabilities to actually do the work.
 
 ### What the token usage reveals
 
@@ -287,8 +283,6 @@ The evaluation shows a dramatic difference in token distribution:
 | **Completion tokens** | 726       | 2,309     | 3.2x        |
 | **Total**             | 767       | 1,062,383 | 1,385x      |
 
-**What this tells us about architecture**:
-
 The 25,000x prompt difference isn't inefficiency - it's the entire codebase being read into context. The plain LLM received just the instruction (41 tokens). Codex SDK received:
 
 - The same instruction (41 tokens)
@@ -296,14 +290,11 @@ The 25,000x prompt difference isn't inefficiency - it's the entire codebase bein
 - Full content of `user_service.py` (~400 tokens)
 - Codex system prompts and tool definitions (~1.059M tokens)
 
-**Key insight**: **Context is the feature**. Coding agents are fundamentally context-heavy, reasoning-light. The intelligence isn't in generating more text - it's in synthesizing from massive context.
+Context is the feature. Coding agents are context-heavy, reasoning-light. The intelligence is in synthesizing from massive context, not generating more text.
 
-This inverts traditional LLM optimization:
+This inverts traditional LLM optimization. Chat LLMs minimize prompt and maximize completion. Coding agents maximize context and minimize completion to structured output.
 
-- **Chat LLM goal**: Minimize prompt, maximize useful completion
-- **Coding agent goal**: Maximize context, minimize completion to structured output
-
-**Scaling considerations**:
+### Scaling considerations
 
 For the small test codebase (2 files, ~100 LOC), Codex read 1M tokens. This scales roughly linearly with codebase size, suggesting:
 
@@ -311,19 +302,9 @@ For the small test codebase (2 files, ~100 LOC), Codex read 1M tokens. This scal
 - 100 files: ~50M tokens
 - 1,000 files: ~500M tokens (may hit context limits)
 
-**Architecture choices this forces**:
+For larger codebases, consider focused scans on specific subdirectories, filtering out tests and generated code, or incremental analysis on changed files only.
 
-1. **Focused scans**: Analyze specific subdirectories, not entire monorepos
-2. **File filtering**: Exclude tests, migrations, generated code before reading
-3. **Incremental analysis**: Scan changed files only (git diff integration)
-4. **Trade context for accuracy**: Larger context = better analysis, but may hit limits
-
-**vs Claude Agent SDK:**
-
-- Claude SDK has full file system access but returns natural language by default
-- Requires additional prompting or LLM-based parsing for structured output
-- Better for interactive security remediation where you modify code after finding issues
-- Similar token usage pattern when analyzing full codebases
+Claude Agent SDK has full file system access but returns natural language by default. It's better suited for interactive remediation where you modify code after finding issues. Both SDKs show similar token patterns when analyzing full codebases.
 
 See the [agentic-sdk-comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/agentic-sdk-comparison) for a working implementation.
 
@@ -835,135 +816,29 @@ prompts:
 # - Possibly explain it can't modify ✅
 ```
 
-### What NOT to measure
+### Metrics that don't translate well
 
-**Don't use chat LLM metrics**:
+Traditional chat LLM metrics like BLEU scores or perplexity measure fluency, not task completion. For agents, you want to know "did it work?" not "how good is the text?"
 
-- ❌ BLEU score (this isn't translation)
-- ❌ Perplexity (we want actions, not fluency)
-- ❌ "How good is the text?" (we want "did it work?")
+Partial success metrics ("found 3 of 5 issues") are less useful than binary completion. Automation pipelines break on "mostly correct JSON" - either the output is machine-readable or it isn't.
 
-**Don't measure partial success**:
+### Eval design tips
 
-- ❌ "Found 3 of 5 issues" (why did it miss 2?)
-- ❌ "Mostly correct JSON" (automation breaks on "mostly")
-- ❌ "Pretty good code quality" (subjective, not actionable)
+**Tasks should require agent capabilities.** "Write a function that reverses a string" tests the model. "Find all functions in this codebase that reverse strings" tests the agent.
 
-### Eval design principles
+**Success should be measurable.** Subjective rubrics like "Is the code high quality?" are hard to act on. Objective checks like "Did it find the 3 intentional bugs?" give clear pass/fail.
 
-**1. Tasks must require agent capabilities**
+**Include failure modes.** Test what happens when an agent is asked to do something outside its tier (e.g., asking a read-only agent to modify files).
 
-Bad test (any LLM can do this):
-
-```yaml
-prompts:
-  - 'Write a function that reverses a string'
-```
-
-Good test (requires file access):
-
-```yaml
-prompts:
-  - 'Find all functions in the codebase that reverse strings and list their performance characteristics'
-```
-
-**2. Success must be measurable**
-
-Bad assertion:
-
-```yaml
-- type: llm-rubric
-  value: 'Is the code high quality?' # Subjective
-```
-
-Good assertion:
-
-```yaml
-- type: javascript
-  value: |
-    // Objective: Did it find the 3 intentional bugs?
-    const foundMD5 = output.includes('MD5');
-    const foundCVV = output.includes('CVV');
-    const foundSession = output.includes('session');
-    return { pass: foundMD5 && foundCVV && foundSession };
-```
-
-**3. Include failure modes**
-
-Test what happens when the agent _can't_ do the task:
-
-```yaml
-tests:
-  # Test 1: Task it CAN do
-  - description: 'Analyze security (read-only)'
-    ...
-
-  # Test 2: Task it CAN'T do
-  - description: 'Fix security issues (requires write)'
-    assert:
-      - type: javascript
-        value: |
-          // Should fail gracefully, not silently succeed
-          const attemptedWrite = output.files_modified > 0;
-          return {
-            pass: !attemptedWrite,  // Should NOT modify files
-            reason: attemptedWrite ? 'Exceeded capabilities' : 'Correctly stayed read-only'
-          };
-```
-
-**4. Compare tiers, not just providers**
-
-Most valuable comparisons:
-
-- Tier 0 vs Tier 1 (Plain LLM vs Codex SDK) - Shows capability gap
-- Tier 1 vs Tier 2 (Codex vs Claude Agent) - Shows read vs read/write
-- Same tier, different providers (Codex vs competitor) - Shows implementation quality
-
-Less valuable:
-
-- Different models, same provider (gpt-4o vs gpt-4) - Model diff, not agent diff
-- Same task, trivial variations - Not testing agent capabilities
+**Compare tiers, not just providers.** The most interesting comparisons show the capability gap between Plain LLM vs Codex SDK (Tier 0 vs 1) or Codex vs Claude Agent (Tier 1 vs 2). Comparing different models on the same provider tests the model, not the agent architecture.
 
 ### Common pitfalls
 
-**Pitfall 1: Testing the model, not the agent**
+**Testing the model instead of the agent.** If your prompt is "Explain what a linked list is," you're testing the underlying model. "Find all linked list implementations in this codebase" tests the agent's file access.
 
-```yaml
-# ❌ Bad: This tests gpt-5.1 vs claude-sonnet-4
-providers:
-  - openai:gpt-5.1
-  - anthropic:claude-sonnet-4-5-20250929
-prompts:
-  - 'Explain what a linked list is'
+**Forgetting the baseline.** Including a plain LLM alongside the agent shows why the agent matters. The plain LLM will fail tasks requiring file access, making the comparison meaningful.
 
-# ✅ Good: This tests Codex SDK vs Claude Agent SDK
-providers:
-  - openai:codex-sdk
-  - anthropic:claude-agent-sdk
-prompts:
-  - 'Find all linked list implementations in this codebase and analyze their time complexity'
-```
-
-**Pitfall 2: Forgetting the baseline**
-
-Always include a plain LLM baseline to show _why_ agents matter:
-
-```yaml
-providers:
-  - openai:codex-sdk # The agent
-  - openai:gpt-5.1 # The baseline (will fail)
-  - anthropic:claude-sonnet-4-5-20250929 # Another baseline (will also fail)
-```
-
-**Pitfall 3: Ignoring token usage patterns**
-
-Token distribution reveals architecture:
-
-- Plain LLM: Small prompt, normal completion
-- Codex SDK: **Huge prompt** (reads files), small completion (JSON)
-- Claude Agent: Huge prompt, variable completion (depends on task)
-
-If your "agentic" eval shows normal token distribution, you're not testing agent capabilities.
+**Ignoring token distribution.** If your eval shows normal token patterns (small prompt, normal completion), you're probably not exercising agent capabilities. Agent evals typically show huge prompts (from file reads) and small completions (structured output).
 
 ## Where to go next
 
