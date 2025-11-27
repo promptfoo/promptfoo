@@ -44,7 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(telemetry): add model-level tracking to eval_ran event with sanitized provider IDs, isModelComparison flag for A/B testing detection, and hasCustomProvider flag
+- feat(telemetry): add model-level tracking to eval_ran event with full provider IDs (models array), isModelComparison flag for A/B testing detection, and hasCustomProvider flag
 - feat(telemetry): add latency percentiles (p50, p95, p99) to eval_ran for understanding tail latency distribution
 - feat(telemetry): add cache hit rate tracking (cacheHits, cacheMisses, cacheHitRate) to eval_ran
 - feat(telemetry): add per-assertion-type effectiveness breakdown (assertionBreakdown) to eval_ran
