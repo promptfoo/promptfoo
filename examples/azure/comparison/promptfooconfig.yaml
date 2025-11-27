@@ -9,9 +9,9 @@ prompts:
     Question: {{question}}
 
 providers:
-  # OpenAI GPT-5 (Latest flagship)
-  - id: azure:chat:gpt-5
-    label: gpt-5
+  # OpenAI GPT-5.1 (Latest flagship)
+  - id: azure:chat:gpt-5.1
+    label: gpt-5.1
     config:
       apiHost: 'your-resource.openai.azure.com'
       max_tokens: 1024

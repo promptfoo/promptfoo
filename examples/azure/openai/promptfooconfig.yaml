@@ -5,17 +5,10 @@ prompts:
   - 'Generate one very interesting fact about {{topic}}'
 
 providers:
-  # GPT-5 - Latest flagship model
-  - id: azure:chat:gpt-5
+  # GPT-5.1 - Latest flagship model
+  - id: azure:chat:gpt-5.1
     config:
       apiHost: 'your-org.openai.azure.com'
-
-  # o3-mini - Reasoning model
-  - id: azure:chat:o3-mini
-    config:
-      apiHost: 'your-org.openai.azure.com'
-      # Reasoning models use max_completion_tokens instead of max_tokens
-      isReasoningModel: true
 
 defaultTest:
   assert:
