@@ -655,9 +655,9 @@ describe('xAI Chat Provider', () => {
 
       expect(result.output).toBe('Response with tokens');
       expect(result.tokenUsage).toBeDefined();
-      expect(result.tokenUsage.prompt).toBe(100);
-      expect(result.tokenUsage.completion).toBe(50);
-      expect(result.tokenUsage.total).toBe(150);
+      expect(result.tokenUsage?.prompt).toBe(100);
+      expect(result.tokenUsage?.completion).toBe(50);
+      expect(result.tokenUsage?.total).toBe(150);
     });
 
     it('should calculate cost for successful responses', async () => {
