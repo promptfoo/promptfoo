@@ -6,7 +6,6 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
-import { isPromptfooSampleTarget } from '../providers/shared';
 import telemetry from '../telemetry';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
@@ -130,12 +129,18 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     const plugins = config?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [];
     const strategies = config?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [];
 
-    // Check if using sample target
+    // Check if using sample target (promptfoo: prefix or promptfoo.app URL)
     const isSampleTarget = config?.targets?.some((t) => {
       if (typeof t === 'string') {
-        return t.includes('promptfoo:');
+        return t.includes('promptfoo:') || t.includes('promptfoo.app');
       }
-      return t.id?.includes('promptfoo:') || isPromptfooSampleTarget(t);
+      const id = t.id || '';
+      const url = t.config?.url || '';
+      return (
+        id.includes('promptfoo:') ||
+        url.includes('promptfoo.app') ||
+        url.includes('promptfoo.dev')
+      );
     });
 
     telemetry.record('redteam run', {
