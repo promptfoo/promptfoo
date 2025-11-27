@@ -6,13 +6,13 @@ description: Compare AI coding agents for code generation, security analysis, an
 
 # Evaluate Coding Agents
 
-**TL;DR**: This guide helps you pick the right AI coding agent for your scenario and evaluate it systematically. Use the [taxonomy table](#agent-types-and-when-to-use-them) to choose your agent, then jump to the [scenario](#core-evaluation-scenarios) that matches your use case.
+This guide covers the CLI-based coding agents built into promptfoo: [OpenAI Codex SDK](/docs/providers/openai-codex-sdk) and [Claude Agent SDK](/docs/providers/claude-agent-sdk). These run headless and integrate directly with promptfoo's eval framework.
 
-## Understanding agent capabilities
+IDE-based agents like Cursor, Copilot, and Aider are mentioned for comparison but aren't directly supported. [Open an issue](https://github.com/promptfoo/promptfoo/issues) if you'd like to see support for your favorite coding agent.
 
-Coding agents have **categorical** capabilities, not gradual ones. You can't prompt-engineer a plain LLM into reading files - the capabilities are architectural.
+## Capability tiers
 
-### Capability tiers
+Coding agents have categorical capabilities. You can't prompt-engineer a plain LLM into reading files - that requires architectural support.
 
 **Tier 0: Text Generation** (Plain LLM like gpt-5.1, claude-sonnet-4)
 
@@ -35,11 +35,9 @@ Coding agents have **categorical** capabilities, not gradual ones. You can't pro
 - **Cannot do**: Depends on sandbox restrictions
 - **Use for**: Refactoring, feature implementation, test generation
 
-The difference between tiers is binary - a plain LLM either has file access or it doesn't. This isn't about one being "better," it's about fundamentally different capabilities.
+The difference between tiers is binary - a plain LLM either has file access or it doesn't.
 
-## Agent types and when to use them
-
-Different coding agents excel at different tasks. Here's when to use each:
+## When to use each agent
 
 | Agent Type                               | Best For                             | Structured Output     | File System Access     | Tradeoffs                      |
 | ---------------------------------------- | ------------------------------------ | --------------------- | ---------------------- | ------------------------------ |
@@ -77,20 +75,11 @@ Different coding agents excel at different tasks. Here's when to use each:
 - Need real-time code completion
 - Want integrated git workflows
 
-## Core evaluation scenarios
-
-This guide covers three common scenarios where coding agents provide value:
+## Scenarios
 
 1. **[Security audit](#scenario-1-security-audit)** - Find vulnerabilities in existing code
 2. **[Automated refactor](#scenario-2-automated-refactor-with-tests)** - Modify code while preserving behavior
 3. **[Cross-file feature](#scenario-3-cross-file-feature-implementation)** - Implement features spanning multiple files
-
-Each scenario shows:
-
-- Real configuration examples
-- Metrics from actual runs
-- Which agent types work best
-- Assertion strategies
 
 ## Scenario 1: Security audit
 
@@ -271,11 +260,11 @@ Same prompt, different interpretation:
 - **Plain LLM understood**: "Explain how someone would do this task"
 - **Codex SDK understood**: "Do this task"
 
-Without file system access, the plain LLM couldn't read files to analyze. It couldn't execute, so it explained. This is the core difference between conversational and agentic AI - the agent has the capabilities to actually do the work.
+Without file system access, the plain LLM defaulted to explaining rather than doing.
 
-### What the token usage reveals
+### Token usage breakdown
 
-The evaluation shows a dramatic difference in token distribution:
+Token distribution shows a dramatic difference:
 
 |                       | Plain LLM | Codex SDK | Ratio       |
 | --------------------- | --------- | --------- | ----------- |
@@ -283,28 +272,24 @@ The evaluation shows a dramatic difference in token distribution:
 | **Completion tokens** | 726       | 2,309     | 3.2x        |
 | **Total**             | 767       | 1,062,383 | 1,385x      |
 
-The 25,000x prompt difference isn't inefficiency - it's the entire codebase being read into context. The plain LLM received just the instruction (41 tokens). Codex SDK received:
+The 25,000x prompt difference is the entire codebase being read into context:
 
-- The same instruction (41 tokens)
-- Full content of `payment_processor.py` (~500 tokens)
-- Full content of `user_service.py` (~400 tokens)
-- Codex system prompts and tool definitions (~1.059M tokens)
+- Instruction: 41 tokens
+- `payment_processor.py`: ~500 tokens
+- `user_service.py`: ~400 tokens
+- Codex system prompts and tools: ~1.059M tokens
 
-Context is the feature. Coding agents are context-heavy, reasoning-light. The intelligence is in synthesizing from massive context, not generating more text.
+This inverts typical LLM patterns. Chat models minimize prompt and maximize completion. Coding agents maximize context and minimize completion.
 
-This inverts traditional LLM optimization. Chat LLMs minimize prompt and maximize completion. Coding agents maximize context and minimize completion to structured output.
+### Scaling
 
-### Scaling considerations
-
-For the small test codebase (2 files, ~100 LOC), Codex read 1M tokens. This scales roughly linearly with codebase size, suggesting:
+For this test codebase (2 files, ~100 LOC), Codex read 1M tokens. Rough scaling:
 
 - 10 files: ~5M tokens
 - 100 files: ~50M tokens
 - 1,000 files: ~500M tokens (may hit context limits)
 
-For larger codebases, consider focused scans on specific subdirectories, filtering out tests and generated code, or incremental analysis on changed files only.
-
-Claude Agent SDK has full file system access but returns natural language by default. It's better suited for interactive remediation where you modify code after finding issues. Both SDKs show similar token patterns when analyzing full codebases.
+For larger codebases: focus scans on specific subdirectories, filter out tests and generated code, or analyze only changed files.
 
 See the [agentic-sdk-comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/agentic-sdk-comparison) for a working implementation.
 
@@ -420,8 +405,6 @@ tests:
 4. Dependencies updated
 
 ## Feature deep dives
-
-These features are key differentiators when evaluating coding agents.
 
 ### Structured output
 
@@ -550,7 +533,7 @@ tests:
         metric: 'Repository safety'
 ```
 
-**Best practice**: Always work in Git repos. Use `skip_git_repo_check: true` only for testing/examples.
+Always work in Git repos. Use `skip_git_repo_check: true` only for testing/examples.
 
 ### Cost and latency
 
@@ -746,13 +729,11 @@ tests:
 
 ## Evaluation methodology
 
-Based on real-world evaluations, here's what makes a good coding agent eval:
-
 ### What to measure
 
-**1. Task completion** (binary, not gradual)
+**1. Task completion** (binary)
 
-Coding agents either complete the task or they don't. There's no partial credit for "trying":
+Agents either complete the task or they don't:
 
 ```yaml
 - type: javascript
@@ -768,9 +749,9 @@ Coding agents either complete the task or they don't. There's no partial credit 
     };
 ```
 
-**2. Automation readiness** (can you pipe the output?)
+**2. Automation readiness**
 
-Can the output go directly into another system without human intervention?
+Can the output go directly into another system?
 
 ```yaml
 - type: javascript
@@ -788,7 +769,7 @@ Can the output go directly into another system without human intervention?
     }
 ```
 
-**3. Schema compliance** (100% or 0%)
+**3. Schema compliance**
 
 With schema enforcement, either every field is correct or it fails:
 
@@ -802,9 +783,9 @@ output_schema:
 # If it errors, it's 0% compliant
 ```
 
-**4. Capability boundaries** (does it know what it can't do?)
+**4. Capability boundaries**
 
-Test whether agents gracefully handle tasks outside their tier:
+Test whether agents handle tasks outside their tier:
 
 ```yaml
 # Test: Ask read-only agent to modify files
@@ -816,34 +797,29 @@ prompts:
 # - Possibly explain it can't modify ✅
 ```
 
-### Metrics that don't translate well
+### Metrics to avoid
 
-Traditional chat LLM metrics like BLEU scores or perplexity measure fluency, not task completion. For agents, you want to know "did it work?" not "how good is the text?"
+BLEU scores and perplexity measure fluency, not task completion. For agents, "did it work?" matters more than "how good is the text?"
 
-Partial success metrics ("found 3 of 5 issues") are less useful than binary completion. Automation pipelines break on "mostly correct JSON" - either the output is machine-readable or it isn't.
+Partial success metrics ("found 3 of 5 issues") are less useful than binary completion. Automation pipelines break on "mostly correct JSON."
 
-### Eval design tips
+### Eval design
 
-**Tasks should require agent capabilities.** "Write a function that reverses a string" tests the model. "Find all functions in this codebase that reverse strings" tests the agent.
-
-**Success should be measurable.** Subjective rubrics like "Is the code high quality?" are hard to act on. Objective checks like "Did it find the 3 intentional bugs?" give clear pass/fail.
-
-**Include failure modes.** Test what happens when an agent is asked to do something outside its tier (e.g., asking a read-only agent to modify files).
-
-**Compare tiers, not just providers.** The most interesting comparisons show the capability gap between Plain LLM vs Codex SDK (Tier 0 vs 1) or Codex vs Claude Agent (Tier 1 vs 2). Comparing different models on the same provider tests the model, not the agent architecture.
+- **Require agent capabilities.** "Write a function that reverses a string" tests the model. "Find all functions in this codebase that reverse strings" tests the agent.
+- **Measure objectively.** "Is the code high quality?" is subjective. "Did it find the 3 intentional bugs?" is measurable.
+- **Include failure modes.** Test what happens when you ask a read-only agent to modify files.
+- **Compare tiers, not just providers.** Plain LLM vs Codex SDK (Tier 0 vs 1) or Codex vs Claude Agent (Tier 1 vs 2) shows capability gaps. Different models on the same provider tests the model, not the agent.
 
 ### Common pitfalls
 
-**Testing the model instead of the agent.** If your prompt is "Explain what a linked list is," you're testing the underlying model. "Find all linked list implementations in this codebase" tests the agent's file access.
+- **Testing the model instead of the agent.** "Explain what a linked list is" tests the model. "Find all linked list implementations in this codebase" tests the agent.
+- **Forgetting the baseline.** Include a plain LLM alongside the agent. It'll fail tasks requiring file access, making the comparison meaningful.
+- **Ignoring token distribution.** Normal token patterns (small prompt, large completion) suggest you're not exercising agent capabilities. Agent evals show huge prompts and small completions.
 
-**Forgetting the baseline.** Including a plain LLM alongside the agent shows why the agent matters. The plain LLM will fail tasks requiring file access, making the comparison meaningful.
+## See also
 
-**Ignoring token distribution.** If your eval shows normal token patterns (small prompt, normal completion), you're probably not exercising agent capabilities. Agent evals typically show huge prompts (from file reads) and small completions (structured output).
-
-## Where to go next
-
-- [OpenAI Codex SDK provider docs](/docs/providers/openai-codex-sdk) - Full configuration reference
-- [Claude Agent SDK provider docs](/docs/providers/claude-agent-sdk) - Alternative agent approach
-- [Agentic SDK comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/agentic-sdk-comparison) - Working side-by-side comparison
-- [Sandboxed code evals](/docs/guides/sandboxed-code-evals) - Isolate untrusted code execution
-- [LLM red teaming](/docs/guides/llm-redteaming) - Adversarial testing for security
+- [OpenAI Codex SDK provider docs](/docs/providers/openai-codex-sdk)
+- [Claude Agent SDK provider docs](/docs/providers/claude-agent-sdk)
+- [Agentic SDK comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/agentic-sdk-comparison)
+- [Sandboxed code evals](/docs/guides/sandboxed-code-evals)
+- [LLM red teaming](/docs/guides/llm-redteaming)
