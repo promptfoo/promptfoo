@@ -35,7 +35,6 @@ This example includes configurations to test different Grok capabilities:
 - **Image Generation** (`promptfooconfig.images.yaml`) - Artistic image creation using Grok's image models
 - **Live Search** (`promptfooconfig.search.yaml`) - Real-time web and X search using Live Search
 - **Agent Tools (Responses API)** (`promptfooconfig.responses.yaml`) - Autonomous web and X search using Agent Tools
-- **Promptfoo Search** (`promptfooconfig.promptfoo-search.yaml`) - Searching for information about promptfoo
 
 ## Run Individual Tests
 
@@ -51,9 +50,6 @@ promptfoo eval -c promptfooconfig.search.yaml
 
 # Agent Tools with Responses API (recommended)
 promptfoo eval -c promptfooconfig.responses.yaml
-
-# Search for promptfoo information
-promptfoo eval -c promptfooconfig.promptfoo-search.yaml
 ```
 
 ## Featured Models
