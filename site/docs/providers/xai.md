@@ -208,7 +208,7 @@ This is equivalent to setting `base_url="https://us-west-1.api.x.ai/v1"` in the 
 
 :::warning Deprecation Notice
 
-xAI has announced that the Live Search API (via `search_parameters`) will be **deprecated by December 15, 2025**. The replacement is the Agent Tools API, which provides enhanced agentic search capabilities. Agent Tools require the Responses API endpoint - see the [Agent Tools API](#agent-tools-api) section for more details.
+xAI has announced that the Live Search API (via `search_parameters`) will be **deprecated by December 15, 2025**. The replacement is the Agent Tools API, which provides enhanced agentic search capabilities. Agent Tools require the Responses API endpoint - see the [Agent Tools API](#agent-tools-api-responses-api) section for more details.
 
 :::
 
