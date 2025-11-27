@@ -16,6 +16,7 @@ import { MCPConfig } from './mcp/types';
 import type {
   AgentDefinition,
   Options as QueryOptions,
+  OutputFormat,
   SettingSource,
 } from '@anthropic-ai/claude-agent-sdk';
 
@@ -188,6 +189,12 @@ export interface ClaudeCodeOptions {
    * Keys are agent names, values are agent definitions with description, tools, and prompt.
    */
   agents?: Record<string, AgentDefinition>;
+
+  /**
+   * Output format specification for structured outputs.
+   * When set, the agent will return validated JSON matching the provided schema.
+   */
+  output_format?: OutputFormat;
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -349,6 +356,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       resumeSessionAt: config.resume_session_at,
       continue: config.continue,
       agents: config.agents,
+      outputFormat: config.output_format,
       env,
     };
 
@@ -484,13 +492,23 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const sessionId = msg.session_id;
           if (msg.subtype == 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
-            const response = {
-              output: msg.result,
+            // When structured output is enabled and available, use it as the output
+            // Otherwise fall back to the text result
+            const output = msg.structured_output !== undefined ? msg.structured_output : msg.result;
+            const response: ProviderResponse = {
+              output,
               tokenUsage,
               cost,
               raw,
               sessionId,
             };
+            // Include structured output in metadata if available
+            if (msg.structured_output !== undefined) {
+              response.metadata = {
+                ...response.metadata,
+                structuredOutput: msg.structured_output,
+              };
+            }
 
             if (shouldWriteCache && cache && cacheKey) {
               try {
