@@ -1839,6 +1839,24 @@ class Evaluator {
     const avgLatencyMs =
       this.evalRecord.results.length > 0 ? totalLatencyMs / this.evalRecord.results.length : 0;
 
+    // Calculate latency percentiles (p50, p95, p99)
+    const latencies = this.evalRecord.results
+      .map((r) => r.latencyMs)
+      .filter((l): l is number => l !== undefined && l > 0)
+      .sort((a, b) => a - b);
+
+    const getPercentile = (arr: number[], p: number): number => {
+      if (arr.length === 0) {
+        return 0;
+      }
+      const index = Math.floor(arr.length * p);
+      return arr[Math.min(index, arr.length - 1)];
+    };
+
+    const latencyP50Ms = getPercentile(latencies, 0.5);
+    const latencyP95Ms = getPercentile(latencies, 0.95);
+    const latencyP99Ms = getPercentile(latencies, 0.99);
+
     // Detect key feature usage patterns
     const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
     const usesTransforms = Boolean(
@@ -1937,6 +1955,9 @@ class Evaluator {
       // Performance metrics
       totalEvalTimeMs,
       avgLatencyMs: Math.round(avgLatencyMs),
+      latencyP50Ms: Math.round(latencyP50Ms),
+      latencyP95Ms: Math.round(latencyP95Ms),
+      latencyP99Ms: Math.round(latencyP99Ms),
       concurrencyUsed: concurrency,
       timeoutOccurred,
 
