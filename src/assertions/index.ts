@@ -97,16 +97,8 @@ import type {
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
-export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
-  'answer-relevance',
-  'context-faithfulness',
-  'context-recall',
-  'context-relevance',
-  'factuality',
-  'llm-rubric',
-  'model-graded-closedqa',
-  'model-graded-factuality',
-]);
+// Re-export from constants to avoid circular dependencies
+export { MODEL_GRADED_ASSERTION_TYPES } from './constants';
 
 const ASSERTION_HANDLERS: Record<
   BaseAssertionTypes,

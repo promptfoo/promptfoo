@@ -21,19 +21,20 @@ describe('computeRunStats', () => {
     mockTracker.getProviderUsage.mockReturnValue(null);
   });
 
-  const createStats = (overrides?: Partial<EvaluateStats>): EvaluateStats => ({
-    successes: 0,
-    failures: 0,
-    errors: 0,
-    tokenUsage: {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      numRequests: 0,
-    },
-    ...overrides,
-  });
+  const createStats = (overrides?: Partial<EvaluateStats>): EvaluateStats =>
+    ({
+      successes: 0,
+      failures: 0,
+      errors: 0,
+      tokenUsage: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+      },
+      ...overrides,
+    }) as EvaluateStats;
 
   const createProvider = (id: string): ApiProvider =>
     ({
@@ -91,8 +92,8 @@ describe('computeRunStats', () => {
         response: { cached: false },
         gradingResult: {
           componentResults: [
-            { pass: true, assertion: { type: 'equals' } },
-            { pass: false, assertion: { type: 'contains' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'equals' } },
+            { pass: false, score: 0, reason: '', assertion: { type: 'contains' } },
           ],
         },
       },
@@ -102,7 +103,7 @@ describe('computeRunStats', () => {
         provider: { id: 'openai:gpt-4' },
         response: { cached: true },
         gradingResult: {
-          componentResults: [{ pass: true, assertion: { type: 'equals' } }],
+          componentResults: [{ pass: true, score: 1, reason: '', assertion: { type: 'equals' } }],
         },
       },
       {
@@ -124,7 +125,7 @@ describe('computeRunStats', () => {
         cached: 100,
         numRequests: 3,
       },
-    });
+    } as any);
 
     const providers = [createProvider('openai:gpt-4')];
 

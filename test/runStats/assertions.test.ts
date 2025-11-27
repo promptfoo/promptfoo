@@ -24,9 +24,9 @@ describe('computeAssertionBreakdown', () => {
         latencyMs: 100,
         gradingResult: {
           componentResults: [
-            { pass: true, assertion: { type: 'equals' } },
-            { pass: false, assertion: { type: 'equals' } },
-            { pass: true, assertion: { type: 'contains' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'equals' } },
+            { pass: false, score: 0, reason: '', assertion: { type: 'equals' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'contains' } },
           ],
         },
       },
@@ -45,18 +45,18 @@ describe('computeAssertionBreakdown', () => {
         latencyMs: 100,
         gradingResult: {
           componentResults: [
-            { pass: true, assertion: { type: 'a' } },
-            { pass: true, assertion: { type: 'b' } },
-            { pass: true, assertion: { type: 'b' } },
-            { pass: true, assertion: { type: 'c' } },
-            { pass: true, assertion: { type: 'c' } },
-            { pass: true, assertion: { type: 'c' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'equals' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'contains' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'contains' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'regex' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'regex' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'regex' } },
           ],
         },
       },
     ];
     const breakdown = computeAssertionBreakdown(results);
-    expect(breakdown.map((b) => b.type)).toEqual(['c', 'b', 'a']);
+    expect(breakdown.map((b) => b.type)).toEqual(['regex', 'contains', 'equals']);
   });
 
   it('should limit to maxTypes', () => {
@@ -66,9 +66,9 @@ describe('computeAssertionBreakdown', () => {
         latencyMs: 100,
         gradingResult: {
           componentResults: [
-            { pass: true, assertion: { type: 'a' } },
-            { pass: true, assertion: { type: 'b' } },
-            { pass: true, assertion: { type: 'c' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'equals' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'contains' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'regex' } },
           ],
         },
       },
@@ -83,7 +83,10 @@ describe('computeAssertionBreakdown', () => {
         success: true,
         latencyMs: 100,
         gradingResult: {
-          componentResults: [{ pass: true, assertion: {} }, { pass: false }],
+          componentResults: [
+            { pass: true, score: 1, reason: '', assertion: {} as any },
+            { pass: false, score: 0, reason: '' },
+          ],
         },
       },
     ];
@@ -93,19 +96,20 @@ describe('computeAssertionBreakdown', () => {
 });
 
 describe('computeAssertionStats', () => {
-  const createStats = (overrides?: Partial<EvaluateStats>): EvaluateStats => ({
-    successes: 0,
-    failures: 0,
-    errors: 0,
-    tokenUsage: {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      numRequests: 0,
-    },
-    ...overrides,
-  });
+  const createStats = (overrides?: Partial<EvaluateStats>): EvaluateStats =>
+    ({
+      successes: 0,
+      failures: 0,
+      errors: 0,
+      tokenUsage: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+      },
+      ...overrides,
+    }) as EvaluateStats;
 
   it('should return zeros for empty results', () => {
     const stats = computeAssertionStats([], createStats());
@@ -133,9 +137,9 @@ describe('computeAssertionStats', () => {
         latencyMs: 100,
         gradingResult: {
           componentResults: [
-            { pass: true, assertion: { type: 'equals' } },
-            { pass: false, assertion: { type: 'equals' } },
-            { pass: true, assertion: { type: 'contains' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'equals' } },
+            { pass: false, score: 0, reason: '', assertion: { type: 'equals' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'contains' } },
           ],
         },
       },
@@ -154,10 +158,10 @@ describe('computeAssertionStats', () => {
         latencyMs: 100,
         gradingResult: {
           componentResults: [
-            { pass: true, assertion: { type: 'llm-rubric' } },
-            { pass: true, assertion: { type: 'llm-rubric' } }, // Same type, should not double-count
-            { pass: true, assertion: { type: 'factuality' } },
-            { pass: true, assertion: { type: 'equals' } }, // Not model-graded
+            { pass: true, score: 1, reason: '', assertion: { type: 'llm-rubric' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'llm-rubric' } }, // Same type, should not double-count
+            { pass: true, score: 1, reason: '', assertion: { type: 'factuality' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'equals' } }, // Not model-graded
           ],
         },
       },
@@ -186,7 +190,7 @@ describe('computeAssertionStats', () => {
           },
         },
       },
-    });
+    } as any);
     const stats = computeAssertionStats([], evalStats);
     expect(stats.tokenUsage).toEqual({
       totalTokens: 500,
