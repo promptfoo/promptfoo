@@ -745,6 +745,25 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with maxBudgetUsd configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              max_budget_usd: 5.0,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              maxBudgetUsd: 5.0,
+            }),
+          });
+        });
+
         it('with append system prompt', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 

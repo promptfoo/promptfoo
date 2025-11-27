@@ -143,6 +143,12 @@ export interface ClaudeCodeOptions {
    * Each plugin must be a directory containing .claude-plugin/plugin.json manifest
    */
   plugins?: Array<{ type: 'local'; path: string }>;
+
+  /**
+   * Maximum budget in USD for this session. When exceeded, the SDK will stop with error_max_budget_usd.
+   * Useful for cost control in automated evaluations.
+   */
+  max_budget_usd?: number;
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -297,6 +303,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       allowedTools,
       disallowedTools,
       plugins: config.plugins,
+      maxBudgetUsd: config.max_budget_usd,
       env,
     };
 
