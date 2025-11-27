@@ -15,14 +15,14 @@ npx promptfoo@latest init --example azure/claude
 
 ```bash
 export AZURE_API_KEY=your-api-key
-export AZURE_AI_HOST=your-deployment.services.ai.azure.com
+export AZURE_API_HOST=your-deployment.services.ai.azure.com
 ```
 
 ## Available Claude Models
 
 | Model                        | Description                    |
 | ---------------------------- | ------------------------------ |
-| `claude-opus-4-5-20250929`   | Claude Opus 4.5 - Most capable |
+| `claude-opus-4-5-20251101`   | Claude Opus 4.5 - Most capable |
 | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 - Balanced   |
 | `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet              |
 | `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku - Fast        |

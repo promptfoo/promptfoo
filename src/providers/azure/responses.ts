@@ -51,8 +51,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
    * don't support temperature, and accept reasoning_effort parameter.
    */
   isReasoningModel(): boolean {
-    // Check explicit config flag first
-    if (this.config.isReasoningModel) {
+    // Check explicit config flags first (match chat.ts behavior)
+    if (this.config.isReasoningModel || this.config.o1) {
       return true;
     }
 

@@ -15,7 +15,7 @@ npx promptfoo@latest init --example azure/deepseek
 
 ```bash
 export AZURE_API_KEY=your-api-key
-export AZURE_AI_HOST=your-deployment.services.ai.azure.com
+export AZURE_API_HOST=your-deployment.services.ai.azure.com
 ```
 
 ## Available DeepSeek Models

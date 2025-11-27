@@ -14,12 +14,8 @@ npx promptfoo@latest init --example azure/comparison
 2. Set your environment variables:
 
 ```bash
-# For Azure OpenAI models
-export AZURE_API_KEY=your-azure-openai-key
-export AZURE_API_HOST=your-resource.openai.azure.com
-
-# For third-party models (Claude, Llama, Mistral)
-export AZURE_AI_HOST=your-deployment.services.ai.azure.com
+export AZURE_API_KEY=your-api-key
+# Set apiHost in promptfooconfig.yaml for each provider's deployment
 ```
 
 ## Models Compared

@@ -745,4 +745,12 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'jais-30b-chat',
     cost: { input: 0.1 / 1000000, output: 0.1 / 1000000 },
   },
+  {
+    id: 'JAIS-70b-chat',
+    cost: { input: 0.2 / 1000000, output: 0.2 / 1000000 },
+  },
+  {
+    id: 'Falcon3-7B-Instruct',
+    cost: { input: 0.05 / 1000000, output: 0.05 / 1000000 },
+  },
 ];
