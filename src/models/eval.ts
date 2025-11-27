@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 
 import { and, desc, eq, sql } from 'drizzle-orm';
+import type { EvalRunStats } from '../runStats/index';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
@@ -250,7 +251,7 @@ export default class Eval {
    * Computed once after evaluation completes, available for user inspection.
    * Not persisted to database (yet).
    */
-  runStats?: import('../runStats').EvalRunStats;
+  runStats?: EvalRunStats;
 
   static async latest() {
     const db = getDb();
