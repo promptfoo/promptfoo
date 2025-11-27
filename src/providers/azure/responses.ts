@@ -155,6 +155,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       textFormat = { format: { type: 'text' } };
     }
 
+    // Add verbosity for reasoning models if configured
+    if (isReasoningModel && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
+    }
+
     // Azure Responses API uses 'model' field for deployment name
     const body = {
       model: this.deploymentName,

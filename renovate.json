@@ -15,5 +15,19 @@
     "src/app/package.json",
     "code-scan-action/package.json",
     "examples/**/package.json"
+  ],
+  "packageRules": [
+    {
+      "description": "Runtime npm deps: wait 5 days before updates",
+      "matchDatasources": ["npm"],
+      "matchDepTypes": ["dependencies"],
+      "minimumReleaseAge": "5 days"
+    },
+    {
+      "description": "Dev npm deps: wait 2 days (tooling, linters, CI helpers)",
+      "matchDatasources": ["npm"],
+      "matchDepTypes": ["devDependencies"],
+      "minimumReleaseAge": "2 days"
+    }
   ]
 }
