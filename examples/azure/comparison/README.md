@@ -20,12 +20,12 @@ export AZURE_API_KEY=your-api-key
 
 ## Models Compared
 
-| Provider  | Model                        | Label         |
-| --------- | ---------------------------- | ------------- |
-| OpenAI    | `gpt-4.1`                    | gpt-4.1       |
-| Anthropic | `claude-sonnet-4-5-20250929` | claude-sonnet |
-| Meta      | `Llama-3.3-70B-Instruct`     | llama-3.3     |
-| Mistral   | `Mistral-Large-2411`         | mistral-large |
+| Provider  | Model                                    | Label         |
+| --------- | ---------------------------------------- | ------------- |
+| OpenAI    | `gpt-5`                                  | gpt-5         |
+| Anthropic | `claude-sonnet-4-5-20250929`             | claude-sonnet |
+| Meta      | `Llama-4-Maverick-17B-128E-Instruct-FP8` | llama-4       |
+| Mistral   | `Mistral-Large-2411`                     | mistral-large |
 
 ## Running the Example
 

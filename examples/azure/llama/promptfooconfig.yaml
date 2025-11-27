@@ -10,16 +10,18 @@ prompts:
     Include comments explaining the code.
 
 providers:
-  - id: azure:chat:Llama-3.3-70B-Instruct
-    label: llama-3.3-70b
+  # Llama 4 Maverick - Higher capacity with 128 experts
+  - id: azure:chat:Llama-4-Maverick-17B-128E-Instruct-FP8
+    label: llama-4-maverick
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 2048
       temperature: 0.3
 
-  - id: azure:chat:Meta-Llama-3.1-8B-Instruct
-    label: llama-3.1-8b
+  # Llama 4 Scout - Lighter weight with 16 experts
+  - id: azure:chat:Llama-4-Scout-17B-16E-Instruct
+    label: llama-4-scout
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'

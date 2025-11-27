@@ -821,7 +821,7 @@ Azure AI Foundry provides access to Meta's Llama models, including Llama 4:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: azure:chat:Llama-3.3-70B-Instruct
+  - id: azure:chat:Llama-4-Maverick-17B-128E-Instruct-FP8
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
@@ -830,8 +830,8 @@ providers:
 
 Available Llama models include:
 
-- `Llama-4-Scout-17B-16E-Instruct` - Llama 4 Scout
-- `Llama-4-Maverick-17B-128E-Instruct-FP8` - Llama 4 Maverick
+- `Llama-4-Maverick-17B-128E-Instruct-FP8` - Llama 4 Maverick (128 experts)
+- `Llama-4-Scout-17B-16E-Instruct` - Llama 4 Scout (16 experts)
 - `Llama-3.3-70B-Instruct` - Llama 3.3 70B
 - `Meta-Llama-3.1-405B-Instruct` - Llama 3.1 405B
 - `Meta-Llama-3.1-70B-Instruct` - Llama 3.1 70B
