@@ -6,7 +6,7 @@
  * error breakdowns, and per-provider performance.
  */
 
-import type { GradingResult, ProviderResponse } from '../types';
+import type { GradingResult, ProviderResponse } from '../types/index';
 
 /**
  * Minimal result interface for stats computation.

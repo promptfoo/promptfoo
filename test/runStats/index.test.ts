@@ -1,6 +1,6 @@
-import { computeRunStats } from '../../src/runStats';
+import { computeRunStats } from '../../src/runStats/index';
 import type { StatableResult } from '../../src/runStats/types';
-import type { ApiProvider, EvaluateStats } from '../../src/types';
+import type { ApiProvider, EvaluateStats } from '../../src/types/index';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 // Mock TokenUsageTracker

@@ -6,7 +6,7 @@
  * cache effectiveness, error breakdowns, and per-provider performance.
  */
 
-import type { ApiProvider, EvaluateStats } from '../types';
+import type { ApiProvider, EvaluateStats } from '../types/index';
 import { computeAssertionStats } from './assertions';
 import { computeCacheStats } from './cache';
 import { computeErrorStats } from './errors';

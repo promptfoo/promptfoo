@@ -1,5 +1,5 @@
 import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions/index';
-import type { AssertionType, EvaluateStats } from '../types';
+import type { AssertionType, EvaluateStats } from '../types/index';
 import type { AssertionTypeStats, AssertionTokenUsage, StatableResult } from './types';
 
 /**

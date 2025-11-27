@@ -25,7 +25,7 @@ import { isPromptfooSampleTarget } from './providers/shared';
 import { strategyDisplayNames } from './redteam/constants';
 import { getSessionId, isSimbaTestCase } from './redteam/util';
 import { generatePrompts } from './suggestions';
-import { computeRunStats } from './runStats';
+import { computeRunStats } from './runStats/index';
 import telemetry from './telemetry';
 import {
   generateTraceContextIfNeeded,

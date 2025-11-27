@@ -1,6 +1,6 @@
 import { computeAssertionBreakdown, computeAssertionStats } from '../../src/runStats/assertions';
 import type { StatableResult } from '../../src/runStats/types';
-import type { EvaluateStats } from '../../src/types';
+import type { EvaluateStats } from '../../src/types/index';
 
 describe('computeAssertionBreakdown', () => {
   it('should return empty array for empty results', () => {
