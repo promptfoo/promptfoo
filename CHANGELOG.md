@@ -44,6 +44,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(telemetry): add model-level tracking to eval_ran event with sanitized provider IDs, isModelComparison flag for A/B testing detection, and hasCustomProvider flag
+- feat(telemetry): add latency percentiles (p50, p95, p99) to eval_ran for understanding tail latency distribution
+- feat(telemetry): add cache hit rate tracking (cacheHits, cacheMisses, cacheHitRate) to eval_ran
+- feat(telemetry): add per-assertion-type effectiveness breakdown (assertionBreakdown) to eval_ran
+- feat(telemetry): add per-provider performance metrics (providerBreakdown with requests, successRate, avgLatencyMs) to eval_ran
+- feat(telemetry): add error categorization (errorTypes, errorBreakdown) to eval_ran for timeout, rate_limit, auth, server_error, and network errors
+- feat(telemetry): add redteam run tracking with pass/fail/error rates, plugin/strategy lists, and isPromptfooSampleTarget flag
 - feat(providers): add Claude Opus 4.5 support across Anthropic (claude-opus-4-5-20251101, claude-opus-4-5-latest), Google Vertex AI (claude-opus-4-5@20251101), and AWS Bedrock (anthropic.claude-opus-4-5-20251101-v1:0 for all regions) with $5/MTok input and $25/MTok output pricing; includes comprehensive documentation updates, advanced coding example demonstrating bug diagnosis and tradeoff analysis, updated provider examples, and cost calculation tests
 - feat(util): add support for loading tool definitions from Python/JavaScript files - providers now support dynamic tool generation using `file://tools.py:get_tools` and `file://tools.js:get_tools` syntax, enabling runtime tool definitions based on environment, config, or external APIs (#6272)
 - feat(server): add server-side provider list customization via ui-providers.yaml - enables organizations to define custom provider lists that appear in eval creator and redteam setup UIs; when ui-providers.yaml exists, replaces default ~600 providers with organization-specific options for simplified workflow and security control (#6124)
