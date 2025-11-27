@@ -320,7 +320,7 @@ providers:
   - id: anthropic:claude-agent-sdk
     config:
       output_format:
-        type: json
+        type: json_schema
         schema:
           type: object
           properties:
