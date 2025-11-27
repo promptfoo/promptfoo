@@ -46,6 +46,12 @@ export interface OpenAICodexSDKConfig {
   working_dir?: string;
 
   /**
+   * Additional directories the agent can access beyond the working directory.
+   * Maps to --add-dir flag in Codex CLI.
+   */
+  additional_directories?: string[];
+
+  /**
    * Skip Git repository check (Codex requires Git by default)
    */
   skip_git_repo_check?: boolean;
@@ -56,7 +62,7 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-4', 'gpt-4o', 'o3-mini')
+   * Model to use (e.g., 'gpt-5.1-codex', 'gpt-4o', 'o3-mini')
    */
   model?: string;
 
@@ -69,6 +75,12 @@ export interface OpenAICodexSDKConfig {
    * Maximum tokens for response
    */
   max_tokens?: number;
+
+  /**
+   * Maximum tokens for tool output (default: 10000)
+   * Controls how much output from tool calls is included in the context.
+   */
+  tool_output_token_limit?: number;
 
   /**
    * Thread management
@@ -143,12 +155,41 @@ async function loadCodexSDK(): Promise<any> {
   }
 }
 
+// Pricing per 1M tokens (as of November 2025)
+// See: https://openai.com/pricing
+const CODEX_MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'gpt-5.1-codex': { input: 2.0, output: 8.0 },
+  'gpt-5.1-codex-max': { input: 3.0, output: 12.0 },
+  'gpt-5.1-codex-mini': { input: 0.5, output: 2.0 },
+  'gpt-5-codex': { input: 2.0, output: 8.0 },
+  'gpt-5-codex-mini': { input: 0.5, output: 2.0 },
+  'gpt-5': { input: 2.0, output: 8.0 },
+  'gpt-4o': { input: 2.5, output: 10.0 },
+  'gpt-4o-mini': { input: 0.15, output: 0.6 },
+  'gpt-4-turbo': { input: 10.0, output: 30.0 },
+  'gpt-4': { input: 30.0, output: 60.0 },
+  'o3-mini': { input: 1.1, output: 4.4 },
+  o1: { input: 15.0, output: 60.0 },
+  'o1-mini': { input: 3.0, output: 12.0 },
+};
+
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    // GPT-5.1 Codex models (recommended for code tasks)
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
+    // GPT-5 Codex models
+    'gpt-5-codex',
+    'gpt-5-codex-mini',
+    // GPT-5 base
+    'gpt-5',
+    // GPT-4 models
     'gpt-4',
     'gpt-4-turbo',
     'gpt-4o',
     'gpt-4o-mini',
+    // Reasoning models
     'o1',
     'o1-mini',
     'o3-mini',
@@ -309,6 +350,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       workingDirectory: config.working_dir,
       skipGitRepoCheck: config.skip_git_repo_check ?? false,
       ...(config.model ? { model: config.model } : {}),
+      ...(config.additional_directories?.length
+        ? { additionalDirectories: config.additional_directories }
+        : {}),
     });
 
     if (config.persist_threads && cacheKey) {
@@ -361,8 +405,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private generateCacheKey(config: OpenAICodexSDKConfig, prompt: string): string {
     const keyData = {
       working_dir: config.working_dir,
+      additional_directories: config.additional_directories,
       model: config.model,
       output_schema: config.output_schema,
+      tool_output_token_limit: config.tool_output_token_limit,
       prompt,
     };
 
@@ -422,6 +468,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (config.output_schema) {
       runOptions.outputSchema = config.output_schema;
     }
+    if (config.tool_output_token_limit !== undefined) {
+      runOptions.toolOutputTokenLimit = config.tool_output_token_limit;
+    }
 
     // Execute turn
     try {
@@ -444,8 +493,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           }
         : undefined;
 
-      // TODO: Calculate cost from usage
-      const cost = 0;
+      // Calculate cost from usage
+      let cost = 0;
+      if (tokenUsage && config.model) {
+        const pricing = CODEX_MODEL_PRICING[config.model];
+        if (pricing) {
+          // Pricing is per 1M tokens
+          const inputCost = (tokenUsage.prompt || 0) * (pricing.input / 1_000_000);
+          const outputCost = (tokenUsage.completion || 0) * (pricing.output / 1_000_000);
+          cost = inputCost + outputCost;
+        }
+      }
 
       logger.debug('OpenAI Codex SDK response', { output, usage: turn.usage });
 

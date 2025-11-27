@@ -14,14 +14,14 @@ Coding agents have **categorical** capabilities, not gradual ones. You can't pro
 
 ### Capability tiers
 
-**Tier 0: Text Generation** (Plain LLM like gpt-4, claude-sonnet)
+**Tier 0: Text Generation** (Plain LLM like gpt-5.1, claude-sonnet-4)
 
 - **What it receives**: Your prompt text only
 - **Can do**: Discuss code, generate snippets, explain concepts
 - **Cannot do**: Read files, execute code, guarantee output structure
 - **Use for**: Code review (paste code in prompt), explaining patterns
 
-**Tier 1: Code Reading** (Codex SDK)
+**Tier 1: Code Reading** (OpenAI Codex SDK)
 
 - **What it receives**: Your prompt + full codebase context (1M+ tokens)
 - **Can do**: Analyze code, detect vulnerabilities, produce structured JSON
@@ -41,12 +41,12 @@ Coding agents have **categorical** capabilities, not gradual ones. You can't pro
 
 Different coding agents excel at different tasks. Here's when to use each:
 
-| Agent Type                           | Best For                             | Structured Output     | File System Access     | Tradeoffs                      |
-| ------------------------------------ | ------------------------------------ | --------------------- | ---------------------- | ------------------------------ |
-| **Plain LLM** (gpt-4, claude-sonnet) | Code review, simple generation       | Manual parsing needed | No                     | Fast, cheap, limited context   |
-| **OpenAI Codex SDK**                 | Security audits, schema-driven tasks | Native JSON schema    | Read-only by default   | High token use, strict output  |
-| **Claude Agent SDK**                 | Refactoring, multi-file edits        | Natural language      | Full read/write + bash | Full capabilities, higher cost |
-| **Cursor/Copilot/Aider**             | IDE integration, interactive coding  | IDE-specific          | IDE-controlled         | Interactive, non-automated     |
+| Agent Type                               | Best For                             | Structured Output     | File System Access     | Tradeoffs                      |
+| ---------------------------------------- | ------------------------------------ | --------------------- | ---------------------- | ------------------------------ |
+| **Plain LLM** (gpt-5.1, claude-sonnet-4) | Code review, simple generation       | Manual parsing needed | No                     | Fast, cheap, limited context   |
+| **OpenAI Codex SDK**                     | Security audits, schema-driven tasks | Native JSON schema    | Read-only by default   | High token use, strict output  |
+| **Claude Agent SDK**                     | Refactoring, multi-file edits        | Natural language      | Full read/write + bash | Full capabilities, higher cost |
+| **Cursor/Copilot/Aider**                 | IDE integration, interactive coding  | IDE-specific          | IDE-controlled         | Interactive, non-automated     |
 
 ### Quick recommendations
 
@@ -111,9 +111,9 @@ prompts:
 
 providers:
   - id: openai:codex-sdk
-    label: codex-gpt-4o
+    label: codex-gpt-5.1
     config:
-      model: gpt-4o
+      model: gpt-5.1-codex
       working_dir: ./test-codebase
       skip_git_repo_check: true
       # Enforce JSON structure
@@ -247,9 +247,9 @@ Running the evaluation:
 npm run local -- eval -c promptfooconfig.yaml
 ```
 
-Real results comparing Codex SDK vs Plain LLM (gpt-4o):
+Real results comparing Codex SDK vs Plain LLM (gpt-5.1):
 
-| Metric                       | OpenAI Codex SDK (gpt-4o)             | Plain LLM (gpt-4o)                      |
+| Metric                       | OpenAI Codex SDK (gpt-5.1-codex)      | Plain LLM (gpt-5.1)                     |
 | ---------------------------- | ------------------------------------- | --------------------------------------- |
 | Task completion              | **PASS** - Analyzed code              | **FAIL** - Returned Bandit instructions |
 | Vulnerabilities found        | 3 (MD5, CVV logging, data storage)    | N/A (didn't perform analysis)           |
@@ -262,7 +262,7 @@ Real results comparing Codex SDK vs Plain LLM (gpt-4o):
 
 ### Why the plain LLM failed
 
-The plain LLM (same gpt-4o model) returned this instead of analyzing the code:
+The plain LLM (same underlying model) returned this instead of analyzing the code:
 
 > "To analyze all Python files in a directory for security vulnerabilities and return the findings in JSON format, we can use static code analysis tools like Bandit. Below is a step-by-step guide on how you might achieve this using Python and Bandit:..."
 
@@ -335,7 +335,7 @@ See the [agentic-sdk-comparison example](https://github.com/promptfoo/promptfoo/
 
 ### Configuration outline
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 description: 'Refactor user authentication with test verification'
 
 prompts:
@@ -346,12 +346,10 @@ prompts:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      model: sonnet
+      model: claude-sonnet-4-5-20250929
       working_dir: ./user-service
-      tools:
-        - read_file
-        - write_file
-        - bash # Run tests after refactoring
+      # Claude Agent SDK has full tool access by default
+      # Use disallowed_tools to restrict if needed
 
 tests:
   - description: 'Successful refactor with passing tests'
@@ -394,7 +392,7 @@ tests:
 
 ### Configuration outline
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 description: 'Add rate limiting to Flask API'
 
 prompts:
@@ -408,12 +406,9 @@ prompts:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      model: sonnet
+      model: claude-sonnet-4-5-20250929
       working_dir: ./flask-api
-      tools:
-        - read_file
-        - write_file
-        - bash
+      # Claude Agent SDK has full tool access by default
 
 tests:
   - description: 'Multi-file feature implementation'
@@ -447,7 +442,7 @@ tests:
 
 These features are key differentiators when evaluating coding agents.
 
-### 6.1 Structured output
+### Structured output
 
 **What it is**: Guaranteed JSON output matching a schema.
 
@@ -492,7 +487,7 @@ tests:
 - With `output_schema`: 98-100% compliance
 - Without: 85-92% compliance (manual retry logic needed)
 
-### 6.2 Threads and conversation state
+### Threads and conversation state
 
 **What it is**: Multi-turn conversations where the agent remembers previous context.
 
@@ -537,7 +532,7 @@ tests:
         metric: 'Context retention'
 ```
 
-### 6.3 Repository safety
+### Repository safety
 
 **What it is**: Agents that enforce working in a Git repository to prevent data loss.
 
@@ -576,7 +571,7 @@ tests:
 
 **Best practice**: Always work in Git repos. Use `skip_git_repo_check: true` only for testing/examples.
 
-### 6.4 Cost and latency
+### Cost and latency
 
 **What it is**: Dollars per task and seconds to complete.
 
@@ -633,7 +628,7 @@ tests:
 
 ### Recipe 1: Security scanner with severity breakdown
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Security scanner with severity metrics'
 
@@ -643,7 +638,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-4o
+      model: gpt-5.1-codex
       working_dir: ./src
       output_schema:
         type: object
@@ -678,7 +673,7 @@ tests:
 
 ### Recipe 2: Code quality metrics
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 description: 'Code quality analysis with complexity scoring'
 
 prompts:
@@ -687,7 +682,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-4o
+      model: gpt-5.1-codex
       working_dir: ./src
       output_schema:
         type: object
@@ -715,7 +710,7 @@ tests:
 
 ### Recipe 3: Multi-agent comparison
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 description: 'Compare multiple agents on same task'
 
 prompts:
@@ -724,9 +719,9 @@ prompts:
 providers:
   # Codex SDK with structured output
   - id: openai:codex-sdk
-    label: codex-gpt-4o
+    label: codex-gpt-5.1
     config:
-      model: gpt-4o
+      model: gpt-5.1-codex
       working_dir: ./src
       output_schema:
         type: object
@@ -735,14 +730,14 @@ providers:
 
   # Claude for natural language processing
   - id: anthropic:claude-agent-sdk
-    label: claude-sonnet
+    label: claude-sonnet-4
     config:
-      model: sonnet
+      model: claude-sonnet-4-5-20250929
       working_dir: ./src
 
   # Plain LLM baseline
-  - id: openai:gpt-4o
-    label: baseline-gpt-4o
+  - id: openai:gpt-5.1
+    label: baseline-gpt-5.1
 
 tests:
   - assert:
@@ -934,10 +929,10 @@ Less valuable:
 **Pitfall 1: Testing the model, not the agent**
 
 ```yaml
-# ❌ Bad: This tests gpt-4o vs claude-sonnet
+# ❌ Bad: This tests gpt-5.1 vs claude-sonnet-4
 providers:
-  - openai:gpt-4o
-  - anthropic:claude-sonnet
+  - openai:gpt-5.1
+  - anthropic:claude-sonnet-4-5-20250929
 prompts:
   - 'Explain what a linked list is'
 
@@ -956,8 +951,8 @@ Always include a plain LLM baseline to show _why_ agents matter:
 ```yaml
 providers:
   - openai:codex-sdk # The agent
-  - openai:gpt-4o # The baseline (will fail)
-  - anthropic:claude-sonnet # Another baseline (will also fail)
+  - openai:gpt-5.1 # The baseline (will fail)
+  - anthropic:claude-sonnet-4-5-20250929 # Another baseline (will also fail)
 ```
 
 **Pitfall 3: Ignoring token usage patterns**

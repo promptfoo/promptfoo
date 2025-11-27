@@ -144,6 +144,19 @@ describe('OpenAICodexSDKProvider', () => {
 
       warnSpy.mockRestore();
     });
+
+    it('should not warn about gpt-5.1-codex models', () => {
+      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-max' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-mini' } });
+      new OpenAICodexSDKProvider({ config: { fallback_model: 'gpt-5-codex' } });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
   });
 
   describe('callApi', () => {
@@ -284,6 +297,45 @@ describe('OpenAICodexSDKProvider', () => {
           skipGitRepoCheck: true,
         });
       });
+
+      it('should pass additional_directories to startThread', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            working_dir: '/main/dir',
+            additional_directories: ['/extra/dir1', '/extra/dir2'],
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockStartThread).toHaveBeenCalledWith({
+          workingDirectory: '/main/dir',
+          skipGitRepoCheck: false,
+          additionalDirectories: ['/extra/dir1', '/extra/dir2'],
+        });
+      });
+
+      it('should not include additionalDirectories when empty', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            working_dir: '/main/dir',
+            additional_directories: [],
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockStartThread).toHaveBeenCalledWith({
+          workingDirectory: '/main/dir',
+          skipGitRepoCheck: false,
+        });
+      });
     });
 
     describe('thread management', () => {
@@ -398,6 +450,150 @@ describe('OpenAICodexSDKProvider', () => {
         });
 
         expect(result.output).toBe('{"summary":"All good","status":"ok"}');
+      });
+    });
+
+    describe('tool_output_token_limit', () => {
+      it('should pass tool_output_token_limit to run options', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            tool_output_token_limit: 20000,
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockRun).toHaveBeenCalledWith('Test prompt', {
+          toolOutputTokenLimit: 20000,
+        });
+      });
+
+      it('should combine tool_output_token_limit with output_schema', async () => {
+        const schema = { type: 'object' };
+        mockRun.mockResolvedValue(createMockResponse('{}'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            output_schema: schema,
+            tool_output_token_limit: 15000,
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockRun).toHaveBeenCalledWith('Test prompt', {
+          outputSchema: schema,
+          toolOutputTokenLimit: 15000,
+        });
+      });
+
+      it('should not include toolOutputTokenLimit when not specified', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+      });
+    });
+
+    describe('cost calculation', () => {
+      it('should calculate cost for gpt-5.1-codex model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 1000,
+            cached_input_tokens: 0,
+            output_tokens: 500,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.1-codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.1-codex: $2/1M input, $8/1M output
+        // Cost = (1000 * 2/1000000) + (500 * 8/1000000) = 0.002 + 0.004 = 0.006
+        expect(result.cost).toBeCloseTo(0.006, 6);
+      });
+
+      it('should calculate cost for gpt-5.1-codex-mini model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.1-codex-mini' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.1-codex-mini: $0.5/1M input, $2/1M output
+        // prompt tokens = 2000 + 500 = 2500
+        // Cost = (2500 * 0.5/1000000) + (1000 * 2/1000000) = 0.00125 + 0.002 = 0.00325
+        expect(result.cost).toBeCloseTo(0.00325, 6);
+      });
+
+      it('should return 0 cost when model pricing not found', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 100,
+            output_tokens: 50,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'unknown-model' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBe(0);
+      });
+
+      it('should return 0 cost when no model specified', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 100,
+            output_tokens: 50,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBe(0);
+      });
+
+      it('should return 0 cost when no usage data', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.1-codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBe(0);
       });
     });
 

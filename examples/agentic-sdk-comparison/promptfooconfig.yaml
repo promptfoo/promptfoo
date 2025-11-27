@@ -9,9 +9,9 @@ prompts:
 providers:
   # Codex SDK with native JSON schema support
   - id: openai:codex-sdk
-    label: codex-gpt-4o
+    label: codex-gpt-5.1
     config:
-      model: gpt-4o
+      model: gpt-5.1-codex
       working_dir: examples/agentic-sdk-comparison/test-codebase
       skip_git_repo_check: true
       # Native structured output support (Codex strength)
@@ -47,8 +47,8 @@ providers:
             type: string
 
   # Plain OpenAI API for comparison (no schema enforcement)
-  - id: openai:gpt-4o
-    label: plain-gpt-4o
+  - id: openai:gpt-5.1
+    label: plain-gpt-5.1
     config:
       temperature: 0
 

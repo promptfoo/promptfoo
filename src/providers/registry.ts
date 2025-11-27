@@ -216,21 +216,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) =>
-      providerPath.startsWith('openai:codex-sdk') || providerPath.startsWith('openai:codex'),
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
-      return new OpenAICodexSDKProvider({
-        ...providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('anthropic:'),
     create: async (
       providerPath: string,
@@ -766,13 +751,21 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
       // Load OpenAI module
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
+      // Codex SDK providers (openai:codex-sdk or openai:codex)
+      if (modelType === 'codex-sdk' || modelType === 'codex') {
+        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
+        return new OpenAICodexSDKProvider({
+          ...providerOptions,
+          env: context.env,
+        });
+      }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
       }
@@ -824,7 +817,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>, openai:agents:<agent name>`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },

@@ -73,7 +73,7 @@ The provider creates an ephemeral thread for each eval test case.
 
 Specify which OpenAI model to use for code generation:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:codex-sdk
     config:
@@ -87,7 +87,7 @@ prompts:
 
 Specify a custom working directory for the Codex SDK to operate in:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:codex-sdk
     config:
@@ -104,7 +104,7 @@ This allows you to prepare a directory with files before running your tests.
 
 If you need to run in a non-Git directory, you can bypass the Git repository requirement:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:codex-sdk
     config:
@@ -124,22 +124,24 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 
 ## Supported Parameters
 
-| Parameter             | Type    | Description                                   | Default               |
-| --------------------- | ------- | --------------------------------------------- | --------------------- |
-| `apiKey`              | string  | OpenAI API key                                | Environment variable  |
-| `working_dir`         | string  | Directory for Codex to operate in             | Current directory     |
-| `model`               | string  | Primary model to use                          | Codex SDK default     |
-| `fallback_model`      | string  | Fallback model if primary fails               | None                  |
-| `max_tokens`          | number  | Maximum tokens for response                   | Codex SDK default     |
-| `skip_git_repo_check` | boolean | Skip Git repository validation                | false                 |
-| `codex_path_override` | string  | Custom path to codex binary                   | None                  |
-| `thread_id`           | string  | Resume existing thread from ~/.codex/sessions | None (creates new)    |
-| `persist_threads`     | boolean | Keep threads alive between calls              | false                 |
-| `thread_pool_size`    | number  | Max concurrent threads (when persist_threads) | 1                     |
-| `output_schema`       | object  | JSON schema for structured responses          | None                  |
-| `cli_env`             | object  | Custom environment variables for Codex CLI    | Inherits from process |
-| `system_prompt`       | string  | Custom system instructions                    | None                  |
-| `enable_streaming`    | boolean | Enable streaming events                       | false                 |
+| Parameter                 | Type     | Description                                   | Default               |
+| ------------------------- | -------- | --------------------------------------------- | --------------------- |
+| `apiKey`                  | string   | OpenAI API key                                | Environment variable  |
+| `working_dir`             | string   | Directory for Codex to operate in             | Current directory     |
+| `additional_directories`  | string[] | Additional directories the agent can access   | None                  |
+| `model`                   | string   | Primary model to use                          | Codex SDK default     |
+| `fallback_model`          | string   | Fallback model if primary fails               | None                  |
+| `max_tokens`              | number   | Maximum tokens for response                   | Codex SDK default     |
+| `tool_output_token_limit` | number   | Maximum tokens for tool output                | 10000                 |
+| `skip_git_repo_check`     | boolean  | Skip Git repository validation                | false                 |
+| `codex_path_override`     | string   | Custom path to codex binary                   | None                  |
+| `thread_id`               | string   | Resume existing thread from ~/.codex/sessions | None (creates new)    |
+| `persist_threads`         | boolean  | Keep threads alive between calls              | false                 |
+| `thread_pool_size`        | number   | Max concurrent threads (when persist_threads) | 1                     |
+| `output_schema`           | object   | JSON schema for structured responses          | None                  |
+| `cli_env`                 | object   | Custom environment variables for Codex CLI    | Inherits from process |
+| `system_prompt`           | string   | Custom system instructions                    | None                  |
+| `enable_streaming`        | boolean  | Enable streaming events                       | false                 |
 
 ## Models
 
@@ -155,10 +157,27 @@ providers:
 
 Supported models include:
 
+**GPT-5.1 Codex Models (Recommended)**
+
 - `gpt-5.1-codex` - Primary model for code generation (recommended)
+- `gpt-5.1-codex-max` - Frontier model with enhanced reasoning for complex tasks
+- `gpt-5.1-codex-mini` - Cost-efficient variant for simpler tasks
+
+**GPT-5 Models**
+
+- `gpt-5-codex` - Previous generation codex model
+- `gpt-5-codex-mini` - Cost-efficient previous generation
 - `gpt-5` - GPT-5 base model
+
+**GPT-4 Models**
+
 - `gpt-4o` - GPT-4 Omni
 - `gpt-4o-mini` - GPT-4 variant
+- `gpt-4-turbo` - GPT-4 Turbo
+- `gpt-4` - GPT-4 base
+
+**Reasoning Models**
+
 - `o3-mini` - Mini reasoning model
 - `o1` - Reasoning model
 - `o1-mini` - Mini reasoning model
@@ -171,7 +190,7 @@ For faster or lower-cost evals, use mini models:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-4o-mini
+      model: gpt-5.1-codex-mini
 ```
 
 Or reasoning-optimized models:
@@ -226,7 +245,7 @@ providers:
 
 The Codex SDK supports JSON schema output. Specify an `output_schema` to get structured responses:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:codex-sdk
     config:
@@ -305,6 +324,38 @@ providers:
       skip_git_repo_check: true
 ```
 
+## Additional Directories
+
+Allow the Codex agent to access directories beyond the main working directory:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      working_dir: ./src
+      additional_directories:
+        - ./tests
+        - ./config
+        - ./shared-libs
+      model: gpt-5.1-codex
+```
+
+This is useful when the agent needs to read files from multiple locations, such as test files, configuration, or shared libraries.
+
+## Tool Output Token Limit
+
+Control how much output from tool calls is included in the context:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      tool_output_token_limit: 20000 # Increase from default 10000
+      model: gpt-5.1-codex
+```
+
+Higher limits allow more tool output but consume more context tokens.
+
 ## Custom Environment Variables
 
 Pass custom environment variables to the Codex CLI:
@@ -336,9 +387,11 @@ providers:
 This provider automatically caches responses based on:
 
 - Prompt content
-- Provider configuration
 - Working directory (if specified)
-- Environment variables
+- Additional directories (if specified)
+- Model name
+- Output schema (if specified)
+- Tool output token limit (if specified)
 
 To disable caching globally:
 
@@ -346,7 +399,14 @@ To disable caching globally:
 export PROMPTFOO_CACHE_ENABLED=false
 ```
 
-You can also include `bustCache: true` in the configuration to prevent reading from the cache.
+To bust the cache for a specific test case, set `options.bustCache: true` in your test configuration:
+
+```yaml
+tests:
+  - vars: {}
+    options:
+      bustCache: true
+```
 
 ## Advanced Examples
 
@@ -354,7 +414,7 @@ You can also include `bustCache: true` in the configuration to prevent reading f
 
 Review multiple files in a codebase:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:codex-sdk
     config:
@@ -380,7 +440,7 @@ tests:
 
 Generate structured bug reports from code:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:codex-sdk
     config:
@@ -420,7 +480,7 @@ prompts:
 
 Use persistent threads for multi-turn conversations:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:codex-sdk
     config:
