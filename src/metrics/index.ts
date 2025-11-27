@@ -62,11 +62,17 @@ export interface ComputeEvalMetricsInput {
  *   providers: testSuite.providers,
  * });
  *
- * // Expose to users
+ * // Expose to users via the Eval model
  * evalRecord.metrics = metrics;
  *
- * // Send to telemetry (uses same data)
- * telemetry.record('eval_ran', { ...basicInfo, ...metrics });
+ * // For telemetry, nested objects must be serialized to JSON strings
+ * // since EventProperties only allows primitives and string arrays
+ * telemetry.record('eval_ran', {
+ *   avgLatencyMs: metrics.latency.avgMs,
+ *   cacheHits: metrics.cache.hits,
+ *   providerBreakdown: JSON.stringify(metrics.providers),
+ *   // ... other fields
+ * });
  * ```
  */
 export function computeEvalMetrics(input: ComputeEvalMetricsInput): EvalMetrics {
