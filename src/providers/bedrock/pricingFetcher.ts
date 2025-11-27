@@ -4,7 +4,14 @@ import {
   type GetProductsCommandOutput,
 } from '@aws-sdk/client-pricing';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
+import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+
+/**
+ * Cache TTL for pricing data in milliseconds.
+ * AWS pricing updates up to 3x daily, so 4 hours is a reasonable TTL.
+ */
+const PRICING_CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 export interface BedrockPricingData {
   models: Map<string, BedrockModelPricing>;
@@ -41,34 +48,51 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
   // Extract base model name (remove version suffix like :0, :1, :2)
   let baseId = modelId.split(':')[0];
 
-  // Strip region prefix if present (us., eu., apac.)
-  baseId = baseId.replace(/^(us|eu|apac)\./, '');
+  // Strip region prefix if present (us., eu., apac., us-gov., global., au., jp.)
+  baseId = baseId.replace(/^(us|eu|apac|us-gov|global|au|jp)\./, '');
 
   // Common model mappings
   const mappings: Record<string, string> = {
-    // Anthropic Claude models
+    // Anthropic Claude models - Current generation
     'anthropic.claude-3-5-sonnet-20241022-v2': 'Claude 3.5 Sonnet v2',
     'anthropic.claude-3-5-sonnet-20240620-v1': 'Claude 3.5 Sonnet',
     'anthropic.claude-3-5-haiku-20241022-v1': 'Claude 3.5 Haiku',
     'anthropic.claude-3-opus-20240229-v1': 'Claude 3 Opus',
     'anthropic.claude-3-sonnet-20240229-v1': 'Claude 3 Sonnet',
     'anthropic.claude-3-haiku-20240307-v1': 'Claude 3 Haiku',
+    // Anthropic Claude models - Legacy
+    'anthropic.claude-instant-v1': 'Claude Instant',
+    'anthropic.claude-v1': 'Claude',
+    'anthropic.claude-v2': 'Claude v2',
 
     // Amazon Nova models
     'amazon.nova-micro-v1': 'Nova Micro',
     'amazon.nova-lite-v1': 'Nova Lite',
     'amazon.nova-pro-v1': 'Nova Pro',
     'amazon.nova-premier-v1': 'Nova Premier',
+    // Amazon Titan models
+    'amazon.titan-text-express-v1': 'Titan Text G1 - Express',
+    'amazon.titan-text-lite-v1': 'Titan Text G1 - Lite',
+    'amazon.titan-text-premier-v1': 'Titan Text G1 - Premier',
 
-    // Meta Llama models
+    // Meta Llama models - Llama 2
+    'meta.llama2-13b-chat-v1': 'Llama 2 Chat 13B',
+    'meta.llama2-70b-chat-v1': 'Llama 2 Chat 70B',
+    // Meta Llama models - Llama 3
+    'meta.llama3-8b-instruct-v1': 'Llama 3 8B Instruct',
+    'meta.llama3-70b-instruct-v1': 'Llama 3 70B Instruct',
+    // Meta Llama models - Llama 3.1
     'meta.llama3-1-405b-instruct-v1': 'Llama 3.1 405B Instruct',
     'meta.llama3-1-70b-instruct-v1': 'Llama 3.1 70B Instruct',
     'meta.llama3-1-8b-instruct-v1': 'Llama 3.1 8B Instruct',
+    // Meta Llama models - Llama 3.2
     'meta.llama3-2-90b-instruct-v1': 'Llama 3.2 90B Instruct',
     'meta.llama3-2-11b-instruct-v1': 'Llama 3.2 11B Instruct',
     'meta.llama3-2-3b-instruct-v1': 'Llama 3.2 3B Instruct',
     'meta.llama3-2-1b-instruct-v1': 'Llama 3.2 1B Instruct',
+    // Meta Llama models - Llama 3.3
     'meta.llama3-3-70b-instruct-v1': 'Llama 3.3 70B Instruct',
+    // Meta Llama models - Llama 4
     'meta.llama4-scout-17b-instruct-v1': 'Llama 4 Scout 17B',
     'meta.llama4-maverick-17b-instruct-v1': 'Llama 4 Maverick 17B',
 
@@ -82,6 +106,8 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     // Cohere models
     'cohere.command-r-v1': 'Command R',
     'cohere.command-r-plus-v1': 'Command R+',
+    'cohere.command-text-v14': 'Command',
+    'cohere.command-light-text-v14': 'Command Light',
 
     // AI21 models
     'ai21.jamba-1-5-large-v1': 'Jamba 1.5 Large',
@@ -133,7 +159,6 @@ export async function getPricingData(
   region: string,
   credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider,
 ): Promise<BedrockPricingData | null> {
-  const { getCache, isCacheEnabled } = await import('../../cache');
   const cache = await getCache();
   const cacheKey = `bedrock-pricing:${region}`;
 
@@ -143,20 +168,33 @@ export async function getPricingData(
       const cachedData = await cache.get(cacheKey);
       if (cachedData) {
         const parsed = JSON.parse(cachedData as string);
-        const models = new Map<string, BedrockModelPricing>(
-          parsed.models as Array<[string, BedrockModelPricing]>,
-        );
-        const pricingData = {
-          models,
-          region: parsed.region,
-          fetchedAt: new Date(parsed.fetchedAt),
-        };
-        logger.debug('[Bedrock Pricing]: Using cached pricing data', {
-          region,
-          modelCount: models.size,
-          cachedAt: new Date(parsed.fetchedAt).toISOString(),
-        });
-        return pricingData;
+        const fetchedAt = new Date(parsed.fetchedAt);
+        const cacheAge = Date.now() - fetchedAt.getTime();
+
+        // Check if cache is still valid (within TTL)
+        if (cacheAge < PRICING_CACHE_TTL_MS) {
+          const models = new Map<string, BedrockModelPricing>(
+            parsed.models as Array<[string, BedrockModelPricing]>,
+          );
+          const pricingData = {
+            models,
+            region: parsed.region,
+            fetchedAt,
+          };
+          logger.debug('[Bedrock Pricing]: Using cached pricing data', {
+            region,
+            modelCount: models.size,
+            cachedAt: fetchedAt.toISOString(),
+            cacheAgeHours: (cacheAge / (60 * 60 * 1000)).toFixed(1),
+          });
+          return pricingData;
+        } else {
+          logger.debug('[Bedrock Pricing]: Cached pricing data expired', {
+            region,
+            cacheAgeHours: (cacheAge / (60 * 60 * 1000)).toFixed(1),
+            ttlHours: (PRICING_CACHE_TTL_MS / (60 * 60 * 1000)).toFixed(1),
+          });
+        }
       }
     } catch (err) {
       logger.debug('[Bedrock Pricing]: Failed to parse cached pricing', {
@@ -307,6 +345,16 @@ async function fetchBedrockPricing(
           const priceDim = Object.values(onDemand.priceDimensions)[0] as any;
           const price = parseFloat(priceDim.pricePerUnit.USD);
 
+          // Skip invalid prices (NaN, negative, or Infinity)
+          if (!Number.isFinite(price) || price < 0) {
+            logger.debug('[Bedrock Pricing]: Skipping invalid price', {
+              modelName,
+              priceRaw: priceDim.pricePerUnit?.USD,
+              parsedPrice: price,
+            });
+            continue;
+          }
+
           // Only create model entry when we find on-demand pricing
           if (!models.has(modelName)) {
             models.set(modelName, { input: 0, output: 0 });
@@ -371,13 +419,24 @@ async function fetchBedrockPricing(
  */
 const FALLBACK_PRICING: Record<string, BedrockModelPricing> = {
   // ===== Claude Models =====
-  // Claude 4 models (Anthropic official pricing)
+  // Claude 4.5 models (Anthropic official pricing - different from 4.0/4.1)
+  // Source: https://claude.com/pricing
+  'claude-opus-4-5': { input: 0.000005, output: 0.000025 }, // $5/$25 per MTok
+  'claude-opus-4-5-20251101': { input: 0.000005, output: 0.000025 },
+  'claude-sonnet-4-5': { input: 0.000003, output: 0.000015 }, // $3/$15 per MTok
+  'claude-sonnet-4-5-20250929': { input: 0.000003, output: 0.000015 },
+  'claude-haiku-4-5': { input: 0.000001, output: 0.000005 }, // $1/$5 per MTok
+  'claude-haiku-4-5-20251001': { input: 0.000001, output: 0.000005 },
+  // Claude 4.0/4.1 models (higher pricing than 4.5)
+  'claude-opus-4': { input: 0.000015, output: 0.000075 }, // $15/$75 per MTok
   'claude-opus-4-1': { input: 0.000015, output: 0.000075 },
   'claude-opus-4-20250514': { input: 0.000015, output: 0.000075 },
-  'claude-sonnet-4-5': { input: 0.000003, output: 0.000015 },
+  'claude-opus-4-1-20250805': { input: 0.000015, output: 0.000075 },
+  'claude-sonnet-4': { input: 0.000003, output: 0.000015 }, // $3/$15 per MTok
   'claude-sonnet-4-20250514': { input: 0.000003, output: 0.000015 },
-  'claude-3-7-sonnet': { input: 0.000003, output: 0.000015 },
-  'claude-haiku-4-5': { input: 0.000001, output: 0.000005 },
+  // Claude 3.7 Sonnet
+  'claude-3-7-sonnet': { input: 0.000003, output: 0.000015 }, // $3/$15 per MTok
+  'claude-3-7-sonnet-20250219': { input: 0.000003, output: 0.000015 },
 
   // Claude 3.5 Sonnet v2 (October 2024 release, same pricing as v1)
   'claude-3-5-sonnet-20241022-v2': { input: 0.000003, output: 0.000015 },
@@ -420,8 +479,9 @@ const FALLBACK_PRICING: Record<string, BedrockModelPricing> = {
  */
 function getFallbackPricing(modelId: string): BedrockModelPricing | undefined {
   // Normalize model ID: remove region prefix, version suffix
+  // Must match the same prefixes as mapBedrockModelIdToApiName
   const normalized = modelId
-    .replace(/^(us|eu|apac|global|au|jp)\./, '')
+    .replace(/^(us|eu|apac|us-gov|global|au|jp)\./, '')
     .replace(/:\d+$/, '')
     .toLowerCase();
 
@@ -459,7 +519,9 @@ export function calculateCostWithFetchedPricing(
     promptTokens === undefined ||
     completionTokens === undefined ||
     !Number.isFinite(promptTokens) ||
-    !Number.isFinite(completionTokens)
+    !Number.isFinite(completionTokens) ||
+    promptTokens < 0 ||
+    completionTokens < 0
   ) {
     return undefined;
   }
