@@ -1,11 +1,11 @@
-# azure-openai
+# openai (Azure OpenAI)
 
 This example demonstrates how to use Azure OpenAI with promptfoo, including text generation and vision capabilities.
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example azure-openai
+npx promptfoo@latest init --example azure/openai
 ```
 
 ## Environment Variables
@@ -21,7 +21,7 @@ You can set these in a `.env` file or directly in your environment.
 
 1. An Azure account with access to Azure OpenAI Service
 2. Deployments for one or more Azure OpenAI models:
-   - Text models: gpt-4o, o3-mini
+   - Text models: gpt-5.1, gpt-4o
    - Vision models: gpt-4o (or other vision-capable models)
 3. Your Azure OpenAI endpoint URL
 
