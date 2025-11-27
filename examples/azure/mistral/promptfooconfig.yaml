@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure Mistral models
+
+prompts:
+  - |
+    You are a helpful assistant. Answer the following question clearly and concisely.
+
+    Question: {{question}}
+
+providers:
+  # Mistral Large - Most capable Mistral model
+  - id: azure:chat:Mistral-Large-2411
+    label: mistral-large
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 1024
+      temperature: 0.7
+
+  # Ministral 3B - Fast and lightweight
+  - id: azure:chat:Ministral-3B-2410
+    label: ministral-3b
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 1024
+      temperature: 0.7
+
+tests:
+  - vars:
+      question: What are the key differences between compiled and interpreted programming languages?
+    assert:
+      - type: contains-any
+        value: ['compiled', 'interpreted', 'machine code', 'runtime']
+      - type: llm-rubric
+        value: Provides a clear comparison with examples
+
+  - vars:
+      question: Explain the concept of API rate limiting and why it's important.
+    assert:
+      - type: contains-any
+        value: ['rate', 'limit', 'request', 'throttle']
+      - type: llm-rubric
+        value: Explains both the concept and its importance
+
+  - vars:
+      question: What is the difference between SQL and NoSQL databases?
+    assert:
+      - type: contains-any
+        value: ['relational', 'schema', 'document', 'flexible']
+      - type: llm-rubric
+        value: Covers key differences between database types

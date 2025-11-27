@@ -751,6 +751,74 @@ describe('Azure Provider Tests', () => {
         expect((provider as any).isReasoningModel()).toBe(false);
       });
 
+      // Third-party reasoning model detection tests
+      it('should auto-detect DeepSeek-R1 reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('DeepSeek-R1', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect deepseek-r1 with different separators', () => {
+        const providerHyphen = new AzureChatCompletionProvider('deepseek-r1-distill', {
+          config: {},
+        });
+        const providerUnderscore = new AzureChatCompletionProvider('deepseek_r1', {
+          config: {},
+        });
+        expect((providerHyphen as any).isReasoningModel()).toBe(true);
+        expect((providerUnderscore as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Phi-4-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('phi-4-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Phi-4-mini-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('Phi-4-mini-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Grok reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('grok-3-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect grok-mini-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('grok-3-mini-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should not detect regular Grok models as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('grok-3', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should not detect regular DeepSeek-V3 as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('DeepSeek-V3', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should not detect regular Phi-4 as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('Phi-4', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
       it('should use max_completion_tokens for reasoning models', async () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
