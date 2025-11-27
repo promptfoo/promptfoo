@@ -126,8 +126,14 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
     // Get config info from liveRedteamConfig or try to extract from results
     const config = options.liveRedteamConfig;
-    const plugins = config?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [];
-    const strategies = config?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [];
+    const plugins =
+      (config?.plugins as Array<string | { id: string }>)?.map((p: string | { id: string }) =>
+        typeof p === 'string' ? p : p.id,
+      ) || [];
+    const strategies =
+      (config?.strategies as Array<string | { id: string }>)?.map((s: string | { id: string }) =>
+        typeof s === 'string' ? s : s.id,
+      ) || [];
 
     // Check if using sample target (promptfoo: prefix or promptfoo.app URL)
     // Note: targets can be a single string, function, or array per ProvidersSchema
