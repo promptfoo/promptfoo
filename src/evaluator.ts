@@ -1876,6 +1876,34 @@ class Evaluator {
       ),
     );
 
+    // Sanitize provider IDs for privacy (don't expose full URLs or very long custom paths)
+    const sanitizeProviderId = (id: string): string => {
+      if (id.startsWith('http:') || id.startsWith('https:')) {
+        return 'http:custom-endpoint';
+      }
+      if (id.startsWith('ws:') || id.startsWith('wss:')) {
+        return 'websocket:custom-endpoint';
+      }
+      if (id.length > 80) {
+        return id.substring(0, 80) + '...';
+      }
+      return id;
+    };
+
+    // Full model identifiers (sanitized for privacy)
+    const models = Array.from(
+      new Set(testSuite.providers.map((p) => sanitizeProviderId(p.id()))),
+    ).sort();
+
+    // Detect A/B testing scenarios (multiple different models)
+    const isModelComparison =
+      testSuite.providers.length > 1 && new Set(testSuite.providers.map((p) => p.id())).size > 1;
+
+    // Detect custom/unknown providers
+    const hasCustomProvider =
+      providerPrefixes.includes('unknown') ||
+      testSuite.providers.some((p) => !p.id().includes(':'));
+
     // Detect timeout occurrences (more robust than string matching)
     const timeoutOccurred =
       evalTimedOut ||
@@ -1893,6 +1921,9 @@ class Evaluator {
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
       providerPrefixes: providerPrefixes.sort(),
+      models,
+      isModelComparison,
+      hasCustomProvider,
       assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
