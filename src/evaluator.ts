@@ -1930,42 +1930,8 @@ class Evaluator {
       ),
     );
 
-    // Sanitize provider IDs for privacy (don't expose full URLs or local paths)
-    const sanitizeProviderId = (id: string): string => {
-      if (id.startsWith('http:') || id.startsWith('https:')) {
-        return 'http:custom-endpoint';
-      }
-      if (id.startsWith('ws:') || id.startsWith('wss:')) {
-        return 'websocket:custom-endpoint';
-      }
-      // Sanitize file-based providers to avoid leaking local filesystem paths
-      if (id.startsWith('file://')) {
-        return 'file:custom-provider';
-      }
-      // Sanitize python providers (python:path/to/script.py:function)
-      if (id.startsWith('python:')) {
-        return 'python:custom-provider';
-      }
-      // Sanitize exec providers
-      if (id.startsWith('exec:')) {
-        return 'exec:custom-provider';
-      }
-      // Truncate very long IDs that might contain paths or sensitive info
-      if (id.length > 80) {
-        // Extract the provider prefix (e.g., "openai", "anthropic") if present
-        const colonIndex = id.indexOf(':');
-        if (colonIndex > 0 && colonIndex < 30) {
-          return id.substring(0, colonIndex) + ':truncated';
-        }
-        return 'custom:truncated';
-      }
-      return id;
-    };
-
-    // Full model identifiers (sanitized for privacy)
-    const models = Array.from(
-      new Set(testSuite.providers.map((p) => sanitizeProviderId(p.id()))),
-    ).sort();
+    // Full model identifiers
+    const models = Array.from(new Set(testSuite.providers.map((p) => p.id()))).sort();
 
     // Detect A/B testing scenarios (multiple different models)
     const isModelComparison =
@@ -1977,37 +1943,22 @@ class Evaluator {
       testSuite.providers.some((p) => !p.id().includes(':'));
 
     // Calculate per-provider performance metrics
-    // Track both sanitized (for telemetry) and raw (for token tracker lookup) IDs
     const providerMetrics: Record<
       string,
-      {
-        rawIds: Set<string>;
-        requests: number;
-        successes: number;
-        failures: number;
-        totalLatencyMs: number;
-      }
+      { requests: number; successes: number; failures: number; totalLatencyMs: number }
     > = {};
     for (const result of this.evalRecord.results) {
-      const rawId = result.provider?.id || 'unknown';
-      const sanitizedId = sanitizeProviderId(rawId);
-      if (!providerMetrics[sanitizedId]) {
-        providerMetrics[sanitizedId] = {
-          rawIds: new Set(),
-          requests: 0,
-          successes: 0,
-          failures: 0,
-          totalLatencyMs: 0,
-        };
+      const providerId = result.provider?.id || 'unknown';
+      if (!providerMetrics[providerId]) {
+        providerMetrics[providerId] = { requests: 0, successes: 0, failures: 0, totalLatencyMs: 0 };
       }
-      providerMetrics[sanitizedId].rawIds.add(rawId);
-      providerMetrics[sanitizedId].requests++;
+      providerMetrics[providerId].requests++;
       if (result.success) {
-        providerMetrics[sanitizedId].successes++;
+        providerMetrics[providerId].successes++;
       } else {
-        providerMetrics[sanitizedId].failures++;
+        providerMetrics[providerId].failures++;
       }
-      providerMetrics[sanitizedId].totalLatencyMs += result.latencyMs || 0;
+      providerMetrics[providerId].totalLatencyMs += result.latencyMs || 0;
     }
 
     // Categorize error types
@@ -2120,22 +2071,12 @@ class Evaluator {
       // Per-provider performance with token metrics (top 10 providers)
       providerBreakdown: Object.entries(providerMetrics)
         .map(([provider, m]) => {
-          // Aggregate token usage from all raw IDs that map to this sanitized provider
           const tracker = TokenUsageTracker.getInstance();
-          let totalTokens = 0;
-          let promptTokens = 0;
-          let completionTokens = 0;
-          let cachedTokens = 0;
-
-          for (const rawId of m.rawIds) {
-            const usage = tracker.getProviderUsage(rawId);
-            if (usage) {
-              totalTokens += usage.total || 0;
-              promptTokens += usage.prompt || 0;
-              completionTokens += usage.completion || 0;
-              cachedTokens += usage.cached || 0;
-            }
-          }
+          const usage = tracker.getProviderUsage(provider);
+          const totalTokens = usage?.total || 0;
+          const promptTokens = usage?.prompt || 0;
+          const completionTokens = usage?.completion || 0;
+          const cachedTokens = usage?.cached || 0;
 
           return {
             provider,
