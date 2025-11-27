@@ -56,6 +56,25 @@ describe('AzureResponsesProvider', () => {
       const provider = new AzureResponsesProvider('gpt-4.1');
       expect(provider.isReasoningModel()).toBe(false);
     });
+
+    it('should respect isReasoningModel config override for custom deployment names', () => {
+      const provider = new AzureResponsesProvider('my-custom-deployment', {
+        config: { isReasoningModel: true },
+      });
+      expect(provider.isReasoningModel()).toBe(true);
+    });
+
+    it('should respect o1 config override for custom deployment names', () => {
+      const provider = new AzureResponsesProvider('my-custom-deployment', {
+        config: { o1: true },
+      });
+      expect(provider.isReasoningModel()).toBe(true);
+    });
+
+    it('should not identify custom deployment as reasoning model without config override', () => {
+      const provider = new AzureResponsesProvider('my-custom-deployment');
+      expect(provider.isReasoningModel()).toBe(false);
+    });
   });
 
   describe('supportsTemperature', () => {
@@ -168,6 +187,45 @@ describe('AzureResponsesProvider', () => {
       const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.temperature).toBe(0.7);
+    });
+
+    it('should include verbosity for reasoning models when configured', async () => {
+      const provider = new AzureResponsesProvider('gpt-5', {
+        config: { verbosity: 'high' },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.text).toMatchObject({
+        format: { type: 'text' },
+        verbosity: 'high',
+      });
+    });
+
+    it('should include verbosity for custom deployment with isReasoningModel override', async () => {
+      const provider = new AzureResponsesProvider('my-custom-deployment', {
+        config: { isReasoningModel: true, verbosity: 'medium' },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.text).toMatchObject({
+        format: { type: 'text' },
+        verbosity: 'medium',
+      });
+    });
+
+    it('should not include verbosity for non-reasoning models', async () => {
+      const provider = new AzureResponsesProvider('gpt-4.1-test', {
+        config: { verbosity: 'high' },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.text).toMatchObject({
+        format: { type: 'text' },
+      });
+      expect(body.text.verbosity).toBeUndefined();
     });
   });
 

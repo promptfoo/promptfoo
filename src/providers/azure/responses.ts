@@ -46,6 +46,10 @@ export class AzureResponsesProvider extends AzureGenericProvider {
   }
 
   isReasoningModel(): boolean {
+    // Check config override first (matching azure:chat implementation)
+    if (this.config.isReasoningModel || this.config.o1) {
+      return true;
+    }
     return (
       this.deploymentName.startsWith('o1') ||
       this.deploymentName.startsWith('o3') ||
@@ -128,6 +132,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       }
     } else {
       textFormat = { format: { type: 'text' } };
+    }
+
+    // Add verbosity for reasoning models if configured
+    if (isReasoningModel && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
     }
 
     // Azure Responses API uses 'model' field for deployment name
