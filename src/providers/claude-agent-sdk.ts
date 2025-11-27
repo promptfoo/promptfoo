@@ -155,6 +155,29 @@ export interface ClaudeCodeOptions {
    * Useful when the agent needs to read files from multiple locations.
    */
   additional_directories?: string[];
+
+  /**
+   * Session ID to resume a previous conversation. The agent will continue from where it left off.
+   * Use with 'fork_session' to branch instead of continuing the same session.
+   */
+  resume?: string;
+
+  /**
+   * When true and 'resume' is set, creates a new session branching from the resumed point
+   * instead of continuing the original session.
+   */
+  fork_session?: boolean;
+
+  /**
+   * When resuming, only restore messages up to this message UUID.
+   * Allows resuming from a specific point in the conversation history.
+   */
+  resume_session_at?: string;
+
+  /**
+   * When true, continues from the previous conversation without requiring a resume session ID.
+   */
+  continue?: boolean;
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -311,6 +334,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       plugins: config.plugins,
       maxBudgetUsd: config.max_budget_usd,
       additionalDirectories: config.additional_directories,
+      resume: config.resume,
+      forkSession: config.fork_session,
+      resumeSessionAt: config.resume_session_at,
+      continue: config.continue,
       env,
     };
 

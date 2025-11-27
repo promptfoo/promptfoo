@@ -785,6 +785,31 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with session management configuration (resume, forkSession, continue)', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              resume: 'session-123',
+              fork_session: true,
+              resume_session_at: 'message-uuid-456',
+              continue: false,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              resume: 'session-123',
+              forkSession: true,
+              resumeSessionAt: 'message-uuid-456',
+              continue: false,
+            }),
+          });
+        });
+
         it('with append system prompt', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
