@@ -32,6 +32,7 @@ import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
+import { AwsBedrockConverseProvider } from './bedrock/converse';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -104,6 +105,7 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
+import { createXAIResponsesProvider } from './xai/responses';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -332,6 +334,11 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+
+      // Handle Converse API
+      if (modelType === 'converse') {
+        return new AwsBedrockConverseProvider(modelName, providerOptions);
+      }
 
       // Handle nova-sonic model
       if (modelType === 'nova-sonic' || modelType.includes('amazon.nova-sonic')) {
@@ -1039,6 +1046,14 @@ export const providerMap: ProviderFactory[] = [
       // Handle xai:image:<model> format
       if (modelType === 'image') {
         return createXAIImageProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
+      // Handle xai:responses:<model> format for Agent Tools API
+      if (modelType === 'responses') {
+        return createXAIResponsesProvider(providerPath, {
           ...providerOptions,
           env: context.env,
         });

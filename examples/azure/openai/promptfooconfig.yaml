@@ -5,16 +5,10 @@ prompts:
   - 'Generate one very interesting fact about {{topic}}'
 
 providers:
-  - id: azure:chat:gpt-4o-deployment1
+  # GPT-5.1 - Latest flagship model
+  - id: azure:chat:gpt-5.1
     config:
       apiHost: 'your-org.openai.azure.com'
-
-  # Example of reasoning model setup
-  - id: azure:chat:o3-mini-deployment
-    config:
-      apiHost: 'your-org.openai.azure.com'
-      # Flag to indicate this is a reasoning model (o1, o3-mini, etc.)
-      isReasoningModel: true
 
 defaultTest:
   assert:
@@ -30,6 +24,6 @@ tests:
       - type: similar
         value: Bananas are naturally radioactive.
         provider:
-          id: azure:embeddings:ada-deployment1
+          id: azure:embeddings:text-embedding-3-large
           config:
             apiHost: 'your-org.openai.azure.com'

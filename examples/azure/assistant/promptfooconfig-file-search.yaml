@@ -26,10 +26,10 @@ providers:
       temperature: 0.7
       apiVersion: '2024-05-01-preview'
 
-# Override the default grader
+# Override the default grader (use your gpt-5.1 deployment name)
 defaultTest:
   options:
-    provider: azure:chat:gpt-4o-deployment1
+    provider: azure:chat:gpt-5.1-deployment
 
 tests:
   - vars:
