@@ -11,6 +11,11 @@ import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { outputFromMessage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { novaOutputFromMessage, novaParseMessages } from './util';
+import {
+  getPricingData,
+  calculateCostWithFetchedPricing,
+  type BedrockPricingData,
+} from './pricingFetcher';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 
@@ -62,6 +67,8 @@ interface BedrockOptions {
   showThinking?: boolean;
   endpoint?: string;
   inferenceModelType?: BedrockModelFamily;
+  /** Custom cost override. Can be a single number (per token) or { input, output } per token. */
+  cost?: number | { input: number; output: number };
 }
 
 export interface TextGenerationOptions {
@@ -1777,6 +1784,8 @@ export abstract class AwsBedrockGenericProvider {
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
   config: BedrockOptions;
+  private pricingData?: BedrockPricingData | null;
+  private pricingDataPromise?: Promise<BedrockPricingData | null>;
 
   constructor(
     modelName: string,
@@ -1922,6 +1931,47 @@ export abstract class AwsBedrockGenericProvider {
       getEnvString('AWS_BEDROCK_REGION') ||
       'us-east-1'
     );
+  }
+
+  /**
+   * Gets pricing data for cost calculation, with lazy loading and caching.
+   * Pricing fetch is done asynchronously and won't block the API call.
+   * Returns cached data if available, null if still fetching or failed.
+   */
+  async getPricingDataForCost(): Promise<BedrockPricingData | null> {
+    // Return cached result if we have it
+    if (this.pricingData !== undefined) {
+      return this.pricingData;
+    }
+
+    // If a fetch is already in progress, wait for it
+    if (this.pricingDataPromise) {
+      return this.pricingDataPromise;
+    }
+
+    // Start fetching pricing data
+    // Only fetch if we have IAM credentials (not API key-only auth)
+    const apiKey = this.getApiKey();
+    if (apiKey && !this.config.accessKeyId) {
+      // API key-only auth - pricing API won't work without IAM credentials
+      logger.debug('[Bedrock]: Skipping pricing fetch - API key auth without IAM credentials');
+      this.pricingData = null;
+      return null;
+    }
+
+    const credentials = await this.getCredentials();
+    this.pricingDataPromise = getPricingData(this.getRegion(), credentials)
+      .then((data) => {
+        this.pricingData = data;
+        return data;
+      })
+      .catch((err) => {
+        logger.debug('[Bedrock]: Failed to fetch pricing data', { error: String(err) });
+        this.pricingData = null;
+        return null;
+      });
+
+    return this.pricingDataPromise;
   }
 }
 
@@ -2069,9 +2119,41 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
+      // Calculate cost if we have token usage
+      let cost: number | undefined;
+      if (tokenUsage.prompt !== undefined && tokenUsage.completion !== undefined) {
+        // Check for custom cost override in config
+        const configCost = this.config.cost;
+        if (typeof configCost === 'object' && configCost !== null) {
+          // Custom cost override: { input: number, output: number }
+          cost = tokenUsage.prompt * configCost.input + tokenUsage.completion * configCost.output;
+          logger.debug('[Bedrock]: Using custom cost override', { cost, configCost });
+        } else if (typeof configCost === 'number') {
+          // Legacy: single number for both input and output
+          cost = (tokenUsage.prompt + tokenUsage.completion) * configCost;
+          logger.debug('[Bedrock]: Using legacy cost override', { cost, configCost });
+        } else {
+          // Fetch pricing data and calculate cost
+          const pricingData = await this.getPricingDataForCost();
+          cost = calculateCostWithFetchedPricing(
+            this.modelName,
+            pricingData,
+            tokenUsage.prompt,
+            tokenUsage.completion,
+          );
+          if (cost !== undefined) {
+            logger.debug('[Bedrock]: Calculated cost from pricing data', {
+              cost,
+              modelName: this.modelName,
+            });
+          }
+        }
+      }
+
       return {
         output: model.output(this.config, output),
         tokenUsage,
+        ...(cost !== undefined ? { cost } : {}),
         ...(output['amazon-bedrock-guardrailAction']
           ? {
               guardrails: {
