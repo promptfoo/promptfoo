@@ -65,7 +65,7 @@ providers:
 
 ## Provider Types
 
-- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano)
+- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-5.1, gpt-5.1-mini, gpt-5.1-nano)
 - `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
 - `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-4.1, gpt-5.1)
