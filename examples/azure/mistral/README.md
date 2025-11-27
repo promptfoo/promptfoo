@@ -20,12 +20,12 @@ export AZURE_API_HOST=your-deployment.services.ai.azure.com
 
 ## Available Mistral Models
 
-| Model                 | Description                        |
-| --------------------- | ---------------------------------- |
-| `Mistral-Large-2411`  | Mistral Large - Most capable       |
-| `Pixtral-Large-2411`  | Pixtral Large - Vision + text      |
-| `Ministral-3B-2410`   | Ministral 3B - Fast, lightweight   |
-| `Mistral-Nemo-2407`   | Mistral Nemo - Balanced            |
+| Model                | Description                      |
+| -------------------- | -------------------------------- |
+| `Mistral-Large-2411` | Mistral Large - Most capable     |
+| `Pixtral-Large-2411` | Pixtral Large - Vision + text    |
+| `Ministral-3B-2410`  | Ministral 3B - Fast, lightweight |
+| `Mistral-Nemo-2407`  | Mistral Nemo - Balanced          |
 
 ## Running the Example
 

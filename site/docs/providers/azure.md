@@ -80,15 +80,15 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 ### OpenAI Models
 
-| Category             | Models                                                                       |
-| -------------------- | ---------------------------------------------------------------------------- |
+| Category             | Models                                                                         |
+| -------------------- | ------------------------------------------------------------------------------ |
 | **GPT-5 Series**     | `gpt-5.1`, `gpt-5.1-mini`, `gpt-5.1-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano` |
-| **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                    |
-| **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                   |
-| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`              |
-| **Specialized**      | `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`                   |
-| **Deep Research**    | `o3-deep-research`, `o4-mini-deep-research`                                  |
-| **Embeddings**       | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002` |
+| **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                      |
+| **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                     |
+| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`                |
+| **Specialized**      | `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`                     |
+| **Deep Research**    | `o3-deep-research`, `o4-mini-deep-research`                                    |
+| **Embeddings**       | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`   |
 
 ### Third-Party Models (Azure AI Foundry)
 
