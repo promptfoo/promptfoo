@@ -1919,7 +1919,7 @@ class Evaluator {
       ),
     );
 
-    // Sanitize provider IDs for privacy (don't expose full URLs or very long custom paths)
+    // Sanitize provider IDs for privacy (don't expose full URLs or local paths)
     const sanitizeProviderId = (id: string): string => {
       if (id.startsWith('http:') || id.startsWith('https:')) {
         return 'http:custom-endpoint';
@@ -1927,8 +1927,26 @@ class Evaluator {
       if (id.startsWith('ws:') || id.startsWith('wss:')) {
         return 'websocket:custom-endpoint';
       }
+      // Sanitize file-based providers to avoid leaking local filesystem paths
+      if (id.startsWith('file://')) {
+        return 'file:custom-provider';
+      }
+      // Sanitize python providers (python:path/to/script.py:function)
+      if (id.startsWith('python:')) {
+        return 'python:custom-provider';
+      }
+      // Sanitize exec providers
+      if (id.startsWith('exec:')) {
+        return 'exec:custom-provider';
+      }
+      // Truncate very long IDs that might contain paths or sensitive info
       if (id.length > 80) {
-        return id.substring(0, 80) + '...';
+        // Extract the provider prefix (e.g., "openai", "anthropic") if present
+        const colonIndex = id.indexOf(':');
+        if (colonIndex > 0 && colonIndex < 30) {
+          return id.substring(0, colonIndex) + ':truncated';
+        }
+        return 'custom:truncated';
       }
       return id;
     };
@@ -1989,7 +2007,11 @@ class Evaluator {
         let category = 'other';
         if (errorLower.includes('timeout') || errorLower.includes('timed out')) {
           category = 'timeout';
-        } else if (errorLower.includes('rate limit') || errorLower.includes('429')) {
+        } else if (
+          errorLower.includes('rate limit') ||
+          errorLower.includes('429') ||
+          errorLower.includes('too many requests')
+        ) {
           category = 'rate_limit';
         } else if (errorLower.includes('401') || errorLower.includes('403')) {
           category = 'auth';
