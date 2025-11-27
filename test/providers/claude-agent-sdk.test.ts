@@ -945,6 +945,55 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with hooks configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          // Create a mock hook callback
+          const mockHookCallback = jest.fn().mockResolvedValue({ continue: true });
+          const hooks = {
+            PreToolUse: [
+              {
+                matcher: 'Bash',
+                hooks: [mockHookCallback],
+              },
+            ],
+          };
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              hooks,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              hooks,
+            }),
+          });
+        });
+
+        it('with includePartialMessages configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              include_partial_messages: true,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              includePartialMessages: true,
+            }),
+          });
+        });
+
         it('with append system prompt', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 

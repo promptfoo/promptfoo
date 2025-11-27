@@ -15,6 +15,8 @@ import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
 import type {
   AgentDefinition,
+  HookCallbackMatcher,
+  HookEvent,
   Options as QueryOptions,
   OutputFormat,
   SettingSource,
@@ -195,6 +197,18 @@ export interface ClaudeCodeOptions {
    * When set, the agent will return validated JSON matching the provided schema.
    */
   output_format?: OutputFormat;
+
+  /**
+   * Hooks for intercepting events during agent execution.
+   * Allows custom logic at various points like PreToolUse, PostToolUse, etc.
+   */
+  hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
+
+  /**
+   * When true, includes partial/streaming messages in the response.
+   * Useful for debugging or when you need to see intermediate outputs.
+   */
+  include_partial_messages?: boolean;
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -357,6 +371,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       continue: config.continue,
       agents: config.agents,
       outputFormat: config.output_format,
+      hooks: config.hooks,
+      includePartialMessages: config.include_partial_messages,
       env,
     };
 
