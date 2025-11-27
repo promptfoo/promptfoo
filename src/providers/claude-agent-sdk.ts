@@ -137,6 +137,12 @@ export interface ClaudeCodeOptions {
    * if not supplied, it won't look for any settings, CLAUDE.md, or slash commands
    */
   setting_sources?: SettingSource[];
+
+  /**
+   * 'plugins' allows loading Claude Code plugins from local file system paths
+   * Each plugin must be a directory containing .claude-plugin/plugin.json manifest
+   */
+  plugins?: Array<{ type: 'local'; path: string }>;
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -290,6 +296,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,
       disallowedTools,
+      plugins: config.plugins,
       env,
     };
 
