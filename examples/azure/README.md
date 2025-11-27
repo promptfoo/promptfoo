@@ -19,6 +19,7 @@ This directory contains examples for using Azure AI services with promptfoo, inc
 | [claude](./claude/)         | Anthropic Claude models (Opus, Sonnet, Haiku) |
 | [llama](./llama/)           | Meta Llama models (4, 3.3, 3.1)               |
 | [deepseek](./deepseek/)     | DeepSeek models including R1 reasoning        |
+| [mistral](./mistral/)       | Mistral models (Large, Ministral)             |
 | [comparison](./comparison/) | Compare models across providers               |
 
 ## Quick Start
@@ -37,6 +38,7 @@ npx promptfoo@latest init --example azure/foundry-agent
 npx promptfoo@latest init --example azure/claude
 npx promptfoo@latest init --example azure/llama
 npx promptfoo@latest init --example azure/deepseek
+npx promptfoo@latest init --example azure/mistral
 npx promptfoo@latest init --example azure/comparison
 ```
 
