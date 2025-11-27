@@ -321,6 +321,11 @@ const redTeamSidebar = [
       },
       {
         type: 'doc',
+        label: 'Detecting Model Drift',
+        id: 'red-team/model-drift',
+      },
+      {
+        type: 'doc',
         label: 'Testing Guardrails',
         id: 'guides/testing-guardrails',
       },
