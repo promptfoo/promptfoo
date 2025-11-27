@@ -56,9 +56,23 @@ Pass/fail logic of the assertion:
 For Azure, if the prompt fails the input content safety filter, the response status is 400 with code `content_filter`. In this case, the guardrails assertion passes.
 :::
 
-## Red Team Configuration
+## Inverse Assertion (not-guardrails)
 
-When using guardrails assertions for red teaming scenarios, you should specify the `guardrails` property:
+Use `not-guardrails` to verify dangerous prompts get caught - the test passes when content is blocked, fails when it slips through:
+
+```yaml
+assert:
+  - type: not-guardrails
+```
+
+With `not-guardrails`:
+
+- If the provider's guardrails blocks the content, the test **passes** (the attack was blocked)
+- If the content passes through, the test **fails** (the guardrail didn't catch it)
+
+## Red Team Configuration (Legacy)
+
+Alternatively, you can use the `purpose: redteam` config option:
 
 ```yaml
 assert:
@@ -67,14 +81,7 @@ assert:
       purpose: redteam
 ```
 
-:::note
-
-This changes the pass/fail logic of the assertion:
-
-- If the provider's guardrails blocks the content, the test **passes** (indicating the attack was successfully blocked)
-- If the guardrails passes the content, the assertion doesn't impact the final test result (the test will be graded based on other assertions)
-
-:::
+This has the same pass/fail behavior as `not-guardrails`, but additionally tracks failed content safety checks in Promptfoo's red team reporting.
 
 ## How it works
 

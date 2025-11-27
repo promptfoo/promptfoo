@@ -174,4 +174,97 @@ describe('handleGuardrail', () => {
       assertion: baseAssertion,
     });
   });
+
+  describe('inverse mode (not-guardrails)', () => {
+    const inverseAssertion = {
+      type: 'not-guardrails' as const,
+    };
+
+    it('should pass when content is flagged and inverse=true', async () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: inverseAssertion,
+        inverse: true,
+        providerResponse: {
+          guardrails: {
+            flagged: true,
+            reason: 'Prompt injection detected',
+          },
+          output: 'test output',
+        },
+      };
+
+      const result = await handleGuardrails(params);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Guardrail correctly blocked: Prompt injection detected',
+        assertion: inverseAssertion,
+      });
+    });
+
+    it('should fail when content is not flagged and inverse=true', async () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: inverseAssertion,
+        inverse: true,
+        providerResponse: {
+          guardrails: {
+            flagged: false,
+          },
+          output: 'test output',
+        },
+      };
+
+      const result = await handleGuardrails(params);
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'Content was not blocked by guardrails (expected to be blocked)',
+        assertion: inverseAssertion,
+      });
+    });
+
+    it('should fail when no guardrails are present and inverse=true', async () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: inverseAssertion,
+        inverse: true,
+        providerResponse: {
+          output: 'test output',
+        },
+      };
+
+      const result = await handleGuardrails(params);
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'Guardrail was not applied (expected content to be blocked)',
+        assertion: inverseAssertion,
+      });
+    });
+
+    it('should pass with specific message when input is flagged and inverse=true', async () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: inverseAssertion,
+        inverse: true,
+        providerResponse: {
+          guardrails: {
+            flagged: true,
+            flaggedInput: true,
+          },
+          output: 'test output',
+        },
+      };
+
+      const result = await handleGuardrails(params);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Guardrail correctly blocked: Prompt failed safety checks',
+        assertion: inverseAssertion,
+      });
+    });
+  });
 });

@@ -24,14 +24,23 @@ Model Armor is a managed service that screens LLM prompts and responses for:
    gcloud services enable modelarmor.googleapis.com --project=YOUR_PROJECT_ID
    ```
 
-2. **Set the regional API endpoint**:
+2. **Grant IAM Permissions** (for Vertex AI integration):
+
+   ```bash
+   PROJECT_NUMBER=$(gcloud projects describe YOUR_PROJECT_ID --format="value(projectNumber)")
+   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+     --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-aiplatform.iam.gserviceaccount.com" \
+     --role="roles/modelarmor.user"
+   ```
+
+3. **Set the regional API endpoint** (for direct API testing):
 
    ```bash
    gcloud config set api_endpoint_overrides/modelarmor \
      "https://modelarmor.us-central1.rep.googleapis.com/"
    ```
 
-3. **Create a Model Armor template**:
+4. **Create a Model Armor template**:
 
    ```bash
    gcloud model-armor templates create basic-safety \
@@ -43,7 +52,7 @@ Model Armor is a managed service that screens LLM prompts and responses for:
      --basic-config-filter-enforcement=enabled
    ```
 
-4. **Set environment variables**:
+5. **Set environment variables** (for direct API testing):
 
    ```bash
    export GOOGLE_PROJECT_ID=your-project-id
@@ -51,6 +60,8 @@ Model Armor is a managed service that screens LLM prompts and responses for:
    export MODEL_ARMOR_TEMPLATE=basic-safety
    export GCLOUD_ACCESS_TOKEN=$(gcloud auth print-access-token)
    ```
+
+   Note: Access tokens expire after 1 hour. For CI/CD, use service account keys or Workload Identity Federation.
 
 ## Examples
 
@@ -80,12 +91,13 @@ This example:
 
 - Uses Vertex AI's native Model Armor integration
 - Compares models with and without Model Armor enabled
-- Uses the `guardrails` assertion type
+- Uses the `guardrails` and `not-guardrails` assertion types
 
 ## Configuration Files
 
-- `promptfooconfig.yaml` - Direct Model Armor API testing
-- `promptfooconfig.vertex.yaml` - Vertex AI integration with Model Armor
+- `promptfooconfig.yaml` - Direct Model Armor API testing (recommended for detailed filter results)
+- `promptfooconfig.vertex.yaml` - Vertex AI integration with Model Armor (recommended for production-like testing)
+- `transforms/sanitize-response.js` - Response transformer for the sanitization API
 - `datasets/model-armor-test.csv` - Test dataset with prompts for each filter type
 
 ### Using the Dataset
@@ -109,7 +121,7 @@ When Model Armor blocks content, you'll see:
 
 For debugging, inspect the raw Model Armor response in `metadata.modelArmor`, which contains the full `sanitizationResult` including individual filter states and confidence levels.
 
-For red team testing, use the `guardrails` assertion with `purpose: redteam` to verify that dangerous prompts are correctly blocked.
+Use `not-guardrails` to verify dangerous prompts get caught - the test passes when content is blocked, fails when it slips through.
 
 ## Cleanup
 
