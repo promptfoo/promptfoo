@@ -149,6 +149,12 @@ export interface ClaudeCodeOptions {
    * Useful for cost control in automated evaluations.
    */
   max_budget_usd?: number;
+
+  /**
+   * Additional directories the agent can access beyond the working directory.
+   * Useful when the agent needs to read files from multiple locations.
+   */
+  additional_directories?: string[];
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -304,6 +310,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       disallowedTools,
       plugins: config.plugins,
       maxBudgetUsd: config.max_budget_usd,
+      additionalDirectories: config.additional_directories,
       env,
     };
 
