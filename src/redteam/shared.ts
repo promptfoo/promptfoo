@@ -130,18 +130,31 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     const strategies = config?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [];
 
     // Check if using sample target (promptfoo: prefix or promptfoo.app URL)
-    const isSampleTarget = config?.targets?.some((t) => {
+    // Note: targets can be a single string, function, or array per ProvidersSchema
+    const checkIsSampleTarget = (t: unknown): boolean => {
       if (typeof t === 'string') {
         return t.includes('promptfoo:') || t.includes('promptfoo.app');
       }
-      const id = t.id || '';
-      const url = t.config?.url || '';
-      return (
-        id.includes('promptfoo:') ||
-        url.includes('promptfoo.app') ||
-        url.includes('promptfoo.dev')
-      );
-    });
+      if (typeof t === 'object' && t !== null) {
+        const obj = t as { id?: string; config?: { url?: string } };
+        const id = obj.id || '';
+        const url = obj.config?.url || '';
+        return (
+          id.includes('promptfoo:') ||
+          url.includes('promptfoo.app') ||
+          url.includes('promptfoo.dev')
+        );
+      }
+      return false;
+    };
+
+    const targets = config?.targets;
+    const isSampleTarget =
+      typeof targets === 'string'
+        ? checkIsSampleTarget(targets)
+        : Array.isArray(targets)
+          ? targets.some(checkIsSampleTarget)
+          : false;
 
     telemetry.record('redteam run', {
       phase: 'completed',

@@ -1845,12 +1845,23 @@ class Evaluator {
       .filter((l): l is number => l !== undefined && l > 0)
       .sort((a, b) => a - b);
 
+    // Linear interpolation percentile (PERCENTILE.INC method)
+    // This gives distinct values for p95/p99 even with small sample sizes
     const getPercentile = (arr: number[], p: number): number => {
       if (arr.length === 0) {
         return 0;
       }
-      const index = Math.floor(arr.length * p);
-      return arr[Math.min(index, arr.length - 1)];
+      if (arr.length === 1) {
+        return arr[0];
+      }
+      const rank = p * (arr.length - 1);
+      const lower = Math.floor(rank);
+      const upper = Math.ceil(rank);
+      if (lower === upper) {
+        return arr[lower];
+      }
+      const fraction = rank - lower;
+      return arr[lower] + fraction * (arr[upper] - arr[lower]);
     };
 
     const latencyP50Ms = getPercentile(latencies, 0.5);
