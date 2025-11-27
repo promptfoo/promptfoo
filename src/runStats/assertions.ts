@@ -1,6 +1,20 @@
-import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions/index';
 import type { AssertionType, EvaluateStats } from '../types/index';
 import type { AssertionTypeStats, AssertionTokenUsage, StatableResult } from './types';
+
+/**
+ * Model-graded assertion types that use LLM calls for evaluation.
+ * Duplicated here to avoid circular dependency with assertions/index.ts.
+ */
+const MODEL_GRADED_ASSERTION_TYPES: Set<AssertionType> = new Set([
+  'answer-relevance',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'factuality',
+  'llm-rubric',
+  'model-graded-closedqa',
+  'model-graded-factuality',
+]);
 
 /**
  * Internal accumulator for per-assertion-type stats during computation.
