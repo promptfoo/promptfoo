@@ -383,6 +383,6 @@ This reveals which models are more resistant to specific attack types and helps 
 - [Test Cases](/docs/configuration/test-cases/) - Configure custom test cases
 - [Assertions](/docs/configuration/expected-outputs/) - Available assertion types for custom tests
 - [Risk Scoring](/docs/red-team/risk-scoring/) - Understand severity-weighted metrics
-  [Configuration](/docs/red-team/configuration/) - Full red team configuration reference
+- [Configuration](/docs/red-team/configuration/) - Full red team configuration reference
 - [Plugins](/docs/red-team/plugins/) - Available vulnerability categories
 - [Strategies](/docs/red-team/strategies/) - Attack delivery techniques
