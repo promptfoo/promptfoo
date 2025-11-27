@@ -1948,16 +1948,30 @@ class Evaluator {
       testSuite.providers.some((p) => !p.id().includes(':'));
 
     // Calculate per-provider performance metrics
+    // Track both sanitized (for telemetry) and raw (for token tracker lookup) IDs
     const providerMetrics: Record<
       string,
-      { requests: number; successes: number; failures: number; totalLatencyMs: number }
+      {
+        rawIds: Set<string>;
+        requests: number;
+        successes: number;
+        failures: number;
+        totalLatencyMs: number;
+      }
     > = {};
     for (const result of this.evalRecord.results) {
-      const providerId = result.provider?.id || 'unknown';
-      const sanitizedId = sanitizeProviderId(providerId);
+      const rawId = result.provider?.id || 'unknown';
+      const sanitizedId = sanitizeProviderId(rawId);
       if (!providerMetrics[sanitizedId]) {
-        providerMetrics[sanitizedId] = { requests: 0, successes: 0, failures: 0, totalLatencyMs: 0 };
+        providerMetrics[sanitizedId] = {
+          rawIds: new Set(),
+          requests: 0,
+          successes: 0,
+          failures: 0,
+          totalLatencyMs: 0,
+        };
       }
+      providerMetrics[sanitizedId].rawIds.add(rawId);
       providerMetrics[sanitizedId].requests++;
       if (result.success) {
         providerMetrics[sanitizedId].successes++;
@@ -2054,20 +2068,55 @@ class Evaluator {
       modelGradedAssertions: modelGradedCount,
       assertionPassRate: totalAssertions > 0 ? passedAssertions / totalAssertions : 0,
 
+      // Assertion token usage (for model-graded assertions)
+      assertionTokenUsage: {
+        totalTokens: this.stats.tokenUsage.assertions?.total || 0,
+        promptTokens: this.stats.tokenUsage.assertions?.prompt || 0,
+        completionTokens: this.stats.tokenUsage.assertions?.completion || 0,
+        cachedTokens: this.stats.tokenUsage.assertions?.cached || 0,
+        numRequests: this.stats.tokenUsage.assertions?.numRequests || 0,
+        reasoningTokens: this.stats.tokenUsage.assertions?.completionDetails?.reasoning || 0,
+      },
+
       // Per-assertion-type breakdown (top 20 types)
       assertionBreakdown: Object.entries(assertionBreakdown)
         .map(([type, counts]) => ({ type, ...counts }))
         .sort((a, b) => b.pass + b.fail - (a.pass + a.fail))
         .slice(0, 20),
 
-      // Per-provider performance (top 10 providers)
+      // Per-provider performance with token metrics (top 10 providers)
       providerBreakdown: Object.entries(providerMetrics)
-        .map(([provider, m]) => ({
-          provider,
-          requests: m.requests,
-          successRate: m.requests > 0 ? m.successes / m.requests : 0,
-          avgLatencyMs: m.requests > 0 ? Math.round(m.totalLatencyMs / m.requests) : 0,
-        }))
+        .map(([provider, m]) => {
+          // Aggregate token usage from all raw IDs that map to this sanitized provider
+          const tracker = TokenUsageTracker.getInstance();
+          let totalTokens = 0;
+          let promptTokens = 0;
+          let completionTokens = 0;
+          let cachedTokens = 0;
+
+          for (const rawId of m.rawIds) {
+            const usage = tracker.getProviderUsage(rawId);
+            if (usage) {
+              totalTokens += usage.total || 0;
+              promptTokens += usage.prompt || 0;
+              completionTokens += usage.completion || 0;
+              cachedTokens += usage.cached || 0;
+            }
+          }
+
+          return {
+            provider,
+            requests: m.requests,
+            successRate: m.requests > 0 ? m.successes / m.requests : 0,
+            avgLatencyMs: m.requests > 0 ? Math.round(m.totalLatencyMs / m.requests) : 0,
+            totalTokens,
+            promptTokens,
+            completionTokens,
+            cachedTokens,
+            tokensPerRequest: m.requests > 0 ? Math.round(totalTokens / m.requests) : 0,
+            cacheRate: totalTokens > 0 ? cachedTokens / totalTokens : 0,
+          };
+        })
         .sort((a, b) => b.requests - a.requests)
         .slice(0, 10),
 
