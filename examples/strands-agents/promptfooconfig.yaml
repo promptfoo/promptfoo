@@ -1,0 +1,104 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Strands Agents SDK Example - Weather Assistant Evaluation
+#
+# This configuration evaluates a Strands agent that provides weather information
+# and temperature conversions. It demonstrates:
+# - Using a Python provider (file://) to integrate custom agents
+#   https://promptfoo.dev/docs/providers/python/
+# - Testing tool usage with contains-any assertions
+#   https://promptfoo.dev/docs/configuration/expected-outputs/#contains
+# - Using llm-rubric for semantic evaluation of responses
+#   https://promptfoo.dev/docs/configuration/expected-outputs/model-graded/
+# - Performance assertions (latency, cost)
+#   https://promptfoo.dev/docs/configuration/expected-outputs/#latency
+#
+# Strands Agents SDK by AWS: https://github.com/strands-agents/sdk-python
+# Strands Documentation: https://strandsagents.com/
+
+description: Strands Agents SDK evaluation
+
+# The prompt template - {{query}} is replaced with test case variables
+prompts:
+  - '{{query}}'
+
+# Provider configuration pointing to our Python agent
+# The file:// prefix tells promptfoo to load a Python module
+# Format: file://<script>:<function>
+providers:
+  - id: 'file://agent_provider.py:call_api'
+    label: 'Strands Weather Agent'
+    config:
+      # Model ID passed to the Strands agent (can be changed to gpt-4o, etc.)
+      model_id: 'gpt-4o-mini'
+
+# Default assertions applied to all test cases
+# https://promptfoo.dev/docs/configuration/guide/#default-test-cases
+defaultTest:
+  assert:
+    # Performance: Response should complete within 30 seconds
+    - type: latency
+      threshold: 30000
+
+# Test cases to evaluate the agent's responses
+tests:
+  # Test 1: Basic weather query - verifies the get_weather tool works
+  - description: 'Weather query for New York'
+    vars:
+      query: "What's the weather like in New York?"
+    assert:
+      # Check that response contains expected weather data
+      - type: contains-any
+        value: ['New York', 'Sunny', '72']
+      # Use LLM to verify response quality
+      - type: llm-rubric
+        value: 'Response should include weather information for New York City'
+
+  # Test 2: Another city to verify tool handles different inputs
+  - description: 'Weather query for London'
+    vars:
+      query: 'Tell me the current weather in London'
+    assert:
+      - type: contains-any
+        value: ['London', 'Cloudy', '58']
+      # Verify response mentions temperature (custom JavaScript assertion)
+      # https://promptfoo.dev/docs/configuration/expected-outputs/#javascript
+      - type: javascript
+        value: 'output.includes("°F") || output.includes("degrees")'
+
+  # Test 3: Test with icontains (case-insensitive)
+  - description: 'Weather query for Tokyo'
+    vars:
+      query: "What's the weather in Tokyo?"
+    assert:
+      # Case-insensitive check
+      - type: icontains
+        value: 'tokyo'
+      - type: icontains
+        value: 'clear'
+      # Verify response is not too short (at least 20 chars)
+      - type: javascript
+        value: 'output.length >= 20'
+
+  # Test 4: Multi-tool usage - tests both get_weather AND convert_temperature
+  # This verifies the agent can chain multiple tools together
+  - description: 'Weather with temperature conversion'
+    vars:
+      query: "What's the weather in New York? Also tell me the temperature in Celsius."
+    assert:
+      - type: llm-rubric
+        value: 'Response should include New York weather (72°F) AND convert it to Celsius (approximately 22°C)'
+      # Verify both temperature units appear in response
+      - type: javascript
+        value: '(output.includes("°F") || output.includes("Fahrenheit")) && (output.includes("°C") || output.includes("Celsius"))'
+
+  # Test 5: Unknown city - verify graceful handling
+  - description: 'Weather for unknown city'
+    vars:
+      query: "What's the weather in Atlantis?"
+    assert:
+      # Should still return a response (default weather)
+      - type: icontains
+        value: 'atlantis'
+      # Should not error out
+      - type: not-contains
+        value: 'Error'
