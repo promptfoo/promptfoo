@@ -1,5 +1,5 @@
-import { computeModelInfo, computeProviderMetrics } from '../../src/metrics/providers';
-import type { MetricableResult } from '../../src/metrics/types';
+import { computeModelInfo, computeProviderStats } from '../../src/runStats/providers';
+import type { StatableResult } from '../../src/runStats/types';
 import type { ApiProvider } from '../../src/types';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
@@ -10,7 +10,7 @@ jest.mock('../../src/util/tokenUsage', () => ({
   },
 }));
 
-describe('computeProviderMetrics', () => {
+describe('computeProviderStats', () => {
   const mockTracker = {
     getProviderUsage: jest.fn(),
   };
@@ -22,20 +22,20 @@ describe('computeProviderMetrics', () => {
   });
 
   it('should return empty array for empty results', () => {
-    const metrics = computeProviderMetrics([]);
-    expect(metrics).toEqual([]);
+    const stats = computeProviderStats([]);
+    expect(stats).toEqual([]);
   });
 
-  it('should compute basic metrics per provider', () => {
-    const results: MetricableResult[] = [
+  it('should compute basic stats per provider', () => {
+    const results: StatableResult[] = [
       { success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } },
       { success: true, latencyMs: 200, provider: { id: 'openai:gpt-4' } },
       { success: false, latencyMs: 50, provider: { id: 'openai:gpt-4' } },
     ];
 
-    const metrics = computeProviderMetrics(results);
-    expect(metrics).toHaveLength(1);
-    expect(metrics[0]).toMatchObject({
+    const stats = computeProviderStats(results);
+    expect(stats).toHaveLength(1);
+    expect(stats[0]).toMatchObject({
       provider: 'openai:gpt-4',
       requests: 3,
       successes: 2,
@@ -46,31 +46,31 @@ describe('computeProviderMetrics', () => {
   });
 
   it('should handle multiple providers', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       { success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } },
       { success: true, latencyMs: 200, provider: { id: 'anthropic:claude-3' } },
       { success: true, latencyMs: 150, provider: { id: 'openai:gpt-4' } },
     ];
 
-    const metrics = computeProviderMetrics(results);
-    expect(metrics).toHaveLength(2);
+    const stats = computeProviderStats(results);
+    expect(stats).toHaveLength(2);
     // Should be sorted by request count
-    expect(metrics[0].provider).toBe('openai:gpt-4');
-    expect(metrics[0].requests).toBe(2);
-    expect(metrics[1].provider).toBe('anthropic:claude-3');
-    expect(metrics[1].requests).toBe(1);
+    expect(stats[0].provider).toBe('openai:gpt-4');
+    expect(stats[0].requests).toBe(2);
+    expect(stats[1].provider).toBe('anthropic:claude-3');
+    expect(stats[1].requests).toBe(1);
   });
 
   it('should use "unknown" for missing provider id', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       { success: true, latencyMs: 100 },
       { success: true, latencyMs: 200, provider: {} },
     ];
 
-    const metrics = computeProviderMetrics(results);
-    expect(metrics).toHaveLength(1);
-    expect(metrics[0].provider).toBe('unknown');
-    expect(metrics[0].requests).toBe(2);
+    const stats = computeProviderStats(results);
+    expect(stats).toHaveLength(1);
+    expect(stats[0].provider).toBe('unknown');
+    expect(stats[0].requests).toBe(2);
   });
 
   it('should include token usage from TokenUsageTracker', () => {
@@ -81,13 +81,13 @@ describe('computeProviderMetrics', () => {
       cached: 100,
     });
 
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       { success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } },
       { success: true, latencyMs: 200, provider: { id: 'openai:gpt-4' } },
     ];
 
-    const metrics = computeProviderMetrics(results);
-    expect(metrics[0]).toMatchObject({
+    const stats = computeProviderStats(results);
+    expect(stats[0]).toMatchObject({
       totalTokens: 1000,
       promptTokens: 800,
       completionTokens: 200,
@@ -98,14 +98,14 @@ describe('computeProviderMetrics', () => {
   });
 
   it('should limit to maxProviders', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       { success: true, latencyMs: 100, provider: { id: 'provider-a' } },
       { success: true, latencyMs: 100, provider: { id: 'provider-b' } },
       { success: true, latencyMs: 100, provider: { id: 'provider-c' } },
     ];
 
-    const metrics = computeProviderMetrics(results, 2);
-    expect(metrics).toHaveLength(2);
+    const stats = computeProviderStats(results, 2);
+    expect(stats).toHaveLength(2);
   });
 
   it('should handle zero tokens gracefully', () => {
@@ -116,13 +116,13 @@ describe('computeProviderMetrics', () => {
       cached: 0,
     });
 
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       { success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } },
     ];
 
-    const metrics = computeProviderMetrics(results);
-    expect(metrics[0].cacheRate).toBe(0);
-    expect(metrics[0].tokensPerRequest).toBe(0);
+    const stats = computeProviderStats(results);
+    expect(stats[0].cacheRate).toBe(0);
+    expect(stats[0].tokensPerRequest).toBe(0);
   });
 });
 

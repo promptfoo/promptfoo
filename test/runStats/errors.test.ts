@@ -1,5 +1,5 @@
-import { categorizeError, computeErrorMetrics } from '../../src/metrics/errors';
-import type { MetricableResult } from '../../src/metrics/types';
+import { categorizeError, computeErrorStats } from '../../src/runStats/errors';
+import type { StatableResult } from '../../src/runStats/types';
 
 describe('categorizeError', () => {
   it('should categorize timeout errors', () => {
@@ -46,10 +46,10 @@ describe('categorizeError', () => {
   });
 });
 
-describe('computeErrorMetrics', () => {
-  it('should return empty metrics for empty results', () => {
-    const metrics = computeErrorMetrics([]);
-    expect(metrics).toEqual({
+describe('computeErrorStats', () => {
+  it('should return empty stats for empty results', () => {
+    const stats = computeErrorStats([]);
+    expect(stats).toEqual({
       total: 0,
       types: [],
       breakdown: {
@@ -63,26 +63,26 @@ describe('computeErrorMetrics', () => {
     });
   });
 
-  it('should return empty metrics when no errors', () => {
-    const results: MetricableResult[] = [
+  it('should return empty stats when no errors', () => {
+    const results: StatableResult[] = [
       { success: true, latencyMs: 100 },
       { success: true, latencyMs: 200 },
     ];
-    const metrics = computeErrorMetrics(results);
-    expect(metrics.total).toBe(0);
-    expect(metrics.types).toEqual([]);
+    const stats = computeErrorStats(results);
+    expect(stats.total).toBe(0);
+    expect(stats.types).toEqual([]);
   });
 
   it('should count and categorize errors correctly', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       { success: false, latencyMs: 0, error: 'Request timeout' },
       { success: false, latencyMs: 0, error: 'Connection timed out' },
       { success: false, latencyMs: 0, error: 'Rate limit exceeded' },
       { success: true, latencyMs: 100 },
       { success: false, latencyMs: 0, error: 'Unknown error' },
     ];
-    const metrics = computeErrorMetrics(results);
-    expect(metrics).toEqual({
+    const stats = computeErrorStats(results);
+    expect(stats).toEqual({
       total: 4,
       types: ['other', 'rate_limit', 'timeout'],
       breakdown: {
@@ -97,21 +97,21 @@ describe('computeErrorMetrics', () => {
   });
 
   it('should only include non-zero error types in types array', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       { success: false, latencyMs: 0, error: 'HTTP 500' },
       { success: false, latencyMs: 0, error: 'HTTP 502' },
     ];
-    const metrics = computeErrorMetrics(results);
-    expect(metrics.types).toEqual(['server_error']);
+    const stats = computeErrorStats(results);
+    expect(stats.types).toEqual(['server_error']);
   });
 
   it('should sort types alphabetically', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       { success: false, latencyMs: 0, error: 'timeout' },
       { success: false, latencyMs: 0, error: '401 unauthorized' },
       { success: false, latencyMs: 0, error: 'network error' },
     ];
-    const metrics = computeErrorMetrics(results);
-    expect(metrics.types).toEqual(['auth', 'network', 'timeout']);
+    const stats = computeErrorStats(results);
+    expect(stats.types).toEqual(['auth', 'network', 'timeout']);
   });
 });

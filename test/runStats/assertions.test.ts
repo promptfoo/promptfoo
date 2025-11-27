@@ -1,5 +1,5 @@
-import { computeAssertionBreakdown, computeAssertionMetrics } from '../../src/metrics/assertions';
-import type { MetricableResult } from '../../src/metrics/types';
+import { computeAssertionBreakdown, computeAssertionStats } from '../../src/runStats/assertions';
+import type { StatableResult } from '../../src/runStats/types';
 import type { EvaluateStats } from '../../src/types';
 
 describe('computeAssertionBreakdown', () => {
@@ -9,7 +9,7 @@ describe('computeAssertionBreakdown', () => {
   });
 
   it('should return empty array when no grading results', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       { success: true, latencyMs: 100 },
       { success: true, latencyMs: 200 },
     ];
@@ -18,7 +18,7 @@ describe('computeAssertionBreakdown', () => {
   });
 
   it('should compute pass/fail counts per assertion type', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       {
         success: true,
         latencyMs: 100,
@@ -39,7 +39,7 @@ describe('computeAssertionBreakdown', () => {
   });
 
   it('should sort by total volume descending', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       {
         success: true,
         latencyMs: 100,
@@ -60,7 +60,7 @@ describe('computeAssertionBreakdown', () => {
   });
 
   it('should limit to maxTypes', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       {
         success: true,
         latencyMs: 100,
@@ -78,7 +78,7 @@ describe('computeAssertionBreakdown', () => {
   });
 
   it('should use "unknown" for missing assertion type', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       {
         success: true,
         latencyMs: 100,
@@ -92,7 +92,7 @@ describe('computeAssertionBreakdown', () => {
   });
 });
 
-describe('computeAssertionMetrics', () => {
+describe('computeAssertionStats', () => {
   const createStats = (overrides?: Partial<EvaluateStats>): EvaluateStats => ({
     successes: 0,
     failures: 0,
@@ -108,8 +108,8 @@ describe('computeAssertionMetrics', () => {
   });
 
   it('should return zeros for empty results', () => {
-    const metrics = computeAssertionMetrics([], createStats());
-    expect(metrics).toEqual({
+    const stats = computeAssertionStats([], createStats());
+    expect(stats).toEqual({
       total: 0,
       passed: 0,
       passRate: 0,
@@ -127,7 +127,7 @@ describe('computeAssertionMetrics', () => {
   });
 
   it('should count total and passed assertions', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       {
         success: true,
         latencyMs: 100,
@@ -140,15 +140,15 @@ describe('computeAssertionMetrics', () => {
         },
       },
     ];
-    const metrics = computeAssertionMetrics(results, createStats());
-    expect(metrics.total).toBe(3);
-    expect(metrics.passed).toBe(2);
-    expect(metrics.passRate).toBeCloseTo(2 / 3);
+    const stats = computeAssertionStats(results, createStats());
+    expect(stats.total).toBe(3);
+    expect(stats.passed).toBe(2);
+    expect(stats.passRate).toBeCloseTo(2 / 3);
   });
 
   it('should count unique model-graded assertion types', () => {
     // llm-rubric and factuality are model-graded types
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       {
         success: true,
         latencyMs: 100,
@@ -162,13 +162,13 @@ describe('computeAssertionMetrics', () => {
         },
       },
     ];
-    const metrics = computeAssertionMetrics(results, createStats());
+    const stats = computeAssertionStats(results, createStats());
     // Should count unique model-graded types: llm-rubric, factuality = 2
-    expect(metrics.modelGraded).toBe(2);
+    expect(stats.modelGraded).toBe(2);
   });
 
   it('should extract token usage from stats', () => {
-    const stats = createStats({
+    const evalStats = createStats({
       tokenUsage: {
         total: 1000,
         prompt: 800,
@@ -187,8 +187,8 @@ describe('computeAssertionMetrics', () => {
         },
       },
     });
-    const metrics = computeAssertionMetrics([], stats);
-    expect(metrics.tokenUsage).toEqual({
+    const stats = computeAssertionStats([], evalStats);
+    expect(stats.tokenUsage).toEqual({
       totalTokens: 500,
       promptTokens: 400,
       completionTokens: 100,
@@ -199,9 +199,9 @@ describe('computeAssertionMetrics', () => {
   });
 
   it('should handle missing assertion token usage gracefully', () => {
-    const stats = createStats();
-    const metrics = computeAssertionMetrics([], stats);
-    expect(metrics.tokenUsage).toEqual({
+    const evalStats = createStats();
+    const stats = computeAssertionStats([], evalStats);
+    expect(stats.tokenUsage).toEqual({
       totalTokens: 0,
       promptTokens: 0,
       completionTokens: 0,

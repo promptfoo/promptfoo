@@ -1,5 +1,5 @@
-import { computeEvalMetrics } from '../../src/metrics';
-import type { MetricableResult } from '../../src/metrics/types';
+import { computeRunStats } from '../../src/runStats';
+import type { StatableResult } from '../../src/runStats/types';
 import type { ApiProvider, EvaluateStats } from '../../src/types';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
@@ -10,7 +10,7 @@ jest.mock('../../src/util/tokenUsage', () => ({
   },
 }));
 
-describe('computeEvalMetrics', () => {
+describe('computeRunStats', () => {
   const mockTracker = {
     getProviderUsage: jest.fn(),
   };
@@ -40,14 +40,14 @@ describe('computeEvalMetrics', () => {
       id: () => id,
     }) as ApiProvider;
 
-  it('should compute all metrics for empty input', () => {
-    const metrics = computeEvalMetrics({
+  it('should compute all stats for empty input', () => {
+    const runStats = computeRunStats({
       results: [],
       stats: createStats(),
       providers: [],
     });
 
-    expect(metrics).toEqual({
+    expect(runStats).toEqual({
       latency: { avgMs: 0, p50Ms: 0, p95Ms: 0, p99Ms: 0 },
       cache: { hits: 0, misses: 0, hitRate: null },
       errors: {
@@ -82,8 +82,8 @@ describe('computeEvalMetrics', () => {
     });
   });
 
-  it('should compute comprehensive metrics for realistic input', () => {
-    const results: MetricableResult[] = [
+  it('should compute comprehensive stats for realistic input', () => {
+    const results: StatableResult[] = [
       {
         success: true,
         latencyMs: 100,
@@ -128,43 +128,43 @@ describe('computeEvalMetrics', () => {
 
     const providers = [createProvider('openai:gpt-4')];
 
-    const metrics = computeEvalMetrics({ results, stats, providers });
+    const runStats = computeRunStats({ results, stats, providers });
 
-    // Verify all metric categories are present
-    expect(metrics.latency).toBeDefined();
-    expect(metrics.cache).toBeDefined();
-    expect(metrics.errors).toBeDefined();
-    expect(metrics.providers).toBeDefined();
-    expect(metrics.assertions).toBeDefined();
-    expect(metrics.models).toBeDefined();
+    // Verify all stat categories are present
+    expect(runStats.latency).toBeDefined();
+    expect(runStats.cache).toBeDefined();
+    expect(runStats.errors).toBeDefined();
+    expect(runStats.providers).toBeDefined();
+    expect(runStats.assertions).toBeDefined();
+    expect(runStats.models).toBeDefined();
 
     // Spot check some values
-    expect(metrics.latency.avgMs).toBe(117); // (100+200+50)/3 rounded
-    expect(metrics.cache.hits).toBe(1);
-    expect(metrics.cache.misses).toBe(1);
-    expect(metrics.errors.total).toBe(1);
-    expect(metrics.errors.breakdown.rate_limit).toBe(1);
-    expect(metrics.assertions.total).toBe(3);
-    expect(metrics.assertions.passed).toBe(2);
-    expect(metrics.models.ids).toEqual(['openai:gpt-4']);
-    expect(metrics.models.isComparison).toBe(false);
+    expect(runStats.latency.avgMs).toBe(117); // (100+200+50)/3 rounded
+    expect(runStats.cache.hits).toBe(1);
+    expect(runStats.cache.misses).toBe(1);
+    expect(runStats.errors.total).toBe(1);
+    expect(runStats.errors.breakdown.rate_limit).toBe(1);
+    expect(runStats.assertions.total).toBe(3);
+    expect(runStats.assertions.passed).toBe(2);
+    expect(runStats.models.ids).toEqual(['openai:gpt-4']);
+    expect(runStats.models.isComparison).toBe(false);
   });
 
   it('should detect model comparison correctly', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       { success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } },
       { success: true, latencyMs: 200, provider: { id: 'anthropic:claude-3' } },
     ];
 
     const providers = [createProvider('openai:gpt-4'), createProvider('anthropic:claude-3')];
 
-    const metrics = computeEvalMetrics({
+    const runStats = computeRunStats({
       results,
       stats: createStats(),
       providers,
     });
 
-    expect(metrics.models.isComparison).toBe(true);
-    expect(metrics.models.ids).toEqual(['anthropic:claude-3', 'openai:gpt-4']);
+    expect(runStats.models.isComparison).toBe(true);
+    expect(runStats.models.ids).toEqual(['anthropic:claude-3', 'openai:gpt-4']);
   });
 });

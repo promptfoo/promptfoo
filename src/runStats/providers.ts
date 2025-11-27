@@ -1,9 +1,9 @@
 import type { ApiProvider } from '../types';
 import { TokenUsageTracker } from '../util/tokenUsage';
-import type { MetricableResult, ProviderMetrics } from './types';
+import type { ProviderStats, StatableResult } from './types';
 
 /**
- * Internal accumulator for per-provider metrics during computation.
+ * Internal accumulator for per-provider stats during computation.
  */
 interface ProviderAccumulator {
   requests: number;
@@ -13,19 +13,19 @@ interface ProviderAccumulator {
 }
 
 /**
- * Computes per-provider performance metrics from evaluation results.
+ * Computes per-provider performance statistics from evaluation results.
  *
  * Includes request counts, success rates, latency, and token usage from TokenUsageTracker.
  *
  * @param results - Array of evaluation results
  * @param maxProviders - Maximum number of providers to return (default 10)
- * @returns Array of provider metrics sorted by request count
+ * @returns Array of provider stats sorted by request count
  */
-export function computeProviderMetrics(
-  results: MetricableResult[],
+export function computeProviderStats(
+  results: StatableResult[],
   maxProviders: number = 10,
-): ProviderMetrics[] {
-  // Accumulate metrics per provider
+): ProviderStats[] {
+  // Accumulate stats per provider
   const accumulators: Record<string, ProviderAccumulator> = {};
 
   for (const result of results) {
@@ -52,11 +52,11 @@ export function computeProviderMetrics(
     acc.totalLatencyMs += result.latencyMs || 0;
   }
 
-  // Convert to ProviderMetrics array with token usage
+  // Convert to ProviderStats array with token usage
   const tracker = TokenUsageTracker.getInstance();
 
   return Object.entries(accumulators)
-    .map(([provider, acc]): ProviderMetrics => {
+    .map(([provider, acc]): ProviderStats => {
       const usage = tracker.getProviderUsage(provider);
       const totalTokens = usage?.total || 0;
       const promptTokens = usage?.prompt || 0;

@@ -1,9 +1,9 @@
 import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions/index';
 import type { AssertionType, EvaluateStats } from '../types';
-import type { AssertionTypeMetrics, AssertionTokenUsage, MetricableResult } from './types';
+import type { AssertionTypeStats, AssertionTokenUsage, StatableResult } from './types';
 
 /**
- * Internal accumulator for per-assertion-type metrics during computation.
+ * Internal accumulator for per-assertion-type stats during computation.
  */
 interface AssertionAccumulator {
   pass: number;
@@ -11,16 +11,16 @@ interface AssertionAccumulator {
 }
 
 /**
- * Computes per-assertion-type effectiveness metrics from evaluation results.
+ * Computes per-assertion-type effectiveness statistics from evaluation results.
  *
  * @param results - Array of evaluation results
  * @param maxTypes - Maximum number of assertion types to return (default 20)
- * @returns Array of assertion type metrics sorted by volume
+ * @returns Array of assertion type stats sorted by volume
  */
 export function computeAssertionBreakdown(
-  results: MetricableResult[],
+  results: StatableResult[],
   maxTypes: number = 20,
-): AssertionTypeMetrics[] {
+): AssertionTypeStats[] {
   const accumulators: Record<string, AssertionAccumulator> = {};
 
   for (const result of results) {
@@ -42,7 +42,7 @@ export function computeAssertionBreakdown(
   }
 
   return Object.entries(accumulators)
-    .map(([type, acc]): AssertionTypeMetrics => {
+    .map(([type, acc]): AssertionTypeStats => {
       const total = acc.pass + acc.fail;
       return {
         type,
@@ -57,21 +57,21 @@ export function computeAssertionBreakdown(
 }
 
 /**
- * Computes overall assertion metrics from evaluation results.
+ * Computes overall assertion statistics from evaluation results.
  *
  * @param results - Array of evaluation results
  * @param stats - Evaluation statistics containing token usage
- * @returns Complete assertion metrics object
+ * @returns Complete assertion stats object
  */
-export function computeAssertionMetrics(
-  results: MetricableResult[],
+export function computeAssertionStats(
+  results: StatableResult[],
   stats: EvaluateStats,
 ): {
   total: number;
   passed: number;
   passRate: number;
   modelGraded: number;
-  breakdown: AssertionTypeMetrics[];
+  breakdown: AssertionTypeStats[];
   tokenUsage: AssertionTokenUsage;
 } {
   let total = 0;

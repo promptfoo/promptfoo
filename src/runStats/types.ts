@@ -1,20 +1,20 @@
 /**
- * Metrics types for evaluation performance analysis.
+ * Run statistics types for evaluation performance analysis.
  *
- * These metrics are computed once after an evaluation completes and serve dual purposes:
- * 1. Exposed to users via the Eval object for visibility into evaluation performance
- * 2. Sent to telemetry for product analytics
+ * These stats are computed once after an evaluation completes and provide
+ * visibility into evaluation performance - latency, cache effectiveness,
+ * error breakdowns, and per-provider performance.
  */
 
 import type { GradingResult, ProviderResponse } from '../types';
 
 /**
- * Minimal result interface for metrics computation.
+ * Minimal result interface for stats computation.
  *
- * This interface captures the subset of fields needed to compute metrics.
+ * This interface captures the subset of fields needed to compute run stats.
  * It is satisfied by both EvalResult (database model) and EvaluateResult (interface).
  */
-export interface MetricableResult {
+export interface StatableResult {
   success: boolean;
   latencyMs: number;
   error?: string | null;
@@ -24,9 +24,9 @@ export interface MetricableResult {
 }
 
 /**
- * Latency distribution metrics with percentiles.
+ * Latency distribution statistics with percentiles.
  */
-export interface LatencyMetrics {
+export interface LatencyStats {
   /** Average latency in milliseconds */
   avgMs: number;
   /** 50th percentile (median) latency in milliseconds */
@@ -38,9 +38,9 @@ export interface LatencyMetrics {
 }
 
 /**
- * Cache effectiveness metrics.
+ * Cache effectiveness statistics.
  */
-export interface CacheMetrics {
+export interface CacheStats {
   /** Number of cache hits */
   hits: number;
   /** Number of cache misses */
@@ -63,9 +63,9 @@ export interface ErrorBreakdown {
 }
 
 /**
- * Per-provider performance metrics.
+ * Per-provider performance statistics.
  */
-export interface ProviderMetrics {
+export interface ProviderStats {
   /** Provider identifier */
   provider: string;
   /** Total number of requests */
@@ -93,9 +93,9 @@ export interface ProviderMetrics {
 }
 
 /**
- * Per-assertion-type effectiveness metrics.
+ * Per-assertion-type effectiveness statistics.
  */
-export interface AssertionTypeMetrics {
+export interface AssertionTypeStats {
   /** Assertion type identifier */
   type: string;
   /** Number of passes */
@@ -109,7 +109,7 @@ export interface AssertionTypeMetrics {
 }
 
 /**
- * Token usage metrics for assertions (model-graded).
+ * Token usage for assertions (model-graded).
  */
 export interface AssertionTokenUsage {
   /** Total tokens used for assertions */
@@ -127,17 +127,18 @@ export interface AssertionTokenUsage {
 }
 
 /**
- * Complete evaluation metrics.
+ * Complete evaluation run statistics.
  *
- * This is the main interface exposed to users via Eval.metrics
- * and sent to telemetry.
+ * This is the main interface exposed to users via Eval.runStats.
+ * Contains operational data about the evaluation run - performance,
+ * cache effectiveness, errors, and per-provider breakdowns.
  */
-export interface EvalMetrics {
+export interface EvalRunStats {
   /** Latency distribution */
-  latency: LatencyMetrics;
+  latency: LatencyStats;
 
   /** Cache effectiveness */
-  cache: CacheMetrics;
+  cache: CacheStats;
 
   /** Error information */
   errors: {
@@ -150,9 +151,9 @@ export interface EvalMetrics {
   };
 
   /** Per-provider performance (sorted by request count, top 10) */
-  providers: ProviderMetrics[];
+  providers: ProviderStats[];
 
-  /** Assertion metrics */
+  /** Assertion statistics */
   assertions: {
     /** Total number of assertions */
     total: number;
@@ -163,7 +164,7 @@ export interface EvalMetrics {
     /** Number of model-graded assertions */
     modelGraded: number;
     /** Breakdown by assertion type (sorted by volume, top 20) */
-    breakdown: AssertionTypeMetrics[];
+    breakdown: AssertionTypeStats[];
     /** Token usage for model-graded assertions */
     tokenUsage: AssertionTokenUsage;
   };

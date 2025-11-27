@@ -1,5 +1,5 @@
-import { computeLatencyMetrics, getPercentile } from '../../src/metrics/latency';
-import type { MetricableResult } from '../../src/metrics/types';
+import { computeLatencyStats, getPercentile } from '../../src/runStats/latency';
+import type { StatableResult } from '../../src/runStats/types';
 
 describe('getPercentile', () => {
   it('should return 0 for empty array', () => {
@@ -46,15 +46,15 @@ describe('getPercentile', () => {
   });
 });
 
-describe('computeLatencyMetrics', () => {
-  const createResult = (latencyMs: number): MetricableResult => ({
+describe('computeLatencyStats', () => {
+  const createResult = (latencyMs: number): StatableResult => ({
     success: true,
     latencyMs,
   });
 
   it('should return zeros for empty results', () => {
-    const metrics = computeLatencyMetrics([]);
-    expect(metrics).toEqual({
+    const stats = computeLatencyStats([]);
+    expect(stats).toEqual({
       avgMs: 0,
       p50Ms: 0,
       p95Ms: 0,
@@ -62,10 +62,10 @@ describe('computeLatencyMetrics', () => {
     });
   });
 
-  it('should compute metrics for single result', () => {
+  it('should compute stats for single result', () => {
     const results = [createResult(100)];
-    const metrics = computeLatencyMetrics(results);
-    expect(metrics).toEqual({
+    const stats = computeLatencyStats(results);
+    expect(stats).toEqual({
       avgMs: 100,
       p50Ms: 100,
       p95Ms: 100,
@@ -75,35 +75,35 @@ describe('computeLatencyMetrics', () => {
 
   it('should compute average correctly', () => {
     const results = [createResult(100), createResult(200), createResult(300)];
-    const metrics = computeLatencyMetrics(results);
-    expect(metrics.avgMs).toBe(200);
+    const stats = computeLatencyStats(results);
+    expect(stats.avgMs).toBe(200);
   });
 
   it('should filter out zero and undefined latencies', () => {
-    const results: MetricableResult[] = [
+    const results: StatableResult[] = [
       { success: true, latencyMs: 100 },
       { success: true, latencyMs: 0 },
       { success: true, latencyMs: 200 },
     ];
-    const metrics = computeLatencyMetrics(results);
+    const stats = computeLatencyStats(results);
     // Only 100 and 200 should be included
-    expect(metrics.avgMs).toBe(150);
+    expect(stats.avgMs).toBe(150);
   });
 
   it('should round values to integers', () => {
     const results = [createResult(100), createResult(200), createResult(201)];
-    const metrics = computeLatencyMetrics(results);
+    const stats = computeLatencyStats(results);
     // Average: (100 + 200 + 201) / 3 = 167.0
-    expect(metrics.avgMs).toBe(167);
+    expect(stats.avgMs).toBe(167);
   });
 
   it('should compute distinct p50, p95, p99 for varied latencies', () => {
     // 20 results with increasing latencies
     const results = Array.from({ length: 20 }, (_, i) => createResult((i + 1) * 100));
-    const metrics = computeLatencyMetrics(results);
+    const stats = computeLatencyStats(results);
 
-    expect(metrics.avgMs).toBe(1050); // (100+200+...+2000)/20 = 21000/20 = 1050
-    expect(metrics.p50Ms).toBeLessThan(metrics.p95Ms);
-    expect(metrics.p95Ms).toBeLessThan(metrics.p99Ms);
+    expect(stats.avgMs).toBe(1050); // (100+200+...+2000)/20 = 21000/20 = 1050
+    expect(stats.p50Ms).toBeLessThan(stats.p95Ms);
+    expect(stats.p95Ms).toBeLessThan(stats.p99Ms);
   });
 });

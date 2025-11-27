@@ -246,11 +246,11 @@ export default class Eval {
   _shared: boolean = false;
 
   /**
-   * Evaluation performance metrics.
+   * Evaluation run statistics.
    * Computed once after evaluation completes, available for user inspection.
    * Not persisted to database (yet).
    */
-  metrics?: import('../metrics').EvalMetrics;
+  runStats?: import('../runStats').EvalRunStats;
 
   static async latest() {
     const db = getDb();

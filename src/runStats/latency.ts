@@ -1,4 +1,4 @@
-import type { LatencyMetrics, MetricableResult } from './types';
+import type { LatencyStats, StatableResult } from './types';
 
 /**
  * Computes a percentile value using linear interpolation (PERCENTILE.INC method).
@@ -26,12 +26,12 @@ export function getPercentile(sortedArr: number[], p: number): number {
 }
 
 /**
- * Computes latency distribution metrics from evaluation results.
+ * Computes latency distribution statistics from evaluation results.
  *
  * @param results - Array of evaluation results
- * @returns Latency metrics including average and percentiles
+ * @returns Latency stats including average and percentiles
  */
-export function computeLatencyMetrics(results: MetricableResult[]): LatencyMetrics {
+export function computeLatencyStats(results: StatableResult[]): LatencyStats {
   const latencies = results
     .map((r) => r.latencyMs)
     .filter((l): l is number => l !== undefined && l > 0)

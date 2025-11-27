@@ -1,10 +1,16 @@
-import type { ErrorBreakdown, MetricableResult } from './types';
+import type { ErrorBreakdown, StatableResult } from './types';
 
 /**
  * Error category type.
  * Note: Uses snake_case to maintain compatibility with existing telemetry data.
  */
-export type ErrorCategory = 'timeout' | 'rate_limit' | 'auth' | 'server_error' | 'network' | 'other';
+export type ErrorCategory =
+  | 'timeout'
+  | 'rate_limit'
+  | 'auth'
+  | 'server_error'
+  | 'network'
+  | 'other';
 
 /**
  * Categorizes an error message into a known category.
@@ -28,11 +34,7 @@ export function categorizeError(errorMessage: string): ErrorCategory {
   if (errorLower.includes('401') || errorLower.includes('403')) {
     return 'auth';
   }
-  if (
-    errorLower.includes('500') ||
-    errorLower.includes('502') ||
-    errorLower.includes('503')
-  ) {
+  if (errorLower.includes('500') || errorLower.includes('502') || errorLower.includes('503')) {
     return 'server_error';
   }
   if (
@@ -46,12 +48,12 @@ export function categorizeError(errorMessage: string): ErrorCategory {
 }
 
 /**
- * Computes error metrics from evaluation results.
+ * Computes error statistics from evaluation results.
  *
  * @param results - Array of evaluation results
- * @returns Error metrics including total count, types, and breakdown
+ * @returns Error stats including total count, types, and breakdown
  */
-export function computeErrorMetrics(results: MetricableResult[]): {
+export function computeErrorStats(results: StatableResult[]): {
   total: number;
   types: string[];
   breakdown: ErrorBreakdown;
