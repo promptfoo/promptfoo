@@ -70,9 +70,9 @@ With `not-guardrails`:
 - If the provider's guardrails blocks the content, the test **passes** (the attack was blocked)
 - If the content passes through, the test **fails** (the guardrail didn't catch it)
 
-## Red Team Configuration (Legacy)
+## Red Team Configuration
 
-Alternatively, you can use the `purpose: redteam` config option:
+For red team testing, use the `purpose: redteam` config option:
 
 ```yaml
 assert:
