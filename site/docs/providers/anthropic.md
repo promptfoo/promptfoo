@@ -9,6 +9,10 @@ This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) 
 
 > **Note:** Anthropic models can also be accessed through [AWS Bedrock](/docs/providers/aws-bedrock/) and [Google Vertex](/docs/providers/vertex/).
 
+:::tip Agentic Evals
+For agentic evaluations with file access, tool use, and MCP servers, see the [Claude Agent SDK provider](/docs/providers/claude-agent-sdk/).
+:::
+
 ## Setup
 
 To use Anthropic, you need to set the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.
@@ -567,5 +571,9 @@ We provide several example implementations demonstrating Claude's capabilities:
 
 - [AWS Bedrock](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) - Using Claude through AWS Bedrock
 - [Google Vertex AI](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex) - Using Claude through Google Vertex AI
+
+#### Agentic Evaluations
+
+- [Claude Agent SDK](/docs/providers/claude-agent-sdk/) - For agentic evals with file access, tool use, and MCP servers
 
 For more examples and general usage patterns, visit our [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples) on GitHub.
