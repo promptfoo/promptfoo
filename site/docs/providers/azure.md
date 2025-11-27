@@ -72,7 +72,7 @@ providers:
 - `azure:assistant:<assistant id>` - For Azure OpenAI Assistants (using Azure OpenAI API)
 - `azure:foundry-agent:<assistant id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
 
-Vision-capable models (GPT-4o, GPT-4.1) use the standard `azure:chat:` provider type.
+Vision-capable models (GPT-5.1, GPT-4o, GPT-4.1) use the standard `azure:chat:` provider type.
 
 ## Available Models
 
@@ -82,7 +82,7 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 | Category             | Models                                                                       |
 | -------------------- | ---------------------------------------------------------------------------- |
-| **GPT-5 Series**     | `gpt-5`, `gpt-5.1`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-chat`                 |
+| **GPT-5 Series**     | `gpt-5.1`, `gpt-5.1-mini`, `gpt-5.1-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano` |
 | **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                    |
 | **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                   |
 | **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`              |
@@ -142,7 +142,7 @@ providers:
 
 The Responses API supports all Azure OpenAI models:
 
-- **GPT-5 Series**: `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-chat`
+- **GPT-5 Series**: `gpt-5.1`, `gpt-5.1-mini`, `gpt-5.1-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`
 - **GPT-4 Series**: `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
 - **Reasoning Models**: `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`
 - **Specialized Models**: `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`
@@ -713,7 +713,7 @@ This means you're using a reasoning model without setting the `isReasoningModel`
 
 ## Using Vision Models
 
-Azure OpenAI supports vision-capable models like GPT-4o and GPT-4.1 for image analysis.
+Azure OpenAI supports vision-capable models like GPT-5.1, GPT-4o, and GPT-4.1 for image analysis.
 
 ### Configuration
 
@@ -1212,5 +1212,10 @@ For complete working examples, check out the [Azure Foundry Agent example direct
 - [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Learn how to compare different models and instructions
 - [Azure Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure) - All Azure examples in one place:
   - [OpenAI](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/openai) - Chat, vision, and embedding examples
+  - [Claude](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/claude) - Anthropic Claude on Azure AI Foundry
+  - [Llama](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/llama) - Meta Llama models
+  - [DeepSeek](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/deepseek) - DeepSeek reasoning models
+  - [Mistral](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/mistral) - Mistral models
+  - [Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/comparison) - Multi-provider comparison
   - [Assistants](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant) - Assistant with tools examples
   - [Foundry Agent](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent) - Azure AI Foundry Agents
