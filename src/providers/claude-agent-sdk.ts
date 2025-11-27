@@ -13,7 +13,11 @@ import logger from '../logger';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
-import type { Options as QueryOptions, SettingSource } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  AgentDefinition,
+  Options as QueryOptions,
+  SettingSource,
+} from '@anthropic-ai/claude-agent-sdk';
 
 import type {
   ApiProvider,
@@ -178,6 +182,12 @@ export interface ClaudeCodeOptions {
    * When true, continues from the previous conversation without requiring a resume session ID.
    */
   continue?: boolean;
+
+  /**
+   * Programmatic agent definitions. Allows defining custom subagents inline without filesystem dependencies.
+   * Keys are agent names, values are agent definitions with description, tools, and prompt.
+   */
+  agents?: Record<string, AgentDefinition>;
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -338,6 +348,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       forkSession: config.fork_session,
       resumeSessionAt: config.resume_session_at,
       continue: config.continue,
+      agents: config.agents,
       env,
     };
 

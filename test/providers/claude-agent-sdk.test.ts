@@ -810,6 +810,38 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with programmatic agents configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const agents = {
+            'code-reviewer': {
+              description: 'Reviews code for issues',
+              prompt: 'You are a code reviewer. Review the code carefully.',
+              tools: ['Read', 'Grep', 'Glob'],
+              model: 'sonnet' as const,
+            },
+            'test-writer': {
+              description: 'Writes tests for code',
+              prompt: 'You are a test writer. Write comprehensive tests.',
+            },
+          };
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              agents,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              agents,
+            }),
+          });
+        });
+
         it('with append system prompt', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
