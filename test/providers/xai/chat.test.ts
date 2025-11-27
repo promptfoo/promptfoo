@@ -429,6 +429,84 @@ describe('xAI Chat Provider', () => {
       // Temperature should still be present
       expect(result.body.temperature).toBe(0.8);
     });
+
+    it('filters unsupported parameters for Grok 4.1 Fast models', () => {
+      const provider = createXAIProvider('xai:grok-4-1-fast-reasoning') as any;
+      const mockContext = {
+        prompt: {
+          config: {
+            presence_penalty: 0.5,
+            frequency_penalty: 0.7,
+            stop: ['\\n'],
+            reasoning_effort: 'high',
+            temperature: 0.7,
+            max_completion_tokens: 2048,
+          },
+        },
+      };
+
+      const result = provider.getOpenAiBody('test prompt', mockContext);
+
+      // These should be filtered out for Grok 4.1 Fast
+      expect(result.body.presence_penalty).toBeUndefined();
+      expect(result.body.frequency_penalty).toBeUndefined();
+      expect(result.body.stop).toBeUndefined();
+      expect(result.body.reasoning_effort).toBeUndefined();
+
+      // These should still be present
+      expect(result.body.temperature).toBe(0.7);
+      expect(result.body.max_completion_tokens).toBe(2048);
+    });
+
+    it('filters unsupported parameters for Grok 4 Fast models', () => {
+      const provider = createXAIProvider('xai:grok-4-fast-reasoning') as any;
+      const mockContext = {
+        prompt: {
+          config: {
+            presence_penalty: 0.5,
+            frequency_penalty: 0.7,
+            stop: ['\\n'],
+            reasoning_effort: 'high',
+            temperature: 0.7,
+          },
+        },
+      };
+
+      const result = provider.getOpenAiBody('test prompt', mockContext);
+
+      // These should be filtered out for Grok 4 Fast
+      expect(result.body.presence_penalty).toBeUndefined();
+      expect(result.body.frequency_penalty).toBeUndefined();
+      expect(result.body.stop).toBeUndefined();
+      expect(result.body.reasoning_effort).toBeUndefined();
+
+      // Temperature should still be present
+      expect(result.body.temperature).toBe(0.7);
+    });
+
+    it('filters unsupported parameters for non-reasoning variants', () => {
+      const provider = createXAIProvider('xai:grok-4-1-fast-non-reasoning') as any;
+      const mockContext = {
+        prompt: {
+          config: {
+            presence_penalty: 0.5,
+            frequency_penalty: 0.7,
+            stop: ['\\n'],
+            temperature: 0.5,
+          },
+        },
+      };
+
+      const result = provider.getOpenAiBody('test prompt', mockContext);
+
+      // These should be filtered out for Grok 4.1 Fast non-reasoning
+      expect(result.body.presence_penalty).toBeUndefined();
+      expect(result.body.frequency_penalty).toBeUndefined();
+      expect(result.body.stop).toBeUndefined();
+
+      // Temperature should still be present
+      expect(result.body.temperature).toBe(0.5);
+    });
   });
 
   describe('Model constants', () => {
@@ -436,6 +514,36 @@ describe('xAI Chat Provider', () => {
       expect(GROK_REASONING_MODELS).toContain('grok-4-0709');
       expect(GROK_REASONING_MODELS).toContain('grok-4');
       expect(GROK_REASONING_MODELS).toContain('grok-4-latest');
+    });
+
+    it('includes Grok 4.1 Fast reasoning models in reasoning models list', () => {
+      expect(GROK_REASONING_MODELS).toContain('grok-4-1-fast-reasoning');
+      expect(GROK_REASONING_MODELS).toContain('grok-4-1-fast');
+      expect(GROK_REASONING_MODELS).toContain('grok-4-1-fast-latest');
+    });
+
+    it('includes Grok 4 Fast reasoning models in reasoning models list', () => {
+      expect(GROK_REASONING_MODELS).toContain('grok-4-fast-reasoning');
+      expect(GROK_REASONING_MODELS).toContain('grok-4-fast');
+      expect(GROK_REASONING_MODELS).toContain('grok-4-fast-latest');
+    });
+
+    it('does NOT include non-reasoning variants in reasoning models list', () => {
+      expect(GROK_REASONING_MODELS).not.toContain('grok-4-1-fast-non-reasoning');
+      expect(GROK_REASONING_MODELS).not.toContain('grok-4-fast-non-reasoning');
+    });
+
+    it('includes all Grok 4.1 Fast and Grok 4 Fast models in GROK_4_MODELS', () => {
+      // Grok 4.1 Fast
+      expect(GROK_4_MODELS).toContain('grok-4-1-fast-reasoning');
+      expect(GROK_4_MODELS).toContain('grok-4-1-fast');
+      expect(GROK_4_MODELS).toContain('grok-4-1-fast-latest');
+      expect(GROK_4_MODELS).toContain('grok-4-1-fast-non-reasoning');
+      // Grok 4 Fast
+      expect(GROK_4_MODELS).toContain('grok-4-fast-reasoning');
+      expect(GROK_4_MODELS).toContain('grok-4-fast');
+      expect(GROK_4_MODELS).toContain('grok-4-fast-latest');
+      expect(GROK_4_MODELS).toContain('grok-4-fast-non-reasoning');
     });
 
     it('does not include Grok-4 in reasoning effort models list', () => {
@@ -455,6 +563,42 @@ describe('xAI Chat Provider', () => {
       expect(grok4Model?.cost.output).toBe(15.0 / 1e6);
       expect(grok4Model?.aliases).toContain('grok-4');
       expect(grok4Model?.aliases).toContain('grok-4-latest');
+    });
+
+    it('includes Grok 4.1 Fast in XAI_CHAT_MODELS with correct pricing', () => {
+      const grok41FastReasoning = XAI_CHAT_MODELS.find(
+        (model) => model.id === 'grok-4-1-fast-reasoning',
+      );
+      expect(grok41FastReasoning).toBeDefined();
+      expect(grok41FastReasoning?.cost.input).toBe(0.2 / 1e6);
+      expect(grok41FastReasoning?.cost.output).toBe(0.5 / 1e6);
+      expect(grok41FastReasoning?.aliases).toContain('grok-4-1-fast');
+      expect(grok41FastReasoning?.aliases).toContain('grok-4-1-fast-latest');
+
+      const grok41FastNonReasoning = XAI_CHAT_MODELS.find(
+        (model) => model.id === 'grok-4-1-fast-non-reasoning',
+      );
+      expect(grok41FastNonReasoning).toBeDefined();
+      expect(grok41FastNonReasoning?.cost.input).toBe(0.2 / 1e6);
+      expect(grok41FastNonReasoning?.cost.output).toBe(0.5 / 1e6);
+    });
+
+    it('includes Grok 4 Fast in XAI_CHAT_MODELS with correct pricing', () => {
+      const grok4FastReasoning = XAI_CHAT_MODELS.find(
+        (model) => model.id === 'grok-4-fast-reasoning',
+      );
+      expect(grok4FastReasoning).toBeDefined();
+      expect(grok4FastReasoning?.cost.input).toBe(0.2 / 1e6);
+      expect(grok4FastReasoning?.cost.output).toBe(0.5 / 1e6);
+      expect(grok4FastReasoning?.aliases).toContain('grok-4-fast');
+      expect(grok4FastReasoning?.aliases).toContain('grok-4-fast-latest');
+
+      const grok4FastNonReasoning = XAI_CHAT_MODELS.find(
+        (model) => model.id === 'grok-4-fast-non-reasoning',
+      );
+      expect(grok4FastNonReasoning).toBeDefined();
+      expect(grok4FastNonReasoning?.cost.input).toBe(0.2 / 1e6);
+      expect(grok4FastNonReasoning?.cost.output).toBe(0.5 / 1e6);
     });
 
     it('includes all Grok-3 mini aliases in reasoning constants', () => {
@@ -526,6 +670,38 @@ describe('xAI Chat Provider', () => {
 
       const codefast0825Cost = calculateXAICost('grok-code-fast-1-0825', {}, 1000, 500);
       expect(codefast0825Cost).toBeCloseTo(0.00095);
+
+      // Grok 4.1 Fast models ($0.20/1M input, $0.50/1M output)
+      const grok41FastCost = calculateXAICost('grok-4-1-fast-reasoning', {}, 1000, 500);
+      expect(grok41FastCost).toBeCloseTo(0.00045);
+      expect(grok41FastCost).toBe(1000 * (0.2 / 1e6) + 500 * (0.5 / 1e6));
+
+      const grok41FastNonReasoningCost = calculateXAICost(
+        'grok-4-1-fast-non-reasoning',
+        {},
+        1000,
+        500,
+      );
+      expect(grok41FastNonReasoningCost).toBeCloseTo(0.00045);
+
+      const grok41FastAliasCost = calculateXAICost('grok-4-1-fast', {}, 1000, 500);
+      expect(grok41FastAliasCost).toBeCloseTo(0.00045);
+
+      // Grok 4 Fast models ($0.20/1M input, $0.50/1M output)
+      const grok4FastCost = calculateXAICost('grok-4-fast-reasoning', {}, 1000, 500);
+      expect(grok4FastCost).toBeCloseTo(0.00045);
+      expect(grok4FastCost).toBe(1000 * (0.2 / 1e6) + 500 * (0.5 / 1e6));
+
+      const grok4FastNonReasoningCost = calculateXAICost(
+        'grok-4-fast-non-reasoning',
+        {},
+        1000,
+        500,
+      );
+      expect(grok4FastNonReasoningCost).toBeCloseTo(0.00045);
+
+      const grok4FastAliasCost = calculateXAICost('grok-4-fast', {}, 1000, 500);
+      expect(grok4FastAliasCost).toBeCloseTo(0.00045);
 
       // Verify cost relationships
       expect(Number(fastCost)).toBeGreaterThan(Number(betaCost));
