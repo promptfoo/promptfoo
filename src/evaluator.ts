@@ -25,6 +25,7 @@ import { isPromptfooSampleTarget } from './providers/shared';
 import { strategyDisplayNames } from './redteam/constants';
 import { getSessionId, isSimbaTestCase } from './redteam/util';
 import { generatePrompts } from './suggestions';
+import { computeEvalMetrics } from './metrics';
 import telemetry from './telemetry';
 import {
   generateTraceContextIfNeeded,
@@ -1831,50 +1832,14 @@ class Evaluator {
     const totalTokens = this.stats.tokenUsage.total;
     const cachedTokens = this.stats.tokenUsage.cached;
 
-    // Calculate correct average latency by summing individual request latencies
-    const totalLatencyMs = this.evalRecord.results.reduce(
-      (sum, result) => sum + (result.latencyMs || 0),
-      0,
-    );
-    const avgLatencyMs =
-      this.evalRecord.results.length > 0 ? totalLatencyMs / this.evalRecord.results.length : 0;
-
-    // Calculate latency percentiles (p50, p95, p99)
-    const latencies = this.evalRecord.results
-      .map((r) => r.latencyMs)
-      .filter((l): l is number => l !== undefined && l > 0)
-      .sort((a, b) => a - b);
-
-    // Linear interpolation percentile (PERCENTILE.INC method)
-    // This gives distinct values for p95/p99 even with small sample sizes
-    const getPercentile = (arr: number[], p: number): number => {
-      if (arr.length === 0) {
-        return 0;
-      }
-      if (arr.length === 1) {
-        return arr[0];
-      }
-      const rank = p * (arr.length - 1);
-      const lower = Math.floor(rank);
-      const upper = Math.ceil(rank);
-      if (lower === upper) {
-        return arr[lower];
-      }
-      const fraction = rank - lower;
-      return arr[lower] + fraction * (arr[upper] - arr[lower]);
-    };
-
-    const latencyP50Ms = getPercentile(latencies, 0.5);
-    const latencyP95Ms = getPercentile(latencies, 0.95);
-    const latencyP99Ms = getPercentile(latencies, 0.99);
-
-    // Calculate cache hit rate from results
-    const cacheHits = this.evalRecord.results.filter((r) => r.response?.cached).length;
-    const cacheMisses = this.evalRecord.results.filter(
-      (r) => r.response && !r.response.cached,
-    ).length;
-    const cacheHitRate =
-      cacheHits + cacheMisses > 0 ? cacheHits / (cacheHits + cacheMisses) : null;
+    // Compute comprehensive evaluation metrics using the metrics module
+    // These metrics are stored on evalRecord for user access and used for telemetry
+    const metrics = computeEvalMetrics({
+      results: this.evalRecord.results,
+      stats: this.stats,
+      providers: testSuite.providers,
+    });
+    this.evalRecord.metrics = metrics;
 
     // Detect key feature usage patterns
     const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
@@ -1891,36 +1856,7 @@ class Evaluator {
       return url.includes('promptfoo.app') || label.toLowerCase().includes('example');
     });
 
-    // Calculate assertion metrics
-    const totalAssertions = prompts.reduce(
-      (acc, p) => acc + (p.metrics?.assertPassCount || 0) + (p.metrics?.assertFailCount || 0),
-      0,
-    );
-    const passedAssertions = prompts.reduce((acc, p) => acc + (p.metrics?.assertPassCount || 0), 0);
-
-    // Count model-graded vs other assertion types
-    const modelGradedCount = Array.from(assertionTypes).filter((type) =>
-      MODEL_GRADED_ASSERTION_TYPES.has(type as AssertionType),
-    ).length;
-
-    // Calculate per-assertion-type effectiveness (pass/fail breakdown)
-    const assertionBreakdown: Record<string, { pass: number; fail: number }> = {};
-    for (const result of this.evalRecord.results) {
-      const componentResults = result.gradingResult?.componentResults || [];
-      for (const cr of componentResults) {
-        const type = cr.assertion?.type || 'unknown';
-        if (!assertionBreakdown[type]) {
-          assertionBreakdown[type] = { pass: 0, fail: 0 };
-        }
-        if (cr.pass) {
-          assertionBreakdown[type].pass++;
-        } else {
-          assertionBreakdown[type].fail++;
-        }
-      }
-    }
-
-    // Calculate provider distribution (maintain exact compatibility)
+    // Calculate provider distribution (maintain exact compatibility for telemetry)
     const providerPrefixes = Array.from(
       new Set(
         testSuite.providers.map((p) => {
@@ -1929,70 +1865,6 @@ class Evaluator {
         }),
       ),
     );
-
-    // Full model identifiers
-    const models = Array.from(new Set(testSuite.providers.map((p) => p.id()))).sort();
-
-    // Detect A/B testing scenarios (multiple different models)
-    const isModelComparison =
-      testSuite.providers.length > 1 && new Set(testSuite.providers.map((p) => p.id())).size > 1;
-
-    // Detect custom/unknown providers
-    const hasCustomProvider =
-      providerPrefixes.includes('unknown') ||
-      testSuite.providers.some((p) => !p.id().includes(':'));
-
-    // Calculate per-provider performance metrics
-    const providerMetrics: Record<
-      string,
-      { requests: number; successes: number; failures: number; totalLatencyMs: number }
-    > = {};
-    for (const result of this.evalRecord.results) {
-      const providerId = result.provider?.id || 'unknown';
-      if (!providerMetrics[providerId]) {
-        providerMetrics[providerId] = { requests: 0, successes: 0, failures: 0, totalLatencyMs: 0 };
-      }
-      providerMetrics[providerId].requests++;
-      if (result.success) {
-        providerMetrics[providerId].successes++;
-      } else {
-        providerMetrics[providerId].failures++;
-      }
-      providerMetrics[providerId].totalLatencyMs += result.latencyMs || 0;
-    }
-
-    // Categorize error types
-    const errorCategories: Record<string, number> = {};
-    for (const result of this.evalRecord.results) {
-      if (result.error) {
-        const errorLower = result.error.toLowerCase();
-        let category = 'other';
-        if (errorLower.includes('timeout') || errorLower.includes('timed out')) {
-          category = 'timeout';
-        } else if (
-          errorLower.includes('rate limit') ||
-          errorLower.includes('429') ||
-          errorLower.includes('too many requests')
-        ) {
-          category = 'rate_limit';
-        } else if (errorLower.includes('401') || errorLower.includes('403')) {
-          category = 'auth';
-        } else if (
-          errorLower.includes('500') ||
-          errorLower.includes('502') ||
-          errorLower.includes('503')
-        ) {
-          category = 'server_error';
-        } else if (
-          errorLower.includes('network') ||
-          errorLower.includes('econnrefused') ||
-          errorLower.includes('enotfound')
-        ) {
-          category = 'network';
-        }
-        errorCategories[category] = (errorCategories[category] || 0) + 1;
-      }
-    }
 
     // Detect timeout occurrences (more robust than string matching)
     const timeoutOccurred =
@@ -2011,9 +1883,9 @@ class Evaluator {
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
       providerPrefixes: providerPrefixes.sort(),
-      models,
-      isModelComparison,
-      hasCustomProvider,
+      models: metrics.models.ids,
+      isModelComparison: metrics.models.isComparison,
+      hasCustomProvider: metrics.models.hasCustom,
       assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
@@ -2024,19 +1896,19 @@ class Evaluator {
       numFails: this.stats.failures,
       numErrors: this.stats.errors,
 
-      // Performance metrics
+      // Performance metrics (from metrics module)
       totalEvalTimeMs,
-      avgLatencyMs: Math.round(avgLatencyMs),
-      latencyP50Ms: Math.round(latencyP50Ms),
-      latencyP95Ms: Math.round(latencyP95Ms),
-      latencyP99Ms: Math.round(latencyP99Ms),
+      avgLatencyMs: metrics.latency.avgMs,
+      latencyP50Ms: metrics.latency.p50Ms,
+      latencyP95Ms: metrics.latency.p95Ms,
+      latencyP99Ms: metrics.latency.p99Ms,
       concurrencyUsed: concurrency,
       timeoutOccurred,
 
-      // Cache metrics
-      cacheHits,
-      cacheMisses,
-      cacheHitRate,
+      // Cache metrics (from metrics module)
+      cacheHits: metrics.cache.hits,
+      cacheMisses: metrics.cache.misses,
+      cacheHitRate: metrics.cache.hitRate ?? -1, // -1 indicates no requests
 
       // Token and cost metrics
       totalTokens,
@@ -2046,57 +1918,24 @@ class Evaluator {
       totalCost,
       totalRequests,
 
-      // Assertion metrics
-      numAssertions: totalAssertions,
-      passedAssertions,
-      modelGradedAssertions: modelGradedCount,
-      assertionPassRate: totalAssertions > 0 ? passedAssertions / totalAssertions : 0,
+      // Assertion metrics (from metrics module)
+      numAssertions: metrics.assertions.total,
+      passedAssertions: metrics.assertions.passed,
+      modelGradedAssertions: metrics.assertions.modelGraded,
+      assertionPassRate: metrics.assertions.passRate,
 
-      // Assertion token usage (for model-graded assertions)
-      assertionTokenUsage: {
-        totalTokens: this.stats.tokenUsage.assertions?.total || 0,
-        promptTokens: this.stats.tokenUsage.assertions?.prompt || 0,
-        completionTokens: this.stats.tokenUsage.assertions?.completion || 0,
-        cachedTokens: this.stats.tokenUsage.assertions?.cached || 0,
-        numRequests: this.stats.tokenUsage.assertions?.numRequests || 0,
-        reasoningTokens: this.stats.tokenUsage.assertions?.completionDetails?.reasoning || 0,
-      },
+      // Assertion token usage (from metrics module, serialized for telemetry)
+      assertionTokenUsage: JSON.stringify(metrics.assertions.tokenUsage),
 
-      // Per-assertion-type breakdown (top 20 types)
-      assertionBreakdown: Object.entries(assertionBreakdown)
-        .map(([type, counts]) => ({ type, ...counts }))
-        .sort((a, b) => b.pass + b.fail - (a.pass + a.fail))
-        .slice(0, 20),
+      // Per-assertion-type breakdown (from metrics module, serialized for telemetry)
+      assertionBreakdown: JSON.stringify(metrics.assertions.breakdown),
 
-      // Per-provider performance with token metrics (top 10 providers)
-      providerBreakdown: Object.entries(providerMetrics)
-        .map(([provider, m]) => {
-          const tracker = TokenUsageTracker.getInstance();
-          const usage = tracker.getProviderUsage(provider);
-          const totalTokens = usage?.total || 0;
-          const promptTokens = usage?.prompt || 0;
-          const completionTokens = usage?.completion || 0;
-          const cachedTokens = usage?.cached || 0;
+      // Per-provider performance (from metrics module, serialized for telemetry)
+      providerBreakdown: JSON.stringify(metrics.providers),
 
-          return {
-            provider,
-            requests: m.requests,
-            successRate: m.requests > 0 ? m.successes / m.requests : 0,
-            avgLatencyMs: m.requests > 0 ? Math.round(m.totalLatencyMs / m.requests) : 0,
-            totalTokens,
-            promptTokens,
-            completionTokens,
-            cachedTokens,
-            tokensPerRequest: m.requests > 0 ? Math.round(totalTokens / m.requests) : 0,
-            cacheRate: totalTokens > 0 ? cachedTokens / totalTokens : 0,
-          };
-        })
-        .sort((a, b) => b.requests - a.requests)
-        .slice(0, 10),
-
-      // Error categorization
-      errorTypes: Object.keys(errorCategories).sort(),
-      errorBreakdown: errorCategories,
+      // Error categorization (from metrics module)
+      errorTypes: metrics.errors.types,
+      errorBreakdown: JSON.stringify(metrics.errors.breakdown),
 
       // Feature usage
       usesConversationVar,

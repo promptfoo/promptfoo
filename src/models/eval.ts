@@ -245,6 +245,13 @@ export default class Eval {
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
 
+  /**
+   * Evaluation performance metrics.
+   * Computed once after evaluation completes, available for user inspection.
+   * Not persisted to database (yet).
+   */
+  metrics?: import('../metrics').EvalMetrics;
+
   static async latest() {
     const db = getDb();
     const db_results = await db
