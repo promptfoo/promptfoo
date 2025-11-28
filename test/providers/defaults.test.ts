@@ -601,6 +601,16 @@ describe('Provider override tests', () => {
       expect(providers.gradingProvider.id()).toContain('my-deployment');
     });
 
+    it('should use Azure when API key and AZURE_DEPLOYMENT_NAME (without OPENAI prefix) are set', async () => {
+      process.env.AZURE_OPENAI_API_KEY = 'test-key';
+      process.env.AZURE_DEPLOYMENT_NAME = 'my-deployment';
+      // Note: NOT setting AZURE_OPENAI_DEPLOYMENT_NAME - testing fallback
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider.id()).toContain('my-deployment');
+    });
+
     it('should NOT use Azure when only API key is set (no deployment name)', async () => {
       process.env.AZURE_OPENAI_API_KEY = 'test-key';
       // No AZURE_OPENAI_DEPLOYMENT_NAME

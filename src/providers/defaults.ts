@@ -133,6 +133,7 @@ function hasAnyCredential(envKeys: (keyof EnvOverrides)[], env?: EnvOverrides): 
 
 /**
  * Check for Azure OpenAI credentials (API key OR client credentials) AND deployment name.
+ * Accepts either AZURE_OPENAI_DEPLOYMENT_NAME or AZURE_DEPLOYMENT_NAME per documentation.
  */
 function hasAzureCredentials(env?: EnvOverrides): boolean {
   const hasApiKey = hasAnyCredential(['AZURE_OPENAI_API_KEY', 'AZURE_API_KEY'], env);
@@ -140,7 +141,10 @@ function hasAzureCredentials(env?: EnvOverrides): boolean {
     hasCredential('AZURE_CLIENT_ID', env) &&
     hasCredential('AZURE_CLIENT_SECRET', env) &&
     hasCredential('AZURE_TENANT_ID', env);
-  const hasDeployment = hasCredential('AZURE_OPENAI_DEPLOYMENT_NAME', env);
+  const hasDeployment = hasAnyCredential(
+    ['AZURE_OPENAI_DEPLOYMENT_NAME', 'AZURE_DEPLOYMENT_NAME'],
+    env,
+  );
 
   return (hasApiKey || hasClientCreds) && hasDeployment;
 }
@@ -187,10 +191,14 @@ function createOpenAIProviders(): DefaultProviders {
 /**
  * Create Azure-specific providers (requires dynamic deployment name lookup).
  * Note: Azure uses the same provider for all completion tasks since it's deployment-based.
+ * Supports both AZURE_OPENAI_DEPLOYMENT_NAME and AZURE_DEPLOYMENT_NAME per documentation.
  */
 function createAzureProviders(env?: EnvOverrides): DefaultProviders {
   const deploymentName =
-    getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
+    getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') ||
+    env?.AZURE_OPENAI_DEPLOYMENT_NAME ||
+    getEnvString('AZURE_DEPLOYMENT_NAME') ||
+    env?.AZURE_DEPLOYMENT_NAME;
   const embeddingDeploymentName =
     getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
     env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
