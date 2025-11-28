@@ -27,6 +27,7 @@ import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
+  GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
@@ -324,6 +325,19 @@ export class VertexChatProvider extends VertexGenericProvider {
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
+      // Model Armor integration: inject template configuration for prompt/response screening
+      // See: https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
+      ...(config.modelArmor &&
+        (config.modelArmor.promptTemplate || config.modelArmor.responseTemplate) && {
+          model_armor_config: {
+            ...(config.modelArmor.promptTemplate && {
+              prompt_template_name: config.modelArmor.promptTemplate,
+            }),
+            ...(config.modelArmor.responseTemplate && {
+              response_template_name: config.modelArmor.responseTemplate,
+            }),
+          },
+        }),
     };
 
     if (config.responseSchema) {
@@ -419,38 +433,87 @@ export class VertexChatProvider extends VertexGenericProvider {
         const dataWithResponse = data as GeminiResponseData[];
         let output;
         for (const datum of dataWithResponse) {
+          // Check for blockReason first (before getCandidate) since blocked responses have no candidates
+          if (datum.promptFeedback?.blockReason) {
+            // Handle Model Armor blocks with detailed guardrails information
+            const isModelArmor = datum.promptFeedback.blockReason === 'MODEL_ARMOR';
+            const blockReasonMessage =
+              datum.promptFeedback.blockReasonMessage ||
+              `Content was blocked due to ${isModelArmor ? 'Model Armor' : 'safety settings'}: ${datum.promptFeedback.blockReason}`;
+
+            const tokenUsage = {
+              total: datum.usageMetadata?.totalTokenCount || 0,
+              prompt: datum.usageMetadata?.promptTokenCount || 0,
+              completion: datum.usageMetadata?.candidatesTokenCount || 0,
+            };
+
+            // Build guardrails response with Model Armor details
+            const guardrails: GuardrailResponse = {
+              flagged: true,
+              flaggedInput: true,
+              flaggedOutput: false,
+              reason: blockReasonMessage,
+            };
+
+            if (cliState.config?.redteam) {
+              // Refusals are not errors during redteams, they're actually successes.
+              return {
+                output: blockReasonMessage,
+                tokenUsage,
+                guardrails,
+                metadata: {
+                  modelArmor: isModelArmor
+                    ? {
+                        blockReason: datum.promptFeedback.blockReason,
+                        ...(datum.promptFeedback.blockReasonMessage && {
+                          blockReasonMessage: datum.promptFeedback.blockReasonMessage,
+                        }),
+                      }
+                    : undefined,
+                },
+              };
+            }
+            return {
+              error: blockReasonMessage,
+              guardrails,
+              metadata: {
+                modelArmor: isModelArmor
+                  ? {
+                      blockReason: datum.promptFeedback.blockReason,
+                      ...(datum.promptFeedback.blockReasonMessage && {
+                        blockReasonMessage: datum.promptFeedback.blockReasonMessage,
+                      }),
+                    }
+                  : undefined,
+              },
+            };
+          }
+
           const candidate = getCandidate(datum);
           if (candidate.finishReason && candidate.finishReason === 'SAFETY') {
             const finishReason = 'Content was blocked due to safety settings.';
+            const tokenUsage = {
+              total: datum.usageMetadata?.totalTokenCount || 0,
+              prompt: datum.usageMetadata?.promptTokenCount || 0,
+              completion: datum.usageMetadata?.candidatesTokenCount || 0,
+            };
+            // Build guardrails response for safety blocks
+            const guardrails: GuardrailResponse = {
+              flagged: true,
+              flaggedInput: false,
+              flaggedOutput: true,
+              reason: finishReason,
+            };
             if (cliState.config?.redteam) {
               // Refusals are not errors during redteams, they're actually successes.
-              // Calculate token usage even for safety-blocked responses
-              const tokenUsage = {
-                total: datum.usageMetadata?.totalTokenCount || 0,
-                prompt: datum.usageMetadata?.promptTokenCount || 0,
-                completion: datum.usageMetadata?.candidatesTokenCount || 0,
-              };
-              return { output: finishReason, tokenUsage };
+              return { output: finishReason, tokenUsage, guardrails };
             }
-            return { error: finishReason };
+            return { error: finishReason, guardrails };
           } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
             // e.g. MALFORMED_FUNCTION_CALL
             return {
               error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
             };
-          } else if (datum.promptFeedback?.blockReason) {
-            const blockReason = `Content was blocked due to safety settings: ${datum.promptFeedback.blockReason}`;
-            if (cliState.config?.redteam) {
-              // Refusals are not errors during redteams, they're actually successes.
-              // Calculate token usage even for safety-blocked responses
-              const tokenUsage = {
-                total: datum.usageMetadata?.totalTokenCount || 0,
-                prompt: datum.usageMetadata?.promptTokenCount || 0,
-                completion: datum.usageMetadata?.candidatesTokenCount || 0,
-              };
-              return { output: blockReason, tokenUsage };
-            }
-            return { error: blockReason };
           } else if (candidate.content?.parts) {
             output = mergeParts(output, formatCandidateContents(candidate));
           } else {

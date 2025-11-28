@@ -26,6 +26,8 @@ tags: [security-vulnerability, ai-security, agents]
 
 _A Promptfoo engineer uses Claude Code to run agent-based attacks against a CTF—a system made deliberately vulnerable for security training._
 
+<!-- truncate -->
+
 ## The first big attack
 
 Yesterday, Anthropic [published a report](https://www.anthropic.com/news/disrupting-AI-espionage) on the first documented state-level cyberattack carried out largely autonomously by AI agents.

@@ -23,6 +23,7 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
@@ -72,10 +73,10 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
-import { handleRuby } from './ruby';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
+import { handleRuby } from './ruby';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
@@ -259,12 +260,14 @@ export async function runAssertion({
   // Add trace data if traceId is available
   if (traceId) {
     try {
-      const { getTraceStore } = await import('../tracing/store');
       const traceStore = getTraceStore();
       const traceData = await traceStore.getTrace(traceId);
       if (traceData) {
         context.trace = {
           traceId: traceData.traceId,
+          evaluationId: traceData.evaluationId,
+          testCaseId: traceData.testCaseId,
+          metadata: traceData.metadata,
           spans: traceData.spans || [],
         };
       }

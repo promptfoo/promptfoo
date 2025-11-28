@@ -23,6 +23,10 @@ This file provides guidance for writing and maintaining documentation in the sit
 - **Individual plugin pages**: Focused content with specific examples
 - **Configuration**: Quick start first, then advanced options
 
+## Technical Writing Tips
+
+- Use `jailbreak:meta` (single-turn), `jailbreak:hydra` (multi-turn), and `jailbreak:composite` as the default strategies, unless you have a specific need for other strategies
+
 ## SEO Best Practices
 
 ### Technical Depth with Keywords

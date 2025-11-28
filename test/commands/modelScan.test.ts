@@ -3,16 +3,24 @@ import { type ChildProcess, spawn } from 'child_process';
 import { Command } from 'commander';
 import { checkModelAuditInstalled, modelScanCommand } from '../../src/commands/modelScan';
 import logger from '../../src/logger';
+
 jest.mock('child_process');
 jest.mock('../../src/logger');
 jest.mock('../../src/models/modelAudit', () => ({
   __esModule: true,
   default: {
     create: jest.fn().mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' }),
+    findByRevision: jest.fn().mockResolvedValue(null),
   },
 }));
 jest.mock('../../src/updates', () => ({
   checkModelAuditUpdates: jest.fn().mockResolvedValue(undefined),
+  getModelAuditCurrentVersion: jest.fn().mockResolvedValue('0.2.16'),
+}));
+jest.mock('../../src/util/huggingfaceMetadata', () => ({
+  isHuggingFaceModel: jest.fn().mockReturnValue(false),
+  getHuggingFaceMetadata: jest.fn().mockResolvedValue(null),
+  parseHuggingFaceModel: jest.fn().mockReturnValue(null),
 }));
 
 describe('modelScanCommand', () => {
@@ -33,32 +41,18 @@ describe('modelScanCommand', () => {
     // Mock logger.error to capture the output
     const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
-    // Mock for checkModelAuditInstalled (modelaudit --version)
-    const versionCheckProcess = {
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'close') {
-          callback(0); // Simulate successful version check
-        }
-        return versionCheckProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    // Mock for any potential scan process (shouldn't be reached but needed for safety)
-    const mockScanProcess = {
-      stdout: { on: jest.fn() },
-      stderr: { on: jest.fn() },
-      on: jest.fn(),
-    } as unknown as ChildProcess;
-
-    // Set up spawn mock: first for version check, then default for any other calls
-    (spawn as unknown as jest.Mock)
-      .mockReturnValueOnce(versionCheckProcess)
-      .mockReturnValue(mockScanProcess);
+    // getModelAuditCurrentVersion is already mocked to return '0.2.16' (installed)
+    // Still need spawn mock since Commander may try to execute the command action
 
     modelScanCommand(program);
 
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
-    await command?.parseAsync(['scan-model']);
+    // Parse without path argument - Commander requires paths but the action should handle this
+    try {
+      await command?.parseAsync(['scan-model']);
+    } catch {
+      // Commander may throw for missing required argument
+    }
 
     expect(loggerErrorSpy).toHaveBeenCalledWith(
       'No paths specified. Please provide at least one model file or directory to scan.',
@@ -72,8 +66,13 @@ describe('modelScanCommand', () => {
     // Mock logger.error to capture the output
     const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
-    // Mock for checkModelAuditInstalled (modelaudit --version) - simulate not installed
+    // Mock getModelAuditCurrentVersion to return null (not installed)
+    const { getModelAuditCurrentVersion } = require('../../src/updates');
+    (getModelAuditCurrentVersion as jest.Mock).mockResolvedValueOnce(null);
+
+    // Mock for fallback spawn check - simulate not installed
     const versionCheckProcess = {
+      stdout: { on: jest.fn() },
       on: jest.fn().mockImplementation((event: string, callback: any) => {
         if (event === 'error') {
           callback(new Error('command not found'));
@@ -82,17 +81,7 @@ describe('modelScanCommand', () => {
       }),
     } as unknown as ChildProcess;
 
-    // Mock for any potential scan process (shouldn't be reached but needed for safety)
-    const mockScanProcess = {
-      stdout: { on: jest.fn() },
-      stderr: { on: jest.fn() },
-      on: jest.fn(),
-    } as unknown as ChildProcess;
-
-    // Set up spawn mock: first for version check, then default for any other calls
-    (spawn as unknown as jest.Mock)
-      .mockReturnValueOnce(versionCheckProcess)
-      .mockReturnValue(mockScanProcess);
+    (spawn as unknown as jest.Mock).mockReturnValue(versionCheckProcess);
 
     modelScanCommand(program);
 
@@ -106,15 +95,7 @@ describe('modelScanCommand', () => {
   });
 
   it('should spawn modelaudit process with correct arguments', async () => {
-    // Mock for checkModelAuditInstalled (modelaudit --version)
-    const versionCheckProcess = {
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'close') {
-          callback(0);
-        }
-        return versionCheckProcess;
-      }),
-    } as unknown as ChildProcess;
+    // getModelAuditCurrentVersion is already mocked to return '0.2.16' (installed)
 
     const mockChildProcess = {
       stdout: {
@@ -131,10 +112,7 @@ describe('modelScanCommand', () => {
       }),
     } as unknown as ChildProcess;
 
-    // First call for version check, second for actual scan
-    (spawn as unknown as jest.Mock)
-      .mockReturnValueOnce(versionCheckProcess)
-      .mockReturnValueOnce(mockChildProcess);
+    (spawn as unknown as jest.Mock).mockReturnValue(mockChildProcess);
 
     modelScanCommand(program);
 
@@ -159,7 +137,6 @@ describe('modelScanCommand', () => {
       '--progress',
     ]);
 
-    expect(spawn).toHaveBeenCalledWith('modelaudit', ['--version']);
     expect(spawn).toHaveBeenCalledWith(
       'modelaudit',
       [
@@ -193,15 +170,7 @@ describe('modelScanCommand', () => {
     // Mock logger.error to capture the output
     const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
-    // Mock for checkModelAuditInstalled (modelaudit --version)
-    const versionCheckProcess = {
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'close') {
-          callback(0);
-        }
-        return versionCheckProcess;
-      }),
-    } as unknown as ChildProcess;
+    // getModelAuditCurrentVersion is already mocked to return '0.2.16' (installed)
 
     const mockChildProcess = {
       stdout: {
@@ -218,10 +187,7 @@ describe('modelScanCommand', () => {
       }),
     } as unknown as ChildProcess;
 
-    // First call for version check, second for actual scan
-    (spawn as unknown as jest.Mock)
-      .mockReturnValueOnce(versionCheckProcess)
-      .mockReturnValueOnce(mockChildProcess);
+    (spawn as unknown as jest.Mock).mockReturnValue(mockChildProcess);
 
     modelScanCommand(program);
 
@@ -235,15 +201,7 @@ describe('modelScanCommand', () => {
   });
 
   it('should handle exit code 1 (scan completed with issues)', async () => {
-    // Mock for checkModelAuditInstalled (modelaudit --version)
-    const versionCheckProcess = {
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'close') {
-          callback(0);
-        }
-        return versionCheckProcess;
-      }),
-    } as unknown as ChildProcess;
+    // getModelAuditCurrentVersion is already mocked to return '0.2.16' (installed)
 
     const mockOutput = JSON.stringify({
       total_checks: 10,
@@ -286,10 +244,7 @@ describe('modelScanCommand', () => {
       }),
     } as unknown as ChildProcess;
 
-    // First call for version check, second for actual scan
-    (spawn as unknown as jest.Mock)
-      .mockReturnValueOnce(versionCheckProcess)
-      .mockReturnValueOnce(mockChildProcess);
+    (spawn as unknown as jest.Mock).mockReturnValue(mockChildProcess);
 
     modelScanCommand(program);
 
@@ -305,15 +260,7 @@ describe('modelScanCommand', () => {
     // Mock logger.error to capture the output
     const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
-    // Mock for checkModelAuditInstalled (modelaudit --version)
-    const versionCheckProcess = {
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'close') {
-          callback(0);
-        }
-        return versionCheckProcess;
-      }),
-    } as unknown as ChildProcess;
+    // getModelAuditCurrentVersion is already mocked to return '0.2.16' (installed)
 
     const mockChildProcess = {
       stdout: {
@@ -334,10 +281,7 @@ describe('modelScanCommand', () => {
       }),
     } as unknown as ChildProcess;
 
-    // First call for version check, second for actual scan
-    (spawn as unknown as jest.Mock)
-      .mockReturnValueOnce(versionCheckProcess)
-      .mockReturnValueOnce(mockChildProcess);
+    (spawn as unknown as jest.Mock).mockReturnValue(mockChildProcess);
 
     modelScanCommand(program);
 
@@ -352,77 +296,238 @@ describe('modelScanCommand', () => {
   });
 });
 
+describe('Re-scan on version change behavior', () => {
+  let program: Command;
+  let mockExit: jest.SpyInstance;
+
+  beforeEach(() => {
+    program = new Command();
+    mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    mockExit.mockRestore();
+  });
+
+  it('should skip scan when model already scanned with same version', async () => {
+    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } =
+      require('../../src/util/huggingfaceMetadata');
+    const ModelAudit = require('../../src/models/modelAudit').default;
+    const { getModelAuditCurrentVersion } = require('../../src/updates');
+
+    // Mock HuggingFace model detection
+    (isHuggingFaceModel as jest.Mock).mockReturnValue(true);
+    (parseHuggingFaceModel as jest.Mock).mockReturnValue({
+      owner: 'test-owner',
+      repo: 'test-model',
+    });
+    (getHuggingFaceMetadata as jest.Mock).mockResolvedValue({
+      sha: 'abc123',
+      siblings: [],
+    });
+
+    // Mock existing scan with same version (0.2.16)
+    (ModelAudit.findByRevision as jest.Mock).mockResolvedValue({
+      id: 'existing-scan-id',
+      scannerVersion: '0.2.16',
+      createdAt: Date.now(),
+    });
+
+    // Mock getModelAuditCurrentVersion to return same version (0.2.16)
+    (getModelAuditCurrentVersion as jest.Mock).mockResolvedValue('0.2.16');
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
+    await command?.parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
+
+    // Should exit early without scanning (exit code 0)
+    expect(mockExit).not.toHaveBeenCalled();
+    // Should not call spawn for actual scan (version check uses getModelAuditCurrentVersion)
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('should re-scan when scanner version has changed', async () => {
+    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } =
+      require('../../src/util/huggingfaceMetadata');
+    const ModelAudit = require('../../src/models/modelAudit').default;
+    const { getModelAuditCurrentVersion } = require('../../src/updates');
+
+    // Mock HuggingFace model detection
+    (isHuggingFaceModel as jest.Mock).mockReturnValue(true);
+    (parseHuggingFaceModel as jest.Mock).mockReturnValue({
+      owner: 'test-owner',
+      repo: 'test-model',
+    });
+    (getHuggingFaceMetadata as jest.Mock).mockResolvedValue({
+      sha: 'abc123',
+      siblings: [],
+    });
+
+    // Mock existing scan with OLD version (0.2.10)
+    const existingAudit = {
+      id: 'existing-scan-id',
+      scannerVersion: '0.2.10',
+      createdAt: Date.now(),
+      results: {},
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    (ModelAudit.findByRevision as jest.Mock).mockResolvedValue(existingAudit);
+
+    // Mock getModelAuditCurrentVersion to return NEW version 0.2.16
+    (getModelAuditCurrentVersion as jest.Mock).mockResolvedValue('0.2.16');
+
+    // Mock scan process that returns valid JSON
+    const mockScanOutput = JSON.stringify({
+      total_checks: 10,
+      passed_checks: 10,
+      failed_checks: 0,
+      files_scanned: 5,
+      bytes_scanned: 1024,
+      duration: 1000,
+    });
+
+    const mockScanProcess = {
+      stdout: {
+        on: jest.fn().mockImplementation((event: string, callback: any) => {
+          if (event === 'data') {
+            callback(Buffer.from(mockScanOutput));
+          }
+        }),
+      },
+      stderr: { on: jest.fn() },
+      on: jest.fn().mockImplementation((event: string, callback: any) => {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockScanProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as jest.Mock).mockReturnValue(mockScanProcess);
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
+    await command?.parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
+
+    // Should have called spawn once for the actual scan
+    expect(spawn).toHaveBeenCalledTimes(1);
+    // Should have updated the existing audit's scanner version
+    expect(existingAudit.save).toHaveBeenCalled();
+    expect(existingAudit.scannerVersion).toBe('0.2.16');
+  });
+
+  it('should re-scan when previous scan has no version info', async () => {
+    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } =
+      require('../../src/util/huggingfaceMetadata');
+    const ModelAudit = require('../../src/models/modelAudit').default;
+    const { getModelAuditCurrentVersion } = require('../../src/updates');
+
+    // Mock HuggingFace model detection
+    (isHuggingFaceModel as jest.Mock).mockReturnValue(true);
+    (parseHuggingFaceModel as jest.Mock).mockReturnValue({
+      owner: 'test-owner',
+      repo: 'test-model',
+    });
+    (getHuggingFaceMetadata as jest.Mock).mockResolvedValue({
+      sha: 'abc123',
+      siblings: [],
+    });
+
+    // Mock existing scan with NO version (null)
+    const existingAudit = {
+      id: 'existing-scan-id',
+      scannerVersion: null,
+      createdAt: Date.now(),
+      results: {},
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    (ModelAudit.findByRevision as jest.Mock).mockResolvedValue(existingAudit);
+
+    // Mock getModelAuditCurrentVersion to return version 0.2.16
+    (getModelAuditCurrentVersion as jest.Mock).mockResolvedValue('0.2.16');
+
+    // Mock scan process
+    const mockScanOutput = JSON.stringify({
+      total_checks: 10,
+      passed_checks: 10,
+      failed_checks: 0,
+      files_scanned: 5,
+      bytes_scanned: 1024,
+      duration: 1000,
+    });
+
+    const mockScanProcess = {
+      stdout: {
+        on: jest.fn().mockImplementation((event: string, callback: any) => {
+          if (event === 'data') {
+            callback(Buffer.from(mockScanOutput));
+          }
+        }),
+      },
+      stderr: { on: jest.fn() },
+      on: jest.fn().mockImplementation((event: string, callback: any) => {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockScanProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as jest.Mock).mockReturnValue(mockScanProcess);
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
+    await command?.parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
+
+    // Should have called spawn once for the scan
+    expect(spawn).toHaveBeenCalledTimes(1);
+    // Should have updated the existing audit with new version
+    expect(existingAudit.save).toHaveBeenCalled();
+    expect(existingAudit.scannerVersion).toBe('0.2.16');
+  });
+});
+
 describe('checkModelAuditInstalled', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should return true if modelaudit is installed', async () => {
-    const mockChildProcess = {
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'close') {
-          callback(0);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as jest.Mock).mockReturnValue(mockChildProcess);
+  it('should return installed: true and version when getModelAuditCurrentVersion returns version', async () => {
+    const { getModelAuditCurrentVersion } = require('../../src/updates');
+    (getModelAuditCurrentVersion as jest.Mock).mockResolvedValue('0.2.16');
 
     const result = await checkModelAuditInstalled();
-    expect(result).toBe(true);
-    expect(spawn).toHaveBeenCalledWith('modelaudit', ['--version']);
+    expect(result).toEqual({ installed: true, version: '0.2.16' });
+    // Should not need to spawn since getModelAuditCurrentVersion returned a version
+    expect(spawn).not.toHaveBeenCalled();
   });
 
-  it('should return false if modelaudit is not installed', async () => {
-    const mockChildProcess = {
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'error') {
-          callback(new Error('command not found'));
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as jest.Mock).mockReturnValue(mockChildProcess);
+  it('should return installed: false when modelaudit is not installed', async () => {
+    const { getModelAuditCurrentVersion } = require('../../src/updates');
+    (getModelAuditCurrentVersion as jest.Mock).mockResolvedValue(null);
 
     const result = await checkModelAuditInstalled();
-    expect(result).toBe(false);
-    expect(spawn).toHaveBeenCalledWith('modelaudit', ['--version']);
+    expect(result).toEqual({ installed: false, version: null });
   });
 
-  it('should return true if modelaudit exits with code 1', async () => {
-    const mockChildProcess = {
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'close') {
-          callback(1);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as jest.Mock).mockReturnValue(mockChildProcess);
+  it('should handle different version formats from getModelAuditCurrentVersion', async () => {
+    const { getModelAuditCurrentVersion } = require('../../src/updates');
+    (getModelAuditCurrentVersion as jest.Mock).mockResolvedValue('1.0.0');
 
     const result = await checkModelAuditInstalled();
-    expect(result).toBe(true);
-    expect(spawn).toHaveBeenCalledWith('modelaudit', ['--version']);
+    expect(result).toEqual({ installed: true, version: '1.0.0' });
   });
 
-  it('should return false if modelaudit exits with non-0/1 code', async () => {
-    const mockChildProcess = {
-      on: jest.fn().mockImplementation((event: string, callback: any) => {
-        if (event === 'close') {
-          callback(2);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as jest.Mock).mockReturnValue(mockChildProcess);
+  it('should return installed: true with version even when fallback would return exit code 1', async () => {
+    const { getModelAuditCurrentVersion } = require('../../src/updates');
+    // getModelAuditCurrentVersion returns version successfully
+    (getModelAuditCurrentVersion as jest.Mock).mockResolvedValue('0.2.19');
 
     const result = await checkModelAuditInstalled();
-    expect(result).toBe(false);
-    expect(spawn).toHaveBeenCalledWith('modelaudit', ['--version']);
+    expect(result).toEqual({ installed: true, version: '0.2.19' });
+    // No fallback needed
+    expect(spawn).not.toHaveBeenCalled();
   });
 });
 
@@ -501,7 +606,15 @@ describe('Command Options Validation', () => {
   });
 
   it('should only pass valid arguments to modelaudit', async () => {
+    // Mock for checkModelAuditInstalled (returns { installed, version })
     const versionCheckProcess = {
+      stdout: {
+        on: jest.fn().mockImplementation((event: string, callback: any) => {
+          if (event === 'data') {
+            callback(Buffer.from('modelaudit, version 0.2.16\n'));
+          }
+        }),
+      },
       on: jest.fn().mockImplementation((event: string, callback: any) => {
         if (event === 'close') {
           callback(0);
@@ -565,7 +678,15 @@ describe('Command Options Validation', () => {
   });
 
   it('should handle multiple blacklist patterns correctly', async () => {
+    // Mock for checkModelAuditInstalled (returns { installed, version })
     const versionCheckProcess = {
+      stdout: {
+        on: jest.fn().mockImplementation((event: string, callback: any) => {
+          if (event === 'data') {
+            callback(Buffer.from('modelaudit, version 0.2.16\n'));
+          }
+        }),
+      },
       on: jest.fn().mockImplementation((event: string, callback: any) => {
         if (event === 'close') {
           callback(0);
