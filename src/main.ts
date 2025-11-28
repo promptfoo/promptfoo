@@ -31,6 +31,7 @@ import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/di
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
+import { reconCommand as redteamReconCommand } from './redteam/commands/recon';
 import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
@@ -136,6 +137,7 @@ async function main() {
   );
   redteamDiscoverCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
+  redteamReconCommand(redteamBaseCommand);
   redteamRunCommand(redteamBaseCommand);
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);
