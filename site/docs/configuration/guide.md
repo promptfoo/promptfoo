@@ -367,7 +367,7 @@ assertionTemplates:
 ```
 
 :::info
-`tools` and `functions` values in providers config are _not_ dereferenced. This is because they are standalone JSON schemas that may contain their own internal references.
+`tools`, `functions` and `json_schema` values in providers config are _not_ dereferenced. This is because they are standalone JSON schemas that may contain their own internal references.
 :::
 
 ## Multiple variables in a single test case
