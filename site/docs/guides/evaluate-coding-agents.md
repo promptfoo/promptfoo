@@ -333,6 +333,7 @@ prompts:
   - |
     Refactor user_service.py to use bcrypt instead of MD5 for password hashing.
     After making changes, run the test suite and ensure all tests pass.
+    Report your results including: what you changed, test output, and final status.
 
 providers:
   - id: anthropic:claude-agent-sdk
@@ -346,21 +347,27 @@ providers:
 tests:
   - description: 'Successful refactor with passing tests'
     assert:
+      # Claude Agent SDK returns text describing what it did
+      # Check the response mentions key indicators of success
       - type: javascript
         value: |
-          // Check that bcrypt is imported
-          const code = output.files?.['user_service.py'] || '';
-          const hasBcrypt = code.includes('import bcrypt');
-          const noMD5 = !code.includes('hashlib.md5');
+          const text = String(output).toLowerCase();
 
-          // Check that tests were run and passed
-          const testsRan = output.bash_output?.includes('pytest');
-          const testsPassed = output.bash_output?.includes('passed');
+          // Check agent mentioned making bcrypt changes
+          const mentionsBcrypt = text.includes('bcrypt');
+          const mentionsRemovingMD5 = text.includes('md5') && (text.includes('removed') || text.includes('replaced'));
+
+          // Check tests were run and passed
+          const ranTests = text.includes('pytest') || text.includes('test');
+          const testsPassed = text.includes('passed') || text.includes('success');
+
+          const score = [mentionsBcrypt, mentionsRemovingMD5, ranTests, testsPassed]
+            .filter(Boolean).length / 4;
 
           return {
-            pass: hasBcrypt && noMD5 && testsRan && testsPassed,
-            score: [hasBcrypt, noMD5, testsRan, testsPassed].filter(Boolean).length / 4,
-            reason: `Bcrypt: ${hasBcrypt}, No MD5: ${noMD5}, Tests ran: ${testsRan}, Tests passed: ${testsPassed}`
+            pass: score >= 0.75,
+            score,
+            reason: `Bcrypt: ${mentionsBcrypt}, MD5 removed: ${mentionsRemovingMD5}, Tests: ${ranTests && testsPassed}`
           };
         metric: 'Refactor Quality'
 
@@ -369,11 +376,17 @@ tests:
         metric: 'Cost per refactor'
 ```
 
+:::note
+
+Claude Agent SDK returns the final text response (or structured output if `output_format` is configured). The agent doesn't expose intermediate file contents or bash output in the response—you evaluate based on what the agent reports doing. For verification, you can check files on disk after the eval or use structured output.
+
+:::
+
 **Key assertions:**
 
-1. Code changes implemented correctly (bcrypt imported, MD5 removed)
-2. Tests executed via bash tool
-3. Tests pass after refactoring
+1. Agent reports making bcrypt changes
+2. Agent mentions running tests
+3. Agent indicates tests passed
 4. Cost stays under threshold
 
 ## Scenario 3: Cross-file feature implementation
@@ -395,6 +408,8 @@ prompts:
     3. Add rate limit tests to test_api.py
     4. Update requirements.txt with redis dependency
 
+    Summarize all changes you made.
+
 providers:
   - id: anthropic:claude-agent-sdk
     config:
@@ -407,28 +422,43 @@ tests:
     assert:
       - type: javascript
         value: |
-          const files = output.files || {};
+          const text = String(output).toLowerCase();
 
-          // Check all required files were created/modified
-          const hasRateLimiter = 'rate_limiter.py' in files;
-          const apiUpdated = files['api.py']?.includes('@rate_limit');
-          const testsAdded = files['test_api.py']?.includes('test_rate_limit');
-          const depsUpdated = files['requirements.txt']?.includes('redis');
+          // Check agent mentions creating/modifying each component
+          const hasRateLimiter = text.includes('rate_limiter') || text.includes('rate limiter');
+          const apiUpdated = text.includes('api.py') && text.includes('decorator');
+          const testsAdded = text.includes('test') && text.includes('rate');
+          const depsUpdated = text.includes('redis') && text.includes('requirements');
+
+          const score = [hasRateLimiter, apiUpdated, testsAdded, depsUpdated]
+            .filter(Boolean).length / 4;
 
           return {
-            pass: hasRateLimiter && apiUpdated && testsAdded && depsUpdated,
-            score: [hasRateLimiter, apiUpdated, testsAdded, depsUpdated].filter(Boolean).length / 4,
-            reason: `Files: ${Object.keys(files).length}, Rate limiter: ${hasRateLimiter}, API updated: ${apiUpdated}, Tests: ${testsAdded}, Deps: ${depsUpdated}`
+            pass: score >= 0.75,
+            score,
+            reason: `Rate limiter: ${hasRateLimiter}, API: ${apiUpdated}, Tests: ${testsAdded}, Deps: ${depsUpdated}`
           };
         metric: 'Cross-file completeness'
+
+      # Use llm-rubric for semantic verification
+      - type: llm-rubric
+        value: |
+          Did the agent complete all four tasks?
+          1. Created a rate limiter module
+          2. Added decorator to API routes
+          3. Added tests for rate limiting
+          4. Updated dependencies
+
+          Score 1.0 if all four, 0.5 if 2-3, 0.0 if fewer.
+        threshold: 0.75
 ```
 
 **Key assertions:**
 
-1. All required files created/modified
-2. Files reference each other correctly (imports, decorators)
-3. Tests cover new functionality
-4. Dependencies updated
+1. Agent mentions creating rate limiter
+2. Agent reports updating API with decorator
+3. Agent mentions adding tests
+4. Agent reports updating dependencies
 
 ## Feature deep dives
 
@@ -667,78 +697,86 @@ Even if you track SWE-bench scores, bespoke evals on your own codebase catch dom
 Final outputs don't capture everything. For agents, stepwise behavior matters:
 
 - Did it run tests before claiming success?
-- Did it retry failed commands unnecessarily?
-- Did it attempt dangerous operations?
+- Did it make unnecessary API calls?
+- How long did each step take?
 
-Use `context.vars._conversation` to access the full agent trace:
+When [tracing is enabled](/docs/tracing/), use `context.trace` to access OpenTelemetry spans:
 
 ```yaml title="promptfooconfig.yaml"
 tests:
   - assert:
       - type: javascript
         value: |
-          // Access conversation trace for stepwise analysis
-          const trace = context.vars._conversation || [];
+          // Check if trace data is available
+          if (!context.trace) {
+            // Tracing not enabled - skip trace-based checks
+            return { pass: true, reason: 'Tracing not enabled' };
+          }
 
-          // Count bash commands
-          const bashCalls = trace.filter(t =>
-            t.role === 'assistant' && t.content?.includes('bash')
+          const { spans } = context.trace;
+
+          // Count tool calls by looking at span names
+          const toolCalls = spans.filter(s =>
+            s.name.toLowerCase().includes('tool') ||
+            s.name.toLowerCase().includes('bash')
           ).length;
 
-          // Check for test execution
-          const ranTests = trace.some(t =>
-            t.content?.includes('pytest') || t.content?.includes('npm test')
-          );
+          // Check for errors in any span
+          const errorSpans = spans.filter(s => s.statusCode >= 400);
 
-          // Check for dangerous commands
-          const dangerous = trace.some(t =>
-            t.content?.includes('rm -rf') ||
-            t.content?.includes('curl') && t.content?.includes('|')
-          );
+          // Calculate total duration
+          const duration = spans.length > 0
+            ? Math.max(...spans.map(s => s.endTime || 0)) -
+              Math.min(...spans.map(s => s.startTime))
+            : 0;
 
           return {
-            pass: ranTests && !dangerous,
-            score: ranTests ? 1.0 : 0.0,
-            reason: `Bash calls: ${bashCalls}, Tests run: ${ranTests}, Dangerous: ${dangerous}`
+            pass: errorSpans.length === 0 && duration < 30000,
+            score: errorSpans.length === 0 ? 1.0 : 0.0,
+            reason: `Tool calls: ${toolCalls}, Errors: ${errorSpans.length}, Duration: ${duration}ms`
           };
         metric: 'Agent behavior'
 ```
 
-This enables "Agent-as-a-Judge" style evaluation—judging traces, not just outcomes.
+For conversation-level analysis, include instructions in your prompt asking the agent to summarize its steps, then evaluate that summary.
+
+See the [tracing documentation](/docs/tracing/) for setup instructions.
 
 ### Handling flakiness
 
 Agent runs are noisy. The same prompt can succeed or fail depending on model sampling.
 
-**Strategy 1: Multiple runs**
+**Strategy 1: Multiple runs via CLI**
 
-```yaml title="promptfooconfig.yaml"
-# Run each test case 3 times
-defaultTest:
-  options:
-    repeat: 3
-
-tests:
-  - vars:
-      task: 'Find security vulnerabilities'
-    assert:
-      - type: javascript
-        value: |
-          // Track pass rate across runs
-          const passRate = context.test?.metrics?.passRate || 0;
-          return {
-            pass: passRate >= 0.66, // 2/3 must pass
-            reason: `Pass rate: ${(passRate * 100).toFixed(0)}%`
-          };
+```bash
+# Run the eval 3 times
+npx promptfoo eval -c config.yaml --repeat 3
 ```
 
-**Strategy 2: Variance detection**
+Each run produces separate results. Compare pass rates across runs in the web UI or via `promptfoo view`.
 
-High variance on a specific prompt is a red flag—it often indicates an ambiguous task or unstable model behavior. Track which prompts have high variance and investigate them.
+**Strategy 2: Model selection**
 
-**Strategy 3: Temperature control**
+Some models are more deterministic than others. Mini models (gpt-5.1-codex-mini) tend to be faster but may have higher variance. Larger models often produce more consistent results.
 
-For reproducibility, set `temperature: 0` in provider config. For coverage testing, use higher temperatures across runs.
+For plain LLM providers that support it, set `temperature: 0` for reproducibility.
+
+**Strategy 3: Robust assertions**
+
+Design assertions that tolerate minor variations:
+
+```yaml
+- type: javascript
+  value: |
+    const text = String(output).toLowerCase();
+    // Accept multiple valid phrasings
+    const foundVuln = text.includes('vulnerability') ||
+                      text.includes('security issue') ||
+                      text.includes('risk');
+    return { pass: foundVuln, reason: foundVuln ? 'Found issue' : 'No issues reported' };
+```
+
+**Variance as signal**: High variance on a specific prompt often indicates an ambiguous task. If the same prompt fails 50% of the time, clarify the instructions rather than running more retries.
 
 ### Safety and sandboxing
 
