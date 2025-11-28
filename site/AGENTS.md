@@ -1,2 +1,1 @@
-- Don't start your own dev server for the site.
-- Don't edit CHANGELOG.md - it's automatically generated.
+@AGENTS.md
