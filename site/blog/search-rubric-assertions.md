@@ -293,7 +293,7 @@ You have two knobs:
 
 ```yaml
 grading:
-  provider: openai:responses:o4-mini
+  provider: openai:responses:gpt-5.1
   providerOptions:
     config:
       tools:
@@ -334,7 +334,7 @@ Typical impact in a CI environment:
 
 - **Latency**: grading plus search tends to add 2-5 seconds per assertion in our experience, depending on provider and network.
 - **Cost**:
-  - Judge model tokens, often on a cheaper model like o4-mini or Claude Sonnet.
+  - Judge model tokens, often on a capable model like GPT-5.1 or Claude 4.5 Opus.
   - Web search tool calls at roughly $5-35 per 1,000 uses depending on provider and configuration.
 
 That sounds expensive, but you rarely need search for all tests. For example, a 100-test suite where 20 tests use `search-rubric` is usually a few dollars per run, even on top tier models.
@@ -394,14 +394,16 @@ prompts:
   - 'The CEO of Microsoft is {{name}}'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-5.1
 
 grading:
-  provider: openai:responses:o4-mini
+  provider: anthropic:messages:claude-opus-4-5-20251101
   providerOptions:
     config:
       tools:
-        - type: web_search_preview
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 5
 
 tests:
   - vars:
