@@ -222,51 +222,43 @@ tests:
       context: file://path/to/dynamicVarGenerator.js
 ```
 
-`dynamicVarGenerator.js` receives `varName`, `prompt`, `otherVars`, and `provider` as arguments, which you can use to query a database or generate content based on test context:
+The function receives `varName`, `prompt`, `otherVars`, and `provider` as arguments:
 
 ```js
 module.exports = async function (varName, prompt, otherVars, provider) {
-  // Use otherVars to access other variables from the test case
-  const question = otherVars.question;
+  // Access other variables from the test case
+  const role = otherVars.role;
 
-  // Generate dynamic content based on the question
-  const context = await fetchRelevantDocuments(question);
+  // Return the dynamic value
+  return { output: PROMPTS[role] };
 
-  return { output: context };
-
-  // Handle potential errors
-  // return { error: 'Error message' }
+  // Or return an error
+  // return { error: 'Something went wrong' };
 };
 ```
 
 See the [dynamic-var example](https://github.com/promptfoo/promptfoo/tree/main/examples/dynamic-var) for a complete working example.
 
-This JavaScript file processes input variables and returns a dynamic value based on the provided context.
-
 ### Python variables
 
-For Python, the approach is similar. Define a Python script that includes a `get_var` function to generate your variable's value. The function should accept `var_name`, `prompt`, and `other_vars`.
+Define a `get_var` function that accepts `var_name`, `prompt`, and `other_vars`:
 
 ```yaml
 tests:
   - vars:
-      context: file://fetch_dynamic_context.py
+      context: file://load_context.py
 ```
 
-fetch_dynamic_context.py:
-
 ```python
-def get_var(var_name: str, prompt: str, other_vars: Dict[str, str]) -> Dict[str, str]:
-    # NOTE: Must return a dictionary with an 'output' key or an 'error' key.
-    # Example logic to dynamically generate variable content
-    if var_name == 'context':
-        return {
-            'output': f"Context for {other_vars['input']} in prompt: {prompt}"
-        }
-    return {'output': 'default context'}
+def get_var(var_name, prompt, other_vars):
+    # Access other variables from the test case
+    role = other_vars.get("role")
 
-    # Handle potential errors
-    # return { 'error': 'Error message' }
+    # Return the dynamic value
+    return {"output": PROMPTS[role]}
+
+    # Or return an error
+    # return {"error": "Something went wrong"}
 ```
 
 ## Avoiding repetition
