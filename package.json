@@ -60,8 +60,6 @@
     "lint:site": "npx @biomejs/biome lint site",
     "lint:src": "npx @biomejs/biome lint src",
     "lint:tests": "npx @biomejs/biome lint test",
-    "lint:index": "node scripts/check-index-imports.cjs",
-    "lint:index:fix": "node scripts/fix-index-imports.cjs",
     "lint": "npm run lint:src",
     "local:web": "npm run dev --prefix src/app",
     "local": "tsx src/main.ts",
