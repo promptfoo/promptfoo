@@ -224,7 +224,7 @@ tests:
 
 The function receives `varName`, `prompt`, `otherVars`, and `provider` as arguments:
 
-```js
+```js title="dynamicVarGenerator.js"
 module.exports = async function (varName, prompt, otherVars, provider) {
   // Access other variables from the test case
   const role = otherVars.role;
@@ -249,7 +249,7 @@ tests:
       context: file://load_context.py
 ```
 
-```python
+```python title="load_context.py"
 def get_var(var_name, prompt, other_vars):
     # Access other variables from the test case
     role = other_vars.get("role")
@@ -682,7 +682,7 @@ defaultTest:
     transform: file://transform.js:customTransform
 ```
 
-```js
+```js title="transform.js"
 module.exports = {
   customTransform: (output, context) => {
     // context.vars, context.prompt
@@ -699,7 +699,7 @@ defaultTest:
     transform: file://transform.py
 ```
 
-```python
+```python title="transform.py"
 def get_transform(output, context):
     # context['vars'], context['prompt']
     return output.upper()
@@ -760,7 +760,7 @@ defaultTest:
     transformVars: file://transformVars.js:customTransformVars
 ```
 
-```js
+```js title="transformVars.js"
 const fs = require('fs');
 
 module.exports = {
@@ -789,7 +789,7 @@ defaultTest:
     transformVars: file://transform_vars.py
 ```
 
-```python
+```python title="transform_vars.py"
 import os
 
 def get_transform(vars, context):
