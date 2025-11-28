@@ -61,6 +61,13 @@ vi.mock('./FilterModeSelector', () => ({
   ),
 }));
 
+const mockUseFilterMode = vi.fn();
+vi.mock('./FilterModeProvider', () => ({
+  useFilterMode: () => mockUseFilterMode(),
+  DEFAULT_FILTER_MODE: 'all',
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 vi.mock('./ResultsFilters/FiltersButton', () => ({
   default: () => <div>Filters Button</div>,
 }));
@@ -154,6 +161,11 @@ describe('ResultsView Share Button', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
@@ -1624,6 +1636,11 @@ describe('ResultsView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
       columnStates: {},
@@ -1637,6 +1654,11 @@ describe('ResultsView', () => {
   });
 
   it('FilterModeSelector receives and displays the correct mode', async () => {
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'user-rated',
+      setFilterMode: vi.fn(),
+    });
+
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {

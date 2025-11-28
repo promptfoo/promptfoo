@@ -321,18 +321,6 @@ function ResultsTable({
           (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
         );
 
-<<<<<<< HEAD
-        const newResult = {
-          pass: finalPass,
-          score: finalScore,
-          reason: 'Manual result (overrides all other grading results)',
-          comment,
-          assertion: { type: HUMAN_ASSERTION_TYPE },
-        };
-
-        if (humanResultIndex === -1) {
-          componentResults.push(newResult);
-=======
         // If isPass is null, remove the human assertion (unset manual grading)
         if (isPass === null) {
           if (humanResultIndex !== -1) {
@@ -350,7 +338,6 @@ function ResultsTable({
               finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
             }
           }
->>>>>>> origin/main
         } else {
           // Add or update the human assertion
           finalPass = isPass;
@@ -360,7 +347,7 @@ function ResultsTable({
             score: finalScore,
             reason: 'Manual result (overrides all other grading results)',
             comment,
-            assertion: { type: 'human' as const },
+            assertion: { type: HUMAN_ASSERTION_TYPE },
           };
 
           if (humanResultIndex === -1) {

@@ -584,7 +584,7 @@ describe('EvalOutputCell', () => {
       <EvalOutputCell {...defaultProps} output={initialOutput} />,
     );
 
-    const thumbsUpButton = screen.getByRole('button', { name: 'Mark test passed (score 1.0)' });
+    const thumbsUpButton = screen.getByRole('button', { name: 'Mark test passed' });
     expect(thumbsUpButton).toHaveClass('active');
 
     const updatedOutput = {
@@ -608,7 +608,7 @@ describe('EvalOutputCell', () => {
 
     rerender(<EvalOutputCell {...defaultProps} output={updatedOutput} />);
 
-    const thumbsDownButton = screen.getByRole('button', { name: 'Mark test failed (score 0.0)' });
+    const thumbsDownButton = screen.getByRole('button', { name: 'Mark test failed' });
     expect(thumbsDownButton).toHaveClass('active');
   });
 });
