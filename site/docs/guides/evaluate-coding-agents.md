@@ -22,12 +22,12 @@ Standard LLM evals test a function: given input X, does output Y meet criteria Z
 
 ## Capability tiers
 
-| Tier           | Example                                          | Can Do                                       | Cannot Do                |
-| -------------- | ------------------------------------------------ | -------------------------------------------- | ------------------------ |
-| **0: Text**    | `openai:gpt-5.1`, `anthropic:claude-sonnet-4`    | Generate code, discuss patterns, return JSON | Read files, execute code |
-| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk` | Read/write files, run commands, iterate      | (Full capabilities)      |
+| Tier           | Example                                                  | Can Do                                       | Cannot Do                |
+| -------------- | -------------------------------------------------------- | -------------------------------------------- | ------------------------ |
+| **0: Text**    | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-5-20250929` | Generate code, discuss patterns, return JSON | Read files, execute code |
+| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk`         | Read/write files, run commands, iterate      | (Full capabilities)      |
 
-The same underlying model behaves differently at each tier. A plain `claude-sonnet-4` call can't read your files; wrap it in Claude Agent SDK and it can.
+The same underlying model behaves differently at each tier. A plain `claude-sonnet-4-5-20250929` call can't read your files; wrap it in Claude Agent SDK and it can.
 
 Both agentic providers have similar capabilities. The differences are in defaults and ecosystem:
 
@@ -39,44 +39,17 @@ Both agentic providers have similar capabilities. The differences are in default
 | **Safety**              | Git repo check                   | Tool allowlists                  |
 | **Ecosystem**           | OpenAI Responses API             | MCP servers, CLAUDE.md           |
 
-## Basic structure
-
-An agent eval looks like any other promptfoo config, but the provider does the heavy lifting:
-
-```yaml
-providers:
-  - id: openai:codex-sdk
-    config:
-      working_dir: ./src # Agent operates here
-      model: gpt-5.1-codex
-
-prompts:
-  - Find all security vulnerabilities in this codebase.
-
-tests:
-  - assert:
-      - type: icontains
-        value: vulnerability
-```
-
-The agent reads files, reasons, and returns output. Your assertions check whether it did the job. Run with `npx promptfoo eval`.
-
-The scenarios below show common patterns: structured output, refactoring with tests, and multi-file changes.
-
-## Scenarios
+## Examples
 
 ### Security audit with structured output
 
-This scenario uses Codex SDK to scan code for vulnerabilities and return findings as validated JSON.
-
-The key insight: `output_schema` guarantees the response structure, making downstream automation reliable.
+Codex SDK's `output_schema` guarantees valid JSON, making the response structure predictable for downstream automation.
 
 <details>
-<summary>Full configuration</summary>
+<summary>Configuration</summary>
 
 ```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Security audit with structured output
+description: Security audit
 
 prompts:
   - Analyze all Python files for security vulnerabilities.
@@ -106,7 +79,7 @@ providers:
 
 tests:
   - assert:
-      - type: is-json
+      - type: contains-json
       - type: javascript
         value: |
           const result = typeof output === 'string' ? JSON.parse(output) : output;
@@ -144,20 +117,14 @@ class PaymentProcessor:
 
 </details>
 
-**What to observe:**
-
-- Codex reads files, reasons about vulnerabilities, returns structured JSON
-- A plain LLM given the same prompt explains _how_ to do a security audit instead of _doing_ one
-- Token usage is high (~1M) because Codex loads system context; this is expected
+A plain LLM given the same prompt will explain how to do a security audit rather than actually doing one—it can't read the files. Expect high token usage (~1M) because Codex loads its system context regardless of codebase size.
 
 ### Refactoring with test verification
 
-This scenario uses Claude Agent SDK to modify code and verify tests pass.
-
-The key insight: Claude Agent SDK defaults to read-only tools. You must explicitly enable writes via `append_allowed_tools` and `permission_mode`.
+Claude Agent SDK defaults to read-only tools when `working_dir` is set. To modify files or run commands, you must explicitly enable them with `append_allowed_tools` and `permission_mode`.
 
 <details>
-<summary>Full configuration</summary>
+<summary>Configuration</summary>
 
 ```yaml title="promptfooconfig.yaml"
 description: Refactor with test verification
@@ -193,18 +160,14 @@ tests:
 
 </details>
 
-**What to observe:**
-
-- The agent modifies files, runs tests, reports results
-- Output is the agent's final text response, not file contents
-- For file-level verification, read the files after the eval or enable [tracing](/docs/tracing/)
+The agent's output is its final text response describing what it did, not the file contents. For file-level verification, read the files after the eval or enable [tracing](/docs/tracing/).
 
 ### Multi-file feature implementation
 
-This scenario tests an agent's ability to coordinate changes across multiple files.
+When tasks span multiple files, use `llm-rubric` to evaluate semantic completion rather than checking for specific strings.
 
 <details>
-<summary>Full configuration</summary>
+<summary>Configuration</summary>
 
 ```yaml title="promptfooconfig.yaml"
 description: Add rate limiting to Flask API
@@ -240,101 +203,53 @@ tests:
 
 </details>
 
-**What to observe:**
-
-- `llm-rubric` evaluates semantic completion, not just string matching
-- The agent coordinates multiple file operations
-- This is where agents diverge most from plain LLMs
-
 ## Evaluation techniques
 
-### Structured output validation
+### Structured output
 
-Two approaches exist, with different tradeoffs:
-
-**Provider-enforced** (Codex `output_schema`, Claude `output_format.json_schema`): The provider guarantees valid JSON. Use `is-json` assertion.
+Provider-enforced schemas (Codex `output_schema`, Claude `output_format.json_schema`) guarantee valid JSON. Use `contains-json` to validate—it extracts JSON from markdown code blocks and surrounding text, which agents often produce:
 
 ```yaml
-providers:
-  - id: openai:codex-sdk
-    config:
-      output_schema:
-        type: object
-        required: [result]
-        properties:
-          result: { type: string }
-
-tests:
-  - assert:
-      - type: is-json
+- type: contains-json
+  value:
+    type: object
+    required: [vulnerabilities]
 ```
 
-**Prompt-based**: Ask for JSON in your prompt. Output may be wrapped in markdown code blocks.
+The `value` is optional. Without it, the assertion just checks that valid JSON exists. With a schema, it validates structure.
 
-````yaml
-tests:
-  - assert:
-      - type: javascript
-        value: |
-          const text = String(output);
-          const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-          const json = match ? match[1].trim() : text;
-          try {
-            JSON.parse(json);
-            return { pass: true };
-          } catch (e) {
-            return { pass: false, reason: e.message };
-          }
-````
+### Cost and latency
 
-### Cost and latency assertions
-
-Agent tasks are expensive. Set thresholds:
+Agent tasks are expensive. A security audit might cost $0.10–0.30 and take 30–120 seconds. Set thresholds to catch regressions:
 
 ```yaml
-tests:
-  - assert:
-      - type: cost
-        threshold: 0.25
-      - type: latency
-        threshold: 30000
+- type: cost
+  threshold: 0.25
+- type: latency
+  threshold: 30000
 ```
 
-Token distribution tells you what's happening:
+Token distribution reveals what the agent is doing. High prompt tokens with low completion tokens means the agent is reading files. The inverse means you're testing the model's generation, not the agent's capabilities.
 
-| Pattern                     | Meaning                                      |
-| --------------------------- | -------------------------------------------- |
-| High prompt, low completion | Agent reading files (expected)               |
-| Low prompt, high completion | Model generating text (not exercising agent) |
+### Non-determinism
 
-### Handling non-determinism
-
-Agent runs vary. Strategies:
-
-**Run multiple times:**
-
-```bash
-npx promptfoo eval -c config.yaml --repeat 3
-```
-
-**Flexible assertions:**
+The same prompt can produce different results across runs. Run evals multiple times with `--repeat 3` to measure variance. Write flexible assertions that accept equivalent phrasings:
 
 ```yaml
 - type: javascript
   value: |
     const text = String(output).toLowerCase();
-    // Accept multiple phrasings
     const found = text.includes('vulnerability') ||
                   text.includes('security issue') ||
                   text.includes('risk identified');
     return { pass: found };
 ```
 
-**High variance = ambiguous prompt.** If the same prompt fails 50% of the time, clarify instructions rather than running more retries.
+If a prompt fails 50% of the time, the prompt is ambiguous. Fix the instructions rather than running more retries.
 
-### LLM-as-judge for semantic quality
+### LLM-as-judge
 
-JavaScript checks structure. For semantic quality, use model grading:
+JavaScript assertions check structure. For semantic quality—whether the code is actually secure, whether the refactor preserved behavior—use model grading:
 
 ```yaml
 - type: llm-rubric
@@ -347,20 +262,14 @@ JavaScript checks structure. For semantic quality, use model grading:
 
 ## Safety
 
-Coding agents execute code. Before running evals:
+Coding agents execute arbitrary code. Never give them access to production credentials, real customer data, or network access to internal systems.
 
-:::warning
+Sandboxing options:
 
-Never give agents access to production credentials, real customer data, or network access to internal systems.
-
-:::
-
-**Sandboxing strategies:**
-
-- Run in ephemeral containers with no network
-- Mount repos read-only, write to separate volumes
-- Use dummy API keys and mock services
-- Restrict tools: `disallowed_tools: ['Bash']`
+- Ephemeral containers with no network access
+- Read-only repo mounts with writes going to separate volumes
+- Dummy API keys and mock services
+- Tool restrictions via `disallowed_tools: ['Bash']`
 
 ```yaml
 providers:
