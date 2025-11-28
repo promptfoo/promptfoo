@@ -22,33 +22,22 @@ Standard LLM evals test a function: given input X, does output Y meet criteria Z
 
 ## Capability tiers
 
-| Tier            | Example                      | Can Do                                                 | Cannot Do                |
-| --------------- | ---------------------------- | ------------------------------------------------------ | ------------------------ |
-| **0: Text**     | `openai:gpt-5.1`             | Generate code, discuss patterns, return JSON           | Read files, execute code |
-| **1: Codebase** | `openai:codex-sdk`           | Analyze files, produce structured reports, modify code | (Full capabilities)      |
-| **2: Tools**    | `anthropic:claude-agent-sdk` | Read/write files, run commands, call MCP servers       | Depends on config        |
+| Tier           | Example                                          | Can Do                                       | Cannot Do                |
+| -------------- | ------------------------------------------------ | -------------------------------------------- | ------------------------ |
+| **0: Text**    | `openai:gpt-5.1`, `anthropic:claude-sonnet-4`    | Generate code, discuss patterns, return JSON | Read files, execute code |
+| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk` | Read/write files, run commands, iterate      | (Full capabilities)      |
 
-The same underlying model (e.g., Claude Sonnet 4.5) behaves differently at each tier. Tier determines capability ceiling; model determines quality within that ceiling.
+The same underlying model behaves differently at each tier. A plain `claude-sonnet-4` call can't read your files; wrap it in Claude Agent SDK and it can.
 
-## Choosing an agent
+Both agentic providers have similar capabilities. The differences are in defaults and ecosystem:
 
-**OpenAI Codex SDK** when you need:
-
-- Guaranteed JSON output via `output_schema`
-- Thread-based conversation state
-- Git repository safety checks
-
-**Claude Agent SDK** when you need:
-
-- Fine-grained tool permissions
-- MCP server integration
-- CLAUDE.md project context
-
-**Plain LLM** when you need:
-
-- Maximum speed and minimum cost
-- Full control over context
-- No file system access (intentionally)
+| Aspect                  | Codex SDK                        | Claude Agent SDK                 |
+| ----------------------- | -------------------------------- | -------------------------------- |
+| **Default permissions** | Full access (Git repo required)  | Read-only until you opt-in       |
+| **Structured output**   | `output_schema`                  | `output_format.json_schema`      |
+| **State management**    | Thread-based (`persist_threads`) | Stateless (or `resume` sessions) |
+| **Safety**              | Git repo check                   | Tool allowlists                  |
+| **Ecosystem**           | OpenAI Responses API             | MCP servers, CLAUDE.md           |
 
 ## Scenarios
 
