@@ -5,18 +5,18 @@ image: /img/blog/search-rubric-assertions/title.jpg
 image_alt: 'Search rubric assertion verifying current information'
 slug: llm-search-rubric-assertions
 keywords: [promptfoo, LLM testing, web search, fact checking, real-time verification, assertions]
-date: 2025-07-30
+date: 2025-11-28
 authors: [steve]
 tags: [feature-announcement, testing, assertions]
 ---
 
 # Real-Time Fact Checking for LLM Outputs
 
-Two U.S. federal judges recently withdrew rulings containing AI-generated citations that didn't exist.
+LLM hallucinations have real consequences. In 2023, lawyers in *Mata v. Avianca* were [fined $5,000](https://en.wikipedia.org/wiki/Mata_v._Avianca,_Inc.) for submitting ChatGPT-generated legal briefs containing fabricated case citations. More recently, [two federal judges withdrew rulings](https://www.washingtontimes.com/news/2025/oct/23/two-federal-judges-admit-using-ai-botched-rulings/) after their clerks used AI that hallucinated nonexistent legal precedents.
 
-This type of error happens because LLM outputs often include outdated or incorrect information from training data. Traditional assertion types check format and style, but can't verify current facts.
+LLM outputs often include outdated or incorrect information. Traditional assertion types check format and style, but can't verify current facts against reality.
 
-We're releasing search-rubric assertions that verify time-sensitive information during testing.
+We're releasing `search-rubric` assertions that verify time-sensitive information during testing.
 
 <!-- truncate -->
 
@@ -77,8 +77,8 @@ Traditional assertions can't catch when an LLM confidently states last year's st
 
 Web search requires a provider with search capabilities. All major providers now support this:
 
-- **Anthropic** (May 2025): Configure with `web_search_20250305` tool
-- **OpenAI**: Use `web_search_preview` tool with responses API
+- **Anthropic**: Configure with `web_search_20250305` tool
+- **OpenAI**: Use `web_search_preview` tool with Responses API
 - **Google/Vertex**: Built-in `googleSearch` tool
 - **Perplexity**: Native web search, no configuration needed
 - **xAI**: Enable with `search_parameters`
@@ -88,9 +88,9 @@ Web search requires a provider with search capabilities. All major providers now
 | Use case                         | Keep `llm-rubric` | Add `search-rubric` |
 | -------------------------------- | ----------------- | ------------------- |
 | Fiction, tone, UX copy           | ✓                 |                     |
-| API docs, math, finance          |                   | ✓                   |
+| Current events, news             |                   | ✓                   |
 | Real-time data (weather, stocks) |                   | ✓                   |
-| Academic citations               |                   | ✓                   |
+| Recent releases, announcements   |                   | ✓                   |
 
 ## Real Examples
 
@@ -107,17 +107,17 @@ assert:
       - States whether markets are open or closed
 ```
 
-### Legal Tech
+### Current Events
 
 ```yaml
-# Confirm case citations exist
+# Verify recent news accuracy
 assert:
   - type: search-rubric
     value: |
-      Correctly cites Miranda v. Arizona including:
-      - Accurate case citation (384 U.S. 436)
-      - Correct year (1966)
-      - Key holding about right to remain silent
+      Correctly describes the 2024 U.S. Presidential Election:
+      - Names the winning candidate
+      - States the electoral vote margin
+      - Mentions key swing states
 ```
 
 ### Healthcare
@@ -167,14 +167,14 @@ If no grading provider is specified, Promptfoo will automatically select one wit
 
 Web search adds approximately 2-3 seconds per assertion.
 
-Pricing varies by provider:
+Pricing varies by provider (as of late 2025):
 
-- **OpenAI**: $0.003-0.008 per search
-- **Anthropic**: $10 per 1,000 searches ($0.01 each)
+- **OpenAI**: $10-50 per 1,000 web searches depending on context size, plus token costs
+- **Anthropic**: $10 per 1,000 searches plus standard token costs
 - **Perplexity**: Varies by model tier
 - **Google**: Included in standard API pricing
 
-For a typical test suite with 50 search-rubric assertions, expect to pay $0.15-0.50 per run.
+For a typical test suite with 50 search-rubric assertions, expect to pay $0.50-2.50 per run depending on provider.
 
 To reduce costs during development:
 
@@ -280,7 +280,7 @@ See the [documentation](/docs/configuration/expected-outputs/model-graded/search
   "@context": "https://schema.org",
   "@type": "TechArticle",
   "headline": "Real-Time Fact Checking for LLM Outputs",
-  "datePublished": "2025-07-30",
+  "datePublished": "2025-11-28",
   "author": {
     "@type": "Person",
     "name": "Steve"
