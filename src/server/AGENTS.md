@@ -4,7 +4,7 @@
 
 ## Architecture
 
-```
+```text
 src/server/
 ├── index.ts          # Entry point
 ├── server.ts         # Express app + middleware setup
@@ -24,17 +24,15 @@ src/server/
 **Always sanitize when logging request/response data:**
 
 ```typescript
-// ✅ CORRECT - Second param auto-sanitized
+// Correct - Second param auto-sanitized
 logger.debug('[API] Request received', {
   body: req.body, // API keys auto-redacted
   headers: req.headers, // Auth headers auto-redacted
 });
 
-// ❌ WRONG - Exposes secrets
+// WRONG - Exposes secrets
 logger.debug(`Body: ${JSON.stringify(req.body)}`);
 ```
-
-See root `CLAUDE.md` for sensitive field list.
 
 ## Standard Response Format
 
@@ -55,21 +53,13 @@ res.status(400).json({ success: false, error: 'Invalid input' });
 ```typescript
 router.post('/api/eval', async (req, res) => {
   try {
-    // Validate
     const validated = schema.parse(req.body);
-
-    // Process
     const result = await runEvaluation(validated);
-
     res.json({ success: true, data: result });
   } catch (error) {
     logger.error('[API] Evaluation failed', { error });
-
     const status = error instanceof ValidationError ? 400 : 500;
-    res.status(status).json({
-      success: false,
-      error: error.message,
-    });
+    res.status(status).json({ success: false, error: error.message });
   }
 });
 ```
@@ -109,13 +99,6 @@ npm run dev          # Both server + frontend
 ```
 
 Server runs on `http://localhost:3000`
-
-## Route Organization
-
-- `routes/eval.ts` - Evaluation CRUD operations
-- `routes/config.ts` - Configuration management
-- `routes/results.ts` - Result queries and exports
-- `routes/share.ts` - Sharing functionality
 
 ## When Working Here
 

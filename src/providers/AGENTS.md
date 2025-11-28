@@ -2,7 +2,7 @@
 
 **What this is:** LLM provider integrations that implement a standardized interface to call different AI services (OpenAI, Anthropic, AWS Bedrock, etc.).
 
-## Architecture Context
+## Architecture
 
 Each provider:
 
@@ -22,17 +22,17 @@ Each provider:
 **ALWAYS sanitize logs** to prevent leaking API keys:
 
 ```typescript
-// ✅ CORRECT - Second param auto-sanitized
+// Correct - Second param auto-sanitized
 logger.debug('[Provider] API call', {
   headers: requestHeaders, // apiKey/authorization auto-redacted
   config: providerConfig,
 });
 
-// ❌ WRONG - Exposes secrets
+// WRONG - Exposes secrets
 logger.debug(`Calling API with config: ${JSON.stringify(config)}`);
 ```
 
-See root `CLAUDE.md` for complete sanitization field list.
+See root AGENTS.md for complete sanitization field list.
 
 ## Common Patterns
 

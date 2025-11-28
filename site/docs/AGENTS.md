@@ -2,7 +2,7 @@
 
 **What this is:** Docusaurus-based documentation deployed to [promptfoo.dev](https://www.promptfoo.dev/).
 
-## 🎯 Making Documentation Changes
+## Making Documentation Changes
 
 **MOST UPDATES SHOULD BE VERY SMALL** - typically 1-5 line changes.
 
@@ -28,30 +28,23 @@ find site/docs -name "*jailbreak*"
 4. **Don't create new files** unless absolutely necessary
 5. **Check for duplicates** - Ensure info isn't already documented elsewhere
 
-### Common Update Patterns
+## Key Principles
 
-```bash
-# Updating model names (very common)
-# Find: openai:gpt-4
-# Replace: openai:gpt-5
+1. **Minimal edits** - Don't rewrite, improve incrementally
+2. **Don't modify headings** - Often externally linked
+3. **Progressive disclosure** - Essential info first
+4. **Action-oriented** - Imperative mood ("Install the package")
+5. **No bullshit** - Never use embellishment words like "sophisticated"
 
-# Fixing terminology
-# Find: evaluation
-# Replace: eval
-
-# Adding missing step to existing guide
-# Add 1-2 lines to existing numbered list
-```
-
-## Critical Terminology
+## Terminology
 
 **Use "eval" not "evaluation":**
 
 ```bash
-# ✅ Correct
+# Correct
 npx promptfoo eval
 
-# ❌ Wrong
+# Wrong
 npx promptfoo evaluation
 ```
 
@@ -60,21 +53,102 @@ npx promptfoo evaluation
 - "Promptfoo" (capital) - Start of sentences, headings
 - "promptfoo" (lowercase) - Code, commands, package names
 
-## Quick Context
+## Front Matter (Required)
 
-- Markdown/MDX files in `site/docs/`
-- Built with Docusaurus
-- Front matter required: `title`, `description`
-- Code blocks only get `title=` if complete runnable files
-- Admonitions need empty lines around content (Prettier requirement)
+Every documentation page needs front matter:
 
-## Key Principles
+```markdown
+---
+title: Configuring Promptfoo for Multiple Models
+description: Learn how to set up evaluations across different LLM providers
+sidebar_position: 3
+---
+```
 
-1. **Minimal edits** - Don't rewrite, improve incrementally
-2. **Don't modify headings** - Often externally linked
-3. **Progressive disclosure** - Essential info first
-4. **Action-oriented** - Imperative mood ("Install the package")
-5. **No bullshit** - never use embellishment words like describing our system as "sophisticated"
+- `title` - Page title (under 60 characters for SEO)
+- `description` - Summary (150-160 characters)
+- `sidebar_position` - Order in sidebar navigation
+
+## Code Block Formatting
+
+### Titles
+
+**Only add titles to complete, runnable files:**
+
+```yaml title="promptfooconfig.yaml"
+# Complete YAML configuration file
+description: Basic evaluation setup
+prompts:
+  - file://prompts/my-prompt.txt
+providers:
+  - openai:responses:gpt-5.1
+```
+
+**No titles for code fragments:**
+
+```yaml
+# YAML fragment - no title
+prompts:
+  - 'What is the capital of {{country}}?'
+```
+
+### Highlighting
+
+Use comment directives to highlight lines:
+
+```javascript
+// highlight-next-line
+const result = calculateScore(input);
+console.log(result);
+```
+
+Or highlight ranges:
+
+```javascript
+function example() {
+  // highlight-start
+  const a = 1;
+  const b = 2;
+  return a + b;
+  // highlight-end
+}
+```
+
+**Never remove existing highlight directives when editing.**
+
+## Admonitions
+
+Use callout blocks for important information:
+
+```markdown
+:::note
+
+Some **content** with _Markdown_ `syntax`.
+
+:::
+
+:::warning
+
+Important caution message.
+
+:::
+
+:::danger
+
+Critical warning.
+
+:::
+```
+
+**Always include empty lines around content inside admonitions** (Prettier requirement).
+
+## Writing Style
+
+- Clear, concise language
+- Write for international audience (avoid idioms)
+- Spell out acronyms on first use
+- Active voice over passive voice
+- User-centric: lead with what users need to accomplish
 
 ## Development
 
@@ -86,12 +160,10 @@ npm run dev  # http://localhost:3000
 SKIP_OG_GENERATION=true npm run build
 ```
 
-## Comprehensive Guidelines
+## Anti-Patterns to Avoid
 
-See `.cursor/rules/docusaurus.mdc` for complete documentation standards including:
-
-- Front matter requirements
-- Code block formatting rules
-- Admonition syntax
-- SEO best practices
-- Writing style guidelines
+- Verbose, LLM-generated explanations
+- Repetitive content across pages
+- Generic examples that don't illustrate the specific feature
+- Bullet point overuse where prose would be clearer
+- Prescriptive test scenarios that limit user flexibility

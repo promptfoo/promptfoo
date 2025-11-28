@@ -2,7 +2,7 @@
 
 **What this is:** Drizzle ORM migration files for SQLite database. Auto-generated SQL that applies schema changes.
 
-## 🚨 CRITICAL: Schema is NOT Here
+## Schema is NOT Here
 
 **Schema definitions are in `src/database/schema.ts`, NOT in this directory.**
 
@@ -18,6 +18,7 @@ This directory only contains generated SQL migration files.
 ## File Naming
 
 Drizzle auto-generates names: `NNNN_adjective_noun.sql`
+
 - `0000_lush_hellion.sql`
 - `0001_wide_calypso.sql`
 - Sequential numbering ensures order

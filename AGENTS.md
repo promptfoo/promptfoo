@@ -1,6 +1,16 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI agents when working with code in this repository.
+
+## Project Overview
+
+Promptfoo is an open-source framework for evaluating and testing LLM applications. The project is written primarily in TypeScript and includes:
+
+- `src/`: Core library code
+- `test/`: Test files
+- `site/`: Documentation site (Docusaurus)
+- `examples/`: Example configurations and use cases
+- `src/app/`: Web UI (React)
 
 ## Frontend API Calls
 
@@ -164,6 +174,20 @@ The OG image generation process can take several minutes and may cause CI timeou
     return apiStatus === 'blocked' ? 'Connection failed' : undefined;
   }, [apiStatus]);
   ```
+
+## Python Guidelines
+
+- Use Python 3.9 or later
+- Follow the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)
+- Use type hints to improve code readability and catch potential errors
+- Use `ruff` for linting and formatting
+  - Run `ruff check --fix` for general linting
+  - Run `ruff check --select I --fix` for import sorting
+  - Run `ruff format` for formatting
+- Write unit tests for new Python functions using the built-in `unittest` module
+- Keep the Python codebase simple and minimal, without unnecessary external dependencies
+- When adding Python examples, update relevant `requirements.txt` files
+- When implementing custom providers, prompts, or asserts in Python, follow the promptfoo API patterns
 
 ## Logging and Sanitization
 
