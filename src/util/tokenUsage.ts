@@ -48,6 +48,30 @@ export class TokenUsageTracker {
   }
 
   /**
+   * Get aggregated token usage for all providers matching a given ID prefix.
+   * This handles the case where tracking IDs include class names (e.g., "openai:gpt-4 (OpenAiChatCompletionProvider)")
+   * but lookups use bare provider IDs (e.g., "openai:gpt-4").
+   *
+   * @param providerIdPrefix The provider ID prefix to match
+   * @returns Aggregated token usage for all matching providers, or undefined if none found
+   */
+  public getProviderUsageByPrefix(providerIdPrefix: string): TokenUsage | undefined {
+    let result: TokenUsage | undefined;
+
+    for (const [trackingId, usage] of this.providersMap.entries()) {
+      // Match if tracking ID equals prefix or starts with "prefix ("
+      if (trackingId === providerIdPrefix || trackingId.startsWith(`${providerIdPrefix} (`)) {
+        if (!result) {
+          result = createEmptyTokenUsage();
+        }
+        accumulateTokenUsage(result, usage);
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Get all provider IDs that have token usage tracked
    * @returns Array of provider IDs
    */

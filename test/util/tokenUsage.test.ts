@@ -211,4 +211,70 @@ describe('TokenUsageTracker', () => {
     tracker.resetAllUsage();
     expect(tracker.getProviderIds()).toHaveLength(0);
   });
+
+  describe('getProviderUsageByPrefix', () => {
+    it('should return undefined when no providers match the prefix', () => {
+      tracker.trackUsage('openai:gpt-4 (OpenAiChatCompletionProvider)', { total: 100 });
+      expect(tracker.getProviderUsageByPrefix('anthropic:claude')).toBeUndefined();
+    });
+
+    it('should match exact provider ID', () => {
+      tracker.trackUsage('openai:gpt-4', { total: 100, prompt: 50, completion: 50 });
+      const usage = tracker.getProviderUsageByPrefix('openai:gpt-4');
+      expect(usage).toEqual(
+        expect.objectContaining({
+          total: 100,
+          prompt: 50,
+          completion: 50,
+        }),
+      );
+    });
+
+    it('should match provider ID with class name suffix', () => {
+      tracker.trackUsage('openai:gpt-4 (OpenAiChatCompletionProvider)', {
+        total: 100,
+        prompt: 50,
+        completion: 50,
+      });
+      const usage = tracker.getProviderUsageByPrefix('openai:gpt-4');
+      expect(usage).toEqual(
+        expect.objectContaining({
+          total: 100,
+          prompt: 50,
+          completion: 50,
+        }),
+      );
+    });
+
+    it('should aggregate usage from multiple matching providers', () => {
+      // Same base provider with different class names (e.g., wrapped providers)
+      tracker.trackUsage('openai:gpt-4 (OpenAiChatCompletionProvider)', {
+        total: 100,
+        prompt: 50,
+        completion: 50,
+        numRequests: 1,
+      });
+      tracker.trackUsage('openai:gpt-4 (CustomOpenAiProvider)', {
+        total: 200,
+        prompt: 100,
+        completion: 100,
+        numRequests: 2,
+      });
+      const usage = tracker.getProviderUsageByPrefix('openai:gpt-4');
+      expect(usage).toEqual(
+        expect.objectContaining({
+          total: 300,
+          prompt: 150,
+          completion: 150,
+          numRequests: 3,
+        }),
+      );
+    });
+
+    it('should not match provider ID that is a substring but not a prefix', () => {
+      tracker.trackUsage('openai:gpt-4-turbo (OpenAiChatCompletionProvider)', { total: 100 });
+      // "openai:gpt-4" should NOT match "openai:gpt-4-turbo" because it's not followed by " ("
+      expect(tracker.getProviderUsageByPrefix('openai:gpt-4')).toBeUndefined();
+    });
+  });
 });
