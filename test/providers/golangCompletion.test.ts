@@ -1,5 +1,6 @@
 import { execFile } from 'child_process';
 import fs from 'fs';
+import nock from 'nock';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../src/cache';
@@ -42,6 +43,8 @@ describe('GolangProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.resetAllMocks();
+    // Clean up any lingering nock interceptors from other tests
+    nock.cleanAll();
 
     // Reset all mocks to default behavior
     mockGetCache.mockResolvedValue({
@@ -191,6 +194,11 @@ describe('GolangProvider', () => {
       });
       return {} as any;
     }) as any);
+  });
+
+  afterEach(() => {
+    // Clean up nock interceptors after each test
+    nock.cleanAll();
   });
 
   describe('constructor', () => {
