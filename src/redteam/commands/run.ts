@@ -58,7 +58,13 @@ export function redteamRunCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'redteam run',
       });
-      telemetry.record('redteam run', {});
+      // Record initial redteam run event with available info
+      // Full config details recorded in shared.ts after config is loaded
+      telemetry.record('redteam run', {
+        phase: 'started',
+        fromCloud: opts.config ? UUID_REGEX.test(opts.config) : false,
+        hasTarget: Boolean(opts.target),
+      });
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
         if (opts.target && !UUID_REGEX.test(opts.target)) {
