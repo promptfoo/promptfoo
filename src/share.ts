@@ -10,8 +10,8 @@ import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
 import {
   checkCloudPermissions,
-  getOrgContext,
   makeRequest as makeCloudRequest,
+  resolveTeamId,
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 
@@ -442,22 +442,35 @@ export async function createShareableUrl(
     return null;
   }
 
-  // Show org/team context before uploading (only when cloud is enabled)
-  const orgContext = await getOrgContext();
-  if (orgContext) {
-    const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
-    logger.info(
-      `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
-    );
-  }
-
   // 1. Handle email collection
   await handleEmailCollection(evalRecord);
 
-  // 2. Get API configuration
+  // 2. Auto-inject current team into metadata (if not already set)
+  try {
+    if (cloudConfig.isEnabled()) {
+      evalRecord.config.metadata = evalRecord.config.metadata || {};
+
+      // Only inject if not already set (explicit metadata takes precedence)
+      if (evalRecord.config.metadata.teamId) {
+        logger.debug('Team already set in metadata, skipping auto-injection');
+      } else {
+        const currentTeam = await resolveTeamId();
+        evalRecord.config.metadata.teamId = currentTeam.id;
+        logger.debug(`Auto-injecting current team into metadata: ${currentTeam.name}`);
+      }
+    }
+  } catch (error) {
+    // Team resolution failed - server will use default team
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    logger.warn(`Could not resolve team for sharing: ${errorMsg}`);
+    logger.warn('Your eval will be shared to your default team.');
+    logger.info('To specify a team explicitly, use: promptfoo share --team "TeamName"');
+  }
+
+  // 3. Get API configuration
   const { url } = await getApiConfig(evalRecord);
 
-  // 3. Determine if we can use new results format
+  // 4. Determine if we can use new results format
   const canUseNewResults = cloudConfig.isEnabled();
   logger.debug(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
@@ -570,13 +583,6 @@ export async function createShareableModelAuditUrl(
       passedChecks: auditRecord.passedChecks,
       failedChecks: auditRecord.failedChecks,
       metadata: auditRecord.metadata,
-      // Revision tracking fields for deduplication
-      modelId: auditRecord.modelId,
-      revisionSha: auditRecord.revisionSha,
-      contentHash: auditRecord.contentHash,
-      modelSource: auditRecord.modelSource,
-      sourceLastModified: auditRecord.sourceLastModified,
-      scannerVersion: auditRecord.scannerVersion,
     };
 
     // Log payload size for debugging large model audits

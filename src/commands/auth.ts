@@ -29,7 +29,8 @@ export function authCommand(program: Command) {
       'The host of the promptfoo instance. This needs to be the url of the API if different from the app url.',
     )
     .option('-k, --api-key <apiKey>', 'Login using an API key.')
-    .action(async (cmdObj: { orgId: string; host: string; apiKey: string }) => {
+    .option('-t, --team <team>', 'Team name, slug, or ID to set as default')
+    .action(async (cmdObj: { orgId: string; host: string; apiKey: string; team?: string }) => {
       let token: string | undefined;
       const apiHost = cmdObj.host || cloudConfig.getApiHost();
       telemetry.record('command_used', {
@@ -64,6 +65,22 @@ export function authCommand(program: Command) {
           try {
             const allTeams = await getUserTeams();
             cloudConfig.cacheTeams(allTeams, organization.id);
+
+            // Handle --team flag (highest priority)
+            if (cmdObj.team) {
+              try {
+                const selectedTeam = await resolveTeamFromIdentifier(cmdObj.team);
+                cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
+                logger.info(`Team: ${chalk.cyan(selectedTeam.name)}`);
+                return;
+              } catch (teamError) {
+                logger.error(
+                  `Failed to set team "${cmdObj.team}": ${teamError instanceof Error ? teamError.message : String(teamError)}`,
+                );
+                logger.info('Falling back to default team selection...');
+                // Fall through to default logic
+              }
+            }
 
             const existingTeamId = cloudConfig.getCurrentTeamId(organization.id);
             if (existingTeamId) {

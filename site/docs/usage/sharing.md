@@ -64,6 +64,24 @@ promptfoo list
 promptfoo share my-eval-id
 ```
 
+## Sharing to Specific Teams
+
+If you belong to multiple teams, you can specify which team to share to:
+
+```sh
+# Share to a specific team
+promptfoo share --team "Engineering Team"
+
+# Using team slug also works
+promptfoo share --team engineering-team
+```
+
+When you omit the `--team` flag, your eval is shared to your default team. To view available teams:
+
+```sh
+promptfoo auth teams list
+```
+
 ## Enterprise Sharing
 
 If you have a Promptfoo Enterprise account:
@@ -75,6 +93,9 @@ promptfoo auth login --host https://your-company.promptfoo.app -k YOUR_API_KEY
 
 # Share your eval
 promptfoo share
+
+# Share to a specific team
+promptfoo share --team "Engineering Team"
 ```
 
 Enterprise sharing includes additional features:
