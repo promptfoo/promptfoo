@@ -144,13 +144,61 @@ providers:
         command: node
         args: ['server.js']
         name: advanced-server
-      timeout: 30000 # Connection timeout in milliseconds
+      timeout: 900000 # Request timeout in milliseconds (15 minutes)
       debug: true # Enable debug logging
       verbose: true # Enable verbose output
       defaultArgs: # Default arguments for all tool calls
         session_id: 'test-session'
         user_role: 'customer'
 ```
+
+### Timeout Configuration
+
+MCP tool calls have a default timeout of 60 seconds (from the MCP SDK). For long-running tools, you can increase the timeout:
+
+**Via config (per-provider):**
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      timeout: 900000 # 15 minutes in milliseconds
+      server:
+        url: https://api.example.com/mcp
+```
+
+**Via environment variable (global default):**
+
+```bash
+# Set default timeout for all MCP requests (in milliseconds)
+export MCP_REQUEST_TIMEOUT_MS=900000  # 15 minutes
+```
+
+The priority order is: `config.timeout` > `MCP_REQUEST_TIMEOUT_MS` env var > SDK default (60 seconds).
+
+### Advanced Timeout Options
+
+For long-running MCP tools that send progress notifications, you can use advanced timeout options:
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      timeout: 300000 # 5 minutes initial timeout
+      resetTimeoutOnProgress: true # Reset timeout when progress is received
+      maxTotalTimeout: 900000 # 15 minutes absolute maximum
+      server:
+        url: https://api.example.com/mcp
+```
+
+| Option                   | Description                                                             |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `timeout`                | Request timeout in milliseconds (default: 60000)                        |
+| `resetTimeoutOnProgress` | Reset timeout when progress notifications are received (default: false) |
+| `maxTotalTimeout`        | Absolute maximum timeout regardless of progress (optional)              |
+| `pingOnConnect`          | Ping server after connecting to verify responsiveness (default: false)  |
 
 ## Usage with Tool Calls
 
@@ -248,11 +296,11 @@ These plugins target the most common security vulnerabilities in systems that ex
 
 The MCP provider supports these environment variables:
 
-| Variable      | Description                              | Default |
-| ------------- | ---------------------------------------- | ------- |
-| `MCP_TIMEOUT` | Default timeout for MCP connections (ms) | 30000   |
-| `MCP_DEBUG`   | Enable debug logging                     | false   |
-| `MCP_VERBOSE` | Enable verbose output                    | false   |
+| Variable                 | Description                                          | Default |
+| ------------------------ | ---------------------------------------------------- | ------- |
+| `MCP_REQUEST_TIMEOUT_MS` | Default timeout for MCP tool calls and requests (ms) | 60000   |
+| `MCP_DEBUG`              | Enable debug logging for MCP connections             | false   |
+| `MCP_VERBOSE`            | Enable verbose output for MCP connections            | false   |
 
 ## Error Handling
 

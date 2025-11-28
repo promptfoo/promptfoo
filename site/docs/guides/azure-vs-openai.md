@@ -42,7 +42,7 @@ Create a new directory for your comparison project and initialize it:
 npx promptfoo@latest init openai-azure-comparison
 ```
 
-Edit your `promptfooconfig.yaml` to include both OpenAI and Azure OpenAI as providers. In this case, we're going to compare GPT 3.5 on both services.
+Edit your `promptfooconfig.yaml` to include both OpenAI and Azure OpenAI as providers. In this example, we'll compare the same model on both services.
 
 ```yaml
 providers:

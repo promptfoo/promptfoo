@@ -923,16 +923,90 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
-      it('should still resolve non-glob file references in vars when they do not contain wildcards', () => {
-        (fs.readFileSync as jest.Mock).mockReturnValue('test data');
+      it('should preserve non-glob file references in vars for runtime loading by renderPrompt', () => {
         const config = {
           vars: {
-            content: 'file://content.txt', // No glob pattern
+            content: 'file://content.txt', // No glob pattern - still preserved
           },
         };
         const result = maybeLoadConfigFromExternalFile(config);
-        expect(result.vars.content).toBe('test data');
-        expect(fs.readFileSync).toHaveBeenCalled();
+        // File references in vars should be preserved for runtime loading
+        // JS/Python files will be executed by renderPrompt in evaluatorHelpers.ts
+        expect(result.vars.content).toBe('file://content.txt');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve JS file references in vars for runtime execution', () => {
+        const config = {
+          vars: {
+            dynamicContent: 'file://generateContent.js',
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.dynamicContent).toBe('file://generateContent.js');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve Python file references in vars for runtime execution', () => {
+        const config = {
+          vars: {
+            dynamicContent: 'file://generateContent.py',
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.dynamicContent).toBe('file://generateContent.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve all file references in nested test cases loaded from external files', () => {
+        // This tests the scenario from PR #6393 where test cases are loaded
+        // from an external YAML file and contain JS/Python file references in vars
+        const testCasesFromExternalFile = [
+          {
+            vars: {
+              question: 'What is the policy?',
+              context: 'file://load_context.py',
+            },
+          },
+          {
+            vars: {
+              question: 'How does this work?',
+              context: 'file://load_context.js',
+            },
+          },
+        ];
+
+        const result = maybeLoadConfigFromExternalFile(testCasesFromExternalFile);
+
+        // Both Python and JS file references should be preserved for runtime execution
+        expect(result[0].vars.context).toBe('file://load_context.py');
+        expect(result[1].vars.context).toBe('file://load_context.js');
+        // Static values should remain unchanged
+        expect(result[0].vars.question).toBe('What is the policy?');
+        expect(result[1].vars.question).toBe('How does this work?');
+        // No files should have been read
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve plain text file references in vars for consistent runtime loading', () => {
+        // Plain text files are also preserved for runtime loading by renderPrompt
+        // This ensures consistent behavior across all file types
+        const config = {
+          tests: [
+            {
+              vars: {
+                content: 'file://content.txt',
+                data: 'file://data.json',
+              },
+            },
+          ],
+        };
+
+        const result = maybeLoadConfigFromExternalFile(config);
+
+        expect(result.tests[0].vars.content).toBe('file://content.txt');
+        expect(result.tests[0].vars.data).toBe('file://data.json');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
       });
     });
   });
