@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure OpenAI chat and embeddings with fact generation
+
+prompts:
+  - 'Generate one very interesting fact about {{topic}}'
+
+providers:
+  # GPT-5.1 - Latest flagship model
+  - id: azure:chat:gpt-5.1
+    config:
+      apiHost: 'your-org.openai.azure.com'
+
+defaultTest:
+  assert:
+    - type: latency
+      threshold: 3000
+
+tests:
+  - vars:
+      topic: monkeys
+  - vars:
+      topic: bananas
+    assert:
+      - type: similar
+        value: Bananas are naturally radioactive.
+        provider:
+          id: azure:embeddings:text-embedding-3-large
+          config:
+            apiHost: 'your-org.openai.azure.com'

@@ -40,6 +40,15 @@ function scoreToString(score: number | null) {
   return `(${score.toFixed(2)})`;
 }
 
+/**
+ * Detects if the provider is an image generation provider.
+ * Image providers follow the pattern like 'openai:image:dall-e-3'.
+ * Used to skip truncation for image content since truncating `![alt](url)` breaks rendering.
+ */
+export function isImageProvider(provider: string | undefined): boolean {
+  return provider?.includes(':image:') ?? false;
+}
+
 const tooltipSlotProps: TooltipProps['slotProps'] = {
   popper: { disablePortal: true },
 };
@@ -720,7 +729,10 @@ function EvalOutputCell({
         </div>
       )}
       <div style={contentStyle}>
-        <TruncatedText text={node || text} maxLength={maxTextLength} />
+        <TruncatedText
+          text={node || text}
+          maxLength={renderMarkdown && isImageProvider(output.provider) ? 0 : maxTextLength}
+        />
       </div>
       {comment}
       {detail}

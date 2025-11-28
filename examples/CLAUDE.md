@@ -41,7 +41,7 @@ Every example needs:
 
 ## Quick Reference
 
-- Use latest models: `openai:gpt-5`, `anthropic:claude-sonnet-4-5-20250929`
+- Use latest models: `openai:gpt-5.1`, `anthropic:claude-sonnet-4-5-20250929`
 - Make test cases fun/engaging, not boring
 - Use `file://` prefix for external files
 - Keep descriptions SHORT (3-10 words)
