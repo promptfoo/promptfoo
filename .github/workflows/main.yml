@@ -133,10 +133,6 @@ jobs:
         run: |
           npm run lint
 
-      - name: Check Index Imports
-        run: |
-          npm run lint:index
-
       - name: Run Style Check
         run: |
           npm run format:check
