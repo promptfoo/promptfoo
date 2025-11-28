@@ -26,18 +26,18 @@ This assertion will use a language model to grade the output based on the specif
 
 Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses different models depending on which API keys are available, checked in priority order:
 
-| Priority | Provider | Model | Environment Variable |
-|----------|----------|-------|---------------------|
-| 1 | OpenAI | `gpt-4.1-2025-04-14` | `OPENAI_API_KEY` |
-| 2 | Anthropic | `claude-sonnet-4-5-20250929` | `ANTHROPIC_API_KEY` |
-| 3 | Azure OpenAI | Your deployment | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_DEPLOYMENT_NAME` |
-| 4 | Google AI Studio | `gemini-3-pro-preview` | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `PALM_API_KEY` |
-| 5 | xAI | `grok-4-1-fast-reasoning` | `XAI_API_KEY` |
-| 6 | DeepSeek | `deepseek-chat` | `DEEPSEEK_API_KEY` |
-| 7 | Mistral | `mistral-large-latest` | `MISTRAL_API_KEY` |
-| 8 | Google Vertex | `gemini-2.5-pro` | Google ADC (ambient credentials) |
-| 9 | AWS Bedrock | `amazon.nova-pro-v1:0` | `AWS_ACCESS_KEY_ID` or `AWS_PROFILE` (ambient) |
-| 10 | GitHub Models | `openai/gpt-5.1` | `GITHUB_TOKEN` (ambient) |
+| Priority | Provider         | Model                        | Environment Variable                                    |
+| -------- | ---------------- | ---------------------------- | ------------------------------------------------------- |
+| 1        | OpenAI           | `gpt-4.1-2025-04-14`         | `OPENAI_API_KEY`                                        |
+| 2        | Anthropic        | `claude-sonnet-4-5-20250929` | `ANTHROPIC_API_KEY`                                     |
+| 3        | Azure OpenAI     | Your deployment              | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_DEPLOYMENT_NAME` |
+| 4        | Google AI Studio | `gemini-3-pro-preview`       | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `PALM_API_KEY`   |
+| 5        | xAI              | `grok-4-1-fast-reasoning`    | `XAI_API_KEY`                                           |
+| 6        | DeepSeek         | `deepseek-chat`              | `DEEPSEEK_API_KEY`                                      |
+| 7        | Mistral          | `mistral-large-latest`       | `MISTRAL_API_KEY`                                       |
+| 8        | Google Vertex    | `gemini-2.5-pro`             | Google ADC (ambient credentials)                        |
+| 9        | AWS Bedrock      | `amazon.nova-pro-v1:0`       | `AWS_ACCESS_KEY_ID` or `AWS_PROFILE` (ambient)          |
+| 10       | GitHub Models    | `openai/gpt-5.1`             | `GITHUB_TOKEN` (ambient)                                |
 
 You can override this by setting the `provider` option (see below).
 

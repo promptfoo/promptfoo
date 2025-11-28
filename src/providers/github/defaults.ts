@@ -21,21 +21,3 @@ export const DefaultGitHubGradingJsonProvider = new OpenAiChatCompletionProvider
 export const DefaultGitHubSuggestionsProvider = new OpenAiChatCompletionProvider('openai/gpt-5.1', {
   config: githubConfig,
 });
-
-// Fast model for quick evaluations
-export const DefaultGitHubFastProvider = new OpenAiChatCompletionProvider('openai/gpt-5.1-nano', {
-  config: githubConfig,
-});
-
-// Balanced model for general use
-export const DefaultGitHubBalancedProvider = new OpenAiChatCompletionProvider(
-  'openai/gpt-5.1-mini',
-  {
-    config: githubConfig,
-  },
-);
-
-// Reasoning model for complex evaluations
-export const DefaultGitHubReasoningProvider = new OpenAiChatCompletionProvider('openai/o3-mini', {
-  config: githubConfig,
-});

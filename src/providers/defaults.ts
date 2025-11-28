@@ -46,6 +46,7 @@ import {
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
+  DefaultWebSearchProvider as OpenAiWebSearchProvider,
 } from './openai/defaults';
 import {
   DefaultGradingProvider as XAIGradingProvider,
@@ -74,6 +75,7 @@ interface ProviderSetOptions {
   synthesize?: ApiProvider;
   embedding?: ApiProvider;
   llmRubric?: ApiProvider;
+  webSearch?: ApiProvider;
 }
 
 /**
@@ -165,6 +167,7 @@ function createProviderSet(options: ProviderSetOptions): DefaultProviders {
     synthesizeProvider: options.synthesize ?? options.gradingJson ?? options.grading,
     llmRubricProvider: options.llmRubric,
     moderationProvider: OpenAiModerationProvider,
+    webSearchProvider: options.webSearch,
   };
 }
 
@@ -177,6 +180,7 @@ function createOpenAIProviders(): DefaultProviders {
     gradingJson: OpenAiGradingJsonProvider,
     suggestions: OpenAiSuggestionsProvider,
     embedding: OpenAiEmbeddingProvider,
+    webSearch: OpenAiWebSearchProvider,
   });
 }
 
@@ -236,6 +240,7 @@ const PROVIDER_PRIORITY: ProviderCandidate[] = [
         suggestions: anthropic.suggestionsProvider,
         synthesize: anthropic.synthesizeProvider,
         llmRubric: anthropic.llmRubricProvider,
+        webSearch: anthropic.webSearchProvider,
       });
     },
   },
