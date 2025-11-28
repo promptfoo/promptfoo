@@ -299,6 +299,9 @@ type EnvVars = {
   OPENAI_TEMPERATURE?: number;
   OPENAI_TOP_P?: number;
 
+  // OpenAI Codex SDK
+  CODEX_API_KEY?: string;
+
   // OpenRouter
   OPENROUTER_API_KEY?: string;
 
