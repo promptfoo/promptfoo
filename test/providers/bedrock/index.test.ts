@@ -2,7 +2,6 @@ import dedent from 'dedent';
 import {
   AWS_BEDROCK_MODELS,
   AwsBedrockCompletionProvider,
-  AwsBedrockGenericProvider,
   addConfigParam,
   BEDROCK_MODEL,
   coerceStrToNum,
@@ -13,6 +12,7 @@ import {
   LlamaVersion,
   parseValue,
 } from '../../../src/providers/bedrock/index';
+import { AwsBedrockGenericProvider } from '../../../src/providers/bedrock/base';
 
 import type {
   BedrockAI21GenerationOptions,

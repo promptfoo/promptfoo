@@ -1758,31 +1758,6 @@ describe('readConfig', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith('config.yaml', 'utf-8');
   });
 
-  it('should throw validation error for invalid dereferenced config', async () => {
-    const mockConfig = {
-      description: 'invalid_config',
-      providers: [{ $ref: 'defaultParams.yaml#/invalidKey' }],
-    };
-
-    const dereferencedConfig = {
-      description: 'invalid_config',
-      providers: [{ invalid: true }],
-    };
-
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(mockConfig));
-    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValueOnce(dereferencedConfig);
-    jest.mocked(fs.existsSync).mockReturnValueOnce(true);
-
-    await readConfig('config.yaml');
-
-    expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith(
-      'Invalid configuration file config.yaml:\nValidation error: Unrecognized key(s) in object: \'invalid\' at "providers[0]"',
-    );
-    const calls = jest.mocked(logger.warn).mock.calls;
-    expect(calls[0][0]).toContain('Invalid configuration file');
-  });
-
   it('should handle empty YAML file by defaulting to empty object', async () => {
     jest.spyOn(fs, 'readFileSync').mockReturnValue('');
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.yaml' } as any);

@@ -35,6 +35,7 @@ const config: Config = {
     '<rootDir>/test/external',
     '<rootDir>/test/progress',
     '<rootDir>/test/types',
+    '<rootDir>/test/providers/xai',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',

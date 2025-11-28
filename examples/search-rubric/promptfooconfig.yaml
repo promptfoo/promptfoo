@@ -1,0 +1,101 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Search rubric assertions for fact-checking
+
+prompts:
+  - '{{question}}'
+
+providers:
+  # Anthropic Claude 4.5 Opus (Nov 2024 checkpoint) with web search tool
+  - id: anthropic:messages:claude-opus-4-5-20251101
+    config:
+      tools:
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 5
+
+  # OpenAI GPT-5.1 with web search tool
+  - id: openai:responses:gpt-5.1
+    config:
+      tools:
+        - type: web_search_preview
+
+  # Google Gemini 3 Pro Preview with googleSearch
+  - id: google:gemini-3-pro-preview
+    config:
+      tools:
+        - googleSearch: {}
+
+  # xAI Grok 4.1 Fast Reasoning with live web search
+  - id: xai:grok-4-1-fast-reasoning
+    config:
+      search_parameters:
+        mode: 'on'
+
+  # Perplexity Sonar Pro with built-in search
+  - perplexity:sonar-pro
+
+tests:
+  # Tech industry leadership
+  - vars:
+      question: 'Who is the current CEO of Microsoft?'
+    assert:
+      - type: search-rubric
+        value: 'Correctly identifies Satya Nadella as the current CEO of Microsoft'
+
+  - vars:
+      question: 'Who is the current CEO of OpenAI?'
+    assert:
+      - type: search-rubric
+        value: 'Correctly identifies the current CEO of OpenAI (Sam Altman as of late 2024)'
+
+  # Real-time financial data
+  - vars:
+      question: 'What is the current stock price of NVIDIA (NVDA)?'
+    assert:
+      - type: search-rubric
+        value: |
+          Provides a recent NVIDIA stock price that:
+          - Is a realistic price (should be in the hundreds of dollars range as of 2025)
+          - Includes the currency (USD or $)
+        threshold: 0.8
+
+  - vars:
+      question: 'What is the current market cap of Apple (AAPL)?'
+    assert:
+      - type: search-rubric
+        value: 'States Apple market cap in the trillions of dollars (should be around $3-4 trillion as of 2025)'
+        threshold: 0.8
+
+  # Current events and sports
+  - vars:
+      question: 'Who won the 2024 US Presidential Election?'
+    assert:
+      - type: search-rubric
+        value: 'Correctly identifies Donald Trump as the winner of the 2024 US Presidential Election'
+
+  - vars:
+      question: 'Who won Super Bowl LVIII in February 2024?'
+    assert:
+      - type: search-rubric
+        value: 'Correctly identifies the Kansas City Chiefs as the winners of Super Bowl LVIII (58) defeating the San Francisco 49ers'
+
+  # Technology facts
+  - vars:
+      question: 'What is the latest version of Node.js LTS?'
+    assert:
+      - type: search-rubric
+        value: |
+          States a currently supported Node.js LTS version:
+          - Names a version that is in Active or Maintenance LTS
+          - Does not recommend an end-of-life version
+        threshold: 0.7
+
+  # Weather (real-time)
+  - vars:
+      question: 'What is the current weather in Tokyo, Japan?'
+    assert:
+      - type: search-rubric
+        value: |
+          Provides current Tokyo weather including:
+          - Temperature with units (Celsius or Fahrenheit)
+          - General conditions (sunny, cloudy, rainy, etc.)
