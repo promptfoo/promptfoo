@@ -85,6 +85,7 @@ import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
+import { handleSearchRubric } from './searchRubric';
 import { handleIsXml } from './xml';
 
 import type {
@@ -106,6 +107,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'llm-rubric',
   'model-graded-closedqa',
   'model-graded-factuality',
+  'search-rubric',
 ]);
 
 const ASSERTION_HANDLERS: Record<
@@ -179,6 +181,7 @@ const ASSERTION_HANDLERS: Record<
   regex: handleRegex,
   ruby: handleRuby,
   'rouge-n': handleRougeScore,
+  'search-rubric': handleSearchRubric,
   similar: handleSimilar,
   'similar:cosine': handleSimilar,
   'similar:dot': handleSimilar,
