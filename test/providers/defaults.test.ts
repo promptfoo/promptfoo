@@ -12,7 +12,6 @@ import {
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
   DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
 } from '../../src/providers/google/ai.studio';
-import { DefaultEmbeddingProvider as GeminiEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -20,7 +19,10 @@ import {
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from '../../src/providers/mistral/defaults';
-import { DefaultModerationProvider } from '../../src/providers/openai/defaults';
+import {
+  DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
+  DefaultModerationProvider,
+} from '../../src/providers/openai/defaults';
 
 import type { ApiProvider } from '../../src/types/index';
 import type { EnvOverrides } from '../../src/types/env';
@@ -236,7 +238,7 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
-      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider); // Falls back to OpenAI
     });
 
     it('should use Google AI Studio providers when GOOGLE_API_KEY is set', async () => {
@@ -249,7 +251,7 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
-      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider); // Falls back to OpenAI
     });
 
     it('should use Google AI Studio providers when PALM_API_KEY is set', async () => {
@@ -262,7 +264,7 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
-      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider); // Falls back to OpenAI
     });
 
     it('should use Google AI Studio providers when provided via env overrides', async () => {
@@ -277,7 +279,7 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
-      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider); // Falls back to OpenAI
     });
 
     it('should not use Google AI Studio providers when OpenAI credentials exist', async () => {
@@ -741,8 +743,8 @@ describe('Provider override tests', () => {
 
       // Even though Gemini is detected, override takes precedence
       expect(providers.gradingProvider.id()).toBe('override-provider');
-      // But embedding should still be Vertex (from Gemini selection)
-      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider);
+      // But embedding should still be OpenAI (from Gemini selection fallback)
+      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
     });
   });
 
