@@ -19,8 +19,8 @@ Agent capabilities are gated by tools and environment, not prompting. You can't 
 **Tier 0: Text Generation** (Plain LLM via standard provider)
 
 - **What it receives**: Your prompt text only
-- **Can do**: Discuss code, generate snippets, explain concepts
-- **Cannot do**: Read files, execute code, guarantee output structure
+- **Can do**: Discuss code, generate snippets, explain concepts, return structured JSON via provider APIs
+- **Cannot do**: Read files or execute code on its own
 - **Use for**: Code review (paste code in prompt), explaining patterns
 
 :::note
@@ -29,36 +29,42 @@ Agent capabilities are gated by tools and environment, not prompting. You can't 
 
 :::
 
-**Tier 1: Code Reading** (OpenAI Codex SDK provider)
+**Tier 1: Code Analysis** (OpenAI Codex SDK provider)
 
 - **What it receives**: Your prompt + full codebase context (1M+ tokens)
-- **Can do**: Analyze code, detect vulnerabilities, produce structured JSON
-- **Cannot do**: Modify files, run tests, execute bash commands
-- **Use for**: Security audits, code analysis, generating reports
+- **Can do**: Analyze code, detect vulnerabilities, produce structured JSON, modify files, execute commands
+- **Best for**: Security audits, code analysis, generating reports with guaranteed JSON structure
+- **Tradeoff**: High token usage (~1M tokens for system overhead)
 
 :::note
 
-Codex itself supports full file modification and code execution. The promptfoo `openai:codex-sdk` provider is configured read-only for safety. This is an intentional design choice for eval scenarios where you want analysis without side effects.
+Codex SDK is a full-featured coding agent with file modification and execution capabilities. This guide focuses on analysis use cases where structured output matters most. The Git repository requirement (enabled by default) provides safety through version control.
 
 :::
 
-**Tier 2: Code Modification** (Claude Agent SDK, Cursor, Aider)
+**Tier 2: Tool-Based Agents** (Claude Agent SDK, Cursor, Aider)
 
-- **What it receives**: Your prompt + codebase + write/execute permissions
-- **Can do**: Read, write, execute commands, iterate on failures
-- **Cannot do**: Depends on sandbox restrictions
+- **What it receives**: Your prompt + codebase + explicit tool permissions
+- **Can do**: Read, write, execute commands, iterate on failures (when configured)
+- **Key difference**: Explicit tool calls (Read, Grep, Bash) you can observe and restrict
 - **Use for**: Refactoring, feature implementation, test generation
 
-The tiers have sharp boundaries (file access or not), but within each tier there are meaningful gradations: how much code can be seen, what commands are allowed, what MCP servers are connected, etc.
+:::note
+
+Claude Agent SDK defaults to **read-only** tools (Read, Grep, Glob, LS) when `working_dir` is set. To enable writes or bash, configure `append_allowed_tools` and `permission_mode`. See [Claude Agent SDK docs](/docs/providers/claude-agent-sdk/) for details.
+
+:::
+
+Both SDK-based agents (Codex and Claude) have full coding capabilities. The key differences are output format (native JSON schema vs markdown) and tool visibility (implicit vs explicit).
 
 ## When to use each agent
 
-| Agent Type                               | Best For                             | Structured Output  | File System Access       | Tradeoffs                      |
-| ---------------------------------------- | ------------------------------------ | ------------------ | ------------------------ | ------------------------------ |
-| **Plain LLM** (gpt-5.1, claude-sonnet-4) | Code review, simple generation       | JSON schema or raw | No                       | Fast, cheap, limited context   |
-| **OpenAI Codex SDK**                     | Security audits, schema-driven tasks | Native JSON schema | Read-only (in promptfoo) | High token use, strict output  |
-| **Claude Agent SDK**                     | Refactoring, multi-file edits        | JSON schema        | Configurable per-tool    | Full capabilities, higher cost |
-| **Cursor/Copilot/Aider**                 | IDE integration, interactive coding  | IDE-specific       | IDE-controlled           | Interactive, non-automated     |
+| Agent Type                               | Best For                             | Structured Output  | File System Access    | Tradeoffs                     |
+| ---------------------------------------- | ------------------------------------ | ------------------ | --------------------- | ----------------------------- |
+| **Plain LLM** (gpt-5.1, claude-sonnet-4) | Code review, simple generation       | JSON schema or raw | No                    | Fast, cheap, limited context  |
+| **OpenAI Codex SDK**                     | Security audits, schema-driven tasks | Native JSON schema | Full (Git required)   | High token use, strict output |
+| **Claude Agent SDK**                     | Refactoring, multi-file edits        | JSON schema        | Configurable per-tool | Explicit tool control         |
+| **Cursor/Copilot/Aider**                 | IDE integration, interactive coding  | IDE-specific       | IDE-controlled        | Interactive, non-automated    |
 
 ### Quick recommendations
 
@@ -264,7 +270,7 @@ Real results comparing Codex SDK vs Plain LLM (gpt-5.1):
 | Vulnerabilities found        | 3 (MD5, CVV logging, data storage)    | N/A (didn't perform analysis)           |
 | Structured output compliance | 100% (enforced by schema)             | N/A (returned text, not JSON)           |
 | Token usage                  | 1,062,383 (1.06M prompt, 2.3K output) | 767 (41 prompt, 726 output)             |
-| Duration                     | 2m 24s                                | &lt;5s                                  |
+| Duration                     | 2m 24s                                | Under 5s                                |
 | Pass rate                    | 100%                                  | 0%                                      |
 
 The plain LLM returned instructions on how to use Bandit instead of actually analyzing the code. Codex SDK performed the security audit and returned actionable JSON.
@@ -303,18 +309,15 @@ Agent runs allocate more tokens to reading and inspecting code than to generatin
 
 ### Scaling
 
-The 1M token count has two components:
+In this test, Codex used ~1M total prompt tokens across its internal turns and tool calls. The bulk was Codex's own planning and tool usage, not the ~1K tokens of file content. This overhead is **task-dependent**—harder tasks or ones where Codex iterates more will use more tokens.
 
-- **Fixed overhead** (~1M tokens): Codex system prompts, tool definitions, and internal scaffolding. This cost is roughly constant regardless of codebase size.
-- **Variable overhead** (~1K tokens): Actual file contents. Scales with the number and size of files the agent reads.
+For larger codebases:
 
-For this toy codebase (2 files, ~100 LOC), the fixed overhead dominates. For larger codebases:
+- Token usage scales with files touched and task complexity, not total repo size
+- Modern frontier models support hundreds of thousands of tokens per request (sometimes up to ~1M depending on provider). Agents use streaming, caching, and compaction rather than loading everything at once
+- Real-world scaling depends on which files the agent decides to read
 
-- The variable portion scales roughly linearly with files touched
-- Modern context windows are ~1M tokens, not 500M—agents use streaming, caching, and compaction rather than loading everything at once
-- Real-world scaling depends on which files the agent decides to read, not total repo size
-
-**For larger codebases**: Focus scans on specific subdirectories, filter out tests and generated code, or analyze only changed files. Use `additional_directories` to limit scope.
+**For larger codebases**: Use `working_dir` to limit scope to specific subdirectories. Only add `additional_directories` if there are extra paths the agent truly needs (it expands scope, not limits it).
 
 See the [agentic-sdk-comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/agentic-sdk-comparison) for a working implementation.
 
@@ -340,9 +343,9 @@ providers:
     config:
       model: claude-sonnet-4-5-20250929
       working_dir: ./user-service
-      # Tools are enabled by configuration. By default the agent can
-      # read/write files and run bash commands in working_dir.
-      # Use disallowed_tools to restrict specific capabilities.
+      # Default is read-only. Enable writes and bash for refactoring:
+      append_allowed_tools: ['Write', 'Edit', 'MultiEdit', 'Bash']
+      permission_mode: acceptEdits
 
 tests:
   - description: 'Successful refactor with passing tests'
@@ -378,7 +381,7 @@ tests:
 
 :::note
 
-Claude Agent SDK returns the final text response (or structured output if `output_format` is configured). The agent doesn't expose intermediate file contents or bash output in the response—you evaluate based on what the agent reports doing. For verification, you can check files on disk after the eval or use structured output.
+Claude Agent SDK returns the final text response (or structured output if `output_format` is configured). The agent doesn't expose intermediate file contents or bash output in `output`—you evaluate based on what the agent reports doing. For deeper inspection, enable tracing and check `context.trace` for individual tool calls, or read modified files on disk after the eval.
 
 :::
 
@@ -415,7 +418,9 @@ providers:
     config:
       model: claude-sonnet-4-5-20250929
       working_dir: ./flask-api
-      # Can read, write, and execute bash in working_dir
+      # Enable file writes for multi-file feature implementation
+      append_allowed_tools: ['Write', 'Edit', 'MultiEdit']
+      permission_mode: acceptEdits
 
 tests:
   - description: 'Multi-file feature implementation'
@@ -466,51 +471,85 @@ tests:
 
 **What it is**: Guaranteed JSON output matching a schema.
 
-**Why it matters**: Automation requires consistent, parseable output. Manual JSON parsing fails ~5-15% of the time when LLMs return malformed JSON.
+**Why it matters**: Automation requires consistent, parseable output. Without schema enforcement, LLMs occasionally return malformed JSON that breaks pipelines.
 
 **Who has it**:
 
 - **OpenAI Codex SDK**: Native `output_schema` with strict validation
 - **OpenAI API**: `response_format` with JSON schema (gpt-4o, gpt-5.1)
-- **Claude API and Agent SDK**: JSON schema support via structured outputs (Sonnet 4, Sonnet 4.5, Opus 4.1)
+- **Claude API and Agent SDK**: JSON schema support via structured outputs (Sonnet 4, Sonnet 4.5, Opus 4.5)
 
-Both OpenAI and Anthropic now provide strong JSON schema guarantees. The main difference is ergonomics: Codex SDK's `output_schema` is inline YAML, while Claude uses the API's structured output feature.
+**Two approaches**:
 
-**Evaluation tactic**:
+1. **Provider-level structured output** (recommended): Use `output_schema` (Codex) or `output_format.json_schema` (Claude Agent SDK). The provider enforces the schema and returns parsed JSON.
+
+2. **Prompt-based JSON**: Ask the model to return JSON in your prompt. Works but may produce markdown-wrapped output that needs extraction.
+
+**Evaluation tactic for provider-level structured output**:
 
 ```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./src
+      output_format:
+        type: json_schema
+        schema:
+          type: object
+          required: [vulnerabilities, risk_score, summary]
+          properties:
+            vulnerabilities: { type: array }
+            risk_score: { type: number }
+            summary: { type: string }
+
 tests:
   - assert:
-      - type: is-json # Basic check
+      - type: is-json
       - type: javascript
         value: |
-          // In JS assertions, output is a string - parse it first
+          // With output_format.json_schema, output is already parsed JSON
           const result = typeof output === 'string' ? JSON.parse(output) : output;
-
-          // Strict schema validation
-          const schema = {
-            vulnerabilities: Array,
-            risk_score: 'number',
-            summary: 'string'
+          return {
+            pass: Array.isArray(result.vulnerabilities),
+            reason: `Found ${result.vulnerabilities?.length || 0} vulnerabilities`
           };
+```
 
-          for (const [key, type] of Object.entries(schema)) {
-            if (type === Array && !Array.isArray(result[key])) {
-              return { pass: false, reason: `${key} not an array` };
+**Evaluation tactic for prompt-based JSON** (when provider may wrap in markdown):
+
+````yaml
+tests:
+  - assert:
+      - type: javascript
+        value: |
+          const text = String(output);
+
+          // Extract JSON from markdown code blocks or parse directly
+          let result;
+          const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) ||
+                           text.match(/^(\{[\s\S]*\})$/);
+
+          if (jsonMatch) {
+            try {
+              result = JSON.parse(jsonMatch[1].trim());
+            } catch (e) {
+              return { pass: false, reason: `JSON parse error: ${e.message}` };
             }
-            if (typeof type === 'string' && typeof result[key] !== type) {
-              return { pass: false, reason: `${key} not a ${type}` };
+          } else {
+            try {
+              result = JSON.parse(text);
+            } catch (e) {
+              return { pass: false, reason: 'No valid JSON found' };
             }
           }
 
-          return { pass: true, score: 1.0 };
+          return { pass: Array.isArray(result.vulnerabilities), score: 1.0 };
         metric: 'Schema compliance'
-```
+````
 
-**Typical results:**
-
-- With `output_schema`: 98-100% compliance
-- Without: 85-92% compliance (manual retry logic needed)
+:::tip
+Use `type: is-json` when your provider is configured to return raw JSON (Codex with `output_schema`, Claude Agent SDK with `output_format.json_schema`, or Responses API with `response_format`). Use regex extraction only when prompting for JSON without structured output configuration.
+:::
 
 ### Threads and conversation state
 
@@ -600,19 +639,11 @@ Always work in Git repos. Use `skip_git_repo_check: true` only for testing/examp
 
 **What it is**: Dollars per task and seconds to complete.
 
-**Why it matters**: Agent tasks are 5-20x more expensive than simple LLM calls due to tool use, file reads, and multiple turns.
+**Why it matters**: Agent tasks cost more than simple LLM calls due to tool use, file reads, and multiple turns.
 
-**Typical costs** (as of 2025):
+Cost and latency vary significantly by task complexity, model, and codebase size. A security audit of a few files might cost $0.10-0.30 and take 30-120 seconds. Complex multi-file features can cost several dollars and run for minutes.
 
-- Security audit (5 files): $0.10-0.30
-- Simple refactor (1 file): $0.05-0.15
-- Complex feature (10+ files): $0.50-2.00
-
-**Typical latency**:
-
-- Security audit: 8-15s
-- Simple refactor: 6-12s
-- Complex feature: 20-60s
+Run your own benchmarks—these numbers depend heavily on your specific use case.
 
 **Evaluation tactic**:
 
@@ -761,7 +792,7 @@ Some models are more deterministic than others. Mini models (gpt-5.1-codex-mini)
 
 For plain LLM providers that support it, set `temperature: 0` for reproducibility.
 
-**Strategy 3: Robust assertions**
+**Strategy 3: Flexible assertions**
 
 Design assertions that tolerate minor variations:
 
@@ -780,7 +811,7 @@ Design assertions that tolerate minor variations:
 
 ### Safety and sandboxing
 
-Tier 2 agents can execute arbitrary code. Before running evals:
+SDK-based coding agents can execute arbitrary code. Before running evals:
 
 :::warning
 
@@ -806,7 +837,7 @@ providers:
         - bash # Disable shell entirely for analysis-only tasks
 ```
 
-For comprehensive sandboxing, see [Sandboxed code evals](/docs/guides/sandboxed-code-evals).
+For more on sandboxing, see [Sandboxed code evals](/docs/guides/sandboxed-code-evals).
 
 ### LLM-as-judge for code
 
@@ -856,7 +887,7 @@ LLM-rubric assertions are useful for:
 
 ### Recipe 1: Security scanner with severity breakdown
 
-```yaml title="promptfooconfig.yaml"
+````yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Security scanner with severity metrics'
 
@@ -864,7 +895,9 @@ prompts:
   - 'Scan all code for security vulnerabilities. Return JSON with findings grouped by severity.'
 
 providers:
+  # Codex SDK: output_schema guarantees raw JSON
   - id: openai:codex-sdk
+    label: codex
     config:
       model: gpt-5.1-codex
       working_dir: ./src
@@ -878,12 +911,38 @@ providers:
           low: { type: array, items: { type: string } }
           summary: { type: string }
 
+  # Claude Agent SDK: JSON often wrapped in markdown
+  - id: anthropic:claude-agent-sdk
+    label: claude-agent
+    config:
+      model: claude-sonnet-4-5-20250929
+      working_dir: ./src
+
 tests:
   - assert:
-      - type: is-json
       - type: javascript
         value: |
-          const result = typeof output === 'string' ? JSON.parse(output) : output;
+          const text = String(output);
+
+          // Extract JSON from markdown (Claude) or parse directly (Codex)
+          let result;
+          const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) ||
+                           text.match(/^(\{[\s\S]*\})$/);
+
+          if (jsonMatch) {
+            try {
+              result = JSON.parse(jsonMatch[1].trim());
+            } catch (e) {
+              return { pass: false, score: 0, reason: `JSON parse error: ${e.message}` };
+            }
+          } else {
+            try {
+              result = JSON.parse(text);
+            } catch (e) {
+              return { pass: false, score: 0, reason: 'No JSON found in response' };
+            }
+          }
+
           const criticalCount = result.critical?.length || 0;
           const highCount = result.high?.length || 0;
           const totalCount = criticalCount + highCount +
@@ -899,46 +958,56 @@ tests:
 
       - type: cost
         threshold: 0.30
-```
+````
 
 ### Recipe 2: Code quality metrics
 
-```yaml title="promptfooconfig.yaml"
+````yaml title="promptfooconfig.yaml"
 description: 'Code quality analysis with complexity scoring'
 
 prompts:
-  - 'Analyze code quality. Return cyclomatic complexity, test coverage gaps, and code smells.'
+  - 'Analyze code quality. Return JSON with complexity_score (1-10), coverage_gaps (array), and code_smells (array).'
 
 providers:
-  - id: openai:codex-sdk
+  # Works with both Codex SDK and Claude Agent SDK
+  - id: anthropic:claude-agent-sdk
     config:
-      model: gpt-5.1-codex
+      model: claude-sonnet-4-5-20250929
       working_dir: ./src
-      output_schema:
-        type: object
-        required: [complexity_score, coverage_gaps, code_smells]
-        properties:
-          complexity_score: { type: number } # 1-10 scale
-          coverage_gaps: { type: array, items: { type: string } }
-          code_smells: { type: array, items: { type: string } }
 
 tests:
   - assert:
-      - type: is-json
       - type: javascript
         value: |
-          const result = typeof output === 'string' ? JSON.parse(output) : output;
-          const complexity = result.complexity_score || 10;
-          const hasGaps = (result.coverage_gaps?.length || 0) > 0;
-          const hasSmells = (result.code_smells?.length || 0) > 0;
+          const text = String(output);
 
+          // Extract JSON from markdown or parse directly
+          let result;
+          const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) ||
+                           text.match(/^(\{[\s\S]*\})$/);
+
+          if (jsonMatch) {
+            try {
+              result = JSON.parse(jsonMatch[1].trim());
+            } catch (e) {
+              return { pass: false, score: 0, reason: `JSON parse error: ${e.message}` };
+            }
+          } else {
+            try {
+              result = JSON.parse(text);
+            } catch (e) {
+              return { pass: false, score: 0, reason: 'No JSON found' };
+            }
+          }
+
+          const complexity = result.complexity_score || 10;
           return {
             pass: complexity <= 7,  // Acceptable complexity
             score: Math.max(0, (10 - complexity) / 10),
             reason: `Complexity: ${complexity}/10, Coverage gaps: ${result.coverage_gaps?.length || 0}, Smells: ${result.code_smells?.length || 0}`
           };
         metric: 'Code quality'
-```
+````
 
 ### Recipe 3: Multi-agent comparison
 
@@ -1004,17 +1073,18 @@ tests:
 Agents either complete the task or they don't:
 
 ```yaml
-- type: is-json
 - type: javascript
   value: |
     // Did it complete the task? Binary question.
-    const result = typeof output === 'string' ? JSON.parse(output) : output;
-    const didReadFiles = result.files_analyzed > 0;
-    const didFindIssues = result.vulnerabilities?.length > 0;
+    const text = String(output).toLowerCase();
+
+    // Check for evidence of task completion
+    const analyzedFiles = text.includes('.py') || text.includes('.js') || text.includes('file');
+    const foundIssues = text.includes('vulnerability') || text.includes('issue') || text.includes('risk');
 
     return {
-      pass: didReadFiles && didFindIssues,
-      reason: `Completed: files=${didReadFiles}, issues=${didFindIssues}`
+      pass: analyzedFiles && foundIssues,
+      reason: `Completed: files analyzed=${analyzedFiles}, issues found=${foundIssues}`
     };
 ```
 
@@ -1022,21 +1092,28 @@ Agents either complete the task or they don't:
 
 Can the output go directly into another system?
 
-```yaml
+````yaml
 - type: javascript
   value: |
     // Can we pipe this into a dashboard/CI/CD?
+    const text = String(output);
+
+    // Extract JSON from markdown or parse directly
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) ||
+                     text.match(/^(\{[\s\S]*\})$/);
+
     try {
-      const parsed = typeof output === 'string' ? JSON.parse(output) : output;
-      const hasRequiredFields = 'vulnerabilities' in parsed && 'risk_score' in parsed;
+      const json = jsonMatch ? jsonMatch[1].trim() : text;
+      const parsed = JSON.parse(json);
+      const hasRequiredFields = 'vulnerabilities' in parsed || 'issues' in parsed;
       return {
         pass: hasRequiredFields,
-        reason: hasRequiredFields ? 'Automation-ready' : 'Requires manual parsing'
+        reason: hasRequiredFields ? 'Automation-ready' : 'Missing required fields'
       };
     } catch (e) {
-      return { pass: false, reason: 'Not machine-readable' };
+      return { pass: false, reason: 'Not machine-readable JSON' };
     }
-```
+````
 
 **3. Schema compliance**
 
@@ -1082,8 +1159,8 @@ prompts:
 
 - **Require agent capabilities.** "Write a function that reverses a string" tests the model. "Find all functions in this codebase that reverse strings" tests the agent.
 - **Measure objectively.** "Is the code high quality?" is subjective. "Did it find the 3 intentional bugs?" is measurable.
-- **Include failure modes.** Test what happens when you ask a read-only agent to modify files.
-- **Compare tiers, not just providers.** Plain LLM vs Codex SDK (Tier 0 vs 1) or Codex vs Claude Agent (Tier 1 vs 2) shows capability gaps. Different models on the same provider tests the model, not the agent.
+- **Include failure modes.** Test what happens when you ask an agent to do something outside its configured permissions.
+- **Compare agent types, not just models.** Plain LLM vs Codex SDK vs Claude Agent SDK shows capability gaps. Different models on the same provider tests the model, not the agent architecture.
 
 ### Common pitfalls
 
