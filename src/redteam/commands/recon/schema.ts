@@ -44,8 +44,7 @@ export const ReconOutputSchema = {
     },
     exampleIdentifiers: {
       type: 'string',
-      description:
-        'Example data formats found (e.g., user ID patterns, account number formats)',
+      description: 'Example data formats found (e.g., user ID patterns, account number formats)',
     },
     criticalActions: {
       type: 'string',
@@ -76,8 +75,7 @@ export const ReconOutputSchema = {
     entities: {
       type: 'array',
       items: { type: 'string' },
-      description:
-        'Named entities relevant to testing (company names, product names, etc.)',
+      description: 'Named entities relevant to testing (company names, product names, etc.)',
     },
     discoveredTools: {
       type: 'array',

@@ -52,9 +52,7 @@ export function applicationDefinitionToPurpose(result: ReconResult): string {
   }
 
   if (result.sensitiveDataTypes) {
-    sections.push(
-      `Types of Sensitive Data Handled:\n\`\`\`\n${result.sensitiveDataTypes}\n\`\`\``,
-    );
+    sections.push(`Types of Sensitive Data Handled:\n\`\`\`\n${result.sensitiveDataTypes}\n\`\`\``);
   }
 
   if (result.exampleIdentifiers) {
@@ -152,9 +150,7 @@ export function buildRedteamConfig(result: ReconResult): Partial<UnifiedConfig> 
   // Truncate purpose for description (first sentence or 100 chars)
   const purposeSummary = result.purpose.split('.')[0].trim();
   const description =
-    purposeSummary.length > 100
-      ? `${purposeSummary.substring(0, 97)}...`
-      : purposeSummary;
+    purposeSummary.length > 100 ? `${purposeSummary.substring(0, 97)}...` : purposeSummary;
 
   const config: Partial<UnifiedConfig> = {
     description: `Red team config for: ${description}`,

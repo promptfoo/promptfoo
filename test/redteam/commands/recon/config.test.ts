@@ -142,9 +142,7 @@ describe('buildRedteamConfig', () => {
   it('should add prompt-injection when tools discovered', () => {
     const result: ReconResult = {
       purpose: 'Test',
-      discoveredTools: [
-        { name: 'search', description: 'Search function' },
-      ],
+      discoveredTools: [{ name: 'search', description: 'Search function' }],
     };
     const config = buildRedteamConfig(result);
 

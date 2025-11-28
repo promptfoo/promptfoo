@@ -1,4 +1,7 @@
-import { buildReconPrompt, DEFAULT_EXCLUSIONS } from '../../../../src/redteam/commands/recon/prompt';
+import {
+  buildReconPrompt,
+  DEFAULT_EXCLUSIONS,
+} from '../../../../src/redteam/commands/recon/prompt';
 
 describe('buildReconPrompt', () => {
   afterEach(() => {

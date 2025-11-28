@@ -23,10 +23,7 @@ export const DEFAULT_EXCLUSIONS = [
 /**
  * Builds the agent prompt for reconnaissance analysis
  */
-export function buildReconPrompt(
-  scratchpadPath: string,
-  additionalExclusions?: string[],
-): string {
+export function buildReconPrompt(scratchpadPath: string, additionalExclusions?: string[]): string {
   const exclusions = [...DEFAULT_EXCLUSIONS, ...(additionalExclusions || [])];
 
   return dedent`

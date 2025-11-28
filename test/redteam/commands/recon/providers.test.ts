@@ -134,8 +134,6 @@ describe('selectProvider', () => {
       return undefined;
     });
 
-    expect(() => selectProvider('openai')).toThrow(
-      'OPENAI_API_KEY or CODEX_API_KEY required',
-    );
+    expect(() => selectProvider('openai')).toThrow('OPENAI_API_KEY or CODEX_API_KEY required');
   });
 });
