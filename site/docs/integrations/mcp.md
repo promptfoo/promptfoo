@@ -51,7 +51,7 @@ MCP servers can be run locally or accessed remotely. For development and testing
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:responses:gpt-5.1
     config:
       apiKey: <your-api-key>
       mcp:
@@ -64,7 +64,7 @@ providers:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:responses:gpt-5.1
     config:
       apiKey: <your-api-key>
       mcp:
@@ -91,7 +91,7 @@ Promptfoo allows a single provider to connect to multiple MCP servers by using t
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:responses:gpt-5.1
     config:
       mcp:
         enabled: true
@@ -113,7 +113,7 @@ providers:
 
 ```yaml
 providers:
-  - id: anthropic:claude-3-5-sonnet-20241022
+  - id: anthropic:claude-sonnet-4-5-20250929
     config:
       mcp:
         enabled: true
@@ -147,7 +147,7 @@ providers:
           args: ['-y', '@modelcontextprotocol/server-memory']
           name: gemini-memory
 
-  - id: openai:chat:gpt-4.1
+  - id: openai:responses:gpt-5.1
     config:
       apiKey: <your-api-key>
       mcp:
@@ -158,7 +158,7 @@ providers:
           headers:
             X-API-Key: openai-server-api-key
 
-  - id: anthropic:messages:claude-3-5-sonnet-20241022
+  - id: anthropic:claude-sonnet-4-5-20250929
     config:
       mcp:
         enabled: true
@@ -207,7 +207,7 @@ MCP tool calls have a default timeout of 60 seconds. For long-running tools, inc
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:responses:gpt-5.1
     config:
       mcp:
         enabled: true
