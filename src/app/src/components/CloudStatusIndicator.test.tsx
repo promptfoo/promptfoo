@@ -1,0 +1,369 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import CloudStatusIndicator from './CloudStatusIndicator';
+
+// Mock the useCloudConfig hook
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: vi.fn(),
+}));
+
+// Mock the useTelemetry hook
+vi.mock('@app/hooks/useTelemetry', () => ({
+  useTelemetry: vi.fn(),
+}));
+
+import useCloudConfig from '@app/hooks/useCloudConfig';
+import { useTelemetry } from '@app/hooks/useTelemetry';
+
+describe('CloudStatusIndicator', () => {
+  const mockRecordEvent = vi.fn();
+  const mockRefetch = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset window.open mock
+    global.window.open = vi.fn();
+
+    // Default mock for useTelemetry
+    vi.mocked(useTelemetry).mockReturnValue({
+      recordEvent: mockRecordEvent,
+      identifyUser: vi.fn(),
+      isInitialized: true,
+    });
+  });
+
+  it('should show loading state', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: null,
+      isLoading: true,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    const button = screen.getByRole('button');
+    expect(button).toHaveAttribute('aria-label', expect.stringContaining('Checking cloud status'));
+  });
+
+  it('should show authenticated state with cloud icon', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: true,
+        appUrl: 'https://app.promptfoo.app',
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    const button = screen.getByRole('button');
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Connected to Promptfoo Cloud'),
+    );
+    expect(screen.getByTestId('CloudIcon')).toBeInTheDocument();
+  });
+
+  it('should show authenticated state with enterprise', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: true,
+        appUrl: 'https://enterprise.company.com',
+        isEnterprise: true,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    const button = screen.getByRole('button');
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Connected to Promptfoo Enterprise'),
+    );
+    expect(screen.getByTestId('CloudIcon')).toBeInTheDocument();
+  });
+
+  it('should show unauthenticated state with cloud off icon', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    const button = screen.getByRole('button');
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Not connected to Promptfoo Cloud'),
+    );
+    expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
+  });
+
+  it('should show error state', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: null,
+      isLoading: false,
+      error: 'Network error',
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    const button = screen.getByRole('button');
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Unable to check cloud status'),
+    );
+    expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
+  });
+
+  it('should open cloud dashboard when authenticated and track telemetry', () => {
+    const mockAppUrl = 'https://app.promptfoo.app';
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: true,
+        appUrl: mockAppUrl,
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+
+    expect(window.open).toHaveBeenCalledWith(mockAppUrl, '_blank');
+    expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+      feature: 'cloud_status_icon_click',
+      authenticated: true,
+    });
+  });
+
+  it('should show dialog when unauthenticated and track telemetry', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+
+    expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
+    expect(screen.getByText(/Share evaluation results with your team/)).toBeInTheDocument();
+    expect(screen.getByText(/Centralized dashboard and reporting/)).toBeInTheDocument();
+    expect(screen.getByText('Learn More')).toBeInTheDocument();
+    expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+      feature: 'cloud_status_icon_click',
+      authenticated: false,
+    });
+  });
+
+  it('should show enterprise dialog when unauthenticated and enterprise', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: true,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+
+    expect(screen.getByText('Connect to Promptfoo Enterprise')).toBeInTheDocument();
+    expect(screen.getByText(/Share evaluation results with your organization/)).toBeInTheDocument();
+    expect(screen.getByText(/Centralized dashboard and reporting/)).toBeInTheDocument();
+    expect(screen.getByText('Learn More')).toBeInTheDocument();
+  });
+
+  it('should close dialog when close button is clicked', async () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    // Open dialog
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+
+    expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
+
+    // Close dialog
+    const closeButton = screen.getByText('Close');
+    fireEvent.click(closeButton);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Connect to Promptfoo Cloud')).not.toBeInTheDocument();
+    });
+  });
+
+  it('should show error in dialog when there is an error', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: null,
+      isLoading: false,
+      error: 'Network connection failed',
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    // Open dialog
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+
+    expect(
+      screen.getByText(
+        'Unable to connect to cloud service. Please check your connection and try again.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('should track telemetry when promptfoo.app link is clicked', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    // Open dialog
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+
+    // Click promptfoo.app link
+    const promptfooLink = screen.getByText('promptfoo.app');
+    fireEvent.click(promptfooLink);
+
+    expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
+      action: 'cloud_cta_signup_click',
+      source: 'cloud_status_dialog',
+    });
+  });
+
+  it('should track telemetry when Learn More button is clicked', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    // Open dialog
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+
+    // Click Learn More button
+    const learnMoreButton = screen.getByText('Learn More');
+    fireEvent.click(learnMoreButton);
+
+    expect(window.open).toHaveBeenCalledWith(
+      'https://www.promptfoo.dev/docs/usage/sharing/',
+      '_blank',
+    );
+    expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
+      action: 'cloud_learn_more_click',
+      source: 'cloud_status_dialog',
+    });
+  });
+
+  it('should call refetch when Refresh Status button is clicked', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    // Open dialog
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+
+    // Click Refresh Status button
+    const refreshButton = screen.getByText('Refresh Status');
+    fireEvent.click(refreshButton);
+
+    expect(mockRefetch).toHaveBeenCalled();
+    expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
+      action: 'cloud_status_refresh',
+      source: 'cloud_status_dialog',
+    });
+  });
+
+  it('should disable Refresh Status button while loading', () => {
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: null,
+        isEnterprise: false,
+      },
+      isLoading: true,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<CloudStatusIndicator />);
+
+    // Open dialog - need to click first to trigger state change
+    const iconButton = screen.getByRole('button');
+    fireEvent.click(iconButton);
+
+    // Find the Checking... button (which replaces Refresh Status when loading)
+    const checkingButton = screen.getByText('Checking...');
+    expect(checkingButton).toBeDisabled();
+  });
+});
