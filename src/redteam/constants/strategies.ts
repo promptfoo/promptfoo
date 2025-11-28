@@ -66,6 +66,7 @@ export const DATASET_PLUGINS = [
   'aegis',
   'pliny',
   'unsafebench',
+  'vlguard',
   'xstest',
 ] as const;
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];

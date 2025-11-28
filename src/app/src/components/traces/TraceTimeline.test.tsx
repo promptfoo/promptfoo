@@ -1,10 +1,9 @@
+import { createTheme, Theme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, beforeEach } from 'vitest';
-import { createTheme, ThemeProvider, Theme } from '@mui/material/styles';
-import type { TraceData } from '@promptfoo/types';
-
+import { beforeEach, describe, expect, it } from 'vitest';
 import TraceTimeline from './TraceTimeline';
+import type { TraceData } from '@promptfoo/types';
 
 describe('TraceTimeline', () => {
   let theme: Theme;
@@ -24,6 +23,9 @@ describe('TraceTimeline', () => {
   it('should render trace details and hierarchical spans for a valid trace', () => {
     const mockTrace: TraceData = {
       traceId: 'trace-happy-path-123',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [
         {
           spanId: 'child-1',
@@ -64,6 +66,9 @@ describe('TraceTimeline', () => {
   it('should render a message "No trace data available" when given a trace with an empty spans array', () => {
     const mockTrace: TraceData = {
       traceId: 'empty-trace-123',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [],
     };
 
@@ -75,6 +80,9 @@ describe('TraceTimeline', () => {
   it('should display a tooltip with formatted duration, start time, and end time when hovering over a span', async () => {
     const mockTrace: TraceData = {
       traceId: 'trace-tooltip-123',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [
         {
           spanId: 'span-1',
@@ -104,6 +112,9 @@ describe('TraceTimeline', () => {
   it('should correctly process and display spans with identical start times', () => {
     const mockTrace: TraceData = {
       traceId: 'trace-same-start-time-123',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [
         {
           spanId: 'span-1',
@@ -136,6 +147,9 @@ describe('TraceTimeline', () => {
   it('should render the timeline without crashing when spans have incomplete data (missing name)', () => {
     const mockTrace: TraceData = {
       traceId: 'trace-incomplete-data-123',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [
         {
           spanId: 'span-1',
@@ -154,6 +168,9 @@ describe('TraceTimeline', () => {
   it('should display span attributes in tooltip when span has attributes', async () => {
     const mockTrace: TraceData = {
       traceId: 'trace-with-attributes',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [
         {
           spanId: 'span-with-attrs',
@@ -186,6 +203,9 @@ describe('TraceTimeline', () => {
   it('should apply error color styling to spans with error status code', () => {
     const mockTrace: TraceData = {
       traceId: 'trace-error-status-123',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [
         {
           spanId: 'error-span',
@@ -209,6 +229,9 @@ describe('TraceTimeline', () => {
   it('should apply success color styling to spans with success status code', () => {
     const mockTrace: TraceData = {
       traceId: 'trace-success-status-123',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [
         {
           spanId: 'success-span',
@@ -231,6 +254,9 @@ describe('TraceTimeline', () => {
   it('should handle spans where endTime is earlier than startTime gracefully', () => {
     const mockTrace: TraceData = {
       traceId: 'trace-invalid-time-123',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [
         {
           spanId: 'invalid-time-span',
@@ -250,6 +276,9 @@ describe('TraceTimeline', () => {
   it('should render spans correctly when all spans have identical start and end times (zero duration)', () => {
     const mockTrace: TraceData = {
       traceId: 'trace-zero-duration-456',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [
         {
           spanId: 'span-1',
@@ -277,6 +306,9 @@ describe('TraceTimeline', () => {
   it('should display spans with invalid parentSpanId as root spans', () => {
     const mockTrace: TraceData = {
       traceId: 'trace-invalid-parent-123',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [
         {
           spanId: 'orphan-1',
@@ -298,6 +330,9 @@ describe('TraceTimeline', () => {
   it('should handle traces with extreme time differences between spans', () => {
     const mockTrace: TraceData = {
       traceId: 'trace-extreme-time-diff',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
       spans: [
         {
           spanId: 'normal-span',

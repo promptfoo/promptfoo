@@ -134,6 +134,26 @@ type EnvVars = {
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
 
+  //=========================================================================
+  // MCP (Model Context Protocol) settings
+  //=========================================================================
+  /**
+   * Default timeout in milliseconds for MCP tool calls.
+   * This overrides the MCP SDK's default 60-second timeout.
+   * Can be overridden per-provider via config.mcp.timeout.
+   */
+  MCP_REQUEST_TIMEOUT_MS?: number;
+  /**
+   * Enable debug logging for MCP connections.
+   * Can be overridden per-provider via config.mcp.debug.
+   */
+  MCP_DEBUG?: boolean;
+  /**
+   * Enable verbose output for MCP connections.
+   * Can be overridden per-provider via config.mcp.verbose.
+   */
+  MCP_VERBOSE?: boolean;
+
   // Posthog
   PROMPTFOO_POSTHOG_KEY?: string;
   PROMPTFOO_POSTHOG_HOST?: string;
@@ -298,6 +318,9 @@ type EnvVars = {
   OPENAI_STOP?: string;
   OPENAI_TEMPERATURE?: number;
   OPENAI_TOP_P?: number;
+
+  // OpenAI Codex SDK
+  CODEX_API_KEY?: string;
 
   // OpenRouter
   OPENROUTER_API_KEY?: string;
