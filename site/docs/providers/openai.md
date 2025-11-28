@@ -408,11 +408,12 @@ tests:
 ### Cost Considerations
 
 :::info
-Web search is included in the OpenAI Responses API pricing:
+Web search calls in the Responses API are billed separately from normal tokens:
 
-- No additional cost beyond standard API usage
+- The web search tool costs **$10 per 1,000 calls** for the standard tool and **$10-25 per 1,000 calls** for preview variants, plus any search content tokens where applicable
 - Each search-rubric assertion may perform one or more searches
 - Use caching (`--cache`) to avoid redundant searches during development
+- See [OpenAI's pricing page](https://openai.com/api/pricing/) for current rates
   :::
 
 ### Best Practices

@@ -184,10 +184,10 @@ assert:
 Web search assertions have the following cost implications:
 
 - **Anthropic Claude**: $10 per 1,000 searches plus standard token costs
-- **Perplexity**: Pricing varies by model (check current Perplexity Sonar pricing)
-- **Google Gemini**: Built-in googleSearch tool, included in Gemini API pricing
-- **OpenAI**: web_search_preview tool included in standard API pricing
-- **xAI Grok**: Built-in search, standard API pricing applies
+- **OpenAI**: Web search tools are billed per 1,000 tool calls ($10-25) in addition to token usage
+- **Google Gemini**: $35 per 1,000 grounded prompts (Vertex AI: $45 per 1,000)
+- **Perplexity**: Per-request plus token-based pricing (check their pricing page)
+- **xAI Grok**: $25 per 1,000 sources plus token usage
 
 ## Threshold Support
 

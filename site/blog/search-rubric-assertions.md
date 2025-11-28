@@ -12,7 +12,7 @@ tags: [feature-announcement, testing, assertions]
 
 # Real-Time Fact Checking for LLM Outputs
 
-In July and October 2025, two different U.S. federal judges had to withdraw or revise written opinions after lawyers noticed that the decisions quoted cases and language that did not exist. Follow-up reporting revealed that generative AI had been used for research in chambers, and hallucinated citations slipped into the published rulings. ([Reuters](https://www.reuters.com/legal/government/two-us-judges-withdraw-rulings-after-attorneys-question-accuracy-2025-07-29/))
+In mid-2025, two U.S. federal judges withdrew or corrected written opinions after lawyers noticed that the decisions quoted cases and language that did not exist. In one chambers, draft research produced using generative AI had slipped into a published ruling. ([Reuters](https://www.reuters.com/legal/government/two-us-judges-withdraw-rulings-after-attorneys-question-accuracy-2025-07-29/))
 
 None of these errors looked obviously wrong on the page. They read like normal legal prose until someone checked the underlying facts.
 
@@ -62,7 +62,7 @@ At a high level:
 4. The grading model decides when to call search based on the rubric.
 5. It returns a JSON object like `{ pass: boolean, score: number, reason: string }`.
 
-You never have to write the web search logic yourself. You just describe what "correct enough" means.
+You do not write any of the search logic yourself. You just describe what "correct enough" means.
 
 ### Minimal example
 
@@ -228,7 +228,7 @@ Because the rubric encodes the expected timeline, the grader must confirm the da
 
 ### 4. Software versions
 
-Node.js LTS moves quickly. As of late 2025, Node 24.x is the newest LTS release, and older LTS lines like 20.x and 22.x are already in maintenance or near end-of-life.
+Node.js LTS moves quickly. As of late 2025, Node 24.x is the newest Active LTS release, and older LTS lines like 22.x and 20.x are in Maintenance LTS rather than the recommended track for new projects. ([Node.js](https://nodejs.org/en/about/previous-releases))
 
 ```yaml
 assert:
@@ -267,11 +267,11 @@ As of November 2025:
 ### Google Gemini / Vertex AI
 
 - Gemini 2.5 and Gemini 3 series models can ground responses with the `googleSearch` tool.
-- Grounding with Google Search is billed per grounded prompt after a small free tier (currently about **$35 per 1,000 grounded prompts**). ([Google AI Pricing](https://ai.google.dev/gemini-api/docs/pricing))
+- Grounding with Google Search on the Gemini API is billed per grounded prompt after a free daily quota, currently **$35 per 1,000 grounded prompts**. Vertex AI's enterprise Web Grounding is **$45 per 1,000 grounded prompts**. ([Google AI Pricing](https://ai.google.dev/gemini-api/docs/pricing))
 
 ### Perplexity
 
-- Sonar models expose search as part of the API, with Search API pricing starting around **$5 per 1,000 requests**, plus model usage. ([Perplexity Pricing](https://docs.perplexity.ai/getting-started/pricing))
+- Sonar models expose search as part of the API with per-request plus token-based pricing. Check [Perplexity's pricing page](https://docs.perplexity.ai/getting-started/pricing) for current rates.
 
 ### xAI Grok
 

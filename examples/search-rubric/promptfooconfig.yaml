@@ -85,9 +85,9 @@ tests:
     assert:
       - type: search-rubric
         value: |
-          States a recent Node.js LTS version:
-          - Should be version 20.x or higher (as of 2025)
-          - Mentions it is an LTS (Long Term Support) release
+          States a currently supported Node.js LTS version:
+          - Names a version that is in Active or Maintenance LTS
+          - Does not recommend an end-of-life version
         threshold: 0.7
 
   # Weather (real-time)
