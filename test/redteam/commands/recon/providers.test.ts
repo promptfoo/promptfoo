@@ -28,7 +28,7 @@ describe('selectProvider', () => {
     const result = selectProvider();
 
     expect(result.type).toBe('openai');
-    expect(result.model).toBe('gpt-5.1-codex-max');
+    expect(result.model).toBe('gpt-5.1-codex');
   });
 
   it('should select OpenAI when CODEX_API_KEY is set', () => {
@@ -42,7 +42,7 @@ describe('selectProvider', () => {
     const result = selectProvider();
 
     expect(result.type).toBe('openai');
-    expect(result.model).toBe('gpt-5.1-codex-max');
+    expect(result.model).toBe('gpt-5.1-codex');
   });
 
   it('should select Anthropic when only ANTHROPIC_API_KEY is set', () => {
@@ -112,7 +112,7 @@ describe('selectProvider', () => {
     const result = selectProvider('openai');
 
     expect(result.type).toBe('openai');
-    expect(result.model).toBe('gpt-5.1-codex-max');
+    expect(result.model).toBe('gpt-5.1-codex');
   });
 
   it('should throw when forced to anthropic but no ANTHROPIC_API_KEY', () => {

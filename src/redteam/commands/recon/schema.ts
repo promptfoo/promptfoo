@@ -3,6 +3,7 @@
  */
 export const ReconOutputSchema = {
   type: 'object',
+  additionalProperties: false,
   properties: {
     // Core ApplicationDefinition fields
     purpose: {
@@ -82,13 +83,14 @@ export const ReconOutputSchema = {
       type: 'array',
       items: {
         type: 'object',
+        additionalProperties: false,
         properties: {
           name: { type: 'string' },
           description: { type: 'string' },
           file: { type: 'string' },
           parameters: { type: 'string' },
         },
-        required: ['name', 'description'],
+        required: ['name', 'description', 'file', 'parameters'],
       },
       description: 'LLM tools/functions discovered in the codebase',
     },
@@ -108,5 +110,27 @@ export const ReconOutputSchema = {
       description: 'Important files reviewed during analysis',
     },
   },
-  required: ['purpose'],
+  required: [
+    'purpose',
+    'features',
+    'industry',
+    'systemPrompt',
+    'hasAccessTo',
+    'doesNotHaveAccessTo',
+    'userTypes',
+    'securityRequirements',
+    'sensitiveDataTypes',
+    'exampleIdentifiers',
+    'criticalActions',
+    'forbiddenTopics',
+    'attackConstraints',
+    'competitors',
+    'connectedSystems',
+    'redteamUser',
+    'entities',
+    'discoveredTools',
+    'suggestedPlugins',
+    'securityNotes',
+    'keyFiles',
+  ],
 };

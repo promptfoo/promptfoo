@@ -26,7 +26,7 @@ export async function createOpenAIReconProvider(
       working_dir: directory,
       additional_directories: [scratchpad.dir],
       skip_git_repo_check: true,
-      model: model || 'gpt-5.1-codex-max',
+      model: model || 'gpt-5.1-codex',
       output_schema: ReconOutputSchema,
     },
   });
@@ -88,7 +88,7 @@ export function selectProvider(forcedProvider?: 'openai' | 'anthropic'): Provide
     if (!getEnvString('OPENAI_API_KEY') && !getEnvString('CODEX_API_KEY')) {
       throw new Error('OPENAI_API_KEY or CODEX_API_KEY required for OpenAI provider');
     }
-    return { type: 'openai', model: 'gpt-5.1-codex-max' };
+    return { type: 'openai', model: 'gpt-5.1-codex' };
   }
 
   if (forcedProvider === 'anthropic') {
@@ -101,7 +101,7 @@ export function selectProvider(forcedProvider?: 'openai' | 'anthropic'): Provide
   // Auto-detect: prefer OpenAI
   if (getEnvString('OPENAI_API_KEY') || getEnvString('CODEX_API_KEY')) {
     logger.info('Using OpenAI Codex SDK (OPENAI_API_KEY detected)');
-    return { type: 'openai', model: 'gpt-5.1-codex-max' };
+    return { type: 'openai', model: 'gpt-5.1-codex' };
   }
 
   if (getEnvString('ANTHROPIC_API_KEY')) {
