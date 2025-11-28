@@ -122,7 +122,7 @@ Use the `promptfoo.minimumSeverity` setting to filter out lower-severity finding
 
 ## Privacy
 
-Code is sent to Promptfoo's servers for analysis and is not stored after analysis completes. For organizations that need to run scans on their own infrastructure, the extension works with [Promptfoo Enterprise On-Prem](../enterprise).
+Code is sent to Promptfoo's servers for analysis and is not stored after analysis completes. For organizations that need to run scans on their own infrastructure, the extension works with [Promptfoo Enterprise On-Prem](/docs/enterprise/).
 
 ## See Also
 
