@@ -6,27 +6,41 @@ description: Compare AI coding agents for code generation, security analysis, an
 
 # Evaluate Coding Agents
 
+**TL;DR**: Pick your agent based on what it needs to do, then jump to the matching [scenario](#scenarios). Use the [capability tiers](#capability-tiers) to understand what's possible, and the [evaluation methodology](#evaluation-methodology) for designing assertions.
+
 This guide covers the CLI-based coding agents built into promptfoo: [OpenAI Codex SDK](/docs/providers/openai-codex-sdk) and [Claude Agent SDK](/docs/providers/claude-agent-sdk). These run headless and integrate directly with promptfoo's eval framework.
 
 IDE-based agents like Cursor, Copilot, and Aider are mentioned for comparison but aren't directly supported. [Open an issue](https://github.com/promptfoo/promptfoo/issues) if you'd like to see support for your favorite coding agent.
 
 ## Capability tiers
 
-Coding agents have categorical capabilities. You can't prompt-engineer a plain LLM into reading files - that requires architectural support.
+Agent capabilities are gated by tools and environment, not prompting. You can't prompt-engineer a plain LLM into reading files—that requires architectural support.
 
-**Tier 0: Text Generation** (Plain LLM like gpt-5.1, claude-sonnet-4)
+**Tier 0: Text Generation** (Plain LLM via standard provider)
 
 - **What it receives**: Your prompt text only
 - **Can do**: Discuss code, generate snippets, explain concepts
 - **Cannot do**: Read files, execute code, guarantee output structure
 - **Use for**: Code review (paste code in prompt), explaining patterns
 
-**Tier 1: Code Reading** (OpenAI Codex SDK)
+:::note
+
+"Plain LLM" means using models like gpt-5.1 or claude-sonnet-4 through promptfoo's standard chat/completions providers without an agent harness. The same models can be full coding agents when wrapped by Codex SDK or Claude Agent SDK.
+
+:::
+
+**Tier 1: Code Reading** (OpenAI Codex SDK provider)
 
 - **What it receives**: Your prompt + full codebase context (1M+ tokens)
 - **Can do**: Analyze code, detect vulnerabilities, produce structured JSON
 - **Cannot do**: Modify files, run tests, execute bash commands
 - **Use for**: Security audits, code analysis, generating reports
+
+:::note
+
+Codex itself supports full file modification and code execution. The promptfoo `openai:codex-sdk` provider is configured read-only for safety. This is an intentional design choice for eval scenarios where you want analysis without side effects.
+
+:::
 
 **Tier 2: Code Modification** (Claude Agent SDK, Cursor, Aider)
 
@@ -35,16 +49,16 @@ Coding agents have categorical capabilities. You can't prompt-engineer a plain L
 - **Cannot do**: Depends on sandbox restrictions
 - **Use for**: Refactoring, feature implementation, test generation
 
-The difference between tiers is binary - a plain LLM either has file access or it doesn't.
+The tiers have sharp boundaries (file access or not), but within each tier there are meaningful gradations: how much code can be seen, what commands are allowed, what MCP servers are connected, etc.
 
 ## When to use each agent
 
-| Agent Type                               | Best For                             | Structured Output     | File System Access     | Tradeoffs                      |
-| ---------------------------------------- | ------------------------------------ | --------------------- | ---------------------- | ------------------------------ |
-| **Plain LLM** (gpt-5.1, claude-sonnet-4) | Code review, simple generation       | Manual parsing needed | No                     | Fast, cheap, limited context   |
-| **OpenAI Codex SDK**                     | Security audits, schema-driven tasks | Native JSON schema    | Read-only by default   | High token use, strict output  |
-| **Claude Agent SDK**                     | Refactoring, multi-file edits        | Natural language      | Full read/write + bash | Full capabilities, higher cost |
-| **Cursor/Copilot/Aider**                 | IDE integration, interactive coding  | IDE-specific          | IDE-controlled         | Interactive, non-automated     |
+| Agent Type                               | Best For                             | Structured Output  | File System Access       | Tradeoffs                      |
+| ---------------------------------------- | ------------------------------------ | ------------------ | ------------------------ | ------------------------------ |
+| **Plain LLM** (gpt-5.1, claude-sonnet-4) | Code review, simple generation       | JSON schema or raw | No                       | Fast, cheap, limited context   |
+| **OpenAI Codex SDK**                     | Security audits, schema-driven tasks | Native JSON schema | Read-only (in promptfoo) | High token use, strict output  |
+| **Claude Agent SDK**                     | Refactoring, multi-file edits        | JSON schema        | Configurable per-tool    | Full capabilities, higher cost |
+| **Cursor/Copilot/Aider**                 | IDE integration, interactive coding  | IDE-specific       | IDE-controlled           | Interactive, non-automated     |
 
 ### Quick recommendations
 
@@ -136,13 +150,19 @@ providers:
 tests:
   - description: 'Find security vulnerabilities'
     assert:
-      # Verify structured output
+      # First check it's valid JSON
+      - type: is-json
+      # Then verify structured output
       - type: javascript
         value: |
+          // Parse output - with output_schema, Codex returns valid JSON
+          // but in JS assertions, output is always a string
+          const result = typeof output === 'string' ? JSON.parse(output) : output;
+
           // Check required fields exist
-          if (!Array.isArray(output.vulnerabilities) ||
-              typeof output.risk_score !== 'number' ||
-              typeof output.summary !== 'string') {
+          if (!Array.isArray(result.vulnerabilities) ||
+              typeof result.risk_score !== 'number' ||
+              typeof result.summary !== 'string') {
             return {
               pass: false,
               score: 0,
@@ -151,7 +171,7 @@ tests:
           }
 
           // Check for key vulnerabilities in test code
-          const vulns = output.vulnerabilities;
+          const vulns = result.vulnerabilities;
           const foundMD5 = vulns.some(v =>
             v.issue?.toLowerCase().includes('md5') ||
             v.category === 'cryptography'
@@ -279,17 +299,22 @@ The 25,000x prompt difference is the entire codebase being read into context:
 - `user_service.py`: ~400 tokens
 - Codex system prompts and tools: ~1.059M tokens
 
-This inverts typical LLM patterns. Chat models minimize prompt and maximize completion. Coding agents maximize context and minimize completion.
+Agent runs allocate more tokens to reading and inspecting code than to generating text, compared to chat use cases. But the reasoning step itself is still nontrivial—these models use significant compute to synthesize findings from massive context.
 
 ### Scaling
 
-For this test codebase (2 files, ~100 LOC), Codex read 1M tokens. Rough scaling:
+The 1M token count has two components:
 
-- 10 files: ~5M tokens
-- 100 files: ~50M tokens
-- 1,000 files: ~500M tokens (may hit context limits)
+- **Fixed overhead** (~1M tokens): Codex system prompts, tool definitions, and internal scaffolding. This cost is roughly constant regardless of codebase size.
+- **Variable overhead** (~1K tokens): Actual file contents. Scales with the number and size of files the agent reads.
 
-For larger codebases: focus scans on specific subdirectories, filter out tests and generated code, or analyze only changed files.
+For this toy codebase (2 files, ~100 LOC), the fixed overhead dominates. For larger codebases:
+
+- The variable portion scales roughly linearly with files touched
+- Modern context windows are ~1M tokens, not 500M—agents use streaming, caching, and compaction rather than loading everything at once
+- Real-world scaling depends on which files the agent decides to read, not total repo size
+
+**For larger codebases**: Focus scans on specific subdirectories, filter out tests and generated code, or analyze only changed files. Use `additional_directories` to limit scope.
 
 See the [agentic-sdk-comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/agentic-sdk-comparison) for a working implementation.
 
@@ -314,8 +339,9 @@ providers:
     config:
       model: claude-sonnet-4-5-20250929
       working_dir: ./user-service
-      # Claude Agent SDK has full tool access by default
-      # Use disallowed_tools to restrict if needed
+      # Tools are enabled by configuration. By default the agent can
+      # read/write files and run bash commands in working_dir.
+      # Use disallowed_tools to restrict specific capabilities.
 
 tests:
   - description: 'Successful refactor with passing tests'
@@ -374,7 +400,7 @@ providers:
     config:
       model: claude-sonnet-4-5-20250929
       working_dir: ./flask-api
-      # Claude Agent SDK has full tool access by default
+      # Can read, write, and execute bash in working_dir
 
 tests:
   - description: 'Multi-file feature implementation'
@@ -415,8 +441,10 @@ tests:
 **Who has it**:
 
 - **OpenAI Codex SDK**: Native `output_schema` with strict validation
-- **OpenAI API**: `response_format` with JSON schema (gpt-4o+)
-- **Claude**: Constrained output (less strict than OpenAI)
+- **OpenAI API**: `response_format` with JSON schema (gpt-4o, gpt-5.1)
+- **Claude API and Agent SDK**: JSON schema support via structured outputs (Sonnet 4, Sonnet 4.5, Opus 4.1)
+
+Both OpenAI and Anthropic now provide strong JSON schema guarantees. The main difference is ergonomics: Codex SDK's `output_schema` is inline YAML, while Claude uses the API's structured output feature.
 
 **Evaluation tactic**:
 
@@ -426,6 +454,9 @@ tests:
       - type: is-json # Basic check
       - type: javascript
         value: |
+          // In JS assertions, output is a string - parse it first
+          const result = typeof output === 'string' ? JSON.parse(output) : output;
+
           // Strict schema validation
           const schema = {
             vulnerabilities: Array,
@@ -434,10 +465,10 @@ tests:
           };
 
           for (const [key, type] of Object.entries(schema)) {
-            if (type === Array && !Array.isArray(output[key])) {
+            if (type === Array && !Array.isArray(result[key])) {
               return { pass: false, reason: `${key} not an array` };
             }
-            if (typeof type === 'string' && typeof output[key] !== type) {
+            if (typeof type === 'string' && typeof result[key] !== type) {
               return { pass: false, reason: `${key} not a ${type}` };
             }
           }
@@ -559,25 +590,30 @@ Always work in Git repos. Use `skip_git_repo_check: true` only for testing/examp
 tests:
   - description: 'Cost and latency constraints'
     assert:
+      # Built-in cost assertion - uses provider response metadata
       - type: cost
         threshold: 0.25 # Max $0.25 per audit
         metric: 'Cost per audit'
 
+      # Built-in latency assertion
       - type: latency
         threshold: 15000 # Max 15 seconds
         metric: 'Latency'
 
+      # For custom cost metrics, use context.providerResponse
       - type: javascript
         value: |
-          // Calculate cost-per-vulnerability
-          const cost = output.cost || 0;
-          const vulnCount = output.vulnerabilities?.length || 0;
+          const result = typeof output === 'string' ? JSON.parse(output) : output;
+          const vulnCount = result.vulnerabilities?.length || 0;
+
+          // Cost is in context, not output
+          const cost = context.providerResponse?.cost || 0;
           const costPerVuln = vulnCount > 0 ? cost / vulnCount : 999;
 
           return {
             pass: costPerVuln < 0.10,
             score: Math.max(0, 1 - costPerVuln / 0.10),
-            reason: `$${costPerVuln.toFixed(3)} per vulnerability`
+            reason: `$${costPerVuln.toFixed(3)} per vulnerability (${vulnCount} found)`
           };
         metric: 'Cost efficiency'
 ```
@@ -587,6 +623,196 @@ tests:
 - Use smaller models for simple tasks (gpt-4o-mini vs gpt-4o saves ~70%)
 - Limit `working_dir` scope to reduce file reads
 - Use `thread_pool_size` to reuse threads (saves ~30% on multi-task runs)
+
+## Advanced evaluation techniques
+
+### Connection to benchmarks
+
+For systematic agent evaluation, consider established benchmarks:
+
+- **[SWE-bench](https://www.swebench.com/)**: Real GitHub issues from popular repos. Agents produce patches, evaluated by running tests. SWE-bench Verified uses human-validated issues.
+- **SWE-bench Live**: Issues from the past month, reducing contamination risk.
+
+You can use promptfoo to evaluate against SWE-bench style tasks:
+
+```yaml title="promptfooconfig.yaml"
+description: 'SWE-bench style evaluation'
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      model: claude-sonnet-4-5-20250929
+      working_dir: ./swebench-instance # Repo with failing test
+      # Agent produces a patch
+
+tests:
+  - vars:
+      issue: 'Fix the TypeError in parse_date when input is None'
+    assert:
+      # Check patch applies cleanly
+      - type: javascript
+        value: |
+          const patchApplied = context.providerResponse?.sessionId;
+          return { pass: !!patchApplied, reason: patchApplied ? 'Patch created' : 'No patch' };
+
+      # Check tests pass (run separately or via bash tool)
+      - type: contains
+        value: 'PASSED'
+```
+
+Even if you track SWE-bench scores, bespoke evals on your own codebase catch domain-specific issues benchmarks miss.
+
+### Trace-based evaluation
+
+Final outputs don't capture everything. For agents, stepwise behavior matters:
+
+- Did it run tests before claiming success?
+- Did it retry failed commands unnecessarily?
+- Did it attempt dangerous operations?
+
+Use `context.vars._conversation` to access the full agent trace:
+
+```yaml title="promptfooconfig.yaml"
+tests:
+  - assert:
+      - type: javascript
+        value: |
+          // Access conversation trace for stepwise analysis
+          const trace = context.vars._conversation || [];
+
+          // Count bash commands
+          const bashCalls = trace.filter(t =>
+            t.role === 'assistant' && t.content?.includes('bash')
+          ).length;
+
+          // Check for test execution
+          const ranTests = trace.some(t =>
+            t.content?.includes('pytest') || t.content?.includes('npm test')
+          );
+
+          // Check for dangerous commands
+          const dangerous = trace.some(t =>
+            t.content?.includes('rm -rf') ||
+            t.content?.includes('curl') && t.content?.includes('|')
+          );
+
+          return {
+            pass: ranTests && !dangerous,
+            score: ranTests ? 1.0 : 0.0,
+            reason: `Bash calls: ${bashCalls}, Tests run: ${ranTests}, Dangerous: ${dangerous}`
+          };
+        metric: 'Agent behavior'
+```
+
+This enables "Agent-as-a-Judge" style evaluation—judging traces, not just outcomes.
+
+### Handling flakiness
+
+Agent runs are noisy. The same prompt can succeed or fail depending on model sampling.
+
+**Strategy 1: Multiple runs**
+
+```yaml title="promptfooconfig.yaml"
+# Run each test case 3 times
+defaultTest:
+  options:
+    repeat: 3
+
+tests:
+  - vars:
+      task: 'Find security vulnerabilities'
+    assert:
+      - type: javascript
+        value: |
+          // Track pass rate across runs
+          const passRate = context.test?.metrics?.passRate || 0;
+          return {
+            pass: passRate >= 0.66, // 2/3 must pass
+            reason: `Pass rate: ${(passRate * 100).toFixed(0)}%`
+          };
+```
+
+**Strategy 2: Variance detection**
+
+High variance on a specific prompt is a red flag—it often indicates an ambiguous task or unstable model behavior. Track which prompts have high variance and investigate them.
+
+**Strategy 3: Temperature control**
+
+For reproducibility, set `temperature: 0` in provider config. For coverage testing, use higher temperatures across runs.
+
+### Safety and sandboxing
+
+Tier 2 agents can execute arbitrary code. Before running evals:
+
+:::warning
+
+Never give agents access to production credentials, real customer data, or network access to internal systems.
+
+:::
+
+**Sandboxing strategies:**
+
+1. **Ephemeral containers**: Run each eval in a fresh Docker container with no network access
+2. **Read-only mounts**: Mount the repo read-only, write to a separate volume
+3. **Credential isolation**: Use dummy API keys and mock services
+4. **Command allowlists**: Restrict which bash commands are permitted
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      model: claude-sonnet-4-5-20250929
+      working_dir: ./sandbox # Disposable directory
+      # Restrict to safe tools only
+      disallowed_tools:
+        - bash # Disable shell entirely for analysis-only tasks
+```
+
+For comprehensive sandboxing, see [Sandboxed code evals](/docs/guides/sandboxed-code-evals).
+
+### LLM-as-judge for code
+
+JavaScript assertions check structure. For semantic quality, use model-graded assertions:
+
+```yaml title="promptfooconfig.yaml"
+tests:
+  - vars:
+      task: 'Replace MD5 with bcrypt for password hashing'
+    assert:
+      # Structural check
+      - type: javascript
+        value: |
+          const hasNoBcrypt = !output.includes('bcrypt');
+          return { pass: !hasNoBcrypt, reason: hasNoBcrypt ? 'Missing bcrypt' : 'Has bcrypt' };
+
+      # Semantic check - is the fix actually secure?
+      - type: llm-rubric
+        value: |
+          Evaluate this code change for security:
+          1. Is bcrypt used correctly (proper salt rounds, async hashing)?
+          2. Is MD5 completely removed, not just supplemented?
+          3. Are there any new vulnerabilities introduced?
+
+          Score 1.0 for secure implementation, 0.5 for partial, 0.0 for insecure.
+        threshold: 0.8
+
+      # Check for regression risk
+      - type: llm-rubric
+        value: |
+          How invasive is this change?
+          - Minimal (1.0): Only touches hashing code
+          - Moderate (0.5): Changes function signatures or adds dependencies
+          - High risk (0.0): Restructures authentication flow
+
+          Return the risk level.
+        threshold: 0.5
+```
+
+LLM-rubric assertions are useful for:
+
+- **Diff plausibility**: Does the patch match the issue description?
+- **Security fix quality**: Is the replacement actually secure?
+- **Regression risk**: How invasive is the change?
 
 ## Copy-paste recipes
 
@@ -616,13 +842,15 @@ providers:
 
 tests:
   - assert:
+      - type: is-json
       - type: javascript
         value: |
-          const criticalCount = output.critical?.length || 0;
-          const highCount = output.high?.length || 0;
+          const result = typeof output === 'string' ? JSON.parse(output) : output;
+          const criticalCount = result.critical?.length || 0;
+          const highCount = result.high?.length || 0;
           const totalCount = criticalCount + highCount +
-                            (output.medium?.length || 0) +
-                            (output.low?.length || 0);
+                            (result.medium?.length || 0) +
+                            (result.low?.length || 0);
 
           return {
             pass: totalCount > 0,
@@ -658,16 +886,18 @@ providers:
 
 tests:
   - assert:
+      - type: is-json
       - type: javascript
         value: |
-          const complexity = output.complexity_score || 10;
-          const hasGaps = (output.coverage_gaps?.length || 0) > 0;
-          const hasSmells = (output.code_smells?.length || 0) > 0;
+          const result = typeof output === 'string' ? JSON.parse(output) : output;
+          const complexity = result.complexity_score || 10;
+          const hasGaps = (result.coverage_gaps?.length || 0) > 0;
+          const hasSmells = (result.code_smells?.length || 0) > 0;
 
           return {
             pass: complexity <= 7,  // Acceptable complexity
             score: Math.max(0, (10 - complexity) / 10),
-            reason: `Complexity: ${complexity}/10, Coverage gaps: ${output.coverage_gaps?.length || 0}, Smells: ${output.code_smells?.length || 0}`
+            reason: `Complexity: ${complexity}/10, Coverage gaps: ${result.coverage_gaps?.length || 0}, Smells: ${result.code_smells?.length || 0}`
           };
         metric: 'Code quality'
 ```
@@ -736,16 +966,17 @@ tests:
 Agents either complete the task or they don't:
 
 ```yaml
+- type: is-json
 - type: javascript
   value: |
     // Did it complete the task? Binary question.
-    const didReadFiles = output.files_analyzed > 0;
-    const didFindIssues = output.vulnerabilities?.length > 0;
-    const didReturnJSON = typeof output === 'object';
+    const result = typeof output === 'string' ? JSON.parse(output) : output;
+    const didReadFiles = result.files_analyzed > 0;
+    const didFindIssues = result.vulnerabilities?.length > 0;
 
     return {
-      pass: didReadFiles && didFindIssues && didReturnJSON,
-      reason: `Completed: ${didReadFiles && didFindIssues && didReturnJSON}`
+      pass: didReadFiles && didFindIssues,
+      reason: `Completed: files=${didReadFiles}, issues=${didFindIssues}`
     };
 ```
 
@@ -797,11 +1028,17 @@ prompts:
 # - Possibly explain it can't modify ✅
 ```
 
-### Metrics to avoid
+### Choosing metrics
 
-BLEU scores and perplexity measure fluency, not task completion. For agents, "did it work?" matters more than "how good is the text?"
+**For automation pipelines**: Use binary completion metrics. Automation breaks on "mostly correct JSON"—either the output is machine-readable or it isn't.
 
-Partial success metrics ("found 3 of 5 issues") are less useful than binary completion. Automation pipelines break on "mostly correct JSON."
+**For engineering teams**: Partial coverage metrics ("found 3 of 5 vulnerabilities") are still valuable for:
+
+- Identifying which categories the agent systematically misses
+- Tracking improvement over time
+- Comparing precision at different severity thresholds
+
+**Avoid**: BLEU scores and perplexity measure fluency, not task completion. For agents, "did it work?" matters more than "how good is the text?"
 
 ### Eval design
 
