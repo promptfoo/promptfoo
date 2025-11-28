@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- docs(redteam): Adding documentation for multi-turn conversations using both stateful and stateless providers (#5832)
+
 ### Added
 
 - feat(providers): add Claude Agent SDK plugin support - enables loading local plugins via `plugins` config

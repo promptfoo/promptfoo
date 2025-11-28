@@ -329,6 +329,11 @@ const redTeamSidebar = [
         label: 'Testing Guardrails',
         id: 'guides/testing-guardrails',
       },
+      {
+        type: 'doc',
+        label: 'Multi-Turn Conversations',
+        id: 'red-team/multi-turn-conversations',
+      },
     ],
   },
 ];
