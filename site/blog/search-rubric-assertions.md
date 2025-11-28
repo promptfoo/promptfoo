@@ -6,7 +6,7 @@ image_alt: 'Search rubric assertion verifying current information'
 slug: llm-search-rubric-assertions
 keywords: [promptfoo, LLM testing, web search, fact checking, real-time verification, assertions]
 date: 2025-11-28
-authors: [steve]
+authors: [michael]
 tags: [feature-announcement, testing, assertions]
 ---
 
@@ -448,7 +448,7 @@ You can read the full configuration reference in the [Search-Rubric documentatio
   "datePublished": "2025-11-28",
   "author": {
     "@type": "Person",
-    "name": "Steve"
+    "name": "Michael"
   },
   "keywords": "LLM testing, web search, fact checking, real-time verification",
   "description": "Promptfoo's search-rubric assertion uses models with web search to verify time-sensitive facts like stock prices, weather, software versions, and legal citations during testing."
