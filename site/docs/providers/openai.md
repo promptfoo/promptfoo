@@ -369,7 +369,7 @@ To enable web search with the OpenAI Responses API, use the `openai:responses` p
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:o4-mini
+  - id: openai:responses:gpt-5.1
     config:
       tools:
         - type: web_search_preview
@@ -392,7 +392,7 @@ prompts:
   - 'What is the current temperature in {{city}}?'
 
 providers:
-  - id: openai:responses:o4-mini
+  - id: openai:responses:gpt-5.1
     config:
       tools:
         - type: web_search_preview
@@ -420,7 +420,7 @@ Web search calls in the Responses API are billed separately from normal tokens:
 
 1. **Use specific search queries**: More specific queries yield better verification results
 2. **Enable caching**: Run with `npx promptfoo eval --cache` to avoid repeated searches
-3. **Use appropriate models**: o4-mini is recommended for cost-effective web search
+3. **Use appropriate models**: gpt-5.1-mini is recommended for cost-effective web search
 4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
 
 For more details on using search-rubric assertions, see the [Search-Rubric documentation](/docs/configuration/expected-outputs/model-graded/search-rubric).

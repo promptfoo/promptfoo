@@ -89,6 +89,8 @@ tests:
 
 When this runs, Promptfoo uses a separate search-enabled model as the grader. If the SUT hallucinates or returns a stale training-data price, the assertion fails with an explanation.
 
+**What to expect:** Models like `gpt-4o-mini` without web search will often refuse to answer real-time questions ("I don't have access to real-time data"). The search-rubric grader correctly flags this as a failure since no actual price was provided. To test models that confidently answer (and potentially hallucinate), use a more capable model or one with web search enabled as the SUT.
+
 ---
 
 ## How it works under the hood
@@ -252,6 +254,8 @@ You can use any provider that can both:
 1. Act as a general purpose grader model
 2. Call out to web search from the API
 
+By late 2025, all of the major model providers had some flavor of first-class web search or grounding API, each with its own pricing line item. That is great for capabilities, but it also means your evals need to understand when they are exercising these tools and whether they are returning current, correct information.
+
 As of November 2025:
 
 ### Anthropic Claude 4 and 4.5
@@ -374,7 +378,7 @@ A suite that hits web search 500 times on every CI run will cost real money. Sta
 
 ### 4. The grader is still an LLM
 
-Search helps, but grading remains probabilistic. Use `threshold` to require a high score for sensitive checks, and keep some traditional non-LLM assertions in place.
+The grader is still an LLM with its own failure modes. Search reduces hallucinations but does not eliminate them. Use `threshold` to require a high score for sensitive checks, and keep some non-LLM assertions in place.
 
 ---
 

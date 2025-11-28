@@ -31,7 +31,7 @@ assert:
   # Using llm-rubric with a web-search capable provider
   - type: llm-rubric
     value: 'Contains current stock price for Apple (AAPL) within $5'
-    provider: openai:responses:o4-mini # Must configure web search tool
+    provider: openai:responses:gpt-5.1 # Must configure web search tool
 
   # Using search-rubric (automatically selects a web-search provider)
   - type: search-rubric
@@ -181,13 +181,13 @@ assert:
 
 ## Cost Considerations
 
-Web search assertions have the following cost implications:
+Web search assertions have the following cost implications. As of November 2025:
 
-- **Anthropic Claude**: $10 per 1,000 searches plus standard token costs
-- **OpenAI**: Web search tools are billed per 1,000 tool calls ($10-25) in addition to token usage
-- **Google Gemini**: $35 per 1,000 grounded prompts (Vertex AI: $45 per 1,000)
-- **Perplexity**: Per-request plus token-based pricing (check their pricing page)
-- **xAI Grok**: $25 per 1,000 sources plus token usage
+- **Anthropic Claude**: $10 per 1,000 web search calls plus token costs
+- **OpenAI**: Web search tools on the Responses API cost $10-25 per 1,000 tool calls in addition to token usage
+- **Google Gemini API**: $35 per 1,000 grounded prompts; **Vertex AI Web Grounding**: $45 per 1,000
+- **Perplexity**: Per-request plus token-based pricing; see Perplexity or your proxy's pricing page
+- **xAI Grok**: $25 per 1,000 sources plus token usage for Live Search
 
 ## Threshold Support
 
@@ -208,16 +208,79 @@ assert:
 4. **Enable caching**: Use `promptfoo eval --cache` during development to avoid repeated searches
 5. **Test variable substitution**: Ensure your rubrics work with different variable values
 
+## Expected Behavior
+
+Understanding how `search-rubric` evaluates different scenarios helps you write better tests.
+
+### What the grader catches
+
+The search-enabled grader identifies several types of failures:
+
+| SUT Response | Grader Verdict | Reason |
+| --- | --- | --- |
+| "I don't have access to real-time data" | **Fail** | No actual answer provided |
+| Stale price from training data | **Fail** | Value differs from current market |
+| Correct current price | **Pass** | Matches web search results |
+| Partially correct answer | **Partial** | Score reflects completeness |
+
+### Models without web search
+
+Models like `gpt-4o-mini` without web search enabled will often refuse to answer real-time questions:
+
+> "I don't have access to real-time stock data. For current prices, please check a financial website."
+
+The `search-rubric` grader correctly flags this as a failure since no actual information was provided. This is the expected behavior—the assertion is verifying whether your system provides accurate current information, not whether it gracefully declines.
+
+**To test models that confidently answer (and potentially hallucinate):**
+
+- Use a more capable model as the system under test
+- Enable web search on your SUT if available
+- Test against models known to attempt answers even when uncertain
+
+### Partial matches and scoring
+
+The grader returns a score from 0.0 to 1.0 based on how well the output matches the rubric:
+
+- **1.0**: Fully matches all rubric criteria
+- **0.7-0.9**: Matches most criteria, minor issues
+- **0.4-0.6**: Partial match, missing key information
+- **0.0-0.3**: Significant errors or refusal to answer
+
+Use the `threshold` parameter to set your acceptable score level.
+
 ## Troubleshooting
 
 ### "No provider with web search capabilities"
 
-Ensure your grading provider supports web search. Default providers without web search configuration will fail.
+Ensure your grading provider supports web search. Default providers without web search configuration will fail. Check the [Grading Providers](#grading-providers) section above.
+
+### Test always fails with refusal
+
+If your SUT consistently refuses to answer real-time questions, this is expected behavior for models without web access. The `search-rubric` grader is correctly identifying that no factual answer was provided.
+
+**Solutions:**
+
+1. Use a model with web search capabilities as your SUT
+2. Accept that models without real-time access cannot answer these questions
+3. Use `llm-rubric` instead if you only need to verify the response format
 
 ### Inaccurate results
 
-Try making your search query more specific or adjusting the threshold.
+The grader relies on web search results, which may occasionally be wrong or ambiguous.
+
+**Best practices:**
+
+- Write rubrics that can be verified from multiple reputable sources
+- Avoid rubrics about speculative or disputed claims
+- Use appropriate thresholds (not 1.0) to allow for minor discrepancies
 
 ### High costs
 
-Consider using Perplexity's `sonar` model or enabling result caching.
+Web search adds cost on top of model tokens.
+
+**Cost reduction strategies:**
+
+- Use `promptfoo eval --cache` during development
+- Reserve `search-rubric` for tests that truly need real-time verification
+- Use `llm-rubric` for static fact-checking that doesn't require current data
+- Consider Perplexity's `sonar` model for built-in search without per-call fees

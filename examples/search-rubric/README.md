@@ -29,14 +29,14 @@ npx promptfoo eval
 
 ### Anthropic Claude
 
-- Web search capabilities via tool configuration (launched May 2025)
+- Web search capabilities via tool configuration (launched in 2025)
 - Requires explicit `web_search_20250305` tool configuration
 - Pricing: $10 per 1,000 searches plus standard token costs
 
 ### OpenAI
 
 - Requires `web_search_preview` tool configuration
-- Works with o4-mini and other response models
+- Works with gpt-5.1, o4-mini, and other Responses API models
 
 ### Perplexity
 
