@@ -3,15 +3,10 @@ import { calculateCost } from './shared';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
-import type { OpenAiCompletionOptions } from './openai/types';
 
-type DeepSeekConfig = OpenAiCompletionOptions;
-
-type DeepSeekProviderOptions = Omit<ProviderOptions, 'config'> & {
-  config?: {
-    config?: DeepSeekConfig;
-  };
-};
+// DeepSeekProviderOptions is just ProviderOptions - the base type already includes
+// config?: any and env?: EnvOverrides, which is all we need
+type DeepSeekProviderOptions = ProviderOptions;
 
 export const DEEPSEEK_CHAT_MODELS = [
   {
@@ -71,28 +66,20 @@ export function calculateDeepSeekCost(
   return inputCostTotal + cacheReadCostTotal + outputCostTotal;
 }
 
-class DeepSeekProvider extends OpenAiChatCompletionProvider {
-  private originalConfig?: DeepSeekConfig;
-
+export class DeepSeekProvider extends OpenAiChatCompletionProvider {
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }
 
-  constructor(modelName: string, providerOptions: DeepSeekProviderOptions) {
-    // Extract the nested config
-    const deepseekConfig = providerOptions.config?.config;
-
+  constructor(modelName: string, providerOptions: DeepSeekProviderOptions = {}) {
     super(modelName, {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        ...deepseekConfig,
         apiKeyEnvar: 'DEEPSEEK_API_KEY',
         apiBaseUrl: 'https://api.deepseek.com/v1',
       },
     });
-
-    this.originalConfig = deepseekConfig;
   }
 
   id(): string {

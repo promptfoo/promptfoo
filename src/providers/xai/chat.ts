@@ -84,10 +84,10 @@ type XAIConfig = {
   agent_tools?: XAIAgentTool[];
 } & OpenAiCompletionOptions;
 
-type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
-  config?: {
-    config?: XAIConfig;
-  };
+// Extends ProviderOptions with typed config for xAI-specific options
+// Note: env is already in ProviderOptions, config narrows from 'any' to XAIConfig
+type XAIProviderOptions = ProviderOptions & {
+  config?: XAIConfig;
 };
 
 export const XAI_CHAT_MODELS = [
@@ -322,7 +322,7 @@ export function calculateXAICost(
   return inputCostTotal + outputCostTotal;
 }
 
-class XAIProvider extends OpenAiChatCompletionProvider {
+export class XAIProvider extends OpenAiChatCompletionProvider {
   private originalConfig?: XAIConfig;
 
   protected get apiKey(): string | undefined {
@@ -376,15 +376,13 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     return result;
   }
 
-  constructor(modelName: string, providerOptions: XAIProviderOptions) {
-    // Extract the nested config
-    const xaiConfig = providerOptions.config?.config;
+  constructor(modelName: string, providerOptions: XAIProviderOptions = {}) {
+    const xaiConfig = providerOptions.config;
 
     super(modelName, {
       ...providerOptions,
       config: {
-        ...providerOptions.config,
-        ...xaiConfig, // Merge the nested config into the main config
+        ...xaiConfig,
         apiKeyEnvar: 'XAI_API_KEY',
         apiBaseUrl: xaiConfig?.region
           ? `https://${xaiConfig.region}.api.x.ai/v1`
