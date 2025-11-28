@@ -222,24 +222,24 @@ tests:
       context: file://path/to/dynamicVarGenerator.js
 ```
 
-`dynamicVarGenerator.js` receives `varName`, `prompt`, and `otherVars` as arguments, which you can use to query a database or anything else based on test context:
+`dynamicVarGenerator.js` receives `varName`, `prompt`, `otherVars`, and `provider` as arguments, which you can use to query a database or generate content based on test context:
 
 ```js
-module.exports = function (varName, prompt, otherVars) {
-  // Example logic to return a value based on the varName
-  if (varName === 'context') {
-    return {
-      output: `Processed ${otherVars.input} for prompt: ${prompt}`,
-    };
-  }
-  return {
-    output: 'default value',
-  };
+module.exports = async function (varName, prompt, otherVars, provider) {
+  // Use otherVars to access other variables from the test case
+  const question = otherVars.question;
+
+  // Generate dynamic content based on the question
+  const context = await fetchRelevantDocuments(question);
+
+  return { output: context };
 
   // Handle potential errors
   // return { error: 'Error message' }
 };
 ```
+
+See the [dynamic-var example](https://github.com/promptfoo/promptfoo/tree/main/examples/dynamic-var) for a complete working example.
 
 This JavaScript file processes input variables and returns a dynamic value based on the provided context.
 
