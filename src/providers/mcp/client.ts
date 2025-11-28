@@ -1,4 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { getAuthHeaders } from './util';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -6,6 +7,44 @@ import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdi
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 import type { MCPConfig, MCPServerConfig, MCPTool, MCPToolResult } from './types';
+
+/**
+ * MCP SDK RequestOptions type for timeout configuration.
+ */
+interface MCPRequestOptions {
+  timeout?: number;
+  resetTimeoutOnProgress?: boolean;
+  maxTotalTimeout?: number;
+}
+
+/**
+ * Get the effective request options for MCP requests.
+ * Priority: config values > MCP_REQUEST_TIMEOUT_MS env var > undefined (SDK default of 60s)
+ */
+function getEffectiveRequestOptions(config: MCPConfig): MCPRequestOptions | undefined {
+  const timeout = config.timeout ?? getEnvInt('MCP_REQUEST_TIMEOUT_MS');
+
+  // If no timeout options are set, return undefined to use SDK defaults
+  if (!timeout && !config.resetTimeoutOnProgress && !config.maxTotalTimeout) {
+    return undefined;
+  }
+
+  const options: MCPRequestOptions = {};
+
+  if (timeout) {
+    options.timeout = timeout;
+  }
+
+  if (config.resetTimeoutOnProgress) {
+    options.resetTimeoutOnProgress = config.resetTimeoutOnProgress;
+  }
+
+  if (config.maxTotalTimeout) {
+    options.maxTotalTimeout = config.maxTotalTimeout;
+  }
+
+  return options;
+}
 
 export class MCPClient {
   private clients: Map<string, Client> = new Map();
@@ -47,6 +86,8 @@ export class MCPClient {
 
     let transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport;
     try {
+      const requestOptions = getEffectiveRequestOptions(this.config);
+
       if (server.command && server.args) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         // NPM package or other command execution
@@ -55,7 +96,7 @@ export class MCPClient {
           args: server.args,
           env: process.env as Record<string, string>,
         });
-        await client.connect(transport);
+        await client.connect(transport, requestOptions);
       } else if (server.path) {
         // Local server file
         const isJs = server.path.endsWith('.js');
@@ -76,7 +117,7 @@ export class MCPClient {
           args: [server.path],
           env: process.env as Record<string, string>,
         });
-        await client.connect(transport);
+        await client.connect(transport, requestOptions);
       } else if (server.url) {
         // Get auth headers and combine with custom headers
         const authHeaders = getAuthHeaders(server);
@@ -93,7 +134,7 @@ export class MCPClient {
             '@modelcontextprotocol/sdk/client/streamableHttp.js'
           );
           transport = new StreamableHTTPClientTransport(new URL(server.url), options);
-          await client.connect(transport);
+          await client.connect(transport, requestOptions);
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
           logger.debug(
@@ -101,15 +142,30 @@ export class MCPClient {
           );
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
           transport = new SSEClientTransport(new URL(server.url), options);
-          await client.connect(transport);
+          await client.connect(transport, requestOptions);
           logger.debug('Connected using SSE transport');
         }
       } else {
         throw new Error('Either command+args or path or url must be specified for MCP server');
       }
 
+      // Ping server to verify connection if configured
+      if (this.config.pingOnConnect) {
+        try {
+          await client.ping(requestOptions);
+          logger.debug(`MCP server ${serverKey} ping successful`);
+        } catch (pingError) {
+          const pingErrorMessage =
+            pingError instanceof Error ? pingError.message : String(pingError);
+          throw new Error(`MCP server ${serverKey} ping failed: ${pingErrorMessage}`);
+        }
+      }
+
       // List available tools
-      const toolsResult = await client.listTools();
+      const toolsResult = await client.listTools(
+        undefined, // no pagination params
+        requestOptions,
+      );
       const serverTools =
         toolsResult?.tools?.map((tool) => ({
           name: tool.name,
@@ -152,12 +208,18 @@ export class MCPClient {
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
+    const requestOptions = getEffectiveRequestOptions(this.config);
+
     // Find which server has this tool
     for (const [serverKey, client] of this.clients.entries()) {
       const serverTools = this.tools.get(serverKey) || [];
       if (serverTools.some((tool) => tool.name === name)) {
         try {
-          const result = await client.callTool({ name, arguments: args });
+          const result = await client.callTool(
+            { name, arguments: args },
+            undefined, // use default result schema
+            requestOptions,
+          );
 
           // Handle different content types appropriately
           let content = '';

@@ -29,6 +29,10 @@ providers:
 ### MCP Config Options
 
 - `enabled`: Set to `true` to enable MCP for this provider.
+- `timeout`: (Optional) Request timeout in milliseconds for MCP tool calls. Defaults to 60000 (60 seconds). Set higher for long-running tools.
+- `resetTimeoutOnProgress`: (Optional) Reset timeout when progress notifications are received. Useful for long-running operations. Default: false.
+- `maxTotalTimeout`: (Optional) Absolute maximum timeout in milliseconds regardless of progress notifications.
+- `pingOnConnect`: (Optional) Ping the server after connecting to verify it's responsive. Default: false.
 - `server`: (Optional) Configuration for launching or connecting to an MCP server.
   - `command`: The command to launch the MCP server (e.g., `npx`).
   - `args`: Arguments to pass to the command (e.g., `['-y', '@modelcontextprotocol/server-memory']`).
@@ -197,11 +201,35 @@ For detailed information about using MCP with OpenAI's Responses API, see the [O
 
 Promptfoo automatically handles JSON Schema compatibility between MCP servers and LLM providers by removing provider-incompatible metadata fields (like `$schema`) while preserving supported features. Tools with no input parameters work without modification.
 
+## Timeout Configuration
+
+MCP tool calls have a default timeout of 60 seconds. For long-running tools, increase the timeout:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4.1
+    config:
+      mcp:
+        enabled: true
+        timeout: 900000 # 15 minutes in milliseconds
+        server:
+          url: https://api.example.com/mcp
+```
+
+You can also set a global default via environment variable:
+
+```bash
+export MCP_REQUEST_TIMEOUT_MS=900000  # 15 minutes
+```
+
+Priority: `config.timeout` > `MCP_REQUEST_TIMEOUT_MS` env var > SDK default (60s).
+
 ## Troubleshooting
 
 - Ensure your MCP server is running and accessible.
 - Check your provider logs for MCP connection errors.
 - Verify that your custom headers are correctly formatted if you're having authentication issues.
+- If tool calls timeout, increase the `timeout` config option or set `MCP_REQUEST_TIMEOUT_MS`.
 
 ## See Also
 

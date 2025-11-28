@@ -134,6 +134,16 @@ type EnvVars = {
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
 
+  //=========================================================================
+  // MCP (Model Context Protocol) settings
+  //=========================================================================
+  /**
+   * Default timeout in milliseconds for MCP tool calls.
+   * This overrides the MCP SDK's default 60-second timeout.
+   * Can be overridden per-provider via config.mcp.timeout.
+   */
+  MCP_REQUEST_TIMEOUT_MS?: number;
+
   // Posthog
   PROMPTFOO_POSTHOG_KEY?: string;
   PROMPTFOO_POSTHOG_HOST?: string;
