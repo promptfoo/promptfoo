@@ -923,16 +923,39 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
-      it('should still resolve non-glob file references in vars when they do not contain wildcards', () => {
-        (fs.readFileSync as jest.Mock).mockReturnValue('test data');
+      it('should preserve non-glob file references in vars for runtime loading by renderPrompt', () => {
         const config = {
           vars: {
-            content: 'file://content.txt', // No glob pattern
+            content: 'file://content.txt', // No glob pattern - still preserved
           },
         };
         const result = maybeLoadConfigFromExternalFile(config);
-        expect(result.vars.content).toBe('test data');
-        expect(fs.readFileSync).toHaveBeenCalled();
+        // File references in vars should be preserved for runtime loading
+        // JS/Python files will be executed by renderPrompt in evaluatorHelpers.ts
+        expect(result.vars.content).toBe('file://content.txt');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve JS file references in vars for runtime execution', () => {
+        const config = {
+          vars: {
+            dynamicContent: 'file://generateContent.js',
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.dynamicContent).toBe('file://generateContent.js');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve Python file references in vars for runtime execution', () => {
+        const config = {
+          vars: {
+            dynamicContent: 'file://generateContent.py',
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.dynamicContent).toBe('file://generateContent.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
       });
     });
   });
