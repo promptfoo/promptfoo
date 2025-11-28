@@ -51,7 +51,7 @@ That is what `search-rubric` is for.
 
 ## What `search-rubric` actually does
 
-Conceptually, `search-rubric` is `llm-rubric` plus a search-enabled judge model.
+Conceptually, [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) is [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) plus a search-enabled judge model.
 
 At a high level:
 
@@ -153,11 +153,11 @@ This is deliberately simple. The judge model is an agent with exactly one job: c
 
 ---
 
-## When to use `search-rubric` vs `llm-rubric`
+## When to use [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) vs [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)
 
 You should not turn on search for every test. It adds latency and cost. Use it where the world moves fast.
 
-| Use case                               | Prefer `llm-rubric` | Prefer `search-rubric` |
+| Use case                               | Prefer [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) | Prefer [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) |
 | -------------------------------------- | ------------------- | ---------------------- |
 | Tone, UX copy, narrative quality       | ✓                   |                        |
 | Prompt adherence, safety, style checks | ✓                   |                        |
@@ -170,8 +170,8 @@ You should not turn on search for every test. It adds latency and cost. Use it w
 
 A practical pattern is:
 
-- Use `llm-rubric` for most qualitative checks.
-- Add `search-rubric` only for tests that intentionally touch the outside world.
+- Use [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) for most qualitative checks.
+- Add [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) only for tests that intentionally touch the outside world.
 
 ---
 
