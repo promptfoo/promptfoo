@@ -65,6 +65,7 @@ jobs:
     name: Build on Node ${{ matrix.node }}
     env:
       PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+      NODE_OPTIONS: '--max-old-space-size=4096'
     timeout-minutes: 5
     runs-on: ubuntu-latest
     strategy:
@@ -305,6 +306,8 @@ jobs:
     name: Share Test
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: '--max-old-space-size=4096'
     permissions:
       contents: read
     steps:
@@ -352,6 +355,8 @@ jobs:
   redteam:
     name: Redteam (Production API)
     runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: '--max-old-space-size=4096'
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -367,6 +372,8 @@ jobs:
     name: Redteam (Staging API)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: '--max-old-space-size=4096'
     permissions:
       contents: read
     steps:
