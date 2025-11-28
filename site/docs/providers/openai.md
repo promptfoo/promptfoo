@@ -1613,7 +1613,11 @@ There are a few things you can do if you encounter OpenAI rate limits (most comm
 
 To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY_5XX` environment variable to `1`.
 
-## Agents SDK Integration
+## Agentic Providers
+
+OpenAI offers several agentic providers for different use cases:
+
+### Agents SDK
 
 Test multi-turn agentic workflows with the [OpenAI Agents provider](/docs/providers/openai-agents). This provider supports the [@openai/agents](https://github.com/openai/openai-agents-js) SDK with tools, handoffs, and tracing.
 
@@ -1627,3 +1631,22 @@ providers:
 ```
 
 See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full configuration options and examples.
+
+### Codex SDK
+
+For agentic coding tasks with working directory access and structured JSON output, use the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk). This provider supports `gpt-5.1-codex` models optimized for code generation:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.1-codex
+      working_dir: ./src
+      output_schema:
+        type: object
+        properties:
+          code: { type: string }
+          explanation: { type: string }
+```
+
+See the [OpenAI Codex SDK documentation](/docs/providers/openai-codex-sdk) for thread management, structured output, and Git-aware operations.
