@@ -39,6 +39,30 @@ Both agentic providers have similar capabilities. The differences are in default
 | **Safety**              | Git repo check                   | Tool allowlists                  |
 | **Ecosystem**           | OpenAI Responses API             | MCP servers, CLAUDE.md           |
 
+## Basic structure
+
+An agent eval looks like any other promptfoo config, but the provider does the heavy lifting:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      working_dir: ./src # Agent operates here
+      model: gpt-5.1-codex
+
+prompts:
+  - Find all security vulnerabilities in this codebase.
+
+tests:
+  - assert:
+      - type: icontains
+        value: vulnerability
+```
+
+The agent reads files, reasons, and returns output. Your assertions check whether it did the job. Run with `npx promptfoo eval`.
+
+The scenarios below show common patterns: structured output, refactoring with tests, and multi-file changes.
+
 ## Scenarios
 
 ### Security audit with structured output
