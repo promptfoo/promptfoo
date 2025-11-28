@@ -1,6 +1,6 @@
 import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
-import { loadApiProvider } from '../../src/providers';
-import type { ApiProvider } from '../../src/types';
+import { loadApiProvider } from '../../src/providers/index';
+import type { ApiProvider } from '../../src/types/index';
 
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),

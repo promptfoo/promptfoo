@@ -1,6 +1,6 @@
 import logger from '../logger';
-import { loadApiProvider } from '../providers';
-import type { ApiProvider } from '../types';
+import { loadApiProvider } from '../providers/index';
+import type { ApiProvider } from '../types/index';
 
 /**
  * Check if a provider has web search capabilities

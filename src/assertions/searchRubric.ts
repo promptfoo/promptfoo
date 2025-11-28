@@ -1,5 +1,5 @@
 import { matchesSearchRubric } from '../matchers';
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export async function handleSearchRubric({
   assertion,
