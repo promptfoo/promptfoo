@@ -156,6 +156,12 @@
                             "DATABRICKS_WORKSPACE_URL": {
                               "type": "string"
                             },
+                            "DEEPSEEK_API_KEY": {
+                              "type": "string"
+                            },
+                            "DEEPSEEK_BASE_URL": {
+                              "type": "string"
+                            },
                             "DOCKER_MODEL_RUNNER_BASE_URL": {
                               "type": "string"
                             },
@@ -351,6 +357,12 @@
                             "WATSONX_AI_PROJECT_ID": {
                               "type": "string"
                             },
+                            "XAI_API_KEY": {
+                              "type": "string"
+                            },
+                            "XAI_BASE_URL": {
+                              "type": "string"
+                            },
                             "AZURE_CONTENT_SAFETY_ENDPOINT": {
                               "type": "string"
                             },
@@ -364,6 +376,15 @@
                               "type": "string"
                             },
                             "AWS_DEFAULT_REGION": {
+                              "type": "string"
+                            },
+                            "AWS_ACCESS_KEY_ID": {
+                              "type": "string"
+                            },
+                            "AWS_SECRET_ACCESS_KEY": {
+                              "type": "string"
+                            },
+                            "AWS_PROFILE": {
                               "type": "string"
                             },
                             "AWS_SAGEMAKER_MAX_TOKENS": {
