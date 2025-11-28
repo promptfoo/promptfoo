@@ -67,12 +67,14 @@ You do not write any of the search logic yourself. You just describe what "corre
 ### Minimal example
 
 ```yaml title="promptfooconfig.yaml"
+prompts:
+  - "What is the current stock price of {{company}}?"
+
 providers:
   - openai:gpt-4o-mini
 
 tests:
-  - prompt: "What is the current stock price of {{company}}?"
-    vars:
+  - vars:
       company: Apple
       ticker: AAPL
     assert:
