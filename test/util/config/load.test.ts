@@ -18,7 +18,7 @@ import {
   readConfig,
   resolveConfigs,
 } from '../../../src/util/config/load';
-import { detectInstaller, promptfooCommand } from '../../../src/util/promptfooCommand';
+import { promptfooCommand } from '../../../src/util/promptfooCommand';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { readTests } from '../../../src/util/testCaseReader';
 
