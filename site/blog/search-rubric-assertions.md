@@ -186,28 +186,34 @@ promptfoo eval --cache
 
 ```yaml title="Provider setup examples"
 providers:
-  # Anthropic - requires web search tool
-  - id: anthropic:claude-sonnet-4-20250514
+  # Anthropic Claude 4.5 Opus (Nov 2024 checkpoint)
+  - id: anthropic:messages:claude-opus-4-5-20251101
     config:
       tools:
         - type: web_search_20250305
           name: web_search
           max_uses: 5
 
-  # OpenAI - requires tool config
-  - id: openai:o4-mini
+  # OpenAI GPT-5.1 with web search
+  - id: openai:responses:gpt-5.1
     config:
       tools:
         - type: web_search_preview
 
-  # Google - uses googleSearch
-  - id: google:gemini-2.5-flash
+  # Google Gemini 3 Pro Preview
+  - id: google:gemini-3-pro-preview
     config:
       tools:
-        - googleSearch
+        - googleSearch: {}
 
-  # Perplexity - built-in search
-  - perplexity:sonar-large
+  # xAI Grok 4.1 Fast Reasoning with live search
+  - id: xai:grok-4-1-fast-reasoning
+    config:
+      search_parameters:
+        mode: 'on'
+
+  # Perplexity Sonar Pro - built-in search
+  - perplexity:sonar-pro
 ```
 
 ## Best Practices

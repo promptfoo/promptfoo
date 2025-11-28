@@ -1721,8 +1721,8 @@ export async function matchesSearchRubric(
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-  assertion?: Assertion | null,
-  _provider?: ApiProvider | null,
+  assertion?: Assertion,
+  _provider?: ApiProvider,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(

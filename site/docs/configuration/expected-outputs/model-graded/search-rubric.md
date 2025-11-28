@@ -67,7 +67,7 @@ Anthropic Claude models support web search through the `web_search_20250305` too
 
 ```yaml
 grading:
-  provider: anthropic:messages:claude-sonnet-4-20250514
+  provider: anthropic:messages:claude-opus-4-5-20251101
   providerOptions:
     config:
       tools:
@@ -82,7 +82,7 @@ OpenAI's responses API supports web search through the `web_search_preview` tool
 
 ```yaml
 grading:
-  provider: openai:responses:o4-mini
+  provider: openai:responses:gpt-5.1
   providerOptions:
     config:
       tools:
@@ -104,7 +104,7 @@ Google's Gemini models support web search through the `googleSearch` tool:
 
 ```yaml
 grading:
-  provider: google:gemini-2.5-flash
+  provider: google:gemini-3-pro-preview
   providerOptions:
     config:
       tools:
@@ -117,11 +117,11 @@ xAI's Grok models have built-in web search capabilities:
 
 ```yaml
 grading:
-  provider: xai:grok-beta
+  provider: xai:grok-4-1-fast-reasoning
   providerOptions:
     config:
       search_parameters:
-        enable_search: true
+        mode: 'on'
 ```
 
 ## Use Cases
