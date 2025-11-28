@@ -215,5 +215,4 @@ describe('handleSearchRubric', () => {
     expect(calls[0][2]).toEqual({ provider: 'anthropic:messages:claude-opus-4-5-20251101' });
     expect(calls[0][3]).toEqual({ city: 'New York' });
   });
-
 });

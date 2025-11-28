@@ -221,7 +221,9 @@ describe('webSearchUtils', () => {
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
-              tools: expect.arrayContaining([expect.objectContaining({ type: 'web_search_preview' })]),
+              tools: expect.arrayContaining([
+                expect.objectContaining({ type: 'web_search_preview' }),
+              ]),
             }),
           }),
         }),

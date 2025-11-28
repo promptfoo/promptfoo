@@ -68,7 +68,7 @@ You do not write any of the search logic yourself. You just describe what "corre
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
-  - "What is the current stock price of {{company}}?"
+  - 'What is the current stock price of {{company}}?'
 
 providers:
   - openai:gpt-4o-mini
@@ -162,15 +162,15 @@ This is deliberately simple. The judge model is an agent with exactly one job: c
 You should not turn on search for every test. It adds latency and cost. Use it where the world moves fast.
 
 | Use case                               | Prefer [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) | Prefer [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) |
-| -------------------------------------- | ------------------- | ---------------------- |
-| Tone, UX copy, narrative quality       | ✓                   |                        |
-| Prompt adherence, safety, style checks | ✓                   |                        |
-| Static APIs, math, pure reasoning      | ✓                   |                        |
-| Stock prices, FX, crypto               |                     | ✓                      |
-| Current weather and travel conditions  |                     | ✓                      |
-| Latest software versions (Node, React) |                     | ✓                      |
-| Case citations and regulations         |                     | ✓                      |
-| "Who won...?" style news questions     |                     | ✓                      |
+| -------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Tone, UX copy, narrative quality       | ✓                                                                                   |                                                                                           |
+| Prompt adherence, safety, style checks | ✓                                                                                   |                                                                                           |
+| Static APIs, math, pure reasoning      | ✓                                                                                   |                                                                                           |
+| Stock prices, FX, crypto               |                                                                                     | ✓                                                                                         |
+| Current weather and travel conditions  |                                                                                     | ✓                                                                                         |
+| Latest software versions (Node, React) |                                                                                     | ✓                                                                                         |
+| Case citations and regulations         |                                                                                     | ✓                                                                                         |
+| "Who won...?" style news questions     |                                                                                     | ✓                                                                                         |
 
 A practical pattern is:
 
@@ -306,7 +306,7 @@ grading:
         - type: web_search_preview
 
 tests:
-  - prompt: "What is the weather in Tokyo right now?"
+  - prompt: 'What is the weather in Tokyo right now?'
     assert:
       - type: search-rubric
         value: |

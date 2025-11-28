@@ -216,12 +216,12 @@ Understanding how `search-rubric` evaluates different scenarios helps you write 
 
 The search-enabled grader identifies several types of failures:
 
-| SUT Response | Grader Verdict | Reason |
-| --- | --- | --- |
-| "I don't have access to real-time data" | **Fail** | No actual answer provided |
-| Stale price from training data | **Fail** | Value differs from current market |
-| Correct current price | **Pass** | Matches web search results |
-| Partially correct answer | **Partial** | Score reflects completeness |
+| SUT Response                            | Grader Verdict | Reason                            |
+| --------------------------------------- | -------------- | --------------------------------- |
+| "I don't have access to real-time data" | **Fail**       | No actual answer provided         |
+| Stale price from training data          | **Fail**       | Value differs from current market |
+| Correct current price                   | **Pass**       | Matches web search results        |
+| Partially correct answer                | **Partial**    | Score reflects completeness       |
 
 ### Models without web search
 
