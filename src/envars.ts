@@ -143,6 +143,16 @@ type EnvVars = {
    * Can be overridden per-provider via config.mcp.timeout.
    */
   MCP_REQUEST_TIMEOUT_MS?: number;
+  /**
+   * Enable debug logging for MCP connections.
+   * Can be overridden per-provider via config.mcp.debug.
+   */
+  MCP_DEBUG?: boolean;
+  /**
+   * Enable verbose output for MCP connections.
+   * Can be overridden per-provider via config.mcp.verbose.
+   */
+  MCP_VERBOSE?: boolean;
 
   // Posthog
   PROMPTFOO_POSTHOG_KEY?: string;

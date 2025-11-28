@@ -299,6 +299,8 @@ The MCP provider supports these environment variables:
 | Variable                 | Description                                          | Default |
 | ------------------------ | ---------------------------------------------------- | ------- |
 | `MCP_REQUEST_TIMEOUT_MS` | Default timeout for MCP tool calls and requests (ms) | 60000   |
+| `MCP_DEBUG`              | Enable debug logging for MCP connections             | false   |
+| `MCP_VERBOSE`            | Enable verbose output for MCP connections            | false   |
 
 ## Error Handling
 

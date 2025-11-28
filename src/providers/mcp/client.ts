@@ -1,5 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { getEnvInt } from '../../envars';
+import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { getAuthHeaders } from './util';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -61,6 +61,20 @@ export class MCPClient {
 
   get connectedServers(): string[] {
     return Array.from(this.clients.keys());
+  }
+
+  /**
+   * Check if debug mode is enabled (config takes priority over env var)
+   */
+  private get isDebugEnabled(): boolean {
+    return this.config.debug ?? getEnvBool('MCP_DEBUG') ?? false;
+  }
+
+  /**
+   * Check if verbose mode is enabled (config takes priority over env var)
+   */
+  private get isVerboseEnabled(): boolean {
+    return this.config.verbose ?? getEnvBool('MCP_VERBOSE') ?? false;
   }
 
   constructor(config: MCPConfig) {
@@ -188,7 +202,7 @@ export class MCPClient {
       this.clients.set(serverKey, client);
       this.tools.set(serverKey, filteredTools);
 
-      if (this.config.verbose) {
+      if (this.isVerboseEnabled) {
         console.log(
           `Connected to MCP server ${serverKey} with tools:`,
           filteredTools.map((tool) => tool.name),
@@ -196,7 +210,7 @@ export class MCPClient {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (this.config.debug) {
+      if (this.isDebugEnabled) {
         logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
       }
       throw new Error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
@@ -244,7 +258,7 @@ export class MCPClient {
           };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          if (this.config.debug) {
+          if (this.isDebugEnabled) {
             logger.error(`Error calling tool ${name}: ${errorMessage}`);
           }
           return {
@@ -267,7 +281,7 @@ export class MCPClient {
         }
         await client.close();
       } catch (error) {
-        if (this.config.debug) {
+        if (this.isDebugEnabled) {
           logger.error(
             `Error during cleanup: ${error instanceof Error ? error.message : String(error)}`,
           );
