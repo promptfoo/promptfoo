@@ -30,5 +30,11 @@ export async function getHarmfulTests(
     return [];
   };
   const allPrompts = await retryWithDeduplication(generatePrompts, n);
-  return sampleArray(allPrompts, n).map((prompt) => createTestCase(injectVar, prompt, plugin));
+  return sampleArray(allPrompts, n).map((prompt) => {
+    const testCase = createTestCase(injectVar, prompt, plugin);
+    // Note: The unaligned provider returns pre-generated harmful content from a dataset,
+    // so inputs cannot be generated dynamically for these test cases.
+    // Inputs feature is not applicable to dataset-based plugins.
+    return testCase;
+  });
 }

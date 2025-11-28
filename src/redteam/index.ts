@@ -538,6 +538,7 @@ export async function synthesize({
   delay,
   entities: entitiesOverride,
   injectVar,
+  inputs,
   language,
   maxConcurrency = 1,
   plugins,
@@ -885,6 +886,7 @@ export async function synthesize({
               ...(plugin.config?.modifiers || {}),
             },
           },
+          inputs,
         });
         {
           const langKey = lang;

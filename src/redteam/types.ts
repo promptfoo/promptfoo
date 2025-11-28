@@ -149,11 +149,13 @@ export interface PluginActionParams {
   n: number;
   delayMs: number;
   config?: PluginConfig;
+  inputs?: Record<string, string>;
 }
 
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
+  inputs?: Record<string, string>;
   language?: string | string[];
   numTests?: number;
   plugins?: RedteamPluginObject[];

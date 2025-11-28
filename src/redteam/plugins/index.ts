@@ -69,6 +69,7 @@ type PluginClass<T extends PluginConfig> = new (
   purpose: string,
   injectVar: string,
   config: T,
+  inputs?: Record<string, string>,
 ) => RedteamPluginBase;
 
 async function fetchRemoteTestCases(
@@ -77,6 +78,7 @@ async function fetchRemoteTestCases(
   injectVar: string,
   n: number,
   config: PluginConfig,
+  inputs?: Record<string, string>,
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -101,6 +103,7 @@ async function fetchRemoteTestCases(
     task: key,
     version: VERSION,
     email: getUserEmail(),
+    ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}),
   });
   try {
     const { data, status, statusText } = await fetchWithCache(
@@ -135,12 +138,30 @@ function createPluginFactory<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
+    action: async ({
+      provider,
+      purpose,
+      injectVar,
+      n,
+      delayMs,
+      config,
+      inputs,
+    }: PluginActionParams) => {
       if ((PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote()) {
         logger.debug(`Using local redteam generation for ${key}`);
-        return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
+        return new PluginClass(provider, purpose, injectVar, config as T, inputs).generateTests(
+          n,
+          delayMs,
+        );
       }
-      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config ?? {});
+      const testCases = await fetchRemoteTestCases(
+        key,
+        purpose,
+        injectVar,
+        n,
+        config ?? {},
+        inputs,
+      );
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
@@ -173,8 +194,9 @@ const pluginFactories: PluginFactory[] = [
           purpose: string,
           injectVar: string,
           config: PluginConfig,
+          inputs?: Record<string, string>,
         ) {
-          super(provider, purpose, injectVar, category, config);
+          super(provider, purpose, injectVar, category, config, inputs);
         }
       },
       category,
@@ -297,7 +319,7 @@ function createRemotePlugin<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async ({ purpose, injectVar, n, config }: PluginActionParams) => {
+    action: async ({ purpose, injectVar, n, config, inputs }: PluginActionParams) => {
       if (neverGenerateRemote()) {
         logger.error(`${key} plugin requires remote generation to be enabled`);
         return [];
@@ -308,6 +330,7 @@ function createRemotePlugin<T extends PluginConfig>(
         injectVar,
         n,
         config ?? {},
+        inputs,
       );
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,
