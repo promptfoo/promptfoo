@@ -431,6 +431,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'code-scanning/github-action' },
         { type: 'doc', id: 'code-scanning/cli' },
+        { type: 'doc', id: 'code-scanning/vscode-extension' },
       ],
     },
     {
