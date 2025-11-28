@@ -1,6 +1,6 @@
 ---
 title: 'Real-Time Fact Checking for LLM Outputs'
-description: 'Promptfoo now supports web search in assertions, allowing you to verify time-sensitive information like stock prices and weather during testing.'
+description: 'Promptfoo now supports web search in assertions, so you can verify time-sensitive information like stock prices, weather, and case citations during testing.'
 image: /img/blog/search-rubric-assertions/title.jpg
 image_alt: 'Search rubric assertion verifying current information'
 slug: llm-search-rubric-assertions
@@ -12,268 +12,433 @@ tags: [feature-announcement, testing, assertions]
 
 # Real-Time Fact Checking for LLM Outputs
 
-LLM hallucinations have real consequences. In 2023, lawyers in *Mata v. Avianca* were [fined $5,000](https://en.wikipedia.org/wiki/Mata_v._Avianca,_Inc.) for submitting ChatGPT-generated legal briefs containing fabricated case citations. More recently, [two federal judges withdrew rulings](https://www.washingtontimes.com/news/2025/oct/23/two-federal-judges-admit-using-ai-botched-rulings/) after their clerks used AI that hallucinated nonexistent legal precedents.
+In July and October 2025, two different U.S. federal judges had to withdraw or revise written opinions after lawyers noticed that the decisions quoted cases and language that did not exist. Follow-up reporting revealed that generative AI had been used for research in chambers, and hallucinated citations slipped into the published rulings. ([Reuters](https://www.reuters.com/legal/government/two-us-judges-withdraw-rulings-after-attorneys-question-accuracy-2025-07-29/))
 
-LLM outputs often include outdated or incorrect information. Traditional assertion types check format and style, but can't verify current facts against reality.
+None of these errors looked obviously wrong on the page. They read like normal legal prose until someone checked the underlying facts.
 
-We're releasing `search-rubric` assertions that verify time-sensitive information during testing.
+This is the core problem: LLMs sound confident even when they are wrong or stale. Traditional assertions can check format and style, but they cannot independently verify that an answer matches the world **right now**.
+
+Promptfoo's new `search-rubric` assertion does that. It lets a separate "judge" model with web search verify time-sensitive facts in your evals.
 
 <!-- truncate -->
 
-## How It Works
+## Why static evals are no longer enough
 
-The search-rubric assertion works like llm-rubric but with web search capabilities:
+A few years ago, "does this answer look reasonable" was often good enough. Today, people use LLMs to:
 
-```yaml
-assert:
-  - type: search-rubric
-    value: 'Provides accurate AAPL stock price within 2% of current market value'
-```
+- Show current stock prices in customer-facing UIs
+- Explain the latest FDA approvals to patients
+- Summarize legal or policy changes
+- Recommend SDKs or APIs that ship new versions every few months
 
-When evaluating, the assertion:
+Models trained on 2024 or early 2025 data will happily answer questions about:
 
-1. Uses your rubric to understand what to verify
-2. Searches the web if current information is needed
-3. Grades the output based on the rubric criteria
-4. Returns pass/fail with a score from 0.0 to 1.0
+- Who won the 2024 U.S. presidential election (Donald Trump) ([Wikipedia](https://en.wikipedia.org/wiki/2024_United_States_presidential_election))
+- Who won Super Bowl LVIII (Kansas City Chiefs over the 49ers, 25-22 in OT) ([Wikipedia](https://en.wikipedia.org/wiki/Super_Bowl_LVIII))
+- When Leqembi received FDA approval for Alzheimer's (accelerated approval in January 2023, traditional approval in July 2023) ([FDA](https://www.fda.gov/news-events/press-announcements/fda-converts-novel-alzheimers-disease-treatment-traditional-approval))
 
-## Example
+But you cannot trust them to know:
 
-Here's a complete test configuration:
+- Today's NVDA price
+- The latest Node.js LTS (Node 24.x as of late 2025) ([Node.js](https://nodejs.org/en/about/previous-releases))
+- Whether a given case citation or regulation is still good law
+
+You need a way to **systematically** check that kind of answer against the web while you run evals and CI.
+
+That is what `search-rubric` is for.
+
+---
+
+## What `search-rubric` actually does
+
+Conceptually, `search-rubric` is `llm-rubric` plus a search-enabled judge model.
+
+At a high level:
+
+1. Your system under test (SUT) produces an output.
+2. You give Promptfoo a rubric like:
+   `"Provides the current AAPL stock price within 2% and includes the currency."`
+3. Promptfoo sends the SUT output and rubric to a grading model that has web search turned on.
+4. The grading model decides when to call search based on the rubric.
+5. It returns a JSON object like `{ pass: boolean, score: number, reason: string }`.
+
+You never have to write the web search logic yourself. You just describe what "correct enough" means.
+
+### Minimal example
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4o-mini
 
 tests:
-  - prompt: "What's the current stock price of {{company}}?"
+  - prompt: "What is the current stock price of {{company}}?"
+    vars:
+      company: Apple
+      ticker: AAPL
     assert:
       - type: search-rubric
         value: |
           States the current {{ticker}} stock price that:
-          1. Is within 3% of actual market price
-          2. Includes currency (USD)
-          3. Mentions if market is currently open or closed
-    vars:
-      company: Apple
-      ticker: AAPL
+          1. Is within 3% of the actual market price
+          2. Includes the currency (USD or $)
+          3. Mentions if the market is currently open or closed
+        threshold: 0.8
 ```
 
-If the model responds with outdated price information from its training data, the test will fail.
+When this runs, Promptfoo uses a separate search-enabled model as the grader. If the SUT hallucinates or returns a stale training-data price, the assertion fails with an explanation.
 
-## Use Cases
+---
 
-Web-search assertions are useful when testing outputs that contain:
+## How it works under the hood
 
-- Current stock prices or financial data
-- Today's weather conditions
-- Recent news or events
-- Business hours or availability
-- Real-time statistics
+For people who care about the plumbing:
 
-Traditional assertions can't catch when an LLM confidently states last year's stock price or yesterday's weather.
-
-## Supported Providers
-
-Web search requires a provider with search capabilities. All major providers now support this:
-
-- **Anthropic**: Configure with `web_search_20250305` tool
-- **OpenAI**: Use `web_search_preview` tool with Responses API
-- **Google/Vertex**: Built-in `googleSearch` tool
-- **Perplexity**: Native web search, no configuration needed
-- **xAI**: Enable with `search_parameters`
-
-## When to Use Web Search
-
-| Use case                         | Keep `llm-rubric` | Add `search-rubric` |
-| -------------------------------- | ----------------- | ------------------- |
-| Fiction, tone, UX copy           | ✓                 |                     |
-| Current events, news             |                   | ✓                   |
-| Real-time data (weather, stocks) |                   | ✓                   |
-| Recent releases, announcements   |                   | ✓                   |
-
-## Real Examples
-
-### Financial Services
+### 1. You write a rubric
 
 ```yaml
-# Verify real-time market data
+- type: search-rubric
+  value: 'Names Satya Nadella as the current CEO of Microsoft'
+```
+
+### 2. Promptfoo picks a grading provider
+
+It prefers a provider with web search configured:
+
+- Your explicit `grading.provider`, if set
+- Otherwise a default "web search provider" inferred from API keys
+- If that fails, it tries to auto-load a search-capable provider such as:
+  - `anthropic:messages:claude-opus-4-5-20251101` with `web_search_20250305`
+  - `openai:responses:gpt-5.1` with `web_search_preview`
+  - `google:gemini-3-pro-preview` with `googleSearch`
+  - `perplexity:sonar-pro` (built-in search)
+  - `xai:grok-4-1-fast-reasoning` with live search enabled
+
+### 3. It sends a grading prompt
+
+Internally, Promptfoo uses a web-search-aware rubric prompt that looks roughly like:
+
+```
+You are grading output according to a user-specified rubric. You may search
+the web to check current information. Respond with:
+{ "reason": string, "pass": boolean, "score": number }
+```
+
+The model receives:
+
+```
+<Output>
+{{output}}
+</Output>
+<Rubric>
+{{rubric}}
+</Rubric>
+```
+
+### 4. The grading model searches when needed
+
+The prompt instructs the grader to call web search when the rubric references:
+
+- Current prices or weather
+- "Latest" or "current" versions
+- News, elections, or other time-sensitive facts
+
+### 5. Promptfoo parses the JSON result
+
+- `pass` is a boolean decision.
+- `score` is a 0.0-1.0 confidence score.
+- You can enforce a `threshold` on the score.
+- The raw `reason` and optional search metadata are stored on the assertion.
+
+This is deliberately simple. The judge model is an agent with exactly one job: check whether the answer is consistent with reality as seen on the web, under a rubric you define.
+
+---
+
+## When to use `search-rubric` vs `llm-rubric`
+
+You should not turn on search for every test. It adds latency and cost. Use it where the world moves fast.
+
+| Use case                               | Prefer `llm-rubric` | Prefer `search-rubric` |
+| -------------------------------------- | ------------------- | ---------------------- |
+| Tone, UX copy, narrative quality       | ✓                   |                        |
+| Prompt adherence, safety, style checks | ✓                   |                        |
+| Static APIs, math, pure reasoning      | ✓                   |                        |
+| Stock prices, FX, crypto               |                     | ✓                      |
+| Current weather and travel conditions  |                     | ✓                      |
+| Latest software versions (Node, React) |                     | ✓                      |
+| Case citations and regulations         |                     | ✓                      |
+| "Who won...?" style news questions     |                     | ✓                      |
+
+A practical pattern is:
+
+- Use `llm-rubric` for most qualitative checks.
+- Add `search-rubric` only for tests that intentionally touch the outside world.
+
+---
+
+## Concrete examples
+
+Here are some real-world patterns where hallucinations hurt, and how `search-rubric` handles them.
+
+### 1. Financial data
+
+```yaml
+# Verify real-time S&P 500 data
 assert:
   - type: search-rubric
     value: |
       Provides S&P 500 index value that:
-      - Is within 1% of current market value
-      - Includes point change from previous close
+      - Is within 1% of the current market value
       - States whether markets are open or closed
+      - Mentions the time reference (for example, "as of 10:32 ET")
+    threshold: 0.9
 ```
 
-### Current Events
+If the model grabs last Friday's close while markets are moving, the assertion fails and the grader explains why.
+
+### 2. Legal citations
+
+There are now multiple public cases of fake citations entering court filings and even judicial opinions through misuse of AI.
 
 ```yaml
-# Verify recent news accuracy
 assert:
   - type: search-rubric
     value: |
-      Correctly describes the 2024 U.S. Presidential Election:
-      - Names the winning candidate
-      - States the electoral vote margin
-      - Mentions key swing states
+      Correctly describes Miranda v. Arizona including:
+      - Accurate citation (384 U.S. 436)
+      - Correct year (1966)
+      - Core holding on the right to remain silent
 ```
 
-### Healthcare
+If the answer invents a citation or misstates the holding, the search-enabled grader should catch it.
+
+### 3. Healthcare claims
 
 ```yaml
-# Validate FDA approvals
 assert:
   - type: search-rubric
-    value: 'States correct FDA approval date for Leqembi (should be January 2023) and its approved use'
+    value: |
+      States the FDA approval timeline for Leqembi that:
+      - Notes accelerated approval in January 2023
+      - Notes traditional approval in July 2023
+      - Describes its use for early-stage Alzheimer's disease
+    threshold: 0.9
 ```
 
-## Configuration
+Because the rubric encodes the expected timeline, the grader must confirm the dates against current FDA or reputable medical sources.
 
-### Basic Setup
+### 4. Software versions
 
-```bash
-npm install -g promptfoo@latest
+Node.js LTS moves quickly. As of late 2025, Node 24.x is the newest LTS release, and older LTS lines like 20.x and 22.x are already in maintenance or near end-of-life.
+
+```yaml
+assert:
+  - type: search-rubric
+    value: |
+      Names a current Node.js LTS version and:
+      - Identifies it as an LTS release
+      - Does not recommend an end-of-life version
 ```
 
-### With Grading Provider
+This catches answers like "Node 18 is the latest LTS" that look reasonable but are wrong in 2025.
 
-Specify a search-rubric capable provider for grading:
+---
 
-```yaml title="promptfooconfig.yaml"
+## Supported providers and current pricing
+
+You can use any provider that can both:
+
+1. Act as a general purpose grader model
+2. Call out to web search from the API
+
+As of November 2025:
+
+### Anthropic Claude 4 and 4.5
+
+- Web search is exposed as the `web_search_20250305` tool on the API. ([Anthropic](https://www.anthropic.com/news/web-search-api))
+- Pricing is currently **$10 per 1,000 search calls**, plus the usual token costs for models like Claude 4 Sonnet and Claude 4 Opus. ([Simon Willison](https://simonwillison.net/2025/May/7/anthropic-api-search/))
+
+### OpenAI (Responses API)
+
+- Web search is exposed as a built-in tool (`web_search` and `web_search_preview`) on the Responses API.
+- Web search tool calls are priced separately from tokens:
+  - **$10 per 1,000 calls** for the main web search tool
+  - **$10-25 per 1,000 calls** for preview variants, with different rules for search content tokens ([OpenAI Pricing](https://openai.com/api/pricing/))
+
+### Google Gemini / Vertex AI
+
+- Gemini 2.5 and Gemini 3 series models can ground responses with the `googleSearch` tool.
+- Grounding with Google Search is billed per grounded prompt after a small free tier (currently about **$35 per 1,000 grounded prompts**). ([Google AI Pricing](https://ai.google.dev/gemini-api/docs/pricing))
+
+### Perplexity
+
+- Sonar models expose search as part of the API, with Search API pricing starting around **$5 per 1,000 requests**, plus model usage. ([Perplexity Pricing](https://docs.perplexity.ai/getting-started/pricing))
+
+### xAI Grok
+
+- Grok 4.1 Fast Reasoning supports "live search" with configuration via `search_parameters`.
+- Live search is currently priced at roughly **$25 per 1,000 sources**, plus token usage. ([xAI Docs](https://docs.x.ai/docs/guides/live-search))
+
+Prices change, so treat these as ballpark numbers and always check the provider's official pricing page before wiring this into a large CI suite.
+
+---
+
+## Configuring grading in Promptfoo
+
+You have two knobs:
+
+1. Which model grades the test
+2. Whether that model has search enabled
+
+### Explicit grading provider
+
+```yaml
 grading:
   provider: openai:responses:o4-mini
   providerOptions:
-    config:
-      tools: [{ type: web_search_preview }]
-
-tests:
-  - prompt: "What's the weather in Tokyo?"
-    assert:
-      - type: search-rubric
-        value: |
-          Describes current Tokyo weather with:
-          - Temperature in Celsius or Fahrenheit
-          - Current conditions (sunny, rainy, cloudy, etc.)
-          - Any active weather warnings if applicable
-```
-
-### Auto-Detection
-
-If no grading provider is specified, Promptfoo will automatically select one with web search capabilities based on available API keys.
-
-## Performance and Costs
-
-Web search adds approximately 2-3 seconds per assertion.
-
-Pricing varies by provider (as of late 2025):
-
-- **OpenAI**: $10-50 per 1,000 web searches depending on context size, plus token costs
-- **Anthropic**: $10 per 1,000 searches plus standard token costs
-- **Perplexity**: Varies by model tier
-- **Google**: Included in standard API pricing
-
-For a typical test suite with 50 search-rubric assertions, expect to pay $0.50-2.50 per run depending on provider.
-
-To reduce costs during development:
-
-```bash
-promptfoo eval --cache
-```
-
-## Provider Configuration
-
-```yaml title="Provider setup examples"
-providers:
-  # Anthropic Claude 4.5 Opus (Nov 2024 checkpoint)
-  - id: anthropic:messages:claude-opus-4-5-20251101
-    config:
-      tools:
-        - type: web_search_20250305
-          name: web_search
-          max_uses: 5
-
-  # OpenAI GPT-5.1 with web search
-  - id: openai:responses:gpt-5.1
     config:
       tools:
         - type: web_search_preview
 
-  # Google Gemini 3 Pro Preview
-  - id: google:gemini-3-pro-preview
-    config:
-      tools:
-        - googleSearch: {}
-
-  # xAI Grok 4.1 Fast Reasoning with live search
-  - id: xai:grok-4-1-fast-reasoning
-    config:
-      search_parameters:
-        mode: 'on'
-
-  # Perplexity Sonar Pro - built-in search
-  - perplexity:sonar-pro
+tests:
+  - prompt: "What is the weather in Tokyo right now?"
+    assert:
+      - type: search-rubric
+        value: |
+          Describes current Tokyo weather including:
+          - Temperature with units (C or F)
+          - General conditions (for example, sunny, cloudy, rainy)
+          - Any active weather warnings if present
 ```
 
-## Best Practices
+### Relying on defaults
 
-**Write clear rubrics like llm-rubric:**
+If you do not specify a `grading.provider`, Promptfoo will try to pick a sensible default based on available API keys and built-in defaults:
 
-```yaml
-# Good - specific criteria
-- type: search-rubric
-  value: 'Names Satya Nadella as the current CEO of Microsoft'
+- If you have OpenAI configured, it prefers a Responses model with web search.
+- If you have Anthropic configured, it may default to a Claude 4 or 4.5 model with `web_search_20250305`.
+- Otherwise it falls back to Perplexity, Gemini, or xAI if available.
 
-# Too vague
-- type: search-rubric
-  value: 'talks about tech leadership'
-```
+If no search-capable provider can be found, `search-rubric` will throw a clear error instead of silently ignoring web search.
 
-**Set appropriate thresholds:**
+---
 
-```yaml
-# Allow flexibility for volatile data
-- type: search-rubric
-  value: 'Provides Bitcoin price in USD within 10% of current market value'
-  threshold: 0.8 # 80% score required
-```
+## Performance and cost in practice
 
-**Cache during development:**
+Every `search-rubric` assertion involves:
+
+1. One SUT call (your normal model invocation).
+2. One grading call to a separate model.
+3. Zero or more web search tool calls inside that grading call.
+
+Typical impact in a CI environment:
+
+- **Latency**: grading plus search tends to add 2-5 seconds per assertion in our experience, depending on provider and network.
+- **Cost**:
+  - Judge model tokens, often on a cheaper model like o4-mini or Claude Sonnet.
+  - Web search tool calls at roughly $5-35 per 1,000 uses depending on provider and configuration.
+
+That sounds expensive, but you rarely need search for all tests. For example, a 100-test suite where 20 tests use `search-rubric` is usually a few dollars per run, even on top tier models.
+
+During development, you can enable caching:
 
 ```bash
-# Avoid repeated searches while iterating
 promptfoo eval --cache
 ```
 
-## Common Issues
+Promptfoo will reuse previous grading outputs so you do not pay or wait for repeated web searches while you iterate.
 
-**"No provider with web search capabilities"**
+---
 
-Ensure your grading provider has web search configured:
+## Failure modes and gotchas
 
-```yaml
+This is the part HN will reasonably worry about.
+
+### 1. Search results can be wrong or ambiguous
+
+`search-rubric` is only as good as the search index behind your provider. You should:
+
+- Prefer rubrics that can be answered from multiple reputable sources.
+- Avoid rubrics that ask for speculative or disputed claims.
+
+### 2. You still have to define "close enough"
+
+Rubrics like "within 5 percent of the current BTC price" or "names at least two recent vulnerabilities from the last year" force you to make your own tradeoffs explicit.
+
+That is a feature, but it takes work.
+
+### 3. Cost scales with naively written tests
+
+A suite that hits web search 500 times on every CI run will cost real money. Start with a handful of critical paths, then expand.
+
+### 4. The grader is still an LLM
+
+Search helps, but grading remains probabilistic. Use `threshold` to require a high score for sensitive checks, and keep some traditional non-LLM assertions in place.
+
+---
+
+## Getting started
+
+From scratch:
+
+```bash
+npm install -g promptfoo@latest
+
+# or, if you use npx
+npx promptfoo init
+```
+
+Then add a simple search-backed check:
+
+```yaml title="simple-search-test.yaml"
+prompts:
+  - 'The CEO of Microsoft is {{name}}'
+
+providers:
+  - id: openai:gpt-4o-mini
+
 grading:
   provider: openai:responses:o4-mini
   providerOptions:
     config:
-      tools: [{ type: web_search_preview }]
+      tools:
+        - type: web_search_preview
+
+tests:
+  - vars:
+      name: 'Satya Nadella'
+    assert:
+      - type: search-rubric
+        value: 'Confirms that {{name}} is the current CEO of Microsoft'
+
+  - vars:
+      name: 'Bill Gates' # Intentionally wrong
+    assert:
+      - type: search-rubric
+        value: 'States the correct current CEO of Microsoft and identifies this answer as incorrect'
+        threshold: 0.8
 ```
 
-**Timeouts**
+Run it:
 
-Web searches can be slow. Increase timeout if needed:
-
-```yaml
-assert:
-  - type: search-rubric
-    value: 'complex query'
-    timeout: 10000 # 10 seconds
+```bash
+npx promptfoo eval -c simple-search-test.yaml
 ```
 
-## Try It Now
+You will see not just pass or fail, but detailed reasons from the grading model about what it found on the web.
 
-See the [documentation](/docs/configuration/expected-outputs/model-graded/search-rubric) for complete examples and provider configurations.
+---
+
+## Where this fits in the bigger picture
+
+Search-backed grading is not a silver bullet. It will not stop people from misusing AI in production or copying answers blindly into court filings.
+
+What it does give you is a repeatable way to say:
+
+> "For this class of prompts, the answers are checked against the real world every time we run CI."
+
+That turns "trust me, it usually works" into something closer to an actual contract.
+
+You can read the full configuration reference in the [Search-Rubric documentation](/docs/configuration/expected-outputs/model-graded/search-rubric). If you ship anything where incorrect real-world facts cost money, reputation, or legal risk, it is worth wiring at least a handful of these tests into your pipeline.
 
 <script type="application/ld+json" dangerouslySetInnerHTML={{__html: `
 {
@@ -286,6 +451,6 @@ See the [documentation](/docs/configuration/expected-outputs/model-graded/search
     "name": "Steve"
   },
   "keywords": "LLM testing, web search, fact checking, real-time verification",
-  "description": "Promptfoo now supports web search in assertions, allowing you to verify time-sensitive information like stock prices and weather during testing."
+  "description": "Promptfoo's search-rubric assertion uses models with web search to verify time-sensitive facts like stock prices, weather, software versions, and legal citations during testing."
 }
 `}} />
