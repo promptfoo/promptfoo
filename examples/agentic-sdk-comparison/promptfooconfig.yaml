@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Agentic SDK comparison with security audit and code generation'
+description: 'Compare Codex SDK vs Claude Agent SDK'
 
 prompts:
   - |
@@ -9,12 +9,11 @@ prompts:
 providers:
   # Codex SDK with native JSON schema support
   - id: openai:codex-sdk
-    label: codex-gpt-5.1
+    label: codex-sdk
     config:
       model: gpt-5.1-codex
       working_dir: examples/agentic-sdk-comparison/test-codebase
       skip_git_repo_check: true
-      # Native structured output support (Codex strength)
       output_schema:
         type: object
         required: [vulnerabilities, risk_score, summary]
@@ -46,9 +45,16 @@ providers:
           summary:
             type: string
 
-  # Plain OpenAI API for comparison (no schema enforcement)
+  # Claude Agent SDK with file system tools
+  - id: anthropic:claude-agent-sdk
+    label: claude-agent-sdk
+    config:
+      model: claude-sonnet-4-5-20250929
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+
+  # Plain LLM for baseline (no file access)
   - id: openai:gpt-5.1
-    label: plain-gpt-5.1
+    label: plain-llm
     config:
       temperature: 0
 
