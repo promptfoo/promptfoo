@@ -259,7 +259,7 @@ const PROVIDER_PRIORITY: ProviderCandidate[] = [
         suggestions: GoogleAiStudioSuggestionsProvider,
         synthesize: GoogleAiStudioSynthesizeProvider,
         llmRubric: GoogleAiStudioLlmRubricProvider,
-        embedding: VertexEmbeddingProvider, // AI Studio doesn't support embeddings
+        // AI Studio doesn't support embeddings; falls back to OpenAI
       }),
   },
   {

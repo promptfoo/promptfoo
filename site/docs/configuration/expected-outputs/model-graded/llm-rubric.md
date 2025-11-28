@@ -35,7 +35,7 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 | 5        | xAI              | `grok-4-1-fast-reasoning`    | `XAI_API_KEY`                                           |
 | 6        | DeepSeek         | `deepseek-chat`              | `DEEPSEEK_API_KEY`                                      |
 | 7        | Mistral          | `mistral-large-latest`       | `MISTRAL_API_KEY`                                       |
-| 8        | Google Vertex    | `gemini-2.5-pro`             | Google ADC (ambient credentials)                        |
+| 8        | Google Vertex    | `gemini-3-pro-preview`       | Google ADC (ambient credentials)                        |
 | 9        | AWS Bedrock      | `amazon.nova-pro-v1:0`       | `AWS_ACCESS_KEY_ID` or `AWS_PROFILE` (ambient)          |
 | 10       | GitHub Models    | `openai/gpt-5.1`             | `GITHUB_TOKEN` (ambient)                                |
 
