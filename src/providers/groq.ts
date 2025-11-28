@@ -33,17 +33,22 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
   }
 
   protected isReasoningModel(): boolean {
-    // Groq's reasoning models include deepseek-r1 and gpt-oss models
+    // Groq's reasoning models include deepseek-r1, gpt-oss, and qwen models
     return (
       this.modelName.includes('deepseek-r1') ||
       this.modelName.includes('gpt-oss') ||
+      this.modelName.includes('qwen') ||
       super.isReasoningModel()
     );
   }
 
   protected supportsTemperature(): boolean {
-    // Groq's deepseek and gpt-oss models support temperature, even though they're reasoning models
-    if (this.modelName.includes('deepseek-r1') || this.modelName.includes('gpt-oss')) {
+    // Groq's deepseek, gpt-oss, and qwen models support temperature, even though they're reasoning models
+    if (
+      this.modelName.includes('deepseek-r1') ||
+      this.modelName.includes('gpt-oss') ||
+      this.modelName.includes('qwen')
+    ) {
       return true;
     }
     return super.supportsTemperature();
@@ -60,12 +65,12 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     });
   }
 
-  override getOpenAiBody(
+  override async getOpenAiBody(
     prompt: string,
     context?: import('../types').CallApiContextParams,
     callApiOptions?: import('../types').CallApiOptionsParams,
   ) {
-    const { body, config } = super.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
     const groqConfig = this.config as GroqCompletionOptions;
 
     // Add Groq-specific reasoning parameters

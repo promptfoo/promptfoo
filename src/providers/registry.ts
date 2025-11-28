@@ -601,6 +601,12 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       const modelName = providerPath.split(':')[1];
+      if (!modelName) {
+        throw new Error(
+          `Invalid groq-responses provider path: "${providerPath}". ` +
+            'Use format groq-responses:<model> (e.g., groq-responses:llama-3.3-70b-versatile)',
+        );
+      }
       return new GroqResponsesProvider(modelName, providerOptions);
     },
   },
@@ -612,6 +618,12 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       const modelName = providerPath.split(':')[1];
+      if (!modelName) {
+        throw new Error(
+          `Invalid groq provider path: "${providerPath}". ` +
+            'Use format groq:<model> (e.g., groq:llama-3.3-70b-versatile)',
+        );
+      }
       return new GroqProvider(modelName, providerOptions);
     },
   },

@@ -2,19 +2,34 @@ import { OpenAiResponsesProvider } from './openai/responses';
 
 import type { ProviderOptions } from '../types/providers';
 import type { OpenAiCompletionOptions } from './openai/types';
-import type { CallApiContextParams, CallApiOptionsParams } from '../types';
 
+/**
+ * Groq Responses API options.
+ *
+ * Note: Unlike the Chat Completions API, the Responses API does NOT support
+ * `reasoning_format` or `include_reasoning` parameters. Reasoning is controlled
+ * via the `reasoning.effort` parameter inherited from OpenAiCompletionOptions.
+ */
 type GroqResponsesOptions = OpenAiCompletionOptions & {
   systemPrompt?: string;
   parallel_tool_calls?: boolean | null;
-  reasoning_format?: 'parsed' | 'raw' | 'hidden' | null;
-  include_reasoning?: boolean;
 };
 
 type GroqResponsesProviderOptions = ProviderOptions & {
   config?: GroqResponsesOptions;
 };
 
+/**
+ * Groq Responses API Provider
+ *
+ * Extends OpenAI Responses API provider with Groq-specific configuration.
+ * Supports reasoning models (DeepSeek R1, GPT-OSS, Qwen) with temperature control.
+ *
+ * Usage:
+ *   groq-responses:llama-3.3-70b-versatile
+ *   groq-responses:openai/gpt-oss-120b
+ *   groq-responses:qwen/qwen3-32b
+ */
 export class GroqResponsesProvider extends OpenAiResponsesProvider {
   static GROQ_RESPONSES_MODEL_NAMES = [
     // Production models
@@ -66,20 +81,6 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
         apiBaseUrl: 'https://api.groq.com/openai/v1',
       },
     });
-  }
-
-  override getOpenAiBody(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ) {
-    const { body, config } = super.getOpenAiBody(prompt, context, callApiOptions);
-
-    // Note: Groq Responses API doesn't support include_reasoning or reasoning_format
-    // These are only for the Chat Completions API
-    // Reasoning is controlled via the reasoning.effort parameter in the Responses API
-
-    return { body, config };
   }
 
   id(): string {
