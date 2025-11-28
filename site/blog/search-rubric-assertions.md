@@ -18,7 +18,7 @@ None of these errors looked obviously wrong on the page. They read like normal l
 
 This is the core problem: LLMs sound confident even when they are wrong or stale. Traditional assertions can check format and style, but they cannot independently verify that an answer matches the world **right now**.
 
-Promptfoo's new `search-rubric` assertion does that. It lets a separate "judge" model with web search verify time-sensitive facts in your evals.
+Promptfoo's new [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) assertion does that. It lets a separate "judge" model with web search verify time-sensitive facts in your evals.
 
 <!-- truncate -->
 
