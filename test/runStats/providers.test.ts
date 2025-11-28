@@ -13,14 +13,12 @@ jest.mock('../../src/util/tokenUsage', () => ({
 describe('computeProviderStats', () => {
   const mockTracker = {
     getProviderUsage: jest.fn(),
-    getProviderUsageByPrefix: jest.fn(),
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
     (TokenUsageTracker.getInstance as jest.Mock).mockReturnValue(mockTracker);
     mockTracker.getProviderUsage.mockReturnValue(null);
-    mockTracker.getProviderUsageByPrefix.mockReturnValue(null);
   });
 
   it('should return empty array for empty results', () => {
@@ -76,7 +74,7 @@ describe('computeProviderStats', () => {
   });
 
   it('should include token usage from TokenUsageTracker', () => {
-    mockTracker.getProviderUsageByPrefix.mockReturnValue({
+    mockTracker.getProviderUsage.mockReturnValue({
       total: 1000,
       prompt: 800,
       completion: 200,
@@ -111,7 +109,7 @@ describe('computeProviderStats', () => {
   });
 
   it('should handle zero tokens gracefully', () => {
-    mockTracker.getProviderUsageByPrefix.mockReturnValue({
+    mockTracker.getProviderUsage.mockReturnValue({
       total: 0,
       prompt: 0,
       completion: 0,

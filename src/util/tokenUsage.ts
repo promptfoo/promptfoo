@@ -4,7 +4,13 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
 import type { TokenUsage } from '../types/shared';
 
 /**
- * A utility class for tracking token usage across an evaluation
+ * A utility class for tracking token usage across an evaluation.
+ *
+ * Key format: Uses bare provider IDs (e.g., "openai:gpt-4") as map keys.
+ * This aligns with how results are aggregated in runStats/providers.ts.
+ *
+ * Lifecycle: The tracker should be reset via resetAllUsage() at the start
+ * of each evaluation run to prevent cross-run token count leakage.
  */
 export class TokenUsageTracker {
   private static instance: TokenUsageTracker;
@@ -45,30 +51,6 @@ export class TokenUsageTracker {
    */
   public getProviderUsage(providerId: string): TokenUsage | undefined {
     return this.providersMap.get(providerId);
-  }
-
-  /**
-   * Get aggregated token usage for all providers matching a given ID prefix.
-   * This handles the case where tracking IDs include class names (e.g., "openai:gpt-4 (OpenAiChatCompletionProvider)")
-   * but lookups use bare provider IDs (e.g., "openai:gpt-4").
-   *
-   * @param providerIdPrefix The provider ID prefix to match
-   * @returns Aggregated token usage for all matching providers, or undefined if none found
-   */
-  public getProviderUsageByPrefix(providerIdPrefix: string): TokenUsage | undefined {
-    let result: TokenUsage | undefined;
-
-    for (const [trackingId, usage] of this.providersMap.entries()) {
-      // Match if tracking ID equals prefix or starts with "prefix ("
-      if (trackingId === providerIdPrefix || trackingId.startsWith(`${providerIdPrefix} (`)) {
-        if (!result) {
-          result = createEmptyTokenUsage();
-        }
-        accumulateTokenUsage(result, usage);
-      }
-    }
-
-    return result;
   }
 
   /**

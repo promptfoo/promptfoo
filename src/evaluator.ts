@@ -477,13 +477,10 @@ export async function runEval({
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
-    // Track token usage at the provider level
+    // Track token usage at the provider level using bare provider ID
+    // This aligns with how runStats/providers.ts aggregates per-provider stats
     if (response.tokenUsage) {
-      const providerId = provider.id();
-      const trackingId = provider.constructor?.name
-        ? `${providerId} (${provider.constructor.name})`
-        : providerId;
-      TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
+      TokenUsageTracker.getInstance().trackUsage(provider.id(), response.tokenUsage);
     }
 
     if (response.error) {
@@ -752,6 +749,9 @@ class Evaluator {
     };
 
     logger.info(`Starting evaluation ${this.evalRecord.id}`);
+
+    // Reset token usage tracker to prevent cross-run leakage
+    TokenUsageTracker.getInstance().resetAllUsage();
 
     // Add abort checks at key points
     checkAbort();

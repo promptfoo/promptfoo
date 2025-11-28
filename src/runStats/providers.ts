@@ -57,9 +57,7 @@ export function computeProviderStats(
 
   return Object.entries(accumulators)
     .map(([provider, acc]): ProviderStats => {
-      // Use prefix matching to handle tracking IDs that include class names
-      // e.g., "openai:gpt-4 (OpenAiChatCompletionProvider)" matches "openai:gpt-4"
-      const usage = tracker.getProviderUsageByPrefix(provider);
+      const usage = tracker.getProviderUsage(provider);
       const totalTokens = usage?.total || 0;
       const promptTokens = usage?.prompt || 0;
       const completionTokens = usage?.completion || 0;
