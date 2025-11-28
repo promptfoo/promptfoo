@@ -33,8 +33,12 @@ import {
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
+<<<<<<< HEAD
+import { getRedteamProvider } from './providers/shared';
+=======
 import { Plugins } from './plugins/index';
 import { redteamProviderManager } from './providers/shared';
+>>>>>>> origin/main
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
@@ -620,6 +624,9 @@ export async function synthesize({
 
   validateStrategies(strategies);
 
+<<<<<<< HEAD
+  const redteamProvider = await getRedteamProvider({ provider, enforceJson: false });
+=======
   // If any language-disallowed strategies are present, force language to English only
   const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
   if (hasLanguageDisallowedStrategy && language) {
@@ -629,6 +636,7 @@ export async function synthesize({
       `[Language Override] Detected language-disallowed strategy (audio/video/image/layer/math-prompt). Forcing language to 'en' (was: ${originalLanguage})`,
     );
   }
+>>>>>>> origin/main
 
   const redteamProvider = await redteamProviderManager.getProvider({
     provider,

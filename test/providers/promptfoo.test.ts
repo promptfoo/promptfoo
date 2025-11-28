@@ -1,4 +1,8 @@
+<<<<<<< HEAD
+import { getEnvString } from '../../src/envars';
+=======
 import { getEnvBool, getEnvString } from '../../src/envars';
+>>>>>>> origin/main
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
   PromptfooChatCompletionProvider,
@@ -141,8 +145,8 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   const options = {
-    jsonOnly: true,
-    preferSmallModel: false,
+    enforceJson: true,
+    preferSmall: false,
     task: 'crescendo' as const,
   };
 

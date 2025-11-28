@@ -9,7 +9,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { redteamProviderManager } from '../providers/shared';
+import { getRedteamProvider } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
@@ -345,6 +345,12 @@ async function translateBatchCore(
   text: string,
   languages: string[],
 ): Promise<Record<string, string>> {
+<<<<<<< HEAD
+  const redteamProvider = await getRedteamProvider({
+    enforceJson: true,
+    preferSmall: true,
+  });
+=======
   // Prefer a preconfigured multilingual provider if available (set by the server at boot).
   const cachedMultilingual = await redteamProviderManager.getMultilingualProvider();
   const redteamProvider =
@@ -353,6 +359,7 @@ async function translateBatchCore(
       jsonOnly: true,
       preferSmallModel: true,
     }));
+>>>>>>> origin/main
 
   const languagesFormatted = languages.map((lang) => `- ${lang}`).join('\n');
 

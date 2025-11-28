@@ -1,8 +1,13 @@
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { getGraderById } from '../../../../src/redteam/graders';
+<<<<<<< HEAD
+import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo';
+import { getRedteamProvider, tryUnblocking } from '../../../../src/redteam/providers/shared';
+=======
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
+>>>>>>> origin/main
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
@@ -19,6 +24,7 @@ jest.mock('../../../../src/util/server', () => ({
 
 jest.mock('../../../../src/redteam/providers/shared', () => ({
   ...jest.requireActual('../../../../src/redteam/providers/shared'),
+  getRedteamProvider: jest.fn(),
   tryUnblocking: jest.fn(),
 }));
 
@@ -111,14 +117,14 @@ describe('CrescendoProvider', () => {
       stateful: true,
     });
 
-    // Set up redteamProviderManager mock
-    jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async (options) => {
-      // When the provider is already an object (not a string), return it for jsonOnly requests
-      // For non-jsonOnly requests (scoring), return the scoring provider
-      if (options.provider && typeof options.provider === 'object') {
-        return options.jsonOnly ? options.provider : mockScoringProvider;
+    // Set up getRedteamProvider mock
+    jest.mocked(getRedteamProvider).mockImplementation(async (options) => {
+      // When the provider is already an object (not a string), return it for enforceJson requests
+      // For non-enforceJson requests (scoring), return the scoring provider
+      if (options?.provider && typeof options.provider === 'object') {
+        return options.enforceJson ? options.provider : mockScoringProvider;
       }
-      return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+      return options?.enforceJson ? mockRedTeamProvider : mockScoringProvider;
     });
 
     // Mock server feature support to return true so unblocking logic runs

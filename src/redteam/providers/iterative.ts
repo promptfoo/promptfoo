@@ -4,6 +4,30 @@ import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+<<<<<<< HEAD
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../remoteGeneration';
+import {
+  ATTACKER_SYSTEM_PROMPT,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+  ON_TOPIC_SYSTEM_PROMPT,
+} from './prompts';
+import {
+  checkPenalizedPhrases,
+  createIterationContext,
+  getRedteamProvider,
+  getTargetResponse,
+  type TargetResponse,
+} from './shared';
+
+=======
+>>>>>>> origin/main
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -591,13 +615,13 @@ class RedteamIterativeProvider implements ApiProvider {
     if (shouldGenerateRemote()) {
       this.gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
-        jsonOnly: true,
-        preferSmallModel: false,
+        enforceJson: true,
+        preferSmall: false,
       });
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
-        jsonOnly: true,
-        preferSmallModel: false,
+        enforceJson: true,
+        preferSmall: false,
       });
     } else {
       this.redteamProvider = config.redteamProvider;
@@ -625,13 +649,13 @@ class RedteamIterativeProvider implements ApiProvider {
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      redteamProvider: await redteamProviderManager.getProvider({
+      redteamProvider: await getRedteamProvider({
         provider: this.redteamProvider,
-        jsonOnly: true,
+        enforceJson: true,
       }),
-      gradingProvider: await redteamProviderManager.getProvider({
+      gradingProvider: await getRedteamProvider({
         provider: this.gradingProvider,
-        jsonOnly: true,
+        enforceJson: true,
       }),
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,

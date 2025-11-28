@@ -1,6 +1,6 @@
 import { SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../../src/cache';
-import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { getRedteamProvider } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import {
   addMathPrompt,
@@ -85,7 +85,7 @@ describe('mathPrompt', () => {
         }),
       } as any;
 
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider);
 
       const result = await encodeMathPrompt('test text', 'set theory');
 
@@ -101,7 +101,7 @@ describe('mathPrompt', () => {
         }),
       } as any;
 
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider);
 
       await expect(encodeMathPrompt('test text', 'set theory')).rejects.toThrow(
         'Expected a JSON object',
@@ -125,7 +125,7 @@ describe('mathPrompt', () => {
         }),
       } as any;
 
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider);
       (SingleBar as any).mockImplementation(
         () =>
           ({

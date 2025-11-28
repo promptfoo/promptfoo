@@ -34,9 +34,13 @@ import {
 import {
   checkPenalizedPhrases,
   createIterationContext,
+  getRedteamProvider,
   getTargetResponse,
+<<<<<<< HEAD
+=======
   redteamProviderManager,
   type TargetResponse,
+>>>>>>> origin/main
 } from './shared';
 import type { Environment } from 'nunjucks';
 
@@ -893,18 +897,18 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     if (shouldGenerateRemote()) {
       gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
-        jsonOnly: true,
-        preferSmallModel: false,
+        enforceJson: true,
+        preferSmall: false,
       });
       redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative:tree',
-        jsonOnly: true,
-        preferSmallModel: false,
+        enforceJson: true,
+        preferSmall: false,
       });
     } else {
-      redteamProvider = await redteamProviderManager.getProvider({
+      redteamProvider = await getRedteamProvider({
         provider: this.config.redteamProvider,
-        jsonOnly: true,
+        enforceJson: true,
       });
       gradingProvider = redteamProvider; // Default to using same provider
     }
