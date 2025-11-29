@@ -17,7 +17,9 @@ const setAuthHeaders = (
 
 describe('AzureCompletionProvider', () => {
   beforeEach(() => {
-    vi.spyOn(AzureCompletionProvider.prototype as any, 'ensureInitialized').mockResolvedValue(undefined);
+    vi.spyOn(AzureCompletionProvider.prototype as any, 'ensureInitialized').mockResolvedValue(
+      undefined,
+    );
     vi.spyOn(AzureCompletionProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
       'api-key': 'test-key',
     });

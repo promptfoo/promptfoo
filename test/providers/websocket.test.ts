@@ -254,9 +254,9 @@ describe('WebSocketProvider', () => {
         },
       });
 
-    websocketMocks.setFactory(() => {
-      setTimeout(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+      websocketMocks.setFactory(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           setTimeout(() => {
             mockWs.onmessage?.({ data: chunks[0] } as WebSocket.MessageEvent);
             setTimeout(() => {
@@ -286,9 +286,9 @@ describe('WebSocketProvider', () => {
         },
       });
 
-    websocketMocks.setFactory(() => {
-      setTimeout(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+      websocketMocks.setFactory(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           setTimeout(() => {
             mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
           }, 5);

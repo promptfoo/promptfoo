@@ -33,9 +33,7 @@ vi.mock('@adaline/gateway', () => {
   return { Gateway: GatewayMock, GatewayAnthropic, GatewayOpenAI, GatewayVertex };
 });
 vi.mock('../../src/cache', async () => {
-  const actual = await vi.importActual<typeof import('../../src/cache')>(
-    '../../src/cache',
-  );
+  const actual = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
   return {
     ...actual,
     getCache: vi.fn(),

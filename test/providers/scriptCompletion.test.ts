@@ -15,9 +15,7 @@ vi.mock('child_process', () => ({
   execFile: vi.fn(),
 }));
 vi.mock('../../src/cache', async () => {
-  const actual = await vi.importActual<typeof import('../../src/cache')>(
-    '../../src/cache',
-  );
+  const actual = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
   return {
     ...actual,
     getCache: vi.fn(),
@@ -111,9 +109,7 @@ describe('getFileHashes', () => {
       update: vi.fn().mockReturnThis(),
       digest: vi.fn(),
     } as unknown as crypto.Hash;
-    vi.mocked(mockHashUpdate.digest)
-      .mockReturnValueOnce(mockHash1)
-      .mockReturnValueOnce(mockHash2);
+    vi.mocked(mockHashUpdate.digest).mockReturnValueOnce(mockHash1).mockReturnValueOnce(mockHash2);
     createHashMock.mockReturnValue(mockHashUpdate);
 
     const result = getFileHashes(scriptParts);

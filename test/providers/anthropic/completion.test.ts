@@ -99,8 +99,7 @@ describe('AnthropicCompletionProvider', () => {
 
     it('should handle API call error', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      vi
-        .spyOn(provider.anthropic.completions, 'create')
+      vi.spyOn(provider.anthropic.completions, 'create')
         .mockImplementation()
         .mockRejectedValue(new Error('API call failed'));
 

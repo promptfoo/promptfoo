@@ -16,9 +16,7 @@ vi.mock('proxy-agent', () => ({
 }));
 
 vi.mock('../../src/esm', async () => {
-  const actual = await vi.importActual<typeof import('../../src/esm')>(
-    '../../src/esm',
-  );
+  const actual = await vi.importActual<typeof import('../../src/esm')>('../../src/esm');
   return {
     ...actual,
     importModule: vi.fn(),

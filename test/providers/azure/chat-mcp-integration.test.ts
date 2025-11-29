@@ -13,8 +13,7 @@ const mcpMocks = vi.hoisted(() => {
     },
   ]);
   const mockCallTool = vi.fn().mockResolvedValue({
-    content:
-      'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
+    content: 'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
   });
 
   class MockMCPClient {
@@ -55,8 +54,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
       },
     ]);
     mcpMocks.mockCallTool.mockResolvedValue({
-      content:
-        'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
+      content: 'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
     });
 
     // Create provider with MCP enabled

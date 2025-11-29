@@ -16,9 +16,7 @@ vi.mock('@fal-ai/client', () => ({
 }));
 
 vi.mock('../../src/cache', async () => {
-  const actual = await vi.importActual<typeof import('../../src/cache')>(
-    '../../src/cache',
-  );
+  const actual = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
   return {
     ...actual,
     getCache: vi.fn(),

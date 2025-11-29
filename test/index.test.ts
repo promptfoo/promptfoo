@@ -12,14 +12,11 @@ import * as fileUtils from '../src/util/file';
 
 vi.mock('../src/cache');
 vi.mock('../src/database', () => ({
-  getDb: vi
-    .fn()
-    .mockReturnValue({ select: vi.fn(), insert: vi.fn(), transaction: vi.fn() }),
+  getDb: vi.fn().mockReturnValue({ select: vi.fn(), insert: vi.fn(), transaction: vi.fn() }),
 }));
 vi.mock('../src/evaluator', async () => {
-  const originalModule = await vi.importActual<typeof import('../src/evaluator')>(
-    '../src/evaluator',
-  );
+  const originalModule =
+    await vi.importActual<typeof import('../src/evaluator')>('../src/evaluator');
   return {
     ...originalModule,
     evaluate: vi.fn().mockImplementation(async (testSuite) => {
@@ -61,9 +58,8 @@ vi.mock('../src/prompts', async () => {
   };
 });
 vi.mock('../src/providers', async () => {
-  const originalModule = await vi.importActual<typeof import('../src/providers')>(
-    '../src/providers',
-  );
+  const originalModule =
+    await vi.importActual<typeof import('../src/providers')>('../src/providers');
   return {
     ...originalModule,
     loadApiProvider: vi.fn(),

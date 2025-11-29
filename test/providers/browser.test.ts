@@ -567,9 +567,9 @@ describe('BrowserProvider - Connect to Existing Session', () => {
     };
 
     const playwrightExtra = await import('playwright-extra');
-    vi
-      .mocked(playwrightExtra.chromium.connectOverCDP)
-      .mockResolvedValueOnce(mockExistingBrowser as any);
+    vi.mocked(playwrightExtra.chromium.connectOverCDP).mockResolvedValueOnce(
+      mockExistingBrowser as any,
+    );
 
     const provider = new BrowserProvider('test', {
       config: {

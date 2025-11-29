@@ -284,9 +284,9 @@ describe('Azure Assistant Provider', () => {
       });
       vi.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
       vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
-      vi
-        .spyOn(provider as any, 'processCompletedRun')
-        .mockResolvedValue({ output: 'Function called successfully' });
+      vi.spyOn(provider as any, 'processCompletedRun').mockResolvedValue({
+        output: 'Function called successfully',
+      });
       vi.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
 
       // Mock API call sequence
@@ -383,9 +383,9 @@ describe('Azure Assistant Provider', () => {
       });
       vi.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
       vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
-      vi
-        .spyOn(provider as any, 'processCompletedRun')
-        .mockResolvedValue({ output: 'Run completed with empty outputs' });
+      vi.spyOn(provider as any, 'processCompletedRun').mockResolvedValue({
+        output: 'Run completed with empty outputs',
+      });
 
       // Mock API call sequence for a run requiring tool outputs but no callbacks available
       (provider as any).makeRequest
@@ -451,9 +451,9 @@ describe('Azure Assistant Provider', () => {
       });
       vi.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
       vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
-      vi
-        .spyOn(provider as any, 'processCompletedRun')
-        .mockResolvedValue({ output: 'Function called successfully' });
+      vi.spyOn(provider as any, 'processCompletedRun').mockResolvedValue({
+        output: 'Function called successfully',
+      });
       vi.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
 
       // Mock API call sequence
@@ -525,9 +525,9 @@ describe('Azure Assistant Provider', () => {
       });
       vi.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
       vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
-      vi
-        .spyOn(provider as any, 'processCompletedRun')
-        .mockResolvedValue({ output: 'Function called with error' });
+      vi.spyOn(provider as any, 'processCompletedRun').mockResolvedValue({
+        output: 'Function called with error',
+      });
       vi.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
 
       // Mock API call sequence
@@ -1078,9 +1078,9 @@ describe('Azure Assistant Provider', () => {
     });
 
     it('should handle JSON parsing errors', async () => {
-      vi
-        .mocked(fetchWithCache)
-        .mockRejectedValueOnce(new Error('Failed to parse response as JSON: Invalid JSON'));
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        new Error('Failed to parse response as JSON: Invalid JSON'),
+      );
 
       await expect((provider as any).makeRequest('https://test.url', {})).rejects.toThrow(
         'Failed to parse response as JSON',

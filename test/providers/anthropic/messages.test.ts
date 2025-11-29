@@ -101,8 +101,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should use cache by default for ToolUse requests', async () => {
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [
@@ -163,8 +162,7 @@ describe('AnthropicMessagesProvider', () => {
         type: 'tool',
       };
       provider.config.tool_choice = toolChoice;
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [
@@ -220,8 +218,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [{ type: 'text', text: 'Test response' }],
@@ -256,8 +253,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [{ type: 'text', text: 'Test response' }],
@@ -284,8 +280,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should not use cache if caching is disabled for ToolUse requests', async () => {
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [
@@ -320,8 +315,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should return cached response for legacy caching behavior', async () => {
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [],
@@ -342,8 +336,7 @@ describe('AnthropicMessagesProvider', () => {
 
     it('should handle API call error', async () => {
       const provider = createProvider('claude-3-5-sonnet-20241022');
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockRejectedValue(new Error('API call failed'));
 
@@ -355,8 +348,7 @@ describe('AnthropicMessagesProvider', () => {
 
     it('should handle non-Error API call errors', async () => {
       const provider = createProvider('claude-3-5-sonnet-20241022');
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockRejectedValue('Non-error object');
 
@@ -382,8 +374,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockRejectedValue(mockApiError);
 
@@ -397,8 +388,7 @@ describe('AnthropicMessagesProvider', () => {
       const provider = createProvider('claude-3-5-sonnet-20241022', {
         config: { max_tokens: 100, temperature: 0.5, cost: 0.015 },
       });
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [{ type: 'text', text: 'Test output' }],
@@ -423,8 +413,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [
@@ -467,8 +456,7 @@ describe('AnthropicMessagesProvider', () => {
 
     it('should handle redacted thinking blocks', async () => {
       const provider = createProvider('claude-3-7-sonnet-20250219');
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [
@@ -543,9 +531,9 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      vi
-        .spyOn(providerWithMaxTokens.anthropic.messages, 'create')
-        .mockRejectedValue(mockMaxTokensError);
+      vi.spyOn(providerWithMaxTokens.anthropic.messages, 'create').mockRejectedValue(
+        mockMaxTokensError,
+      );
 
       const result2 = await providerWithMaxTokens.callApi(
         JSON.stringify([
@@ -576,8 +564,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [{ type: 'text', text: 'Test response' }],
@@ -612,8 +599,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [{ type: 'text', text: 'Test response' }],
@@ -634,8 +620,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      vi
-        .spyOn(provider.anthropic.messages, 'create')
+      vi.spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
           content: [{ type: 'text', text: 'Test response' }],
@@ -652,8 +637,7 @@ describe('AnthropicMessagesProvider', () => {
     describe('finish reason handling', () => {
       it('should surface a normalized finishReason for Anthropic reasons', async () => {
         const provider = createProvider('claude-3-5-sonnet-20241022');
-        vi
-          .spyOn(provider.anthropic.messages, 'create')
+        vi.spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
             content: [{ type: 'text', text: 'Test response' }],
@@ -667,8 +651,7 @@ describe('AnthropicMessagesProvider', () => {
 
       it('should normalize max_tokens to length', async () => {
         const provider = createProvider('claude-3-5-sonnet-20241022');
-        vi
-          .spyOn(provider.anthropic.messages, 'create')
+        vi.spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
             content: [{ type: 'text', text: 'Test response' }],
@@ -682,8 +665,7 @@ describe('AnthropicMessagesProvider', () => {
 
       it('should normalize tool_use to tool_calls', async () => {
         const provider = createProvider('claude-3-5-sonnet-20241022');
-        vi
-          .spyOn(provider.anthropic.messages, 'create')
+        vi.spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
             content: [{ type: 'text', text: 'Test response' }],
@@ -697,8 +679,7 @@ describe('AnthropicMessagesProvider', () => {
 
       it('should exclude finishReason when stop_reason is null', async () => {
         const provider = createProvider('claude-3-5-sonnet-20241022');
-        vi
-          .spyOn(provider.anthropic.messages, 'create')
+        vi.spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
             content: [{ type: 'text', text: 'Test response' }],
@@ -712,8 +693,7 @@ describe('AnthropicMessagesProvider', () => {
 
       it('should exclude finishReason when stop_reason is undefined', async () => {
         const provider = createProvider('claude-3-5-sonnet-20241022');
-        vi
-          .spyOn(provider.anthropic.messages, 'create')
+        vi.spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
             content: [{ type: 'text', text: 'Test response' }],
@@ -739,8 +719,7 @@ describe('AnthropicMessagesProvider', () => {
         );
 
         // Set up specific cache key for our test
-        vi
-          .spyOn(provider.anthropic.messages, 'create')
+        vi.spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({} as any);
 
@@ -770,8 +749,7 @@ describe('AnthropicMessagesProvider', () => {
 
       it('should handle unknown stop reasons by passing them through', async () => {
         const provider = createProvider('claude-3-5-sonnet-20241022');
-        vi
-          .spyOn(provider.anthropic.messages, 'create')
+        vi.spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
             content: [{ type: 'text', text: 'Test response' }],

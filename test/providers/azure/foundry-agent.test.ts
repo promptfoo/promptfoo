@@ -61,13 +61,17 @@ describe('Azure Foundry Agent Provider', () => {
     vi.clearAllMocks();
     process.env.AZURE_API_HOST = 'test.azure.com';
     process.env.AZURE_API_KEY = 'test-key';
-    vi.spyOn(AzureFoundryAgentProvider.prototype as any, 'ensureInitialized').mockResolvedValue(undefined);
-    vi.spyOn(AzureFoundryAgentProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({ 'api-key': 'test-key' });
+    vi.spyOn(AzureFoundryAgentProvider.prototype as any, 'ensureInitialized').mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(AzureFoundryAgentProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
+      'api-key': 'test-key',
+    });
 
     // Mock the initializeClient private method to return our mock client
-    vi
-      .spyOn(AzureFoundryAgentProvider.prototype as any, 'initializeClient')
-      .mockResolvedValue(mockClient);
+    vi.spyOn(AzureFoundryAgentProvider.prototype as any, 'initializeClient').mockResolvedValue(
+      mockClient,
+    );
   });
 
   afterEach(() => {

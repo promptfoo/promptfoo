@@ -606,7 +606,9 @@ describe('createShareableUrl', () => {
       vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
       const mockEvalTracesError = buildMockEval();
-      mockEvalTracesError.getTraces = vi.fn().mockRejectedValue(new Error('Failed to fetch traces'));
+      mockEvalTracesError.getTraces = vi
+        .fn()
+        .mockRejectedValue(new Error('Failed to fetch traces'));
 
       const result = await createShareableUrl(mockEvalTracesError as Eval);
 

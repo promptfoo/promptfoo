@@ -49,9 +49,12 @@ describe('LlamaProvider', () => {
       vi.clearAllMocks();
     });
     it('should call fetchWithCache with correct parameters', async () => {
-      vi
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ ...response, cached: false, status: 200, statusText: 'OK' });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...response,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new LlamaProvider(modelName, { config });
       await provider.callApi(prompt);

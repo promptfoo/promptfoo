@@ -67,7 +67,7 @@ These directories have been fully migrated to Vitest and are listed in `vitest.c
 51. `test/providers/` - Individual provider tests:
     - adaline.gateway, ai21, aimlapi, alibaba, browser, claude-agent-sdk, cloudflare-ai
     - cometapi, deepseek, fal, functionCallbackUtils, helicone, llama, llamaApi
-    - ollama, packageParser, promptfooModel, pythonCompletion*, replicate-image
+    - ollama, packageParser, promptfooModel, pythonCompletion\*, replicate-image
     - rubyCompletion, scriptBasedProvider, scriptCompletion, shared, snowflake
     - togetherai, truefoundry, webhook, websocket
 
