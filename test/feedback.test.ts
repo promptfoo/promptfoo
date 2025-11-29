@@ -64,7 +64,7 @@ describe('Feedback Module', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(console, 'log').mockImplementation();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {

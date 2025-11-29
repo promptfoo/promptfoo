@@ -2558,7 +2558,7 @@ describe('AwsBedrockCompletionProvider', () => {
       set: vi.fn().mockResolvedValue(null),
     };
 
-    vi.mocked(getCache).mockResolvedValue(mockCache);
+    vi.mocked(getCache).mockResolvedValue(mockCache as any);
     vi.mocked(isCacheEnabled).mockReturnValue(false);
 
     originalModelHandler = AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'];

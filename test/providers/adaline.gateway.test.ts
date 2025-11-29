@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mocked } from 'vitest';
 
 import { Gateway } from '@adaline/gateway';
 import { getCache } from '../../src/cache';
@@ -89,10 +90,10 @@ describe('AdalineGatewayCachePlugin', () => {
 
 describe('AdalineGatewayEmbeddingProvider', () => {
   let provider: AdalineGatewayEmbeddingProvider;
-  let mockGateway: vi.Mocked<Gateway>;
+  let mockGateway: Mocked<Gateway>;
 
   beforeEach(() => {
-    mockGateway = new Gateway() as vi.Mocked<Gateway>;
+    mockGateway = new Gateway() as Mocked<Gateway>;
     provider = new AdalineGatewayEmbeddingProvider('openai', 'text-embedding-ada-002');
     provider.gateway = mockGateway;
   });
@@ -149,10 +150,10 @@ describe('AdalineGatewayEmbeddingProvider', () => {
 
 describe('AdalineGatewayChatProvider', () => {
   let provider: AdalineGatewayChatProvider;
-  let mockGateway: vi.Mocked<Gateway>;
+  let mockGateway: Mocked<Gateway>;
 
   beforeEach(() => {
-    mockGateway = new Gateway() as vi.Mocked<Gateway>;
+    mockGateway = new Gateway() as Mocked<Gateway>;
     provider = new AdalineGatewayChatProvider('openai', 'gpt-4');
     provider.gateway = mockGateway;
   });

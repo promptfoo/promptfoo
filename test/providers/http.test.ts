@@ -11,7 +11,7 @@ import {
   beforeEach,
   afterEach,
   afterAll,
-  type SpyInstance,
+  type MockInstance,
 } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
@@ -87,13 +87,9 @@ vi.mock('../../src/cliState', async () => {
 });
 
 // Mock jks-js module for JKS tests
-vi.mock(
-  'jks-js',
-  () => ({
-    toPem: vi.fn(),
-  }),
-  { virtual: true },
-);
+vi.mock('jks-js', () => ({
+  toPem: vi.fn(),
+}));
 
 afterAll(() => {
   consoleSpy.mockRestore();
@@ -3879,9 +3875,9 @@ describe('HttpProvider with token estimation', () => {
 
 describe('RSA signature authentication', () => {
   let mockPrivateKey: string;
-  let mockSign: SpyInstance;
-  let mockUpdate: SpyInstance;
-  let mockEnd: SpyInstance;
+  let mockSign: MockInstance;
+  let mockUpdate: MockInstance;
+  let mockEnd: MockInstance;
 
   beforeEach(() => {
     mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
@@ -4724,7 +4720,7 @@ describe('Body file resolution', () => {
 
 describe('HttpProvider - Sanitization', () => {
   const testUrl = 'http://example.com/api';
-  let loggerDebugSpy: SpyInstance;
+  let loggerDebugSpy: MockInstance;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -4865,7 +4861,7 @@ describe('HttpProvider - Sanitization', () => {
     await provider.callApi('test prompt');
 
     const debugCall = loggerDebugSpy.mock.calls.find(
-      (call) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
+      (call: any) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
     );
     expect(debugCall).toBeDefined();
 
@@ -4908,9 +4904,9 @@ describe('HttpProvider - Sanitization', () => {
       );
 
       // Extract the context object that was passed to the logger
-      const logCall = loggerDebugSpy.mock.calls.find((call) => call[0]?.includes('Calling'));
+      const logCall = loggerDebugSpy.mock.calls.find((call: any) => call[0]?.includes('Calling'));
       expect(logCall).toBeDefined();
-      const loggedContext = logCall[1];
+      const loggedContext = logCall![1];
 
       // Verify that when the logger sanitizes this context, sensitive headers are redacted
       const sanitizedContext = sanitizeObject(loggedContext, { context: 'test' });
@@ -4999,10 +4995,10 @@ describe('HttpProvider - Sanitization', () => {
 
       await provider.callApi('test');
 
-      const debugCall = loggerDebugSpy.mock.calls.find((call) => call[0].includes('Calling'));
+      const debugCall = loggerDebugSpy.mock.calls.find((call: any) => call[0].includes('Calling'));
       expect(debugCall).toBeDefined();
 
-      const logMessage = debugCall[0];
+      const logMessage = debugCall![0];
       expect(logMessage).toContain('api_key=%5BREDACTED%5D');
       expect(logMessage).toContain('format=json'); // Non-sensitive param preserved
       // Note: The URL in config object may contain the original secret, but the main URL is sanitized
@@ -5099,7 +5095,7 @@ describe('HttpProvider - Sanitization', () => {
 
       // Verify logger was called multiple times
       const debugCalls = loggerDebugSpy.mock.calls.filter(
-        (call) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
+        (call: any) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
       );
       expect(debugCalls.length).toBeGreaterThan(0);
     });

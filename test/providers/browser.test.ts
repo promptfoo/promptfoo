@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BrowserProvider, createTransformResponse } from '../../src/providers/browser';
 import type { Page } from 'playwright';
+import type { Mock, Mocked } from 'vitest';
 
-let mockPage: vi.Mocked<Page>;
+let mockPage: Mocked<Page>;
 
 const mockBrowser = {
   contexts: vi.fn(() => []),
@@ -44,7 +45,7 @@ describe('BrowserProvider', () => {
       content: vi.fn(),
       press: vi.fn(),
       close: vi.fn(),
-    } as unknown as vi.Mocked<Page>;
+    } as unknown as Mocked<Page>;
   });
 
   afterEach(() => {
@@ -609,7 +610,7 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       close: mockCloseFn,
     };
 
-    (chromium.connectOverCDP as vi.Mock).mockImplementationOnce(() =>
+    (chromium.connectOverCDP as Mock).mockImplementationOnce(() =>
       Promise.resolve(mockConnectedBrowser),
     );
 

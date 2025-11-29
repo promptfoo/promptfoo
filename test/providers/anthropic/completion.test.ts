@@ -24,7 +24,7 @@ describe('AnthropicCompletionProvider', () => {
   describe('callApi', () => {
     it('should return output for default behavior', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      vi.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
         id: 'test-id',
         model: 'claude-1',
         stop_reason: 'stop_sequence',
@@ -42,7 +42,7 @@ describe('AnthropicCompletionProvider', () => {
 
     it('should return cached output with caching enabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      vi.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
         id: 'test-id',
         model: 'claude-1',
         stop_reason: 'stop_sequence',
@@ -69,7 +69,7 @@ describe('AnthropicCompletionProvider', () => {
 
     it('should return fresh output with caching disabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      vi.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
         id: 'test-id',
         model: 'claude-1',
         stop_reason: 'stop_sequence',
@@ -99,9 +99,9 @@ describe('AnthropicCompletionProvider', () => {
 
     it('should handle API call error', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      vi.spyOn(provider.anthropic.completions, 'create')
-        .mockImplementation()
-        .mockRejectedValue(new Error('API call failed'));
+      vi.spyOn(provider.anthropic.completions, 'create').mockRejectedValue(
+        new Error('API call failed'),
+      );
 
       const result = await provider.callApi('Test prompt');
       expect(result).toMatchObject({

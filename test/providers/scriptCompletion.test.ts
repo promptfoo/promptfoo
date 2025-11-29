@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockedFunction } from 'vitest';
 
 import { execFile } from 'child_process';
 import * as crypto from 'crypto';
@@ -46,10 +47,10 @@ vi.mock('crypto', async () => {
   };
 });
 
-let existsSyncMock: vi.MockedFunction<typeof fs.existsSync>;
-let statSyncMock: vi.MockedFunction<typeof fs.statSync>;
-let readFileSyncMock: vi.MockedFunction<typeof fs.readFileSync>;
-let createHashMock: vi.MockedFunction<typeof crypto.createHash>;
+let existsSyncMock: MockedFunction<typeof fs.existsSync>;
+let statSyncMock: MockedFunction<typeof fs.statSync>;
+let readFileSyncMock: MockedFunction<typeof fs.readFileSync>;
+let createHashMock: MockedFunction<typeof crypto.createHash>;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -85,7 +86,7 @@ describe('getFileHashes', () => {
     const mockHash1 = 'hash1';
     const mockHash2 = 'hash2';
 
-    existsSyncMock.mockImplementation((path) => path !== 'nonexistent.js');
+    existsSyncMock.mockImplementation((path: fs.PathLike) => path !== 'nonexistent.js');
     statSyncMock.mockReturnValue({
       isFile: () => true,
       isDirectory: () => false,
@@ -95,7 +96,7 @@ describe('getFileHashes', () => {
       isFIFO: () => false,
       isSocket: () => false,
     } as fs.Stats);
-    readFileSyncMock.mockImplementation((path) => {
+    readFileSyncMock.mockImplementation((path: fs.PathOrFileDescriptor) => {
       if (path === 'file1.js') {
         return mockFileContent1;
       }

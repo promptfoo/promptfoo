@@ -154,7 +154,7 @@ describe('FunctionCallbackHandler', () => {
 
     it('should handle calls with no function information', async () => {
       const callbacks: FunctionCallbackConfig = {
-        testFunction: vi.fn(),
+        testFunction: vi.fn() as any,
       };
       const call = { notAFunction: true };
 
@@ -436,7 +436,7 @@ describe('FunctionCallbackHandler', () => {
         getAllTools: vi.fn(),
         callTool: vi.fn(),
       };
-      handler = new FunctionCallbackHandler(mockMCPClient);
+      handler = new FunctionCallbackHandler(mockMCPClient as any);
     });
 
     it('should execute MCP tool when tool name matches available MCP tools', async () => {

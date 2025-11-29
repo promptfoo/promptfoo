@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'vitest';
 
 import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
@@ -2552,7 +2553,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 100, output_tokens: 200 },
       };
 
-      (cache.fetchWithCache as vi.Mock).mockResolvedValueOnce({
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
         data: mockData,
         status: 200,
         statusText: 'OK',
@@ -2603,7 +2604,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 100, output_tokens: 200 },
       };
 
-      (cache.fetchWithCache as vi.Mock).mockResolvedValueOnce({
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
         data: mockData,
         status: 200,
         statusText: 'OK',
@@ -2642,7 +2643,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 100, output_tokens: 200 },
       };
 
-      (cache.fetchWithCache as vi.Mock).mockResolvedValueOnce({
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
         data: mockData,
         status: 200,
         statusText: 'OK',

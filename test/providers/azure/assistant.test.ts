@@ -1256,7 +1256,7 @@ describe('Azure Assistant Provider', () => {
           apiKey: 'test-key',
           apiHost: 'test.azure.com',
           functionToolCallbacks: {
-            testFunction: vi.fn(),
+            testFunction: vi.fn() as any,
           },
         },
       });

@@ -5,16 +5,18 @@ import { fetchWithCache } from '../../../src/cache';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import fs from 'fs';
 
+import type { Mocked, MockedFunction } from 'vitest';
+
 // Mock external dependencies
 vi.mock('../../../src/cache');
 vi.mock('../../../src/util/file');
 vi.mock('fs');
 
-const mockFetchWithCache = fetchWithCache as vi.MockedFunction<typeof fetchWithCache>;
-const mockMaybeLoadFromExternalFile = maybeLoadFromExternalFile as vi.MockedFunction<
+const mockFetchWithCache = fetchWithCache as MockedFunction<typeof fetchWithCache>;
+const mockMaybeLoadFromExternalFile = maybeLoadFromExternalFile as MockedFunction<
   typeof maybeLoadFromExternalFile
 >;
-const _mockFs = fs as vi.Mocked<typeof fs>;
+const _mockFs = fs as Mocked<typeof fs>;
 let authHeadersValue: Record<string, string>;
 
 describe('AzureResponsesProvider', () => {
@@ -141,7 +143,7 @@ describe('AzureResponsesProvider', () => {
 
     it('should handle inline response_format', async () => {
       // For inline schemas, maybeLoadFromExternalFile should return the object unchanged
-      mockMaybeLoadFromExternalFile.mockImplementation((input) => input);
+      mockMaybeLoadFromExternalFile.mockImplementation((input: any) => input);
 
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: {

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import fs from 'fs';
 
 import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
@@ -129,9 +130,9 @@ const createMockErrorResponse = (
 };
 
 describe('ClaudeCodeSDKProvider', () => {
-  let tempDirSpy: vi.SpyInstance;
-  let statSyncSpy: vi.SpyInstance;
-  let rmSyncSpy: vi.SpyInstance;
+  let tempDirSpy: MockInstance;
+  let statSyncSpy: MockInstance;
+  let rmSyncSpy: MockInstance;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -148,7 +149,7 @@ describe('ClaudeCodeSDKProvider', () => {
     statSyncSpy = vi.spyOn(fs, 'statSync').mockReturnValue({
       isDirectory: () => true,
     } as fs.Stats);
-    rmSyncSpy = vi.spyOn(fs, 'rmSync').mockImplementation();
+    rmSyncSpy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {});
   });
 
   afterEach(async () => {
@@ -184,7 +185,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should warn about unknown model', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new ClaudeCodeSDKProvider({ config: { model: 'unknown-model' } });
 
@@ -196,7 +197,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should warn about unknown fallback model', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
 
@@ -208,7 +209,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should not warn about Claude Agent SDK model aliases', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       // Test all Claude Agent SDK aliases
       CLAUDE_CODE_MODEL_ALIASES.forEach((alias) => {
@@ -222,7 +223,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should not warn about known Anthropic models', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new ClaudeCodeSDKProvider({ config: { model: 'claude-3-5-sonnet-20241022' } });
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'claude-3-5-haiku-20241022' } });
@@ -291,7 +292,7 @@ describe('ClaudeCodeSDKProvider', () => {
       });
 
       it('should handle SDK exceptions', async () => {
-        const errorSpy = vi.spyOn(logger, 'error').mockImplementation();
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockQuery.mockRejectedValue(new Error('Network error'));
 
         const provider = new ClaudeCodeSDKProvider({
@@ -750,7 +751,7 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(mockQuery).not.toHaveBeenCalled();
 
         // Test abort during execution
-        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
         const abortError = new Error('AbortError');
         abortError.name = 'AbortError';
         mockQuery.mockRejectedValue(abortError);
@@ -1203,7 +1204,7 @@ describe('ClaudeCodeSDKProvider', () => {
           throw new Error('Cache write failed');
         });
 
-        const errorSpy = vi.spyOn(logger, 'error').mockImplementation();
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
         const provider = new ClaudeCodeSDKProvider({
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
