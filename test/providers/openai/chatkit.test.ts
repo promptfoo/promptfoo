@@ -27,6 +27,7 @@ jest.mock('http', () => ({
     listen: jest.fn((_port: number, callback: () => void) => callback()),
     address: jest.fn().mockReturnValue({ port: 3000 }),
     close: jest.fn(),
+    once: jest.fn(), // For error event handler
   }),
 }));
 
@@ -37,6 +38,7 @@ describe('OpenAiChatKitProvider', () => {
   });
 
   afterEach(() => {
+    jest.resetAllMocks();
     enableCache();
   });
 
@@ -168,7 +170,7 @@ describe('OpenAiChatKitProvider', () => {
       });
 
       // Should not throw when cleaning up uninitialized provider
-      await expect(provider.cleanup()).resolves.not.toThrow();
+      await expect(provider.cleanup()).resolves.toBeUndefined();
     });
   });
 });

@@ -213,7 +213,7 @@ npx promptfoo eval --max-concurrency 4
 
 ### Playwright not installed
 
-```
+```text
 Error: Playwright browser not installed
 ```
 

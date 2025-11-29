@@ -71,10 +71,8 @@ import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
-import { OpenAiAgentsProvider } from './openai/agents';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { OpenAiChatKitProvider } from './openai/chatkit';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { OpenAiImageProvider } from './openai/image';
@@ -827,9 +825,11 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
+        const { OpenAiAgentsProvider } = await import('./openai/agents');
         return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
       }
       if (modelType === 'chatkit') {
+        const { OpenAiChatKitProvider } = await import('./openai/chatkit');
         return new OpenAiChatKitProvider(modelName || '', providerOptions);
       }
       if (modelType === 'assistant') {

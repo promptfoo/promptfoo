@@ -56,6 +56,8 @@ describe('ChatKitBrowserPool', () => {
   });
 
   afterEach(async () => {
+    // Use clearAllMocks instead of resetAllMocks to preserve mock implementations
+    jest.clearAllMocks();
     // Ensure clean state after each test
     ChatKitBrowserPool.resetInstance();
   });

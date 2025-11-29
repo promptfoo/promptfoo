@@ -45,9 +45,48 @@ import type {
 import type { EnvOverrides } from '../../types/env';
 
 /**
+ * Check if a URL is from OpenAI's CDN by parsing the hostname.
+ * This is more secure than substring matching which could be bypassed.
+ */
+function isOpenAICdnUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'cdn.platform.openai.com';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate workflowId format to prevent script injection
+ */
+function validateWorkflowId(workflowId: string): void {
+  if (!workflowId || !/^wf_[a-zA-Z0-9]+$/.test(workflowId)) {
+    throw new Error(`Invalid workflowId format: ${workflowId}. Expected format: wf_<alphanumeric>`);
+  }
+}
+
+/**
+ * Validate version format to prevent script injection
+ */
+function validateVersion(version: string): void {
+  if (!/^[a-zA-Z0-9._-]+$/.test(version)) {
+    throw new Error(
+      `Invalid version format: ${version}. Only alphanumeric, dot, dash, and underscore allowed.`,
+    );
+  }
+}
+
+/**
  * Generate the HTML page that hosts the ChatKit component
  */
 function generateChatKitHTML(apiKey: string, workflowId: string, version?: string): string {
+  // Validate inputs to prevent script injection
+  validateWorkflowId(workflowId);
+  if (version) {
+    validateVersion(version);
+  }
+
   const versionClause = version ? `, version: '${version}'` : '';
 
   return `<!DOCTYPE html>
@@ -151,7 +190,7 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
 
     for (const frame of frames) {
       const url = frame.url();
-      if (url.includes('cdn.platform.openai.com')) {
+      if (isOpenAICdnUrl(url)) {
         try {
           const result = await frame.evaluate(() => {
             // Helper to check if element is likely a user message
@@ -222,7 +261,6 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
             // Fallback: look for the longest div that's not in a user message area
             const divs = document.querySelectorAll('div');
             let longestText = '';
-            let _longestDiv: Element | null = null;
 
             divs.forEach((div) => {
               const text = div.textContent || '';
@@ -244,7 +282,6 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
                 }
                 if (!inUserArea) {
                   longestText = text;
-                  _longestDiv = div;
                 }
               }
             });
@@ -264,12 +301,10 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
               .replace(/You said:.*?(?=\n|$)/g, '')
               .trim();
 
-            // If there's a JSON classification prefix, keep it but separate it
+            // If there's a JSON classification prefix, strip it and use the rest
             const jsonMatch = cleaned.match(/^(\{[^}]+\})\s*/);
             if (jsonMatch) {
-              const _json = jsonMatch[1];
               const rest = cleaned.slice(jsonMatch[0].length).trim();
-              // Return the text content, optionally with the JSON
               cleaned = rest.length > 20 ? rest : cleaned;
             }
 
@@ -313,7 +348,7 @@ async function handleApproval(
 
   for (const frame of frames) {
     const url = frame.url();
-    if (url.includes('cdn.platform.openai.com')) {
+    if (isOpenAICdnUrl(url)) {
       try {
         // Look for approval buttons in the ChatKit iframe
         const buttonText = action === 'auto-approve' ? 'Approve' : 'Reject';
@@ -432,9 +467,10 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   ) {
     super(workflowId, options);
     // Default poolSize to PROMPTFOO_MAX_CONCURRENCY env var if set, otherwise 4
-    const defaultPoolSize = process.env.PROMPTFOO_MAX_CONCURRENCY
+    const envPoolSize = process.env.PROMPTFOO_MAX_CONCURRENCY
       ? parseInt(process.env.PROMPTFOO_MAX_CONCURRENCY, 10)
-      : 4;
+      : NaN;
+    const defaultPoolSize = Number.isNaN(envPoolSize) ? 4 : envPoolSize;
 
     this.chatKitConfig = {
       workflowId: options.config?.workflowId || workflowId,
@@ -472,24 +508,28 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       throw new Error('OpenAI API key is required for ChatKit provider');
     }
 
+    const workflowId = this.chatKitConfig.workflowId;
+    if (!workflowId) {
+      throw new Error('ChatKit workflowId is required');
+    }
+
     logger.debug('[ChatKitProvider] Initializing', {
-      workflowId: this.chatKitConfig.workflowId,
+      workflowId,
       version: this.chatKitConfig.version,
     });
 
     // Create HTTP server to serve the ChatKit HTML
-    const html = generateChatKitHTML(
-      apiKey,
-      this.chatKitConfig.workflowId!,
-      this.chatKitConfig.version,
-    );
+    const html = generateChatKitHTML(apiKey, workflowId, this.chatKitConfig.version);
 
     this.server = http.createServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
     });
 
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
+      this.server!.once('error', (err: NodeJS.ErrnoException) => {
+        reject(new Error(`Failed to start ChatKit server: ${err.message}`));
+      });
       this.server!.listen(this.chatKitConfig.serverPort, () => {
         const address = this.server!.address();
         this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
@@ -613,9 +653,9 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       // Handle any approval steps in the workflow
       const approvalsHandled = await processApprovals(
         this.page,
-        this.chatKitConfig.approvalHandling!,
-        this.chatKitConfig.maxApprovals!,
-        this.chatKitConfig.timeout!,
+        this.chatKitConfig.approvalHandling ?? 'auto-approve',
+        this.chatKitConfig.maxApprovals ?? 5,
+        this.chatKitConfig.timeout ?? 120000,
       );
 
       if (approvalsHandled > 0) {
@@ -698,6 +738,13 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       };
     }
 
+    const workflowId = this.chatKitConfig.workflowId;
+    if (!workflowId) {
+      return {
+        error: 'ChatKit workflowId is required',
+      };
+    }
+
     // Get or create the pool
     const pool = ChatKitBrowserPool.getInstance({
       maxConcurrency: this.chatKitConfig.poolSize,
@@ -705,11 +752,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     });
 
     // Set the HTML template (needed for the pool's server)
-    const html = generateChatKitHTML(
-      apiKey,
-      this.chatKitConfig.workflowId!,
-      this.chatKitConfig.version,
-    );
+    const html = generateChatKitHTML(apiKey, workflowId, this.chatKitConfig.version);
     pool.setHtmlTemplate(html);
 
     let pooledPage: Awaited<ReturnType<typeof pool.acquirePage>> | null = null;
@@ -742,9 +785,9 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       // Handle any approval steps in the workflow
       const approvalsHandled = await processApprovals(
         page,
-        this.chatKitConfig.approvalHandling!,
-        this.chatKitConfig.maxApprovals!,
-        this.chatKitConfig.timeout!,
+        this.chatKitConfig.approvalHandling ?? 'auto-approve',
+        this.chatKitConfig.maxApprovals ?? 5,
+        this.chatKitConfig.timeout ?? 120000,
       );
 
       if (approvalsHandled > 0) {

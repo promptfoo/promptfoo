@@ -69,7 +69,9 @@ export class ChatKitBrowserPool {
    */
   static resetInstance(): void {
     if (ChatKitBrowserPool.instance) {
-      ChatKitBrowserPool.instance.shutdown().catch(() => {});
+      ChatKitBrowserPool.instance.shutdown().catch((err) => {
+        logger.debug('[ChatKitPool] Error during shutdown:', { error: String(err) });
+      });
       ChatKitBrowserPool.instance = null;
     }
   }
