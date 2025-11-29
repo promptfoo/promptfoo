@@ -124,6 +124,18 @@ promptfoo redteam init --no-gui
 
 :::
 
+:::tip Auto-generate config from source code
+
+If you have access to the application's source code, the [`recon`](/docs/red-team/recon/) command can automatically analyze your codebase and generate a complete red team configuration:
+
+```sh
+promptfoo redteam recon --dir ./my-llm-app
+```
+
+This extracts system prompts, discovers tools, and suggests relevant plugins based on your code.
+
+:::
+
 ## Run the scan
 
 Now that we've generated the test cases, we're ready to run the adversarial evaluation.
