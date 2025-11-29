@@ -1,7 +1,8 @@
-import { PythonProvider } from '../../src/providers/pythonCompletion';
 import fs from 'fs';
-import path from 'path';
 import os from 'os';
+import path from 'path';
+import { describe, expect, it } from 'vitest';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 
 describe.skip('Performance Benchmarks (manual)', () => {
   function writeTempPython(content: string): string {

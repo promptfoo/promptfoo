@@ -1,56 +1,74 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockedFunction,
+} from 'vitest';
 import request from 'supertest';
 import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
 
 import type { TraceStore } from '../../src/tracing/store';
 
 // Mock the database
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(() => ({
-    insert: jest.fn(),
-    select: jest.fn(),
-    delete: jest.fn(),
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(() => ({
+    insert: vi.fn(),
+    select: vi.fn(),
+    delete: vi.fn(),
   })),
 }));
 
 // Mock the trace store
-jest.mock('../../src/tracing/store');
+vi.mock('../../src/tracing/store');
 
 // Mock the logger
-const mockLogger = {
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-};
-jest.mock('../../src/logger', () => ({
-  default: mockLogger,
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
-// Import the mocked module after mocking
-const mockedTraceStore = jest.requireMock('../../src/tracing/store') as {
-  getTraceStore: jest.MockedFunction<() => TraceStore>;
-};
+// Get the mocked module - initialized in beforeAll
+let mockedTraceStore: typeof import('../../src/tracing/store');
 
 describe('OTLPReceiver', () => {
   let receiver: OTLPReceiver;
-  let mockTraceStore: jest.Mocked<TraceStore>;
+  let mockTraceStore: {
+    createTrace: MockedFunction<() => Promise<void>>;
+    addSpans: MockedFunction<() => Promise<void>>;
+    getTracesByEvaluation: MockedFunction<() => Promise<any[]>>;
+    getTrace: MockedFunction<() => Promise<any | null>>;
+    deleteOldTraces: MockedFunction<() => Promise<void>>;
+  };
+
+  beforeAll(async () => {
+    mockedTraceStore = vi.mocked(await import('../../src/tracing/store'));
+  });
 
   beforeEach(() => {
     // Reset mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create mock trace store
     mockTraceStore = {
-      createTrace: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-      addSpans: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-      getTracesByEvaluation: jest.fn<() => Promise<any[]>>().mockResolvedValue([]),
-      getTrace: jest.fn<() => Promise<any | null>>().mockResolvedValue(null),
-      deleteOldTraces: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    } as unknown as jest.Mocked<TraceStore>;
+      createTrace: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      addSpans: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      getTracesByEvaluation: vi.fn<() => Promise<any[]>>().mockResolvedValue([]),
+      getTrace: vi.fn<() => Promise<any | null>>().mockResolvedValue(null),
+      deleteOldTraces: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    };
 
     // Mock the getTraceStore function
-    mockedTraceStore.getTraceStore.mockReturnValue(mockTraceStore);
+    (mockedTraceStore.getTraceStore as MockedFunction<() => TraceStore>).mockReturnValue(
+      mockTraceStore as unknown as TraceStore,
+    );
 
     // Create receiver instance
     receiver = new OTLPReceiver();
@@ -60,7 +78,7 @@ describe('OTLPReceiver', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('Health check', () => {

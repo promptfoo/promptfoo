@@ -1,61 +1,72 @@
 import fs from 'fs';
 import path from 'path';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock util before any imports that use it - define the mock inline
-jest.mock('util', () => {
-  const actualUtil = jest.requireActual('util');
-  const mockExecFile = jest.fn();
-
-  return {
-    ...actualUtil,
-    promisify: jest.fn((fn) => {
-      if (fn && fn.name === 'execFile') {
-        return mockExecFile;
-      }
-      return actualUtil.promisify(fn);
-    }),
-    __mockExecFileAsync: mockExecFile, // Export for test access
-  };
+// Create mock for execFileAsync - must be hoisted for vi.mock factory
+const { mockExecFileAsync, mockExecFile } = vi.hoisted(() => {
+  const mockExecFileAsync = vi.fn();
+  // Create a mock execFile with the custom promisify symbol
+  const mockExecFile = Object.assign(vi.fn(), {
+    [Symbol.for('nodejs.util.promisify.custom')]: mockExecFileAsync,
+  });
+  return { mockExecFileAsync, mockExecFile };
 });
+
+// Mock child_process.execFile with custom promisify support
+vi.mock('child_process', () => ({
+  execFile: mockExecFile,
+}));
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import * as pythonUtils from '../../src/python/pythonUtils';
 
-// Get reference to the mock after imports
-const mockExecFileAsync = (require('util') as any).__mockExecFileAsync;
-
 // Mock setup
-jest.mock('fs', () => ({
-  writeFileSync: jest.fn(),
-  readFileSync: jest.fn(),
-  unlinkSync: jest.fn(),
+vi.mock('fs', () => {
+  const fsMock = {
+    writeFileSync: vi.fn(),
+    readFileSync: vi.fn(),
+    unlinkSync: vi.fn(),
+  };
+  return {
+    ...fsMock,
+    default: fsMock,
+  };
+});
+
+vi.mock('../../src/envars', () => ({
+  getEnvString: vi.fn(),
+  getEnvBool: vi.fn(),
 }));
 
-jest.mock('../../src/envars', () => ({
-  getEnvString: jest.fn(),
-  getEnvBool: jest.fn(),
-}));
+// Must be hoisted for vi.mock factory
+const { mockPythonShellInstance, MockPythonShell } = vi.hoisted(() => {
+  const instance = {
+    stdout: { on: vi.fn() },
+    stderr: { on: vi.fn() },
+    end: vi.fn(),
+  };
+  // Create a proper class that can be used with 'new'
+  const MockPythonShell = vi.fn(function (this: typeof instance) {
+    Object.assign(this, instance);
+    return this;
+  }) as unknown as typeof import('python-shell').PythonShell;
+  return { mockPythonShellInstance: instance, MockPythonShell };
+});
 
-const mockPythonShellInstance = {
-  stdout: { on: jest.fn() },
-  stderr: { on: jest.fn() },
-  end: jest.fn(),
-};
-
-jest.mock('python-shell', () => ({
-  PythonShell: jest.fn(() => mockPythonShellInstance),
+vi.mock('python-shell', () => ({
+  PythonShell: MockPythonShell,
 }));
 
 describe('Python Utils', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockExecFileAsync.mockReset();
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
     // Set default mock return values
-    jest.mocked(getEnvString).mockReturnValue('');
-    jest.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(getEnvBool).mockReturnValue(false);
   });
 
   describe('getSysExecutable', () => {
@@ -64,10 +75,7 @@ describe('Python Utils', () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'linux' });
 
-      mockExecFileAsync.mockResolvedValue({
-        stdout: '/usr/bin/python3.8\n',
-        stderr: '',
-      });
+      mockExecFileAsync.mockResolvedValue({ stdout: '/usr/bin/python3.8\n', stderr: '' });
 
       const result = await pythonUtils.getSysExecutable();
 
@@ -85,23 +93,28 @@ describe('Python Utils', () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32' });
 
-      // Mock 'where python' command to return multiple paths including WindowsApps
-      mockExecFileAsync
-        .mockResolvedValueOnce({
-          stdout:
-            'C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe\nC:\\Python39\\python.exe\n',
-          stderr: '',
-        })
-        .mockResolvedValueOnce({
-          stdout: 'Python 3.9.0\n',
-          stderr: '',
-        });
+      let callCount = 0;
+      mockExecFileAsync.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // 'where python' returns multiple paths
+          return {
+            stdout:
+              'C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe\nC:\\Python39\\python.exe\n',
+            stderr: '',
+          };
+        } else {
+          // Version check succeeds
+          return { stdout: 'Python 3.9.0\n', stderr: '' };
+        }
+      });
 
       const result = await pythonUtils.getSysExecutable();
 
       // Should skip WindowsApps and use the real Python installation
       expect(result).toBe('C:\\Python39\\python.exe');
       expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      // Verify that the non-WindowsApps path was validated
       expect(mockExecFileAsync).toHaveBeenCalledWith('C:\\Python39\\python.exe', ['--version']);
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
@@ -111,18 +124,23 @@ describe('Python Utils', () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32' });
 
-      // Mock 'where python' to fail, then 'py' sys.executable to succeed
-      mockExecFileAsync
-        .mockRejectedValueOnce(new Error('where command failed'))
-        .mockResolvedValueOnce({
-          stdout: 'C:\\Python39\\python.exe\n',
-          stderr: '',
-        });
+      let callCount = 0;
+      mockExecFileAsync.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // 'where python' fails
+          throw new Error('where command failed');
+        } else {
+          // 'py' sys.executable succeeds
+          return { stdout: 'C:\\Python39\\python.exe\n', stderr: '' };
+        }
+      });
 
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('C:\\Python39\\python.exe');
       expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      // Verify py launcher fallback was used
       expect(mockExecFileAsync).toHaveBeenCalledWith('py', [
         '-c',
         'import sys; print(sys.executable)',
@@ -135,20 +153,23 @@ describe('Python Utils', () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32' });
 
-      // Mock everything to fail except final direct python command
-      mockExecFileAsync
-        .mockRejectedValueOnce(new Error('where failed'))
-        .mockRejectedValueOnce(new Error('py failed'))
-        .mockRejectedValueOnce(new Error('py -3 failed'))
-        .mockResolvedValueOnce({
-          stdout: 'Python 3.9.0\n',
-          stderr: '',
-        });
+      let callCount = 0;
+      mockExecFileAsync.mockImplementation(async () => {
+        callCount++;
+        if (callCount <= 3) {
+          // First 3 calls fail
+          throw new Error('failed');
+        } else {
+          // Final fallback succeeds
+          return { stdout: 'Python 3.9.0\n', stderr: '' };
+        }
+      });
 
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('python');
       expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      // Verify the final fallback python --version was called
       expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version']);
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
@@ -158,9 +179,14 @@ describe('Python Utils', () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32' });
 
-      mockExecFileAsync.mockRejectedValueOnce(new Error('where failed')).mockResolvedValueOnce({
-        stdout: 'C:\\Python39\\python\n',
-        stderr: '',
+      let callCount = 0;
+      mockExecFileAsync.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('where failed');
+        } else {
+          return { stdout: 'C:\\Python39\\python\n', stderr: '' };
+        }
       });
 
       const result = await pythonUtils.getSysExecutable();
@@ -174,21 +200,23 @@ describe('Python Utils', () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32' });
 
-      // Mock 'where python' to return empty output, then py to succeed
-      mockExecFileAsync
-        .mockResolvedValueOnce({
-          stdout: '',
-          stderr: '',
-        })
-        .mockResolvedValueOnce({
-          stdout: 'C:\\Python39\\python.exe\n',
-          stderr: '',
-        });
+      let callCount = 0;
+      mockExecFileAsync.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // 'where python' returns empty
+          return { stdout: '', stderr: '' };
+        } else {
+          // 'py' succeeds
+          return { stdout: 'C:\\Python39\\python.exe\n', stderr: '' };
+        }
+      });
 
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('C:\\Python39\\python.exe');
       expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      // Verify py launcher fallback was used when where returned empty
       expect(mockExecFileAsync).toHaveBeenCalledWith('py', [
         '-c',
         'import sys; print(sys.executable)',
@@ -209,10 +237,7 @@ describe('Python Utils', () => {
   describe('tryPath', () => {
     describe('successful path validation', () => {
       it('should return the path for a valid Python 3 executable', async () => {
-        mockExecFileAsync.mockResolvedValue({
-          stdout: 'Python 3.8.10\n',
-          stderr: '',
-        });
+        mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
 
         const result = await pythonUtils.tryPath('/usr/bin/python3');
 
@@ -232,26 +257,19 @@ describe('Python Utils', () => {
       });
 
       it('should return null if the command times out', async () => {
-        jest.useFakeTimers();
-        const execPromise = new Promise<{ stdout: string; stderr: string }>((resolve) => {
-          setTimeout(() => {
-            resolve({
-              stdout: 'Python 3.8.10\n',
-              stderr: '',
-            });
-          }, 3000);
-        });
+        vi.useFakeTimers();
 
-        mockExecFileAsync.mockReturnValue(execPromise as any);
+        // Mock execFileAsync to return a promise that never resolves (simulating timeout)
+        mockExecFileAsync.mockImplementation(() => new Promise(() => {}));
 
         const resultPromise = pythonUtils.tryPath('/usr/bin/python3');
-        jest.advanceTimersByTime(2501);
+        await vi.advanceTimersByTimeAsync(2501);
 
         const result = await resultPromise;
 
         expect(result).toBeNull();
         expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version']);
-        jest.useRealTimers();
+        vi.useRealTimers();
       });
     });
   });
@@ -259,10 +277,7 @@ describe('Python Utils', () => {
   describe('validatePythonPath', () => {
     describe('caching behavior', () => {
       it('should validate and cache an existing Python 3 path', async () => {
-        mockExecFileAsync.mockResolvedValue({
-          stdout: 'Python 3.8.10\n',
-          stderr: '',
-        });
+        mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
 
         const result = await pythonUtils.validatePythonPath('python', false);
 
@@ -284,26 +299,24 @@ describe('Python Utils', () => {
     describe('fallback behavior', () => {
       it('should fall back to alternative paths for non-existent programs when not explicit', async () => {
         mockExecFileAsync.mockReset();
-        // Primary path fails
-        mockExecFileAsync.mockRejectedValueOnce(new Error('Command failed'));
+        let callCount = 0;
 
-        if (process.platform === 'win32') {
-          // Windows: All getSysExecutable strategies eventually succeed via final fallback
-          mockExecFileAsync.mockRejectedValueOnce(new Error('Command failed')); // where python fails
-          mockExecFileAsync.mockRejectedValueOnce(new Error('Command failed')); // py -c sys.executable fails
-          mockExecFileAsync.mockRejectedValueOnce(new Error('Command failed')); // py -3 -c sys.executable fails
-          // Final fallback (python) validation succeeds
-          mockExecFileAsync.mockResolvedValueOnce({
-            stdout: 'Python 3.9.5\n',
-            stderr: '',
-          });
-        } else {
-          // Unix: getSysExecutable strategies succeed on python3
-          mockExecFileAsync.mockResolvedValueOnce({
-            stdout: '/usr/bin/python3\n',
-            stderr: '',
-          });
-        }
+        mockExecFileAsync.mockImplementation(async () => {
+          callCount++;
+          if (callCount === 1) {
+            // Primary path fails
+            throw new Error('Command failed');
+          } else if (process.platform === 'win32') {
+            if (callCount <= 4) {
+              throw new Error('Command failed');
+            } else {
+              return { stdout: 'Python 3.9.5\n', stderr: '' };
+            }
+          } else {
+            // Unix: getSysExecutable succeeds on python3
+            return { stdout: '/usr/bin/python3\n', stderr: '' };
+          }
+        });
 
         const result = await pythonUtils.validatePythonPath('non_existent_program', false);
 
@@ -332,11 +345,8 @@ describe('Python Utils', () => {
 
     describe('environment variable handling', () => {
       it('should use PROMPTFOO_PYTHON environment variable when provided', async () => {
-        jest.mocked(getEnvString).mockReturnValue('/custom/python/path');
-        mockExecFileAsync.mockResolvedValue({
-          stdout: 'Python 3.8.10\n',
-          stderr: '',
-        });
+        vi.mocked(getEnvString).mockReturnValue('/custom/python/path');
+        mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
 
         const result = await pythonUtils.validatePythonPath('/custom/python/path', true);
 
@@ -347,16 +357,11 @@ describe('Python Utils', () => {
 
     describe('concurrent validation', () => {
       it('should share validation promise between concurrent calls', async () => {
-        const firstPromise = new Promise<{ stdout: string; stderr: string }>((resolve) => {
-          setTimeout(() => {
-            resolve({
-              stdout: 'Python 3.8.10\n',
-              stderr: '',
-            });
-          }, 100);
+        mockExecFileAsync.mockImplementation(async () => {
+          // Add delay to simulate slow execution
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          return { stdout: 'Python 3.8.10\n', stderr: '' };
         });
-
-        mockExecFileAsync.mockReturnValueOnce(firstPromise as any);
 
         // Start two validations concurrently
         const [result1, result2] = await Promise.all([
@@ -378,20 +383,11 @@ describe('Python Utils', () => {
         // Clear cached path first to ensure validation runs
         pythonUtils.state.cachedPythonPath = null;
 
-        // Create a promise that can be resolved manually
-        let resolvePromise: (value: any) => void;
-        const controlledPromise = new Promise<{ stdout: string; stderr: string }>((resolve) => {
-          resolvePromise = resolve;
+        mockExecFileAsync.mockImplementation(async () => {
+          // Delay to simulate slow execution
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return { stdout: 'Python 3.8.10\n', stderr: '' };
         });
-
-        mockExecFileAsync.mockResolvedValue({
-          stdout: 'Python 3.8.10\n',
-          stderr: '',
-        });
-
-        // Reset mock to use our controlled promise
-        mockExecFileAsync.mockReset();
-        mockExecFileAsync.mockReturnValueOnce(controlledPromise as any);
 
         // Start multiple validations without waiting
         const promises = [
@@ -399,14 +395,6 @@ describe('Python Utils', () => {
           pythonUtils.validatePythonPath('python', false),
           pythonUtils.validatePythonPath('python', false),
         ];
-
-        // Resolve the promise after a delay
-        setTimeout(() => {
-          resolvePromise!({
-            stdout: 'Python 3.8.10\n',
-            stderr: '',
-          });
-        }, 10);
 
         const results = await Promise.all(promises);
 
@@ -436,19 +424,16 @@ describe('Python Utils', () => {
 
   describe('runPython', () => {
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should execute a Python script with proper arguments', async () => {
-      jest.mocked(fs.writeFileSync).mockImplementation();
-      jest
-        .mocked(fs.readFileSync)
-        .mockReturnValue(JSON.stringify({ type: 'final_result', data: 42 }));
-      jest.mocked(fs.unlinkSync).mockImplementation();
-      mockExecFileAsync.mockResolvedValue({
-        stdout: 'Python 3.8.10\n',
-        stderr: '',
-      });
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 42 }),
+      );
+      vi.mocked(fs.unlinkSync).mockImplementation(() => {});
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
 
       mockPythonShellInstance.end.mockImplementation((callback: any) => {
         callback(null);
@@ -469,13 +454,10 @@ describe('Python Utils', () => {
     });
 
     it('should throw an error if Python script returns invalid JSON', async () => {
-      jest.mocked(fs.writeFileSync).mockImplementation();
-      jest.mocked(fs.readFileSync).mockReturnValue('invalid json');
-      jest.mocked(fs.unlinkSync).mockImplementation();
-      mockExecFileAsync.mockResolvedValue({
-        stdout: 'Python 3.8.10\n',
-        stderr: '',
-      });
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      vi.mocked(fs.readFileSync).mockReturnValue('invalid json');
+      vi.mocked(fs.unlinkSync).mockImplementation(() => {});
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
 
       mockPythonShellInstance.end.mockImplementation((callback: any) => {
         callback(null);
@@ -487,13 +469,10 @@ describe('Python Utils', () => {
     });
 
     it('should throw an error if Python script does not return final_result', async () => {
-      jest.mocked(fs.writeFileSync).mockImplementation();
-      jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ type: 'other', data: 42 }));
-      jest.mocked(fs.unlinkSync).mockImplementation();
-      mockExecFileAsync.mockResolvedValue({
-        stdout: 'Python 3.8.10\n',
-        stderr: '',
-      });
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ type: 'other', data: 42 }));
+      vi.mocked(fs.unlinkSync).mockImplementation(() => {});
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
 
       mockPythonShellInstance.end.mockImplementation((callback: any) => {
         callback(null);
@@ -505,15 +484,12 @@ describe('Python Utils', () => {
     });
 
     it('should clean up temporary files even on error', async () => {
-      jest.mocked(fs.writeFileSync).mockImplementation();
-      jest.mocked(fs.readFileSync).mockImplementation(() => {
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      vi.mocked(fs.readFileSync).mockImplementation(() => {
         throw new Error('Read failed');
       });
-      jest.mocked(fs.unlinkSync).mockImplementation();
-      mockExecFileAsync.mockResolvedValue({
-        stdout: 'Python 3.8.10\n',
-        stderr: '',
-      });
+      vi.mocked(fs.unlinkSync).mockImplementation(() => {});
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
 
       mockPythonShellInstance.end.mockImplementation((callback: any) => {
         callback(null);

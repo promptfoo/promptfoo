@@ -48,7 +48,7 @@ import { AIStudioChatProvider } from './google/ai.studio';
 import { GoogleImageProvider } from './google/image';
 import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
-import { GroqProvider } from './groq';
+import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
 import {
@@ -599,7 +599,26 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      // Handle groq:responses:<model> format for Responses API
+      if (providerPath.startsWith('groq:responses:')) {
+        const modelName = providerPath.slice('groq:responses:'.length);
+        if (!modelName) {
+          throw new Error(
+            `Invalid groq:responses provider path: "${providerPath}". ` +
+              'Use format groq:responses:<model> (e.g., groq:responses:llama-3.3-70b-versatile)',
+          );
+        }
+        return new GroqResponsesProvider(modelName, providerOptions);
+      }
+
+      // Handle groq:<model> format for Chat Completions API
+      const modelName = providerPath.slice('groq:'.length);
+      if (!modelName) {
+        throw new Error(
+          `Invalid groq provider path: "${providerPath}". ` +
+            'Use format groq:<model> (e.g., groq:llama-3.3-70b-versatile)',
+        );
+      }
       return new GroqProvider(modelName, providerOptions);
     },
   },
