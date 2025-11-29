@@ -17,12 +17,12 @@ Groq supports reasoning models (OpenAI GPT-OSS and Deepseek R1-Llama-70b), in ad
 | Reasoning Models | `deepseek-r1-*`                       | `groq:`           | `reasoning_format`  | None             |
 | Compound Models  | `groq/compound`, `groq/compound-mini` | `groq:`           | `reasoning_format`  | Automatic (all)  |
 | Standard Models  | `llama-3.3-*`, `llama-3.1-*`          | `groq:`           | N/A                 | Manual config    |
-| Responses API    | All reasoning models                  | `groq-responses:` | `reasoning.effort`  | Varies by model  |
+| Responses API    | All reasoning models                  | `groq:responses:` | `reasoning.effort`  | Varies by model  |
 
 **Key Differences:**
 
 - **`groq:`** - Standard Chat Completions API with granular reasoning control
-- **`groq-responses:`** - Stateful Responses API with simplified `reasoning.effort` parameter
+- **`groq:responses:`** - Stateful Responses API with simplified `reasoning.effort` parameter
 - **Compound models** - Have automatic code execution, web search, and visit website tools
 - **GPT-OSS models** - Support `browser_search` tool via manual configuration
 - **Explicit control** - Use `compound_custom.tools.enabled_tools` to control which built-in tools are enabled
@@ -303,13 +303,13 @@ Combine with the `stop` parameter for precise output control.
 
 ## Responses API
 
-Groq's Responses API provides a more stateful and structured approach to conversational AI, with built-in support for tools, structured outputs, and reasoning. Use the `groq-responses:` prefix to access this API.
+Groq's Responses API provides a more stateful and structured approach to conversational AI, with built-in support for tools, structured outputs, and reasoning. Use the `groq:responses:` prefix to access this API.
 
 ### Basic Usage
 
 ```yaml
 providers:
-  - id: groq-responses:openai/gpt-oss-120b
+  - id: groq:responses:openai/gpt-oss-120b
     config:
       temperature: 0.6
       max_output_tokens: 1000
@@ -323,7 +323,7 @@ The Responses API makes it easy to get structured JSON outputs:
 
 ```yaml
 providers:
-  - id: groq-responses:openai/gpt-oss-120b
+  - id: groq:responses:openai/gpt-oss-120b
     config:
       response_format:
         type: 'json_schema'
@@ -360,7 +360,7 @@ prompts:
 
 ### Key Differences from Chat Completions API
 
-| Feature           | Chat Completions (`groq:`)              | Responses API (`groq-responses:`) |
+| Feature           | Chat Completions (`groq:`)              | Responses API (`groq:responses:`) |
 | ----------------- | --------------------------------------- | --------------------------------- |
 | Endpoint          | `/v1/chat/completions`                  | `/v1/responses`                   |
 | Reasoning Control | `include_reasoning`, `reasoning_format` | `reasoning.effort`                |

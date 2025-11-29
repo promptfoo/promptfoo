@@ -1,5 +1,5 @@
 import { clearCache } from '../../../src/cache';
-import { GroqResponsesProvider } from '../../../src/providers/groq-responses';
+import { GroqResponsesProvider } from '../../../src/providers/groq';
 import * as fetchModule from '../../../src/util/fetch/index';
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
@@ -27,7 +27,7 @@ describe('GroqResponsesProvider', () => {
 
     it('should return correct id', () => {
       const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {});
-      expect(provider.id()).toBe('groq-responses:openai/gpt-oss-120b');
+      expect(provider.id()).toBe('groq:responses:openai/gpt-oss-120b');
     });
 
     it('should return correct string representation', () => {
@@ -92,7 +92,7 @@ describe('GroqResponsesProvider', () => {
       });
 
       expect(provider.toJSON()).toEqual({
-        provider: 'groq-responses',
+        provider: 'groq:responses',
         model: 'openai/gpt-oss-120b',
         config: {
           temperature: 0.7,
@@ -111,17 +111,6 @@ describe('GroqResponsesProvider', () => {
 
       const json = provider.toJSON();
       expect(json.config.apiKey).toBeUndefined();
-    });
-  });
-
-  describe('static model list', () => {
-    it('should have production models defined', () => {
-      expect(GroqResponsesProvider.GROQ_RESPONSES_MODEL_NAMES).toContain('llama-3.3-70b-versatile');
-      expect(GroqResponsesProvider.GROQ_RESPONSES_MODEL_NAMES).toContain('openai/gpt-oss-120b');
-    });
-
-    it('should have preview models defined', () => {
-      expect(GroqResponsesProvider.GROQ_RESPONSES_MODEL_NAMES).toContain('qwen/qwen3-32b');
     });
   });
 

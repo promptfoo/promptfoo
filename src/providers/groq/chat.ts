@@ -1,54 +1,33 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import type { CallApiContextParams, CallApiOptionsParams } from '../../types';
+import { OpenAiChatCompletionProvider } from '../openai/chat';
+import type { GroqCompletionOptions, GroqProviderOptions } from './types';
+import { groqSupportsTemperature, isGroqReasoningModel } from './util';
 
-import type { ProviderOptions } from '../types/providers';
-import type { OpenAiCompletionOptions } from './openai/types';
+const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
 
-type GroqCompletionOptions = OpenAiCompletionOptions & {
-  systemPrompt?: string;
-  parallel_tool_calls?: boolean | null;
-  reasoning_format?: 'parsed' | 'raw' | 'hidden' | null;
-  include_reasoning?: boolean;
-  compound_custom?: {
-    tools?: {
-      enabled_tools?: string[];
-      wolfram_settings?: {
-        authorization?: string;
-      };
-    };
-  };
-  search_settings?: {
-    exclude_domains?: string[];
-    include_domains?: string[];
-    country?: string;
-  };
-};
-
-type GroqProviderOptions = ProviderOptions & {
-  config?: GroqCompletionOptions;
-};
-
+/**
+ * Groq Chat Completions API Provider
+ *
+ * Extends OpenAI Chat Completions provider with Groq-specific configuration.
+ * Supports reasoning models (DeepSeek R1, GPT-OSS, Qwen) with temperature control.
+ *
+ * Usage:
+ *   groq:llama-3.3-70b-versatile
+ *   groq:openai/gpt-oss-120b
+ *   groq:qwen/qwen3-32b
+ */
 export class GroqProvider extends OpenAiChatCompletionProvider {
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }
 
   protected isReasoningModel(): boolean {
-    // Groq's reasoning models include deepseek-r1, gpt-oss, and qwen models
-    return (
-      this.modelName.includes('deepseek-r1') ||
-      this.modelName.includes('gpt-oss') ||
-      this.modelName.includes('qwen') ||
-      super.isReasoningModel()
-    );
+    return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
   }
 
   protected supportsTemperature(): boolean {
-    // Groq's deepseek, gpt-oss, and qwen models support temperature, even though they're reasoning models
-    if (
-      this.modelName.includes('deepseek-r1') ||
-      this.modelName.includes('gpt-oss') ||
-      this.modelName.includes('qwen')
-    ) {
+    // Groq's reasoning models support temperature, unlike OpenAI's o1 models
+    if (groqSupportsTemperature(this.modelName)) {
       return true;
     }
     return super.supportsTemperature();
@@ -60,15 +39,15 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
       config: {
         ...providerOptions.config,
         apiKeyEnvar: 'GROQ_API_KEY',
-        apiBaseUrl: 'https://api.groq.com/openai/v1',
+        apiBaseUrl: GROQ_API_BASE_URL,
       },
     });
   }
 
   override async getOpenAiBody(
     prompt: string,
-    context?: import('../types').CallApiContextParams,
-    callApiOptions?: import('../types').CallApiOptionsParams,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
   ) {
     const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
     const groqConfig = this.config as GroqCompletionOptions;
