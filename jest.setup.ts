@@ -109,6 +109,11 @@ afterEach(() => {
     });
   }
   networkCalls.length = 0; // Clear for next test
+
+  // Clean up nock interceptors after each test to prevent socket issues on Windows
+  // This helps avoid EINVAL errors from @mswjs/interceptors when sockets aren't properly closed
+  nock.abortPendingRequests();
+  nock.cleanAll();
 });
 
 afterAll(async () => {
