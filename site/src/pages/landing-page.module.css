@@ -919,6 +919,15 @@ section {
   .features {
     flex-direction: column;
   }
+
+  .securityFlowContainer {
+    flex-direction: column;
+  }
+
+  .securityFlowArrow {
+    transform: rotate(90deg);
+    padding: 0.5rem 0;
+  }
 }
 
 .processFlow {
