@@ -175,3 +175,4 @@ promptfoo code-scans run --api-key your-api-key
 
 - [Code Scanning Overview](./index.md)
 - [GitHub Action](./github-action.md)
+- [VS Code Extension](./vscode-extension.md)
