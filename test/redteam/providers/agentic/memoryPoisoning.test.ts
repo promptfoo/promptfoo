@@ -1,5 +1,4 @@
 import { MemoryPoisoningProvider } from '../../../../src/redteam/providers/agentic/memoryPoisoning';
-
 import type { ApiProvider, CallApiContextParams } from '../../../../src/types/providers';
 
 describe('MemoryPoisoningProvider', () => {
@@ -121,9 +120,10 @@ describe('MemoryPoisoningProvider', () => {
     expect(context.test?.metadata?.scenario).toEqual(scenario);
 
     expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(3);
-    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('memory text', context);
-    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('test prompt', context);
-    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('follow up text', context);
+    // Third argument is options (undefined when not provided)
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('memory text', context, undefined);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('test prompt', context, undefined);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('follow up text', context, undefined);
   });
 
   it('should handle errors during execution', async () => {
