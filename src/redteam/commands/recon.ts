@@ -37,14 +37,14 @@ export function reconCommand(program: Command): void {
         Examples:
           $ promptfoo redteam recon
           $ promptfoo redteam recon --dir ./my-agent
-          $ promptfoo redteam recon --provider anthropic -o redteam-config.yaml
+          $ promptfoo redteam recon --provider anthropic -o config.yaml
       `,
     )
     .option('-d, --dir <path>', 'Local directory to scan', process.cwd())
     .option('-o, --output <path>', 'Output config file path', 'promptfooconfig.yaml')
-    .option('-p, --provider <provider>', 'Force provider (openai or anthropic)')
+    .option('--provider <provider>', 'Force provider (openai or anthropic)')
     .option('-m, --model <model>', 'Override default model')
-    .option('-v, --verbose', 'Show detailed progress', false)
+    .option('-v, --verbose', 'Show debug logs', false)
     .option('-y, --yes', 'Skip confirmation prompts', false)
     .option('--exclude <patterns...>', 'Additional glob patterns to exclude')
     .option('--env-file, --env-path <path>', 'Path to .env file')
