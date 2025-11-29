@@ -25,7 +25,8 @@ jest.mock('../../../src/util/server', () => ({
 }));
 
 describe('RedteamGoatProvider', () => {
-  let mockFetch: jest.Mock;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockFetch: jest.Mock<any>;
 
   // Helper function to create a mock target provider
   const createMockTargetProvider = (
