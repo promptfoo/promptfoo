@@ -63,33 +63,46 @@ import type { EnvOverrides } from '../types/env';
 // =============================================================================
 
 /**
- * Options for creating a standardized provider set.
+ * Options for creating a standardized completion provider set.
  * Most providers only need to specify their grading provider - everything else
  * falls back to sensible defaults.
+ * Note: Embedding is NOT included - it's selected independently.
  */
-interface ProviderSetOptions {
+interface CompletionProviderSetOptions {
   grading: ApiProvider;
   gradingJson?: ApiProvider;
   suggestions?: ApiProvider;
   /** Falls back to gradingJson, then grading if not specified */
   synthesize?: ApiProvider;
-  embedding?: ApiProvider;
   llmRubric?: ApiProvider;
   webSearch?: ApiProvider;
 }
 
 /**
- * A provider candidate in the priority chain.
+ * A provider candidate in the completion priority chain.
  * The check function determines if this provider should be used,
- * and the create function builds the provider set.
+ * and the create function builds the provider set (without embedding - that's selected separately).
  */
-interface ProviderCandidate {
+interface CompletionProviderCandidate {
   /** Human-readable name for logging */
   name: string;
   /** Credential check - can be sync or async */
   check: (env?: EnvOverrides) => boolean | Promise<boolean>;
   /** Factory function to create the provider set */
-  create: (env?: EnvOverrides) => DefaultProviders;
+  create: (env?: EnvOverrides) => Omit<DefaultProviders, 'embeddingProvider'>;
+}
+
+/**
+ * An embedding provider candidate in the embedding priority chain.
+ * Embedding selection is independent of completion provider selection.
+ */
+interface EmbeddingProviderCandidate {
+  /** Human-readable name for logging */
+  name: string;
+  /** Credential check - can be sync or async */
+  check: (env?: EnvOverrides) => boolean | Promise<boolean>;
+  /** Factory function to create the embedding provider */
+  create: (env?: EnvOverrides) => ApiProvider;
 }
 
 // =============================================================================
@@ -154,7 +167,8 @@ function hasAzureCredentials(env?: EnvOverrides): boolean {
 // =============================================================================
 
 /**
- * Create a standardized provider set with sensible defaults.
+ * Create a standardized completion provider set with sensible defaults.
+ * Note: Embedding provider is NOT included - it's selected independently.
  *
  * Fallback chain for synthesizeProvider:
  *   synthesize ?? gradingJson ?? grading
@@ -162,9 +176,10 @@ function hasAzureCredentials(env?: EnvOverrides): boolean {
  * This is because synthesize operations typically need JSON output capability,
  * so gradingJson is preferred over plain grading when synthesize isn't specified.
  */
-function createProviderSet(options: ProviderSetOptions): DefaultProviders {
+function createCompletionProviderSet(
+  options: CompletionProviderSetOptions,
+): Omit<DefaultProviders, 'embeddingProvider'> {
   return {
-    embeddingProvider: options.embedding ?? OpenAiEmbeddingProvider,
     gradingProvider: options.grading,
     gradingJsonProvider: options.gradingJson ?? options.grading,
     suggestionsProvider: options.suggestions ?? options.grading,
@@ -176,24 +191,44 @@ function createProviderSet(options: ProviderSetOptions): DefaultProviders {
 }
 
 /**
- * Create OpenAI provider set (used for both explicit credentials and fallback).
+ * Create OpenAI completion provider set.
+ * Note: Embedding is selected independently via EMBEDDING_PROVIDER_PRIORITY.
  */
-function createOpenAIProviders(): DefaultProviders {
-  return createProviderSet({
+function createOpenAICompletionProviders(): Omit<DefaultProviders, 'embeddingProvider'> {
+  return createCompletionProviderSet({
     grading: OpenAiGradingProvider,
     gradingJson: OpenAiGradingJsonProvider,
     suggestions: OpenAiSuggestionsProvider,
-    embedding: OpenAiEmbeddingProvider,
     webSearch: OpenAiWebSearchProvider,
   });
 }
 
 /**
- * Create Azure-specific providers (requires dynamic deployment name lookup).
+ * Create Azure-specific completion providers (requires dynamic deployment name lookup).
  * Note: Azure uses the same provider for all completion tasks since it's deployment-based.
+ * Note: Embedding is selected independently via EMBEDDING_PROVIDER_PRIORITY.
  * Supports both AZURE_OPENAI_DEPLOYMENT_NAME and AZURE_DEPLOYMENT_NAME per documentation.
  */
-function createAzureProviders(env?: EnvOverrides): DefaultProviders {
+function createAzureCompletionProviders(
+  env?: EnvOverrides,
+): Omit<DefaultProviders, 'embeddingProvider'> {
+  const deploymentName =
+    getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') ||
+    env?.AZURE_OPENAI_DEPLOYMENT_NAME ||
+    getEnvString('AZURE_DEPLOYMENT_NAME') ||
+    env?.AZURE_DEPLOYMENT_NAME;
+
+  // deploymentName is guaranteed to exist because hasAzureCredentials checks for it
+  const azureProvider = new AzureChatCompletionProvider(deploymentName!, { env });
+
+  return createCompletionProviderSet({ grading: azureProvider });
+}
+
+/**
+ * Create Azure embedding provider.
+ * Used by the embedding priority chain when Azure credentials are available.
+ */
+function createAzureEmbeddingProvider(env?: EnvOverrides): ApiProvider {
   const deploymentName =
     getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') ||
     env?.AZURE_OPENAI_DEPLOYMENT_NAME ||
@@ -204,23 +239,15 @@ function createAzureProviders(env?: EnvOverrides): DefaultProviders {
     env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
     deploymentName;
 
-  // deploymentName is guaranteed to exist because hasAzureCredentials checks for it
-  const azureProvider = new AzureChatCompletionProvider(deploymentName!, { env });
-  const azureEmbeddingProvider = new AzureEmbeddingProvider(embeddingDeploymentName!, { env });
-
-  // Use createProviderSet for consistency, but override embedding with Azure-specific provider
-  return {
-    ...createProviderSet({ grading: azureProvider }),
-    embeddingProvider: azureEmbeddingProvider,
-  };
+  return new AzureEmbeddingProvider(embeddingDeploymentName!, { env });
 }
 
 // =============================================================================
-// Provider Priority Chain
+// Provider Priority Chains
 // =============================================================================
 
 /**
- * Provider selection priority chain.
+ * Completion provider selection priority chain.
  *
  * Order rationale:
  *   1-7: Explicit API keys (user intentionally set these)
@@ -230,19 +257,19 @@ function createAzureProviders(env?: EnvOverrides): DefaultProviders {
  * Ambient credentials are last because they may be set for other tools
  * (e.g., GITHUB_TOKEN for git operations, AWS creds for other AWS services).
  */
-const PROVIDER_PRIORITY: ProviderCandidate[] = [
+const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
   // --- Explicit API Keys (Priority 1-7) ---
   {
     name: 'OpenAI',
     check: (env) => hasCredential('OPENAI_API_KEY', env),
-    create: () => createOpenAIProviders(),
+    create: () => createOpenAICompletionProviders(),
   },
   {
     name: 'Anthropic',
     check: (env) => hasCredential('ANTHROPIC_API_KEY', env),
     create: (env) => {
       const anthropic = getAnthropicProviders(env);
-      return createProviderSet({
+      return createCompletionProviderSet({
         grading: anthropic.gradingProvider,
         gradingJson: anthropic.gradingJsonProvider,
         suggestions: anthropic.suggestionsProvider,
@@ -255,26 +282,25 @@ const PROVIDER_PRIORITY: ProviderCandidate[] = [
   {
     name: 'Azure OpenAI',
     check: (env) => hasAzureCredentials(env),
-    create: (env) => createAzureProviders(env),
+    create: (env) => createAzureCompletionProviders(env),
   },
   {
     name: 'Google AI Studio',
     check: (env) => hasAnyCredential(['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY'], env),
     create: () =>
-      createProviderSet({
+      createCompletionProviderSet({
         grading: GoogleAiStudioGradingProvider,
         gradingJson: GoogleAiStudioGradingJsonProvider,
         suggestions: GoogleAiStudioSuggestionsProvider,
         synthesize: GoogleAiStudioSynthesizeProvider,
         llmRubric: GoogleAiStudioLlmRubricProvider,
-        // AI Studio doesn't support embeddings; falls back to OpenAI
       }),
   },
   {
     name: 'xAI',
     check: (env) => hasCredential('XAI_API_KEY', env),
     create: () =>
-      createProviderSet({
+      createCompletionProviderSet({
         grading: XAIGradingProvider,
         gradingJson: XAIGradingJsonProvider,
         suggestions: XAISuggestionsProvider,
@@ -285,7 +311,7 @@ const PROVIDER_PRIORITY: ProviderCandidate[] = [
     name: 'DeepSeek',
     check: (env) => hasCredential('DEEPSEEK_API_KEY', env),
     create: () =>
-      createProviderSet({
+      createCompletionProviderSet({
         grading: DeepSeekGradingProvider,
         gradingJson: DeepSeekGradingJsonProvider,
         suggestions: DeepSeekSuggestionsProvider,
@@ -296,12 +322,11 @@ const PROVIDER_PRIORITY: ProviderCandidate[] = [
     name: 'Mistral',
     check: (env) => hasCredential('MISTRAL_API_KEY', env),
     create: () =>
-      createProviderSet({
+      createCompletionProviderSet({
         grading: MistralGradingProvider,
         gradingJson: MistralGradingJsonProvider,
         suggestions: MistralSuggestionsProvider,
         synthesize: MistralSynthesizeProvider,
-        embedding: MistralEmbeddingProvider,
       }),
   },
 
@@ -310,16 +335,15 @@ const PROVIDER_PRIORITY: ProviderCandidate[] = [
     name: 'Google Vertex',
     check: () => hasGoogleDefaultCredentials(),
     create: () =>
-      createProviderSet({
+      createCompletionProviderSet({
         grading: VertexGradingProvider,
-        embedding: VertexEmbeddingProvider,
       }),
   },
   {
     name: 'AWS Bedrock',
     check: (env) => hasAnyCredential(['AWS_ACCESS_KEY_ID', 'AWS_PROFILE'], env),
     create: () =>
-      createProviderSet({
+      createCompletionProviderSet({
         grading: BedrockGradingProvider,
         gradingJson: BedrockGradingJsonProvider,
         suggestions: BedrockSuggestionsProvider,
@@ -330,12 +354,43 @@ const PROVIDER_PRIORITY: ProviderCandidate[] = [
     name: 'GitHub Models',
     check: (env) => hasCredential('GITHUB_TOKEN', env),
     create: () =>
-      createProviderSet({
+      createCompletionProviderSet({
         grading: GitHubGradingProvider,
         gradingJson: GitHubGradingJsonProvider,
         suggestions: GitHubSuggestionsProvider,
       }),
   },
+];
+
+/**
+ * Embedding provider selection priority chain.
+ * Selected INDEPENDENTLY from completion providers.
+ *
+ * Only includes providers that actually support embeddings.
+ * Falls back to OpenAI if no embedding-capable provider is found.
+ */
+const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
+  {
+    name: 'OpenAI',
+    check: (env) => hasCredential('OPENAI_API_KEY', env),
+    create: () => OpenAiEmbeddingProvider,
+  },
+  {
+    name: 'Azure OpenAI',
+    check: (env) => hasAzureCredentials(env),
+    create: (env) => createAzureEmbeddingProvider(env),
+  },
+  {
+    name: 'Mistral',
+    check: (env) => hasCredential('MISTRAL_API_KEY', env),
+    create: () => MistralEmbeddingProvider,
+  },
+  {
+    name: 'Google Vertex',
+    check: () => hasGoogleDefaultCredentials(),
+    create: () => VertexEmbeddingProvider,
+  },
+  // Note: Anthropic, xAI, DeepSeek, Bedrock, GitHub don't support embeddings
 ];
 
 // =============================================================================
@@ -360,7 +415,9 @@ export function setDefaultEmbeddingProviders(provider: ApiProvider | undefined):
 /**
  * Get the default providers based on available credentials.
  *
- * Priority Order (explicit API keys first, then ambient credentials):
+ * Completion and embedding providers are selected INDEPENDENTLY:
+ *
+ * Completion Priority (explicit API keys first, then ambient):
  *  1. OpenAI      - OPENAI_API_KEY
  *  2. Anthropic   - ANTHROPIC_API_KEY
  *  3. Azure       - AZURE_OPENAI_API_KEY + deployment name
@@ -372,9 +429,24 @@ export function setDefaultEmbeddingProviders(provider: ApiProvider | undefined):
  *  9. Bedrock     - AWS credentials (ambient)
  * 10. GitHub      - GITHUB_TOKEN (ambient)
  * 11. OpenAI      - Fallback (may fail without key)
+ *
+ * Embedding Priority (only providers with embedding support):
+ *  1. OpenAI      - OPENAI_API_KEY
+ *  2. Azure       - AZURE_OPENAI_API_KEY + embedding deployment
+ *  3. Mistral     - MISTRAL_API_KEY
+ *  4. Vertex      - Google ADC (ambient)
+ *  5. OpenAI      - Fallback (may fail without key)
  */
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
-  const providers = await selectProvidersByCredentials(env);
+  // Select completion and embedding providers independently
+  const completionProviders = await selectCompletionProviders(env);
+  const embeddingProvider = await selectEmbeddingProvider(env);
+
+  const providers: DefaultProviders = {
+    ...completionProviders,
+    embeddingProvider,
+  };
+
   return applyOverrides(providers, env);
 }
 
@@ -383,21 +455,45 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
 // =============================================================================
 
 /**
- * Iterate through the priority chain and return the first matching provider.
+ * Select completion providers based on the first matching credentials.
  * Falls back to OpenAI if no credentials are found.
  */
-async function selectProvidersByCredentials(env?: EnvOverrides): Promise<DefaultProviders> {
-  for (const candidate of PROVIDER_PRIORITY) {
+async function selectCompletionProviders(
+  env?: EnvOverrides,
+): Promise<Omit<DefaultProviders, 'embeddingProvider'>> {
+  for (const candidate of COMPLETION_PROVIDER_PRIORITY) {
     const hasCredentials = await candidate.check(env);
     if (hasCredentials) {
-      logger.debug(`Using ${candidate.name} default providers`);
+      logger.debug(`Using ${candidate.name} completion providers`);
       return candidate.create(env);
     }
   }
 
   // Fallback to OpenAI (may fail without key, but provides helpful error message)
-  logger.debug('Using OpenAI default providers (fallback)');
-  return createOpenAIProviders();
+  logger.debug('Using OpenAI completion providers (fallback)');
+  return createOpenAICompletionProviders();
+}
+
+/**
+ * Select embedding provider based on the first matching credentials.
+ * Falls back to OpenAI if no embedding-capable provider is found.
+ *
+ * This is independent of completion provider selection because:
+ * - Many providers (Anthropic, xAI, DeepSeek, etc.) don't support embeddings
+ * - Users may want to use different providers for completions vs embeddings
+ */
+async function selectEmbeddingProvider(env?: EnvOverrides): Promise<ApiProvider> {
+  for (const candidate of EMBEDDING_PROVIDER_PRIORITY) {
+    const hasCredentials = await candidate.check(env);
+    if (hasCredentials) {
+      logger.debug(`Using ${candidate.name} embedding provider`);
+      return candidate.create(env);
+    }
+  }
+
+  // Fallback to OpenAI (may fail without key, but provides helpful error message)
+  logger.debug('Using OpenAI embedding provider (fallback)');
+  return OpenAiEmbeddingProvider;
 }
 
 // =============================================================================

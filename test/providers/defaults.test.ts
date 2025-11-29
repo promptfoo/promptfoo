@@ -12,6 +12,7 @@ import {
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
   DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
 } from '../../src/providers/google/ai.studio';
+import { DefaultEmbeddingProvider as VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -54,6 +55,11 @@ describe('Provider override tests', () => {
     process.env = { ...originalEnv };
     setDefaultCompletionProviders(undefined as any);
     setDefaultEmbeddingProviders(undefined as any);
+    // Reset Google ADC mock to default (false)
+    const mockHasGoogleDefaultCredentials = jest.requireMock(
+      '../../src/providers/google/util',
+    ).hasGoogleDefaultCredentials;
+    mockHasGoogleDefaultCredentials.mockResolvedValue(false);
     // Clear all credential env vars
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
@@ -214,17 +220,21 @@ describe('Provider override tests', () => {
     expect(providers.synthesizeProvider).not.toBe(MistralSynthesizeProvider);
   });
 
-  it('should not use Mistral providers when Anthropic credentials exist', async () => {
+  it('should not use Mistral COMPLETION providers when Anthropic credentials exist', async () => {
     process.env.MISTRAL_API_KEY = 'test-key';
     process.env.ANTHROPIC_API_KEY = 'test-key';
 
     const providers = await getDefaultProviders();
 
-    expect(providers.embeddingProvider).not.toBe(MistralEmbeddingProvider);
+    // Completion providers should use Anthropic (higher priority)
     expect(providers.gradingJsonProvider).not.toBe(MistralGradingJsonProvider);
     expect(providers.gradingProvider).not.toBe(MistralGradingProvider);
     expect(providers.suggestionsProvider).not.toBe(MistralSuggestionsProvider);
     expect(providers.synthesizeProvider).not.toBe(MistralSynthesizeProvider);
+
+    // But embedding should use Mistral since Anthropic doesn't support embeddings
+    // and Mistral is the first embedding-capable provider with credentials
+    expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
   });
 
   describe('Google AI Studio provider selection', () => {
@@ -777,6 +787,87 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       expect(providers.gradingProvider).toBe(MistralGradingProvider);
+    });
+  });
+
+  describe('Decoupled embedding provider selection', () => {
+    it('should select embedding provider independently from completion provider', async () => {
+      // xAI for completions (doesn't support embeddings)
+      // Mistral for embeddings (has embedding support)
+      process.env.XAI_API_KEY = 'test-xai';
+      process.env.MISTRAL_API_KEY = 'test-mistral';
+
+      const providers = await getDefaultProviders();
+
+      // Completion should use xAI (higher priority)
+      expect(providers.gradingProvider.id()).toBe('xai:grok-4-1-fast-reasoning');
+
+      // Embedding should use Mistral (first available with embedding support)
+      expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
+    });
+
+    it('should use Vertex for embeddings when Google ADC is available', async () => {
+      // DeepSeek for completions (doesn't support embeddings)
+      // Mock Vertex credentials
+      process.env.DEEPSEEK_API_KEY = 'test-deepseek';
+
+      // Enable Google ADC mock
+      const mockHasGoogleDefaultCredentials = jest.requireMock(
+        '../../src/providers/google/util',
+      ).hasGoogleDefaultCredentials;
+      mockHasGoogleDefaultCredentials.mockResolvedValue(true);
+
+      const providers = await getDefaultProviders();
+
+      // Completion should use DeepSeek (higher priority than Vertex)
+      expect(providers.gradingProvider.id()).toBe('deepseek:deepseek-chat');
+
+      // Embedding should use Vertex (Google ADC is available)
+      expect(providers.embeddingProvider).toBe(VertexEmbeddingProvider);
+    });
+
+    it('should fall back to OpenAI for embeddings when no embedding provider has credentials', async () => {
+      // GitHub for completions (doesn't support embeddings)
+      // No embedding-capable provider has credentials
+      process.env.GITHUB_TOKEN = 'test-github';
+
+      const providers = await getDefaultProviders();
+
+      // Completion should use GitHub
+      expect(providers.gradingProvider.id()).toContain('gpt-5.1');
+
+      // Embedding should fall back to OpenAI (even without key - will fail at runtime)
+      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+    });
+
+    it('should use different providers for completion and embedding based on credentials', async () => {
+      // Anthropic for completions (doesn't support embeddings)
+      // Mistral for embeddings
+      process.env.ANTHROPIC_API_KEY = 'test-anthropic';
+      process.env.MISTRAL_API_KEY = 'test-mistral';
+
+      const providers = await getDefaultProviders();
+
+      // Completion should use Anthropic (higher priority than Mistral)
+      expect(providers.gradingProvider.id()).toContain('claude');
+
+      // Embedding should use Mistral (first embedding-capable provider with credentials)
+      expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
+    });
+
+    it('should select embedding from different provider than completion when optimal', async () => {
+      // Bedrock for completions (doesn't support embeddings in our chain)
+      // Mistral for embeddings
+      process.env.AWS_ACCESS_KEY_ID = 'test-aws';
+      process.env.MISTRAL_API_KEY = 'test-mistral';
+
+      const providers = await getDefaultProviders();
+
+      // Completion should use Mistral (higher priority than Bedrock)
+      expect(providers.gradingProvider).toBe(MistralGradingProvider);
+
+      // Embedding should also use Mistral (same key works for both)
+      expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
     });
   });
 });
