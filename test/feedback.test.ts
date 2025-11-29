@@ -2,12 +2,12 @@ import { vi } from 'vitest';
 
 import { gatherFeedback, sendFeedback } from '../src/feedback';
 import logger from '../src/logger';
-import { fetchWithProxy } from '../src/util/fetch';
+import { fetchWithProxy } from '../src/util/fetch/index';
 import * as readlineUtils from '../src/util/readline';
 
 let actualFeedback: typeof import('../src/feedback');
 
-vi.mock('../src/util/fetch', () => ({
+vi.mock('../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
 }));
 
