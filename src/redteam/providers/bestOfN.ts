@@ -1,16 +1,11 @@
 import async from 'async';
 import chalk from 'chalk';
 import dedent from 'dedent';
+
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
-import invariant from '../../util/invariant';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
-import { getSessionId } from '../util';
-
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -18,6 +13,17 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
+import { fetchWithProxy } from '../../util/fetch/index';
+import invariant from '../../util/invariant';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
+import {
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
+import { getSessionId } from '../util';
 
 interface BestOfNResponse {
   modifiedPrompts: string[];
@@ -67,20 +73,24 @@ export default class BestOfNProvider implements ApiProvider {
     const sessionIds: string[] = [];
     try {
       // Get candidate prompts from the server
-      const response = await fetchWithProxy(getRemoteGenerationUrl(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetchWithProxy(
+        getRemoteGenerationUrl(),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            task: 'jailbreak:best-of-n',
+            prompt: context.vars[this.injectVar],
+            nSteps: this.nSteps,
+            maxCandidatesPerStep: this.maxCandidatesPerStep,
+            version: VERSION,
+            email: getUserEmail(),
+          }),
         },
-        body: JSON.stringify({
-          task: 'jailbreak:best-of-n',
-          prompt: context.vars[this.injectVar],
-          nSteps: this.nSteps,
-          maxCandidatesPerStep: this.maxCandidatesPerStep,
-          version: VERSION,
-          email: getUserEmail(),
-        }),
-      });
+        options?.abortSignal,
+      );
 
       const data = (await response.json()) as BestOfNResponse;
       invariant(Array.isArray(data.modifiedPrompts), 'Expected modifiedPrompts array in response');
@@ -159,6 +169,10 @@ export default class BestOfNProvider implements ApiProvider {
         }
       );
     } catch (err) {
+      // Re-throw abort errors to properly cancel the operation
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       logger.error(`[Best-of-N] Error: ${err}`);
       return {
         error: String(err),

@@ -309,6 +309,71 @@ describe('RedteamIterativeMetaProvider', () => {
     });
   });
 
+  describe('Abort Signal Handling', () => {
+    it('should pass options with abortSignal to agentProvider.callApi', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Verify options were passed to callApi
+      expect(mockAgentProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should handle agent provider errors and continue loop (non-abort)', async () => {
+      // First call errors, second succeeds
+      mockAgentProvider.callApi = jest
+        .fn<() => Promise<ProviderResponse>>()
+        .mockResolvedValueOnce({ error: 'Temporary error' })
+        .mockResolvedValueOnce({
+          output: { result: 'Attack prompt' },
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 2,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Should continue after error and complete second iteration
+      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.metadata.redteamHistory).toHaveLength(1);
+    });
+  });
+
   describe('Privacy protection - excludeTargetOutputFromAgenticAttackGeneration', () => {
     it('should NOT send target response to cloud when privacy is enabled', async () => {
       const sensitiveResponse = 'SENSITIVE: Credit Card 4111-1111-1111-1111, SSN 123-45-6789';

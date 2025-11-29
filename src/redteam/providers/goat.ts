@@ -10,7 +10,12 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index';
+import type {
+  Assertion,
+  AssertionSet,
+  AtomicTestCase,
+  GradingResult,
+} from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -24,15 +29,31 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
+import {
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import { getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import type { Message } from './shared';
-import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
-import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
-import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
+import {
+  getLastMessageContent,
+  messagesToRedteamHistory,
+  tryUnblocking,
+} from './shared';
+import {
+  formatTraceForMetadata,
+  formatTraceSummary,
+} from './traceFormatting';
+import {
+  type RawTracingConfig,
+  resolveTracingOptions,
+} from './tracingOptions';
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -243,13 +264,17 @@ export default class GoatProvider implements ApiProvider {
             traceSummary: previousTraceSummary,
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-          response = await fetchWithProxy(getRemoteGenerationUrl(), {
-            body,
-            headers: {
-              'Content-Type': 'application/json',
+          response = await fetchWithProxy(
+            getRemoteGenerationUrl(),
+            {
+              body,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              method: 'POST',
             },
-            method: 'POST',
-          });
+            options?.abortSignal,
+          );
           const data = (await response.json()) as ExtractAttackFailureResponse;
 
           if (!data.message) {
@@ -279,13 +304,17 @@ export default class GoatProvider implements ApiProvider {
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-        response = await fetchWithProxy(getRemoteGenerationUrl(), {
-          body,
-          headers: {
-            'Content-Type': 'application/json',
+        response = await fetchWithProxy(
+          getRemoteGenerationUrl(),
+          {
+            body,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            method: 'POST',
           },
-          method: 'POST',
-        });
+          options?.abortSignal,
+        );
         const data = await response.json();
         if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
           logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
@@ -457,6 +486,11 @@ export default class GoatProvider implements ApiProvider {
           }
         }
       } catch (error) {
+        // Re-throw abort errors to properly cancel the operation
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.debug('[GOAT] Operation aborted');
+          throw error;
+        }
         logger.error(`[GOAT] Error in GOAT turn ${turn}`, { error });
       }
     }

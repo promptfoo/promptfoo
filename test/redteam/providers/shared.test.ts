@@ -344,6 +344,38 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it('re-throws AbortError from getTargetResponse and does not swallow it', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: jest
+          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .mockRejectedValue(abortError),
+      };
+
+      await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
+        'The operation was aborted',
+      );
+    });
+
+    it('swallows non-AbortError exceptions and returns error response', async () => {
+      const regularError = new Error('API timeout');
+
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: jest
+          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .mockRejectedValue(regularError),
+      };
+
+      const result = await getTargetResponse(mockProvider, 'test prompt');
+
+      expect(result.error).toBe('API timeout');
+      expect(result.output).toBe('');
+    });
+
     describe('Multilingual provider', () => {
       it('getMultilingualProvider returns undefined when not set', async () => {
         // Ensure clean state

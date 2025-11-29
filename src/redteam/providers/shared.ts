@@ -5,6 +5,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import type { TraceContextData } from '../../tracing/traceContext';
 import {
   type ApiProvider,
   type CallApiContextParams,
@@ -16,13 +17,20 @@ import {
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types/index';
-import type { TraceContextData } from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { type TransformContext, TransformInputType, transform } from '../../util/transform';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import {
+  transform,
+  type TransformContext,
+  TransformInputType,
+} from '../../util/transform';
+import {
+  ATTACKER_MODEL,
+  ATTACKER_MODEL_SMALL,
+  TEMPERATURE,
+} from './constants';
 
 async function loadRedteamProvider({
   provider,
@@ -193,6 +201,10 @@ export async function getTargetResponse(
   try {
     targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
+    // Re-throw abort errors to properly cancel the operation
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     return { output: '', error: (error as Error).message, tokenUsage: { numRequests: 1 } };
   }
   if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
@@ -504,6 +516,10 @@ export async function tryUnblocking({
       };
     }
   } catch (error) {
+    // Re-throw abort errors to properly cancel the operation
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
     return { success: false };
   }

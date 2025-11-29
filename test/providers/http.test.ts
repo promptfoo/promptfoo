@@ -1,8 +1,8 @@
 import crypto from 'crypto';
+import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 
-import dedent from 'dedent';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -19,8 +19,14 @@ import {
   urlEncodeRawRequestPath,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
-import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../src/util/file';
-import { sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
+import {
+  maybeLoadConfigFromExternalFile,
+  maybeLoadFromExternalFile,
+} from '../../src/util/file';
+import {
+  sanitizeObject,
+  sanitizeUrl,
+} from '../../src/util/sanitizer';
 
 // Mock console.warn to prevent test noise
 const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -5106,6 +5112,108 @@ describe('HttpProvider - Sanitization', () => {
       expect(sanitizeUrl(null as any)).toBeNull();
       expect(sanitizeUrl(undefined as any)).toBeUndefined();
     });
+  });
+});
+
+describe('HttpProvider - Abort Signal Handling', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should pass abortSignal to fetchWithCache', async () => {
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+
+    const abortController = new AbortController();
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt', undefined, { abortSignal: abortController.signal });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: abortController.signal }),
+      expect.any(Number),
+      expect.any(String),
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should pass abortSignal to fetchWithCache in raw request mode', async () => {
+    const rawRequest = dedent`
+      POST /api HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "{{ prompt }}"}
+    `;
+
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        request: rawRequest,
+      },
+    });
+
+    const abortController = new AbortController();
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt', undefined, { abortSignal: abortController.signal });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: abortController.signal }),
+      expect.any(Number),
+      expect.any(String),
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should work without abortSignal (backwards compatibility)', async () => {
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    // Call without options parameter
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.not.objectContaining({ signal: expect.anything() }),
+      expect.any(Number),
+      expect.any(String),
+      undefined,
+      undefined,
+    );
   });
 });
 

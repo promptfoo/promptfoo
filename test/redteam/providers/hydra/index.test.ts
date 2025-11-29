@@ -1183,6 +1183,84 @@ describe('HydraProvider', () => {
     });
   });
 
+  describe('Abort Signal Handling', () => {
+    it('should pass options to agent provider callApi', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context, options);
+
+      // Agent provider should be called with options
+      expect(mockAgentProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should pass options to target provider via getTargetResponse', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context, options);
+
+      // Target provider should be called with options via getTargetResponse
+      expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+  });
+
   describe('callApi() - metadata output', () => {
     it('should return complete metadata', async () => {
       const { getSessionId } = jest.requireMock('../../../../src/redteam/util');
