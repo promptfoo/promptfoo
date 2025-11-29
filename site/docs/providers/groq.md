@@ -5,24 +5,24 @@ description: Configure Groq's ultra-fast LLM inference API for high-performance 
 
 # Groq
 
-[Groq](https://wow.groq.com) is an extremely fast inference API compatible with all the options provided by Promptfoo's [OpenAI provider](/docs/providers/openai/). See openai specific documentation for configuration details.
+[Groq](https://groq.com) is an extremely fast inference API compatible with all the options provided by Promptfoo's [OpenAI provider](/docs/providers/openai/). See openai specific documentation for configuration details.
 
 Groq provides access to a wide range of models including reasoning models with chain-of-thought capabilities, compound models with built-in tools, and standard chat models. See the [Groq Models documentation](https://console.groq.com/docs/models) for the current list of available models.
 
 ## Quick Reference
 
-| Feature          | Description                                    | Provider Prefix   | Key Config          |
-| ---------------- | ---------------------------------------------- | ----------------- | ------------------- |
-| Reasoning Models | Models with chain-of-thought capabilities      | `groq:`           | `include_reasoning` |
-| Compound Models  | Built-in code execution, web search, browsing  | `groq:`           | `compound_custom`   |
-| Standard Models  | General-purpose chat models                    | `groq:`           | `temperature`       |
-| Long Context     | Models with extended context windows (100k+)   | `groq:`           | N/A                 |
-| Responses API    | Stateful API with simplified reasoning control | `groq:responses:` | `reasoning.effort`  |
+| Feature          | Description                                      | Provider Prefix   | Key Config          |
+| ---------------- | ------------------------------------------------ | ----------------- | ------------------- |
+| Reasoning Models | Models with chain-of-thought capabilities        | `groq:`           | `include_reasoning` |
+| Compound Models  | Built-in code execution, web search, browsing    | `groq:`           | `compound_custom`   |
+| Standard Models  | General-purpose chat models                      | `groq:`           | `temperature`       |
+| Long Context     | Models with extended context windows (100k+)     | `groq:`           | N/A                 |
+| Responses API    | Structured API with simplified reasoning control | `groq:responses:` | `reasoning.effort`  |
 
 **Key Differences:**
 
 - **`groq:`** - Standard Chat Completions API with granular reasoning control
-- **`groq:responses:`** - Stateful Responses API with simplified `reasoning.effort` parameter
+- **`groq:responses:`** - Responses API (beta) with simplified `reasoning.effort` parameter
 - **Compound models** - Have automatic code execution, web search, and visit website tools
 - **Reasoning models** - Support `browser_search` tool via manual configuration
 - **Explicit control** - Use `compound_custom.tools.enabled_tools` to control which built-in tools are enabled
@@ -90,25 +90,26 @@ Groq provides access to models across several categories. For the current list o
 - **Vision Models** - Multi-modal models that can process images
 - **Speech Models** - Whisper models for speech-to-text
 
-### Using Any Groq Model
+### Using Groq Models
 
 Use any model from Groq's model library with the `groq:` prefix:
 
 ```yaml
 providers:
   # Standard chat model
-  - id: groq:<model-name>
+  - id: groq:llama-3.3-70b-versatile
     config:
       temperature: 0.7
       max_completion_tokens: 4096
 
-  # Long context model - ideal for document analysis
-  - id: groq:<long-context-model>
+  # Reasoning model
+  - id: groq:deepseek-r1-distill-llama-70b
     config:
-      max_completion_tokens: 8192
+      temperature: 0.6
+      include_reasoning: true
 ```
 
-Check the [Groq Console](https://console.groq.com/docs/models) for model names and context window sizes.
+Check the [Groq Console](https://console.groq.com/docs/models) for the full list of available models.
 
 ## Tool Use (Function Calling)
 
@@ -142,20 +143,17 @@ providers:
 
 ## Vision
 
-Promptfoo supports two vision models on GroqCloud: the **llama-3.2-90b-vision-preview**, and **llama-3.2-11b-vision-preview**, which support tool use, and JSON mode.
+Groq provides vision models that can process both text and image inputs. These models support tool use and JSON mode. See the [Groq Vision documentation](https://console.groq.com/docs/vision) for current model availability and specifications.
 
 ### Image Input Guidelines
 
-- **Image URLs:** Maximum allowed size is 20MB. Requests with larger image URLs return a 400 error.
-- **Base64 Encoded Images:** For local images, convert the image to a base64 string. Maximum allowed size is 4MB; larger images return a 413 error.
-- **Single Image Per Request:** Only one image can be processed per request. Multiple images will result in a 400 error.
-- **System Prompt Restrictions:** Vision models do not support system prompts when processing images.
+- **Image URLs:** Maximum allowed size is 20MB
+- **Base64 Encoded Images:** Maximum allowed size is 4MB
+- **Multiple Images:** Check model documentation for image limits per request
 
 ### How to Use Vision in Promptfoo
 
-To use vision models with promptfoo, specify the vision model ID in your provider configuration. For example:
-
-And include the image in an openai compatible format.
+Specify a vision model ID in your provider configuration and include images in OpenAI-compatible format:
 
 ```yaml title="openai-compatible-prompt-format.yaml"
 - role: user
@@ -171,7 +169,7 @@ And include the image in an openai compatible format.
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: file://openai-compatible-prompt-format.yaml
 providers:
-  - id: groq:llama-3.2-90b-vision-preview
+  - id: groq:meta-llama/llama-4-scout-17b-16e-instruct
     config:
       temperature: 1
       max_completion_tokens: 1024
@@ -196,12 +194,11 @@ prompts:
     Your task is to analyze the following question with careful reasoning and rigor:
     {{ question }}
 providers:
-  - id: groq:<reasoning-model> # e.g., openai/gpt-oss-120b
+  - id: groq:deepseek-r1-distill-llama-70b
     config:
       temperature: 0.6
       max_completion_tokens: 25000
-      include_reasoning: true # Set to false to hide reasoning
-      reasoning_effort: 'high' # 'low', 'medium', or 'high'
+      reasoning_format: parsed # 'parsed', 'raw', or 'hidden'
 tests:
   - vars:
       question: |
@@ -224,9 +221,9 @@ Example to hide reasoning:
 
 ```yaml
 providers:
-  - id: groq:<reasoning-model>
+  - id: groq:deepseek-r1-distill-llama-70b
     config:
-      include_reasoning: false # Hide thinking output
+      reasoning_format: hidden # Hide thinking output
 ```
 
 For **other reasoning models** (e.g., Qwen, DeepSeek), use `reasoning_format`:
@@ -239,8 +236,6 @@ For **other reasoning models** (e.g., Qwen, DeepSeek), use `reasoning_format`:
 
 Note: When using JSON mode or tool calls with `reasoning_format`, only `parsed` or `hidden` formats are supported.
 
-````
-
 ## Assistant Message Prefilling
 
 Control model output format by prefilling assistant messages. This technique allows you to direct the model to skip preambles and enforce specific formats like JSON or code blocks.
@@ -249,7 +244,7 @@ Control model output format by prefilling assistant messages. This technique all
 
 Include a partial assistant message in your prompt, and the model will continue from that point:
 
-```yaml
+````yaml
 prompts:
   - |
     [
@@ -266,12 +261,12 @@ prompts:
 providers:
   - id: groq:llama-3.3-70b-versatile
     config:
-      stop: "```"  # Stop at closing code fence
+      stop: '```' # Stop at closing code fence
 
 tests:
   - vars:
       task: Write a Python function to calculate factorial
-      prefill: "```python"
+      prefill: '```python'
 ````
 
 ### Common Use Cases
@@ -298,13 +293,13 @@ Combine with the `stop` parameter for precise output control.
 
 ## Responses API
 
-Groq's Responses API provides a more stateful and structured approach to conversational AI, with built-in support for tools, structured outputs, and reasoning. Use the `groq:responses:` prefix to access this API.
+Groq's Responses API provides a structured approach to conversational AI, with built-in support for tools, structured outputs, and reasoning. Use the `groq:responses:` prefix to access this API. Note: This API is currently in beta.
 
 ### Basic Usage
 
 ```yaml
 providers:
-  - id: groq:responses:<model-name>
+  - id: groq:responses:llama-3.3-70b-versatile
     config:
       temperature: 0.6
       max_output_tokens: 1000
@@ -318,7 +313,7 @@ The Responses API makes it easy to get structured JSON outputs:
 
 ```yaml
 providers:
-  - id: groq:responses:<model-name>
+  - id: groq:responses:llama-3.3-70b-versatile
     config:
       response_format:
         type: 'json_schema'
@@ -496,11 +491,10 @@ Some reasoning models on Groq support a browser search tool that must be explici
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: groq:<reasoning-model>
+  - id: groq:compound-beta # or other models with browser_search support
     config:
       temperature: 0.6
       max_completion_tokens: 3000
-      reasoning_effort: low # Recommended to reduce token usage
       tools:
         - type: browser_search
       tool_choice: required # Ensures the tool is used
