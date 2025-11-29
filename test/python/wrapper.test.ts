@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   getSysExecutable,
@@ -9,21 +10,29 @@ import {
 } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 
-jest.mock('../../src/esm');
-jest.mock('python-shell');
-jest.mock('fs', () => ({
-  writeFileSync: jest.fn(),
-  readFileSync: jest.fn(),
-  unlinkSync: jest.fn(),
-}));
-jest.mock('../../src/python/pythonUtils', () => {
-  const originalModule = jest.requireActual('../../src/python/pythonUtils');
+vi.mock('../../src/esm');
+vi.mock('python-shell');
+vi.mock('fs', () => {
+  const fsMock = {
+    writeFileSync: vi.fn(),
+    readFileSync: vi.fn(),
+    unlinkSync: vi.fn(),
+  };
+  return {
+    ...fsMock,
+    default: fsMock,
+  };
+});
+vi.mock('../../src/python/pythonUtils', async () => {
+  const originalModule = await vi.importActual<typeof import('../../src/python/pythonUtils')>(
+    '../../src/python/pythonUtils',
+  );
   return {
     ...originalModule,
-    validatePythonPath: jest.fn(),
-    runPython: jest.fn(originalModule.runPython),
-    tryPath: jest.fn(),
-    getSysExecutable: jest.fn(),
+    validatePythonPath: vi.fn(),
+    runPython: vi.fn(originalModule.runPython),
+    tryPath: vi.fn(),
+    getSysExecutable: vi.fn(),
     // Use the real state object so all implementations share the same cache
     state: originalModule.state,
   };
@@ -42,22 +51,22 @@ describe('wrapper', () => {
     delete process.env.PROMPTFOO_PYTHON;
   });
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest
-      .mocked(validatePythonPath)
-      .mockImplementation((pythonPath: string, _isExplicit: boolean): Promise<string> => {
+    vi.clearAllMocks();
+    vi.mocked(validatePythonPath).mockImplementation(
+      (pythonPath: string, _isExplicit: boolean): Promise<string> => {
         state.cachedPythonPath = pythonPath;
         return Promise.resolve(pythonPath);
-      });
+      },
+    );
   });
   describe('runPythonCode', () => {
     it('should clean up the temporary files after execution', async () => {
-      const mockWriteFileSync = jest.fn();
-      const mockUnlinkSync = jest.fn();
-      const mockRunPython = jest.fn().mockResolvedValue('cleanup test');
-      jest.spyOn(fs, 'writeFileSync').mockImplementation(mockWriteFileSync);
-      jest.spyOn(fs, 'unlinkSync').mockImplementation(mockUnlinkSync);
-      jest.mocked(runPython).mockImplementation(mockRunPython);
+      const mockWriteFileSync = vi.fn();
+      const mockUnlinkSync = vi.fn();
+      const mockRunPython = vi.fn().mockResolvedValue('cleanup test');
+      vi.spyOn(fs, 'writeFileSync').mockImplementation(mockWriteFileSync);
+      vi.spyOn(fs, 'unlinkSync').mockImplementation(mockUnlinkSync);
+      vi.mocked(runPython).mockImplementation(mockRunPython);
       await runPythonCode('print("cleanup test")', 'main', []);
       expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
       expect(mockWriteFileSync).toHaveBeenCalledWith(
@@ -75,9 +84,9 @@ describe('wrapper', () => {
     });
     it('should execute Python code from a string and read the output file', async () => {
       const mockOutput = { type: 'final_result', data: 'execution result' };
-      jest.spyOn(fs, 'writeFileSync').mockReturnValue();
-      jest.spyOn(fs, 'unlinkSync').mockReturnValue();
-      const mockRunPython = jest.mocked(runPython);
+      vi.spyOn(fs, 'writeFileSync').mockReturnValue();
+      vi.spyOn(fs, 'unlinkSync').mockReturnValue();
+      const mockRunPython = vi.mocked(runPython);
       mockRunPython.mockResolvedValue(mockOutput.data);
       const code = 'print("Hello, world!")';
       const result = await runPythonCode(code, 'main', []);
@@ -87,11 +96,13 @@ describe('wrapper', () => {
     });
   });
   describe('validatePythonPath race conditions', () => {
-    beforeAll(() => {
+    beforeAll(async () => {
       // Restore the real validatePythonPath implementation while keeping
       // tryPath and getSysExecutable mocked to avoid actual system calls
-      const realModule = jest.requireActual('../../src/python/pythonUtils');
-      jest.mocked(validatePythonPath).mockImplementation(realModule.validatePythonPath);
+      const realModule = await vi.importActual<typeof import('../../src/python/pythonUtils')>(
+        '../../src/python/pythonUtils',
+      );
+      vi.mocked(validatePythonPath).mockImplementation(realModule.validatePythonPath);
     });
 
     beforeEach(() => {
@@ -101,12 +112,12 @@ describe('wrapper', () => {
 
       // Configure the module-level mocks with realistic delays to simulate Windows behavior
       // This is critical for testing race conditions that only appear under slow I/O
-      jest.mocked(tryPath).mockImplementation(async (_path: string) => {
+      vi.mocked(tryPath).mockImplementation(async (_path: string) => {
         // Simulate slow Windows process spawning and antivirus scanning
         await new Promise((resolve) => setTimeout(resolve, 50));
         return '/usr/bin/python3';
       });
-      jest.mocked(getSysExecutable).mockImplementation(async () => {
+      vi.mocked(getSysExecutable).mockImplementation(async () => {
         // Simulate slow Windows 'where' command and py launcher
         await new Promise((resolve) => setTimeout(resolve, 100));
         return '/usr/bin/python3';

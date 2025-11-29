@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { ResultFailureReason } from '../../../src/types/index';
 import {
   convertEvalResultToTableCell,

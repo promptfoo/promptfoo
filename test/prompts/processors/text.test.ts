@@ -1,15 +1,16 @@
 import * as fs from 'fs';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PROMPT_DELIMITER } from '../../../src/prompts/constants';
 import { processTxtFile } from '../../../src/prompts/processors/text';
 
-jest.mock('fs');
+vi.mock('fs');
 
 describe('processTxtFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockReadFileSync = vi.mocked(fs.readFileSync);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should process a text file with single prompt and no label', () => {
