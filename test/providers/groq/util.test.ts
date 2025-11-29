@@ -1,4 +1,4 @@
-import { groqSupportsTemperature, isGroqReasoningModel } from '../../../src/providers/groq';
+import { groqSupportsTemperature, isGroqReasoningModel } from '../../../src/providers/groq/index';
 
 describe('Groq utility functions', () => {
   describe('isGroqReasoningModel', () => {

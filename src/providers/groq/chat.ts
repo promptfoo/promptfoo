@@ -1,4 +1,4 @@
-import type { CallApiContextParams, CallApiOptionsParams } from '../../types';
+import type { CallApiContextParams, CallApiOptionsParams } from '../../types/index';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import type { GroqCompletionOptions, GroqProviderOptions } from './types';
 import { groqSupportsTemperature, isGroqReasoningModel } from './util';

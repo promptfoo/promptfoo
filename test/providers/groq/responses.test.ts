@@ -1,5 +1,5 @@
 import { clearCache } from '../../../src/cache';
-import { GroqResponsesProvider } from '../../../src/providers/groq';
+import { GroqResponsesProvider } from '../../../src/providers/groq/index';
 import * as fetchModule from '../../../src/util/fetch/index';
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
