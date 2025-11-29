@@ -1,10 +1,8 @@
 import type { UnifiedConfig } from '../../../types/index';
 import {
   ALL_PLUGINS,
-  PII_PLUGINS,
   HARM_PLUGINS,
-  ADDITIONAL_PLUGINS,
-  BASE_PLUGINS,
+  PII_PLUGINS,
   BIAS_PLUGINS,
   MEDICAL_PLUGINS,
   FINANCIAL_PLUGINS,
@@ -15,84 +13,84 @@ import {
 import type { ReconResult } from './types';
 
 /**
- * Set of all valid plugin IDs for validation
+ * Set of all valid plugin IDs for validation - derived from constants
  */
-const VALID_PLUGIN_IDS = new Set<string>([
-  ...ALL_PLUGINS,
-  ...PII_PLUGINS,
-  ...Object.keys(HARM_PLUGINS),
-  ...ADDITIONAL_PLUGINS,
-  ...BASE_PLUGINS,
-  ...BIAS_PLUGINS,
-  ...MEDICAL_PLUGINS,
-  ...FINANCIAL_PLUGINS,
-  ...PHARMACY_PLUGINS,
-  ...INSURANCE_PLUGINS,
-  ...ECOMMERCE_PLUGINS,
-]);
+const VALID_PLUGIN_IDS = new Set<string>(ALL_PLUGINS);
 
 /**
- * Common plugins the agent should suggest from, organized by category
+ * Generates a formatted list of plugins organized by category
+ * This is dynamically generated from the plugin constants to stay in sync
  */
-export const SUGGESTED_PLUGIN_LIST = `
-## Valid Plugin Categories
+function generatePluginList(): string {
+  const sections: string[] = ['## Valid Plugin Categories'];
 
-### PII & Privacy
-- pii:direct - Direct PII disclosure
-- pii:session - Session-based PII leakage
-- pii:api-db - PII via API/database access
-- pii:social - Social engineering for PII
+  // PII & Privacy
+  sections.push(`\n### PII & Privacy\n${PII_PLUGINS.map((p) => `- ${p}`).join('\n')}`);
 
-### Authorization & Access Control
+  // Authorization & Access Control (manually curated - these are key security plugins)
+  sections.push(`\n### Authorization & Access Control
 - rbac - Role-based access control bypass
 - bola - Broken object-level authorization
-- bfla - Broken function-level authorization
+- bfla - Broken function-level authorization`);
 
-### Injection Attacks
+  // Injection Attacks (manually curated)
+  sections.push(`\n### Injection Attacks
 - sql-injection - SQL injection
 - shell-injection - Shell/command injection
 - ssrf - Server-side request forgery
-- indirect-prompt-injection - Indirect prompt injection
+- indirect-prompt-injection - Indirect prompt injection`);
 
-### Prompt Security
+  // Prompt Security (manually curated)
+  sections.push(`\n### Prompt Security
 - prompt-extraction - System prompt extraction
 - hijacking - Conversation hijacking
-- system-prompt-override - Override system instructions
+- system-prompt-override - Override system instructions`);
 
-### Harmful Content (harmful:*)
-- harmful:violent-crime
-- harmful:illegal-activities
-- harmful:hate
-- harmful:harassment-bullying
-- harmful:self-harm
-- harmful:sexual-content
-- harmful:child-exploitation
-- harmful:specialized-advice
-- harmful:privacy
-- harmful:misinformation-disinformation
+  // Harmful Content - dynamically from HARM_PLUGINS
+  const harmPlugins = Object.keys(HARM_PLUGINS)
+    .sort()
+    .map((p) => `- ${p}`)
+    .join('\n');
+  sections.push(`\n### Harmful Content\n${harmPlugins}`);
 
-### Agent/Tool Security
+  // Bias plugins
+  sections.push(`\n### Bias Detection\n${BIAS_PLUGINS.map((p) => `- ${p}`).join('\n')}`);
+
+  // Agent/Tool Security (manually curated)
+  sections.push(`\n### Agent/Tool Security
 - excessive-agency - Agent exceeds intended scope
 - tool-discovery - Discover hidden tools/capabilities
-- cross-session-leak - Data leaks between sessions
+- cross-session-leak - Data leaks between sessions`);
 
-### Content Quality
+  // Content Quality (manually curated)
+  sections.push(`\n### Content Quality
 - hallucination - Factual inaccuracies
 - overreliance - Over-trusting user input
 - contracts - Violates stated policies/rules
-- imitation - Impersonation attacks
+- imitation - Impersonation attacks`);
 
-### Industry-Specific
-- medical:* - Healthcare domain (anchoring-bias, hallucination, etc.)
-- financial:* - Finance domain (compliance-violation, data-leakage, etc.)
-- ecommerce:* - E-commerce (price-manipulation, pci-dss, etc.)
+  // Industry-specific - dynamically generated
+  sections.push(`\n### Medical/Healthcare\n${MEDICAL_PLUGINS.map((p) => `- ${p}`).join('\n')}`);
+  sections.push(`\n### Financial\n${FINANCIAL_PLUGINS.map((p) => `- ${p}`).join('\n')}`);
+  sections.push(`\n### Pharmacy\n${PHARMACY_PLUGINS.map((p) => `- ${p}`).join('\n')}`);
+  sections.push(`\n### Insurance\n${INSURANCE_PLUGINS.map((p) => `- ${p}`).join('\n')}`);
+  sections.push(`\n### E-commerce\n${ECOMMERCE_PLUGINS.map((p) => `- ${p}`).join('\n')}`);
 
-### Other
+  // Other commonly used
+  sections.push(`\n### Other
 - competitors - Endorses competitors
 - debug-access - Accesses debug/admin features
 - politics - Political content
-- religion - Religious content
-`.trim();
+- religion - Religious content`);
+
+  return sections.join('\n');
+}
+
+/**
+ * Common plugins the agent should suggest from, organized by category
+ * Dynamically generated from plugin constants to stay in sync
+ */
+export const SUGGESTED_PLUGIN_LIST = generatePluginList();
 
 /**
  * Validates if a plugin ID is valid
