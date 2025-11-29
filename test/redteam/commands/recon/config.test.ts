@@ -49,15 +49,29 @@ describe('applicationDefinitionToPurpose', () => {
       purpose: 'Test',
       hasAccessTo: 'Database, API',
       doesNotHaveAccessTo: 'Filesystem',
-      securityRequirements: 'HIPAA compliance',
     });
 
     expect(result).toContain('Systems and Data the Application Has Access To:');
     expect(result).toContain('Database, API');
     expect(result).toContain('Systems and Data the Application Should NOT Have Access To:');
     expect(result).toContain('Filesystem');
-    expect(result).toContain('Security and Compliance Requirements:');
-    expect(result).toContain('HIPAA compliance');
+  });
+
+  it('should skip placeholder values like "not specified"', () => {
+    const result = applicationDefinitionToPurpose({
+      purpose: 'Test purpose',
+      features: 'Not specified',
+      industry: 'Healthcare',
+      competitors: 'None mentioned',
+      forbiddenTopics: 'Not applicable',
+    });
+
+    expect(result).toContain('Application Purpose:');
+    expect(result).toContain('Industry/Domain:');
+    // These should be skipped because they're placeholders
+    expect(result).not.toContain('Key Features');
+    expect(result).not.toContain('Competitors');
+    expect(result).not.toContain('forbidden');
   });
 
   it('should skip undefined fields', () => {
@@ -298,6 +312,45 @@ describe('buildRedteamConfig', () => {
       (p) => typeof p === 'object' && p.id === 'prompt-extraction',
     );
     expect(promptExtractionObject).toBeUndefined();
+  });
+
+  it('should skip prompt-extraction config for placeholder systemPrompt', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      // Placeholder systemPrompt that should not be used
+      systemPrompt:
+        'Not provided; the example relies on whatever default instructions the target model already uses.',
+    };
+    const config = buildRedteamConfig(result);
+
+    // prompt-extraction should be a simple string, not configured with the placeholder
+    expect(config.redteam?.plugins).toContain('prompt-extraction');
+    const plugins = config.redteam?.plugins as Array<string | { id: string; config?: unknown }>;
+    const promptExtractionObject = plugins.find(
+      (p) => typeof p === 'object' && p.id === 'prompt-extraction',
+    );
+    expect(promptExtractionObject).toBeUndefined();
+  });
+
+  it('should infer plugins from security notes', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      securityNotes: [
+        'Authentication uses plaintext credentials',
+        'Payment processing stores card data',
+        'Session history persists across turns',
+      ],
+    };
+    const config = buildRedteamConfig(result);
+
+    // Should infer auth-related plugins
+    expect(config.redteam?.plugins).toContain('rbac');
+    expect(config.redteam?.plugins).toContain('bola');
+    expect(config.redteam?.plugins).toContain('bfla');
+    // Should infer PII plugins from payment mention
+    expect(config.redteam?.plugins).toContain('pii:api-db');
+    // Should infer cross-session from session mention
+    expect(config.redteam?.plugins).toContain('cross-session-leak');
   });
 });
 

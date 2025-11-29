@@ -147,88 +147,104 @@ export function filterValidPlugins(suggestedPlugins: string[]): string[] {
 }
 
 /**
+ * Checks if a field value is meaningful (not empty or a placeholder)
+ */
+function isValueMeaningful(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  const lower = value.toLowerCase().trim();
+  // Skip empty or placeholder values
+  if (
+    lower === '' ||
+    lower === 'none' ||
+    lower === 'n/a' ||
+    lower === 'na' ||
+    lower.startsWith('not ') || // "not specified", "not mentioned", "not provided", "not applicable", "not found"
+    lower.startsWith('none ') || // "none mentioned", "none specified"
+    lower.startsWith('no ') // "no formal", "no built-in", "no additional"
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Converts a ReconResult to the purpose string format expected by promptfoo redteam
  *
- * This matches the format used by the web UI's applicationDefinitionToPurpose function
+ * This matches the format used by the web UI's applicationDefinitionToPurpose function.
+ * Skips sections with placeholder values to reduce verbosity.
  */
 export function applicationDefinitionToPurpose(result: ReconResult): string {
   const sections: string[] = [];
 
-  if (result.purpose) {
+  // Always include core fields if present
+  if (isValueMeaningful(result.purpose)) {
     sections.push(`Application Purpose:\n\`\`\`\n${result.purpose}\n\`\`\``);
   }
 
-  if (result.features) {
+  if (isValueMeaningful(result.features)) {
     sections.push(`Key Features and Capabilities:\n\`\`\`\n${result.features}\n\`\`\``);
   }
 
-  if (result.industry) {
+  if (isValueMeaningful(result.industry)) {
     sections.push(`Industry/Domain:\n\`\`\`\n${result.industry}\n\`\`\``);
   }
 
-  if (result.attackConstraints) {
+  // Include security-relevant fields if meaningful
+  if (isValueMeaningful(result.attackConstraints)) {
     sections.push(
       `System Rules and Constraints for Attackers:\n\`\`\`\n${result.attackConstraints}\n\`\`\``,
     );
   }
 
-  if (result.hasAccessTo) {
+  if (isValueMeaningful(result.hasAccessTo)) {
     sections.push(
       `Systems and Data the Application Has Access To:\n\`\`\`\n${result.hasAccessTo}\n\`\`\``,
     );
   }
 
-  if (result.doesNotHaveAccessTo) {
+  // Skip doesNotHaveAccessTo, userTypes, securityRequirements if not meaningful
+  // These are often boilerplate and add noise
+  if (isValueMeaningful(result.doesNotHaveAccessTo)) {
     sections.push(
       `Systems and Data the Application Should NOT Have Access To:\n\`\`\`\n${result.doesNotHaveAccessTo}\n\`\`\``,
     );
   }
 
-  if (result.userTypes) {
+  if (isValueMeaningful(result.userTypes)) {
     sections.push(
       `Types of Users Who Interact with the Application:\n\`\`\`\n${result.userTypes}\n\`\`\``,
     );
   }
 
-  if (result.securityRequirements) {
-    sections.push(
-      `Security and Compliance Requirements:\n\`\`\`\n${result.securityRequirements}\n\`\`\``,
-    );
-  }
+  // Skip securityRequirements - often boilerplate
 
-  if (result.sensitiveDataTypes) {
+  if (isValueMeaningful(result.sensitiveDataTypes)) {
     sections.push(`Types of Sensitive Data Handled:\n\`\`\`\n${result.sensitiveDataTypes}\n\`\`\``);
   }
 
-  if (result.exampleIdentifiers) {
-    sections.push(
-      `Example Data Identifiers and Formats:\n\`\`\`\n${result.exampleIdentifiers}\n\`\`\``,
-    );
-  }
+  // Skip exampleIdentifiers - useful for agent but verbose in output
 
-  if (result.criticalActions) {
+  if (isValueMeaningful(result.criticalActions)) {
     sections.push(
       `Critical or Dangerous Actions the Application Can Perform:\n\`\`\`\n${result.criticalActions}\n\`\`\``,
     );
   }
 
-  if (result.forbiddenTopics) {
+  if (isValueMeaningful(result.forbiddenTopics)) {
     sections.push(
       `Content and Topics the Application Should Never Discuss:\n\`\`\`\n${result.forbiddenTopics}\n\`\`\``,
     );
   }
 
-  if (result.competitors) {
-    sections.push(
-      `Competitors That Should Not Be Endorsed:\n\`\`\`\n${result.competitors}\n\`\`\``,
-    );
-  }
+  // Skip competitors - often empty/not applicable
 
-  if (result.redteamUser) {
+  if (isValueMeaningful(result.redteamUser)) {
     sections.push(`Red Team User Persona:\n\`\`\`\n${result.redteamUser}\n\`\`\``);
   }
 
-  if (result.connectedSystems) {
+  if (isValueMeaningful(result.connectedSystems)) {
     sections.push(
       `Connected Systems the LLM Agent Has Access To:\n\`\`\`\n${result.connectedSystems}\n\`\`\``,
     );
@@ -239,6 +255,28 @@ export function applicationDefinitionToPurpose(result: ReconResult): string {
 
 /** Plugin can be a string ID or an object with config */
 type PluginConfig = string | { id: string; config: Record<string, unknown> };
+
+/**
+ * Checks if a system prompt is meaningful (not empty or a placeholder)
+ */
+function isValidSystemPrompt(systemPrompt: string | undefined): boolean {
+  if (!systemPrompt) {
+    return false;
+  }
+  const lower = systemPrompt.toLowerCase();
+  // Skip placeholder/empty values
+  if (
+    lower.includes('not provided') ||
+    lower.includes('not found') ||
+    lower.includes('not specified') ||
+    lower.includes('no system prompt') ||
+    lower.includes('default instructions') ||
+    lower.length < 20 // Too short to be meaningful
+  ) {
+    return false;
+  }
+  return true;
+}
 
 /**
  * Determines appropriate plugins based on recon findings
@@ -322,15 +360,53 @@ function suggestPluginsFromFindings(result: ReconResult): PluginConfig[] {
     }
   }
 
+  // Parse security notes for additional attack vectors
+  if (result.securityNotes && result.securityNotes.length > 0) {
+    const notes = result.securityNotes.join(' ').toLowerCase();
+
+    // Auth/credential issues -> authorization plugins
+    if (
+      notes.includes('credential') ||
+      notes.includes('auth') ||
+      notes.includes('password') ||
+      notes.includes('plaintext')
+    ) {
+      pluginIds.add('rbac');
+      pluginIds.add('bola');
+      pluginIds.add('bfla');
+    }
+
+    // Database mentions -> SQL injection
+    if (notes.includes('database') || notes.includes('sql') || notes.includes('query')) {
+      pluginIds.add('sql-injection');
+    }
+
+    // Payment/PCI mentions -> PII plugins
+    if (notes.includes('payment') || notes.includes('pci') || notes.includes('card')) {
+      pluginIds.add('pii:direct');
+      pluginIds.add('pii:api-db');
+    }
+
+    // Session/state mentions -> cross-session
+    if (notes.includes('session') || notes.includes('persist') || notes.includes('history')) {
+      pluginIds.add('cross-session-leak');
+    }
+
+    // Shell/command execution
+    if (notes.includes('shell') || notes.includes('command') || notes.includes('exec')) {
+      pluginIds.add('shell-injection');
+    }
+  }
+
   // Convert to plugin configs, adding configuration where needed
   const plugins: PluginConfig[] = [];
   for (const id of pluginIds) {
-    if (id === 'prompt-extraction' && result.systemPrompt) {
+    if (id === 'prompt-extraction' && isValidSystemPrompt(result.systemPrompt)) {
       // Configure prompt-extraction with the discovered system prompt
       // This allows the grader to detect if the actual prompt was leaked
       plugins.push({
         id: 'prompt-extraction',
-        config: { systemPrompt: result.systemPrompt },
+        config: { systemPrompt: result.systemPrompt! },
       });
     } else {
       plugins.push(id);
