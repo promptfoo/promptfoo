@@ -1,21 +1,22 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { PromptfooModelProvider } from '../../src/providers/promptfooModel';
 
 describe('PromptfooModelProvider', () => {
-  let mockFetch: jest.Mock;
-  let mockCloudConfig: jest.SpyInstance;
-  const mockLogger = jest.spyOn(logger, 'debug').mockImplementation();
+  let mockFetch: vi.Mock;
+  let mockCloudConfig: ReturnType<typeof vi.spyOn>;
+  const mockLogger = vi.spyOn(logger, 'debug').mockImplementation(() => {});
 
   beforeEach(() => {
-    mockFetch = jest.fn();
+    mockFetch = vi.fn();
     global.fetch = mockFetch;
-    mockCloudConfig = jest.spyOn(cloudConfig, 'getApiKey').mockReturnValue('test-token');
+    mockCloudConfig = vi.spyOn(cloudConfig, 'getApiKey').mockReturnValue('test-token');
     mockLogger.mockClear();
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should initialize with model name', () => {

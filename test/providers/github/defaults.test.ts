@@ -1,25 +1,26 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDefaultProviders } from '../../../src/providers/defaults';
 import { getEnvString } from '../../../src/envars';
 
-jest.mock('../../../src/envars');
-jest.mock('../../../src/logger', () => ({
+vi.mock('../../../src/envars');
+vi.mock('../../../src/logger', () => ({
   __esModule: true,
   default: {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
 }));
-jest.mock('../../../src/providers/google/util', () => ({
-  hasGoogleDefaultCredentials: jest.fn().mockResolvedValue(false),
+vi.mock('../../../src/providers/google/util', () => ({
+  hasGoogleDefaultCredentials: vi.fn().mockResolvedValue(false),
 }));
 
-const mockedGetEnvString = jest.mocked(getEnvString);
+const mockedGetEnvString = vi.mocked(getEnvString);
 
 describe('GitHub Models Default Providers', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should use GitHub token for github: model when only GITHUB_TOKEN is available', async () => {

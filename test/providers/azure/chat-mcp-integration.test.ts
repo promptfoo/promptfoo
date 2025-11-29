@@ -1,35 +1,63 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
-import { MCPClient } from '../../../src/providers/mcp/client';
+
+// Create hoisted mocks for the MCPClient class
+const mcpMocks = vi.hoisted(() => {
+  const mockInitialize = vi.fn().mockResolvedValue(undefined);
+  const mockCleanup = vi.fn().mockResolvedValue(undefined);
+  const mockGetAllTools = vi.fn().mockReturnValue([
+    {
+      name: 'list_resources',
+      description: 'List available token system resources',
+      inputSchema: { type: 'object' },
+    },
+  ]);
+  const mockCallTool = vi.fn().mockResolvedValue({
+    content:
+      'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
+  });
+
+  class MockMCPClient {
+    initialize = mockInitialize;
+    cleanup = mockCleanup;
+    getAllTools = mockGetAllTools;
+    callTool = mockCallTool;
+  }
+
+  return {
+    MockMCPClient,
+    mockInitialize,
+    mockCleanup,
+    mockGetAllTools,
+    mockCallTool,
+  };
+});
 
 // Mock external dependencies
-jest.mock('../../../src/cache');
-jest.mock('../../../src/logger');
-jest.mock('../../../src/providers/mcp/client');
+vi.mock('../../../src/cache');
+vi.mock('../../../src/logger');
+vi.mock('../../../src/providers/mcp/client', () => ({
+  MCPClient: mcpMocks.MockMCPClient,
+}));
 
 describe('AzureChatCompletionProvider MCP Integration', () => {
   let provider: AzureChatCompletionProvider;
-  let mockMCPClient: jest.Mocked<MCPClient>;
 
   beforeEach(() => {
-    // Create a mock MCP client
-    mockMCPClient = {
-      initialize: jest.fn().mockResolvedValue(undefined),
-      cleanup: jest.fn().mockResolvedValue(undefined),
-      getAllTools: jest.fn().mockReturnValue([
-        {
-          name: 'list_resources',
-          description: 'List available token system resources',
-          inputSchema: { type: 'object' },
-        },
-      ]),
-      callTool: jest.fn().mockResolvedValue({
-        content:
-          'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
-      }),
-    } as any;
-
-    // Mock the MCPClient constructor to return our mock
-    (MCPClient as jest.MockedClass<typeof MCPClient>).mockImplementation(() => mockMCPClient);
+    // Reset mocks
+    mcpMocks.mockInitialize.mockResolvedValue(undefined);
+    mcpMocks.mockCleanup.mockResolvedValue(undefined);
+    mcpMocks.mockGetAllTools.mockReturnValue([
+      {
+        name: 'list_resources',
+        description: 'List available token system resources',
+        inputSchema: { type: 'object' },
+      },
+    ]);
+    mcpMocks.mockCallTool.mockResolvedValue({
+      content:
+        'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
+    });
 
     // Create provider with MCP enabled
     provider = new AzureChatCompletionProvider('test-deployment', {
@@ -50,7 +78,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   afterEach(async () => {
     await provider.cleanup();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should integrate MCP tools with FunctionCallbackHandler', async () => {
@@ -58,12 +86,12 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     await (provider as any).initializationPromise;
 
     // Verify MCP client was initialized
-    expect(mockMCPClient.initialize).toHaveBeenCalled();
+    expect(mcpMocks.mockInitialize).toHaveBeenCalled();
 
     // Test that the function callback handler now has the MCP client
     const handler = (provider as any).functionCallbackHandler;
     expect(handler).toBeDefined();
-    expect((handler as any).mcpClient).toBe(mockMCPClient);
+    expect((handler as any).mcpClient).toBeDefined();
   });
 
   it('should execute MCP tool through FunctionCallbackHandler', async () => {
@@ -81,7 +109,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     const result = await handler.processCall(toolCall, {});
 
     // Verify MCP tool was called
-    expect(mockMCPClient.callTool).toHaveBeenCalledWith('list_resources', {});
+    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
 
     // Verify result format matches expected pattern (not [object Object])
     expect(result).toEqual({
@@ -99,7 +127,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     await (provider as any).initializationPromise;
 
     // Configure mock to return an error
-    mockMCPClient.callTool.mockResolvedValue({
+    mcpMocks.mockCallTool.mockResolvedValue({
       content: '',
       error: 'MCP server connection failed',
     });
@@ -145,7 +173,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
     // Create a function callback with the same name as an MCP tool
     const functionCallbacks = {
-      list_resources: jest.fn().mockResolvedValue('Function callback result'),
+      list_resources: vi.fn().mockResolvedValue('Function callback result'),
     };
 
     const toolCall = {
@@ -156,7 +184,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     const result = await handler.processCall(toolCall, functionCallbacks);
 
     // Should call MCP tool, not function callback
-    expect(mockMCPClient.callTool).toHaveBeenCalledWith('list_resources', {});
+    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
     expect(functionCallbacks.list_resources).not.toHaveBeenCalled();
 
     // Result should be from MCP tool

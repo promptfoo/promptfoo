@@ -1,4 +1,5 @@
 import path from 'path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
@@ -6,29 +7,54 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
-jest.mock('../../../src/cache');
-jest.mock('../../../src/logger');
-jest.mock('../../../src/esm', () => ({
-  importModule: jest.fn(),
+vi.mock('../../../src/cache', () => ({
+  fetchWithCache: vi.fn(),
+  enableCache: vi.fn(),
+  disableCache: vi.fn(),
+}));
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+vi.mock('../../../src/esm', () => ({
+  importModule: vi.fn(),
 }));
 
-const mockFetchWithCache = jest.mocked(fetchWithCache);
-const mockLogger = jest.mocked(logger);
-const mockImportModule = jest.mocked(importModule);
+const mockFetchWithCache = vi.mocked(fetchWithCache);
+const mockLogger = vi.mocked(logger);
+const mockImportModule = vi.mocked(importModule);
+const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+const originalDeepseekApiKey = process.env.DEEPSEEK_API_KEY;
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
+    process.env.OPENAI_API_KEY = 'test-api-key';
+    process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
   });
 
   afterEach(() => {
     enableCache();
+    if (originalOpenAiApiKey) {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    } else {
+      delete process.env.OPENAI_API_KEY;
+    }
+    if (originalDeepseekApiKey) {
+      process.env.DEEPSEEK_API_KEY = originalDeepseekApiKey;
+    } else {
+      delete process.env.DEEPSEEK_API_KEY;
+    }
   });
 
   describe('OpenAiChatCompletionProvider', () => {
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should call API successfully', async () => {
@@ -575,7 +601,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       };
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const mockWeatherFunction = jest.fn().mockResolvedValue('Sunny, 25°C');
+      const mockWeatherFunction = vi.fn().mockResolvedValue('Sunny, 25°C');
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
         config: {
@@ -810,7 +836,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     describe('External Function Callbacks', () => {
       beforeEach(() => {
         cliState.basePath = '/test/base/path';
-        jest.clearAllMocks();
+        vi.clearAllMocks();
       });
 
       afterEach(() => {
@@ -844,7 +870,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         // Mock the external function
-        const mockExternalFunction = jest.fn().mockResolvedValue('External function result');
+        const mockExternalFunction = vi.fn().mockResolvedValue('External function result');
         mockImportModule.mockResolvedValue({
           testFunction: mockExternalFunction,
         });
@@ -910,7 +936,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         };
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
-        const mockCachedFunction = jest.fn().mockResolvedValue('Cached result');
+        const mockCachedFunction = vi.fn().mockResolvedValue('Cached result');
         mockImportModule.mockResolvedValue({
           cachedFunction: mockCachedFunction,
         });
@@ -1051,7 +1077,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         // Mock a function that throws during execution
-        const mockFailingFunction = jest
+        const mockFailingFunction = vi
           .fn()
           .mockRejectedValue(new Error('Function execution failed'));
         mockImportModule.mockResolvedValue({
@@ -1124,7 +1150,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         };
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
-        const mockParsedFunction = jest.fn().mockResolvedValue('Parsed successfully');
+        const mockParsedFunction = vi.fn().mockResolvedValue('Parsed successfully');
         mockImportModule.mockResolvedValue(mockParsedFunction);
 
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -1192,8 +1218,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         };
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
-        const mockInlineFunction = jest.fn().mockResolvedValue('Inline result');
-        const mockExternalFunction = jest.fn().mockResolvedValue('External result');
+        const mockInlineFunction = vi.fn().mockResolvedValue('Inline result');
+        const mockExternalFunction = vi.fn().mockResolvedValue('External result');
         mockImportModule.mockResolvedValue({
           externalFunc: mockExternalFunction,
         });

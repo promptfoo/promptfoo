@@ -1,3 +1,5 @@
+import type { Mocked } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
@@ -5,29 +7,67 @@ import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/mess
 import { MCPClient } from '../../../src/providers/mcp/client';
 import type Anthropic from '@anthropic-ai/sdk';
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+const mcpMocks = vi.hoisted(() => {
+  const initialize = vi.fn();
+  const cleanup = vi.fn();
+  const getAllTools = vi.fn().mockReturnValue([]);
+  const instances: any[] = [];
+
+  class MockMCPClient {
+    initialize = initialize;
+    cleanup = cleanup;
+    getAllTools = getAllTools;
+
+    constructor() {
+      instances.push(this);
+    }
+  }
+
+  return { cleanup, getAllTools, initialize, instances, MockMCPClient };
+});
+
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('../../../src/providers/mcp/client');
+vi.mock('../../../src/providers/mcp/client', () => ({
+  MCPClient: mcpMocks.MockMCPClient,
+}));
+
+const TEST_API_KEY = 'test-api-key';
+const originalEnv = process.env;
+let mockMCPClient: Mocked<MCPClient> | undefined;
+
+const createProvider = (
+  ...args: ConstructorParameters<typeof AnthropicMessagesProvider>
+): AnthropicMessagesProvider => {
+  const created = new AnthropicMessagesProvider(...args);
+  const lastInstance = mcpMocks.instances.at(-1) as Mocked<MCPClient> | undefined;
+  if (lastInstance) {
+    mockMCPClient = lastInstance;
+  }
+  return created;
+};
 
 describe('AnthropicMessagesProvider', () => {
   let provider: AnthropicMessagesProvider;
-  let mockMCPClient: jest.Mocked<MCPClient>;
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    mockMCPClient = {
-      initialize: jest.fn(),
-      cleanup: jest.fn(),
-      getAllTools: jest.fn().mockReturnValue([]),
-    } as any;
-    jest.mocked(MCPClient).mockImplementation(() => mockMCPClient);
+    vi.resetAllMocks();
+    process.env = { ...originalEnv, ANTHROPIC_API_KEY: TEST_API_KEY };
+    mockMCPClient = undefined;
+    mcpMocks.instances.length = 0;
+    mcpMocks.initialize.mockReset();
+    mcpMocks.cleanup.mockReset();
+    mcpMocks.getAllTools.mockReset();
+    mcpMocks.getAllTools.mockReturnValue([]);
   });
 
   afterEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await clearCache();
+    process.env = originalEnv;
+    mcpMocks.instances.length = 0;
   });
 
   describe('callApi', () => {
@@ -52,12 +92,16 @@ describe('AnthropicMessagesProvider', () => {
       },
     ];
 
-    const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
-      config: { tools },
+    let provider: AnthropicMessagesProvider;
+
+    beforeEach(() => {
+      provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: { tools },
+      });
     });
 
     it('should use cache by default for ToolUse requests', async () => {
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -119,7 +163,7 @@ describe('AnthropicMessagesProvider', () => {
         type: 'tool',
       };
       provider.config.tool_choice = toolChoice;
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -167,7 +211,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should include extra_body parameters in API call', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
         config: {
           extra_body: {
             top_p: 0.9,
@@ -176,7 +220,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -206,13 +250,13 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should not include extra_body when it is not an object', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
         config: {
           extra_body: undefined,
         },
       });
 
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -240,7 +284,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should not use cache if caching is disabled for ToolUse requests', async () => {
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -276,7 +320,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should return cached response for legacy caching behavior', async () => {
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -297,8 +341,8 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle API call error', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
-      jest
+      const provider = createProvider('claude-3-5-sonnet-20241022');
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockRejectedValue(new Error('API call failed'));
@@ -310,8 +354,8 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle non-Error API call errors', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
-      jest
+      const provider = createProvider('claude-3-5-sonnet-20241022');
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockRejectedValue('Non-error object');
@@ -323,7 +367,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle APIError with error details', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+      const provider = createProvider('claude-3-5-sonnet-20241022');
 
       const mockApiError = Object.create(APIError.prototype);
       Object.assign(mockApiError, {
@@ -338,7 +382,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockRejectedValue(mockApiError);
@@ -350,10 +394,10 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should return token usage and cost', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
         config: { max_tokens: 100, temperature: 0.5, cost: 0.015 },
       });
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -370,7 +414,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle thinking configuration', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+      const provider = createProvider('claude-3-7-sonnet-20250219', {
         config: {
           thinking: {
             type: 'enabled',
@@ -379,7 +423,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -422,8 +466,8 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle redacted thinking blocks', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
-      jest
+      const provider = createProvider('claude-3-7-sonnet-20250219');
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -444,7 +488,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle API errors for thinking configuration', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
+      const provider = createProvider('claude-3-7-sonnet-20250219');
 
       // Mock API error for invalid budget
       const mockApiError = Object.create(APIError.prototype);
@@ -460,7 +504,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      jest.spyOn(provider.anthropic.messages, 'create').mockRejectedValue(mockApiError);
+      vi.spyOn(provider.anthropic.messages, 'create').mockRejectedValue(mockApiError);
 
       const result = await provider.callApi(
         JSON.stringify([
@@ -480,7 +524,7 @@ describe('AnthropicMessagesProvider', () => {
       );
 
       // Test budget exceeding max_tokens
-      const providerWithMaxTokens = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+      const providerWithMaxTokens = createProvider('claude-3-7-sonnet-20250219', {
         config: {
           max_tokens: 2048,
         },
@@ -499,7 +543,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      jest
+      vi
         .spyOn(providerWithMaxTokens.anthropic.messages, 'create')
         .mockRejectedValue(mockMaxTokensError);
 
@@ -522,7 +566,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should respect explicit temperature when thinking is enabled', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+      const provider = createProvider('claude-3-7-sonnet-20250219', {
         config: {
           thinking: {
             type: 'enabled',
@@ -532,7 +576,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -562,13 +606,13 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should include beta features header when specified', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+      const provider = createProvider('claude-3-7-sonnet-20250219', {
         config: {
           beta: ['output-128k-2025-02-19'],
         },
       });
 
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -584,13 +628,13 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should include multiple beta features in header', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+      const provider = createProvider('claude-3-7-sonnet-20250219', {
         config: {
           beta: ['output-128k-2025-02-19', 'another-beta-feature'],
         },
       });
 
-      jest
+      vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
@@ -607,8 +651,8 @@ describe('AnthropicMessagesProvider', () => {
 
     describe('finish reason handling', () => {
       it('should surface a normalized finishReason for Anthropic reasons', async () => {
-        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
-        jest
+        const provider = createProvider('claude-3-5-sonnet-20241022');
+        vi
           .spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
@@ -622,8 +666,8 @@ describe('AnthropicMessagesProvider', () => {
       });
 
       it('should normalize max_tokens to length', async () => {
-        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
-        jest
+        const provider = createProvider('claude-3-5-sonnet-20241022');
+        vi
           .spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
@@ -637,8 +681,8 @@ describe('AnthropicMessagesProvider', () => {
       });
 
       it('should normalize tool_use to tool_calls', async () => {
-        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
-        jest
+        const provider = createProvider('claude-3-5-sonnet-20241022');
+        vi
           .spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
@@ -652,8 +696,8 @@ describe('AnthropicMessagesProvider', () => {
       });
 
       it('should exclude finishReason when stop_reason is null', async () => {
-        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
-        jest
+        const provider = createProvider('claude-3-5-sonnet-20241022');
+        vi
           .spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
@@ -667,8 +711,8 @@ describe('AnthropicMessagesProvider', () => {
       });
 
       it('should exclude finishReason when stop_reason is undefined', async () => {
-        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
-        jest
+        const provider = createProvider('claude-3-5-sonnet-20241022');
+        vi
           .spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
@@ -682,7 +726,7 @@ describe('AnthropicMessagesProvider', () => {
       });
 
       it('should handle cached responses with finishReason', async () => {
-        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+        const provider = createProvider('claude-3-5-sonnet-20241022');
 
         const cacheKey = expect.stringContaining('anthropic:');
         await getCache().set(
@@ -695,7 +739,7 @@ describe('AnthropicMessagesProvider', () => {
         );
 
         // Set up specific cache key for our test
-        jest
+        vi
           .spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({} as any);
@@ -725,8 +769,8 @@ describe('AnthropicMessagesProvider', () => {
       });
 
       it('should handle unknown stop reasons by passing them through', async () => {
-        const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
-        jest
+        const provider = createProvider('claude-3-5-sonnet-20241022');
+        vi
           .spyOn(provider.anthropic.messages, 'create')
           .mockImplementation()
           .mockResolvedValue({
@@ -743,7 +787,7 @@ describe('AnthropicMessagesProvider', () => {
 
   describe('cleanup', () => {
     it('should await initialization before cleanup', async () => {
-      provider = new AnthropicMessagesProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-3-5-sonnet-latest', {
         config: {
           mcp: {
             enabled: true,
@@ -755,6 +799,9 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
+      const client = mockMCPClient;
+      expect(client).toBeDefined();
+
       // Simulate initialization in progress
       const initPromise = Promise.resolve();
       provider['initializationPromise'] = initPromise;
@@ -762,11 +809,11 @@ describe('AnthropicMessagesProvider', () => {
       await provider.cleanup();
 
       // Verify cleanup was called after initialization
-      expect(mockMCPClient.cleanup).toHaveBeenCalledWith();
+      expect(client!.cleanup).toHaveBeenCalledWith();
     });
 
     it('should handle cleanup when MCP is not enabled', async () => {
-      provider = new AnthropicMessagesProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-3-5-sonnet-latest', {
         config: {
           mcp: {
             enabled: false,
@@ -776,11 +823,11 @@ describe('AnthropicMessagesProvider', () => {
 
       await provider.cleanup();
 
-      expect(mockMCPClient.cleanup).not.toHaveBeenCalled();
+      expect(mockMCPClient).toBeUndefined();
     });
 
     it('should handle cleanup errors gracefully', async () => {
-      provider = new AnthropicMessagesProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-3-5-sonnet-latest', {
         config: {
           mcp: {
             enabled: true,
@@ -792,7 +839,10 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      mockMCPClient.cleanup.mockRejectedValueOnce(new Error('Cleanup failed'));
+      const client = mockMCPClient;
+      expect(client).toBeDefined();
+
+      client!.cleanup.mockRejectedValueOnce(new Error('Cleanup failed'));
 
       await expect(provider.cleanup()).rejects.toThrow('Cleanup failed');
     });
@@ -800,7 +850,7 @@ describe('AnthropicMessagesProvider', () => {
 
   describe('Structured Outputs - output_format', () => {
     it('should add structured-outputs beta header when output_format is used', async () => {
-      const provider = new AnthropicMessagesProvider('claude-sonnet-4-5-20250929', {
+      const provider = createProvider('claude-sonnet-4-5-20250929', {
         config: {
           output_format: {
             type: 'json_schema',
@@ -816,7 +866,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      const mockCreate = jest.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      const mockCreate = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: '{"name":"John"}' }],
         id: 'msg_123',
         model: 'claude-sonnet-4-5-20250929',
@@ -852,7 +902,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should automatically parse JSON when output_format is json_schema', async () => {
-      const provider = new AnthropicMessagesProvider('claude-sonnet-4-5-20250929', {
+      const provider = createProvider('claude-sonnet-4-5-20250929', {
         config: {
           output_format: {
             type: 'json_schema',
@@ -869,7 +919,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      jest.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: '{"name":"Alice","age":30}' }],
         id: 'msg_123',
         model: 'claude-sonnet-4-5-20250929',
@@ -889,7 +939,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle JSON parsing errors gracefully', async () => {
-      const provider = new AnthropicMessagesProvider('claude-sonnet-4-5-20250929', {
+      const provider = createProvider('claude-sonnet-4-5-20250929', {
         config: {
           output_format: {
             type: 'json_schema',
@@ -904,7 +954,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      jest.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: 'Invalid JSON {name}' }],
         id: 'msg_123',
         model: 'claude-sonnet-4-5-20250929',
@@ -924,7 +974,7 @@ describe('AnthropicMessagesProvider', () => {
     it('should handle nested output_format with file:// references', async () => {
       // This test verifies that the code can handle external file loading
       // In a real scenario, maybeLoadFromExternalFile would load the schema
-      const provider = new AnthropicMessagesProvider('claude-sonnet-4-5-20250929', {
+      const provider = createProvider('claude-sonnet-4-5-20250929', {
         config: {
           output_format: {
             type: 'json_schema',
@@ -939,7 +989,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      jest.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: '{"name":"Bob"}' }],
         id: 'msg_123',
         model: 'claude-sonnet-4-5-20250929',
@@ -956,7 +1006,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should combine output_format with strict tools beta headers', async () => {
-      const provider = new AnthropicMessagesProvider('claude-sonnet-4-5-20250929', {
+      const provider = createProvider('claude-sonnet-4-5-20250929', {
         config: {
           output_format: {
             type: 'json_schema',
@@ -982,7 +1032,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      const mockCreate = jest.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      const mockCreate = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: '{"result":"42"}' }],
         id: 'msg_123',
         model: 'claude-sonnet-4-5-20250929',
@@ -1006,7 +1056,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should not duplicate beta headers when both strict tools and output_format are used', async () => {
-      const provider = new AnthropicMessagesProvider('claude-sonnet-4-5-20250929', {
+      const provider = createProvider('claude-sonnet-4-5-20250929', {
         config: {
           output_format: {
             type: 'json_schema',
@@ -1032,7 +1082,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      const mockCreate = jest.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      const mockCreate = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: '{"value":100}' }],
         id: 'msg_123',
         model: 'claude-sonnet-4-5-20250929',
@@ -1058,7 +1108,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle streaming with output_format and parse JSON', async () => {
-      const provider = new AnthropicMessagesProvider('claude-sonnet-4-5-20250929', {
+      const provider = createProvider('claude-sonnet-4-5-20250929', {
         config: {
           stream: true,
           output_format: {
@@ -1094,11 +1144,11 @@ describe('AnthropicMessagesProvider', () => {
       };
 
       const mockStream = {
-        finalMessage: jest.fn().mockResolvedValue(mockFinalMessage),
+        finalMessage: vi.fn().mockResolvedValue(mockFinalMessage),
       };
 
       // @ts-expect-error - Mocking stream return value for test
-      jest.spyOn(provider.anthropic.messages, 'stream').mockResolvedValue(mockStream);
+      vi.spyOn(provider.anthropic.messages, 'stream').mockResolvedValue(mockStream);
 
       const result = await provider.callApi('Check status');
 

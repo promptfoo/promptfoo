@@ -1,6 +1,8 @@
+import { vi } from 'vitest';
+
 import { fetchWithRetries } from '../src/util/fetch/index';
 
-const mockedFetch = jest.spyOn(global, 'fetch');
+const mockedFetch = vi.spyOn(global, 'fetch');
 
 const mockedFetchResponse = (ok: boolean, response: object, headers: object = {}) => {
   const responseText = JSON.stringify(response);
@@ -18,7 +20,7 @@ const mockedFetchResponse = (ok: boolean, response: object, headers: object = {}
 };
 
 const mockedSetTimeout = (reqTimeout: number) =>
-  jest.spyOn(global, 'setTimeout').mockImplementation((cb: () => void, ms?: number) => {
+  vi.spyOn(global, 'setTimeout').mockImplementation((cb: () => void, ms?: number) => {
     if (ms !== reqTimeout) {
       cb();
     }
@@ -27,16 +29,16 @@ const mockedSetTimeout = (reqTimeout: number) =>
 
 describe('fetchWithRetries', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
     mockedFetch.mockReset();
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   afterAll(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should fetch data', async () => {

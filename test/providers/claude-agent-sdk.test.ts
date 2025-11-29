@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
 import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
@@ -12,19 +13,22 @@ import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-a
 
 import type { CallApiContextParams } from '../../src/types/index';
 
-jest.mock('../../src/cliState', () => ({ basePath: '/test/basePath' }));
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(),
+vi.mock('../../src/cliState', () => ({
+  default: { basePath: '/test/basePath' },
+  basePath: '/test/basePath',
 }));
-jest.mock('../../src/providers/mcp/transform');
-jest.mock('node:module', () => ({
-  createRequire: jest.fn(() => ({
-    resolve: jest.fn(() => '@anthropic-ai/claude-agent-sdk'),
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn(),
+}));
+vi.mock('../../src/providers/mcp/transform');
+vi.mock('node:module', () => ({
+  createRequire: vi.fn(() => ({
+    resolve: vi.fn(() => '@anthropic-ai/claude-agent-sdk'),
   })),
 }));
 
-const mockQuery = jest.fn();
-const mockTransformMCPConfigToClaudeCode = jest.mocked(transformMCPConfigToClaudeCode);
+const mockQuery = vi.fn();
+const mockTransformMCPConfigToClaudeCode = vi.mocked(transformMCPConfigToClaudeCode);
 
 // Helper to create a complete NonNullableUsage object
 const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
@@ -51,8 +55,8 @@ const createMockQuery = (message: Partial<SDKMessage>): Query => {
 
   const query = generator() as Query;
   // Add the interrupt and setPermissionMode methods that Query extends with
-  query.interrupt = jest.fn().mockResolvedValue(undefined);
-  query.setPermissionMode = jest.fn().mockResolvedValue(undefined);
+  query.interrupt = vi.fn().mockResolvedValue(undefined);
+  query.setPermissionMode = vi.fn().mockResolvedValue(undefined);
 
   return query;
 };
@@ -125,30 +129,30 @@ const createMockErrorResponse = (
 };
 
 describe('ClaudeCodeSDKProvider', () => {
-  let tempDirSpy: jest.SpyInstance;
-  let statSyncSpy: jest.SpyInstance;
-  let rmSyncSpy: jest.SpyInstance;
+  let tempDirSpy: vi.SpyInstance;
+  let statSyncSpy: vi.SpyInstance;
+  let rmSyncSpy: vi.SpyInstance;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+  beforeEach(async () => {
+    vi.clearAllMocks();
 
     // Setup importModule to return our mockQuery
-    const { importModule } = require('../../src/esm');
-    importModule.mockResolvedValue({ query: mockQuery });
+    const { importModule } = await import('../../src/esm');
+    vi.mocked(importModule).mockResolvedValue({ query: mockQuery });
 
     // Default mocks
     mockTransformMCPConfigToClaudeCode.mockReturnValue({});
 
     // File system mocks
-    tempDirSpy = jest.spyOn(fs, 'mkdtempSync').mockReturnValue('/tmp/test-temp-dir');
-    statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({
+    tempDirSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue('/tmp/test-temp-dir');
+    statSyncSpy = vi.spyOn(fs, 'statSync').mockReturnValue({
       isDirectory: () => true,
     } as fs.Stats);
-    rmSyncSpy = jest.spyOn(fs, 'rmSync').mockImplementation();
+    rmSyncSpy = vi.spyOn(fs, 'rmSync').mockImplementation();
   });
 
   afterEach(async () => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
     await clearCache();
   });
 
@@ -180,7 +184,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should warn about unknown model', () => {
-      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
 
       new ClaudeCodeSDKProvider({ config: { model: 'unknown-model' } });
 
@@ -192,7 +196,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should warn about unknown fallback model', () => {
-      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
 
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
 
@@ -204,7 +208,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should not warn about Claude Agent SDK model aliases', () => {
-      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
 
       // Test all Claude Agent SDK aliases
       CLAUDE_CODE_MODEL_ALIASES.forEach((alias) => {
@@ -218,7 +222,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should not warn about known Anthropic models', () => {
-      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
 
       new ClaudeCodeSDKProvider({ config: { model: 'claude-3-5-sonnet-20241022' } });
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'claude-3-5-haiku-20241022' } });
@@ -287,7 +291,7 @@ describe('ClaudeCodeSDKProvider', () => {
       });
 
       it('should handle SDK exceptions', async () => {
-        const errorSpy = jest.spyOn(logger, 'error').mockImplementation();
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation();
         mockQuery.mockRejectedValue(new Error('Network error'));
 
         const provider = new ClaudeCodeSDKProvider({
@@ -746,7 +750,7 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(mockQuery).not.toHaveBeenCalled();
 
         // Test abort during execution
-        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
         const abortError = new Error('AbortError');
         abortError.name = 'AbortError';
         mockQuery.mockRejectedValue(abortError);
@@ -949,7 +953,7 @@ describe('ClaudeCodeSDKProvider', () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           // Create a mock hook callback
-          const mockHookCallback = jest.fn().mockResolvedValue({ continue: true });
+          const mockHookCallback = vi.fn().mockResolvedValue({ continue: true });
           const hooks = {
             PreToolUse: [
               {
@@ -1098,7 +1102,7 @@ describe('ClaudeCodeSDKProvider', () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
         // Mock filesystem for working directory fingerprinting
-        const readdirSyncSpy = jest.spyOn(fs, 'readdirSync');
+        const readdirSyncSpy = vi.spyOn(fs, 'readdirSync');
         readdirSyncSpy.mockReturnValue([
           { name: 'file1.txt', isFile: () => true, isDirectory: () => false },
           { name: 'file2.txt', isFile: () => true, isDirectory: () => false },
@@ -1195,11 +1199,11 @@ describe('ClaudeCodeSDKProvider', () => {
 
         // Mock cache.set to throw an error
         const cache = await getCache();
-        const setSpy = jest.spyOn(cache, 'set').mockImplementation(async () => {
+        const setSpy = vi.spyOn(cache, 'set').mockImplementation(async () => {
           throw new Error('Cache write failed');
         });
 
-        const errorSpy = jest.spyOn(logger, 'error').mockImplementation();
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation();
 
         const provider = new ClaudeCodeSDKProvider({
           env: { ANTHROPIC_API_KEY: 'test-api-key' },

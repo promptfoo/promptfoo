@@ -1,7 +1,25 @@
 import WebSocket from 'ws';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mocked } from 'vitest';
+
 import { createTransformResponse, WebSocketProvider } from '../../src/providers/websocket';
 
-jest.mock('ws');
+const websocketMocks = vi.hoisted(() => {
+  let factory: (() => Mocked<WebSocket>) | null = null;
+
+  const WebSocketMock = vi.fn(function () {
+    return factory?.() ?? ({} as Mocked<WebSocket>);
+  });
+
+  const setFactory = (nextFactory: () => Mocked<WebSocket>) => {
+    factory = nextFactory;
+  };
+
+  return { WebSocketMock, setFactory };
+});
+
+vi.mock('ws', () => ({
+  default: websocketMocks.WebSocketMock,
+}));
 
 describe('createTransformResponse', () => {
   it('should use provided function parser', () => {
@@ -23,20 +41,21 @@ describe('createTransformResponse', () => {
 });
 
 describe('WebSocketProvider', () => {
-  let mockWs: jest.Mocked<WebSocket>;
+  let mockWs: Mocked<WebSocket>;
   let provider: WebSocketProvider;
 
   beforeEach(() => {
     mockWs = {
-      on: jest.fn(),
-      send: jest.fn(),
-      close: jest.fn(),
-      onmessage: jest.fn(),
-      onerror: jest.fn(),
-      onopen: jest.fn(),
-    } as unknown as jest.Mocked<WebSocket>;
+      on: vi.fn(),
+      send: vi.fn(),
+      close: vi.fn(),
+      onmessage: vi.fn(),
+      onerror: vi.fn(),
+      onopen: vi.fn(),
+    } as unknown as Mocked<WebSocket>;
 
-    jest.mocked(WebSocket).mockImplementation(() => mockWs);
+    websocketMocks.WebSocketMock.mockClear();
+    websocketMocks.setFactory(() => mockWs);
 
     provider = new WebSocketProvider('ws://test.com', {
       config: {
@@ -47,7 +66,7 @@ describe('WebSocketProvider', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should initialize with correct config', () => {
@@ -69,7 +88,7 @@ describe('WebSocketProvider', () => {
     });
 
     // Mock WebSocket to handle the connection properly
-    jest.mocked(WebSocket).mockImplementation(() => {
+    websocketMocks.setFactory(() => {
       setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         setTimeout(() => {
@@ -97,7 +116,7 @@ describe('WebSocketProvider', () => {
     });
 
     // Mock WebSocket to handle the connection properly
-    jest.mocked(WebSocket).mockImplementation(() => {
+    websocketMocks.setFactory(() => {
       setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         setTimeout(() => {
@@ -131,7 +150,7 @@ describe('WebSocketProvider', () => {
   it('should send message and handle response', async () => {
     const responseData = { result: 'test response' };
 
-    jest.mocked(WebSocket).mockImplementation(() => {
+    websocketMocks.setFactory(() => {
       setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         setTimeout(() => {
@@ -147,7 +166,7 @@ describe('WebSocketProvider', () => {
   });
 
   it('should handle WebSocket errors', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
+    websocketMocks.setFactory(() => {
       setTimeout(() => {
         mockWs.onerror?.({
           type: 'error',
@@ -175,7 +194,7 @@ describe('WebSocketProvider', () => {
   });
 
   it('should handle non-JSON response', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
+    websocketMocks.setFactory(() => {
       setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         setTimeout(() => {
@@ -198,7 +217,7 @@ describe('WebSocketProvider', () => {
       },
     });
 
-    jest.mocked(WebSocket).mockImplementation(() => {
+    websocketMocks.setFactory(() => {
       setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         setTimeout(() => {
@@ -235,9 +254,9 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
-        setTimeout(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+    websocketMocks.setFactory(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           setTimeout(() => {
             mockWs.onmessage?.({ data: chunks[0] } as WebSocket.MessageEvent);
             setTimeout(() => {
@@ -267,9 +286,9 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
-        setTimeout(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+    websocketMocks.setFactory(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           setTimeout(() => {
             mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
           }, 5);
@@ -297,7 +316,7 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      websocketMocks.setFactory(() => {
         setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           setTimeout(() => {
@@ -327,7 +346,7 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      websocketMocks.setFactory(() => {
         setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           setTimeout(() => {
@@ -352,7 +371,7 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      websocketMocks.setFactory(() => {
         setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           setTimeout(() => {
@@ -377,7 +396,7 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      websocketMocks.setFactory(() => {
         setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           setTimeout(() => {
@@ -407,7 +426,7 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      websocketMocks.setFactory(() => {
         setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           setTimeout(() => {
@@ -436,7 +455,7 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      websocketMocks.setFactory(() => {
         setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           setTimeout(() => {
