@@ -6,9 +6,9 @@ Last updated: 2025-11-28
 
 | Metric          | Count     | Percentage |
 | --------------- | --------- | ---------- |
-| Vitest tests    | 1,700+    | ~20%       |
-| Jest tests      | 6,775     | ~80%       |
-| **Total tests** | **8,475** | 100%       |
+| Vitest tests    | 2,856     | ~33%       |
+| Jest tests      | 5,801     | ~67%       |
+| **Total tests** | **8,657** | 100%       |
 
 ## Migrated Directories (Vitest)
 
@@ -36,12 +36,12 @@ These directories have been fully migrated to Vitest and are listed in `vitest.c
 20. `test/config-schema.test.ts` - Config schema validation tests (12 tests)
 21. `test/tracing/` - Tracing tests (5 files, 38 tests) - top-level await with `vi.mocked()` for module mocking
 22. `test/util/` - Utility function tests (37 files, ~460 tests) - complex mocking including `vi.importActual()`, default exports, and `vi.doMock()` patterns
+23. `test/assertions/` - Assertion tests (46 files, ~500 tests) - complex `vi.hoisted()` mocking patterns, 4 tests skipped due to mock dependency chains
 
 ## Remaining Jest Directories
 
-These directories still run with Jest (~350 test files):
+These directories still run with Jest (~300 test files):
 
-- `test/assertions/`
 - `test/commands/`
 - `test/evaluator/`
 - `test/events/`
@@ -232,7 +232,6 @@ Recommended order for next migration batch (by complexity):
    - `test/events/`
 
 2. **Complex** - Large directories with heavy mocking:
-   - `test/assertions/`
    - `test/commands/`
    - `test/server/`
    - `test/evaluator/`
