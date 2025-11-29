@@ -13,7 +13,8 @@ export const ReconOutputSchema = {
     },
     features: {
       type: 'string',
-      description: 'Key features and capabilities the user can access. No file references.',
+      description:
+        'What can users accomplish with this LLM app? Describe user-facing capabilities (browse inventory, get recommendations, schedule appointments), NOT technical implementation (accepts JSON, proxies requests, enforces rate limits).',
     },
     industry: {
       type: 'string',
@@ -59,7 +60,8 @@ export const ReconOutputSchema = {
     },
     attackConstraints: {
       type: 'string',
-      description: 'Guardrails and safety mechanisms that attackers must bypass',
+      description:
+        "LLM behavioral guardrails attackers must bypass (stays in character, refuses certain topics, won't reveal internal info). NOT infrastructure security (auth, rate limits, JSON format).",
     },
     competitors: {
       type: 'string',

@@ -237,25 +237,29 @@ export function applicationDefinitionToPurpose(result: ReconResult): string {
   return sections.join('\n\n');
 }
 
+/** Plugin can be a string ID or an object with config */
+type PluginConfig = string | { id: string; config: Record<string, unknown> };
+
 /**
  * Determines appropriate plugins based on recon findings
+ * Returns plugins with configuration when needed (e.g., prompt-extraction with systemPrompt)
  */
-function suggestPluginsFromFindings(result: ReconResult): string[] {
-  const plugins = new Set<string>();
+function suggestPluginsFromFindings(result: ReconResult): PluginConfig[] {
+  const pluginIds = new Set<string>();
 
   // Start with any agent-suggested plugins (filtered for validity)
   if (result.suggestedPlugins) {
     const validSuggested = filterValidPlugins(result.suggestedPlugins);
-    validSuggested.forEach((p) => plugins.add(p));
+    validSuggested.forEach((p) => pluginIds.add(p));
   }
 
   // Add plugins based on sensitive data detection
   if (result.sensitiveDataTypes) {
     const data = result.sensitiveDataTypes.toLowerCase();
-    plugins.add('pii:direct');
-    plugins.add('pii:session');
+    pluginIds.add('pii:direct');
+    pluginIds.add('pii:session');
     if (data.includes('credit card') || data.includes('payment') || data.includes('financial')) {
-      plugins.add('pii:api-db');
+      pluginIds.add('pii:api-db');
     }
   }
 
@@ -263,7 +267,7 @@ function suggestPluginsFromFindings(result: ReconResult): string[] {
   if (result.connectedSystems) {
     const systems = result.connectedSystems.toLowerCase();
     if (systems.includes('database') || systems.includes('sql')) {
-      plugins.add('sql-injection');
+      pluginIds.add('sql-injection');
     }
     if (
       systems.includes('http') ||
@@ -271,10 +275,10 @@ function suggestPluginsFromFindings(result: ReconResult): string[] {
       systems.includes('webhook') ||
       systems.includes('external')
     ) {
-      plugins.add('ssrf');
+      pluginIds.add('ssrf');
     }
     if (systems.includes('shell') || systems.includes('command') || systems.includes('exec')) {
-      plugins.add('shell-injection');
+      pluginIds.add('shell-injection');
     }
   }
 
@@ -282,43 +286,58 @@ function suggestPluginsFromFindings(result: ReconResult): string[] {
   if (result.userTypes) {
     const users = result.userTypes.toLowerCase();
     if (users.includes('admin') || users.includes('role') || users.includes('permission')) {
-      plugins.add('rbac');
+      pluginIds.add('rbac');
     }
     if (users.includes('user') && (users.includes('admin') || users.includes('different'))) {
-      plugins.add('bola');
-      plugins.add('bfla');
+      pluginIds.add('bola');
+      pluginIds.add('bfla');
     }
   }
 
   // Add plugins based on discovered tools
   if (result.discoveredTools && result.discoveredTools.length > 0) {
-    plugins.add('excessive-agency');
-    plugins.add('tool-discovery');
+    pluginIds.add('excessive-agency');
+    pluginIds.add('tool-discovery');
   }
 
   // Add prompt security plugins for all LLM apps
-  plugins.add('prompt-extraction');
-  plugins.add('hijacking');
+  pluginIds.add('prompt-extraction');
+  pluginIds.add('hijacking');
 
   // Add basic harmful content plugins
-  plugins.add('harmful:violent-crime');
-  plugins.add('harmful:illegal-activities');
+  pluginIds.add('harmful:violent-crime');
+  pluginIds.add('harmful:illegal-activities');
 
   // Add hallucination for factual accuracy
-  plugins.add('hallucination');
+  pluginIds.add('hallucination');
 
   // Industry-specific plugins
   if (result.industry) {
     const industry = result.industry.toLowerCase();
     if (industry.includes('health') || industry.includes('medical')) {
-      plugins.add('harmful:specialized-advice');
+      pluginIds.add('harmful:specialized-advice');
     }
     if (industry.includes('finance') || industry.includes('banking')) {
-      plugins.add('harmful:specialized-advice');
+      pluginIds.add('harmful:specialized-advice');
     }
   }
 
-  return Array.from(plugins);
+  // Convert to plugin configs, adding configuration where needed
+  const plugins: PluginConfig[] = [];
+  for (const id of pluginIds) {
+    if (id === 'prompt-extraction' && result.systemPrompt) {
+      // Configure prompt-extraction with the discovered system prompt
+      // This allows the grader to detect if the actual prompt was leaked
+      plugins.push({
+        id: 'prompt-extraction',
+        config: { systemPrompt: result.systemPrompt },
+      });
+    } else {
+      plugins.push(id);
+    }
+  }
+
+  return plugins;
 }
 
 /**

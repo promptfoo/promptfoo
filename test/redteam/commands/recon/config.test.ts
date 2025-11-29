@@ -263,6 +263,42 @@ describe('buildRedteamConfig', () => {
     // Invalid plugins should be filtered
     expect(config.redteam?.plugins).not.toContain('invalid-plugin');
   });
+
+  it('should configure prompt-extraction with systemPrompt when discovered', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      systemPrompt: 'You are a helpful car dealership assistant.',
+    };
+    const config = buildRedteamConfig(result);
+
+    // Find the prompt-extraction plugin
+    const plugins = config.redteam?.plugins as Array<string | { id: string; config?: unknown }>;
+    const promptExtractionPlugin = plugins.find(
+      (p) => typeof p === 'object' && p.id === 'prompt-extraction',
+    );
+
+    expect(promptExtractionPlugin).toBeDefined();
+    expect(
+      (promptExtractionPlugin as { config: { systemPrompt: string } }).config.systemPrompt,
+    ).toBe('You are a helpful car dealership assistant.');
+  });
+
+  it('should use simple string for prompt-extraction when no systemPrompt', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      // systemPrompt not provided
+    };
+    const config = buildRedteamConfig(result);
+
+    // prompt-extraction should be a simple string, not an object
+    expect(config.redteam?.plugins).toContain('prompt-extraction');
+    // Verify it's not an object
+    const plugins = config.redteam?.plugins as Array<string | { id: string; config?: unknown }>;
+    const promptExtractionObject = plugins.find(
+      (p) => typeof p === 'object' && p.id === 'prompt-extraction',
+    );
+    expect(promptExtractionObject).toBeUndefined();
+  });
 });
 
 describe('isValidPlugin', () => {
