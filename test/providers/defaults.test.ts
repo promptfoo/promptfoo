@@ -73,6 +73,7 @@ describe('Provider override tests', () => {
     delete process.env.XAI_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.GITHUB_TOKEN;
+    delete process.env.VOYAGE_API_KEY;
     // Clear Azure env vars
     delete process.env.AZURE_OPENAI_API_KEY;
     delete process.env.AZURE_API_KEY;
@@ -868,6 +869,48 @@ describe('Provider override tests', () => {
 
       // Embedding should also use Mistral (same key works for both)
       expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
+    });
+
+    it('should use Voyage for embeddings when VOYAGE_API_KEY is set (Anthropic recommended)', async () => {
+      // Anthropic for completions (doesn't support embeddings)
+      // Voyage for embeddings (Anthropic's recommended embedding provider)
+      process.env.ANTHROPIC_API_KEY = 'test-anthropic';
+      process.env.VOYAGE_API_KEY = 'test-voyage';
+
+      const providers = await getDefaultProviders();
+
+      // Completion should use Anthropic
+      expect(providers.gradingProvider.id()).toContain('claude');
+
+      // Embedding should use Voyage (Anthropic recommends Voyage for embeddings)
+      expect(providers.embeddingProvider.id()).toBe('voyage:voyage-3.5');
+    });
+
+    it('should prefer OpenAI over Voyage for embeddings when both keys exist', async () => {
+      // When both OpenAI and Voyage keys exist, OpenAI has higher priority
+      process.env.OPENAI_API_KEY = 'test-openai';
+      process.env.VOYAGE_API_KEY = 'test-voyage';
+
+      const providers = await getDefaultProviders();
+
+      // OpenAI should win for both completion and embedding
+      expect(providers.gradingProvider.id()).toContain('gpt-4.1');
+      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+    });
+
+    it('should use Voyage for embeddings with any non-embedding completion provider', async () => {
+      // xAI for completions (doesn't support embeddings)
+      // Voyage for embeddings
+      process.env.XAI_API_KEY = 'test-xai';
+      process.env.VOYAGE_API_KEY = 'test-voyage';
+
+      const providers = await getDefaultProviders();
+
+      // Completion should use xAI
+      expect(providers.gradingProvider.id()).toBe('xai:grok-4-1-fast-reasoning');
+
+      // Embedding should use Voyage
+      expect(providers.embeddingProvider.id()).toBe('voyage:voyage-3.5');
     });
   });
 });

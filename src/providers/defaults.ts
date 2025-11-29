@@ -48,6 +48,7 @@ import {
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
   DefaultWebSearchProvider as OpenAiWebSearchProvider,
 } from './openai/defaults';
+import { VoyageEmbeddingProvider } from './voyage';
 import {
   DefaultGradingProvider as XAIGradingProvider,
   DefaultGradingJsonProvider as XAIGradingJsonProvider,
@@ -369,6 +370,10 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
  * Only includes providers that actually support embeddings.
  * Falls back to OpenAI if no embedding-capable provider is found.
  */
+// Default Voyage embedding model - voyage-3.5 offers balanced performance
+// Anthropic recommends Voyage for embeddings: https://docs.anthropic.com/en/docs/build-with-claude/embeddings
+const VoyageDefaultEmbeddingProvider = new VoyageEmbeddingProvider('voyage-3.5');
+
 const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
   {
     name: 'OpenAI',
@@ -379,6 +384,13 @@ const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
     name: 'Azure OpenAI',
     check: (env) => hasAzureCredentials(env),
     create: (env) => createAzureEmbeddingProvider(env),
+  },
+  {
+    // Voyage AI - Anthropic's recommended embedding provider
+    // Offers high-quality embeddings with domain-specific models available
+    name: 'Voyage',
+    check: (env) => hasCredential('VOYAGE_API_KEY', env),
+    create: () => VoyageDefaultEmbeddingProvider,
   },
   {
     name: 'Mistral',
@@ -433,9 +445,10 @@ export function setDefaultEmbeddingProviders(provider: ApiProvider | undefined):
  * Embedding Priority (only providers with embedding support):
  *  1. OpenAI      - OPENAI_API_KEY
  *  2. Azure       - AZURE_OPENAI_API_KEY + embedding deployment
- *  3. Mistral     - MISTRAL_API_KEY
- *  4. Vertex      - Google ADC (ambient)
- *  5. OpenAI      - Fallback (may fail without key)
+ *  3. Voyage      - VOYAGE_API_KEY (Anthropic's recommended embedding provider)
+ *  4. Mistral     - MISTRAL_API_KEY
+ *  5. Vertex      - Google ADC (ambient)
+ *  6. OpenAI      - Fallback (may fail without key)
  */
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
   // Select completion and embedding providers independently
