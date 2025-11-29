@@ -69,7 +69,7 @@ describe('dataset generation', () => {
       providers: [
         {
           id: () => 'test-provider',
-          callApi: vi.fn(),
+          callApi: vi.fn() as any,
         },
       ],
     };

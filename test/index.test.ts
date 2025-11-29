@@ -190,7 +190,7 @@ describe('evaluate function', () => {
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
     loadApiProviderSpy = vi.spyOn(providers, 'loadApiProvider').mockResolvedValue({
       id: () => 'mock-provider',
-      callApi: vi.fn(),
+      callApi: vi.fn() as any,
     });
   });
 
@@ -849,7 +849,7 @@ describe('evaluate with external defaultTest', () => {
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
     loadApiProviderSpy = vi.spyOn(providers, 'loadApiProvider').mockResolvedValue({
       id: () => 'mock-provider',
-      callApi: vi.fn(),
+      callApi: vi.fn() as any,
     });
 
     maybeLoadFromExternalFileSpy = vi.mocked(fileUtils.maybeLoadFromExternalFile);
