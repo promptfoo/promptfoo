@@ -1,7 +1,8 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Special test for METEOR assertion integration
-describe('METEOR assertion', () => {
+// Uses vi.resetModules() + dynamic imports which can be slow on Windows
+describe('METEOR assertion', { timeout: 15000 }, () => {
   beforeEach(() => {
     vi.resetModules();
   });
