@@ -322,11 +322,15 @@ function suggestPluginsFromFindings(result: ReconResult): string[] {
 }
 
 /**
- * Builds recommended strategies with proper configuration
+ * Builds recommended strategies based on application capabilities
+ *
+ * @param stateful - Whether the app supports multi-turn conversations
  */
-function buildStrategies(): Array<string | { id: string; config?: Record<string, unknown> }> {
-  return [
-    // Single-turn strategies
+function buildStrategies(
+  stateful: boolean,
+): Array<string | { id: string; config?: Record<string, unknown> }> {
+  const strategies: Array<string | { id: string; config?: Record<string, unknown> }> = [
+    // Single-turn strategies - always included
     'basic',
     {
       id: 'jailbreak:meta',
@@ -340,15 +344,36 @@ function buildStrategies(): Array<string | { id: string; config?: Record<string,
         // Composite combines multiple jailbreak techniques
       },
     },
-    // Multi-turn strategy for conversational attacks
-    {
-      id: 'jailbreak:hydra',
-      config: {
-        // Hydra uses multi-turn conversation to build trust then attack
-        maxTurns: 5,
-      },
-    },
   ];
+
+  // Multi-turn strategies - only for stateful/conversational apps
+  if (stateful) {
+    strategies.push(
+      {
+        id: 'jailbreak:hydra',
+        config: {
+          // Hydra uses multi-turn conversation to build trust then attack
+          maxTurns: 5,
+        },
+      },
+      {
+        id: 'crescendo',
+        config: {
+          // Crescendo gradually escalates requests across turns
+          maxTurns: 10,
+        },
+      },
+      {
+        id: 'goat',
+        config: {
+          // GOAT (Generative Offensive Agent Tester) for agentic attacks
+          maxTurns: 5,
+        },
+      },
+    );
+  }
+
+  return strategies;
 }
 
 /**
@@ -357,7 +382,7 @@ function buildStrategies(): Array<string | { id: string; config?: Record<string,
 export function buildRedteamConfig(result: ReconResult): Partial<UnifiedConfig> {
   const purpose = applicationDefinitionToPurpose(result);
   const plugins = suggestPluginsFromFindings(result);
-  const strategies = buildStrategies();
+  const strategies = buildStrategies(result.stateful ?? false);
 
   // Truncate purpose for description (first sentence or 100 chars)
   const purposeSummary = result.purpose.split('.')[0].trim();

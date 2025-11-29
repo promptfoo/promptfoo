@@ -180,12 +180,11 @@ describe('buildRedteamConfig', () => {
     expect(config.redteam?.plugins).toContain('harmful:illegal-activities');
   });
 
-  it('should include default strategies with proper configuration', () => {
-    const result: ReconResult = { purpose: 'Test' };
+  it('should include only single-turn strategies for stateless apps', () => {
+    const result: ReconResult = { purpose: 'Test', stateful: false };
     const config = buildRedteamConfig(result);
 
     expect(config.redteam?.strategies).toContain('basic');
-    // Check for jailbreak strategies with config objects
     const strategies = config.redteam?.strategies as Array<
       string | { id: string; config?: unknown }
     >;
@@ -193,14 +192,60 @@ describe('buildRedteamConfig', () => {
     const compositeStrategy = strategies.find(
       (s) => typeof s === 'object' && s.id === 'jailbreak:composite',
     );
+    // Multi-turn strategies should NOT be included for stateless apps
     const hydraStrategy = strategies.find(
       (s) => typeof s === 'object' && s.id === 'jailbreak:hydra',
     );
+    const crescendoStrategy = strategies.find((s) => typeof s === 'object' && s.id === 'crescendo');
+
+    expect(metaStrategy).toBeDefined();
+    expect(compositeStrategy).toBeDefined();
+    expect(hydraStrategy).toBeUndefined();
+    expect(crescendoStrategy).toBeUndefined();
+  });
+
+  it('should include multi-turn strategies for stateful apps', () => {
+    const result: ReconResult = { purpose: 'Test', stateful: true };
+    const config = buildRedteamConfig(result);
+
+    expect(config.redteam?.strategies).toContain('basic');
+    const strategies = config.redteam?.strategies as Array<
+      string | { id: string; config?: unknown }
+    >;
+    // Single-turn strategies should be included
+    const metaStrategy = strategies.find((s) => typeof s === 'object' && s.id === 'jailbreak:meta');
+    const compositeStrategy = strategies.find(
+      (s) => typeof s === 'object' && s.id === 'jailbreak:composite',
+    );
+    // Multi-turn strategies should be included for stateful apps
+    const hydraStrategy = strategies.find(
+      (s) => typeof s === 'object' && s.id === 'jailbreak:hydra',
+    );
+    const crescendoStrategy = strategies.find((s) => typeof s === 'object' && s.id === 'crescendo');
+    const goatStrategy = strategies.find((s) => typeof s === 'object' && s.id === 'goat');
 
     expect(metaStrategy).toBeDefined();
     expect(compositeStrategy).toBeDefined();
     expect(hydraStrategy).toBeDefined();
+    expect(crescendoStrategy).toBeDefined();
+    expect(goatStrategy).toBeDefined();
     expect((hydraStrategy as { config: { maxTurns: number } }).config.maxTurns).toBe(5);
+    expect((crescendoStrategy as { config: { maxTurns: number } }).config.maxTurns).toBe(10);
+  });
+
+  it('should default to single-turn strategies when stateful is undefined', () => {
+    const result: ReconResult = { purpose: 'Test' }; // stateful not set
+    const config = buildRedteamConfig(result);
+
+    const strategies = config.redteam?.strategies as Array<
+      string | { id: string; config?: unknown }
+    >;
+    const hydraStrategy = strategies.find(
+      (s) => typeof s === 'object' && s.id === 'jailbreak:hydra',
+    );
+
+    // Should default to stateless (no multi-turn strategies)
+    expect(hydraStrategy).toBeUndefined();
   });
 
   it('should filter out invalid plugins from suggestions', () => {

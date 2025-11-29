@@ -54,6 +54,10 @@ export interface ReconResult {
   suggestedPlugins?: string[];
   securityNotes?: string[];
   keyFiles?: string[];
+
+  // Conversation capability detection
+  /** Whether the application maintains state across conversation turns */
+  stateful?: boolean;
 }
 
 /**

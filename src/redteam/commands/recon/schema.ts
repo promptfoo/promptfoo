@@ -112,6 +112,11 @@ export const ReconOutputSchema = {
       items: { type: 'string' },
       description: 'Files reviewed during analysis',
     },
+    stateful: {
+      type: 'boolean',
+      description:
+        'True if the app maintains conversation state across multiple turns (chat history, session memory, multi-turn dialogue). False if each request is independent (single-turn, stateless API).',
+    },
   },
   required: [
     'purpose',
@@ -135,5 +140,6 @@ export const ReconOutputSchema = {
     'suggestedPlugins',
     'securityNotes',
     'keyFiles',
+    'stateful',
   ],
 };

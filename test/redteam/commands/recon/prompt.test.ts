@@ -59,6 +59,13 @@ describe('buildReconPrompt', () => {
     expect(prompt).toContain('NOT internal architecture');
   });
 
+  it('should include guidance on stateful detection for strategy selection', () => {
+    const prompt = buildReconPrompt('/tmp/notes.md');
+    expect(prompt).toContain('STATEFUL (multi-turn) or STATELESS (single-turn)');
+    expect(prompt).toContain('conversation history');
+    expect(prompt).toContain('stateful determines attack strategy selection');
+  });
+
   it('should include plugin suggestions', () => {
     const prompt = buildReconPrompt('/tmp/notes.md');
     expect(prompt).toContain('pii:direct');
