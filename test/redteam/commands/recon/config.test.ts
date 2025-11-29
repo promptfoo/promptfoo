@@ -1,6 +1,9 @@
 import {
   applicationDefinitionToPurpose,
   buildRedteamConfig,
+  isValidPlugin,
+  filterValidPlugins,
+  SUGGESTED_PLUGIN_LIST,
 } from '../../../../src/redteam/commands/recon/config';
 import type { ReconResult } from '../../../../src/redteam/commands/recon/types';
 
@@ -139,14 +142,15 @@ describe('buildRedteamConfig', () => {
     expect(config.redteam?.plugins).toContain('bfla');
   });
 
-  it('should add prompt-injection when tools discovered', () => {
+  it('should add excessive-agency when tools discovered', () => {
     const result: ReconResult = {
       purpose: 'Test',
       discoveredTools: [{ name: 'search', description: 'Search function' }],
     };
     const config = buildRedteamConfig(result);
 
-    expect(config.redteam?.plugins).toContain('prompt-injection');
+    expect(config.redteam?.plugins).toContain('excessive-agency');
+    expect(config.redteam?.plugins).toContain('tool-discovery');
   });
 
   it('should include entities when provided', () => {
@@ -176,12 +180,131 @@ describe('buildRedteamConfig', () => {
     expect(config.redteam?.plugins).toContain('harmful:illegal-activities');
   });
 
-  it('should include default strategies', () => {
+  it('should include default strategies with proper configuration', () => {
     const result: ReconResult = { purpose: 'Test' };
     const config = buildRedteamConfig(result);
 
     expect(config.redteam?.strategies).toContain('basic');
-    expect(config.redteam?.strategies).toContain('jailbreak');
-    expect(config.redteam?.strategies).toContain('prompt-injection');
+    // Check for jailbreak strategies with config objects
+    const strategies = config.redteam?.strategies as Array<
+      string | { id: string; config?: unknown }
+    >;
+    const metaStrategy = strategies.find((s) => typeof s === 'object' && s.id === 'jailbreak:meta');
+    const compositeStrategy = strategies.find(
+      (s) => typeof s === 'object' && s.id === 'jailbreak:composite',
+    );
+    const hydraStrategy = strategies.find(
+      (s) => typeof s === 'object' && s.id === 'jailbreak:hydra',
+    );
+
+    expect(metaStrategy).toBeDefined();
+    expect(compositeStrategy).toBeDefined();
+    expect(hydraStrategy).toBeDefined();
+    expect((hydraStrategy as { config: { maxTurns: number } }).config.maxTurns).toBe(5);
+  });
+
+  it('should filter out invalid plugins from suggestions', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      suggestedPlugins: ['pii:direct', 'prompt-injection', 'invalid-plugin', 'sql-injection'],
+    };
+    const config = buildRedteamConfig(result);
+
+    // Valid plugins should be included
+    expect(config.redteam?.plugins).toContain('pii:direct');
+    expect(config.redteam?.plugins).toContain('sql-injection');
+    // prompt-injection is a strategy, not a plugin - should be filtered
+    expect(config.redteam?.plugins).not.toContain('prompt-injection');
+    // Invalid plugins should be filtered
+    expect(config.redteam?.plugins).not.toContain('invalid-plugin');
+  });
+});
+
+describe('isValidPlugin', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should return true for valid base plugins', () => {
+    expect(isValidPlugin('contracts')).toBe(true);
+    expect(isValidPlugin('hallucination')).toBe(true);
+    expect(isValidPlugin('hijacking')).toBe(true);
+  });
+
+  it('should return true for valid PII plugins', () => {
+    expect(isValidPlugin('pii:direct')).toBe(true);
+    expect(isValidPlugin('pii:session')).toBe(true);
+    expect(isValidPlugin('pii:api-db')).toBe(true);
+  });
+
+  it('should return true for valid harmful plugins', () => {
+    expect(isValidPlugin('harmful:violent-crime')).toBe(true);
+    expect(isValidPlugin('harmful:hate')).toBe(true);
+    expect(isValidPlugin('harmful:self-harm')).toBe(true);
+  });
+
+  it('should return true for valid injection plugins', () => {
+    expect(isValidPlugin('sql-injection')).toBe(true);
+    expect(isValidPlugin('shell-injection')).toBe(true);
+    expect(isValidPlugin('ssrf')).toBe(true);
+  });
+
+  it('should return false for strategies mistaken as plugins', () => {
+    // These are strategies, NOT plugins
+    expect(isValidPlugin('prompt-injection')).toBe(false);
+    expect(isValidPlugin('jailbreak')).toBe(false);
+    expect(isValidPlugin('basic')).toBe(false);
+  });
+
+  it('should return false for invalid plugin names', () => {
+    expect(isValidPlugin('invalid-plugin')).toBe(false);
+    expect(isValidPlugin('made-up-plugin')).toBe(false);
+    expect(isValidPlugin('')).toBe(false);
+  });
+});
+
+describe('filterValidPlugins', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should return only valid plugins', () => {
+    const input = ['pii:direct', 'invalid', 'sql-injection', 'harmful:hate'];
+    const result = filterValidPlugins(input);
+
+    expect(result).toContain('pii:direct');
+    expect(result).toContain('sql-injection');
+    expect(result).toContain('harmful:hate');
+    expect(result).not.toContain('invalid');
+  });
+
+  it('should skip strategies commonly confused as plugins', () => {
+    const input = ['prompt-injection', 'jailbreak', 'basic', 'crescendo', 'goat', 'pii:direct'];
+    const result = filterValidPlugins(input);
+
+    expect(result).toEqual(['pii:direct']);
+  });
+
+  it('should return empty array for all invalid inputs', () => {
+    const input = ['invalid1', 'invalid2', 'prompt-injection'];
+    const result = filterValidPlugins(input);
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe('SUGGESTED_PLUGIN_LIST', () => {
+  it('should include major plugin categories', () => {
+    expect(SUGGESTED_PLUGIN_LIST).toContain('PII & Privacy');
+    expect(SUGGESTED_PLUGIN_LIST).toContain('Injection Attacks');
+    expect(SUGGESTED_PLUGIN_LIST).toContain('Prompt Security');
+    expect(SUGGESTED_PLUGIN_LIST).toContain('Harmful Content');
+  });
+
+  it('should include commonly used plugins', () => {
+    expect(SUGGESTED_PLUGIN_LIST).toContain('pii:direct');
+    expect(SUGGESTED_PLUGIN_LIST).toContain('sql-injection');
+    expect(SUGGESTED_PLUGIN_LIST).toContain('prompt-extraction');
+    expect(SUGGESTED_PLUGIN_LIST).toContain('harmful:violent-crime');
   });
 });

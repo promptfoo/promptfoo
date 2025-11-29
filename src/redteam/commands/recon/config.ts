@@ -1,5 +1,152 @@
 import type { UnifiedConfig } from '../../../types/index';
+import {
+  ALL_PLUGINS,
+  PII_PLUGINS,
+  HARM_PLUGINS,
+  ADDITIONAL_PLUGINS,
+  BASE_PLUGINS,
+  BIAS_PLUGINS,
+  MEDICAL_PLUGINS,
+  FINANCIAL_PLUGINS,
+  PHARMACY_PLUGINS,
+  INSURANCE_PLUGINS,
+  ECOMMERCE_PLUGINS,
+} from '../../constants/plugins';
 import type { ReconResult } from './types';
+
+/**
+ * Set of all valid plugin IDs for validation
+ */
+const VALID_PLUGIN_IDS = new Set<string>([
+  ...ALL_PLUGINS,
+  ...PII_PLUGINS,
+  ...Object.keys(HARM_PLUGINS),
+  ...ADDITIONAL_PLUGINS,
+  ...BASE_PLUGINS,
+  ...BIAS_PLUGINS,
+  ...MEDICAL_PLUGINS,
+  ...FINANCIAL_PLUGINS,
+  ...PHARMACY_PLUGINS,
+  ...INSURANCE_PLUGINS,
+  ...ECOMMERCE_PLUGINS,
+]);
+
+/**
+ * Common plugins the agent should suggest from, organized by category
+ */
+export const SUGGESTED_PLUGIN_LIST = `
+## Valid Plugin Categories
+
+### PII & Privacy
+- pii:direct - Direct PII disclosure
+- pii:session - Session-based PII leakage
+- pii:api-db - PII via API/database access
+- pii:social - Social engineering for PII
+
+### Authorization & Access Control
+- rbac - Role-based access control bypass
+- bola - Broken object-level authorization
+- bfla - Broken function-level authorization
+
+### Injection Attacks
+- sql-injection - SQL injection
+- shell-injection - Shell/command injection
+- ssrf - Server-side request forgery
+- indirect-prompt-injection - Indirect prompt injection
+
+### Prompt Security
+- prompt-extraction - System prompt extraction
+- hijacking - Conversation hijacking
+- system-prompt-override - Override system instructions
+
+### Harmful Content (harmful:*)
+- harmful:violent-crime
+- harmful:illegal-activities
+- harmful:hate
+- harmful:harassment-bullying
+- harmful:self-harm
+- harmful:sexual-content
+- harmful:child-exploitation
+- harmful:specialized-advice
+- harmful:privacy
+- harmful:misinformation-disinformation
+
+### Agent/Tool Security
+- excessive-agency - Agent exceeds intended scope
+- tool-discovery - Discover hidden tools/capabilities
+- cross-session-leak - Data leaks between sessions
+
+### Content Quality
+- hallucination - Factual inaccuracies
+- overreliance - Over-trusting user input
+- contracts - Violates stated policies/rules
+- imitation - Impersonation attacks
+
+### Industry-Specific
+- medical:* - Healthcare domain (anchoring-bias, hallucination, etc.)
+- financial:* - Finance domain (compliance-violation, data-leakage, etc.)
+- ecommerce:* - E-commerce (price-manipulation, pci-dss, etc.)
+
+### Other
+- competitors - Endorses competitors
+- debug-access - Accesses debug/admin features
+- politics - Political content
+- religion - Religious content
+`.trim();
+
+/**
+ * Validates if a plugin ID is valid
+ */
+export function isValidPlugin(pluginId: string): boolean {
+  // Direct match
+  if (VALID_PLUGIN_IDS.has(pluginId)) {
+    return true;
+  }
+  // Check for category prefixes (e.g., harmful:violent-crime)
+  const prefixes = [
+    'harmful:',
+    'pii:',
+    'bias:',
+    'medical:',
+    'financial:',
+    'pharmacy:',
+    'insurance:',
+    'ecommerce:',
+  ];
+  for (const prefix of prefixes) {
+    if (pluginId.startsWith(prefix)) {
+      return VALID_PLUGIN_IDS.has(pluginId);
+    }
+  }
+  return false;
+}
+
+/**
+ * Filters and validates suggested plugins, returning only valid ones
+ */
+export function filterValidPlugins(suggestedPlugins: string[]): string[] {
+  const valid: string[] = [];
+  const invalid: string[] = [];
+
+  for (const plugin of suggestedPlugins) {
+    // Skip strategies that are commonly confused as plugins
+    if (['prompt-injection', 'jailbreak', 'basic', 'crescendo', 'goat'].includes(plugin)) {
+      continue;
+    }
+    if (isValidPlugin(plugin)) {
+      valid.push(plugin);
+    } else {
+      invalid.push(plugin);
+    }
+  }
+
+  if (invalid.length > 0) {
+    // Log for debugging but don't fail
+    console.warn(`Filtered out invalid plugins: ${invalid.join(', ')}`);
+  }
+
+  return valid;
+}
 
 /**
  * Converts a ReconResult to the purpose string format expected by promptfoo redteam
@@ -98,15 +245,20 @@ export function applicationDefinitionToPurpose(result: ReconResult): string {
 function suggestPluginsFromFindings(result: ReconResult): string[] {
   const plugins = new Set<string>();
 
-  // Start with any agent-suggested plugins
+  // Start with any agent-suggested plugins (filtered for validity)
   if (result.suggestedPlugins) {
-    result.suggestedPlugins.forEach((p) => plugins.add(p));
+    const validSuggested = filterValidPlugins(result.suggestedPlugins);
+    validSuggested.forEach((p) => plugins.add(p));
   }
 
   // Add plugins based on sensitive data detection
   if (result.sensitiveDataTypes) {
+    const data = result.sensitiveDataTypes.toLowerCase();
     plugins.add('pii:direct');
     plugins.add('pii:session');
+    if (data.includes('credit card') || data.includes('payment') || data.includes('financial')) {
+      plugins.add('pii:api-db');
+    }
   }
 
   // Add plugins based on connected systems
@@ -115,29 +267,90 @@ function suggestPluginsFromFindings(result: ReconResult): string[] {
     if (systems.includes('database') || systems.includes('sql')) {
       plugins.add('sql-injection');
     }
-    if (systems.includes('http') || systems.includes('api') || systems.includes('webhook')) {
+    if (
+      systems.includes('http') ||
+      systems.includes('api') ||
+      systems.includes('webhook') ||
+      systems.includes('external')
+    ) {
       plugins.add('ssrf');
+    }
+    if (systems.includes('shell') || systems.includes('command') || systems.includes('exec')) {
+      plugins.add('shell-injection');
     }
   }
 
   // Add plugins based on user types (authorization testing)
-  if (result.userTypes && result.userTypes.toLowerCase().includes('admin')) {
-    plugins.add('rbac');
-    plugins.add('bola');
-    plugins.add('bfla');
+  if (result.userTypes) {
+    const users = result.userTypes.toLowerCase();
+    if (users.includes('admin') || users.includes('role') || users.includes('permission')) {
+      plugins.add('rbac');
+    }
+    if (users.includes('user') && (users.includes('admin') || users.includes('different'))) {
+      plugins.add('bola');
+      plugins.add('bfla');
+    }
   }
 
   // Add plugins based on discovered tools
   if (result.discoveredTools && result.discoveredTools.length > 0) {
-    plugins.add('prompt-injection');
+    plugins.add('excessive-agency');
     plugins.add('tool-discovery');
   }
 
-  // Add basic harmful content plugins for all applications
+  // Add prompt security plugins for all LLM apps
+  plugins.add('prompt-extraction');
+  plugins.add('hijacking');
+
+  // Add basic harmful content plugins
   plugins.add('harmful:violent-crime');
   plugins.add('harmful:illegal-activities');
 
+  // Add hallucination for factual accuracy
+  plugins.add('hallucination');
+
+  // Industry-specific plugins
+  if (result.industry) {
+    const industry = result.industry.toLowerCase();
+    if (industry.includes('health') || industry.includes('medical')) {
+      plugins.add('harmful:specialized-advice');
+    }
+    if (industry.includes('finance') || industry.includes('banking')) {
+      plugins.add('harmful:specialized-advice');
+    }
+  }
+
   return Array.from(plugins);
+}
+
+/**
+ * Builds recommended strategies with proper configuration
+ */
+function buildStrategies(): Array<string | { id: string; config?: Record<string, unknown> }> {
+  return [
+    // Single-turn strategies
+    'basic',
+    {
+      id: 'jailbreak:meta',
+      config: {
+        // Meta strategy iteratively refines jailbreak attempts
+      },
+    },
+    {
+      id: 'jailbreak:composite',
+      config: {
+        // Composite combines multiple jailbreak techniques
+      },
+    },
+    // Multi-turn strategy for conversational attacks
+    {
+      id: 'jailbreak:hydra',
+      config: {
+        // Hydra uses multi-turn conversation to build trust then attack
+        maxTurns: 5,
+      },
+    },
+  ];
 }
 
 /**
@@ -146,6 +359,7 @@ function suggestPluginsFromFindings(result: ReconResult): string[] {
 export function buildRedteamConfig(result: ReconResult): Partial<UnifiedConfig> {
   const purpose = applicationDefinitionToPurpose(result);
   const plugins = suggestPluginsFromFindings(result);
+  const strategies = buildStrategies();
 
   // Truncate purpose for description (first sentence or 100 chars)
   const purposeSummary = result.purpose.split('.')[0].trim();
@@ -172,9 +386,8 @@ export function buildRedteamConfig(result: ReconResult): Partial<UnifiedConfig> 
 
     redteam: {
       purpose,
-      // Plugins are strings that will be validated by the schema when the config is loaded
       plugins: plugins as any,
-      strategies: ['basic', 'jailbreak', 'prompt-injection'] as any,
+      strategies: strategies as any,
       numTests: 5,
     },
   };

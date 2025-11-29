@@ -5,77 +5,82 @@ export const ReconOutputSchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    // Core ApplicationDefinition fields
+    // Core ApplicationDefinition fields - NO FILE REFERENCES in these
     purpose: {
       type: 'string',
-      description: 'Main purpose of the application (1-3 sentences)',
+      description:
+        'Main purpose of the application (1-3 sentences). Write naturally without file references.',
     },
     features: {
       type: 'string',
-      description: 'Key features and capabilities',
+      description: 'Key features and capabilities the user can access. No file references.',
     },
     industry: {
       type: 'string',
-      description: 'Industry/domain (e.g., healthcare, finance, customer service)',
+      description: 'Industry/domain (e.g., healthcare, finance, automotive, customer service)',
     },
     systemPrompt: {
       type: 'string',
-      description: 'The LLM system prompt if found in code (exact text)',
+      description: 'The LLM system prompt if found (exact text, no file path needed)',
     },
     hasAccessTo: {
       type: 'string',
-      description: 'Systems, data, and tools the application CAN access',
+      description:
+        'Data and capabilities the LLM can access (databases, APIs, tools). No file references.',
     },
     doesNotHaveAccessTo: {
       type: 'string',
-      description: 'Explicit restrictions on what the app cannot access',
+      description: 'What the app explicitly cannot do or access. No file references.',
     },
     userTypes: {
       type: 'string',
-      description: 'Different user roles and their permission levels',
+      description:
+        'User roles that interact with the app (customers, admins, etc.) and their permissions',
     },
     securityRequirements: {
       type: 'string',
-      description: 'Security and compliance requirements identified',
+      description: 'Compliance requirements (HIPAA, PCI, etc.) and security policies',
     },
     sensitiveDataTypes: {
       type: 'string',
-      description: 'Types of sensitive/PII data handled (DO NOT include actual values)',
+      description: 'Types of sensitive data handled (PII, financial, health). NO actual values.',
     },
     exampleIdentifiers: {
       type: 'string',
-      description: 'Example data formats found (e.g., user ID patterns, account number formats)',
+      description: 'Data format examples (ID patterns, account formats) for realistic test data',
     },
     criticalActions: {
       type: 'string',
-      description: 'High-risk operations the app can perform',
+      description: 'High-risk operations: payments, data deletion, external API calls, etc.',
     },
     forbiddenTopics: {
       type: 'string',
-      description: 'Topics/content the app should refuse to discuss',
+      description: 'Topics the app should refuse: competitor endorsement, harmful content, etc.',
     },
     attackConstraints: {
       type: 'string',
-      description: 'Guardrails, rules, and safety mechanisms identified',
+      description: 'Guardrails and safety mechanisms that attackers must bypass',
     },
     competitors: {
       type: 'string',
-      description: 'Competitor names found in code',
+      description: 'Competitor names the app should not endorse (for social engineering tests)',
     },
     connectedSystems: {
       type: 'string',
-      description: 'External systems and APIs the app integrates with',
+      description:
+        'External tools/APIs the LLM can invoke (NOT internal architecture). E.g., "inventory database, payment API, scheduling system"',
     },
     redteamUser: {
       type: 'string',
-      description: 'Typical user persona based on code analysis',
+      description:
+        'Persona of actual app user (NOT security tester). E.g., "A customer shopping for a car" or "An employee checking benefits"',
     },
 
-    // Additional recon-specific fields
+    // Additional recon-specific fields - file references OK here
     entities: {
       type: 'array',
       items: { type: 'string' },
-      description: 'Named entities relevant to testing (company names, product names, etc.)',
+      description: 'Company names, product names, people for realistic attack scenarios',
     },
     discoveredTools: {
       type: 'array',
@@ -90,22 +95,22 @@ export const ReconOutputSchema = {
         },
         required: ['name', 'description', 'file', 'parameters'],
       },
-      description: 'LLM tools/functions discovered in the codebase',
+      description: 'LLM-callable tools/functions (attack vectors). File refs OK here.',
     },
     suggestedPlugins: {
       type: 'array',
       items: { type: 'string' },
-      description: 'Recommended redteam plugins based on findings',
+      description: 'Recommended redteam plugins based on attack surface',
     },
     securityNotes: {
       type: 'array',
       items: { type: 'string' },
-      description: 'Security observations and potential vulnerabilities',
+      description: 'Internal notes on vulnerabilities. File references OK here.',
     },
     keyFiles: {
       type: 'array',
       items: { type: 'string' },
-      description: 'Important files reviewed during analysis',
+      description: 'Files reviewed during analysis',
     },
   },
   required: [

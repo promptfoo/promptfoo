@@ -28,11 +28,10 @@ describe('buildReconPrompt', () => {
 
   it('should include analysis instructions', () => {
     const prompt = buildReconPrompt('/tmp/notes.md');
-    expect(prompt).toContain('Phase 1: High-Level Understanding');
-    expect(prompt).toContain('Phase 2: LLM/AI Integration Analysis');
-    expect(prompt).toContain('Phase 3: Security Boundary Analysis');
-    expect(prompt).toContain('Phase 4: External Research');
-    expect(prompt).toContain('Phase 5: Artifact Extraction');
+    expect(prompt).toContain('Phase 1: Application Understanding');
+    expect(prompt).toContain('Phase 2: LLM Integration Discovery');
+    expect(prompt).toContain('Phase 3: Attack Surface Mapping');
+    expect(prompt).toContain('Phase 4: Entity Extraction');
   });
 
   it('should include tool instructions', () => {
@@ -41,17 +40,32 @@ describe('buildReconPrompt', () => {
     expect(prompt).toContain('WebFetch, WebSearch');
   });
 
-  it('should include secret handling instructions', () => {
+  it('should include output rules for blackbox perspective', () => {
     const prompt = buildReconPrompt('/tmp/notes.md');
-    expect(prompt).toContain('CRITICAL: Secret Handling');
-    expect(prompt).toContain('DO NOT include the actual secret values');
+    expect(prompt).toContain('CRITICAL OUTPUT RULES');
+    expect(prompt).toContain('NO FILE REFERENCES in descriptive fields');
+    expect(prompt).toContain('NO SECRET VALUES');
+  });
+
+  it('should include guidance on redteamUser persona', () => {
+    const prompt = buildReconPrompt('/tmp/notes.md');
+    expect(prompt).toContain("redteamUser should be the APPLICATION'S user");
+    expect(prompt).toContain('NOT security tester');
+  });
+
+  it('should include guidance on connectedSystems', () => {
+    const prompt = buildReconPrompt('/tmp/notes.md');
+    expect(prompt).toContain('connectedSystems should be LLM-accessible tools');
+    expect(prompt).toContain('NOT internal architecture');
   });
 
   it('should include plugin suggestions', () => {
     const prompt = buildReconPrompt('/tmp/notes.md');
     expect(prompt).toContain('pii:direct');
     expect(prompt).toContain('sql-injection');
-    expect(prompt).toContain('prompt-injection');
+    expect(prompt).toContain('prompt-extraction');
+    // Verify strategies are explicitly NOT listed as plugins
+    expect(prompt).toContain('prompt-injection (this is a STRATEGY, not a plugin)');
   });
 
   it('should include output schema', () => {
@@ -83,5 +97,10 @@ describe('DEFAULT_EXCLUSIONS', () => {
 
   it('should exclude git directory', () => {
     expect(DEFAULT_EXCLUSIONS).toContain('.git/**');
+  });
+
+  it('should exclude promptfoo config files', () => {
+    expect(DEFAULT_EXCLUSIONS).toContain('promptfooconfig.yaml');
+    expect(DEFAULT_EXCLUSIONS).toContain('redteam.yaml');
   });
 });
