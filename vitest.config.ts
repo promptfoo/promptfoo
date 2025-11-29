@@ -19,6 +19,13 @@ export default defineConfig({
       'test/progress/**/*.test.ts',
       'test/types/**/*.test.ts',
       'test/providers/xai/**/*.test.ts',
+      'test/prompts/**/*.test.ts',
+      'test/python/**/*.test.ts',
+      'test/logger.test.ts',
+      'test/cache.test.ts',
+      'test/config-schema.test.ts',
+      'test/tracing/**/*.test.ts',
+      'test/util/**/*.test.ts',
     ],
     // Exclude integration tests
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],

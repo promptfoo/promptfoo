@@ -1,8 +1,9 @@
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { sanitizeBody, sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
 
 // Mock console methods to prevent test noise
-const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 afterEach(() => {
   consoleErrorSpy.mockClear();
@@ -699,7 +700,7 @@ describe('sanitizeObject', () => {
     it('should handle errors gracefully with throwOnError false', () => {
       const input = { key: 'value' };
       // Mock safeStringify to throw
-      jest.spyOn(JSON, 'parse').mockImplementationOnce(() => {
+      vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
         throw new Error('Parse error');
       });
 
@@ -709,7 +710,7 @@ describe('sanitizeObject', () => {
 
     it('should throw errors when throwOnError is true', () => {
       const input = { key: 'value' };
-      jest.spyOn(JSON, 'parse').mockImplementationOnce(() => {
+      vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
         throw new Error('Parse error');
       });
 
@@ -718,7 +719,7 @@ describe('sanitizeObject', () => {
 
     it('should log context in error messages', () => {
       const input = { key: 'value' };
-      jest.spyOn(JSON, 'parse').mockImplementationOnce(() => {
+      vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
         throw new Error('Parse error');
       });
 

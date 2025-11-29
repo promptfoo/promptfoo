@@ -1916,13 +1916,38 @@ describe('util', () => {
     });
 
     it('should fall back to Google Auth Library when no config or env vars', async () => {
-      const { resolveProjectId } = await import('../../../src/providers/google/util');
+      // Clear any environment variables that could interfere
+      const originalVertexProjectId = process.env.VERTEX_PROJECT_ID;
+      const originalGoogleProjectId = process.env.GOOGLE_PROJECT_ID;
+      delete process.env.VERTEX_PROJECT_ID;
+      delete process.env.GOOGLE_PROJECT_ID;
 
-      const config = {};
-      const env = {};
+      try {
+        let result: string = '';
+        await jest.isolateModulesAsync(async () => {
+          jest.doMock('google-auth-library', () => ({
+            GoogleAuth: jest.fn().mockImplementation(() => ({
+              getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+              getProjectId: jest.fn().mockResolvedValue(mockProjectId),
+            })),
+          }));
+          const { resolveProjectId } = await import('../../../src/providers/google/util');
 
-      const result = await resolveProjectId(config, env);
-      expect(result).toBe(mockProjectId);
+          const config = {};
+          const env = {};
+
+          result = await resolveProjectId(config, env);
+        });
+        expect(result).toBe(mockProjectId);
+      } finally {
+        // Restore environment variables
+        if (originalVertexProjectId !== undefined) {
+          process.env.VERTEX_PROJECT_ID = originalVertexProjectId;
+        }
+        if (originalGoogleProjectId !== undefined) {
+          process.env.GOOGLE_PROJECT_ID = originalGoogleProjectId;
+        }
+      }
     });
 
     it('should handle Google Auth Library getProjectId failure gracefully', async () => {
@@ -1938,7 +1963,7 @@ describe('util', () => {
           .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
       };
       jest.doMock('google-auth-library', () => ({
-        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth),
       }));
 
       const { resolveProjectId } = await import('../../../src/providers/google/util');
@@ -1959,31 +1984,49 @@ describe('util', () => {
     });
 
     it('should return empty string when all sources fail', async () => {
-      // Reset modules to clear cached auth
-      jest.resetModules();
+      // Clear any environment variables that could interfere
+      const originalVertexProjectId = process.env.VERTEX_PROJECT_ID;
+      const originalGoogleProjectId = process.env.GOOGLE_PROJECT_ID;
+      delete process.env.VERTEX_PROJECT_ID;
+      delete process.env.GOOGLE_PROJECT_ID;
 
-      // Mock Google Auth Library where getProjectId throws an error
-      const mockAuth = {
-        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
-        getProjectId: jest
-          .fn()
-          .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
-      };
-      jest.doMock('google-auth-library', () => ({
-        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
-      }));
+      try {
+        let result: string = '';
+        const mockAuth = {
+          getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+          getProjectId: jest
+            .fn()
+            .mockRejectedValue(
+              new Error('Unable to detect a Project Id in the current environment'),
+            ),
+        };
 
-      const { resolveProjectId } = await import('../../../src/providers/google/util');
+        await jest.isolateModulesAsync(async () => {
+          jest.doMock('google-auth-library', () => ({
+            GoogleAuth: jest.fn().mockImplementation(() => mockAuth),
+          }));
 
-      // Test that when no projectId is available anywhere, we get empty string
-      const config = {};
-      const env = {};
+          const { resolveProjectId } = await import('../../../src/providers/google/util');
 
-      const result = await resolveProjectId(config, env);
-      expect(result).toBe('');
+          // Test that when no projectId is available anywhere, we get empty string
+          const config = {};
+          const env = {};
 
-      // Verify that getProjectId was called but failed gracefully
-      expect(mockAuth.getProjectId).toHaveBeenCalled();
+          result = await resolveProjectId(config, env);
+        });
+
+        expect(result).toBe('');
+        // Verify that getProjectId was called but failed gracefully
+        expect(mockAuth.getProjectId).toHaveBeenCalled();
+      } finally {
+        // Restore environment variables
+        if (originalVertexProjectId !== undefined) {
+          process.env.VERTEX_PROJECT_ID = originalVertexProjectId;
+        }
+        if (originalGoogleProjectId !== undefined) {
+          process.env.GOOGLE_PROJECT_ID = originalGoogleProjectId;
+        }
+      }
     });
   });
 });

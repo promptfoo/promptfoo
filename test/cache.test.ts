@@ -1,4 +1,14 @@
 import fs from 'fs';
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from 'vitest';
 
 import {
   clearCache,
@@ -9,26 +19,25 @@ import {
 } from '../src/cache';
 import { fetchWithRetries } from '../src/util/fetch/index';
 
-jest.mock('../src/util/config/manage', () => ({
-  getConfigDirectoryPath: jest.fn().mockReturnValue('/mock/config/path'),
+vi.mock('../src/util/config/manage', () => ({
+  getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/path'),
 }));
 
 // Mock fetchWithRetries to return proper Response objects
-jest.mock('../src/util/fetch/index', () => ({
-  fetchWithRetries: jest.fn(),
+vi.mock('../src/util/fetch/index', () => ({
+  fetchWithRetries: vi.fn(),
 }));
 
 // Mock cache-manager-fs-hash to prevent Windows lockfile errors
-jest.mock('cache-manager-fs-hash', () => ({
-  __esModule: true,
+vi.mock('cache-manager-fs-hash', () => ({
   default: 'mocked-fs-store',
 }));
 
-const mockFetchWithRetries = jest.mocked(fetchWithRetries);
+const mockFetchWithRetries = vi.mocked(fetchWithRetries);
 
 // Mock cache-manager
-jest.mock('cache-manager', () => ({
-  caching: jest.fn().mockImplementation(({ store }) => {
+vi.mock('cache-manager', () => {
+  const cachingMock = vi.fn().mockImplementation(({ store }) => {
     const cache = new Map();
     // Handle both string 'memory' and any other value (including modules) as fs-hash
     const storeName = store === 'memory' ? 'memory' : 'fs-hash';
@@ -36,20 +45,20 @@ jest.mock('cache-manager', () => ({
       store: {
         name: storeName,
       },
-      get: jest.fn().mockImplementation((key) => cache.get(key)),
-      set: jest.fn().mockImplementation((key, value) => {
+      get: vi.fn().mockImplementation((key) => cache.get(key)),
+      set: vi.fn().mockImplementation((key, value) => {
         cache.set(key, value);
         return Promise.resolve();
       }),
-      del: jest.fn().mockImplementation((key) => {
+      del: vi.fn().mockImplementation((key) => {
         cache.delete(key);
         return Promise.resolve();
       }),
-      reset: jest.fn().mockImplementation(() => {
+      reset: vi.fn().mockImplementation(() => {
         cache.clear();
         return Promise.resolve();
       }),
-      wrap: jest.fn().mockImplementation(async (key, fn) => {
+      wrap: vi.fn().mockImplementation(async (key, fn) => {
         const existing = cache.get(key);
         if (existing) {
           return existing;
@@ -59,8 +68,12 @@ jest.mock('cache-manager', () => ({
         return value;
       }),
     };
-  }),
-}));
+  });
+  return {
+    default: { caching: cachingMock },
+    caching: cachingMock,
+  };
+});
 
 const mockFetchWithRetriesResponse = (
   ok: boolean,
@@ -83,16 +96,16 @@ const mockFetchWithRetriesResponse = (
 
 describe('cache configuration', () => {
   const originalEnv = process.env;
-  let mkdirSyncMock: jest.SpyInstance;
-  let existsSyncMock: jest.SpyInstance;
+  let mkdirSyncMock: MockInstance;
+  let existsSyncMock: MockInstance;
 
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
     process.env = { ...originalEnv };
     // Clear cache type override from test setup
     delete process.env.PROMPTFOO_CACHE_TYPE;
-    mkdirSyncMock = jest.spyOn(fs, 'mkdirSync').mockImplementation();
-    existsSyncMock = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+    mkdirSyncMock = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
+    existsSyncMock = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -149,14 +162,14 @@ describe('fetchWithCache', () => {
   const response = { data: 'test data' };
 
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
     mockFetchWithRetries.mockReset();
     clearCache();
     enableCache();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   afterAll(() => {
@@ -249,7 +262,7 @@ describe('fetchWithCache', () => {
     });
 
     it('should handle request timeout', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       const mockTimeoutPromise = new Promise((resolve) => {
         setTimeout(() => resolve(mockFetchWithRetriesResponse(true, response)), 2000);
       });
@@ -261,7 +274,7 @@ describe('fetchWithCache', () => {
         Promise.race([
           fetchPromise,
           new Promise((_, reject) => {
-            jest.advanceTimersByTime(150);
+            vi.advanceTimersByTime(150);
             reject(new Error('timeout'));
           }),
         ]),
