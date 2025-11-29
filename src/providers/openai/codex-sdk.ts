@@ -110,6 +110,31 @@ export interface OpenAICodexSDKConfig {
    * Enable streaming events (default: false for simplicity)
    */
   enable_streaming?: boolean;
+
+  /**
+   * Callback for streaming events (requires enable_streaming: true)
+   * Called with each event during execution for progress updates
+   */
+  on_event?: (event: CodexStreamEvent) => void;
+}
+
+/**
+ * Streaming event from Codex SDK for progress tracking
+ */
+export interface CodexStreamEvent {
+  type: 'item.started' | 'item.completed' | 'item.updated' | 'turn.started' | 'turn.completed';
+  item?: {
+    type: string;
+    /** For command execution items */
+    call?: { command?: string };
+    /** For file change items */
+    path?: string;
+    /** For MCP tool calls */
+    tool?: string;
+    server?: string;
+    /** For agent messages */
+    text?: string;
+  };
 }
 
 /**
@@ -371,6 +396,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const { events } = await thread.runStreamed(prompt, runOptions);
     const items: any[] = [];
     let usage: any = undefined;
+    const onEvent = this.config.on_event;
 
     for await (const event of events) {
       // Check abort signal
@@ -378,7 +404,19 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         throw new Error('AbortError');
       }
 
+      // Call event callback if provided
+      if (onEvent) {
+        try {
+          onEvent(event as CodexStreamEvent);
+        } catch (err) {
+          logger.debug('Error in on_event callback', { err });
+        }
+      }
+
       switch (event.type) {
+        case 'item.started':
+          logger.debug('Codex item started', { item: event.item });
+          break;
         case 'item.completed':
           items.push(event.item);
           logger.debug('Codex item completed', { item: event.item });

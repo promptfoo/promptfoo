@@ -13,6 +13,7 @@ import {
   selectProvider,
   createOpenAIReconProvider,
   createAnthropicReconProvider,
+  type ReconProgressCallback,
 } from './providers';
 import { createScratchpad } from './scratchpad';
 import type { ReconOptions, ReconResult } from './types';
@@ -41,18 +42,24 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
   const providerChoice = selectProvider(options.provider);
   logger.info(`Provider: ${chalk.cyan(providerChoice.type)} (${providerChoice.model})`);
 
-  // Create the appropriate provider
+  // Create the appropriate provider with progress callback
   const modelOverride = options.model || providerChoice.model;
-  const provider =
-    providerChoice.type === 'openai'
-      ? await createOpenAIReconProvider(directory, scratchpad, modelOverride)
-      : await createAnthropicReconProvider(directory, scratchpad, modelOverride);
-
-  // Build the analysis prompt
-  const prompt = buildReconPrompt(scratchpad.path, options.exclude);
 
   // Run analysis with spinner
   const spinner = ora('Analyzing codebase...').start();
+
+  // Progress callback updates the spinner text
+  const onProgress: ReconProgressCallback = (event) => {
+    spinner.text = event.message;
+  };
+
+  const provider =
+    providerChoice.type === 'openai'
+      ? await createOpenAIReconProvider(directory, scratchpad, modelOverride, onProgress)
+      : await createAnthropicReconProvider(directory, scratchpad, modelOverride, onProgress);
+
+  // Build the analysis prompt
+  const prompt = buildReconPrompt(scratchpad.path, options.exclude);
 
   try {
     const result = await provider.analyze(directory, prompt);
