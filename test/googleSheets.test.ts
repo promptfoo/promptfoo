@@ -7,7 +7,7 @@ import {
   writeCsvToGoogleSheet,
 } from '../src/googleSheets';
 import logger from '../src/logger';
-import { fetchWithProxy } from '../src/util/fetch/index.ts';
+import { fetchWithProxy } from '../src/util/fetch';
 import { createMockResponse } from './util/utils';
 
 import type { CsvRow } from '../src/types/index';
@@ -22,7 +22,7 @@ interface MockSpreadsheets {
   batchUpdate: Mock;
 }
 
-vi.mock('../src/util/fetch/index.ts', () => ({
+vi.mock('../src/util/fetch', () => ({
   fetchWithProxy: vi.fn(),
 }));
 
