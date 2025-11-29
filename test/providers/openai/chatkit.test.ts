@@ -38,7 +38,8 @@ describe('OpenAiChatKitProvider', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    // Use clearAllMocks instead of resetAllMocks to preserve mock implementations
+    jest.clearAllMocks();
     enableCache();
   });
 
