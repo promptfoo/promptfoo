@@ -21,6 +21,7 @@ interface PooledPage {
   page: Page;
   ready: boolean;
   inUse: boolean;
+  templateVersion: number;
 }
 
 interface ChatKitPoolConfig {
@@ -43,6 +44,7 @@ export class ChatKitBrowserPool {
   private waitQueue: Array<(page: PooledPage) => void> = [];
   private config: ChatKitPoolConfig;
   private htmlTemplate: string = '';
+  private templateVersion: number = 0;
   private initialized: boolean = false;
   private initPromise: Promise<void> | null = null;
 
@@ -80,7 +82,14 @@ export class ChatKitBrowserPool {
    * Set the HTML template for ChatKit pages
    */
   setHtmlTemplate(html: string): void {
-    this.htmlTemplate = html;
+    if (html !== this.htmlTemplate) {
+      this.htmlTemplate = html;
+      this.templateVersion += 1;
+      // Mark pages as needing refresh to ensure new template is loaded
+      for (const page of this.pages) {
+        page.ready = false;
+      }
+    }
   }
 
   /**
@@ -147,6 +156,11 @@ export class ChatKitBrowserPool {
     // Try to find an available page
     const available = this.pages.find((p) => !p.inUse && p.ready);
     if (available) {
+      // Ensure the page matches the current template/configuration
+      if (available.templateVersion !== this.templateVersion) {
+        await this.refreshPooledPage(available);
+      }
+
       available.inUse = true;
       logger.debug('[ChatKitPool] Acquired existing page', {
         poolSize: this.pages.length,
@@ -184,11 +198,7 @@ export class ChatKitBrowserPool {
 
     // Reset the page for next use by reloading
     try {
-      await pooledPage.page.reload({ waitUntil: 'domcontentloaded' });
-      await pooledPage.page.waitForFunction(() => (window as any).__state?.ready === true, {
-        timeout: 30000,
-      });
-      pooledPage.ready = true;
+      await this.refreshPooledPage(pooledPage);
     } catch (error) {
       logger.warn('[ChatKitPool] Failed to reset page, recreating', { error });
       // Page is broken, remove and recreate
@@ -244,7 +254,17 @@ export class ChatKitBrowserPool {
       page,
       ready: true,
       inUse: false,
+      templateVersion: this.templateVersion,
     };
+  }
+
+  private async refreshPooledPage(pooledPage: PooledPage): Promise<void> {
+    await pooledPage.page.reload({ waitUntil: 'domcontentloaded' });
+    await pooledPage.page.waitForFunction(() => (window as any).__state?.ready === true, {
+      timeout: 30000,
+    });
+    pooledPage.templateVersion = this.templateVersion;
+    pooledPage.ready = true;
   }
 
   /**
