@@ -1,23 +1,24 @@
 ---
 sidebar_label: Groq
-description: Configure Groq's ultra-fast LLM inference API with Llama-70b and vision models for high-performance testing and evaluation with OpenAI-compatible endpoints
+description: Configure Groq's ultra-fast LLM inference API with Llama 4, GPT-OSS reasoning models, and Kimi K2 for high-performance testing and evaluation
 ---
 
 # Groq
 
 [Groq](https://wow.groq.com) is an extremely fast inference API compatible with all the options provided by Promptfoo's [OpenAI provider](/docs/providers/openai/). See openai specific documentation for configuration details.
 
-Groq supports reasoning models (OpenAI GPT-OSS and Deepseek R1-Llama-70b), in addition to models with tool use, vision capabilities, and multi-modal inputs.
+Groq offers access to the latest models including **Llama 4** (preview), **GPT-OSS reasoning models**, **Kimi K2** (262k context), and **Qwen 3**, in addition to production-ready Llama 3.3 models with tool use and vision capabilities.
 
 ## Quick Reference
 
-| Feature          | Models                                | Provider Prefix   | Reasoning Control   | Built-in Tools   |
-| ---------------- | ------------------------------------- | ----------------- | ------------------- | ---------------- |
-| Reasoning Models | `openai/gpt-oss-*`, `qwen/qwen3-32b`  | `groq:`           | `include_reasoning` | `browser_search` |
-| Reasoning Models | `deepseek-r1-*`                       | `groq:`           | `reasoning_format`  | None             |
-| Compound Models  | `groq/compound`, `groq/compound-mini` | `groq:`           | `reasoning_format`  | Automatic (all)  |
-| Standard Models  | `llama-3.3-*`, `llama-3.1-*`          | `groq:`           | N/A                 | Manual config    |
-| Responses API    | All reasoning models                  | `groq:responses:` | `reasoning.effort`  | Varies by model  |
+| Feature           | Models                                          | Provider Prefix   | Reasoning Control   | Built-in Tools   |
+| ----------------- | ----------------------------------------------- | ----------------- | ------------------- | ---------------- |
+| Llama 4 (Preview) | `meta-llama/llama-4-maverick-17b-128e-instruct` | `groq:`           | N/A                 | Manual config    |
+| Kimi K2 (Preview) | `moonshotai/kimi-k2-instruct-0905` (262k ctx)   | `groq:`           | N/A                 | Manual config    |
+| Reasoning Models  | `openai/gpt-oss-120b`, `qwen/qwen3-32b`         | `groq:`           | `include_reasoning` | `browser_search` |
+| Compound Models   | `groq/compound`, `groq/compound-mini`           | `groq:`           | `reasoning_format`  | Automatic (all)  |
+| Standard Models   | `llama-3.3-70b-versatile`                       | `groq:`           | N/A                 | Manual config    |
+| Responses API     | All reasoning models                            | `groq:responses:` | `reasoning.effort`  | Varies by model  |
 
 **Key Differences:**
 
@@ -79,27 +80,57 @@ Key configuration options:
 
 ## Supported Models
 
-Groq supports a variety of models, including:
+Groq supports a variety of models. Here are the most capable options:
 
-### Production Models
+### Preview Models (Latest)
 
-- **llama-3.3-70b-versatile** – Developer: Meta, Context Window: 131k tokens, Max Output Tokens: 32,768
-- **llama-3.1-8b-instant** – Developer: Meta, Context Window: 131k tokens, Max Output Tokens: 131,072
-- **meta-llama/llama-guard-4-12b** – Developer: Meta, Context Window: 131k tokens, Max Output Tokens: 1,024
-- **openai/gpt-oss-120b** – Developer: OpenAI, Context Window: 131k tokens, Max Output Tokens: 65,536 (Reasoning model)
-- **openai/gpt-oss-20b** – Developer: OpenAI, Context Window: 131k tokens, Max Output Tokens: 65,536 (Reasoning model)
-- **whisper-large-v3** – Developer: OpenAI (Speech to Text)
-- **whisper-large-v3-turbo** – Developer: OpenAI (Speech to Text)
+These are the newest and most capable models. Preview models are intended for evaluation and may be discontinued at short notice.
 
-### Preview Models
+- **meta-llama/llama-4-maverick-17b-128e-instruct** – Meta's latest Llama 4, Context: 131k, Output: 8,192 tokens
+- **meta-llama/llama-4-scout-17b-16e-instruct** – Llama 4 Scout variant, Context: 131k, Output: 8,192 tokens
+- **moonshotai/kimi-k2-instruct-0905** – Moonshot's Kimi K2 with **262k context window**, Output: 16,384 tokens
+- **qwen/qwen3-32b** – Alibaba's Qwen 3 reasoning model, Context: 131k, Output: 40,960 tokens
 
-Note: Preview models are intended for evaluation purposes only and should not be used in production environments as they may be discontinued at short notice.
+### Production Models (Stable)
 
-- **meta-llama/llama-4-maverick-17b-128e-instruct** – Developer: Meta, Context Window: 131k tokens, Max Output Tokens: 8,192
-- **meta-llama/llama-4-scout-17b-16e-instruct** – Developer: Meta, Context Window: 131k tokens, Max Output Tokens: 8,192
-- **moonshotai/kimi-k2-instruct-0905** – Developer: Moonshot AI, Context Window: 262k tokens, Max Output Tokens: 16,384
-- **openai/gpt-oss-safeguard-20b** – Developer: OpenAI, Context Window: 131k tokens, Max Output Tokens: 65,536
-- **qwen/qwen3-32b** – Developer: Alibaba Cloud, Context Window: 131k tokens, Max Output Tokens: 40,960 (Reasoning model)
+- **openai/gpt-oss-120b** – OpenAI's GPT-OSS reasoning model (largest), Context: 131k, Output: 65,536 tokens
+- **openai/gpt-oss-20b** – GPT-OSS reasoning model (faster), Context: 131k, Output: 65,536 tokens
+- **llama-3.3-70b-versatile** – Meta's Llama 3.3, great for general use, Context: 131k, Output: 32,768 tokens
+- **llama-3.1-8b-instant** – Fast Llama 3.1 for low-latency, Context: 131k, Output: 131,072 tokens
+- **meta-llama/llama-guard-4-12b** – Safety/moderation model, Context: 131k, Output: 1,024 tokens
+
+### Speech Models
+
+- **whisper-large-v3** – OpenAI Whisper for speech-to-text
+- **whisper-large-v3-turbo** – Faster Whisper variant
+
+## Using Latest Models
+
+### Llama 4 (Preview)
+
+Meta's Llama 4 models offer improved reasoning and instruction-following:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: groq:meta-llama/llama-4-maverick-17b-128e-instruct
+    config:
+      temperature: 0.7
+      max_completion_tokens: 4096
+```
+
+### Kimi K2 (262k Context)
+
+Moonshot's Kimi K2 offers the largest context window (262k tokens) on Groq:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: groq:moonshotai/kimi-k2-instruct-0905
+    config:
+      temperature: 0.7
+      max_completion_tokens: 8192
+```
+
+This is ideal for long document analysis, code review, or multi-document summarization.
 
 ## Tool Use (Function Calling)
 
