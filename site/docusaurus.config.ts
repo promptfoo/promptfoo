@@ -145,6 +145,11 @@ const config: Config = {
               description: 'Secure proxy for Model Context Protocol communications',
             },
             {
+              to: '/code-scanning/',
+              label: 'Code Scanning',
+              description: 'Find LLM vulnerabilities in your IDE and CI/CD',
+            },
+            {
               to: '/docs/getting-started/',
               label: 'Evaluations',
               description: 'Test and evaluate your prompts, models, and RAG pipelines',
