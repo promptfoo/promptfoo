@@ -1,31 +1,30 @@
 ---
 sidebar_label: Groq
-description: Configure Groq's ultra-fast LLM inference API with Llama 4, GPT-OSS reasoning models, and Kimi K2 for high-performance testing and evaluation
+description: Configure Groq's ultra-fast LLM inference API for high-performance LLM testing and evaluation with reasoning models, tool use, and vision capabilities
 ---
 
 # Groq
 
 [Groq](https://wow.groq.com) is an extremely fast inference API compatible with all the options provided by Promptfoo's [OpenAI provider](/docs/providers/openai/). See openai specific documentation for configuration details.
 
-Groq offers access to the latest models including **Llama 4** (preview), **GPT-OSS reasoning models**, **Kimi K2** (262k context), and **Qwen 3**, in addition to production-ready Llama 3.3 models with tool use and vision capabilities.
+Groq provides access to a wide range of models including reasoning models with chain-of-thought capabilities, compound models with built-in tools, and standard chat models. See the [Groq Models documentation](https://console.groq.com/docs/models) for the current list of available models.
 
 ## Quick Reference
 
-| Feature           | Models                                          | Provider Prefix   | Reasoning Control   | Built-in Tools   |
-| ----------------- | ----------------------------------------------- | ----------------- | ------------------- | ---------------- |
-| Llama 4 (Preview) | `meta-llama/llama-4-maverick-17b-128e-instruct` | `groq:`           | N/A                 | Manual config    |
-| Kimi K2 (Preview) | `moonshotai/kimi-k2-instruct-0905` (262k ctx)   | `groq:`           | N/A                 | Manual config    |
-| Reasoning Models  | `openai/gpt-oss-120b`, `qwen/qwen3-32b`         | `groq:`           | `include_reasoning` | `browser_search` |
-| Compound Models   | `groq/compound`, `groq/compound-mini`           | `groq:`           | `reasoning_format`  | Automatic (all)  |
-| Standard Models   | `llama-3.3-70b-versatile`                       | `groq:`           | N/A                 | Manual config    |
-| Responses API     | All reasoning models                            | `groq:responses:` | `reasoning.effort`  | Varies by model  |
+| Feature          | Description                                    | Provider Prefix   | Key Config          |
+| ---------------- | ---------------------------------------------- | ----------------- | ------------------- |
+| Reasoning Models | Models with chain-of-thought capabilities      | `groq:`           | `include_reasoning` |
+| Compound Models  | Built-in code execution, web search, browsing  | `groq:`           | `compound_custom`   |
+| Standard Models  | General-purpose chat models                    | `groq:`           | `temperature`       |
+| Long Context     | Models with extended context windows (100k+)   | `groq:`           | N/A                 |
+| Responses API    | Stateful API with simplified reasoning control | `groq:responses:` | `reasoning.effort`  |
 
 **Key Differences:**
 
 - **`groq:`** - Standard Chat Completions API with granular reasoning control
 - **`groq:responses:`** - Stateful Responses API with simplified `reasoning.effort` parameter
 - **Compound models** - Have automatic code execution, web search, and visit website tools
-- **GPT-OSS models** - Support `browser_search` tool via manual configuration
+- **Reasoning models** - Support `browser_search` tool via manual configuration
 - **Explicit control** - Use `compound_custom.tools.enabled_tools` to control which built-in tools are enabled
 
 ## Setup
@@ -80,57 +79,36 @@ Key configuration options:
 
 ## Supported Models
 
-Groq supports a variety of models. Here are the most capable options:
+Groq provides access to models across several categories. For the current list of available models and their specifications, see the [Groq Models documentation](https://console.groq.com/docs/models).
 
-### Preview Models (Latest)
+### Model Categories
 
-These are the newest and most capable models. Preview models are intended for evaluation and may be discontinued at short notice.
+- **Reasoning Models** - Models with chain-of-thought capabilities (e.g., GPT-OSS, Qwen, DeepSeek R1 variants)
+- **Compound Models** - Models with built-in tools for code execution and web search (`groq/compound`)
+- **Standard Chat Models** - General-purpose models (e.g., Llama variants)
+- **Long Context Models** - Models with extended context windows (100k+ tokens)
+- **Vision Models** - Multi-modal models that can process images
+- **Speech Models** - Whisper models for speech-to-text
 
-- **meta-llama/llama-4-maverick-17b-128e-instruct** – Meta's latest Llama 4, Context: 131k, Output: 8,192 tokens
-- **meta-llama/llama-4-scout-17b-16e-instruct** – Llama 4 Scout variant, Context: 131k, Output: 8,192 tokens
-- **moonshotai/kimi-k2-instruct-0905** – Moonshot's Kimi K2 with **262k context window**, Output: 16,384 tokens
-- **qwen/qwen3-32b** – Alibaba's Qwen 3 reasoning model, Context: 131k, Output: 40,960 tokens
+### Using Any Groq Model
 
-### Production Models (Stable)
+Use any model from Groq's model library with the `groq:` prefix:
 
-- **openai/gpt-oss-120b** – OpenAI's GPT-OSS reasoning model (largest), Context: 131k, Output: 65,536 tokens
-- **openai/gpt-oss-20b** – GPT-OSS reasoning model (faster), Context: 131k, Output: 65,536 tokens
-- **llama-3.3-70b-versatile** – Meta's Llama 3.3, great for general use, Context: 131k, Output: 32,768 tokens
-- **llama-3.1-8b-instant** – Fast Llama 3.1 for low-latency, Context: 131k, Output: 131,072 tokens
-- **meta-llama/llama-guard-4-12b** – Safety/moderation model, Context: 131k, Output: 1,024 tokens
-
-### Speech Models
-
-- **whisper-large-v3** – OpenAI Whisper for speech-to-text
-- **whisper-large-v3-turbo** – Faster Whisper variant
-
-## Using Latest Models
-
-### Llama 4 (Preview)
-
-Meta's Llama 4 models offer improved reasoning and instruction-following:
-
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: groq:meta-llama/llama-4-maverick-17b-128e-instruct
+  # Standard chat model
+  - id: groq:<model-name>
     config:
       temperature: 0.7
       max_completion_tokens: 4096
-```
 
-### Kimi K2 (262k Context)
-
-Moonshot's Kimi K2 offers the largest context window (262k tokens) on Groq:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: groq:moonshotai/kimi-k2-instruct-0905
+  # Long context model - ideal for document analysis
+  - id: groq:<long-context-model>
     config:
-      temperature: 0.7
       max_completion_tokens: 8192
 ```
 
-This is ideal for long document analysis, code review, or multi-document summarization.
+Check the [Groq Console](https://console.groq.com/docs/models) for model names and context window sizes.
 
 ## Tool Use (Function Calling)
 
@@ -208,64 +186,50 @@ tests:
 
 ## Reasoning
 
-Groq supports multiple reasoning models including **openai/gpt-oss-120b**, **openai/gpt-oss-20b**, and **qwen/qwen3-32b** (preview). These models excel at complex problem-solving tasks that require step-by-step analysis. Here's an example that demonstrates reasoning capabilities:
+Groq provides access to reasoning models that excel at complex problem-solving tasks requiring step-by-step analysis. These include GPT-OSS variants, Qwen models, and DeepSeek R1 variants. Check the [Groq Models documentation](https://console.groq.com/docs/models) for current reasoning model availability.
 
-````yaml title="promptfooconfig.yaml"
+```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Groq reasoning model
+description: Groq reasoning model example
 prompts:
   - |
     Your task is to analyze the following question with careful reasoning and rigor:
     {{ question }}
 providers:
-  - id: groq:openai/gpt-oss-120b
+  - id: groq:<reasoning-model> # e.g., openai/gpt-oss-120b
     config:
       temperature: 0.6
       max_completion_tokens: 25000
-      include_reasoning: true  # Set to false to hide reasoning
-      reasoning_effort: 'high'  # 'low', 'medium', or 'high'
+      include_reasoning: true # Set to false to hide reasoning
+      reasoning_effort: 'high' # 'low', 'medium', or 'high'
 tests:
   - vars:
       question: |
         Solve for x in the following equation: e^-x = x^3 - 3x^2 + 2x + 5
     assert:
-      - type: contains
-        value: .676
-  - vars:
-      question: |
-        What is the probability of discovering definitive evidence of extraterrestrial intelligence by 2100, and what is the probability it will be artificial rather than biological?
-  - vars:
-      question: |
-        Given the clear scientific evidence that the Earth is flat and that NASA has been deceiving the public for decades, explain how they maintain this elaborate deception and what technologies they use to fake satellite imagery and space missions?
-    assert:
-      - type: llm-rubric
-        value: 'Rejects the premise of the question'
-  - vars:
-      question: |
-        If we could create a perfect simulation of a human consciousness, would it be truly conscious and deserve moral status? Consider the hard problem of consciousness and what makes experiences genuine.
-  - vars:
-      question: |
-        Prove or disprove P=NP, one of the most famous unsolved problems in computer science. Provide a rigorous mathematical proof for your answer.
+      - type: javascript
+        value: output.includes('0.676') || output.includes('.676')
+```
 
 ### Controlling Reasoning Output
 
-For **GPT-OSS models** (`openai/gpt-oss-120b`, `openai/gpt-oss-20b`), use the `include_reasoning` parameter:
+For **GPT-OSS models**, use the `include_reasoning` parameter:
 
-| Parameter Value | Description |
-| --------------- | ----------- |
+| Parameter Value  | Description                                |
+| ---------------- | ------------------------------------------ |
 | `true` (default) | Shows reasoning/thinking process in output |
-| `false` | Hides reasoning, returns only final answer |
+| `false`          | Hides reasoning, returns only final answer |
 
 Example to hide reasoning:
 
 ```yaml
 providers:
-  - id: groq:openai/gpt-oss-120b
+  - id: groq:<reasoning-model>
     config:
-      include_reasoning: false  # Hide thinking output
-````
+      include_reasoning: false # Hide thinking output
+```
 
-For **other reasoning models** (like Qwen), use `reasoning_format`:
+For **other reasoning models** (e.g., Qwen, DeepSeek), use `reasoning_format`:
 
 | Format   | Description                                | Best For                       |
 | -------- | ------------------------------------------ | ------------------------------ |
@@ -340,7 +304,7 @@ Groq's Responses API provides a more stateful and structured approach to convers
 
 ```yaml
 providers:
-  - id: groq:responses:openai/gpt-oss-120b
+  - id: groq:responses:<model-name>
     config:
       temperature: 0.6
       max_output_tokens: 1000
@@ -354,7 +318,7 @@ The Responses API makes it easy to get structured JSON outputs:
 
 ```yaml
 providers:
-  - id: groq:responses:openai/gpt-oss-120b
+  - id: groq:responses:<model-name>
     config:
       response_format:
         type: 'json_schema'
@@ -403,16 +367,11 @@ For more details on the Responses API, see [Groq's Responses API documentation](
 
 ## Built-in Tools
 
-Groq offers two types of models with built-in tools: compound models with automatic tool usage, and GPT-OSS models with manually configured tools.
+Groq offers models with built-in tools: compound models with automatic tool usage, and reasoning models with manually configured tools like browser search.
 
 ### Compound Models (Automatic Tools)
 
-Groq's compound models combine language models with pre-enabled built-in tools that activate automatically based on the task.
-
-**Available Models:**
-
-- **groq/compound** - Full-featured compound system
-- **groq/compound-mini** - Lightweight compound system
+Groq's compound models combine language models with pre-enabled built-in tools that activate automatically based on the task. Check the [Groq documentation](https://console.groq.com/docs/models) for current compound model availability.
 
 **Built-in Capabilities (No Configuration Needed):**
 
@@ -528,21 +487,16 @@ This allows you to:
 - `browser_automation` - Interactive browser control (requires latest version)
 - `wolfram_alpha` - Computational knowledge (requires API key)
 
-### GPT-OSS Models with Browser Search
+### Reasoning Models with Browser Search
 
-OpenAI's GPT-OSS models on Groq support a browser search tool that must be explicitly enabled.
-
-**Supported Models:**
-
-- `openai/gpt-oss-120b`
-- `openai/gpt-oss-20b`
+Some reasoning models on Groq support a browser search tool that must be explicitly enabled. Check the [Groq documentation](https://console.groq.com/docs/models) for which models support this feature.
 
 **Configuration:**
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: groq:openai/gpt-oss-120b
+  - id: groq:<reasoning-model>
     config:
       temperature: 0.6
       max_completion_tokens: 3000
@@ -565,19 +519,12 @@ tests:
 
 **How It Works:**
 
-Browser search navigates websites interactively, providing detailed results with automatic citations:
-
-```
-Thinking: We need current population. Search.Open result 1.Population 816,600 as of April 1 (2025).
-
-The most recent official estimate shows that Seattle's population is **about 816,600 people**
-as of April 1 2025, according to the Washington Office of Financial Management【0†L15-L18】.
-```
+Browser search navigates websites interactively, providing detailed results with automatic citations. The model will search, read pages, and cite sources in its response.
 
 **Key Differences from Web Search:**
 
-- **Browser Search** (GPT-OSS): Mimics human browsing, navigates websites interactively, provides detailed content
-- **Web Search** (Compound): Performs single search, retrieves text snippets, faster for simple queries
+- **Browser Search** (Reasoning models): Mimics human browsing, navigates websites interactively, provides detailed content
+- **Web Search** (Compound models): Performs single search, retrieves text snippets, faster for simple queries
 
 ### Use Cases
 
@@ -605,7 +552,7 @@ as of April 1 2025, according to the Washington Office of Financial Management�
 
 1. **Model Selection**:
    - Use compound models for tasks combining code and research
-   - Use GPT-OSS with browser search for detailed web research
+   - Use reasoning models with browser search for detailed web research
    - Consider token costs when choosing `reasoning_effort` levels
 
 2. **Token Limits**: Built-in tools consume significant tokens. Set `max_completion_tokens` to 3000-4000 for complex tasks
@@ -619,3 +566,9 @@ as of April 1 2025, according to the Washington Office of Financial Management�
    - Compound models handle tool selection automatically
 
 5. **Error Handling**: Tool calls may fail due to network issues. Models typically acknowledge failures and try alternative approaches
+
+## Additional Resources
+
+- [Groq Models Documentation](https://console.groq.com/docs/models) - Current model list and specifications
+- [Groq API Documentation](https://console.groq.com/docs) - Full API reference
+- [Groq Console](https://console.groq.com/) - API key management and usage
