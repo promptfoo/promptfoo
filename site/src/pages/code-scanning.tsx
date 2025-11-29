@@ -182,55 +182,58 @@ function SeeItInActionSection() {
 }
 
 function VulnerabilityTypesSection() {
+  const vulnerabilities = [
+    {
+      severity: 'critical',
+      name: 'Prompt Injection',
+      description: 'Untrusted input reaches LLM prompts without proper sanitization or boundaries.',
+    },
+    {
+      severity: 'critical',
+      name: 'Data Exfiltration',
+      description: 'Indirect prompt injection vectors that could extract data through agent tools.',
+    },
+    {
+      severity: 'high',
+      name: 'PII Exposure',
+      description:
+        'Code that may leak sensitive user data to LLMs or log confidential information.',
+    },
+    {
+      severity: 'high',
+      name: 'Insecure Output Handling',
+      description: 'LLM outputs used in dangerous contexts like SQL queries or shell commands.',
+    },
+    {
+      severity: 'medium',
+      name: 'Excessive Agency',
+      description: 'LLMs with overly broad tool access or missing approval gates for actions.',
+    },
+    {
+      severity: 'medium',
+      name: 'Jailbreak Risks',
+      description: 'Weak system prompts and guardrail bypasses that could allow harmful outputs.',
+    },
+  ];
+
   return (
-    <section className={styles.featuresSection}>
+    <section className={styles.vulnerabilitySection}>
       <div className="container">
-        <div className={styles.sectionEyebrow}>LLM-SPECIFIC DETECTION</div>
-        <h2 className={styles.sectionTitle}>Find what other scanners miss</h2>
-        <p className={styles.sectionSubtitle}>
-          Focused specifically on LLM security vulnerabilities that general SAST tools overlook
+        <div className={styles.vulnEyebrow}>LLM-SPECIFIC DETECTION</div>
+        <h2 className={styles.vulnTitle}>Find what other scanners miss</h2>
+        <p className={styles.vulnSubtitle}>
+          Purpose-built for AI security risks that general SAST tools overlook
         </p>
-        <div className={styles.features}>
-          <div className={styles.featureItem}>
-            <h3>Prompt Injection</h3>
-            <p>
-              Detect paths where untrusted input reaches LLM prompts without proper sanitization or
-              boundaries.
-            </p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>PII Exposure</h3>
-            <p>
-              Find code that may leak sensitive user data to LLMs or log confidential information.
-            </p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>Jailbreak Risks</h3>
-            <p>
-              Identify weak system prompts and guardrail bypasses that could allow harmful outputs.
-            </p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>Excessive Agency</h3>
-            <p>
-              Detect when LLMs have overly broad tool access or missing approval gates for sensitive
-              actions.
-            </p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>Data Exfiltration</h3>
-            <p>
-              Find indirect prompt injection vectors that could extract data through agent tool
-              calls.
-            </p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>Insecure Output Handling</h3>
-            <p>
-              Detect when LLM outputs are used in dangerous contexts like SQL queries or shell
-              commands.
-            </p>
-          </div>
+        <div className={styles.vulnGrid}>
+          {vulnerabilities.map((vuln) => (
+            <div key={vuln.name} className={styles.vulnCard}>
+              <div className={`${styles.vulnSeverity} ${styles[vuln.severity]}`}>
+                {vuln.severity}
+              </div>
+              <h3 className={styles.vulnName}>{vuln.name}</h3>
+              <p className={styles.vulnDescription}>{vuln.description}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
