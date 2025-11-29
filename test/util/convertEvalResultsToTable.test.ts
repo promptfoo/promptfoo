@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable';
 
 import type { CompletedPrompt, EvaluateTable, ResultsFile } from '../../src/types/index';

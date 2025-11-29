@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../src/util/dataUrl';
 
 describe('dataUrl utilities', () => {

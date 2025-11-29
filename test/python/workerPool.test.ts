@@ -1,6 +1,7 @@
-import { PythonWorkerPool } from '../../src/python/workerPool';
 import fs from 'fs';
 import path from 'path';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { PythonWorkerPool } from '../../src/python/workerPool';
 
 // Windows CI has severe filesystem delays (antivirus, etc.) - allow up to 90s
 const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 5000;

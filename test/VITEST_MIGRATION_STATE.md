@@ -1,13 +1,13 @@
 # Jest to Vitest Migration State
 
-Last updated: 2025-11-27
+Last updated: 2025-11-28
 
 ## Current Progress
 
 | Metric          | Count     | Percentage |
 | --------------- | --------- | ---------- |
-| Vitest tests    | 902       | 10.6%      |
-| Jest tests      | 7,573     | 89.4%      |
+| Vitest tests    | 1,700+    | ~20%       |
+| Jest tests      | 6,775     | ~80%       |
 | **Total tests** | **8,475** | 100%       |
 
 ## Migrated Directories (Vitest)
@@ -29,26 +29,27 @@ These directories have been fully migrated to Vitest and are listed in `vitest.c
 13. `test/progress/` - Progress reporter tests
 14. `test/types/` - Type validation tests
 15. `test/providers/xai/` - xAI provider tests (chat, image)
+16. `test/prompts/` - Prompt processing tests (16 files, 158 tests)
+17. `test/python/` - Python provider tests (6 files, 48 tests) - complex `util.promisify` mocking
+18. `test/logger.test.ts` - Logger tests (61 tests) - complex winston mocking with `vi.hoisted()`
+19. `test/cache.test.ts` - Cache tests (16 tests) - cache-manager mocking with default exports
+20. `test/config-schema.test.ts` - Config schema validation tests (12 tests)
+21. `test/tracing/` - Tracing tests (5 files, 38 tests) - top-level await with `vi.mocked()` for module mocking
+22. `test/util/` - Utility function tests (37 files, ~460 tests) - complex mocking including `vi.importActual()`, default exports, and `vi.doMock()` patterns
 
 ## Remaining Jest Directories
 
-These directories still run with Jest (415 test files):
+These directories still run with Jest (~350 test files):
 
 - `test/assertions/`
 - `test/commands/`
 - `test/evaluator/`
 - `test/events/`
-- `test/prompts/`
 - `test/providers/` (large - 150+ files, except xai/ which is migrated)
 - `test/redteam/` (large - many files)
 - `test/server/`
 - `test/share/`
 - `test/transform/`
-- `test/tracing/`
-- `test/python/`
-- `test/logger.test.ts`
-- `test/cache.test.ts`
-- `test/config.test.ts`
 - And more...
 
 ## Migration Pattern
@@ -158,6 +159,50 @@ vi.mock('optional-package', () => ({
 // In tests, use mocks.mockMethod and mocks.constructorCalls
 ```
 
+### 8. Mocking `util.promisify(execFile)` pattern
+
+When mocking Node.js `child_process.execFile` used with `util.promisify`, use the custom promisify symbol:
+
+```typescript
+// Create mock for execFileAsync - must be hoisted for vi.mock factory
+const { mockExecFileAsync, mockExecFile } = vi.hoisted(() => {
+  const mockExecFileAsync = vi.fn();
+  // Create a mock execFile with the custom promisify symbol
+  const mockExecFile = Object.assign(vi.fn(), {
+    [Symbol.for('nodejs.util.promisify.custom')]: mockExecFileAsync,
+  });
+  return { mockExecFileAsync, mockExecFile };
+});
+
+// Mock child_process.execFile with custom promisify support
+vi.mock('child_process', () => ({
+  execFile: mockExecFile,
+}));
+
+// In tests, use mockExecFileAsync with Promise-style mocking
+mockExecFileAsync.mockResolvedValue({ stdout: 'output', stderr: '' });
+mockExecFileAsync.mockRejectedValue(new Error('Command failed'));
+```
+
+### 9. Mocking constructors (Error, classes, etc.)
+
+When mocking constructors in Vitest, you must use `function` keyword (not arrow functions) to make them constructable:
+
+```typescript
+// Mock Error constructor with custom stack
+const OriginalError = global.Error;
+vi.spyOn(global, 'Error').mockImplementation(function (this: Error, message?: string) {
+  const error = new OriginalError(message);
+  Object.defineProperty(error, 'stack', { value: mockStack });
+  return error;
+} as any);
+
+// Mock a constructor that throws
+vi.mocked(SomeClass).mockImplementationOnce(function () {
+  throw new Error('boom');
+} as any);
+```
+
 ## Commands
 
 ```bash
@@ -181,22 +226,18 @@ npm run test:jest -- test/providers
 
 Recommended order for next migration batch (by complexity):
 
-1. **Easy** - Single file tests with minimal mocking:
-   - `test/logger.test.ts`
-   - `test/cache.test.ts`
-   - `test/config.test.ts`
-
-2. **Medium** - Directories with moderate mocking:
+1. **Medium** - Directories with moderate mocking:
    - `test/transform/`
    - `test/share/`
    - `test/events/`
 
-3. **Complex** - Large directories with heavy mocking:
+2. **Complex** - Large directories with heavy mocking:
    - `test/assertions/`
    - `test/commands/`
    - `test/server/`
+   - `test/evaluator/`
 
-4. **Most Complex** - Very large with many dependencies:
+3. **Most Complex** - Very large with many dependencies:
    - `test/providers/` (~150+ files)
    - `test/redteam/` (many files)
 

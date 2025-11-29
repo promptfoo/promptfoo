@@ -1,12 +1,17 @@
+import { describe, expect, it, vi } from 'vitest';
 import { maybeFilePath, normalizeInput } from '../../src/prompts/utils';
 
-jest.mock('fs', () => ({
-  statSync: jest.fn(jest.requireActual('fs').statSync),
-}));
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs');
+  return {
+    ...actual,
+    statSync: vi.fn(actual.statSync),
+  };
+});
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
-  hasMagic: jest.fn((pattern: string | string[]) => {
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
+  hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
     return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
   }),

@@ -33,6 +33,13 @@ const config: Config = {
     '<rootDir>/test/progress',
     '<rootDir>/test/types',
     '<rootDir>/test/providers/xai',
+    '<rootDir>/test/prompts',
+    '<rootDir>/test/python',
+    '<rootDir>/test/logger.test.ts',
+    '<rootDir>/test/cache.test.ts',
+    '<rootDir>/test/config-schema.test.ts',
+    '<rootDir>/test/tracing',
+    '<rootDir>/test/util',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
