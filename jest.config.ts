@@ -18,6 +18,7 @@ const config: Config = {
     '<rootDir>/node_modules',
     '<rootDir>/src/app',
     // These tests are now run with Vitest (npm run test:vitest)
+    '<rootDir>/test/assertions',
     '<rootDir>/test/codeScans',
     '<rootDir>/test/matchers',
     '<rootDir>/test/database',
