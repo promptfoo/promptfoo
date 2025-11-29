@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     // Gradual migration from Jest - add directories here as they're migrated
     include: [
+      'test/assertions/**/*.test.ts',
       'test/codeScans/**/*.test.ts',
       'test/matchers/**/*.test.ts',
       'test/database/**/*.test.ts',

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import * as path from 'path';
 
 import { runAssertion } from '../../src/assertions/index';
@@ -7,82 +8,90 @@ import { isPackagePath, loadFromPackage } from '../../src/providers/packageParse
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
-jest.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+vi.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('node:module', () => {
+vi.mock('node:module', () => {
   const mockRequire: NodeJS.Require = {
-    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
+    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
   } as unknown as NodeJS.Require;
   return {
-    createRequire: jest.fn().mockReturnValue(mockRequire),
+    createRequire: vi.fn().mockReturnValue(mockRequire),
   };
 });
 
-jest.mock('../../src/util/fetch/index.ts', () => {
-  const actual = jest.requireActual('../../src/util/fetch/index.ts');
+vi.mock('../../src/util/fetch/index.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../src/util/fetch/index')>(
+    '../../src/util/fetch/index.ts',
+  );
   return {
     ...actual,
-    fetchWithRetries: jest.fn(actual.fetchWithRetries),
+    fetchWithRetries: vi.fn(actual.fetchWithRetries),
   };
 });
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
+vi.mock('fs', () => ({
+  readFileSync: vi.fn(),
+  existsSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
   promises: {
-    readFile: jest.fn(),
+    readFile: vi.fn(),
   },
 }));
 
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn().mockImplementation((_path, _functionName) => {
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn().mockImplementation((_path, _functionName) => {
     // Make sure both parameters are captured in the mock call
     return Promise.resolve();
   }),
   __esModule: true,
 }));
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(),
 }));
-jest.mock('path', () => {
-  const actualPath = jest.requireActual('path');
+vi.mock('path', async () => {
+  const actualPath = await vi.importActual<typeof import('path')>('path');
   return {
     ...actualPath,
-    resolve: jest.fn((basePath, filePath) => actualPath.join(basePath, filePath)),
-    extname: jest.fn((filePath) => actualPath.extname(filePath)),
+    resolve: vi.fn((basePath: string, filePath: string) => actualPath.join(basePath, filePath)),
+    extname: vi.fn((filePath: string) => actualPath.extname(filePath)),
     join: actualPath.join,
   };
 });
 
-jest.mock('../../src/cliState', () => ({
+vi.mock('../../src/cliState', () => ({
+  default: {
+    basePath: '/base/path',
+  },
   basePath: '/base/path',
 }));
-jest.mock('../../src/matchers', () => {
-  const actual = jest.requireActual('../../src/matchers');
+vi.mock('../../src/matchers', async () => {
+  const actual = await vi.importActual<typeof import('../../src/matchers')>('../../src/matchers');
   return {
     ...actual,
-    matchesContextRelevance: jest
+    matchesContextRelevance: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
-    matchesContextFaithfulness: jest
+    matchesContextFaithfulness: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
   };
 });
 
 // Add this mock for packageParser
-jest.mock('../../src/providers/packageParser', () => {
-  const mockIsPackagePath = jest.fn();
-  const mockLoadFromPackage = jest.fn();
+vi.mock('../../src/providers/packageParser', () => {
+  const mockIsPackagePath = vi.fn();
+  const mockLoadFromPackage = vi.fn();
   return {
     isPackagePath: mockIsPackagePath,
     loadFromPackage: mockLoadFromPackage,
@@ -151,12 +160,12 @@ const javascriptFunctionFailAssertion: Assertion = {
 
 describe('JavaScript file references', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset all mocks before each test
-    jest.mocked(importModule).mockReset();
-    jest.mocked(path.resolve).mockReset();
-    jest.mocked(isPackagePath).mockReset();
-    jest.mocked(loadFromPackage).mockReset();
+    vi.mocked(importModule).mockReset();
+    vi.mocked(path.resolve).mockReset();
+    vi.mocked(isPackagePath).mockReset();
+    vi.mocked(loadFromPackage).mockReset();
   });
 
   it('should handle JavaScript file reference with function name', async () => {
@@ -165,13 +174,13 @@ describe('JavaScript file references', () => {
       value: 'file:///path/to/assert.js:customFunction',
     };
 
-    const mockFn = jest.fn((_output: string) => true);
-    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
-    jest.mocked(path.extname).mockReturnValue('.js');
-    jest.mocked(isPackagePath).mockReturnValue(false);
+    const mockFn = vi.fn((_output: string) => true);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
 
     // Mock importModule to return the mock function
-    jest.mocked(importModule).mockImplementationOnce((_path, _functionName) => {
+    vi.mocked(importModule).mockImplementationOnce((_path, _functionName) => {
       return Promise.resolve({
         customFunction: mockFn,
       });
@@ -210,13 +219,13 @@ describe('JavaScript file references', () => {
       value: 'file:///path/to/assert.js',
     };
 
-    const mockFn = jest.fn((_output: string) => true);
-    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
-    jest.mocked(path.extname).mockReturnValue('.js');
-    jest.mocked(isPackagePath).mockReturnValue(false);
+    const mockFn = vi.fn((_output: string) => true);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
 
     // Mock importModule to return the mock function
-    jest.mocked(importModule).mockImplementationOnce((_path, _functionName) => {
+    vi.mocked(importModule).mockImplementationOnce((_path, _functionName) => {
       return Promise.resolve(mockFn);
     });
 
@@ -252,13 +261,13 @@ describe('JavaScript file references', () => {
       value: 'file:///path/to/assert.js',
     };
 
-    const mockFn = jest.fn((_output: string) => true);
-    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
-    jest.mocked(path.extname).mockReturnValue('.js');
-    jest.mocked(isPackagePath).mockReturnValue(false);
+    const mockFn = vi.fn((_output: string) => true);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
 
     // Mock importModule to handle both parameters
-    const mockImportModule = jest.mocked(importModule);
+    const mockImportModule = vi.mocked(importModule);
     mockImportModule.mockImplementationOnce((_path, _functionName) => {
       // Return the mock function in a default export object
       return Promise.resolve({ default: mockFn });
@@ -537,35 +546,30 @@ describe('JavaScript file references', () => {
   });
 
   it.each([
-    [
-      'boolean',
-      jest.fn((output: string) => output === 'Expected output'),
-      true,
-      'Assertion passed',
-    ],
-    ['number', jest.fn((output: string) => output.length), true, 'Assertion passed'],
+    ['boolean', vi.fn((output: string) => output === 'Expected output'), true, 'Assertion passed'],
+    ['number', vi.fn((output: string) => output.length), true, 'Assertion passed'],
     [
       'GradingResult',
-      jest.fn((_output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
+      vi.fn((_output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
       true,
       'Custom reason',
     ],
     [
       'boolean',
-      jest.fn((output: string) => output !== 'Expected output'),
+      vi.fn((output: string) => output !== 'Expected output'),
       false,
       'Custom function returned false',
     ],
-    ['number', jest.fn((_output: string) => 0), false, 'Custom function returned false'],
+    ['number', vi.fn((_output: string) => 0), false, 'Custom function returned false'],
     [
       'GradingResult',
-      jest.fn((_output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
+      vi.fn((_output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
       false,
       'Custom reason',
     ],
     [
       'boolean Promise',
-      jest.fn((_output: string) => Promise.resolve(true)),
+      vi.fn((_output: string) => Promise.resolve(true)),
       true,
       'Assertion passed',
     ],
@@ -573,14 +577,14 @@ describe('JavaScript file references', () => {
     const output = 'Expected output';
 
     // Mock path.resolve to return a valid path
-    jest.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
-    jest.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
 
     // Mock isPackagePath to return false for file:// paths
-    jest.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(isPackagePath).mockReturnValue(false);
 
     // Mock importModule to handle both path and functionName
-    const mockImportModule = jest.mocked(importModule);
+    const mockImportModule = vi.mocked(importModule);
     mockImportModule.mockImplementation((path, functionName) => {
       // Make sure both parameters are captured in the mock
       mockImportModule.mock.calls.push([path, functionName]);
@@ -616,35 +620,30 @@ describe('JavaScript file references', () => {
   });
 
   it.each([
-    [
-      'boolean',
-      jest.fn((output: string) => output === 'Expected output'),
-      true,
-      'Assertion passed',
-    ],
-    ['number', jest.fn((output: string) => output.length), true, 'Assertion passed'],
+    ['boolean', vi.fn((output: string) => output === 'Expected output'), true, 'Assertion passed'],
+    ['number', vi.fn((output: string) => output.length), true, 'Assertion passed'],
     [
       'GradingResult',
-      jest.fn((_output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
+      vi.fn((_output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
       true,
       'Custom reason',
     ],
     [
       'boolean',
-      jest.fn((output: string) => output !== 'Expected output'),
+      vi.fn((output: string) => output !== 'Expected output'),
       false,
       'Custom function returned false',
     ],
-    ['number', jest.fn((_output: string) => 0), false, 'Custom function returned false'],
+    ['number', vi.fn((_output: string) => 0), false, 'Custom function returned false'],
     [
       'GradingResult',
-      jest.fn((_output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
+      vi.fn((_output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
       false,
       'Custom reason',
     ],
     [
       'boolean Promise',
-      jest.fn((_output: string) => Promise.resolve(true)),
+      vi.fn((_output: string) => Promise.resolve(true)),
       true,
       'Assertion passed',
     ],
@@ -652,10 +651,10 @@ describe('JavaScript file references', () => {
     const output = 'Expected output';
 
     // Mock isPackagePath to return true for package paths
-    jest.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(isPackagePath).mockReturnValue(true);
 
     // Mock loadFromPackage to return the mockFn
-    jest.mocked(loadFromPackage).mockResolvedValue(mockFn);
+    vi.mocked(loadFromPackage).mockResolvedValue(mockFn);
 
     const packageAssertion: Assertion = {
       type: 'javascript',
@@ -687,17 +686,17 @@ describe('JavaScript file references', () => {
 
   it('should resolve js paths relative to the configuration file', async () => {
     const output = 'Expected output';
-    const mockFn = jest.fn((output: string) => output === 'Expected output');
+    const mockFn = vi.fn((output: string) => output === 'Expected output');
 
     // Mock path.resolve to return a valid path
-    jest.mocked(path.resolve).mockReturnValue('/base/path/path/to/assert.js');
-    jest.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(path.resolve).mockReturnValue('/base/path/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
 
     // Mock isPackagePath to return false
-    jest.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(isPackagePath).mockReturnValue(false);
 
     // Mock importModule to return the mockFn
-    jest.mocked(importModule).mockResolvedValue(mockFn);
+    vi.mocked(importModule).mockResolvedValue(mockFn);
 
     const fileAssertion: Assertion = {
       type: 'javascript',

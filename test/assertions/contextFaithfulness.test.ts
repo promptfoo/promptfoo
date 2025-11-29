@@ -1,19 +1,20 @@
+import { vi } from 'vitest';
 import { handleContextFaithfulness } from '../../src/assertions/contextFaithfulness';
 import * as contextUtils from '../../src/assertions/contextUtils';
 import * as matchers from '../../src/matchers';
 
-jest.mock('../../src/matchers');
-jest.mock('../../src/assertions/contextUtils');
+vi.mock('../../src/matchers');
+vi.mock('../../src/assertions/contextUtils');
 
 describe('handleContextFaithfulness', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should pass when context faithfulness is above threshold', async () => {
     const mockResult = { pass: true, score: 0.9, reason: 'Content is faithful to context' };
-    jest.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
     const result = await handleContextFaithfulness({
       assertion: {
@@ -72,8 +73,8 @@ describe('handleContextFaithfulness', () => {
 
   it('should fail when context faithfulness is below threshold', async () => {
     const mockResult = { pass: false, score: 0.3, reason: 'Content contains hallucinations' };
-    jest.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
     const result = await handleContextFaithfulness({
       assertion: {
@@ -222,8 +223,8 @@ describe('handleContextFaithfulness', () => {
 
   it('should use contextTransform to extract context', async () => {
     const mockResult = { pass: true, score: 1, reason: 'ok' };
-    jest.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('from-transform');
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('from-transform');
 
     const params = {
       assertion: {
