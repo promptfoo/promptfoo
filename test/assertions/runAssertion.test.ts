@@ -77,10 +77,14 @@ vi.mock('../../src/database', () => ({
 }));
 vi.mock('path', async () => {
   const actual = await vi.importActual<typeof import('path')>('path');
-  return {
+  const mocked = {
     ...actual,
-    resolve: vi.fn(actual.resolve),
-    extname: vi.fn(actual.extname),
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
   };
 });
 
@@ -106,10 +110,6 @@ vi.mock('../../src/matchers', async () => {
 const Grader = new TestGrader();
 
 describe('runAssertion', () => {
-  beforeEach(() => {
-    vi.resetModules();
-  });
-
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -375,6 +375,8 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
+    vi.mocked(path.resolve).mockReturnValue('/base/path/output.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key":"value"}';
@@ -386,7 +388,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/output.json', 'utf8');
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
@@ -399,6 +401,8 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
+    vi.mocked(path.resolve).mockReturnValue('/base/path/output.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key":"not value"}';
@@ -410,7 +414,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/output.json', 'utf8');
     expect(result).toMatchObject({
       pass: false,
       reason: 'Expected output "{"key":"not value"}" to equal "{"key":"value"}"',
@@ -574,6 +578,8 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
     vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
@@ -602,7 +608,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
@@ -615,6 +621,8 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
     vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
@@ -643,7 +651,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: false,
       reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
@@ -1050,6 +1058,8 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
     vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
@@ -1078,7 +1088,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
@@ -1091,6 +1101,8 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
     vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
@@ -1119,7 +1131,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: false,
       reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',

@@ -61,11 +61,14 @@ vi.mock('../../src/database', () => ({
 }));
 vi.mock('path', async () => {
   const actualPath = await vi.importActual<typeof import('path')>('path');
-  return {
+  const mocked = {
     ...actualPath,
-    resolve: vi.fn((basePath: string, filePath: string) => actualPath.join(basePath, filePath)),
-    extname: vi.fn((filePath: string) => actualPath.extname(filePath)),
-    join: actualPath.join,
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
   };
 });
 

@@ -31,10 +31,14 @@ vi.mock('../../src/python/pythonUtils', async () => {
 
 vi.mock('path', async () => {
   const actualPath = await vi.importActual<typeof import('path')>('path');
-  return {
+  const mocked = {
     ...actualPath,
-    resolve: vi.fn(actualPath.resolve),
-    extname: vi.fn(actualPath.extname),
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
   };
 });
 
@@ -335,6 +339,8 @@ describe('Python file references', () => {
   ])('should handle when the file:// assertion with .py file returns a %s', async (_type, pythonOutput, expectedPass, expectedReason) => {
     const output = 'Expected output';
     vi.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    vi.mocked(path.extname).mockReturnValue('.py');
 
     const fileAssertion: Assertion = {
       type: 'python',
@@ -351,7 +357,7 @@ describe('Python file references', () => {
       providerResponse,
     });
 
-    expect(runPython).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
+    expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
       output,
       {
         prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
