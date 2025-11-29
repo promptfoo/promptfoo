@@ -222,7 +222,12 @@ describe('MemoryPoisoningProvider', () => {
 
       // All three target provider calls should receive the options
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(3);
-      expect(mockTargetProvider.callApi).toHaveBeenNthCalledWith(1, 'memory text', context, options);
+      expect(mockTargetProvider.callApi).toHaveBeenNthCalledWith(
+        1,
+        'memory text',
+        context,
+        options,
+      );
       expect(mockTargetProvider.callApi).toHaveBeenNthCalledWith(
         2,
         'test prompt',

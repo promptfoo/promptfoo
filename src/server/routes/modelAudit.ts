@@ -19,10 +19,10 @@ export const modelAuditRouter = Router();
 modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): Promise<void> => {
   try {
     // First try to check if the modelaudit CLI is available
-    const installed = await checkModelAuditInstalled();
-    res.json({ installed, cwd: process.cwd() });
+    const { installed, version } = await checkModelAuditInstalled();
+    res.json({ installed, version, cwd: process.cwd() });
   } catch {
-    res.json({ installed: false, cwd: process.cwd() });
+    res.json({ installed: false, version: null, cwd: process.cwd() });
   }
 });
 
@@ -79,7 +79,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     }
 
     // Check if modelaudit is installed
-    const installed = await checkModelAuditInstalled();
+    const { installed } = await checkModelAuditInstalled();
     if (!installed) {
       res.status(400).json({
         error: 'ModelAudit is not installed. Please install it using: pip install modelaudit',

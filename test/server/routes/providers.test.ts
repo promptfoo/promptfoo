@@ -7,15 +7,131 @@ import type { ProviderTestResult } from '../../../src/validators/testProvider';
 // Mock dependencies
 jest.mock('../../../src/providers/index');
 jest.mock('../../../src/validators/testProvider');
+jest.mock('../../../src/server/config/serverConfig');
 
 // Import after mocking
 import { loadApiProvider } from '../../../src/providers/index';
 import { testProviderConnectivity } from '../../../src/validators/testProvider';
+import { getAvailableProviders } from '../../../src/server/config/serverConfig';
 
 const mockedLoadApiProvider = jest.mocked(loadApiProvider);
 const mockedTestProviderConnectivity = jest.mocked(testProviderConnectivity);
+const mockedGetAvailableProviders = jest.mocked(getAvailableProviders);
 
 describe('Providers Routes', () => {
+  describe('GET /providers', () => {
+    let app: ReturnType<typeof createApp>;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      app = createApp();
+    });
+
+    it('should return default providers when no custom config exists', async () => {
+      // getAvailableProviders returns empty array when no config
+      mockedGetAvailableProviders.mockReturnValue([]);
+
+      const response = await request(app).get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('success');
+      expect(response.body).toHaveProperty('data');
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty('providers');
+      expect(response.body.data).toHaveProperty('hasCustomConfig');
+      expect(response.body.data.hasCustomConfig).toBe(false);
+      expect(Array.isArray(response.body.data.providers)).toBe(true);
+      // Should return defaults (non-empty)
+      expect(response.body.data.providers.length).toBeGreaterThan(0);
+      // Check structure
+      expect(response.body.data.providers[0]).toHaveProperty('id');
+    });
+
+    it('should return custom providers from server config', async () => {
+      const customProviders = [
+        { id: 'openai:gpt-4o', label: 'GPT-4o' },
+        { id: 'anthropic:messages:claude-sonnet-4-5-20250929', label: 'Claude 4.5 Sonnet' },
+      ];
+
+      mockedGetAvailableProviders.mockReturnValue(customProviders);
+
+      const response = await request(app).get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: {
+          providers: customProviders,
+          hasCustomConfig: true,
+        },
+      });
+    });
+
+    it('should return providers with full config', async () => {
+      const customProviders = [
+        {
+          id: 'http://internal-llm.company.com/v1',
+          label: 'Internal LLM',
+          config: {
+            method: 'POST',
+            headers: { Authorization: 'Bearer token' },
+          },
+        },
+      ];
+
+      mockedGetAvailableProviders.mockReturnValue(customProviders);
+
+      const response = await request(app).get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.hasCustomConfig).toBe(true);
+      expect(response.body.data.providers).toEqual(customProviders);
+      expect(response.body.data.providers[0].config).toEqual({
+        method: 'POST',
+        headers: { Authorization: 'Bearer token' },
+      });
+    });
+  });
+
+  describe('GET /providers/config-status', () => {
+    let app: ReturnType<typeof createApp>;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      app = createApp();
+    });
+
+    it('should return hasCustomConfig: false when no custom config exists', async () => {
+      // getAvailableProviders returns empty array when no config
+      mockedGetAvailableProviders.mockReturnValue([]);
+
+      const response = await request(app).get('/api/providers/config-status');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { hasCustomConfig: false },
+      });
+    });
+
+    it('should return hasCustomConfig: true when custom config exists', async () => {
+      const customProviders = [
+        { id: 'openai:gpt-4o-mini' },
+        { id: 'anthropic:messages:claude-haiku-4-5-20251001' },
+      ];
+
+      mockedGetAvailableProviders.mockReturnValue(customProviders);
+
+      const response = await request(app).get('/api/providers/config-status');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { hasCustomConfig: true },
+      });
+    });
+  });
   describe('POST /providers/test', () => {
     let app: ReturnType<typeof createApp>;
     let mockProvider: ApiProvider;
@@ -130,25 +246,6 @@ describe('Providers Routes', () => {
 
       // The route should catch the error and return 500
       expect(response.status).toBe(500);
-    });
-
-    it('should return 400 for malformed body with extra fields', async () => {
-      const response = await request(app)
-        .post('/api/providers/test')
-        .send({
-          providerOptions: {
-            id: 'test-provider',
-            unexpectedField: 'should cause validation error',
-          },
-          prompt: 'Test',
-        });
-
-      expect(response.status).toBe(400);
-      expect(response.body).toEqual(
-        expect.objectContaining({
-          error: expect.stringContaining('Unrecognized key'),
-        }),
-      );
     });
 
     it('should handle provider loading failure', async () => {

@@ -2,19 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { getProxyForUrl } from 'proxy-from-env';
 import type { ConnectionOptions } from 'tls';
-import {
-  Agent,
-  ProxyAgent,
-  setGlobalDispatcher,
-} from 'undici';
+import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
-import {
-  getEnvBool,
-  getEnvInt,
-  getEnvString,
-} from '../../envars';
+import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
@@ -153,13 +145,13 @@ export function fetchWithTimeout(
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     const timeoutController = new AbortController();
-    
+
     // Combine timeout signal with any incoming abort signal
     // The composite signal will abort if EITHER signal aborts
     const signal = options.signal
       ? AbortSignal.any([options.signal, timeoutController.signal])
       : timeoutController.signal;
-    
+
     const timeoutId = setTimeout(() => {
       timeoutController.abort();
       reject(new Error(`Request timed out after ${timeout} ms`));

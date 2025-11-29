@@ -56,6 +56,25 @@ describe('AzureResponsesProvider', () => {
       const provider = new AzureResponsesProvider('gpt-4.1');
       expect(provider.isReasoningModel()).toBe(false);
     });
+
+    it('should respect isReasoningModel config override for custom deployment names', () => {
+      const provider = new AzureResponsesProvider('my-custom-deployment', {
+        config: { isReasoningModel: true },
+      });
+      expect(provider.isReasoningModel()).toBe(true);
+    });
+
+    it('should respect o1 config override for custom deployment names', () => {
+      const provider = new AzureResponsesProvider('my-custom-deployment', {
+        config: { o1: true },
+      });
+      expect(provider.isReasoningModel()).toBe(true);
+    });
+
+    it('should not identify custom deployment as reasoning model without config override', () => {
+      const provider = new AzureResponsesProvider('my-custom-deployment');
+      expect(provider.isReasoningModel()).toBe(false);
+    });
   });
 
   describe('supportsTemperature', () => {
@@ -71,9 +90,9 @@ describe('AzureResponsesProvider', () => {
   });
 
   describe('getAzureResponsesBody', () => {
-    it('should create correct request body for basic prompt', () => {
+    it('should create correct request body for basic prompt', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
-      const body = provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body).toMatchObject({
         model: 'gpt-4.1-test',
@@ -86,7 +105,7 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
-    it('should handle external response_format file loading (fixed double-loading bug)', () => {
+    it('should handle external response_format file loading (fixed double-loading bug)', async () => {
       const mockSchema = {
         type: 'json_schema',
         json_schema: {
@@ -103,7 +122,7 @@ describe('AzureResponsesProvider', () => {
         },
       });
 
-      const body = provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith('file://test-schema.json');
       expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledTimes(1); // Should only be called once (fix for double-loading)
@@ -115,7 +134,7 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
-    it('should handle inline response_format', () => {
+    it('should handle inline response_format', async () => {
       // For inline schemas, maybeLoadFromExternalFile should return the object unchanged
       mockMaybeLoadFromExternalFile.mockImplementation((input) => input);
 
@@ -136,7 +155,7 @@ describe('AzureResponsesProvider', () => {
         },
       });
 
-      const body = provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.text.format).toMatchObject({
         type: 'json_schema',
@@ -150,24 +169,63 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
-    it('should not include temperature for reasoning models', () => {
+    it('should not include temperature for reasoning models', async () => {
       const provider = new AzureResponsesProvider('o1-preview', {
         config: { temperature: 0.7 },
       });
 
-      const body = provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body).not.toHaveProperty('temperature');
     });
 
-    it('should include temperature for non-reasoning models', () => {
+    it('should include temperature for non-reasoning models', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: { temperature: 0.7 },
       });
 
-      const body = provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.temperature).toBe(0.7);
+    });
+
+    it('should include verbosity for reasoning models when configured', async () => {
+      const provider = new AzureResponsesProvider('gpt-5', {
+        config: { verbosity: 'high' },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.text).toMatchObject({
+        format: { type: 'text' },
+        verbosity: 'high',
+      });
+    });
+
+    it('should include verbosity for custom deployment with isReasoningModel override', async () => {
+      const provider = new AzureResponsesProvider('my-custom-deployment', {
+        config: { isReasoningModel: true, verbosity: 'medium' },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.text).toMatchObject({
+        format: { type: 'text' },
+        verbosity: 'medium',
+      });
+    });
+
+    it('should not include verbosity for non-reasoning models', async () => {
+      const provider = new AzureResponsesProvider('gpt-4.1-test', {
+        config: { verbosity: 'high' },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.text).toMatchObject({
+        format: { type: 'text' },
+      });
+      expect(body.text.verbosity).toBeUndefined();
     });
   });
 

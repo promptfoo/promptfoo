@@ -359,6 +359,72 @@ To display images in the web viewer, wrap vars or outputs in markdown image tags
 
 Then, enable 'Render markdown' under Table Settings.
 
+## Web Search Support
+
+The OpenAI Responses API supports web search capabilities through the `web_search_preview` tool, which enables the `search-rubric` assertion type. This allows models to search the web for current information and verify facts.
+
+### Enabling Web Search
+
+To enable web search with the OpenAI Responses API, use the `openai:responses` provider format and add the `web_search_preview` tool to your configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.1
+    config:
+      tools:
+        - type: web_search_preview
+```
+
+### Using Web Search Assertions
+
+The `search-rubric` assertion type uses web search to quickly verify current information:
+
+- Real-time data (weather, stock prices, news)
+- Current events and statistics
+- Time-sensitive information
+- Quick fact verification
+
+Example configuration:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - 'What is the current temperature in {{city}}?'
+
+providers:
+  - id: openai:responses:gpt-5.1
+    config:
+      tools:
+        - type: web_search_preview
+
+tests:
+  - vars:
+      city: New York
+    assert:
+      - type: search-rubric
+        value: Current temperature in New York City
+```
+
+### Cost Considerations
+
+:::info
+Web search calls in the Responses API are billed separately from normal tokens:
+
+- The web search tool costs **$10 per 1,000 calls** for the standard tool and **$10-25 per 1,000 calls** for preview variants, plus any search content tokens where applicable
+- Each search-rubric assertion may perform one or more searches
+- Use caching (`--cache`) to avoid redundant searches during development
+- See [OpenAI's pricing page](https://openai.com/api/pricing/) for current rates
+  :::
+
+### Best Practices
+
+1. **Use specific search queries**: More specific queries yield better verification results
+2. **Enable caching**: Run with `npx promptfoo eval --cache` to avoid repeated searches
+3. **Use appropriate models**: gpt-5.1-mini is recommended for cost-effective web search
+4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
+
+For more details on using search-rubric assertions, see the [Search-Rubric documentation](/docs/configuration/expected-outputs/model-graded/search-rubric).
+
 ## Using tools and functions
 
 OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).
@@ -371,6 +437,39 @@ To set `tools` on an OpenAI provider, use the provider's `config` key. The model
 2. A message with tool calls: `{content: '...', tool_calls: [{type: 'function', function: {...}}]}`
 
 Tools can be defined inline or loaded from an external file:
+
+:::info Supported file formats
+
+Tools can be loaded from external files in multiple formats:
+
+```yaml
+# Static data files
+tools: file://./tools.yaml
+tools: file://./tools.json
+
+# Dynamic tool definitions from code (requires function name)
+tools: file://./tools.py:get_tools
+tools: file://./tools.js:getTools
+tools: file://./tools.ts:getTools
+```
+
+Python and JavaScript files must export a function that returns the tool definitions array. The function can be synchronous or asynchronous.
+
+**Asynchronous example:**
+
+```javascript
+// tools.js - Fetch tool definitions from API at runtime
+export async function getTools() {
+  const apiKey = process.env.INTERNAL_API_KEY;
+  const response = await fetch('https://api.internal.com/tool-definitions', {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  const tools = await response.json();
+  return tools;
+}
+```
+
+:::
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -563,6 +662,12 @@ tests:
 ### Loading tools/functions from a file
 
 Instead of duplicating function definitions across multiple configurations, you can reference an external YAML (or JSON) file that contains your functions. This allows you to maintain a single source of truth for your functions, which is particularly useful if you have multiple versions or regular changes to definitions.
+
+:::tip
+
+Tool definitions can be loaded from JSON, YAML, Python, or JavaScript files. For Python/JS files, specify a function name that returns the tool definitions: `file://tools.py:get_tools`
+
+:::
 
 To load your functions from a file, specify the file path in your provider configuration like so:
 
@@ -1574,7 +1679,11 @@ There are a few things you can do if you encounter OpenAI rate limits (most comm
 
 To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY_5XX` environment variable to `1`.
 
-## Agents SDK Integration
+## Agentic Providers
+
+OpenAI offers several agentic providers for different use cases:
+
+### Agents SDK
 
 Test multi-turn agentic workflows with the [OpenAI Agents provider](/docs/providers/openai-agents). This provider supports the [@openai/agents](https://github.com/openai/openai-agents-js) SDK with tools, handoffs, and tracing.
 
@@ -1588,3 +1697,22 @@ providers:
 ```
 
 See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full configuration options and examples.
+
+### Codex SDK
+
+For agentic coding tasks with working directory access and structured JSON output, use the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk). This provider supports `gpt-5.1-codex` models optimized for code generation:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.1-codex
+      working_dir: ./src
+      output_schema:
+        type: object
+        properties:
+          code: { type: string }
+          explanation: { type: string }
+```
+
+See the [OpenAI Codex SDK documentation](/docs/providers/openai-codex-sdk) for thread management, structured output, and Git-aware operations.

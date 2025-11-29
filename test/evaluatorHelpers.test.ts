@@ -858,3 +858,208 @@ describe('collectFileMetadata', () => {
     });
   });
 });
+describe('Image Data URL Generation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(path, 'resolve').mockImplementation((...paths) => {
+      return paths[paths.length - 1];
+    });
+
+    // Mock fs.readFileSync to return predictable base64 data for different image types
+    jest.spyOn(fs, 'readFileSync').mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+      const pathStr = filePath.toString();
+      if (pathStr.includes('.jpg') || pathStr.includes('.jpeg')) {
+        // JPEG magic number: /9j/
+        return Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAA', 'base64');
+      } else if (pathStr.includes('.png')) {
+        // PNG magic number: iVBORw0KGgo
+        return Buffer.from('iVBORw0KGgoAAAANSUhEUgAA', 'base64');
+      } else if (pathStr.includes('.gif')) {
+        // GIF magic number: R0lGODlh
+        return Buffer.from('R0lGODlhAQABAAAAACH5BAEKAAEA', 'base64');
+      } else if (pathStr.includes('.webp')) {
+        // WebP magic number: UklGR
+        return Buffer.from('UklGRh4AAABXRUJQVlA4TBEAAAAv', 'base64');
+      } else if (pathStr.includes('.bmp')) {
+        // BMP magic number: Qk0
+        return Buffer.from('Qk02AAAAAAAAADYAAAAoAAAAAQ', 'base64');
+      } else if (pathStr.includes('.svg')) {
+        return Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+      } else {
+        return Buffer.from('test-file-content');
+      }
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should generate data URL for JPEG files', async () => {
+    const prompt = toPrompt('Test prompt with image: {{image}}');
+    const renderedPrompt = await renderPrompt(prompt, {
+      image: 'file://test-image.jpg',
+    });
+
+    expect(renderedPrompt).toContain('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAA=');
+  });
+
+  it('should generate data URL for PNG files', async () => {
+    const prompt = toPrompt('Test prompt with image: {{image}}');
+    const renderedPrompt = await renderPrompt(prompt, {
+      image: 'file://test-image.png',
+    });
+
+    expect(renderedPrompt).toContain('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA');
+  });
+
+  it('should generate data URL for GIF files', async () => {
+    const prompt = toPrompt('Test prompt with image: {{image}}');
+    const renderedPrompt = await renderPrompt(prompt, {
+      image: 'file://test-image.gif',
+    });
+
+    expect(renderedPrompt).toContain('data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEA');
+  });
+
+  it('should generate data URL for WebP files', async () => {
+    const prompt = toPrompt('Test prompt with image: {{image}}');
+    const renderedPrompt = await renderPrompt(prompt, {
+      image: 'file://test-image.webp',
+    });
+
+    expect(renderedPrompt).toContain('data:image/webp;base64,UklGRh4AAABXRUJQVlA4TBEAAAAv');
+  });
+
+  it('should generate data URL for BMP files', async () => {
+    const prompt = toPrompt('Test prompt with image: {{image}}');
+    const renderedPrompt = await renderPrompt(prompt, {
+      image: 'file://test-image.bmp',
+    });
+
+    expect(renderedPrompt).toContain('data:image/bmp;base64,Qk02AAAAAAAAADYAAAAoAAAAAQ');
+  });
+
+  it('should generate data URL for SVG files', async () => {
+    const prompt = toPrompt('Test prompt with image: {{image}}');
+    const renderedPrompt = await renderPrompt(prompt, {
+      image: 'file://test-image.svg',
+    });
+
+    expect(renderedPrompt).toContain('data:image/svg+xml;base64,');
+    expect(renderedPrompt).toContain(
+      'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
+    ); // base64 of SVG content
+  });
+
+  it('should handle case-insensitive file extensions', async () => {
+    const prompt = toPrompt('Test prompt with image: {{image}}');
+    const renderedPrompt = await renderPrompt(prompt, {
+      image: 'file://test-image.JPG',
+    });
+
+    expect(renderedPrompt).toContain('data:image/jpeg;base64,');
+  });
+
+  it('should use magic number detection for accurate MIME type', async () => {
+    // Test file with wrong extension but correct magic number
+    const prompt = toPrompt('Test prompt with image: {{image}}');
+
+    // Mock a file with .jpg extension but PNG magic number
+    jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      return Buffer.from('iVBORw0KGgoAAAANSUhEUgAA', 'base64'); // PNG magic
+    });
+
+    const renderedPrompt = await renderPrompt(prompt, {
+      image: 'file://wrong-extension.jpg', // .jpg extension
+    });
+
+    // Should detect PNG from magic number, not extension
+    expect(renderedPrompt).toContain('data:image/png;base64,');
+  });
+
+  it('should maintain existing behavior for video files (raw base64)', async () => {
+    jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      return Buffer.from('test-video-content');
+    });
+
+    const prompt = toPrompt('Test prompt with video: {{video}}');
+    const renderedPrompt = await renderPrompt(prompt, {
+      video: 'file://test-video.mp4',
+    });
+
+    // Should NOT have data: prefix for videos
+    expect(renderedPrompt).not.toContain('data:video');
+    expect(renderedPrompt).toContain('dGVzdC12aWRlby1jb250ZW50'); // base64 of 'test-video-content'
+  });
+
+  it('should maintain existing behavior for audio files (raw base64)', async () => {
+    jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      return Buffer.from('test-audio-content');
+    });
+
+    const prompt = toPrompt('Test prompt with audio: {{audio}}');
+    const renderedPrompt = await renderPrompt(prompt, {
+      audio: 'file://test-audio.mp3',
+    });
+
+    // Should NOT have data: prefix for audio
+    expect(renderedPrompt).not.toContain('data:audio');
+    expect(renderedPrompt).toContain('dGVzdC1hdWRpby1jb250ZW50'); // base64 of 'test-audio-content'
+  });
+
+  it('should handle Azure Vision prompt structure correctly', async () => {
+    const azureVisionPrompt = toPrompt(`[
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What do you see in this image?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "{{image_url}}"
+            }
+          }
+        ]
+      }
+    ]`);
+
+    const renderedPrompt = await renderPrompt(azureVisionPrompt, {
+      image_url: 'file://test-image.jpg',
+    });
+
+    const parsed = JSON.parse(renderedPrompt);
+    const imageUrl = parsed[0].content[1].image_url.url;
+
+    expect(imageUrl).toMatch(/^data:image\/jpeg;base64,/);
+    expect(imageUrl).toContain('/9j/4AAQSkZJRgABAQEASABIAAA=');
+  });
+
+  it('should work with existing data URLs (no double processing)', async () => {
+    const prompt = toPrompt('Test prompt with image: {{image}}');
+    const existingDataUrl = 'data:image/jpeg;base64,/9j/existingimage';
+
+    // Should not process files that don't start with file://
+    const renderedPrompt = await renderPrompt(prompt, {
+      image: existingDataUrl,
+    });
+
+    expect(renderedPrompt).toContain(existingDataUrl);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+  });
+
+  it('should work with HTTP URLs (no processing)', async () => {
+    const prompt = toPrompt('Test prompt with image: {{image}}');
+    const httpUrl = 'https://example.com/image.jpg';
+
+    const renderedPrompt = await renderPrompt(prompt, {
+      image: httpUrl,
+    });
+
+    expect(renderedPrompt).toContain(httpUrl);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+  });
+});

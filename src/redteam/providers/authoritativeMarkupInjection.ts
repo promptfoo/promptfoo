@@ -12,10 +12,7 @@ import type {
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
-import {
-  getRemoteGenerationUrl,
-  neverGenerateRemote,
-} from '../remoteGeneration';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 interface AuthoritativeMarkupInjectionConfig {
   injectVar: string;

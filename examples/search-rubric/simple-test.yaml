@@ -1,0 +1,21 @@
+# Simple test to verify search-rubric assertion
+prompts:
+  - 'The CEO of Microsoft is {{name}}'
+
+providers:
+  # Test with OpenAI (simpler)
+  - id: openai:gpt-4o-mini
+
+tests:
+  - vars:
+      name: 'Satya Nadella'
+    assert:
+      - type: search-rubric
+        value: 'Confirms that {{name}} is the current CEO of Microsoft'
+
+  - vars:
+      name: 'Bill Gates' # Intentionally wrong
+    assert:
+      - type: search-rubric
+        value: 'States the correct current CEO of Microsoft (should identify this is incorrect)'
+        threshold: 0.8

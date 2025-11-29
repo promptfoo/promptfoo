@@ -1,14 +1,8 @@
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { getGraderById } from '../../../../src/redteam/graders';
-import {
-  CrescendoProvider,
-  MemorySystem,
-} from '../../../../src/redteam/providers/crescendo/index';
+import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import type { Message } from '../../../../src/redteam/providers/shared';
-import {
-  redteamProviderManager,
-  tryUnblocking,
-} from '../../../../src/redteam/providers/shared';
+import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
@@ -939,7 +933,8 @@ describe('CrescendoProvider', () => {
     // Check that at least one call contains the purpose string
     const calls = mockRedTeamProvider.callApi.mock.calls;
     const hasCallWithPurpose = calls.some(
-      (call: unknown[]) => typeof call[0] === 'string' && call[0].includes('test purpose for attack'),
+      (call: unknown[]) =>
+        typeof call[0] === 'string' && call[0].includes('test purpose for attack'),
     );
     expect(hasCallWithPurpose).toBe(true);
   });
@@ -1784,7 +1779,9 @@ describe('CrescendoProvider - Abort Signal Handling', () => {
     mockRedTeamProvider.callApi.mockRejectedValue(abortError);
 
     // Should re-throw the AbortError, not swallow it
-    await expect(provider.callApi('test prompt', context)).rejects.toThrow('The operation was aborted');
+    await expect(provider.callApi('test prompt', context)).rejects.toThrow(
+      'The operation was aborted',
+    );
   });
 
   it('should pass options with abortSignal to internal method calls', async () => {
@@ -1924,7 +1921,9 @@ describe('CrescendoProvider - Abort Signal Handling', () => {
     mockScoringProvider.callApi.mockRejectedValue(abortError);
 
     // Should re-throw the AbortError from scoring provider
-    await expect(provider.callApi('test prompt', context)).rejects.toThrow('The operation was aborted');
+    await expect(provider.callApi('test prompt', context)).rejects.toThrow(
+      'The operation was aborted',
+    );
   });
 
   it('should swallow non-AbortError exceptions and continue loop', async () => {

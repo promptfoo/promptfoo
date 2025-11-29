@@ -4,21 +4,92 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.119.13](https://github.com/promptfoo/promptfoo/compare/promptfoo-v0.119.12...promptfoo-v0.119.13) (2025-11-25)
+
+### Features
+
+- ecommerce plugin pack ([#6168](https://github.com/promptfoo/promptfoo/issues/6168)) ([152b1ff](https://github.com/promptfoo/promptfoo/commit/152b1ff3f3fdb6ca43a0a5718d463757f63a1814))
+
+### Bug Fixes
+
+- **deps:** bump posthog-node from 5.13.2 to 5.14.0 for sha1-hulud mitigation ([6a44eda](https://github.com/promptfoo/promptfoo/commit/6a44eda819f48273230853cc8692b821f8db14a0))
+
+## [0.119.12](https://github.com/promptfoo/promptfoo/compare/promptfoo-v0.119.11...promptfoo-v0.119.12) (2025-11-24)
+
+### Features
+
+- feat(redteam): add ecommerce plugin pack with 4 security testing plugins (#6168)
+
+* changelog automation and validation ([#6252](https://github.com/promptfoo/promptfoo/issues/6252)) ([ee74c4a](https://github.com/promptfoo/promptfoo/commit/ee74c4ae7dc01c35dd52d835a19188f06a334a1a))
+* **providers:** add Anthropic structured outputs support ([#6226](https://github.com/promptfoo/promptfoo/issues/6226)) ([1b1b9d2](https://github.com/promptfoo/promptfoo/commit/1b1b9d274559a5ae7cefba1de0c6a732a3d6cbf0))
+* **providers:** add Claude Opus 4.5 model support ([#6339](https://github.com/promptfoo/promptfoo/issues/6339)) ([65f855d](https://github.com/promptfoo/promptfoo/commit/65f855d57a2d3e0a663ad86260308f899c375dd6))
+* **providers:** add Claude Opus 4.5 support for Anthropic, Google Vertex AI, and AWS Bedrock ([#6340](https://github.com/promptfoo/promptfoo/issues/6340)) ([95780cb](https://github.com/promptfoo/promptfoo/commit/95780cb32270ec7cca86e5722e204cae321942b5))
+* **providers:** add metadata extraction for OpenAI Responses API ([#6267](https://github.com/promptfoo/promptfoo/issues/6267)) ([f252f33](https://github.com/promptfoo/promptfoo/commit/f252f330f1faed5b8d46f8b32010c81d5f92edf7))
+* **server:** add server-side provider list customization ([#6124](https://github.com/promptfoo/promptfoo/issues/6124)) ([fdb792a](https://github.com/promptfoo/promptfoo/commit/fdb792a2d1908007786571d54a8d7f66fb54940c))
+* **util:** add support for loading tool definitions from Python/JavaScript files ([#6272](https://github.com/promptfoo/promptfoo/issues/6272)) ([41377d0](https://github.com/promptfoo/promptfoo/commit/41377d04d01b8b7abd9955619d29a77c2a8914d5))
+
+### Bug Fixes
+
+- add data URL support for vision models with local images ([#5725](https://github.com/promptfoo/promptfoo/issues/5725)) ([17442a8](https://github.com/promptfoo/promptfoo/commit/17442a85f230668a430076141492c777ecca4995))
+- **assertions:** use script output for file:// references in all assertion types ([#6253](https://github.com/promptfoo/promptfoo/issues/6253)) ([246dcd8](https://github.com/promptfoo/promptfoo/commit/246dcd8642803772ef53ab0b3c6ef471c7bee815))
+- **cli:** restore commandLineOptions support + fix cloud auto-sharing ([#6190](https://github.com/promptfoo/promptfoo/issues/6190)) ([6df071f](https://github.com/promptfoo/promptfoo/commit/6df071f1373ceb6b1c31fb096a2e0c673cc8918c))
+- **code-scan:** remove redundant PR comment when no issues found ([#6317](https://github.com/promptfoo/promptfoo/issues/6317)) ([2a6e38c](https://github.com/promptfoo/promptfoo/commit/2a6e38c4e210c5bc6b1358fa5d4c48c82c3bec78))
+- **codeScan:** exit with code 0 when no files to scan ([#6316](https://github.com/promptfoo/promptfoo/issues/6316)) ([78e5c52](https://github.com/promptfoo/promptfoo/commit/78e5c526ee4ef240419eac2e8e51142b9f538ad6))
+- **logging:** implement PROMPTFOO_LOG_DIR environment variable ([#6179](https://github.com/promptfoo/promptfoo/issues/6179)) ([f3db2d9](https://github.com/promptfoo/promptfoo/commit/f3db2d9421fe72cbd19efde4e888fb016c3c256d))
+- **providers:** propagate agent errors in simulated-user provider ([#6251](https://github.com/promptfoo/promptfoo/issues/6251)) ([2378f71](https://github.com/promptfoo/promptfoo/commit/2378f71bcb06ee39e09f9243051ceea77af1b3a9))
+- **providers:** support function providers in defaultTest.options.provider and assertions ([#6174](https://github.com/promptfoo/promptfoo/issues/6174)) ([601f173](https://github.com/promptfoo/promptfoo/commit/601f1730cd83c858aaf845d7aadd69069d2395c4))
+- **webui:** prevent horizontal scrolling in metadata table ([#6178](https://github.com/promptfoo/promptfoo/issues/6178)) ([5d36d8d](https://github.com/promptfoo/promptfoo/commit/5d36d8d2ff836914f596892b2fc41a80e5b7804e))
+
 ## [Unreleased]
 
 ### Added
 
-- feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking (#6267)
+- feat(providers): add Claude Agent SDK plugin support - enables loading local plugins via `plugins` config
+- feat(providers): add Claude Opus 4.5 support across Anthropic (claude-opus-4-5-20251101, claude-opus-4-5-latest), Google Vertex AI (claude-opus-4-5@20251101), and AWS Bedrock (anthropic.claude-opus-4-5-20251101-v1:0 for all regions) with $5/MTok input and $25/MTok output pricing; includes comprehensive documentation updates, advanced coding example demonstrating bug diagnosis and tradeoff analysis, updated provider examples, and cost calculation tests
+- feat(util): add support for loading tool definitions from Python/JavaScript files - providers now support dynamic tool generation using `file://tools.py:get_tools` and `file://tools.js:get_tools` syntax, enabling runtime tool definitions based on environment, config, or external APIs (#6272)
+- feat(server): add server-side provider list customization via ui-providers.yaml - enables organizations to define custom provider lists that appear in eval creator and redteam setup UIs; when ui-providers.yaml exists, replaces default ~600 providers with organization-specific options for simplified workflow and security control (#6124)
+- feat(providers): add Anthropic structured outputs support with JSON schema outputs via `output_format` parameter and strict tool use via `strict: true` in tool definitions - ensures schema-compliant responses with automatic beta header handling, external file loading, variable rendering, and JSON parsing for Claude Sonnet 4.5 and Claude Opus 4.1 (#6226)
+- feat(webui): add custom policy generation to red team setup (#6181)
+- feat(webui): add strategy test generation to red team setup (#6005)
+- feat(webui): add visibility button for PFX passphrase field in red team target configuration (#6258)
+- feat: Share trace data to promptfoo cloud (#6290)
 
 ### Changed
 
+- feat(cli): add automatic changelog update on version bump with comprehensive error handling (#6252)
+- feat(ci): add JavaScript-based changelog validator replacing bash script for PR number and Unreleased section enforcement (#6252)
+- feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking (#6267)
 - refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
 
 ### Fixed
 
+- fix(code-scan): remove redundant extra PR comment when no vulnerabilities are found (#6317)
+- fix(code-scan): exit with code 0 when no files to scan instead of failing - handles cases where no files are changed, all files are filtered by denylist/size/binary detection, or no patches are found (#6316)
+- fix(providers): add universal data URL support for vision models with edge case handling - automatically converts file:// image inputs to data URLs with transparent provider-specific handling (OpenAI/Azure/Ollama use native data URLs, Anthropic/Google extract base64); includes shared dataUrl utility for RFC 2397 parsing, charset/parameter support, whitespace trimming, small image support (≥20 chars), and comprehensive documentation (#5725)
+- fix(util): add recursive array processing for tool loading - arrays of file:// tool references now processed correctly with Promise.all() and auto-flattening (#6272)
+- fix(webui): prevent horizontal scrolling in metadata table by adding fixed table layout with explicit column widths and proper word-breaking for long content (#6178)
 - fix(providers): maintain backwards compatibility for annotations in raw provider responses (#6267)
 - fix(cli): restore commandLineOptions support for generateSuggestions, table, and write options (#6190)
 - fix(cli): enable auto-sharing when cloud is enabled by not defaulting config.sharing to false - when sharing is unset in config, it now correctly falls through to cloud auto-share behavior instead of defaulting to disabled (#6190)
+- fix(providers): propagate agent errors in simulated-user provider - fixes issue where errors from sendMessageToAgent() were silently ignored, causing false-positive test results when the target provider fails (#6251)
+- fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
+- fix(assertions): use file-based script output for all assertion types with `file://` references (#6200)
+- fix(cli): respect PROMPTFOO_LOG_DIR environment variable for custom log directory location (#6179)
+
+### Documentation
+
+- docs(providers): add comprehensive Anthropic structured outputs documentation covering JSON outputs (`output_format`) and strict tool use (`strict: true`), including usage examples, schema limitations, and feature compatibility (#6226)
+
+### Tests
+
+- test(examples): add structured outputs example demonstrating JSON schema-based responses and strict tool use for Anthropic provider (#6226)
+- test(examples): update tool-use example to include strict mode configuration for Anthropic provider (#6226)
+- test(examples): enhance structured-outputs-config example to demonstrate multi-provider structured outputs with OpenAI and Anthropic, showcasing syntax differences between providers (#6226)
+- test(scripts): add 59 tests for changelog automation scripts covering validation and version update functionality (#6252)
+
+### Dependencies
+
+- fix(deps): bump posthog-node from 5.13.2 to 5.14.0 for sha1-hulud supply-chain attack mitigation (#6349) by @Devdha
 
 ## [0.119.11] - 2025-11-23
 
@@ -51,7 +122,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/)
 - fix(providers): fix LiteLLM provider API key authentication — reverts to inline authentication check to properly handle providers with `apiKeyRequired: false` and fixes Authorization header to be omitted (instead of sending "Bearer undefined") when no API key is set, resolving "API key is not set" error when using LITELLM_API_KEY environment variable (#6322)
 - fix(webui): fix Basic strategy checkbox behavior in red team setup — unchecking Basic now correctly adds `enabled: false` instead of removing the strategy, matching documented behavior at [Basic strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/basic/) (#6313)
 - fix(code-scan): prevent "start line must precede end line" GitHub API error by ensuring start_line is only set when it differs from line - fixes single-line comment highlighting in PR reviews (#6314)
@@ -102,6 +172,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(cli): add missing Authorization header in `validate target` command to fix 403 Forbidden error when calling agent helper endpoint (#6274)
+- fix(providers): support function providers in defaultTest.options.provider and assertions (#6174)
 
 ## [0.119.8] - 2025-11-18
 

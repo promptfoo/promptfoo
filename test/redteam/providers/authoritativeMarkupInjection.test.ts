@@ -1,16 +1,6 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-} from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-import type {
-  ApiProvider,
-  CallApiContextParams,
-} from '../../../src/types/index';
+import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockFetchWithProxy = jest.fn<any>();
@@ -21,7 +11,9 @@ jest.mock('../../../src/util/fetch/index', () => ({
 
 jest.mock('../../../src/evaluatorHelpers', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  renderPrompt: jest.fn().mockImplementation((_prompt: any, vars: any) => vars.input || 'rendered prompt'),
+  renderPrompt: jest
+    .fn()
+    .mockImplementation((_prompt: any, vars: any) => vars.input || 'rendered prompt'),
 }));
 
 jest.mock('../../../src/globalConfig/accounts', () => ({

@@ -1,7 +1,7 @@
-import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
+import { defaultProviders } from '../../constants/defaultProviders';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { createTransformRequest, createTransformResponse } from '../../providers/httpTransforms';
@@ -15,12 +15,75 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
 import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
+import { getAvailableProviders } from '../config/serverConfig';
 import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
 
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 
 export const providersRouter = Router();
+
+/**
+ * GET /api/providers
+ *
+ * Returns the list of providers available in the eval creator UI.
+ * If ui-providers.yaml exists in .promptfoo directory, returns those providers.
+ * Otherwise returns the default list of ~600 providers.
+ *
+ * Response:
+ * - providers: Array of provider options (can be string IDs or full config objects)
+ * - hasCustomConfig: Boolean indicating if custom config exists
+ */
+providersRouter.get('/', (_req: Request, res: Response): void => {
+  try {
+    const serverProviders = getAvailableProviders();
+
+    // If server has custom providers, use those; otherwise use defaults
+    const providers = serverProviders.length > 0 ? serverProviders : defaultProviders;
+    const hasCustomConfig = serverProviders.length > 0;
+
+    res.json({
+      success: true,
+      data: { providers, hasCustomConfig },
+    });
+  } catch (error) {
+    logger.error('[GET /api/providers] Error loading providers', { error });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load providers',
+    });
+  }
+});
+
+/**
+ * GET /api/providers/config-status
+ *
+ * Returns whether a custom provider configuration exists.
+ * Used by redteam setup UI to determine whether to filter provider types.
+ *
+ * When custom config exists (hasCustomConfig: true), redteam setup restricts
+ * provider types to: http, websocket, python, javascript for testing custom implementations.
+ *
+ * Response:
+ * - hasCustomConfig: Boolean indicating if ui-providers.yaml exists with providers
+ */
+providersRouter.get('/config-status', (_req: Request, res: Response): void => {
+  try {
+    const serverProviders = getAvailableProviders();
+    const hasCustomConfig = serverProviders.length > 0;
+
+    res.json({
+      success: true,
+      data: { hasCustomConfig },
+    });
+  } catch (error) {
+    logger.error('[GET /api/providers/config-status] Error loading config status', { error });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load provider config status',
+    });
+  }
+});
 
 // Validation schemas
 const TestRequestTransformSchema = z.object({
@@ -114,12 +177,11 @@ providersRouter.post(
       }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
-      const serializedError = dedent`
-        [POST /providers/discover] Error calling target purpose discovery
-        error: ${errorMessage}
-        providerOptions: ${JSON.stringify(providerOptions)}`;
-      logger.error(serializedError);
-      res.status(500).json({ error: serializedError });
+      logger.error('Error calling target purpose discovery', {
+        error: e,
+        providerOptions,
+      });
+      res.status(500).json({ error: `Discovery failed: ${errorMessage}` });
       return;
     }
   },
@@ -136,11 +198,10 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
   const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
 
   try {
-    logger.debug(
-      dedent`[POST /providers/http-generator] Calling HTTP provider generator API
-        requestExample: ${requestExample?.substring(0, 200)}
-        hasResponseExample: ${!!responseExample}`,
-    );
+    logger.debug('[POST /providers/http-generator] Calling HTTP provider generator API', {
+      requestExamplePreview: requestExample?.substring(0, 200),
+      hasResponseExample: !!responseExample,
+    });
 
     const response = await fetchWithProxy(`${HOST}/api/v1/http-provider-generator`, {
       method: 'POST',
@@ -155,11 +216,10 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error(
-        dedent`[POST /providers/http-generator] Error from cloud API
-          status: ${response.status}
-          error: ${errorText}`,
-      );
+      logger.error('[POST /providers/http-generator] Error from cloud API', {
+        status: response.status,
+        errorText,
+      });
       res.status(response.status).json({
         error: `HTTP error! status: ${response.status}`,
         details: errorText,
@@ -172,10 +232,9 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     res.status(200).json(data);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(
-      dedent`[POST /providers/http-generator] Error calling HTTP provider generator
-        error: ${errorMessage}`,
-    );
+    logger.error('[POST /providers/http-generator] Error calling HTTP provider generator', {
+      error,
+    });
     res.status(500).json({
       error: 'Failed to generate HTTP configuration',
       details: errorMessage,
@@ -227,7 +286,9 @@ providersRouter.post(
         return;
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`[POST /providers/test-request-transform] Error: ${errorMessage}`);
+      logger.error('[POST /providers/test-request-transform] Error', {
+        error,
+      });
       res.status(200).json({
         success: false,
         error: errorMessage,
@@ -289,7 +350,9 @@ providersRouter.post(
         return;
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`[POST /providers/test-response-transform] Error: ${errorMessage}`);
+      logger.error('[POST /providers/test-response-transform] Error', {
+        error,
+      });
       res.status(200).json({
         success: false,
         error: errorMessage,

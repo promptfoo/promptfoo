@@ -1182,14 +1182,12 @@ describe('RedteamGoatProvider', () => {
 
       const regularError = new Error('Network error');
       // First turn fails with non-AbortError, second turn succeeds
-      mockFetch
-        .mockRejectedValueOnce(regularError)
-        .mockImplementationOnce(async () => ({
-          json: async () => ({
-            message: { role: 'assistant', content: 'test response' },
-          }),
-          ok: true,
-        }));
+      mockFetch.mockRejectedValueOnce(regularError).mockImplementationOnce(async () => ({
+        json: async () => ({
+          message: { role: 'assistant', content: 'test response' },
+        }),
+        ok: true,
+      }));
 
       const targetProvider = createMockTargetProvider();
       const context = createMockContext(targetProvider);

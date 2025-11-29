@@ -19,14 +19,8 @@ import {
   urlEncodeRawRequestPath,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
-import {
-  maybeLoadConfigFromExternalFile,
-  maybeLoadFromExternalFile,
-} from '../../src/util/file';
-import {
-  sanitizeObject,
-  sanitizeUrl,
-} from '../../src/util/sanitizer';
+import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../src/util/file';
+import { sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
 
 // Mock console.warn to prevent test noise
 const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});

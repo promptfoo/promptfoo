@@ -417,7 +417,11 @@ async function runRedteamConversation({
         },
       ]);
 
-      const judgeResp: ProviderResponse = await redteamProvider.callApi(judgeBody, undefined, options);
+      const judgeResp: ProviderResponse = await redteamProvider.callApi(
+        judgeBody,
+        undefined,
+        options,
+      );
       if (redteamProvider.delay) {
         await sleep(redteamProvider.delay);
       }

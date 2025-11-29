@@ -204,6 +204,24 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       `Files changed: ${files.length} (${includedFiles.length} included, ${skippedFiles.length} skipped)`,
     );
 
+    // Check if there are no files to scan
+    if (includedFiles.length === 0) {
+      const msg = 'No files to scan';
+      if (showSpinner && spinner) {
+        spinner.succeed(msg);
+      } else {
+        logger.info(msg);
+      }
+
+      // Exit with code 0 (success) when no files to scan
+      cliState.postActionCallback = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for output to be flushed
+        process.exitCode = 0;
+      };
+
+      return;
+    }
+
     // Extract git metadata
     const metadata = await extractMetadata(absoluteRepoPath, baseBranch, compareRef);
     logger.debug(`Compare ref: ${metadata.branch}`);

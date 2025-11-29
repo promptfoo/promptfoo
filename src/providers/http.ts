@@ -20,19 +20,13 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import {
-  maybeLoadConfigFromExternalFile,
-  maybeLoadFromExternalFile,
-} from '../util/file';
+import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { safeResolve } from '../util/pathUtils';
-import {
-  sanitizeObject,
-  sanitizeUrl,
-} from '../util/sanitizer';
+import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -1526,7 +1520,6 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    
     const vars = {
       ...(context?.vars || {}),
       prompt,

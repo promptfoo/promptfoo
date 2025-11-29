@@ -28,6 +28,7 @@ function buildMockEval(): Partial<Eval> {
     save: jest.fn().mockResolvedValue(undefined),
     toEvaluateSummary: jest.fn().mockResolvedValue({}),
     getTable: jest.fn().mockResolvedValue([]),
+    getTraces: jest.fn().mockResolvedValue([]),
     id: randomUUID(),
     getResultsCount: jest.fn().mockResolvedValue(2),
     fetchResultsBatched: jest.fn().mockImplementation(() => {
@@ -484,6 +485,130 @@ describe('createShareableUrl', () => {
         }),
       );
       expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
+    });
+
+    it('sends eval with trace data when traces are available', async () => {
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+      jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+      const mockEvalWithTraces = buildMockEval();
+      const mockTraces = [
+        {
+          traceId: 'trace-123',
+          evaluationId: mockEvalWithTraces.id as string,
+          testCaseId: 'test-case-1',
+          metadata: { test: 'metadata' },
+          spans: [
+            {
+              spanId: 'span-1',
+              name: 'Test Span',
+              startTime: 1000,
+              endTime: 2000,
+              statusCode: 1,
+            },
+          ],
+        },
+      ];
+      mockEvalWithTraces.getTraces = jest.fn().mockResolvedValue(mockTraces);
+
+      // Mock the initial eval send
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      });
+      // Mock the chunk send
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      await createShareableUrl(mockEvalWithTraces as Eval);
+
+      // Verify traces are included in the initial request
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/results',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"traces":['),
+        }),
+      );
+
+      // Verify trace data structure is correct
+      const firstCall = mockFetch.mock.calls[0];
+      const requestBody = JSON.parse(firstCall[1].body);
+      expect(requestBody.traces).toHaveLength(1);
+      expect(requestBody.traces[0]).toMatchObject({
+        traceId: 'trace-123',
+        evaluationId: mockEvalWithTraces.id,
+        testCaseId: 'test-case-1',
+        metadata: { test: 'metadata' },
+      });
+      expect(requestBody.traces[0].spans).toHaveLength(1);
+      expect(requestBody.traces[0].spans[0]).toMatchObject({
+        spanId: 'span-1',
+        name: 'Test Span',
+        startTime: 1000,
+        endTime: 2000,
+        statusCode: 1,
+      });
+    });
+
+    it('sends eval with empty traces array when no traces are available', async () => {
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+      jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+      const mockEvalNoTraces = buildMockEval();
+      mockEvalNoTraces.getTraces = jest.fn().mockResolvedValue([]);
+
+      // Mock the initial eval send
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      });
+      // Mock the chunk send
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      await createShareableUrl(mockEvalNoTraces as Eval);
+
+      // Verify empty traces array is included
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/results',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"traces":[]'),
+        }),
+      );
+
+      const firstCall = mockFetch.mock.calls[0];
+      const requestBody = JSON.parse(firstCall[1].body);
+      expect(requestBody.traces).toEqual([]);
+    });
+
+    it('handles getTraces errors gracefully', async () => {
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+      jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+      const mockEvalTracesError = buildMockEval();
+      mockEvalTracesError.getTraces = jest
+        .fn()
+        .mockRejectedValue(new Error('Failed to fetch traces'));
+
+      const result = await createShareableUrl(mockEvalTracesError as Eval);
+
+      // Should return null when an error occurs
+      expect(result).toBeNull();
     });
   });
 

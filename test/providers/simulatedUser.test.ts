@@ -965,4 +965,101 @@ describe('SimulatedUser', () => {
       expect(result.output).toContain('Response');
     });
   });
+
+  describe('error handling', () => {
+    it('should return error when agent provider returns error in main loop', async () => {
+      const errorProvider = {
+        id: () => 'error-agent',
+        callApi: jest.fn().mockResolvedValue({
+          error: 'Model not found: invalid-model',
+          output: undefined,
+        }),
+      };
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: errorProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('Model not found: invalid-model');
+      expect(result.tokenUsage).toBeDefined();
+    });
+
+    it('should return error when agent provider returns error with initial messages ending in user', async () => {
+      const errorProvider = {
+        id: () => 'error-agent',
+        callApi: jest.fn().mockResolvedValue({
+          error: 'API rate limit exceeded',
+          output: undefined,
+        }),
+      };
+
+      const initialMessages = [{ role: 'user' as const, content: 'Hello' }];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: errorProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('API rate limit exceeded');
+      expect(result.tokenUsage).toBeDefined();
+    });
+
+    it('should return error on first turn failure and not continue conversation', async () => {
+      const errorProvider = {
+        id: () => 'error-agent',
+        callApi: jest.fn().mockResolvedValue({
+          error: 'Connection timeout',
+          output: undefined,
+        }),
+      };
+
+      const userWithMultipleTurns = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 5,
+        },
+      });
+
+      const result = await userWithMultipleTurns.callApi('test prompt', {
+        originalProvider: errorProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('Connection timeout');
+      // Should only call once before returning error
+      expect(errorProvider.callApi).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return error on second turn when first succeeds but second fails', async () => {
+      const partialErrorProvider = {
+        id: () => 'partial-error-agent',
+        callApi: jest
+          .fn()
+          .mockResolvedValueOnce({
+            output: 'first response',
+            tokenUsage: { numRequests: 1 },
+          })
+          .mockResolvedValueOnce({
+            error: 'Rate limit exceeded',
+            output: undefined,
+          }),
+      };
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: partialErrorProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('Rate limit exceeded');
+      expect(partialErrorProvider.callApi).toHaveBeenCalledTimes(2);
+    });
+  });
 });

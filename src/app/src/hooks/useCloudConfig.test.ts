@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { callApi } from '../utils/api';
 import useCloudConfig from './useCloudConfig';
 
@@ -12,6 +12,12 @@ vi.mock('../utils/api', () => ({
 
 describe('useCloudConfig', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
+    // Only use fake timers in specific tests that need timer control
+  });
+
+  afterEach(() => {
     vi.clearAllMocks();
   });
 
@@ -312,8 +318,8 @@ describe('useCloudConfig', () => {
     // Rerender the hook
     rerender();
 
-    // Wait a bit to ensure no additional calls are made
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait a short time to ensure no additional calls are made
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(callApi).toHaveBeenCalledTimes(1);
   });

@@ -1,3 +1,4 @@
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { matchesSimilarity } from '../../src/matchers';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
@@ -7,7 +8,7 @@ import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesSimilarity', () => {
   beforeEach(() => {
-    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === 'Expected output' || text === 'Sample output') {
         return Promise.resolve({
           embedding: [1, 0, 0],
@@ -24,7 +25,7 @@ describe('matchesSimilarity', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass when similarity is above the threshold', async () => {
@@ -125,7 +126,7 @@ describe('matchesSimilarity', () => {
       },
     };
 
-    const mockCallApi = jest.spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi');
+    const mockCallApi = vi.spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi');
     mockCallApi.mockImplementation(function (this: OpenAiChatCompletionProvider) {
       expect(this.config.temperature).toBe(3.1415926);
       expect(this.getApiKey()).toBe('abc123');
@@ -167,9 +168,9 @@ describe('matchesSimilarity', () => {
       },
     };
 
-    jest
-      .spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi')
-      .mockRejectedValueOnce(new Error('API call failed'));
+    vi.spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi').mockRejectedValueOnce(
+      new Error('API call failed'),
+    );
 
     await expect(async () => {
       await matchesSimilarity(expected, output, threshold, false, grading);
@@ -185,7 +186,7 @@ describe('matchesSimilarity', () => {
       provider: DefaultEmbeddingProvider,
     };
 
-    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
       embedding: [1, 2, 3],
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
@@ -241,7 +242,7 @@ describe('matchesSimilarity', () => {
 
   describe('euclidean metric', () => {
     beforeEach(() => {
-      jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+      vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
         if (text === 'Expected output' || text === 'Sample output') {
           return Promise.resolve({
             embedding: [1, 0, 0],
@@ -320,7 +321,7 @@ describe('matchesSimilarity', () => {
     it('should reject non-cosine metric for callSimilarityApi providers', async () => {
       const mockProvider = {
         id: () => 'test-similarity-provider',
-        callSimilarityApi: jest.fn().mockResolvedValue({
+        callSimilarityApi: vi.fn().mockResolvedValue({
           similarity: 0.9,
           tokenUsage: { total: 5, prompt: 2, completion: 3 },
         }),

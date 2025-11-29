@@ -10,12 +10,7 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import type {
-  Assertion,
-  AssertionSet,
-  AtomicTestCase,
-  GradingResult,
-} from '../../types/index';
+import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -29,31 +24,15 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import {
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../util/tokenUsageUtils';
-import {
-  getRemoteGenerationUrl,
-  neverGenerateRemote,
-} from '../remoteGeneration';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import { getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import type { Message } from './shared';
-import {
-  getLastMessageContent,
-  messagesToRedteamHistory,
-  tryUnblocking,
-} from './shared';
-import {
-  formatTraceForMetadata,
-  formatTraceSummary,
-} from './traceFormatting';
-import {
-  type RawTracingConfig,
-  resolveTracingOptions,
-} from './tracingOptions';
+import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
+import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
+import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
 /**
  * Represents metadata for the GOAT conversation process.

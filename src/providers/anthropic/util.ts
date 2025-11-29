@@ -3,10 +3,18 @@ import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
 import type { AnthropicToolConfig, WebFetchToolConfig, WebSearchToolConfig } from './types';
+import { parseDataUrl } from '../../util/dataUrl';
 
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 4 models - Latest generation
+  ...['claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6, // $5 / MTok
+      output: 25 / 1e6, // $25 / MTok
+    },
+  })),
   ...[
     'claude-opus-4-1-20250805',
     'claude-opus-4-20250514',
@@ -121,6 +129,31 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
     .join('\n\n');
 }
 
+/**
+ * Automatically extracts base64 data from data URLs for Anthropic image content.
+ * This ensures compatibility with our universal data URL generation without requiring
+ * users to modify their prompt templates with Nunjucks filters.
+ */
+function processAnthropicImageContent(content: any[]): any[] {
+  return content.map((item) => {
+    if (item.type === 'image' && item.source && item.source.type === 'base64') {
+      // Check if the data field contains a data URL and parse it
+      const parsed = parseDataUrl(item.source.data);
+      if (parsed) {
+        return {
+          ...item,
+          source: {
+            ...item.source,
+            media_type: item.source.media_type || parsed.mimeType,
+            data: parsed.base64Data,
+          },
+        };
+      }
+    }
+    return item;
+  });
+}
+
 export function parseMessages(messages: string): {
   system?: Anthropic.TextBlockParam[];
   extractedMessages: Anthropic.MessageParam[];
@@ -137,7 +170,7 @@ export function parseMessages(messages: string): {
           .map((msg) => ({
             role: msg.role,
             content: Array.isArray(msg.content)
-              ? msg.content
+              ? processAnthropicImageContent(msg.content)
               : [{ type: 'text', text: msg.content }],
           })),
         system: systemMessage
@@ -285,6 +318,13 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
     } else {
       // Standard Anthropic tool
       processedTools.push(tool as Anthropic.Tool);
+
+      // Check if tool uses strict mode (structured outputs for tools)
+      if ('strict' in tool && tool.strict === true) {
+        if (!requiredBetaFeatures.includes('structured-outputs-2025-11-13')) {
+          requiredBetaFeatures.push('structured-outputs-2025-11-13');
+        }
+      }
     }
   }
 

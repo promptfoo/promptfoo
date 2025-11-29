@@ -1,7 +1,4 @@
-import {
-  getEnvBool,
-  getEnvString,
-} from '../../src/envars';
+import { getEnvBool, getEnvString } from '../../src/envars';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
   PromptfooChatCompletionProvider,

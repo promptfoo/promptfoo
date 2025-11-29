@@ -1040,12 +1040,7 @@ describe('fetchWithRetries', () => {
       const successResponse = createMockResponse();
       jest.mocked(global.fetch).mockResolvedValueOnce(successResponse);
 
-      await fetchWithRetries(
-        'https://example.com',
-        { signal: abortController.signal },
-        1000,
-        0,
-      );
+      await fetchWithRetries('https://example.com', { signal: abortController.signal }, 1000, 0);
 
       expect(global.fetch).toHaveBeenCalledWith(
         expect.any(String),

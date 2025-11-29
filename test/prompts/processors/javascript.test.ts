@@ -1,16 +1,17 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../../src/esm';
 import { processJsFile, transformContext } from '../../../src/prompts/processors/javascript';
 import invariant from '../../../src/util/invariant';
 
-jest.mock('../../../src/esm', () => ({
-  importModule: jest.fn(),
+vi.mock('../../../src/esm', () => ({
+  importModule: vi.fn(),
 }));
 
 describe('transformContext', () => {
   it('should transform context with provider and config', () => {
     const context = {
       vars: { key: 'value' },
-      provider: { id: () => 'providerId', label: 'providerLabel', callApi: jest.fn() },
+      provider: { id: () => 'providerId', label: 'providerLabel', callApi: vi.fn() },
       config: { configKey: 'configValue' },
     };
     const result = transformContext(context);
@@ -24,7 +25,7 @@ describe('transformContext', () => {
   it('should transform context with provider and empty config', () => {
     const context = {
       vars: { key: 'value' },
-      provider: { id: () => 'providerId', label: 'providerLabel', callApi: jest.fn() },
+      provider: { id: () => 'providerId', label: 'providerLabel', callApi: vi.fn() },
     };
     const result = transformContext(context);
     expect(result).toEqual({
@@ -41,15 +42,15 @@ describe('transformContext', () => {
 });
 
 describe('processJsFile', () => {
-  const mockImportModule = jest.mocked(importModule);
+  const mockImportModule = vi.mocked(importModule);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should process a valid JavaScript file without a function name or a label', async () => {
     const filePath = 'file.js';
-    const mockFunction = jest.fn(() => 'dummy prompt');
+    const mockFunction = vi.fn(() => 'dummy prompt');
     mockImportModule.mockResolvedValue(mockFunction);
     await expect(processJsFile(filePath, {}, undefined)).resolves.toEqual([
       {
@@ -64,7 +65,7 @@ describe('processJsFile', () => {
 
   it('should process a valid JavaScript file with a label without a function name', async () => {
     const filePath = 'file.js';
-    const mockFunction = jest.fn(() => 'dummy prompt');
+    const mockFunction = vi.fn(() => 'dummy prompt');
     mockImportModule.mockResolvedValue(mockFunction);
     await expect(processJsFile(filePath, { label: 'myLabel' }, undefined)).resolves.toEqual([
       {
@@ -96,7 +97,7 @@ describe('processJsFile', () => {
   it('should process a valid JavaScript file with a label and a function name', async () => {
     const filePath = 'file.js';
     const functionName = 'myFunction';
-    const mockFunction = jest.fn(() => 'dummy prompt');
+    const mockFunction = vi.fn(() => 'dummy prompt');
     mockImportModule.mockResolvedValue(mockFunction);
     await expect(processJsFile(filePath, { label: 'myLabel' }, functionName)).resolves.toEqual([
       {
@@ -121,7 +122,7 @@ describe('processJsFile', () => {
 
   it('should process a valid JavaScript file with config', async () => {
     const filePath = 'file.js';
-    const mockFunction = jest.fn(() => 'dummy prompt');
+    const mockFunction = vi.fn(() => 'dummy prompt');
     mockImportModule.mockResolvedValue(mockFunction);
     const config = { key: 'value' };
     await expect(processJsFile(filePath, { config }, undefined)).resolves.toEqual([
@@ -137,7 +138,7 @@ describe('processJsFile', () => {
 
   it('should pass config to the prompt function', async () => {
     const filePath = 'file.js';
-    const mockFunction = jest.fn(() => 'dummy prompt');
+    const mockFunction = vi.fn(() => 'dummy prompt');
     mockImportModule.mockResolvedValue(mockFunction);
     const config = { key: 'value' };
     const result = await processJsFile(filePath, { config }, undefined);
@@ -145,7 +146,7 @@ describe('processJsFile', () => {
     invariant(promptFunction, 'Prompt function is required');
     await promptFunction({
       vars: {},
-      provider: { id: () => 'test', label: 'Test', callApi: jest.fn() },
+      provider: { id: () => 'test', label: 'Test', callApi: vi.fn() },
     });
     expect(mockFunction).toHaveBeenCalledWith(
       expect.objectContaining({

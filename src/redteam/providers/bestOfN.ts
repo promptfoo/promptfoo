@@ -15,14 +15,8 @@ import type {
 } from '../../types/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
-import {
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../util/tokenUsageUtils';
-import {
-  getRemoteGenerationUrl,
-  neverGenerateRemote,
-} from '../remoteGeneration';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import { getSessionId } from '../util';
 
 interface BestOfNResponse {

@@ -1,3 +1,10 @@
+// Mock envars module before imports
+const mockGetEnvInt = jest.fn().mockReturnValue(undefined);
+jest.mock('../../../src/envars', () => ({
+  ...jest.requireActual('../../../src/envars'),
+  getEnvInt: (...args: unknown[]) => mockGetEnvInt(...args),
+}));
+
 // Import the mocked modules after mocking
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -12,6 +19,7 @@ const mockClient = {
   registerCapabilities: jest.fn(),
   assertCapability: jest.fn(),
   connect: jest.fn(),
+  ping: jest.fn().mockResolvedValue({}),
   listTools: jest.fn().mockResolvedValue({
     tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
   }),
@@ -93,7 +101,7 @@ describe('MCPClient', () => {
         args: ['start'],
         env: process.env as Record<string, string>,
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
       await mcpClient.cleanup();
       expect(mcpClient.hasInitialized).toBe(false);
     });
@@ -156,7 +164,7 @@ describe('MCPClient', () => {
       await mcpClient.initialize();
 
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
     });
 
     it('should initialize with remote server using StreamableHTTPClientTransport with headers', async () => {
@@ -189,7 +197,7 @@ describe('MCPClient', () => {
           }),
         }),
       );
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
     });
 
     it('should fall back to SSEClientTransport if StreamableHTTPClientTransport fails', async () => {
@@ -336,6 +344,144 @@ describe('MCPClient', () => {
 
       expect(Client).toHaveBeenCalledWith({ name: 'promptfoo-MCP', version: '1.0.0' });
     });
+
+    it('should pass timeout to listTools when configured', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        timeout: 900000, // 15 minutes
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(mockClient.listTools).toHaveBeenCalledWith(undefined, { timeout: 900000 });
+    });
+
+    it('should pass timeout options to connect()', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        timeout: 300000,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(mockClient.connect).toHaveBeenCalledWith(expect.anything(), { timeout: 300000 });
+    });
+
+    it('should ping server when pingOnConnect is true', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.ping.mockResolvedValueOnce({});
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        pingOnConnect: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(mockClient.ping).toHaveBeenCalled();
+    });
+
+    it('should fail initialization if ping fails', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.ping.mockRejectedValueOnce(new Error('Server not responding'));
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        pingOnConnect: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await expect(mcpClient.initialize()).rejects.toThrow('ping failed');
+    });
+
+    it('should pass resetTimeoutOnProgress option', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        timeout: 300000,
+        resetTimeoutOnProgress: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      await mcpClient.callTool('tool1', {});
+
+      expect(mockClient.callTool).toHaveBeenCalledWith(
+        { name: 'tool1', arguments: {} },
+        undefined,
+        { timeout: 300000, resetTimeoutOnProgress: true },
+      );
+    });
+
+    it('should pass maxTotalTimeout option', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        timeout: 300000,
+        resetTimeoutOnProgress: true,
+        maxTotalTimeout: 900000,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      await mcpClient.callTool('tool1', {});
+
+      expect(mockClient.callTool).toHaveBeenCalledWith(
+        { name: 'tool1', arguments: {} },
+        undefined,
+        { timeout: 300000, resetTimeoutOnProgress: true, maxTotalTimeout: 900000 },
+      );
+    });
   });
 
   describe('callTool', () => {
@@ -359,10 +505,118 @@ describe('MCPClient', () => {
       const result = await mcpClient.callTool('tool1', { arg: 'value' });
 
       expect(result).toEqual({ content: 'result' });
-      expect(mockClient.callTool).toHaveBeenCalledWith({
-        name: 'tool1',
-        arguments: { arg: 'value' },
+      expect(mockClient.callTool).toHaveBeenCalledWith(
+        {
+          name: 'tool1',
+          arguments: { arg: 'value' },
+        },
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should pass timeout option when configured', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
       });
+      mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        timeout: 900000, // 15 minutes
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      const result = await mcpClient.callTool('tool1', { arg: 'value' });
+
+      expect(result).toEqual({ content: 'result' });
+      expect(mockClient.callTool).toHaveBeenCalledWith(
+        {
+          name: 'tool1',
+          arguments: { arg: 'value' },
+        },
+        undefined,
+        { timeout: 900000 },
+      );
+    });
+
+    it('should use MCP_REQUEST_TIMEOUT_MS env var as fallback when no config timeout', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
+
+      // Mock env var to return a timeout value
+      mockGetEnvInt.mockReturnValue(600000); // 10 minutes
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        // No timeout in config
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      const result = await mcpClient.callTool('tool1', { arg: 'value' });
+
+      expect(result).toEqual({ content: 'result' });
+      expect(mockClient.callTool).toHaveBeenCalledWith(
+        {
+          name: 'tool1',
+          arguments: { arg: 'value' },
+        },
+        undefined,
+        { timeout: 600000 },
+      );
+
+      // Reset mock
+      mockGetEnvInt.mockReturnValue(undefined);
+    });
+
+    it('should prefer config timeout over env var', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
+
+      // Mock env var to return a different timeout value
+      mockGetEnvInt.mockReturnValue(600000); // 10 minutes
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        timeout: 900000, // 15 minutes - should take precedence
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      await mcpClient.callTool('tool1', { arg: 'value' });
+
+      expect(mockClient.callTool).toHaveBeenCalledWith(
+        {
+          name: 'tool1',
+          arguments: { arg: 'value' },
+        },
+        undefined,
+        { timeout: 900000 }, // Config timeout takes precedence
+      );
+
+      // Reset mock
+      mockGetEnvInt.mockReturnValue(undefined);
     });
 
     it('should handle tool error', async () => {

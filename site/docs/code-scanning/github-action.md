@@ -152,6 +152,7 @@ jobs:
 ## See Also
 
 - [Code Scanning Overview](./index.md)
+- [VS Code Extension](./vscode-extension.md)
 - [CLI Command](./cli.md)
 - [Promptfoo Scanner GitHub App](https://github.com/apps/promptfoo-scanner)
 - [Promptfoo Code Scan Action on GitHub](https://github.com/promptfoo/code-scan-action)

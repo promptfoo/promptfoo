@@ -1,69 +1,66 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseXlsxFile } from '../../src/util/xlsx';
 
-jest.mock('xlsx', () => ({
-  readFile: jest.fn(),
-  utils: {
-    sheet_to_json: jest.fn(),
-  },
+// Mock read-excel-file/node module
+const mockReadXlsxFile = vi.fn();
+const mockReadSheetNames = vi.fn();
+
+vi.mock('read-excel-file/node', () => ({
+  __esModule: true,
+  default: (...args: any[]) => mockReadXlsxFile(...args),
+  readSheetNames: (...args: any[]) => mockReadSheetNames(...args),
 }));
 
-jest.mock('fs', () => ({
-  existsSync: jest.fn(() => true),
+vi.mock('fs', () => ({
+  existsSync: vi.fn(() => true),
 }));
 
 describe('parseXlsxFile', () => {
-  let xlsx: any;
   let fs: any;
 
   beforeEach(async () => {
-    xlsx = await import('xlsx');
-    fs = require('fs');
-    jest.resetAllMocks();
+    fs = await import('fs');
+    vi.resetAllMocks();
 
     // Mock fs.existsSync to return true by default
-    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should parse xlsx file successfully', async () => {
-    const mockData = [
-      { col1: 'value1', col2: 'value2' },
-      { col1: 'value3', col2: 'value4' },
+    // read-excel-file returns array of arrays where first row is headers
+    const mockRows = [
+      ['col1', 'col2'], // headers
+      ['value1', 'value2'], // data row 1
+      ['value3', 'value4'], // data row 2
     ];
 
-    xlsx.readFile.mockReturnValue({
-      SheetNames: ['Sheet1'],
-      Sheets: {
-        Sheet1: {},
-      },
-    });
-
-    xlsx.utils.sheet_to_json.mockReturnValue(mockData);
+    mockReadSheetNames.mockResolvedValue(['Sheet1']);
+    mockReadXlsxFile.mockResolvedValue(mockRows);
 
     const result = await parseXlsxFile('test.xlsx');
 
-    expect(result).toEqual(mockData);
-    expect(xlsx.readFile).toHaveBeenCalledWith('test.xlsx');
-    expect(xlsx.utils.sheet_to_json).toHaveBeenCalledWith({}, { defval: '' });
+    expect(result).toEqual([
+      { col1: 'value1', col2: 'value2' },
+      { col1: 'value3', col2: 'value4' },
+    ]);
+    expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx', { sheet: 1 });
   });
 
-  it('should throw error when xlsx module is not installed', async () => {
-    xlsx.readFile.mockImplementation(() => {
-      throw new Error("Cannot find module 'xlsx'");
-    });
+  it('should throw error when read-excel-file module is not installed', async () => {
+    mockReadSheetNames.mockRejectedValue(new Error("Cannot find module 'read-excel-file/node'"));
 
     await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
-      'xlsx is not installed. Please install it with: npm install xlsx',
+      'read-excel-file is not installed. Please install it with: npm install read-excel-file',
     );
   });
 
   it('should throw error when file parsing fails', async () => {
-    xlsx.readFile.mockImplementation(() => {
-      throw new Error('Failed to read file');
-    });
+    mockReadSheetNames.mockResolvedValue(['Sheet1']);
+    mockReadXlsxFile.mockRejectedValue(new Error('Failed to read file'));
 
     await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
       'Failed to parse Excel file test.xlsx: Failed to read file',
@@ -71,14 +68,8 @@ describe('parseXlsxFile', () => {
   });
 
   it('should handle empty sheets', async () => {
-    xlsx.readFile.mockReturnValue({
-      SheetNames: ['Sheet1'],
-      Sheets: {
-        Sheet1: {},
-      },
-    });
-
-    xlsx.utils.sheet_to_json.mockReturnValue([]);
+    mockReadSheetNames.mockResolvedValue(['Sheet1']);
+    mockReadXlsxFile.mockResolvedValue([]);
 
     await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
       'Sheet "Sheet1" is empty or contains no valid data rows',
@@ -86,28 +77,23 @@ describe('parseXlsxFile', () => {
   });
 
   it('should use first sheet by default', async () => {
-    const mockData = [{ col1: 'value1', col2: 'value2' }];
+    const mockRows = [
+      ['col1', 'col2'],
+      ['value1', 'value2'],
+    ];
 
-    xlsx.readFile.mockReturnValue({
-      SheetNames: ['Sheet1', 'Sheet2'],
-      Sheets: {
-        Sheet1: {},
-        Sheet2: {},
-      },
-    });
-
-    xlsx.utils.sheet_to_json.mockReturnValue(mockData);
+    mockReadSheetNames.mockResolvedValue(['Sheet1', 'Sheet2']);
+    mockReadXlsxFile.mockResolvedValue(mockRows);
 
     const result = await parseXlsxFile('test.xlsx');
 
-    expect(result).toEqual(mockData);
-    expect(xlsx.utils.sheet_to_json).toHaveBeenCalledWith({}, { defval: '' });
+    expect(result).toEqual([{ col1: 'value1', col2: 'value2' }]);
+    expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx', { sheet: 1 });
   });
 
   it('should handle malformed Excel files gracefully', async () => {
-    xlsx.readFile.mockImplementation(() => {
-      throw new Error('Invalid file format or corrupted file');
-    });
+    mockReadSheetNames.mockResolvedValue(['Sheet1']);
+    mockReadXlsxFile.mockRejectedValue(new Error('Invalid file format or corrupted file'));
 
     await expect(parseXlsxFile('corrupted.xlsx')).rejects.toThrow(
       'Failed to parse Excel file corrupted.xlsx: Invalid file format or corrupted file',
@@ -116,7 +102,7 @@ describe('parseXlsxFile', () => {
 
   it('should throw specific error when file does not exist', async () => {
     // Override the default mock for this test
-    jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
     await expect(parseXlsxFile('nonexistent.xlsx')).rejects.toThrow(
       'File not found: nonexistent.xlsx',
@@ -125,155 +111,96 @@ describe('parseXlsxFile', () => {
 
   describe('sheet selection syntax', () => {
     it('should select sheet by name using # syntax', async () => {
-      const mockData = [{ col1: 'sheet2data', col2: 'value2' }];
+      const mockRows = [
+        ['col1', 'col2'],
+        ['sheet2data', 'value2'],
+      ];
 
-      xlsx.readFile.mockReturnValue({
-        SheetNames: ['Sheet1', 'DataSheet', 'Sheet3'],
-        Sheets: {
-          Sheet1: { data: 'sheet1' },
-          DataSheet: { data: 'datasheet' },
-          Sheet3: { data: 'sheet3' },
-        },
-      });
-
-      xlsx.utils.sheet_to_json.mockReturnValue(mockData);
+      mockReadSheetNames.mockResolvedValue(['Sheet1', 'DataSheet', 'Sheet3']);
+      mockReadXlsxFile.mockResolvedValue(mockRows);
 
       const result = await parseXlsxFile('test.xlsx#DataSheet');
 
-      expect(result).toEqual(mockData);
-      expect(xlsx.utils.sheet_to_json).toHaveBeenCalledWith({ data: 'datasheet' }, { defval: '' });
+      expect(result).toEqual([{ col1: 'sheet2data', col2: 'value2' }]);
+      expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx', { sheet: 'DataSheet' });
     });
 
     it('should select sheet by 1-based index using # syntax', async () => {
-      const mockData = [{ col1: 'sheet2data', col2: 'value2' }];
+      const mockRows = [
+        ['col1', 'col2'],
+        ['sheet2data', 'value2'],
+      ];
 
-      xlsx.readFile.mockReturnValue({
-        SheetNames: ['Sheet1', 'Sheet2', 'Sheet3'],
-        Sheets: {
-          Sheet1: { data: 'sheet1' },
-          Sheet2: { data: 'sheet2' },
-          Sheet3: { data: 'sheet3' },
-        },
-      });
-
-      xlsx.utils.sheet_to_json.mockReturnValue(mockData);
+      mockReadSheetNames.mockResolvedValue(['Sheet1', 'Sheet2', 'Sheet3']);
+      mockReadXlsxFile.mockResolvedValue(mockRows);
 
       const result = await parseXlsxFile('test.xlsx#2');
 
-      expect(result).toEqual(mockData);
-      expect(xlsx.utils.sheet_to_json).toHaveBeenCalledWith({ data: 'sheet2' }, { defval: '' });
+      expect(result).toEqual([{ col1: 'sheet2data', col2: 'value2' }]);
+      expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx', { sheet: 2 });
     });
 
-    it('should throw error for non-existent sheet name', async () => {
-      xlsx.readFile.mockReturnValue({
-        SheetNames: ['Sheet1', 'Sheet2'],
-        Sheets: {
-          Sheet1: {},
-          Sheet2: {},
-        },
-      });
+    it('should throw error when sheet name does not exist', async () => {
+      mockReadSheetNames.mockResolvedValue(['Sheet1', 'Sheet2', 'Sheet3']);
 
-      await expect(parseXlsxFile('test.xlsx#NonExistentSheet')).rejects.toThrow(
-        'Sheet "NonExistentSheet" not found. Available sheets: Sheet1, Sheet2',
+      await expect(parseXlsxFile('test.xlsx#NonExistent')).rejects.toThrow(
+        'Sheet "NonExistent" not found. Available sheets: Sheet1, Sheet2, Sheet3',
       );
     });
 
-    it('should throw error for out-of-range sheet index', async () => {
-      xlsx.readFile.mockReturnValue({
-        SheetNames: ['Sheet1', 'Sheet2'],
-        Sheets: {
-          Sheet1: {},
-          Sheet2: {},
-        },
-      });
+    it('should throw error when sheet index is out of bounds', async () => {
+      mockReadSheetNames.mockResolvedValue(['Sheet1', 'Sheet2']);
 
       await expect(parseXlsxFile('test.xlsx#5')).rejects.toThrow(
         'Sheet index 5 is out of range. Available sheets: 2 (1-2)',
       );
     });
 
-    it('should throw error for zero or negative sheet index', async () => {
-      xlsx.readFile.mockReturnValue({
-        SheetNames: ['Sheet1', 'Sheet2'],
-        Sheets: {
-          Sheet1: {},
-          Sheet2: {},
-        },
-      });
+    it('should throw error when sheet index is 0', async () => {
+      mockReadSheetNames.mockResolvedValue(['Sheet1', 'Sheet2']);
 
       await expect(parseXlsxFile('test.xlsx#0')).rejects.toThrow(
         'Sheet index 0 is out of range. Available sheets: 2 (1-2)',
       );
     });
-  });
 
-  describe('data validation', () => {
-    it('should throw error for empty sheet', async () => {
-      xlsx.readFile.mockReturnValue({
-        SheetNames: ['EmptySheet'],
-        Sheets: {
-          EmptySheet: {},
-        },
-      });
+    it('should throw error when sheet index is negative', async () => {
+      mockReadSheetNames.mockResolvedValue(['Sheet1', 'Sheet2']);
 
-      xlsx.utils.sheet_to_json.mockReturnValue([]);
-
-      await expect(parseXlsxFile('test.xlsx#EmptySheet')).rejects.toThrow(
-        'Sheet "EmptySheet" is empty or contains no valid data rows',
+      await expect(parseXlsxFile('test.xlsx#-1')).rejects.toThrow(
+        'Sheet index -1 is out of range. Available sheets: 2 (1-2)',
       );
     });
 
-    it('should throw error for sheet with no headers', async () => {
-      xlsx.readFile.mockReturnValue({
-        SheetNames: ['NoHeaders'],
-        Sheets: {
-          NoHeaders: {},
-        },
-      });
-
-      xlsx.utils.sheet_to_json.mockReturnValue([{}]);
-
-      await expect(parseXlsxFile('test.xlsx#NoHeaders')).rejects.toThrow(
-        'Sheet "NoHeaders" has no valid column headers',
-      );
-    });
-
-    it('should throw error for sheet with only empty data', async () => {
-      xlsx.readFile.mockReturnValue({
-        SheetNames: ['EmptyData'],
-        Sheets: {
-          EmptyData: {},
-        },
-      });
-
-      xlsx.utils.sheet_to_json.mockReturnValue([
-        { col1: '', col2: '' },
-        { col1: '   ', col2: '' },
-        { col1: '', col2: '  ' },
-      ]);
-
-      await expect(parseXlsxFile('test.xlsx#EmptyData')).rejects.toThrow(
-        'Sheet "EmptyData" contains only empty data. Please ensure the sheet has both headers and data rows.',
-      );
-    });
-
-    it('should accept sheet with some valid data', async () => {
-      const mockData = [
-        { col1: '', col2: 'valid data' },
-        { col1: '   ', col2: '' },
+    it('should use first sheet when # is at end with no sheet specifier', async () => {
+      // Empty string after # is falsy, so it defaults to sheet 1
+      const mockRows = [
+        ['col1', 'col2'],
+        ['value1', 'value2'],
       ];
 
-      xlsx.readFile.mockReturnValue({
-        SheetNames: ['ValidData'],
-        Sheets: {
-          ValidData: {},
-        },
-      });
+      mockReadSheetNames.mockResolvedValue(['Sheet1', 'Sheet2']);
+      mockReadXlsxFile.mockResolvedValue(mockRows);
 
-      xlsx.utils.sheet_to_json.mockReturnValue(mockData);
+      const result = await parseXlsxFile('test.xlsx#');
 
-      const result = await parseXlsxFile('test.xlsx#ValidData');
-      expect(result).toEqual(mockData);
+      expect(result).toEqual([{ col1: 'value1', col2: 'value2' }]);
+      expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx', { sheet: 1 });
+    });
+
+    it('should handle sheet names with spaces', async () => {
+      const mockRows = [
+        ['col1', 'col2'],
+        ['data', 'value'],
+      ];
+
+      mockReadSheetNames.mockResolvedValue(['Sheet 1', 'My Data Sheet', 'Sheet 3']);
+      mockReadXlsxFile.mockResolvedValue(mockRows);
+
+      const result = await parseXlsxFile('test.xlsx#My Data Sheet');
+
+      expect(result).toEqual([{ col1: 'data', col2: 'value' }]);
+      expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx', { sheet: 'My Data Sheet' });
     });
   });
 });

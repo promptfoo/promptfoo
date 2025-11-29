@@ -21,20 +21,11 @@ import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
-import {
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
-import {
-  getSessionId,
-  isBasicRefusal,
-} from '../../util';
-import {
-  EVAL_SYSTEM_PROMPT,
-  REFUSAL_SYSTEM_PROMPT,
-} from '../crescendo/prompts';
+import { getSessionId, isBasicRefusal } from '../../util';
+import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
 import {

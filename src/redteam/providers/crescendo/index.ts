@@ -1,28 +1,14 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, isValidJson } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../../remoteGeneration';
-import { getSessionId, isBasicRefusal } from '../../util';
-import { getGoalRubric } from '../prompts';
 import {
-  getLastMessageContent,
-  getTargetResponse,
-  isValidChatMessageArray,
-  messagesToRedteamHistory,
-  redteamProviderManager,
-  type TargetResponse,
-  tryUnblocking,
-} from '../shared';
-import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
-
+  extractTraceIdFromTraceparent,
+  fetchTraceContext,
+  type TraceContextData,
+} from '../../../tracing/traceContext';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -35,19 +21,33 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types/index';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject, isValidJson } from '../../../util/json';
+import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
+import { TokenUsageTracker } from '../../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
+import { getSessionId, isBasicRefusal } from '../../util';
+import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
 import {
-  extractTraceIdFromTraceparent,
-  fetchTraceContext,
-  type TraceContextData,
-} from '../../../tracing/traceContext';
+  getLastMessageContent,
+  getTargetResponse,
+  isValidChatMessageArray,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  type TargetResponse,
+  tryUnblocking,
+} from '../shared';
 import { formatTraceForMetadata, formatTraceSummary } from '../traceFormatting';
 import {
-  resolveTracingOptions,
   type RawTracingConfig,
   type RedteamTracingOptions,
+  resolveTracingOptions,
 } from '../tracingOptions';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;

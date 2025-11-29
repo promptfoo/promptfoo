@@ -1,19 +1,23 @@
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { handleConversationRelevance } from '../../src/external/assertions/deepeval';
 import { matchesConversationRelevance } from '../../src/external/matchers/deepeval';
 import { ConversationRelevancyTemplate } from '../../src/external/matchers/conversationRelevancyTemplate';
 import { getDefaultProviders } from '../../src/providers/defaults';
 import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
-jest.mock('../../src/providers/defaults', () => ({
-  getDefaultProviders: jest.fn(),
+vi.mock('../../src/providers/defaults', () => ({
+  getDefaultProviders: vi.fn(),
 }));
 
-jest.mock('../../src/matchers', () => ({
-  ...jest.requireActual('../../src/matchers'),
-  getAndCheckProvider: jest.fn().mockImplementation(async (_type, provider, defaultProvider) => {
-    return provider || defaultProvider;
-  }),
-}));
+vi.mock('../../src/matchers', async () => {
+  const actual = await vi.importActual('../../src/matchers');
+  return {
+    ...actual,
+    getAndCheckProvider: vi.fn().mockImplementation(async (_type, provider, defaultProvider) => {
+      return provider || defaultProvider;
+    }),
+  };
+});
 
 describe('ConversationRelevancyTemplate', () => {
   describe('generateVerdicts', () => {
@@ -48,19 +52,19 @@ describe('ConversationRelevancyTemplate', () => {
 
 describe('matchesConversationRelevance with template', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should use ConversationRelevancyTemplate for prompts', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({ verdict: 'yes' }),
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -93,7 +97,7 @@ describe('handleConversationRelevance with reason generation', () => {
     let callCount = 0;
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockImplementation(async (prompt: string) => {
+      callApi: vi.fn().mockImplementation(async (prompt: string) => {
         callCount++;
         // First few calls are verdicts, last one is reason generation
         if (prompt.includes('irrelevancies')) {
@@ -122,7 +126,7 @@ describe('handleConversationRelevance with reason generation', () => {
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -178,13 +182,13 @@ describe('handleConversationRelevance with reason generation', () => {
   it('should handle empty conversations gracefully', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({ verdict: 'yes' }),
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,

@@ -1,6 +1,6 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
 
@@ -24,6 +24,13 @@ describe('ConfirmEvalNameDialog', () => {
   };
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    // Note: Do NOT use vi.useFakeTimers() here - it breaks userEvent interactions
+    // Default mockOnConfirm to return a resolved promise so async flows complete
+    mockOnConfirm.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
     vi.clearAllMocks();
   });
 
@@ -390,10 +397,14 @@ describe('ConfirmEvalNameDialog', () => {
 
   describe('Timing of onClose callback', () => {
     it('should call onClose only after onConfirm promise resolves', async () => {
-      const confirmDelay = 100;
       const newName = 'New Eval Name';
+
+      let resolveConfirmPromise: () => void;
       mockOnConfirm.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, confirmDelay)),
+        () =>
+          new Promise<void>((resolve) => {
+            resolveConfirmPromise = resolve;
+          }),
       );
 
       render(
@@ -415,7 +426,10 @@ describe('ConfirmEvalNameDialog', () => {
 
       expect(mockOnClose).not.toHaveBeenCalled();
 
-      await new Promise((resolve) => setTimeout(resolve, confirmDelay * 2));
+      // Resolve the confirm promise to trigger onClose
+      await act(async () => {
+        resolveConfirmPromise!();
+      });
 
       expect(mockOnClose).toHaveBeenCalledTimes(1);
     });
@@ -471,8 +485,10 @@ describe('ConfirmEvalNameDialog', () => {
     const confirmButton = screen.getByRole('button', { name: 'Confirm' });
     fireEvent.click(confirmButton);
     expect(mockOnConfirm).toHaveBeenCalledWith('New Name');
-    await screen.findByRole('button', { name: 'Confirm' });
-    expect(mockOnClose).toHaveBeenCalled();
+    // Wait for onClose to be called (dialog closes after successful confirmation)
+    await waitFor(() => {
+      expect(mockOnClose).toHaveBeenCalled();
+    });
   });
 
   it('auto-focuses and selects the input field when the dialog opens', async () => {
@@ -509,9 +525,9 @@ describe('ConfirmEvalNameDialog', () => {
   describe('State Reset on Rapid Open/Close', () => {
     it('resets isLoading state when dialog is closed during loading and reopened with a different currentName', async () => {
       const user = userEvent.setup();
-      const delayedConfirm = vi.fn(
-        () => new Promise<void>((resolve) => setTimeout(() => resolve(), 100)),
-      );
+
+      // Use a promise that never resolves to simulate loading state
+      const delayedConfirm = vi.fn(() => new Promise<void>(() => {}));
 
       const props = {
         ...defaultProps,

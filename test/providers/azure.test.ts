@@ -183,19 +183,20 @@ describe('Azure Provider Tests', () => {
         });
       });
 
-      it('should use provider config when no prompt config exists', () => {
+      it('should use provider config when no prompt config exists', async () => {
         const context = {
           prompt: { label: 'test prompt', raw: 'test prompt' },
           vars: {},
         };
-        expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+        expect(body).toMatchObject({
           functions: [{ name: 'provider_func', parameters: {} }],
           max_tokens: 100,
           temperature: 0.5,
         });
       });
 
-      it('should merge prompt config with provider config', () => {
+      it('should merge prompt config with provider config', async () => {
         const context = {
           prompt: {
             config: {
@@ -207,38 +208,41 @@ describe('Azure Provider Tests', () => {
           },
           vars: {},
         };
-        expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+        expect(body).toMatchObject({
           functions: [{ name: 'prompt_func', parameters: {} }],
           max_tokens: 100,
           temperature: 0.7,
         });
       });
 
-      it('should handle undefined prompt config', () => {
+      it('should handle undefined prompt config', async () => {
         const context = {
           prompt: { label: 'test prompt', raw: 'test prompt' },
           vars: {},
         };
-        expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+        expect(body).toMatchObject({
           functions: [{ name: 'provider_func', parameters: {} }],
           max_tokens: 100,
           temperature: 0.5,
         });
       });
 
-      it('should handle empty prompt config', () => {
+      it('should handle empty prompt config', async () => {
         const context = {
           prompt: { config: {}, label: 'test prompt', raw: 'test prompt' },
           vars: {},
         };
-        expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+        expect(body).toMatchObject({
           functions: [{ name: 'provider_func', parameters: {} }],
           max_tokens: 100,
           temperature: 0.5,
         });
       });
 
-      it('should handle complex nested config merging', () => {
+      it('should handle complex nested config merging', async () => {
         const context = {
           prompt: {
             config: {
@@ -250,7 +254,8 @@ describe('Azure Provider Tests', () => {
           },
           vars: {},
         };
-        expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+        expect(body).toMatchObject({
           functions: [{ name: 'provider_func', parameters: {} }],
           max_tokens: 100,
           response_format: { type: 'json_object' },
@@ -259,7 +264,7 @@ describe('Azure Provider Tests', () => {
         });
       });
 
-      it('should handle json_schema response format', () => {
+      it('should handle json_schema response format', async () => {
         const context = {
           prompt: {
             config: {
@@ -284,7 +289,7 @@ describe('Azure Provider Tests', () => {
           },
           vars: {},
         };
-        const { body } = (provider as any).getOpenAiBody('test prompt', context);
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
         expect(body.response_format).toMatchObject({
           type: 'json_schema',
           json_schema: {
@@ -302,7 +307,7 @@ describe('Azure Provider Tests', () => {
         });
       });
 
-      it('should render variables in response format', () => {
+      it('should render variables in response format', async () => {
         const context = {
           prompt: {
             config: {
@@ -327,7 +332,7 @@ describe('Azure Provider Tests', () => {
             schemaName: 'dynamic_schema',
           },
         };
-        const { body } = (provider as any).getOpenAiBody('test prompt', context);
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
         expect(body.response_format.json_schema.name).toBe('dynamic_schema');
       });
     });
@@ -746,7 +751,75 @@ describe('Azure Provider Tests', () => {
         expect((provider as any).isReasoningModel()).toBe(false);
       });
 
-      it('should use max_completion_tokens for reasoning models', () => {
+      // Third-party reasoning model detection tests
+      it('should auto-detect DeepSeek-R1 reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('DeepSeek-R1', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect deepseek-r1 with different separators', () => {
+        const providerHyphen = new AzureChatCompletionProvider('deepseek-r1-distill', {
+          config: {},
+        });
+        const providerUnderscore = new AzureChatCompletionProvider('deepseek_r1', {
+          config: {},
+        });
+        expect((providerHyphen as any).isReasoningModel()).toBe(true);
+        expect((providerUnderscore as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Phi-4-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('phi-4-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Phi-4-mini-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('Phi-4-mini-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Grok reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('grok-3-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect grok-mini-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('grok-3-mini-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should not detect regular Grok models as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('grok-3', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should not detect regular DeepSeek-V3 as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('DeepSeek-V3', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should not detect regular Phi-4 as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('Phi-4', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should use max_completion_tokens for reasoning models', async () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
             isReasoningModel: true,
@@ -754,34 +827,34 @@ describe('Azure Provider Tests', () => {
             max_tokens: 1000,
           },
         });
-        const body = (provider as any).getOpenAiBody('test prompt').body;
+        const { body } = await (provider as any).getOpenAiBody('test prompt');
         expect(body).toHaveProperty('max_completion_tokens', 2000);
         expect(body).not.toHaveProperty('max_tokens');
       });
 
-      it('should use reasoning_effort for reasoning models', () => {
+      it('should use reasoning_effort for reasoning models', async () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
             isReasoningModel: true,
             reasoning_effort: 'high',
           },
         });
-        const body = (provider as any).getOpenAiBody('test prompt').body;
+        const { body } = await (provider as any).getOpenAiBody('test prompt');
         expect(body).toHaveProperty('reasoning_effort', 'high');
       });
 
-      it('should not include temperature for reasoning models', () => {
+      it('should not include temperature for reasoning models', async () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
             isReasoningModel: true,
             temperature: 0.7,
           },
         });
-        const body = (provider as any).getOpenAiBody('test prompt').body;
+        const { body } = await (provider as any).getOpenAiBody('test prompt');
         expect(body).not.toHaveProperty('temperature');
       });
 
-      it('should support variable rendering in reasoning_effort', () => {
+      it('should support variable rendering in reasoning_effort', async () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
             isReasoningModel: true,
@@ -793,7 +866,7 @@ describe('Azure Provider Tests', () => {
           prompt: { label: 'test prompt', raw: 'test prompt' },
           vars: { effort: 'high' as const },
         };
-        const body = (provider as any).getOpenAiBody('test prompt', context).body;
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
         expect(body).toHaveProperty('reasoning_effort', 'high');
       });
     });

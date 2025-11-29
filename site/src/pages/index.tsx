@@ -6,6 +6,7 @@ import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CodeIcon from '@mui/icons-material/Code';
 import CompareIcon from '@mui/icons-material/Compare';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -122,6 +123,8 @@ function HomepageWalkthrough() {
         return 3;
       } else if (window.location.hash === '#mcp') {
         return 4;
+      } else if (window.location.hash === '#codescanning') {
+        return 6;
       }
     }
     return 1; // Default to Red Teaming
@@ -172,6 +175,43 @@ function HomepageWalkthrough() {
       ),
       icon: <SecurityIcon />,
       destinationUrl: '/red-teaming',
+    },
+    {
+      id: 6,
+      caption: 'Code Scanning',
+      mobileCaption: 'Code Scan',
+      image: '/img/docs/code-scanning/github.png',
+      image2x: '/img/docs/code-scanning/github.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>Find AI vulnerabilities before they're merged</p>
+          <p>
+            SAST for AI workflows catches prompt injection, PII exposure, and jailbreak risks in
+            your development workflow:
+          </p>
+          <ul>
+            <li>
+              <strong>IDE:</strong> Real-time scanning with inline fixes
+            </li>
+            <li>
+              <strong>PR Review:</strong> Automated findings in pull requests
+            </li>
+            <li>
+              <strong>CI/CD:</strong> CLI integration for any pipeline
+            </li>
+          </ul>
+          <p>
+            Deep data flow analysis finds LLM-specific risks that general security scanners miss.
+          </p>
+          <p>
+            <strong>
+              <Link to="/code-scanning">&raquo; Learn more about Code Scanning</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <CodeIcon />,
+      destinationUrl: '/code-scanning',
     },
     {
       id: 3,

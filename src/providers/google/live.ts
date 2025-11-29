@@ -9,7 +9,8 @@ import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { geminiFormatAndSystemInstructions, loadFile } from './util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { geminiFormatAndSystemInstructions, normalizeTools } from './util';
 
 import type {
   ApiProvider,
@@ -184,6 +185,16 @@ export class GoogleLiveProvider implements ApiProvider {
       }
     }
 
+    // Load tools before creating WebSocket Promise
+    const fileTools = this.config.tools
+      ? await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars)
+      : [];
+    const normalizedTools = Array.isArray(fileTools)
+      ? normalizeTools(fileTools)
+      : fileTools
+        ? [fileTools]
+        : [];
+
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
       let isResolved = false;
@@ -336,7 +347,7 @@ export class GoogleLiveProvider implements ApiProvider {
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },
             ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
+            ...(normalizedTools.length > 0 ? { tools: normalizedTools } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
             ...(outputAudioTranscription
               ? { output_audio_transcription: outputAudioTranscription }

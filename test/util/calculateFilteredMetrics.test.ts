@@ -5,6 +5,7 @@
  * on filtered evaluation results.
  */
 
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -27,7 +28,7 @@ describe('calculateFilteredMetrics', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('basic metrics aggregation', () => {

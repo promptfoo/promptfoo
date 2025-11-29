@@ -123,24 +123,33 @@ prompts:
 
 ## Supported Parameters
 
-| Parameter              | Type     | Description                                                                    | Default                  |
-| ---------------------- | -------- | ------------------------------------------------------------------------------ | ------------------------ |
-| `apiKey`               | string   | Anthropic API key                                                              | Environment variable     |
-| `working_dir`          | string   | Directory for file operations                                                  | Temporary directory      |
-| `model`                | string   | Primary model to use (passed to Claude Agent SDK)                              | Claude Agent SDK default |
-| `fallback_model`       | string   | Fallback model if primary fails                                                | Claude Agent SDK default |
-| `max_turns`            | number   | Maximum conversation turns                                                     | Claude Agent SDK default |
-| `max_thinking_tokens`  | number   | Maximum tokens for thinking                                                    | Claude Agent SDK default |
-| `permission_mode`      | string   | File access permissions: `default`, `plan`, `acceptEdits`, `bypassPermissions` | `default`                |
-| `custom_system_prompt` | string   | Replace default system prompt                                                  | None                     |
-| `append_system_prompt` | string   | Append to default system prompt                                                | None                     |
-| `custom_allowed_tools` | string[] | Replace default allowed tools                                                  | None                     |
-| `append_allowed_tools` | string[] | Add to default allowed tools                                                   | None                     |
-| `allow_all_tools`      | boolean  | Allow all available tools                                                      | false                    |
-| `disallowed_tools`     | string[] | Tools to explicitly block (overrides allowed)                                  | None                     |
-| `mcp`                  | object   | MCP server configuration                                                       | None                     |
-| `strict_mcp_config`    | boolean  | Only allow configured MCP servers                                              | true                     |
-| `setting_sources`      | string[] | Where SDK looks for settings, CLAUDE.md, and slash commands                    | None (disabled)          |
+| Parameter                  | Type     | Description                                                                    | Default                  |
+| -------------------------- | -------- | ------------------------------------------------------------------------------ | ------------------------ |
+| `apiKey`                   | string   | Anthropic API key                                                              | Environment variable     |
+| `working_dir`              | string   | Directory for file operations                                                  | Temporary directory      |
+| `model`                    | string   | Primary model to use (passed to Claude Agent SDK)                              | Claude Agent SDK default |
+| `fallback_model`           | string   | Fallback model if primary fails                                                | Claude Agent SDK default |
+| `max_turns`                | number   | Maximum conversation turns                                                     | Claude Agent SDK default |
+| `max_thinking_tokens`      | number   | Maximum tokens for thinking                                                    | Claude Agent SDK default |
+| `max_budget_usd`           | number   | Maximum cost budget in USD for the agent execution                             | None                     |
+| `permission_mode`          | string   | File access permissions: `default`, `plan`, `acceptEdits`, `bypassPermissions` | `default`                |
+| `custom_system_prompt`     | string   | Replace default system prompt                                                  | None                     |
+| `append_system_prompt`     | string   | Append to default system prompt                                                | None                     |
+| `custom_allowed_tools`     | string[] | Replace default allowed tools                                                  | None                     |
+| `append_allowed_tools`     | string[] | Add to default allowed tools                                                   | None                     |
+| `allow_all_tools`          | boolean  | Allow all available tools                                                      | false                    |
+| `disallowed_tools`         | string[] | Tools to explicitly block (overrides allowed)                                  | None                     |
+| `additional_directories`   | string[] | Additional directories the agent can access (beyond working_dir)               | None                     |
+| `mcp`                      | object   | MCP server configuration                                                       | None                     |
+| `strict_mcp_config`        | boolean  | Only allow configured MCP servers                                              | true                     |
+| `setting_sources`          | string[] | Where SDK looks for settings, CLAUDE.md, and slash commands                    | None (disabled)          |
+| `output_format`            | object   | Structured output configuration with JSON schema                               | None                     |
+| `agents`                   | object   | Programmatic agent definitions for custom subagents                            | None                     |
+| `hooks`                    | object   | Event hooks for intercepting tool calls and other events                       | None                     |
+| `include_partial_messages` | boolean  | Include partial/streaming messages in response                                 | false                    |
+| `resume`                   | string   | Resume from a specific session ID                                              | None                     |
+| `fork_session`             | boolean  | Fork from an existing session instead of continuing                            | false                    |
+| `continue`                 | boolean  | Continue an existing session                                                   | false                    |
 
 ## Models
 
@@ -275,6 +284,96 @@ Available values:
 - `project` - Project-level settings
 - `local` - Local directory settings
 
+## Budget Control
+
+Limit the maximum cost of an agent execution with `max_budget_usd`:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      max_budget_usd: 0.50
+```
+
+The agent will stop execution if the cost exceeds the specified budget.
+
+## Additional Directories
+
+Grant the agent access to directories beyond the working directory:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./project
+      additional_directories:
+        - /shared/libs
+        - /data/models
+```
+
+## Structured Output
+
+Get validated JSON responses by specifying an output schema:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      output_format:
+        type: json_schema
+        schema:
+          type: object
+          properties:
+            analysis:
+              type: string
+            confidence:
+              type: number
+          required: [analysis, confidence]
+```
+
+When `output_format` is configured, the response will include structured output that conforms to the schema. The structured output is available in:
+
+- `output` - The parsed structured output (when available)
+- `metadata.structuredOutput` - The raw structured output value
+
+## Session Management
+
+Continue or fork existing sessions for multi-turn interactions:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      # Continue an existing session
+      resume: 'session-id-from-previous-run'
+      continue: true
+
+      # Or fork from an existing session
+      resume: 'session-id-to-fork'
+      fork_session: true
+```
+
+Session IDs are returned in the response and can be used to continue conversations across eval runs.
+
+## Programmatic Agents
+
+Define custom subagents with specific tools and permissions:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      agents:
+        code-reviewer:
+          name: Code Reviewer
+          description: Reviews code for bugs and style issues
+          tools: [Read, Grep, Glob]
+        test-runner:
+          name: Test Runner
+          description: Runs tests and reports results
+          tools: [Bash, Read]
+```
+
 ## Caching Behavior
 
 This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run.
@@ -310,6 +409,7 @@ Here are a few complete example implementations:
 - [Working directory](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#working-directory) - Read-only access to a working directory
 - [Advanced editing](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#advanced-editing) - File edits and working directory reset in an extension hook
 - [MCP integration](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#mcp-integration) - Read-only MCP server integration with weather API
+- [Structured output](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#structured-output) - JSON schema validation for agent responses
 
 ## See Also
 
