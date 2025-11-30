@@ -803,20 +803,28 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       headless: this.chatKitConfig.headless,
     });
 
-    // Set the HTML template (needed for the pool's server)
+    // Generate a unique template key for this workflow configuration
+    // This ensures different workflows get isolated pages in the pool
+    const templateKey = ChatKitBrowserPool.generateTemplateKey(
+      workflowId,
+      this.chatKitConfig.version,
+      this.chatKitConfig.userId,
+    );
+
+    // Register the HTML template for this workflow
     const html = generateChatKitHTML(
       apiKey,
       workflowId,
       this.chatKitConfig.version,
       this.chatKitConfig.userId,
     );
-    pool.setHtmlTemplate(html);
+    pool.setTemplate(templateKey, html);
 
     let pooledPage: Awaited<ReturnType<typeof pool.acquirePage>> | null = null;
 
     try {
-      // Acquire a page from the pool
-      pooledPage = await pool.acquirePage();
+      // Acquire a page from the pool for this specific template
+      pooledPage = await pool.acquirePage(templateKey);
       const page = pooledPage.page;
 
       logger.debug('[ChatKitProvider] Acquired page from pool', {

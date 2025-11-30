@@ -8,8 +8,8 @@
  * Architecture:
  *   - Single browser process (shared across all tests)
  *   - Multiple browser contexts (isolated like incognito windows)
- *   - Shared HTTP server (single port for all contexts)
- *   - Pre-warmed pages (ChatKit ready before test starts)
+ *   - Shared HTTP server with per-workflow template routing
+ *   - Pages are workflow-specific (different workflows get different pages)
  */
 
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
@@ -28,7 +28,7 @@ interface PooledPage {
   page: Page;
   ready: boolean;
   inUse: boolean;
-  templateVersion: number;
+  templateKey: string; // Which workflow template this page is configured for
 }
 
 interface ChatKitPoolConfig {
@@ -40,6 +40,7 @@ interface ChatKitPoolConfig {
 /**
  * Singleton browser pool for ChatKit evaluations.
  * Supports high concurrency by reusing browser contexts.
+ * Each workflow gets its own isolated pages via template routing.
  */
 export class ChatKitBrowserPool {
   private static instance: ChatKitBrowserPool | null = null;
@@ -49,10 +50,9 @@ export class ChatKitBrowserPool {
   private server: http.Server | null = null;
   private serverPort: number = 0;
   private pages: PooledPage[] = [];
-  private waitQueue: Array<(page: PooledPage) => void> = [];
+  private waitQueue: Array<{ templateKey: string; resolve: (page: PooledPage) => void }> = [];
   private config: ChatKitPoolConfig;
-  private htmlTemplate: string = '';
-  private templateVersion: number = 0;
+  private templates: Map<string, string> = new Map(); // templateKey -> HTML
   private initialized: boolean = false;
   private initPromise: Promise<void> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -155,15 +155,28 @@ export class ChatKitBrowserPool {
   }
 
   /**
-   * Set the HTML template for ChatKit pages
+   * Generate a template key from workflow configuration.
+   * This ensures different workflows get isolated pages.
    */
-  setHtmlTemplate(html: string): void {
-    if (html !== this.htmlTemplate) {
-      this.htmlTemplate = html;
-      this.templateVersion += 1;
-      // Mark pages as needing refresh to ensure new template is loaded
+  static generateTemplateKey(workflowId: string, version?: string, userId?: string): string {
+    // Use a simple concatenation - workflowId is the primary differentiator
+    // version and userId are included for completeness but workflowId is key
+    return `${workflowId}:${version || 'default'}:${userId || 'default'}`;
+  }
+
+  /**
+   * Register a template for a workflow configuration
+   */
+  setTemplate(templateKey: string, html: string): void {
+    const existing = this.templates.get(templateKey);
+    if (existing !== html) {
+      this.templates.set(templateKey, html);
+      logger.debug('[ChatKitPool] Registered template', { templateKey });
+      // Mark pages with this template as needing refresh if template changed
       for (const page of this.pages) {
-        page.ready = false;
+        if (page.templateKey === templateKey) {
+          page.ready = false;
+        }
       }
     }
   }
@@ -191,10 +204,26 @@ export class ChatKitBrowserPool {
       maxConcurrency: this.config.maxConcurrency,
     });
 
-    // Create shared HTTP server
-    this.server = http.createServer((_req, res) => {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(this.htmlTemplate);
+    // Create shared HTTP server with per-template routing
+    this.server = http.createServer((req, res) => {
+      // Extract template key from URL path: /template/<key>
+      const url = new URL(req.url || '/', `http://localhost`);
+      const pathParts = url.pathname.split('/').filter(Boolean);
+
+      if (pathParts[0] === 'template' && pathParts[1]) {
+        const templateKey = decodeURIComponent(pathParts[1]);
+        const template = this.templates.get(templateKey);
+
+        if (template) {
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(template);
+          return;
+        }
+      }
+
+      // Fallback: 404 for unknown templates
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Template not found');
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -227,35 +256,41 @@ export class ChatKitBrowserPool {
   }
 
   /**
-   * Acquire a page from the pool. Blocks if all pages are in use.
+   * Acquire a page from the pool for a specific template.
+   * Only returns pages configured for the requested template.
+   * Blocks if all pages are in use.
    */
-  async acquirePage(): Promise<PooledPage> {
+  async acquirePage(templateKey: string): Promise<PooledPage> {
     // Cancel any pending idle shutdown since we're being used
     this.cancelIdleTimer();
 
     await this.initialize();
 
-    // Try to find an available ready page
-    const available = this.pages.find((p) => !p.inUse && p.ready);
-    if (available) {
-      // Ensure the page matches the current template/configuration
-      if (available.templateVersion !== this.templateVersion) {
-        await this.refreshPooledPage(available);
-      }
+    // Ensure template is registered
+    if (!this.templates.has(templateKey)) {
+      throw new Error(`Template not registered: ${templateKey}. Call setTemplate first.`);
+    }
 
+    // Try to find an available ready page with matching template
+    const available = this.pages.find((p) => !p.inUse && p.ready && p.templateKey === templateKey);
+    if (available) {
       available.inUse = true;
       logger.debug('[ChatKitPool] Acquired existing page', {
+        templateKey,
         poolSize: this.pages.length,
       });
       return available;
     }
 
-    // Try to find an idle page that needs refresh (handles template change while pool is full)
-    const needsRefresh = this.pages.find((p) => !p.inUse && !p.ready);
+    // Try to find an idle page with matching template that needs refresh
+    const needsRefresh = this.pages.find(
+      (p) => !p.inUse && !p.ready && p.templateKey === templateKey,
+    );
     if (needsRefresh) {
       await this.refreshPooledPage(needsRefresh);
       needsRefresh.inUse = true;
       logger.debug('[ChatKitPool] Acquired and refreshed page', {
+        templateKey,
         poolSize: this.pages.length,
       });
       return needsRefresh;
@@ -263,24 +298,26 @@ export class ChatKitBrowserPool {
 
     // Create new page if under limit
     if (this.pages.length < this.config.maxConcurrency) {
-      const pooledPage = await this.createPooledPage();
+      const pooledPage = await this.createPooledPage(templateKey);
       pooledPage.inUse = true;
       this.pages.push(pooledPage);
       logger.debug('[ChatKitPool] Created new page', {
+        templateKey,
         poolSize: this.pages.length,
       });
       return pooledPage;
     }
 
-    // Wait for a page to become available with timeout
+    // Wait for a page with matching template to become available
     logger.debug('[ChatKitPool] Waiting for available page', {
+      templateKey,
       poolSize: this.pages.length,
       waiting: this.waitQueue.length + 1,
     });
 
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
-        const index = this.waitQueue.indexOf(wrappedResolve);
+        const index = this.waitQueue.findIndex((w) => w.resolve === wrappedResolve);
         if (index >= 0) {
           this.waitQueue.splice(index, 1);
         }
@@ -297,7 +334,7 @@ export class ChatKitBrowserPool {
         resolve(page);
       };
 
-      this.waitQueue.push(wrappedResolve);
+      this.waitQueue.push({ templateKey, resolve: wrappedResolve });
     });
   }
 
@@ -325,7 +362,7 @@ export class ChatKitBrowserPool {
       // Create replacement - if this fails, we just reduce pool size
       // The pool will recover by creating new pages on demand
       try {
-        const newPage = await this.createPooledPage();
+        const newPage = await this.createPooledPage(pooledPage.templateKey);
         this.pages.push(newPage);
         pooledPage = newPage;
       } catch (createError) {
@@ -337,14 +374,15 @@ export class ChatKitBrowserPool {
       }
     }
 
-    // If someone is waiting, give them the page directly (keep inUse=true)
-    if (this.waitQueue.length > 0) {
-      const waiter = this.waitQueue.shift()!;
+    // If someone is waiting for this template, give them the page directly
+    const waiterIndex = this.waitQueue.findIndex((w) => w.templateKey === pooledPage.templateKey);
+    if (waiterIndex >= 0) {
+      const waiter = this.waitQueue.splice(waiterIndex, 1)[0];
       pooledPage.inUse = true;
-      waiter(pooledPage);
+      waiter.resolve(pooledPage);
       this.cancelIdleTimer();
     } else {
-      // No one waiting, mark as available
+      // No one waiting for this template, mark as available
       pooledPage.inUse = false;
       this.scheduleIdleShutdown();
     }
@@ -394,9 +432,9 @@ export class ChatKitBrowserPool {
   }
 
   /**
-   * Create a new pooled page with ChatKit initialized
+   * Create a new pooled page with ChatKit initialized for a specific template
    */
-  private async createPooledPage(): Promise<PooledPage> {
+  private async createPooledPage(templateKey: string): Promise<PooledPage> {
     if (!this.browser) {
       throw new Error('Browser not initialized');
     }
@@ -408,8 +446,9 @@ export class ChatKitBrowserPool {
     try {
       const page = await context.newPage();
 
-      // Navigate and wait for ChatKit ready
-      await page.goto(`http://localhost:${this.serverPort}`, {
+      // Navigate to the template-specific URL
+      const templateUrl = `http://localhost:${this.serverPort}/template/${encodeURIComponent(templateKey)}`;
+      await page.goto(templateUrl, {
         waitUntil: 'domcontentloaded',
       });
 
@@ -422,7 +461,7 @@ export class ChatKitBrowserPool {
         page,
         ready: true,
         inUse: false,
-        templateVersion: this.templateVersion,
+        templateKey,
       };
     } catch (error) {
       // Clean up context if page creation/initialization fails
@@ -440,18 +479,18 @@ export class ChatKitBrowserPool {
     await pooledPage.page.waitForFunction(() => (window as any).__state?.ready === true, {
       timeout: PAGE_REFRESH_TIMEOUT_MS,
     });
-    pooledPage.templateVersion = this.templateVersion;
     pooledPage.ready = true;
   }
 
   /**
    * Get pool statistics
    */
-  getStats(): { total: number; inUse: number; waiting: number } {
+  getStats(): { total: number; inUse: number; waiting: number; templates: number } {
     return {
       total: this.pages.length,
       inUse: this.pages.filter((p) => p.inUse).length,
       waiting: this.waitQueue.length,
+      templates: this.templates.size,
     };
   }
 
@@ -497,7 +536,7 @@ export class ChatKitBrowserPool {
     }
 
     this.initialized = false;
-    this.templateVersion = 0;
+    this.templates.clear();
     logger.debug('[ChatKitPool] Shutdown complete');
   }
 }
