@@ -140,6 +140,90 @@ When using inference profiles, ensure the `inferenceModelType` matches the model
 
 :::
 
+## Converse API
+
+The Converse API provides a unified interface across all Bedrock models with native support for extended thinking (reasoning), tool calling, and guardrails. Use the `bedrock:converse:` prefix to access this API.
+
+### Basic Usage
+
+```yaml
+providers:
+  - id: bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      region: us-east-1
+      maxTokens: 4096
+      temperature: 0.7
+```
+
+### Extended Thinking
+
+Enable Claude's extended thinking capabilities for complex reasoning tasks:
+
+```yaml
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    config:
+      region: us-west-2
+      maxTokens: 20000
+      thinking:
+        type: enabled
+        budget_tokens: 16000
+      showThinking: true # Include thinking content in output
+```
+
+The `thinking` configuration controls Claude's reasoning behavior:
+
+- `type: enabled` - Activates extended thinking
+- `budget_tokens` - Maximum tokens allocated for thinking (minimum 1024)
+
+Use `showThinking: true` to include the model's reasoning process in the output, or `false` to only show the final response.
+
+:::warning
+Do not set `temperature`, `topP`, or `topK` when using extended thinking. These sampling parameters are incompatible with reasoning mode.
+:::
+
+### Configuration Options
+
+| Option                | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| `maxTokens`           | Maximum output tokens                           |
+| `temperature`         | Sampling temperature (0-1)                      |
+| `topP`                | Nucleus sampling parameter                      |
+| `stopSequences`       | Array of stop sequences                         |
+| `thinking`            | Extended thinking configuration                 |
+| `showThinking`        | Include thinking in output (default: false)     |
+| `performanceConfig`   | Performance settings (`latency: optimized`)     |
+| `serviceTier`         | Service tier (`priority`, `default`, or `flex`) |
+| `guardrailIdentifier` | Guardrail ID for content filtering              |
+| `guardrailVersion`    | Guardrail version (default: DRAFT)              |
+
+### Performance Configuration
+
+Optimize for latency or cost:
+
+```yaml
+providers:
+  - id: bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      performanceConfig:
+        latency: optimized # or 'standard'
+      serviceTier:
+        type: priority # or 'default', 'flex'
+```
+
+### Supported Models
+
+The Converse API works with all Bedrock models that support the Converse operation:
+
+- **Claude**: All Claude 3.x and 4.x models
+- **Amazon Nova**: Lite, Micro, Pro, Premier (not Sonic)
+- **Meta Llama**: 3.x, 4.x models
+- **Mistral**: All Mistral models
+- **Cohere**: Command R and R+ models
+- **AI21**: Jamba models
+- **DeepSeek**: R1 and other models
+- **Qwen**: Qwen3 models
+
 ## Authentication
 
 Amazon Bedrock supports multiple authentication methods, including the new API key authentication for simplified access. Credentials are resolved in this priority order:

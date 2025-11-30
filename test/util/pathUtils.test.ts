@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import path from 'path';
 import { safeJoin, safeResolve } from '../../src/util/pathUtils';
 

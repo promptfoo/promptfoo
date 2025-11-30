@@ -2,30 +2,34 @@
  * Git Diff Tests
  */
 
+import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 import { extractDiff, validateOnBranch } from '../../../src/codeScan/git/diff';
 import { GitError } from '../../../src/types/codeScan';
 import type { SimpleGit, StatusResult } from 'simple-git';
 
-// Mock simple-git
-jest.mock('simple-git');
+// Define a partial mock type for the SimpleGit methods we use
+type MockSimpleGit = Pick<SimpleGit, 'status' | 'branch' | 'diff' | 'log'> & {
+  status: Mock;
+  branch: Mock;
+  diff: Mock;
+  log: Mock;
+};
+
+// Mock simple-git with a factory that returns a mock instance
+const mockGit: MockSimpleGit = {
+  status: vi.fn(),
+  branch: vi.fn(),
+  diff: vi.fn(),
+  log: vi.fn(),
+};
+
+vi.mock('simple-git', () => ({
+  default: vi.fn(() => mockGit),
+}));
 
 describe('Git Diff', () => {
-  let mockGit: jest.Mocked<SimpleGit>;
-
   beforeEach(() => {
-    jest.clearAllMocks();
-
-    // Create a mock SimpleGit instance
-    mockGit = {
-      status: jest.fn(),
-      branch: jest.fn(),
-      diff: jest.fn(),
-      log: jest.fn(),
-    } as unknown as jest.Mocked<SimpleGit>;
-
-    // Mock the default import
-    const simpleGit = require('simple-git');
-    simpleGit.default = jest.fn(() => mockGit);
+    vi.clearAllMocks();
   });
 
   describe('validateOnBranch', () => {

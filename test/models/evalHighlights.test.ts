@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { ResultFailureReason } from '../../src/types/index';
 import { runDbMigrations } from '../../src/migrate';

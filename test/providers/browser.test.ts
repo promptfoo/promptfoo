@@ -1,53 +1,56 @@
-import { jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BrowserProvider, createTransformResponse } from '../../src/providers/browser';
 import type { Page } from 'playwright';
+import type { Mock, Mocked } from 'vitest';
 
-let mockPage: jest.Mocked<Page>;
+let mockPage: Mocked<Page>;
 
 const mockBrowser = {
-  contexts: jest.fn(() => []),
-  newContext: jest.fn(() =>
+  contexts: vi.fn(() => []),
+  newContext: vi.fn(() =>
     Promise.resolve({
-      newPage: jest.fn(() => Promise.resolve(mockPage)),
-      addCookies: jest.fn(),
-      close: jest.fn(),
+      newPage: vi.fn(() => Promise.resolve(mockPage)),
+      addCookies: vi.fn(),
+      close: vi.fn(),
     }),
   ),
-  close: jest.fn(),
+  close: vi.fn(),
 };
 
-jest.mock('playwright-extra', () => ({
+vi.mock('playwright-extra', () => ({
   chromium: {
-    use: jest.fn(),
-    launch: jest.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
-    connectOverCDP: jest.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
-    connect: jest.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
+    use: vi.fn(),
+    launch: vi.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
+    connectOverCDP: vi.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
+    connect: vi.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
   },
 }));
 
-jest.mock('puppeteer-extra-plugin-stealth', () => jest.fn());
+vi.mock('puppeteer-extra-plugin-stealth', () => ({
+  default: vi.fn(),
+}));
 
 describe('BrowserProvider', () => {
   beforeEach(() => {
     mockPage = {
-      goto: jest.fn(),
-      click: jest.fn(),
-      fill: jest.fn(),
-      waitForSelector: jest.fn().mockResolvedValue({} as never),
-      waitForTimeout: jest.fn(),
-      waitForFunction: jest.fn(),
-      screenshot: jest.fn(),
-      $eval: jest.fn(),
-      $$eval: jest.fn(),
-      content: jest.fn(),
-      press: jest.fn(),
-      close: jest.fn(),
-    } as unknown as jest.Mocked<Page>;
+      goto: vi.fn(),
+      click: vi.fn(),
+      fill: vi.fn(),
+      waitForSelector: vi.fn().mockResolvedValue({} as never),
+      waitForTimeout: vi.fn(),
+      waitForFunction: vi.fn(),
+      screenshot: vi.fn(),
+      $eval: vi.fn(),
+      $$eval: vi.fn(),
+      content: vi.fn(),
+      press: vi.fn(),
+      close: vi.fn(),
+    } as unknown as Mocked<Page>;
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should execute navigate action', async () => {
@@ -233,7 +236,7 @@ describe('BrowserProvider', () => {
   });
 
   it('should use transformResponse function', async () => {
-    const transform = jest.fn().mockReturnValue({ foo: 'bar' });
+    const transform = vi.fn().mockReturnValue({ foo: 'bar' });
     const provider = new BrowserProvider('test', {
       config: {
         steps: [
@@ -305,9 +308,9 @@ describe('BrowserProvider', () => {
   });
 
   it('should handle cookies as string', async () => {
-    jest.resetModules();
-    jest.doMock('../../src/util/file', () => ({
-      maybeLoadFromExternalFile: jest.fn().mockReturnValue('foo=bar;baz=qux'),
+    vi.resetModules();
+    vi.doMock('../../src/util/file', () => ({
+      maybeLoadFromExternalFile: vi.fn().mockReturnValue('foo=bar;baz=qux'),
     }));
     const { BrowserProvider: MockedBrowserProvider } = await import('../../src/providers/browser');
     const provider = new MockedBrowserProvider('test', {
@@ -324,7 +327,7 @@ describe('BrowserProvider', () => {
     await provider.callApi('test');
     expect(mockPage.fill).toHaveBeenCalledTimes(0);
     expect(mockPage.press).toHaveBeenCalledTimes(0);
-    jest.dontMock('../../src/util/file');
+    vi.doUnmock('../../src/util/file');
   });
 
   it('should throw error if extract action missing name', async () => {
@@ -380,7 +383,7 @@ describe('BrowserProvider', () => {
   });
 
   it('should not double-wrap when transformResponse returns a full ProviderResponse', async () => {
-    const transformFn = jest.fn().mockReturnValue({
+    const transformFn = vi.fn().mockReturnValue({
       output: 'transformed output',
       metadata: { custom: 'data' },
       tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -410,7 +413,7 @@ describe('BrowserProvider', () => {
   });
 
   it('should wrap raw string values from transformResponse', async () => {
-    const transformFn = jest.fn().mockReturnValue('just a string');
+    const transformFn = vi.fn().mockReturnValue('just a string');
 
     const provider = new BrowserProvider('test', {
       config: {
@@ -433,7 +436,7 @@ describe('BrowserProvider', () => {
   });
 
   it('should wrap raw array values from transformResponse', async () => {
-    const transformFn = jest.fn().mockReturnValue(['item1', 'item2']);
+    const transformFn = vi.fn().mockReturnValue(['item1', 'item2']);
 
     const provider = new BrowserProvider('test', {
       config: {
@@ -458,7 +461,7 @@ describe('BrowserProvider', () => {
 
 describe('createTransformResponse', () => {
   it('should use function as transform', () => {
-    const fn = jest.fn().mockReturnValue('val');
+    const fn = vi.fn().mockReturnValue('val');
     const tr = createTransformResponse(fn);
     expect(tr({}, 'html')).toBe('val');
   });
@@ -477,10 +480,10 @@ describe('createTransformResponse', () => {
 });
 
 describe('BrowserProvider - Connect to Existing Session', () => {
-  let mockFetch: ReturnType<typeof jest.spyOn>;
+  let mockFetch: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    mockFetch = jest.spyOn(global, 'fetch').mockImplementation(() =>
+    mockFetch = vi.spyOn(global, 'fetch').mockImplementation(() =>
       Promise.resolve({
         json: () => Promise.resolve({ Browser: 'Chrome/120.0.0.0' }),
       } as Response),
@@ -535,39 +538,39 @@ describe('BrowserProvider - Connect to Existing Session', () => {
 
   it('should use existing context when connecting to existing browser', async () => {
     const mockPage = {
-      goto: jest.fn(),
-      content: jest.fn(() => Promise.resolve('<html></html>')),
-      click: jest.fn(),
-      type: jest.fn(),
-      waitForSelector: jest.fn(),
-      $$: jest.fn(),
-      screenshot: jest.fn(),
-      waitForTimeout: jest.fn(),
-      close: jest.fn(),
+      goto: vi.fn(),
+      content: vi.fn(() => Promise.resolve('<html></html>')),
+      click: vi.fn(),
+      type: vi.fn(),
+      waitForSelector: vi.fn(),
+      $$: vi.fn(),
+      screenshot: vi.fn(),
+      waitForTimeout: vi.fn(),
+      close: vi.fn(),
     };
 
     const mockContext = {
-      newPage: jest.fn(() => Promise.resolve(mockPage)),
-      addCookies: jest.fn(),
-      close: jest.fn(),
+      newPage: vi.fn(() => Promise.resolve(mockPage)),
+      addCookies: vi.fn(),
+      close: vi.fn(),
     };
 
     const mockExistingBrowser = {
-      contexts: jest.fn(() => [
+      contexts: vi.fn(() => [
         {
-          newPage: jest.fn(() => Promise.resolve(mockPage)),
-          addCookies: jest.fn(),
-          close: jest.fn(),
+          newPage: vi.fn(() => Promise.resolve(mockPage)),
+          addCookies: vi.fn(),
+          close: vi.fn(),
         },
       ]),
-      newContext: jest.fn(() => Promise.resolve(mockContext)),
-      close: jest.fn(),
+      newContext: vi.fn(() => Promise.resolve(mockContext)),
+      close: vi.fn(),
     };
 
     const playwrightExtra = await import('playwright-extra');
-    jest
-      .mocked(playwrightExtra.chromium.connectOverCDP)
-      .mockResolvedValueOnce(mockExistingBrowser as any);
+    vi.mocked(playwrightExtra.chromium.connectOverCDP).mockResolvedValueOnce(
+      mockExistingBrowser as any,
+    );
 
     const provider = new BrowserProvider('test', {
       config: {
@@ -586,28 +589,28 @@ describe('BrowserProvider - Connect to Existing Session', () => {
 
   it('should not close browser when connected to existing session', async () => {
     const { chromium } = await import('playwright-extra');
-    const mockCloseFn = jest.fn();
-    const mockPageClose = jest.fn();
+    const mockCloseFn = vi.fn();
+    const mockPageClose = vi.fn();
 
     const mockConnectedBrowser = {
-      contexts: jest.fn(() => [
+      contexts: vi.fn(() => [
         {
-          newPage: jest.fn(() =>
+          newPage: vi.fn(() =>
             Promise.resolve({
-              goto: jest.fn(),
-              content: jest.fn(),
+              goto: vi.fn(),
+              content: vi.fn(),
               close: mockPageClose,
             }),
           ),
-          addCookies: jest.fn(),
-          close: jest.fn(),
+          addCookies: vi.fn(),
+          close: vi.fn(),
         },
       ]),
-      newContext: jest.fn(),
+      newContext: vi.fn(),
       close: mockCloseFn,
     };
 
-    (chromium.connectOverCDP as jest.Mock).mockImplementationOnce(() =>
+    (chromium.connectOverCDP as Mock).mockImplementationOnce(() =>
       Promise.resolve(mockConnectedBrowser),
     );
 

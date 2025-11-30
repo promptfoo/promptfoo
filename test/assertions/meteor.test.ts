@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import type { AssertionParams, GradingResult } from '../../src/types/index';
 
 import type { handleMeteorAssertion as originalHandleMeteorAssertion } from '../../src/assertions/meteor';
@@ -156,7 +157,7 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
   };
 };
 
-jest.mock('../../src/assertions/meteor', () => ({
+vi.mock('../../src/assertions/meteor', () => ({
   handleMeteorAssertion: mockHandleMeteorAssertion,
 }));
 

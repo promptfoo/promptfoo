@@ -1,7 +1,8 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureEmbeddingProvider } from '../../../src/providers/azure/embedding';
 
-jest.mock('../../../src/cache');
+vi.mock('../../../src/cache');
 
 describe('AzureEmbeddingProvider', () => {
   let provider: AzureEmbeddingProvider;
@@ -19,9 +20,9 @@ describe('AzureEmbeddingProvider', () => {
     (provider as any).authHeaders = {
       'api-key': 'test-key',
     };
-    jest.spyOn(provider as any, 'ensureInitialized').mockImplementation(() => Promise.resolve());
+    vi.spyOn(provider as any, 'ensureInitialized').mockImplementation(() => Promise.resolve());
 
-    jest.mocked(fetchWithCache).mockReset();
+    vi.mocked(fetchWithCache).mockReset();
   });
 
   it('should handle cached response', async () => {
@@ -39,7 +40,7 @@ describe('AzureEmbeddingProvider', () => {
       cached: true,
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
 
     const result = await provider.callEmbeddingApi('test text');
 
@@ -53,7 +54,7 @@ describe('AzureEmbeddingProvider', () => {
   });
 
   it('should handle API call errors', async () => {
-    jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API error'));
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API error'));
 
     const result = await provider.callEmbeddingApi('test text');
 
@@ -80,7 +81,7 @@ describe('AzureEmbeddingProvider', () => {
       cached: false,
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
 
     const result = await provider.callEmbeddingApi('test text');
 
@@ -111,7 +112,7 @@ describe('AzureEmbeddingProvider', () => {
       cached: false,
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
 
     const result = await provider.callEmbeddingApi('test text');
 
@@ -134,7 +135,7 @@ describe('AzureEmbeddingProvider', () => {
       cached: true,
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
 
     await expect(provider.callEmbeddingApi('test text')).rejects.toThrow(
       /Cannot read (?:properties|property) of undefined/,

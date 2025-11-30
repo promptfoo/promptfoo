@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
-import EvalOutputCell from './EvalOutputCell';
+import EvalOutputCell, { isImageProvider } from './EvalOutputCell';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
@@ -1307,6 +1307,40 @@ describe('EvalOutputCell cell highlighting styling', () => {
     expect(statusElement?.contains(statusRowElement)).toBe(true);
     expect(statusRowElement?.contains(pillElement)).toBe(true);
     expect(cellElement?.contains(statusElement)).toBe(true);
+  });
+});
+
+describe('isImageProvider helper function', () => {
+  it('should return true for DALL-E 3 provider', () => {
+    expect(isImageProvider('openai:image:dall-e-3')).toBe(true);
+  });
+
+  it('should return true for DALL-E 2 provider', () => {
+    expect(isImageProvider('openai:image:dall-e-2')).toBe(true);
+  });
+
+  it('should return true for any provider with :image: in the name', () => {
+    expect(isImageProvider('some-provider:image:model')).toBe(true);
+  });
+
+  it('should return false for text completion providers', () => {
+    expect(isImageProvider('openai:gpt-4')).toBe(false);
+  });
+
+  it('should return false for chat providers', () => {
+    expect(isImageProvider('openai:chat:gpt-4')).toBe(false);
+  });
+
+  it('should return false for anthropic providers', () => {
+    expect(isImageProvider('anthropic:claude-3-opus')).toBe(false);
+  });
+
+  it('should return false for undefined provider', () => {
+    expect(isImageProvider(undefined)).toBe(false);
+  });
+
+  it('should return false for empty string', () => {
+    expect(isImageProvider('')).toBe(false);
   });
 });
 

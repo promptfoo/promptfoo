@@ -52,7 +52,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   }
 
   /**
-   * Check if the current deployment is configured as a reasoning model
+   * Check if the current deployment is configured as a reasoning model.
+   * Reasoning models use max_completion_tokens instead of max_tokens,
+   * don't support temperature, and accept reasoning_effort parameter.
    */
   protected isReasoningModel(): boolean {
     // Check explicit config flags first
@@ -64,14 +66,24 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // Supports both direct names (o1-preview) and prefixed names (prod-o1-mini)
     const lowerName = this.deploymentName.toLowerCase();
     return (
+      // OpenAI reasoning models
       lowerName.startsWith('o1') ||
       lowerName.includes('-o1') ||
       lowerName.startsWith('o3') ||
       lowerName.includes('-o3') ||
       lowerName.startsWith('o4') ||
       lowerName.includes('-o4') ||
+      // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
-      lowerName.includes('-gpt-5')
+      lowerName.includes('-gpt-5') ||
+      // DeepSeek reasoning models
+      lowerName.includes('deepseek-r1') ||
+      lowerName.includes('deepseek_r1') ||
+      // Microsoft Phi reasoning models
+      lowerName.includes('phi-4-reasoning') ||
+      lowerName.includes('phi-4-mini-reasoning') ||
+      // xAI Grok reasoning models
+      (lowerName.includes('grok') && lowerName.includes('reasoning'))
     );
   }
 

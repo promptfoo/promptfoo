@@ -73,6 +73,8 @@ export interface GeminiResponseData {
   promptFeedback?: {
     safetyRatings: Array<{ category: string; probability: string }>;
     blockReason: any;
+    /** Message explaining why content was blocked (e.g., by Model Armor) */
+    blockReasonMessage?: string;
   };
 }
 

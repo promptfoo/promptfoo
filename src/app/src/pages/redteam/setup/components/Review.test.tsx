@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { callApi } from '@app/utils/api';
@@ -93,6 +93,7 @@ describe('Review Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
 
     // Reset the mock to return a connected state by default
     vi.mocked(useApiHealth).mockReturnValue({
@@ -105,6 +106,17 @@ describe('Review Component', () => {
       config: defaultConfig,
       updateConfig: mockUpdateConfig,
     });
+  });
+
+  afterEach(() => {
+    // Only run pending timers if fake timers are active
+    // This prevents errors when child describe blocks use real timers
+    try {
+      vi.runOnlyPendingTimers();
+    } catch {
+      // Ignore error if timers are not mocked
+    }
+    vi.useRealTimers();
   });
 
   describe('Component Integration', () => {
@@ -233,7 +245,12 @@ describe('Review Component', () => {
     const accordionSummary = screen.getByText('Advanced Configuration');
     fireEvent.click(accordionSummary);
 
-    const defaultTestVariables = await screen.findByTestId('default-test-variables');
+    // Advance timers for any animations/transitions
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    const defaultTestVariables = screen.getByTestId('default-test-variables');
 
     expect(defaultTestVariables).toBeInTheDocument();
 
@@ -434,9 +451,15 @@ Application Details:
       if (buttonWrapper) {
         fireEvent.mouseOver(buttonWrapper);
 
-        await waitFor(() => {
-          expect(screen.getByText(/cannot connect to promptfoo cloud/i)).toBeInTheDocument();
+        // Advance timers for MUI Tooltip to appear
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
         });
+
+        // Match tooltip text specifically (different from Alert text)
+        expect(
+          screen.getByText(/Cannot connect to Promptfoo Cloud\. Please check your network/i),
+        ).toBeInTheDocument();
       }
     });
 
@@ -565,9 +588,15 @@ Application Details:
       if (buttonWrapper) {
         fireEvent.mouseOver(buttonWrapper);
 
-        await waitFor(() => {
-          expect(screen.getByText(/remote generation is disabled/i)).toBeInTheDocument();
+        // Advance timers for MUI Tooltip to appear
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
         });
+
+        // Match tooltip text specifically (different from Alert text)
+        expect(
+          screen.getByText(/Remote generation is disabled\. Running red team evaluations/i),
+        ).toBeInTheDocument();
       }
     });
 
@@ -591,9 +620,12 @@ Application Details:
       if (buttonWrapper) {
         fireEvent.mouseOver(buttonWrapper);
 
-        await waitFor(() => {
-          expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
+        // Advance timers for MUI Tooltip to appear
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
         });
+
+        expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
       }
     });
 
@@ -619,7 +651,7 @@ Application Details:
         fireEvent.mouseOver(buttonWrapper);
 
         // Wait a bit to ensure tooltip would have time to appear if it was going to
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await vi.advanceTimersByTimeAsync(100);
 
         // Check that no tooltip is shown (check for various tooltip text patterns)
         expect(screen.queryByText(/cannot connect to promptfoo cloud/i)).not.toBeInTheDocument();
@@ -650,7 +682,7 @@ Application Details:
         fireEvent.mouseOver(buttonWrapper);
 
         // Wait a bit to ensure tooltip would have time to appear if it was going to
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await vi.advanceTimersByTimeAsync(100);
 
         // Check that no tooltip is shown
         expect(screen.queryByText(/cannot connect to promptfoo cloud/i)).not.toBeInTheDocument();
@@ -662,6 +694,10 @@ Application Details:
 
   describe('Run Now Button - isRunning Integration', () => {
     beforeEach(() => {
+      // These tests rely on real async behavior (button click → API call → state change)
+      // so we need to use real timers instead of fake timers
+      vi.useRealTimers();
+
       // Reset to connected state
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
@@ -892,6 +928,11 @@ Application Details:
   });
 
   describe('Run Now Button - State Transitions', () => {
+    beforeEach(() => {
+      // These tests use waitFor which doesn't work well with fake timers
+      vi.useRealTimers();
+    });
+
     it('should update button state when API health status changes', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },

@@ -1,3 +1,4 @@
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, enableCache } from '../../src/cache';
 import {
   CloudflareAiChatCompletionProvider,
@@ -10,44 +11,42 @@ import { loadApiProviders } from '../../src/providers/index';
 
 import type { ProviderOptionsMap } from '../../src/types/index';
 
-jest.mock('fs');
-
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+vi.mock('../../src/esm', async () => {
+  const actual = await vi.importActual<typeof import('../../src/esm')>('../../src/esm');
+  return {
+    ...actual,
+    importModule: vi.fn(),
+  };
+});
+
+vi.mock('fs', () => ({
+  readFileSync: vi.fn(),
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn(),
 }));
 
-jest.mock('../../src/esm', () => ({
-  ...jest.requireActual('../../src/esm'),
-  importModule: jest.fn(),
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(),
 }));
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
-}));
-
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
-}));
-
-const mockFetch = jest.mocked(jest.fn());
-global.fetch = mockFetch;
+const mockFetch = vi.mocked(vi.fn());
+(global as typeof globalThis).fetch = mockFetch as unknown as typeof fetch;
 
 const defaultMockResponse = {
   status: 200,
   statusText: 'OK',
   headers: {
-    get: jest.fn().mockReturnValue(null),
-    entries: jest.fn().mockReturnValue([]),
+    get: vi.fn().mockReturnValue(null),
+    entries: vi.fn().mockReturnValue([]),
   },
 };
 
@@ -57,11 +56,11 @@ describe('CloudflareAi Provider', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await clearCache();
   });
 
@@ -100,7 +99,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -126,7 +125,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -174,7 +173,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -237,7 +236,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -294,7 +293,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -490,7 +489,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -565,7 +564,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -602,7 +601,7 @@ describe('CloudflareAi Provider', () => {
 
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -666,7 +665,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -705,7 +704,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 

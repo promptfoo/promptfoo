@@ -1,22 +1,21 @@
-import { clearCache } from '../../src/cache';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearCache, fetchWithCache } from '../../src/cache';
 import { SnowflakeCortexProvider } from '../../src/providers/snowflake';
 
-jest.mock('../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-  clearCache: jest.fn(),
-  enableCache: jest.fn(),
-  disableCache: jest.fn(),
-  isCacheEnabled: jest.fn(),
+vi.mock('../../src/cache', () => ({
+  fetchWithCache: vi.fn(),
+  clearCache: vi.fn(),
+  enableCache: vi.fn(),
+  disableCache: vi.fn(),
+  isCacheEnabled: vi.fn(),
 }));
 
-const mockFetchWithCache = jest.mocked(
-  require('../../src/cache').fetchWithCache,
-) as jest.MockedFunction<typeof import('../../src/cache').fetchWithCache>;
+const mockFetchWithCache = vi.mocked(fetchWithCache);
 
 describe('Snowflake Cortex Provider', () => {
   afterEach(async () => {
     await clearCache();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     delete process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER;
     delete process.env.SNOWFLAKE_API_KEY;
   });
