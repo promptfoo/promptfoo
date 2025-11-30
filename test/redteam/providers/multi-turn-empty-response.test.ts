@@ -1,4 +1,4 @@
-import { MockedFunction, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MockedFunction, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CrescendoProvider } from '../../../src/redteam/providers/crescendo/index';
 import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
 import { CustomProvider } from '../../../src/redteam/providers/custom/index';
@@ -32,6 +32,7 @@ vi.mock('../../../src/redteam/providers/shared', async () => {
 const mockGetTargetResponse = getTargetResponse as MockedFunction<typeof getTargetResponse>;
 
 describe('Multi-turn strategies empty response handling', () => {
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
   const createMockTargetProvider = (): ApiProvider => ({
     id: () => 'mock-target',
     callApi: vi.fn() as CallApiFunction,
@@ -49,6 +50,15 @@ describe('Multi-turn strategies empty response handling', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.OPENAI_API_KEY = 'test-api-key';
+  });
+
+  afterEach(() => {
+    if (originalOpenAiApiKey) {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    } else {
+      delete process.env.OPENAI_API_KEY;
+    }
   });
 
   describe('Crescendo strategy', () => {
