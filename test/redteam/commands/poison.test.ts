@@ -11,22 +11,63 @@ import {
 } from '../../../src/redteam/commands/poison';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
-vi.mock('fs');
+const mockFsReadFileSync = vi.hoisted(() => vi.fn());
+const mockFsExistsSync = vi.hoisted(() => vi.fn());
+const mockFsStatSync = vi.hoisted(() => vi.fn());
+const mockFsMkdirSync = vi.hoisted(() => vi.fn());
+const mockFsWriteFileSync = vi.hoisted(() => vi.fn());
+const mockFsReaddirSync = vi.hoisted(() => vi.fn());
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      readFileSync: mockFsReadFileSync,
+      existsSync: mockFsExistsSync,
+      statSync: mockFsStatSync,
+      mkdirSync: mockFsMkdirSync,
+      writeFileSync: mockFsWriteFileSync,
+      readdirSync: mockFsReaddirSync,
+    },
+    readFileSync: mockFsReadFileSync,
+    existsSync: mockFsExistsSync,
+    statSync: mockFsStatSync,
+    mkdirSync: mockFsMkdirSync,
+    writeFileSync: mockFsWriteFileSync,
+    readdirSync: mockFsReaddirSync,
+  };
+});
+
+const mockPathJoin = vi.hoisted(() => vi.fn());
+const mockPathRelative = vi.hoisted(() => vi.fn());
+const mockPathResolve = vi.hoisted(() => vi.fn());
+const mockPathDirname = vi.hoisted(() => vi.fn().mockReturnValue('mock-dir'));
+
 vi.mock('path', async () => ({
   ...(await vi.importActual('path')),
-  resolve: vi.fn(),
-  join: vi.fn(),
-  relative: vi.fn(),
-  dirname: vi.fn().mockReturnValue('mock-dir')
+  default: {
+    ...(await vi.importActual<typeof import('path')>('path')),
+    resolve: mockPathResolve,
+    join: mockPathJoin,
+    relative: mockPathRelative,
+    dirname: mockPathDirname,
+  },
+  resolve: mockPathResolve,
+  join: mockPathJoin,
+  relative: mockPathRelative,
+  dirname: mockPathDirname,
 }));
 
 describe('poison command', () => {
   beforeEach(() => {
-    vi.resetAllMocks();
-    vi.mocked(fs.mkdirSync).mockImplementation(function() {
-      return '/mock/dir';
-    });
-    vi.mocked(fs.writeFileSync).mockReturnValue();
+    vi.clearAllMocks();
+    // Set default implementations for fs mocks
+    mockFsMkdirSync.mockImplementation(() => '/mock/dir');
+    mockFsWriteFileSync.mockReturnValue(undefined);
+    mockFsReadFileSync.mockReturnValue('test content');
+    mockFsExistsSync.mockReturnValue(true);
   });
 
   describe('getAllFiles', () => {
