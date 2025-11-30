@@ -56,18 +56,41 @@ vi.mock('proxy-agent', async importOriginal => {
   });
 });
 
+const mockExecFile = vi.hoisted(() => vi.fn());
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      execFile: mockExecFile,
+    },
+    execFile: mockExecFile,
+  };
+});
+
 vi.mock('../../src/esm', async () => ({
   ...(await vi.importActual('../../src/esm')),
   importModule: vi.fn()
 }));
 
-vi.mock('fs', async importOriginal => {
-  return ({
-    ...(await importOriginal()),
-    readFileSync: vi.fn(),
-    existsSync: vi.fn(),
-    mkdirSync: vi.fn()
-  });
+const mockFsReadFileSync = vi.hoisted(() => vi.fn());
+const mockFsExistsSync = vi.hoisted(() => vi.fn());
+const mockFsMkdirSync = vi.hoisted(() => vi.fn());
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      readFileSync: mockFsReadFileSync,
+      existsSync: mockFsExistsSync,
+      mkdirSync: mockFsMkdirSync,
+    },
+    readFileSync: mockFsReadFileSync,
+    existsSync: mockFsExistsSync,
+    mkdirSync: mockFsMkdirSync,
+  };
 });
 
 vi.mock('glob', async importOriginal => {
@@ -152,9 +175,15 @@ vi.mock('../../src/providers/adaline.gateway', async importOriginal => {
 });
 
 describe('call provider apis', () => {
+  beforeEach(() => {
+    // Set Azure environment variables for Azure provider tests
+    process.env.AZURE_API_HOST = 'test.openai.azure.com';
+  });
+
   afterEach(async () => {
     vi.clearAllMocks();
     await clearCache();
+    delete process.env.AZURE_API_HOST;
   });
 
   it('AzureOpenAiCompletionProvider callApi', async () => {
@@ -422,7 +451,7 @@ describe('call provider apis', () => {
         stderr: new Stream.Readable(),
       } as child_process.ChildProcess;
 
-      const execFileSpy = vi.spyOn(child_process, 'execFile').mockImplementation(((
+      mockExecFile.mockImplementation(((
         _file: any,
         _args: any,
         _options: any,
@@ -451,8 +480,8 @@ describe('call provider apis', () => {
       });
 
       expect(result.output).toBe(mockResponse);
-      expect(execFileSpy).toHaveBeenCalledTimes(1);
-      expect(execFileSpy).toHaveBeenCalledWith(
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
+      expect(mockExecFile).toHaveBeenCalledWith(
         expect.stringContaining(inputFile),
         expect.arrayContaining(
           inputArgs.concat([
