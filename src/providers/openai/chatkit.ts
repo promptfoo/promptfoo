@@ -516,6 +516,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       poolSize: options.config?.poolSize ?? defaultPoolSize,
       approvalHandling: options.config?.approvalHandling ?? 'auto-approve',
       maxApprovals: options.config?.maxApprovals ?? DEFAULT_MAX_APPROVALS,
+      stateful: options.config?.stateful ?? false,
     };
   }
 
@@ -658,14 +659,18 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     _context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Stateful mode requires sequential processing, so disable pool mode
+    const usePool = this.chatKitConfig.usePool && !this.chatKitConfig.stateful;
+
     logger.debug('[ChatKitProvider] Starting call', {
       prompt: prompt.substring(0, 100),
       workflowId: this.chatKitConfig.workflowId,
-      usePool: this.chatKitConfig.usePool,
+      usePool,
+      stateful: this.chatKitConfig.stateful,
     });
 
-    // Use pool-based execution for better concurrency
-    if (this.chatKitConfig.usePool) {
+    // Use pool-based execution for better concurrency (not available in stateful mode)
+    if (usePool) {
       return this.callApiWithPool(prompt);
     }
 
@@ -676,28 +681,49 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         throw new Error('Browser page not initialized');
       }
 
-      // Refresh the page to get clean state for each evaluation
-      // This ensures each test case is completely independent
-      await this.page.reload({ waitUntil: 'domcontentloaded' });
+      // For stateful mode, don't reload the page to maintain conversation state
+      // For non-stateful mode, refresh to get clean state for each evaluation
+      if (!this.chatKitConfig.stateful) {
+        await this.page.reload({ waitUntil: 'domcontentloaded' });
 
-      // Wait for ChatKit to be ready again after reload
-      await this.page.waitForFunction(() => (window as any).__state?.ready === true, {
-        timeout: CHATKIT_READY_TIMEOUT_MS,
+        // Wait for ChatKit to be ready again after reload
+        await this.page.waitForFunction(() => (window as any).__state?.ready === true, {
+          timeout: CHATKIT_READY_TIMEOUT_MS,
+        });
+      }
+
+      // For stateful mode, check if this is a follow-up message (responses already exist)
+      // Use newThread: false for follow-ups to continue the conversation
+      const responseCount = await this.page.evaluate(
+        () => (window as any).__state?.responses?.length || 0,
+      );
+      const isFollowUp = this.chatKitConfig.stateful && responseCount > 0;
+
+      logger.debug('[ChatKitProvider] Sending message', {
+        stateful: this.chatKitConfig.stateful,
+        isFollowUp,
+        responseCount,
       });
 
       // Send the message
-      await this.page.evaluate((text) => {
-        return (window as any).__chatkit.sendUserMessage({
-          text,
-          newThread: true,
-        });
-      }, prompt);
+      await this.page.evaluate(
+        ({ text, newThread }) => {
+          return (window as any).__chatkit.sendUserMessage({
+            text,
+            newThread,
+          });
+        },
+        { text: prompt, newThread: !isFollowUp },
+      );
 
-      // Wait for response
+      // Wait for response - in stateful mode, wait for a NEW response
       logger.debug('[ChatKitProvider] Waiting for response');
-      await this.page.waitForFunction(() => (window as any).__state?.responses?.length > 0, {
-        timeout: this.chatKitConfig.timeout,
-      });
+      const expectedResponseCount = responseCount + 1;
+      await this.page.waitForFunction(
+        (expected) => (window as any).__state?.responses?.length >= expected,
+        expectedResponseCount,
+        { timeout: this.chatKitConfig.timeout },
+      );
 
       // Allow DOM to settle - ChatKit iframe needs time to render the response
       await this.page.waitForTimeout(DOM_SETTLE_DELAY_MS);
@@ -720,9 +746,15 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       // Get thread ID
       const threadId = await this.page.evaluate(() => (window as any).__state.threadId);
 
+      // Get final response count for turn tracking
+      const finalResponseCount = await this.page.evaluate(
+        () => (window as any).__state?.responses?.length || 0,
+      );
+
       logger.debug('[ChatKitProvider] Response received', {
         threadId,
         textLength: responseText.length,
+        turnNumber: finalResponseCount,
       });
 
       return {
@@ -731,6 +763,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
           threadId,
           workflowId: this.chatKitConfig.workflowId,
           version: this.chatKitConfig.version,
+          stateful: this.chatKitConfig.stateful,
+          turnNumber: finalResponseCount,
         },
       };
     } catch (error) {

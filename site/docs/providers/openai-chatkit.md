@@ -89,6 +89,7 @@ npx promptfoo view
 | `poolSize`         | Max concurrent browser contexts when using pool | `--max-concurrency` or 4 |
 | `approvalHandling` | How to handle workflow approval steps           | `'auto-approve'`         |
 | `maxApprovals`     | Maximum approval steps to process per message   | 5                        |
+| `stateful`         | Enable multi-turn conversation mode             | false                    |
 
 ## Basic Usage
 
@@ -131,6 +132,71 @@ If `poolSize` isn't set, it defaults to `--max-concurrency` (or 4).
 
 To disable pooling and use a fresh browser for each test, set `usePool: false`.
 :::
+
+## Multi-Turn Conversations
+
+Some workflows ask follow-up questions and require multiple conversational turns. Enable `stateful: true` to maintain conversation state across test cases:
+
+```yaml
+providers:
+  - id: openai:chatkit:wf_xxxxx
+    config:
+      stateful: true
+
+tests:
+  # Turn 1: Start the conversation
+  - vars:
+      message: 'I want to plan a birthday party'
+
+  # Turn 2: Continue the conversation (context maintained)
+  - vars:
+      message: "It's for about 20 people, budget is $500"
+```
+
+:::warning
+Stateful mode requires `--max-concurrency 1` for reliable behavior. The conversation state is maintained in the browser page between test cases.
+:::
+
+### Using with Simulated User
+
+For comprehensive multi-turn testing, combine ChatKit with the [simulated user provider](/docs/providers/simulated-user):
+
+```yaml
+prompts:
+  - 'You are a helpful party planning assistant.'
+
+providers:
+  - id: openai:chatkit:wf_xxxxx
+    config:
+      stateful: true
+      timeout: 60000
+
+defaultTest:
+  provider:
+    id: 'promptfoo:simulated-user'
+    config:
+      maxTurns: 5
+
+tests:
+  - vars:
+      instructions: |
+        You are planning a birthday party for your friend.
+        - About 20 guests
+        - Budget of $500
+        - Next Saturday afternoon
+        Answer questions naturally and provide details when asked.
+    assert:
+      - type: llm-rubric
+        value: The assistant gathered requirements and provided useful recommendations
+```
+
+Run with:
+
+```bash
+npx promptfoo eval --max-concurrency 1
+```
+
+The simulated user will interact with the ChatKit workflow for multiple turns, allowing you to test how the workflow handles realistic conversations.
 
 ## Handling Workflow Approvals
 

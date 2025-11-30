@@ -69,4 +69,15 @@ export interface OpenAiChatKitOptions extends OpenAiSharedOptions {
    * @default 5
    */
   maxApprovals?: number;
+
+  /**
+   * Enable stateful/multi-turn conversation mode.
+   * When enabled:
+   * - The browser page is kept alive between calls
+   * - First message uses newThread: true, subsequent messages use newThread: false
+   * - Requires --max-concurrency 1 for reliable behavior
+   * - Useful for workflows that ask follow-up questions
+   * @default false
+   */
+  stateful?: boolean;
 }
