@@ -91,14 +91,33 @@ function validateVersion(version: string): void {
 }
 
 /**
+ * Validate userId format to prevent script injection
+ */
+function validateUserId(userId: string): void {
+  if (!/^[a-zA-Z0-9._@-]+$/.test(userId)) {
+    throw new Error(
+      `Invalid userId format: ${userId}. Only alphanumeric, dot, dash, underscore, and @ allowed.`,
+    );
+  }
+}
+
+/**
  * Generate the HTML page that hosts the ChatKit component
  */
-function generateChatKitHTML(apiKey: string, workflowId: string, version?: string): string {
+function generateChatKitHTML(
+  apiKey: string,
+  workflowId: string,
+  version?: string,
+  userId?: string,
+): string {
   // Validate inputs to prevent script injection
   validateWorkflowId(workflowId);
   if (version) {
     validateVersion(version);
   }
+  // Default userId includes timestamp for uniqueness
+  const effectiveUserId = userId || `promptfoo-eval-${Date.now()}`;
+  validateUserId(effectiveUserId);
 
   const versionClause = version ? `, version: '${version}'` : '';
 
@@ -148,7 +167,7 @@ function generateChatKitHTML(apiKey: string, workflowId: string, version?: strin
               },
               body: JSON.stringify({
                 workflow: { id: '${workflowId}'${versionClause} },
-                user: 'promptfoo-eval-' + Date.now()
+                user: '${effectiveUserId}'
               })
             });
 
@@ -488,7 +507,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     this.chatKitConfig = {
       workflowId: options.config?.workflowId || workflowId,
       version: options.config?.version,
-      userId: options.config?.userId || 'promptfoo-eval',
+      userId: options.config?.userId, // Default with timestamp is applied in generateChatKitHTML
       timeout: options.config?.timeout || DEFAULT_TIMEOUT_MS,
       headless: options.config?.headless ?? true,
       serverPort: options.config?.serverPort || 0,
@@ -532,7 +551,12 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     });
 
     // Create HTTP server to serve the ChatKit HTML
-    const html = generateChatKitHTML(apiKey, workflowId, this.chatKitConfig.version);
+    const html = generateChatKitHTML(
+      apiKey,
+      workflowId,
+      this.chatKitConfig.version,
+      this.chatKitConfig.userId,
+    );
 
     this.server = http.createServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -765,7 +789,12 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     });
 
     // Set the HTML template (needed for the pool's server)
-    const html = generateChatKitHTML(apiKey, workflowId, this.chatKitConfig.version);
+    const html = generateChatKitHTML(
+      apiKey,
+      workflowId,
+      this.chatKitConfig.version,
+      this.chatKitConfig.userId,
+    );
     pool.setHtmlTemplate(html);
 
     let pooledPage: Awaited<ReturnType<typeof pool.acquirePage>> | null = null;

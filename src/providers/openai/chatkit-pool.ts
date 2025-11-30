@@ -309,10 +309,19 @@ export class ChatKitBrowserPool {
         // Ignore close errors
       }
 
-      // Create replacement
-      const newPage = await this.createPooledPage();
-      this.pages.push(newPage);
-      pooledPage = newPage;
+      // Create replacement - if this fails, we just reduce pool size
+      // The pool will recover by creating new pages on demand
+      try {
+        const newPage = await this.createPooledPage();
+        this.pages.push(newPage);
+        pooledPage = newPage;
+      } catch (createError) {
+        logger.warn('[ChatKitPool] Failed to create replacement page', { error: createError });
+        // Pool size is now reduced, but will recover on next acquirePage
+        // If someone is waiting, they'll timeout via PAGE_ACQUIRE_TIMEOUT_MS
+        this.scheduleIdleShutdown();
+        return;
+      }
     }
 
     // If someone is waiting, give them the page directly (keep inUse=true)
@@ -383,24 +392,34 @@ export class ChatKitBrowserPool {
       viewport: { width: 800, height: 600 },
     });
 
-    const page = await context.newPage();
+    try {
+      const page = await context.newPage();
 
-    // Navigate and wait for ChatKit ready
-    await page.goto(`http://localhost:${this.serverPort}`, {
-      waitUntil: 'domcontentloaded',
-    });
+      // Navigate and wait for ChatKit ready
+      await page.goto(`http://localhost:${this.serverPort}`, {
+        waitUntil: 'domcontentloaded',
+      });
 
-    await page.waitForFunction(() => (window as any).__state?.ready === true, {
-      timeout: CHATKIT_READY_TIMEOUT_MS,
-    });
+      await page.waitForFunction(() => (window as any).__state?.ready === true, {
+        timeout: CHATKIT_READY_TIMEOUT_MS,
+      });
 
-    return {
-      context,
-      page,
-      ready: true,
-      inUse: false,
-      templateVersion: this.templateVersion,
-    };
+      return {
+        context,
+        page,
+        ready: true,
+        inUse: false,
+        templateVersion: this.templateVersion,
+      };
+    } catch (error) {
+      // Clean up context if page creation/initialization fails
+      try {
+        await context.close();
+      } catch {
+        // Ignore close errors
+      }
+      throw error;
+    }
   }
 
   private async refreshPooledPage(pooledPage: PooledPage): Promise<void> {

@@ -15,8 +15,9 @@ export interface OpenAiChatKitOptions extends OpenAiSharedOptions {
   version?: string;
 
   /**
-   * User identifier for the ChatKit session
-   * @default 'promptfoo-eval'
+   * User identifier for the ChatKit session.
+   * If not set, a unique ID with timestamp is generated.
+   * @default 'promptfoo-eval-<timestamp>'
    */
   userId?: string;
 
@@ -42,8 +43,7 @@ export interface OpenAiChatKitOptions extends OpenAiSharedOptions {
    * Use a shared browser pool for better concurrency support.
    * When enabled, a single browser with multiple contexts is used
    * instead of spawning separate browsers per test.
-   * Recommended for concurrency > 1.
-   * @default false
+   * @default true
    */
   usePool?: boolean;
 
@@ -69,23 +69,4 @@ export interface OpenAiChatKitOptions extends OpenAiSharedOptions {
    * @default 5
    */
   maxApprovals?: number;
-}
-
-/**
- * Internal state for tracking ChatKit session
- */
-export interface ChatKitSessionState {
-  ready: boolean;
-  threadId: string | null;
-  responses: ChatKitResponseItem[];
-  error?: Error;
-}
-
-/**
- * A captured response from ChatKit
- */
-export interface ChatKitResponseItem {
-  text: string;
-  threadId: string | null;
-  timestamp?: number;
 }
