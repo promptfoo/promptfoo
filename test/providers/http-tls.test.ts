@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
 import { fetchWithCache } from '../../src/cache';

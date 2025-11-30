@@ -1,4 +1,4 @@
-import { SpyInstance, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { MockInstance, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
@@ -26,7 +26,7 @@ vi.mock('../../src/telemetry', () => ({
 
 describe('importCommand', () => {
   let program: Command;
-  let mockExit: SpyInstance;
+  let mockExit: MockInstance;
   let tempFilePath: string;
 
   beforeAll(async () => {

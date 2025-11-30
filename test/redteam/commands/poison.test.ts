@@ -117,7 +117,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockResolvedValue(mockResponse);
 
       const result = await generatePoisonedDocument('test doc', 'test goal');
 
@@ -153,7 +153,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockResolvedValue(mockResponse);
 
       await expect(generatePoisonedDocument('test doc')).rejects.toThrow(
         'Failed to generate poisoned document',
@@ -199,7 +199,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockResolvedValue(mockResponse);
 
       const result = await poisonDocument(mockDoc, 'output-dir');
 
@@ -234,7 +234,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockResolvedValue(mockResponse);
 
       const result = await poisonDocument(mockDoc, 'output-dir');
 
@@ -306,7 +306,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockResolvedValue(mockResponse);
 
       await doPoisonDocuments(options);
 
@@ -366,7 +366,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockResolvedValue(mockResponse);
 
       await doPoisonDocuments(options);
 

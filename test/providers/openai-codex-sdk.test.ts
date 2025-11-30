@@ -1,4 +1,4 @@
-import { SpyInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
 import { clearCache } from '../../src/cache';
@@ -44,7 +44,7 @@ vi.mock('../../src/esm', async importOriginal => {
 });
 
 // Mock the SDK package (for type safety)
-vi.mock('@openai/codex-sdk', () => mockCodexSDK, { virtual: true });
+vi.mock('@openai/codex-sdk', () => mockCodexSDK);
 
 // Helper to create mock response matching real SDK format
 const createMockResponse = (
@@ -63,8 +63,8 @@ const createMockResponse = (
 });
 
 describe('OpenAICodexSDKProvider', () => {
-  let statSyncSpy: SpyInstance;
-  let existsSyncSpy: SpyInstance;
+  let statSyncSpy: MockInstance;
+  let existsSyncSpy: MockInstance;
   const mockImportModule = vi.mocked(importModule);
 
   beforeEach(() => {
@@ -117,7 +117,7 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     it('should warn about unknown model', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'unknown-model' } });
 
@@ -129,7 +129,7 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     it('should warn about unknown fallback model', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
 
@@ -141,7 +141,7 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     it('should not warn about known OpenAI models', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-4o' } });
       new OpenAICodexSDKProvider({ config: { fallback_model: 'o3-mini' } });
@@ -152,7 +152,7 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     it('should not warn about gpt-5.1-codex models', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-max' } });
@@ -202,7 +202,7 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should handle SDK exceptions', async () => {
-        const errorSpy = vi.spyOn(logger, 'error').mockImplementation();
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockRun.mockRejectedValue(new Error('Network error'));
 
         const provider = new OpenAICodexSDKProvider({
@@ -731,7 +731,7 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should handle abort during execution', async () => {
-        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation();
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
         const abortError = new Error('AbortError');
         abortError.name = 'AbortError';
         mockRun.mockRejectedValue(abortError);

@@ -137,7 +137,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
       };
       const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
-      expect(provider.config.extraBodyParams).toEqual({
+      expect((provider.config as any).extraBodyParams).toEqual({
         usage_context: {
           project: 'test-project',
           team: 'engineering',
@@ -159,7 +159,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
       };
       const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
-      expect(provider.config.extraBodyParams).toEqual({
+      expect((provider.config as any).extraBodyParams).toEqual({
         custom_param: 'value',
         usage_context: {
           project: 'test-project',

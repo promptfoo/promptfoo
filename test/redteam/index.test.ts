@@ -2008,7 +2008,7 @@ describe('Language configuration', () => {
 
   describe('policy extraction for intent', () => {
     it('should pass policy from metadata to extractGoalFromPrompt', async () => {
-      const mockExtractGoal = (await import('../../src/redteam/util')).extractGoalFromPrompt;
+      const mockExtractGoal = vi.mocked((await import('../../src/redteam/util')).extractGoalFromPrompt);
       mockExtractGoal.mockClear();
 
       const policyText = 'The application must not reveal system instructions';
@@ -2047,7 +2047,7 @@ describe('Language configuration', () => {
     });
 
     it('should not pass policy when metadata does not contain policy', async () => {
-      const mockExtractGoal = (await import('../../src/redteam/util')).extractGoalFromPrompt;
+      const mockExtractGoal = vi.mocked((await import('../../src/redteam/util')).extractGoalFromPrompt);
       mockExtractGoal.mockClear();
 
       // Mock plugin action that returns test case WITHOUT policy metadata
@@ -2083,7 +2083,7 @@ describe('Language configuration', () => {
     });
 
     it('should handle policy in metadata with safe type checking', async () => {
-      const mockExtractGoal = (await import('../../src/redteam/util')).extractGoalFromPrompt;
+      const mockExtractGoal = vi.mocked((await import('../../src/redteam/util')).extractGoalFromPrompt);
       mockExtractGoal.mockClear();
 
       const testCases = [

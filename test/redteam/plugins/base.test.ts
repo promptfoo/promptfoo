@@ -1,4 +1,4 @@
-import { Mock, SpyInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, MockInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import dedent from 'dedent';
 
 import { matchesLlmRubric } from '../../../src/matchers';
@@ -996,7 +996,7 @@ describe('RedteamGraderBase', () => {
 
   describe('RedteamGraderBase with tools', () => {
     let toolProvider: any;
-    let maybeLoadFromExternalFileSpy: SpyInstance;
+    let maybeLoadFromExternalFileSpy: MockInstance;
     let ToolGrader: any;
 
     beforeEach(() => {

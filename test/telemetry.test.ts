@@ -76,7 +76,7 @@ jest.mock('../src/constants/build', () => ({
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let fetchWithProxySpy: jest.MockedFunction<typeof fetchWithProxy>;
-  let sendEventSpy: jest.SpyInstance;
+  let sendEventSpy: jest.MockInstance;
 
   beforeEach(() => {
     originalEnv = process.env;

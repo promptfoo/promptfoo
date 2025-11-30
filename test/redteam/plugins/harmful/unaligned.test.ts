@@ -1,4 +1,4 @@
-import { SpyInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEnvBool, getEnvString } from '../../../../src/envars';
 import { PromptfooHarmfulCompletionProvider } from '../../../../src/providers/promptfoo';
 import {
@@ -15,7 +15,7 @@ vi.mock('../../../../src/envars');
 
 describe('harmful plugin', () => {
   let mockProvider: ApiProvider;
-  let mockCallApi: SpyInstance;
+  let mockCallApi: MockInstance;
 
   beforeEach(() => {
     vi.clearAllMocks();

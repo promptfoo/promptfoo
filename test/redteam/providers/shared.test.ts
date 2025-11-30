@@ -15,6 +15,7 @@ import {
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiFunction,
   CallApiOptionsParams,
   Prompt,
   ProviderResponse,
@@ -108,7 +109,7 @@ describe('shared redteam provider utilities', () => {
   describe('RedteamProviderManager', () => {
     const mockApiProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: vi.fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>(),
+      callApi: vi.fn() as CallApiFunction,
     };
 
     it('creates default OpenAI provider when no provider specified', async () => {
@@ -184,10 +185,7 @@ describe('shared redteam provider utilities', () => {
     it('uses provider from cliState if available', async () => {
       const mockStateProvider: ApiProvider = {
         id: () => 'state-provider',
-        callApi: vi.fn<
-          Promise<ProviderResponse>,
-          [string, CallApiContextParams | undefined, any]
-        >(),
+        callApi: vi.fn() as CallApiFunction,
       };
 
       // Clear and set up cliState for this test
@@ -208,10 +206,7 @@ describe('shared redteam provider utilities', () => {
     it('sets and reuses providers', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: vi.fn<
-          Promise<ProviderResponse>,
-          [string, CallApiContextParams | undefined, any]
-        >(),
+        callApi: vi.fn() as CallApiFunction,
       };
       mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
@@ -275,7 +270,7 @@ describe('shared redteam provider utilities', () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: vi
-          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .fn()
           .mockRejectedValue(new Error('Network error')),
       };
 
@@ -299,10 +294,7 @@ describe('shared redteam provider utilities', () => {
       it('setMultilingualProvider caches provider and getMultilingualProvider returns it', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-multilingual-provider',
-          callApi: vi.fn<
-            Promise<ProviderResponse>,
-            [string, CallApiContextParams | undefined, any]
-          >(),
+          callApi: vi.fn() as CallApiFunction,
         };
 
         mockedLoadApiProviders.mockResolvedValueOnce([mockProvider]);
@@ -333,7 +325,7 @@ describe('shared redteam provider utilities', () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: vi
-          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .fn()
           .mockResolvedValue({
             output: 'test response',
             tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
@@ -352,7 +344,7 @@ describe('shared redteam provider utilities', () => {
 
     it('passes through context and options', async () => {
       const mockCallApi = vi
-        .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+        .fn()
         .mockResolvedValue({
           output: 'test response',
           tokenUsage: { numRequests: 1 },
@@ -383,7 +375,7 @@ describe('shared redteam provider utilities', () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: vi
-          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .fn()
           .mockResolvedValue({
             output: { key: 'value' },
             tokenUsage: { numRequests: 1 },
@@ -402,7 +394,7 @@ describe('shared redteam provider utilities', () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: vi
-          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .fn()
           .mockResolvedValue({
             error: 'API error',
             sessionId: 'error-session',
@@ -424,7 +416,7 @@ describe('shared redteam provider utilities', () => {
         id: () => 'test-provider',
         delay: 100,
         callApi: vi
-          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .fn()
           .mockResolvedValue({
             output: 'test response',
             tokenUsage: { numRequests: 1 },
@@ -441,7 +433,7 @@ describe('shared redteam provider utilities', () => {
         id: () => 'test-provider',
         delay: 100,
         callApi: vi
-          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .fn()
           .mockResolvedValue({
             output: 'test response',
             cached: true,
@@ -458,7 +450,7 @@ describe('shared redteam provider utilities', () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: vi
-          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .fn()
           .mockResolvedValue({}),
       };
 
@@ -471,7 +463,7 @@ describe('shared redteam provider utilities', () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: vi
-          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .fn()
           .mockResolvedValue({
             output: 'test response',
           }),
@@ -490,7 +482,7 @@ describe('shared redteam provider utilities', () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
           callApi: vi
-            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .fn()
             .mockResolvedValue({
               output: '', // Empty string
               tokenUsage: { numRequests: 1 },
@@ -509,7 +501,7 @@ describe('shared redteam provider utilities', () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
           callApi: vi
-            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .fn()
             .mockResolvedValue({
               output: 0, // Zero value
               tokenUsage: { numRequests: 1 },
@@ -527,12 +519,10 @@ describe('shared redteam provider utilities', () => {
       it('handles false output correctly', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: vi
-            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
-            .mockResolvedValue({
-              output: false, // Boolean false
-              tokenUsage: { numRequests: 1 },
-            }),
+          callApi: vi.fn().mockResolvedValue({
+            output: false, // Boolean false
+            tokenUsage: { numRequests: 1 },
+          }) as CallApiFunction,
         };
 
         const result = await getTargetResponse(mockProvider, 'test prompt');
@@ -546,12 +536,10 @@ describe('shared redteam provider utilities', () => {
       it('handles null output correctly', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: vi
-            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
-            .mockResolvedValue({
-              output: null, // Null value
-              tokenUsage: { numRequests: 1 },
-            }),
+          callApi: vi.fn().mockResolvedValue({
+            output: null, // Null value
+            tokenUsage: { numRequests: 1 },
+          }) as CallApiFunction,
         };
 
         const result = await getTargetResponse(mockProvider, 'test prompt');
@@ -565,12 +553,10 @@ describe('shared redteam provider utilities', () => {
       it('still fails when output property is missing', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: vi
-            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
-            .mockResolvedValue({
-              // No output property at all
-              tokenUsage: { numRequests: 1 },
-            }),
+          callApi: vi.fn().mockResolvedValue({
+            // No output property at all
+            tokenUsage: { numRequests: 1 },
+          }) as CallApiFunction,
         };
 
         await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
@@ -581,11 +567,9 @@ describe('shared redteam provider utilities', () => {
       it('still fails when both output and error are missing', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: vi
-            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
-            .mockResolvedValue({
-              someOtherField: 'value',
-            } as any),
+          callApi: vi.fn().mockResolvedValue({
+            someOtherField: 'value',
+          } as any) as CallApiFunction,
         };
 
         await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(

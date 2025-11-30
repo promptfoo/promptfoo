@@ -78,7 +78,7 @@ describe('GolangProvider', () => {
       return 'mock file content';
     });
 
-    const mockParsePathOrGlob = (await import('../../src/util')).parsePathOrGlob;
+    const mockParsePathOrGlob = vi.mocked((await import('../../src/util')).parsePathOrGlob);
     mockParsePathOrGlob.mockImplementation(function(basePath: string, runPath: string) {
       if (!basePath && runPath === 'script.go') {
         return {
@@ -661,7 +661,7 @@ describe('GolangProvider', () => {
     });
 
     it('should use custom function name when specified', async () => {
-      const mockParsePathOrGlob = (await import('../../src/util')).parsePathOrGlob;
+      const mockParsePathOrGlob = vi.mocked((await import('../../src/util')).parsePathOrGlob);
       mockParsePathOrGlob.mockReturnValueOnce({
         filePath: '/absolute/path/to/script.go',
         functionName: 'custom_function',

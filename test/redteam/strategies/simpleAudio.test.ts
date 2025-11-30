@@ -49,7 +49,7 @@ const mockNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 
 describe('audio strategy', () => {
   beforeAll(() => {
-    vi.spyOn(console, 'log').mockImplementation();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   beforeEach(() => {

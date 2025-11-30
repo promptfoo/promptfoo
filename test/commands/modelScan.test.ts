@@ -1,4 +1,4 @@
-import { Mock, SpyInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ChildProcess, spawn } from 'child_process';
 
 import { Command } from 'commander';
@@ -32,7 +32,7 @@ vi.mock('../../src/util/huggingfaceMetadata', async importOriginal => {
 
 describe('modelScanCommand', () => {
   let program: Command;
-  let mockExit: SpyInstance;
+  let mockExit: MockInstance;
 
   beforeEach(() => {
     program = new Command();
@@ -48,7 +48,7 @@ describe('modelScanCommand', () => {
 
   it('should exit if no paths are provided', async () => {
     // Mock logger.error to capture the output
-    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation();
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     // getModelAuditCurrentVersion is already mocked to return '0.2.16' (installed)
     // Still need spawn mock since Commander may try to execute the command action
@@ -73,7 +73,7 @@ describe('modelScanCommand', () => {
 
   it('should exit if modelaudit is not installed', async () => {
     // Mock logger.error to capture the output
-    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation();
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     // Mock getModelAuditCurrentVersion to return null (not installed)
     const { getModelAuditCurrentVersion } = await import("../../src/updates");
@@ -177,7 +177,7 @@ describe('modelScanCommand', () => {
 
   it('should handle modelaudit process error', async () => {
     // Mock logger.error to capture the output
-    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation();
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     // getModelAuditCurrentVersion is already mocked to return '0.2.16' (installed)
 
@@ -267,7 +267,7 @@ describe('modelScanCommand', () => {
 
   it('should handle exit code 2 (scan process error)', async () => {
     // Mock logger.error to capture the output
-    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation();
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     // getModelAuditCurrentVersion is already mocked to return '0.2.16' (installed)
 
@@ -307,7 +307,7 @@ describe('modelScanCommand', () => {
 
 describe('Re-scan on version change behavior', () => {
   let program: Command;
-  let mockExit: SpyInstance;
+  let mockExit: MockInstance;
 
   beforeEach(() => {
     program = new Command();
@@ -544,7 +544,7 @@ describe('checkModelAuditInstalled', () => {
 
 describe('Command Options Validation', () => {
   let program: Command;
-  let mockExit: SpyInstance;
+  let mockExit: MockInstance;
 
   beforeEach(() => {
     program = new Command();
@@ -672,7 +672,7 @@ describe('Command Options Validation', () => {
     const scanCall = spawnCalls.find((call) => call[1].includes('scan'));
     expect(scanCall).toBeDefined();
 
-    const args = scanCall[1] as string[];
+    const args = scanCall![1] as string[];
 
     // Should contain valid arguments
     expect(args).toContain('--blacklist');
@@ -741,7 +741,7 @@ describe('Command Options Validation', () => {
 
     const spawnCalls = (spawn as Mock).mock.calls;
     const scanCall = spawnCalls.find((call) => call[1].includes('scan'));
-    const args = scanCall[1] as string[];
+    const args = scanCall![1] as string[];
 
     // Should contain all blacklist patterns
     expect(args).toContain('--blacklist');

@@ -1,14 +1,14 @@
 import {
   Mocked,
   MockedFunction,
-  SpyInstance,
+  MockInstance,
   afterEach,
   beforeEach,
   describe,
   expect,
   it,
   vi,
-} from "vitest";
+} from 'vitest';
 
 import fs from 'fs';
 
@@ -92,7 +92,7 @@ vi.mock('../../src/database', async importOriginal => {
 
 describe('exportCommand', () => {
   let program: Command;
-  let mockExit: SpyInstance;
+  let mockExit: MockInstance;
   let mockEval: any;
   const mockFs = fs as Mocked<typeof fs>;
   const mockGetConfigDirectoryPath = getConfigDirectoryPath as MockedFunction<

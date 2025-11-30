@@ -1,4 +1,4 @@
-import { Mocked, MockedFunction, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mocked, MockedFunction, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { strategyDisplayNames } from '../../../src/redteam/constants/metadata';
 import {
   type ApiProvider,
@@ -72,29 +72,34 @@ vi.mock('../../../src/redteam/providers/shared', async () => {
   };
 });
 
-const tokenUsageUtils = await import('../../../src/util/tokenUsageUtils') as Mocked<
-  typeof TokenUsageUtilsModule
->;
-
-const actualTokenUsageUtils = await vi.importActual(
-  '../../../src/util/tokenUsageUtils',
-) as typeof import('../../../src/util/tokenUsageUtils');
-
-const { default: SimbaProvider } =
-  await import("../../../src/redteam/providers/simba") as typeof import('../../../src/redteam/providers/simba');
-const sharedModule =
-  await import("../../../src/redteam/providers/shared") as typeof import('../../../src/redteam/providers/shared');
-const actualSharedModule = await vi.importActual(
-  '../../../src/redteam/providers/shared',
-) as typeof import('../../../src/redteam/providers/shared');
+// Module imports - these are dynamically imported after mocks are set up
+let tokenUsageUtils: Mocked<typeof TokenUsageUtilsModule>;
+let actualTokenUsageUtils: typeof import('../../../src/util/tokenUsageUtils');
+let SimbaProvider: typeof import('../../../src/redteam/providers/simba').default;
+let sharedModule: typeof import('../../../src/redteam/providers/shared');
+let actualSharedModule: typeof import('../../../src/redteam/providers/shared');
 
 describe('SimbaProvider', () => {
-  const accumulateResponseTokenUsageMock =
-    tokenUsageUtils.accumulateResponseTokenUsage as MockedFunction<
+  let accumulateResponseTokenUsageMock: MockedFunction<
+    typeof import('../../../src/util/tokenUsageUtils').accumulateResponseTokenUsage
+  >;
+
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn> | undefined;
+
+  beforeAll(async () => {
+    tokenUsageUtils = (await import('../../../src/util/tokenUsageUtils')) as Mocked<
+      typeof TokenUsageUtilsModule
+    >;
+    actualTokenUsageUtils = await vi.importActual('../../../src/util/tokenUsageUtils');
+    const simbaModule = await import('../../../src/redteam/providers/simba');
+    SimbaProvider = simbaModule.default;
+    sharedModule = await import('../../../src/redteam/providers/shared');
+    actualSharedModule = await vi.importActual('../../../src/redteam/providers/shared');
+
+    accumulateResponseTokenUsageMock = tokenUsageUtils.accumulateResponseTokenUsage as MockedFunction<
       typeof actualTokenUsageUtils.accumulateResponseTokenUsage
     >;
-
-  let consoleErrorSpy: ReturnType<typeof jest.spyOn> | undefined;
+  });
 
   const createMockResponse = (body: unknown, overrides: Record<string, unknown> = {}) =>
     (({

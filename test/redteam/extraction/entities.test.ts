@@ -25,7 +25,7 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 vi.mock('../../../src/envars', async () => {
-  const originalModule = await vi.importActual('../../../src/envars');
+  const originalModule = await vi.importActual<typeof import('../../../src/envars')>('../../../src/envars');
   return {
     ...originalModule,
     getEnvBool: vi.fn(originalModule.getEnvBool),

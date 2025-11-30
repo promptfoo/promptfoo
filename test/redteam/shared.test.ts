@@ -1,4 +1,4 @@
-import { SpyInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import path from 'path';
@@ -103,7 +103,7 @@ vi.mock('os');
 
 describe('doRedteamRun', () => {
   const mockDate = new Date('2023-01-01T00:00:00.000Z');
-  let dateNowSpy: SpyInstance;
+  let dateNowSpy: MockInstance;
 
   beforeEach(() => {
     vi.resetAllMocks();

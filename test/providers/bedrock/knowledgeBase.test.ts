@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
 import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
 
@@ -21,9 +21,9 @@ vi.mock('@aws-sdk/client-bedrock-agent-runtime', async (importOriginal) => {
   };
 });
 
-const { BedrockAgentRuntimeClient, RetrieveAndGenerateCommand } = await import(
-  '@aws-sdk/client-bedrock-agent-runtime'
-);
+// Module imports - loaded in beforeAll
+let BedrockAgentRuntimeClient: typeof import('@aws-sdk/client-bedrock-agent-runtime').BedrockAgentRuntimeClient;
+let RetrieveAndGenerateCommand: typeof import('@aws-sdk/client-bedrock-agent-runtime').RetrieveAndGenerateCommand;
 
 // Mock @smithy/node-http-handler - don't use importOriginal as the dynamic import in source may not see it
 vi.mock('@smithy/node-http-handler', () => ({
@@ -58,6 +58,12 @@ vi.mock('../../../src/cache', async (importOriginal) => {
 });
 
 describe('AwsBedrockKnowledgeBaseProvider', () => {
+  beforeAll(async () => {
+    const bedrockModule = await import('@aws-sdk/client-bedrock-agent-runtime');
+    BedrockAgentRuntimeClient = bedrockModule.BedrockAgentRuntimeClient;
+    RetrieveAndGenerateCommand = bedrockModule.RetrieveAndGenerateCommand;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.AWS_BEDROCK_MAX_RETRIES;
