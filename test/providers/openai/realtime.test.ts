@@ -24,10 +24,12 @@ vi.mock('../../../src/logger', () => ({
 describe('OpenAI Realtime Provider', () => {
   let mockWs: any;
   let mockHandlers: { [key: string]: Function[] };
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
 
   beforeEach(() => {
     vi.resetAllMocks();
     disableCache();
+    process.env.OPENAI_API_KEY = 'test-api-key';
     mockHandlers = {
       open: [],
       message: [],
@@ -55,6 +57,11 @@ describe('OpenAI Realtime Provider', () => {
 
   afterEach(() => {
     enableCache();
+    if (originalOpenAiApiKey) {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    } else {
+      delete process.env.OPENAI_API_KEY;
+    }
   });
 
   describe('Basic Functionality', () => {
