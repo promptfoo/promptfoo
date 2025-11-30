@@ -6,6 +6,9 @@ import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 
+// Hoisted mock for getGraderById
+const mockGetGraderById = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../../src/providers/promptfoo', async importOriginal => {
   return ({
     ...(await importOriginal()),
@@ -35,7 +38,7 @@ vi.mock('../../../../src/redteam/providers/shared', async () => ({
 vi.mock('../../../../src/redteam/graders', async importOriginal => {
   return ({
     ...(await importOriginal()),
-    getGraderById: vi.fn()
+    getGraderById: mockGetGraderById
   });
 });
 
@@ -141,8 +144,8 @@ describe('CrescendoProvider', () => {
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
 
     // Set up default getGraderById mock
-    vi.mocked(getGraderById).mockReset();
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockReset();
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -463,7 +466,7 @@ describe('CrescendoProvider', () => {
 
   it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -588,7 +591,7 @@ describe('CrescendoProvider', () => {
     };
 
     // Mock grader to fail (detect jailbreak)
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(async () => ({
           grade: mockGraderResult,
@@ -663,7 +666,7 @@ describe('CrescendoProvider', () => {
 
   it('should not create synthetic grader result when internal evaluator succeeds', async () => {
     // Mock grader to pass (not detect jailbreak)
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -721,7 +724,7 @@ describe('CrescendoProvider', () => {
 
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -987,7 +990,7 @@ describe('CrescendoProvider', () => {
 
     it('should record success but continue when continueAfterSuccess is false', async () => {
       // Ensure grader passes for this test
-      vi.mocked(getGraderById).mockImplementation(function() {
+      mockGetGraderById.mockImplementation(function() {
         return {
           getResult: vi.fn(async () => ({
             grade: {
@@ -1777,7 +1780,7 @@ describe('CrescendoProvider - Chat Template Support', () => {
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(async () => ({
           grade: { pass: true },

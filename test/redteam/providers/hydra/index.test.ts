@@ -6,6 +6,9 @@ import { HydraProvider } from '../../../../src/redteam/providers/hydra/index';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
 import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types/index';
 
+// Hoisted mock for getGraderById
+const mockGetGraderById = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../../src/providers/promptfoo', async importOriginal => {
   return ({
     ...(await importOriginal()),
@@ -16,7 +19,7 @@ vi.mock('../../../../src/providers/promptfoo', async importOriginal => {
 vi.mock('../../../../src/redteam/graders', async importOriginal => {
   return ({
     ...(await importOriginal()),
-    getGraderById: vi.fn()
+    getGraderById: mockGetGraderById
   });
 });
 
@@ -76,7 +79,7 @@ describe('HydraProvider', () => {
     (PromptfooChatCompletionProvider as Mock).mockImplementation(function() {
       return mockAgentProvider;
     });
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return mockGrader;
     });
     vi.mocked(shouldGenerateRemote).mockImplementation(function() {
@@ -89,7 +92,7 @@ describe('HydraProvider', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('constructor', () => {
@@ -212,7 +215,8 @@ describe('HydraProvider', () => {
         tokenUsage: { total: 50, prompt: 25, completion: 25 },
       });
 
-      // Grader fails (vulnerability detected)
+      // Grader fails (vulnerability detected) - reset first then set new value
+      mockGrader.getResult.mockReset();
       mockGrader.getResult.mockResolvedValue({
         grade: {
           pass: false,
