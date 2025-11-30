@@ -421,7 +421,11 @@ describe('OpenCodeSDKProvider', () => {
         await provider.callApi('Test prompt');
 
         // Second call with bustCache
-        const context: CallApiContextParams = { bustCache: true };
+        const context: CallApiContextParams = {
+          bustCache: true,
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        };
         await provider.callApi('Test prompt', context);
 
         // Both calls should hit the API
@@ -442,6 +446,7 @@ describe('OpenCodeSDKProvider', () => {
             label: 'test',
             config: { model: 'prompt-model' },
           },
+          vars: {},
         };
 
         await provider.callApi('Test prompt', context);
