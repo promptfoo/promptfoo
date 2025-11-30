@@ -9,6 +9,14 @@ import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
+// Hoisted mocks for cache
+const mockCacheGet = vi.hoisted(() => vi.fn());
+const mockCacheSet = vi.hoisted(() => vi.fn());
+const mockIsCacheEnabled = vi.hoisted(() => vi.fn());
+
+// Hoisted mock for importModule
+const mockImportModule = vi.hoisted(() => vi.fn());
+
 // Mock database
 vi.mock('better-sqlite3', () => {
   return vi.fn().mockReturnValue({
@@ -67,16 +75,16 @@ vi.mock('../../../src/cache', async importOriginal => {
   return ({
     ...(await importOriginal()),
 
-    getCache: vi.fn().mockReturnValue({
-      get: vi.fn(),
-      set: vi.fn(),
+    getCache: vi.fn().mockImplementation(() => ({
+      get: mockCacheGet,
+      set: mockCacheSet,
       wrap: vi.fn(),
       del: vi.fn(),
       reset: vi.fn(),
       store: {} as any,
-    }),
+    })),
 
-    isCacheEnabled: vi.fn()
+    isCacheEnabled: mockIsCacheEnabled
   });
 });
 
@@ -95,16 +103,20 @@ vi.mock('../../../src/providers/google/util', async () => {
 vi.mock('../../../src/esm', async importOriginal => {
   return ({
     ...(await importOriginal()),
-    importModule: vi.fn()
+    importModule: mockImportModule
   });
 });
-
-const mockImportModule = vi.mocked(importModule);
 
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
 
   beforeEach(() => {
+    // Reset cache mocks to default state (no cached response)
+    mockCacheGet.mockReset();
+    mockCacheGet.mockResolvedValue(null);
+    mockCacheSet.mockReset();
+    mockImportModule.mockReset();
+
     provider = new VertexChatProvider('gemini-pro', {
       config: {
         context: 'test-context',
@@ -116,20 +128,8 @@ describe('VertexChatProvider.callGeminiApi', () => {
         topK: 40,
       },
     });
-    vi.mocked(getCache).mockImplementation(function() {
-      return {
-        get: vi.fn(),
-        set: vi.fn(),
-        wrap: vi.fn(),
-        del: vi.fn(),
-        reset: vi.fn(),
-        store: {} as any,
-      };
-    });
 
-    vi.mocked(isCacheEnabled).mockImplementation(function() {
-      return true;
-    });
+    mockIsCacheEnabled.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -199,7 +199,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     };
 
-    vi.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+    mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
     const response = await provider.callGeminiApi('test prompt');
 
@@ -475,18 +475,6 @@ describe('VertexChatProvider.callGeminiApi', () => {
     };
 
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
-    const mockCacheSet = vi.fn();
-
-    vi.mocked(getCache).mockImplementation(function() {
-      return {
-        get: vi.fn(),
-        set: mockCacheSet,
-        wrap: vi.fn(),
-        del: vi.fn(),
-        reset: vi.fn(),
-        store: {} as any,
-      };
-    });
 
     vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
@@ -525,9 +513,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     };
 
-    const mockGetCache = vi
-      .mocked(getCache().get)
-      .mockResolvedValue(JSON.stringify(mockCachedResponse));
+    mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
     const mockWeatherFunction = vi.fn().mockResolvedValue('Sunny, 25°C');
 
@@ -559,7 +545,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       JSON.stringify([{ role: 'user', content: "What's the weather in New York?" }]),
     );
 
-    expect(mockGetCache).toHaveBeenCalledTimes(1);
+    expect(mockCacheGet).toHaveBeenCalledTimes(1);
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
     expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
@@ -581,7 +567,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     };
 
-    vi.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+    mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
     const provider = new VertexChatProvider('gemini', {
       config: {
@@ -640,7 +626,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      vi.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
       // Mock importModule to return our test function
       const mockExternalFunction = vi.fn().mockResolvedValue('External function result');
@@ -696,7 +682,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      vi.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
       const mockCachedFunction = vi.fn().mockResolvedValue('Cached result');
       mockImportModule.mockResolvedValue(mockCachedFunction);
@@ -753,7 +739,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      vi.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
       // Mock import module to throw an error
       mockImportModule.mockRejectedValue(new Error('Module not found'));
@@ -808,7 +794,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      vi.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
       const mockInlineFunction = vi.fn().mockResolvedValue('Inline result');
       const mockExternalFunction = vi.fn().mockResolvedValue('External result');
@@ -1012,7 +998,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       };
 
       // Mock the cache to return a response that includes thinking tokens
-      vi.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
       const response = await provider.callGeminiApi('test prompt');
 
@@ -1409,20 +1395,12 @@ describe('VertexChatProvider.callLlamaApi', () => {
   let provider: VertexChatProvider;
 
   beforeEach(() => {
-    vi.mocked(getCache).mockImplementation(function() {
-      return {
-        get: vi.fn(),
-        set: vi.fn(),
-        wrap: vi.fn(),
-        del: vi.fn(),
-        reset: vi.fn(),
-        store: {} as any,
-      };
-    });
+    // Reset cache mocks to default state
+    mockCacheGet.mockReset();
+    mockCacheGet.mockResolvedValue(null);
+    mockCacheSet.mockReset();
 
-    vi.mocked(isCacheEnabled).mockImplementation(function() {
-      return true;
-    });
+    mockIsCacheEnabled.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -1700,20 +1678,12 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
   let provider: VertexChatProvider;
 
   beforeEach(() => {
-    vi.mocked(getCache).mockImplementation(function() {
-      return {
-        get: vi.fn(),
-        set: vi.fn(),
-        wrap: vi.fn(),
-        del: vi.fn(),
-        reset: vi.fn(),
-        store: {} as any,
-      };
-    });
+    // Reset cache mocks to default state
+    mockCacheGet.mockReset();
+    mockCacheGet.mockResolvedValue(null);
+    mockCacheSet.mockReset();
 
-    vi.mocked(isCacheEnabled).mockImplementation(function() {
-      return true;
-    });
+    mockIsCacheEnabled.mockReturnValue(true);
   });
 
   afterEach(() => {
