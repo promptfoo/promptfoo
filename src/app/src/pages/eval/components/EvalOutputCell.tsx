@@ -41,11 +41,25 @@ function scoreToString(score: number | null) {
 
 /**
  * Detects if the provider is an image generation provider.
- * Image providers follow the pattern like 'openai:image:dall-e-3'.
+ * Image providers follow patterns like:
+ * - 'openai:image:dall-e-3' (OpenAI DALL-E)
+ * - 'google:image:imagen-3.0' (Google Imagen)
+ * - 'google:gemini-2.5-flash-image' (Gemini native image generation)
  * Used to skip truncation for image content since truncating `![alt](url)` breaks rendering.
  */
 export function isImageProvider(provider: string | undefined): boolean {
-  return provider?.includes(':image:') ?? false;
+  if (!provider) {
+    return false;
+  }
+  // Check for :image: namespace (OpenAI DALL-E, Google Imagen)
+  if (provider.includes(':image:')) {
+    return true;
+  }
+  // Check for Gemini native image models (e.g., google:gemini-2.5-flash-image)
+  if (provider.startsWith('google:') && provider.includes('-image')) {
+    return true;
+  }
+  return false;
 }
 
 const tooltipSlotProps: TooltipProps['slotProps'] = {
@@ -294,6 +308,8 @@ function EvalOutputCell({
       node = (
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
+          // Allow data: URIs for inline images (e.g., from Gemini image generation)
+          urlTransform={(url) => url}
           components={{
             img: ({ src, alt }) => (
               <img
