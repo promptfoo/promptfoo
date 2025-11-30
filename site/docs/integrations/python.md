@@ -75,11 +75,11 @@ defaultTest:
 client = OpenAI()
 
 def call_api(prompt, options, context):
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
+    response = client.responses.create(
+        model="gpt-5.1-mini",
+        input=prompt,
     )
-    return {"output": response.choices[0].message.content}`,
+    return {"output": response.output_text}`,
     },
     {
       name: 'tests.py',
