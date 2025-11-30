@@ -3,14 +3,31 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { generateSignature } from '../../src/providers/http';
 
-vi.mock('fs');
+// Hoisted mock for fs.promises.stat
+const mockStat = vi.hoisted(() => vi.fn());
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      promises: {
+        ...actual.promises,
+        stat: mockStat,
+      },
+    },
+    promises: {
+      ...actual.promises,
+      stat: mockStat,
+    },
+  };
+});
 
 describe('PFX signature paths (generateSignature)', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    // Ensure fs.promises exists when fs is mocked
-    (fs as any).promises = (fs as any).promises || {};
   });
 
   it('throws when PFX password is missing', async () => {
@@ -28,7 +45,7 @@ describe('PFX signature paths (generateSignature)', () => {
   });
 
   it('throws when PFX file path does not exist', async () => {
-    (fs.promises as any).stat = vi.fn().mockRejectedValue(new Error('ENOENT'));
+    mockStat.mockRejectedValue(new Error('ENOENT'));
 
     vi.doMock('pem', () => ({
       __esModule: true,
