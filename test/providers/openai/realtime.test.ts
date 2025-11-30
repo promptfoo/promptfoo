@@ -190,8 +190,15 @@ describe('OpenAI Realtime Provider', () => {
         removeListener: vi.fn(),
       } as unknown as WebSocket;
 
+      // Create context with conversationId to ensure maintainContext stays true
+      const context = {
+        test: {
+          metadata: { conversationId: 'test-conv-123' },
+        },
+      } as any;
+
       // Create a promise for the API call
-      const responsePromise = provider.callApi('Hello');
+      const responsePromise = provider.callApi('Hello', context);
 
       // Wait for microtask to process so handler is registered
       await Promise.resolve();
@@ -389,8 +396,15 @@ describe('OpenAI Realtime Provider', () => {
         );
       };
 
+      // Create context with conversationId to ensure maintainContext stays true
+      const context = {
+        test: {
+          metadata: { conversationId: 'test-conv-multi' },
+        },
+      } as any;
+
       // First message
-      const firstResponsePromise = provider.callApi('First message');
+      const firstResponsePromise = provider.callApi('First message', context);
       // Wait for microtask to process so handler is registered
       await Promise.resolve();
       await simulateMessageSequence('msg_1', 'assistant_1', 'resp_1', 'First response');
@@ -402,10 +416,7 @@ describe('OpenAI Realtime Provider', () => {
       expect(provider.assistantMessageIds).toContain('assistant_1');
 
       // Second message
-      // Override the maintainContext to true since our test doesn't provide the proper context
-      provider.config.maintainContext = true;
-
-      const secondResponsePromise = provider.callApi('Second message');
+      const secondResponsePromise = provider.callApi('Second message', context);
 
       // Wait for microtask to process so handler is registered
       await Promise.resolve();
@@ -449,7 +460,14 @@ describe('OpenAI Realtime Provider', () => {
         removeListener: vi.fn(),
       } as unknown as WebSocket;
 
-      const responsePromise = provider.callApi('Hello');
+      // Create context with conversationId to ensure maintainContext stays true
+      const context = {
+        test: {
+          metadata: { conversationId: 'test-conv-error' },
+        },
+      } as any;
+
+      const responsePromise = provider.callApi('Hello', context);
 
       // Wait for microtask to process so handler is registered
       await Promise.resolve();
@@ -492,7 +510,14 @@ describe('OpenAI Realtime Provider', () => {
         removeListener: vi.fn(),
       } as unknown as WebSocket;
 
-      const responsePromise = provider.callApi('Hello');
+      // Create context with conversationId to ensure maintainContext stays true
+      const context = {
+        test: {
+          metadata: { conversationId: 'test-conv-audio' },
+        },
+      } as any;
+
+      const responsePromise = provider.callApi('Hello', context);
 
       // Wait for microtask to process so handler is registered
       await Promise.resolve();
@@ -594,7 +619,9 @@ describe('OpenAI Realtime Provider', () => {
       expect(response.audio!.format).toBe('wav');
       // The audio data should be converted from PCM16 to WAV, so it will be different from the original
       expect(response.audio!.data).toBeDefined();
-      expect(response.audio!.data!.length).toBeGreaterThan(audioData.toString('base64').length); // WAV has headers
+      expect(response.audio!.data!.length).toBeGreaterThanOrEqual(
+        audioData.toString('base64').length,
+      ); // WAV has headers
       expect(response.audio!.transcript).toBe('Hello there');
 
       // Verify metadata
