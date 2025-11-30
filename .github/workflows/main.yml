@@ -52,8 +52,7 @@ jobs:
           ruby-version: 3.3
 
       - name: Install Dependencies
-        run: |
-          npm ci
+        run: npm run ci
 
       - name: Test (Jest)
         run: npm run test:jest -- --ci
@@ -82,7 +81,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm run ci
 
       - name: Build
         run: npm run build
@@ -119,8 +118,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: |
-          npm ci
+        run: npm run ci
 
       - name: Lint Project
         run: |
@@ -179,7 +177,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm run ci
 
       - name: Generate JSON Schema
         run: npm run jsonSchema:generate
@@ -265,7 +263,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm run ci
 
       - name: Run App Tests
         run: npm run test:app
@@ -295,8 +293,7 @@ jobs:
           ruby-version: 3.3
 
       - name: Install Dependencies
-        run: |
-          npm ci
+        run: npm run ci
 
       - name: Run Integration Tests
         run: npm run test:integration -- --ci --coverage --maxWorkers=2
@@ -312,7 +309,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm run ci
 
       - name: Run local server
         run: |
@@ -357,7 +354,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm run ci
 
       - name: Run Redteam (Production API)
         run: |
@@ -374,7 +371,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm run ci
 
       # Need to build first so we can login
       - name: Build

@@ -45,7 +45,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          npm ci
+          npm run ci
           npm install @vitest/coverage-v8
 
       - name: Start runner

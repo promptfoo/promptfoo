@@ -37,6 +37,7 @@
     "pf": "dist/src/main.js"
   },
   "scripts": {
+    "ci": "npm ci --ignore-scripts && npx allow-scripts",
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
     "bin": "dist/src/main.js",
     "build:app": "npm run build --prefix src/app",
@@ -103,6 +104,7 @@
     }
   },
   "devDependencies": {
+    "@lavamoat/allow-scripts": "^3.3.1",
     "@adaline/anthropic": "1.9.0",
     "@adaline/azure": "1.7.0",
     "@adaline/gateway": "1.10.0",
@@ -323,8 +325,27 @@
       "better-sqlite3",
       "core-js",
       "core-js-pure",
-      "esbuild"
+      "esbuild",
+      "sharp"
     ],
     "ignoredBuiltDependencies": []
+  },
+  "lavamoat": {
+    "allowScripts": {
+      "@playwright/browser-chromium": true,
+      "@swc/core": true,
+      "better-sqlite3": true,
+      "core-js": true,
+      "core-js-pure": true,
+      "esbuild": true,
+      "sharp": true,
+      "@biomejs/cli-darwin-arm64": false,
+      "@biomejs/cli-darwin-x64": false,
+      "@biomejs/cli-linux-x64": false,
+      "@biomejs/cli-linux-x64-musl": false,
+      "@biomejs/cli-win32-x64": false,
+      "jest>@jest/core>jest-resolve>unrs-resolver": false,
+      "tsx>esbuild": false
+    }
   }
 }

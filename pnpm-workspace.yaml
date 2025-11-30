@@ -1,3 +1,14 @@
 packages:
   - 'src/app'
   - 'site'
+
+# Security: Block lifecycle scripts by default, only allow trusted packages
+# pnpm v10+ blocks scripts by default; this allowlist enables them for native modules
+onlyBuiltDependencies:
+  - '@playwright/browser-chromium'
+  - '@swc/core'
+  - better-sqlite3
+  - core-js
+  - core-js-pure
+  - esbuild
+  - sharp

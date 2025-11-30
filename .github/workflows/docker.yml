@@ -123,7 +123,7 @@ jobs:
           PROMPTFOO_REMOTE_API_BASE_URL: http://localhost:3000
           PROMPTFOO_SHARING_APP_BASE_URL: http://localhost:3000
         run: |
-          npm install
+          npm run ci
           npm run local -- eval -c .github/assets/promptfooconfig.yaml --share
 
       - name: Test that the eval results are uploaded

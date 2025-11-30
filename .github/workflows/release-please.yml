@@ -58,7 +58,7 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
-      - run: npm ci
+      - run: npm run ci
       - run: npm test
 
   publish-npm:
@@ -76,7 +76,7 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
-      - run: npm ci
+      - run: npm run ci
       - run: npm publish --provenance --access public
         env:
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
