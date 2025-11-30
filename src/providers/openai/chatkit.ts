@@ -492,7 +492,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       timeout: options.config?.timeout || DEFAULT_TIMEOUT_MS,
       headless: options.config?.headless ?? true,
       serverPort: options.config?.serverPort || 0,
-      usePool: options.config?.usePool ?? false,
+      usePool: options.config?.usePool ?? true, // Pool mode by default for better performance
       poolSize: options.config?.poolSize ?? defaultPoolSize,
       approvalHandling: options.config?.approvalHandling ?? 'auto-approve',
       maxApprovals: options.config?.maxApprovals ?? DEFAULT_MAX_APPROVALS,

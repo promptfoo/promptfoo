@@ -20,6 +20,7 @@ import logger from '../../logger';
 const CHATKIT_READY_TIMEOUT_MS = 60000;
 const PAGE_REFRESH_TIMEOUT_MS = 30000;
 const PAGE_ACQUIRE_TIMEOUT_MS = 120000;
+const IDLE_SHUTDOWN_DELAY_MS = 5000; // Shutdown pool if idle for this long
 
 interface PooledPage {
   context: BrowserContext;
@@ -53,6 +54,7 @@ export class ChatKitBrowserPool {
   private templateVersion: number = 0;
   private initialized: boolean = false;
   private initPromise: Promise<void> | null = null;
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   private constructor(config: ChatKitPoolConfig) {
     this.config = config;
@@ -74,6 +76,15 @@ export class ChatKitBrowserPool {
         ChatKitBrowserPool.instance = null;
       }
     };
+
+    // beforeExit fires when event loop is empty - allows cleanup of browser
+    // which otherwise keeps the event loop alive
+    process.on('beforeExit', () => {
+      if (ChatKitBrowserPool.instance) {
+        ChatKitBrowserPool.instance.shutdown().catch(() => {});
+        ChatKitBrowserPool.instance = null;
+      }
+    });
 
     process.on('exit', cleanup);
     process.on('SIGINT', () => {
@@ -206,6 +217,9 @@ export class ChatKitBrowserPool {
    * Acquire a page from the pool. Blocks if all pages are in use.
    */
   async acquirePage(): Promise<PooledPage> {
+    // Cancel any pending idle shutdown since we're being used
+    this.cancelIdleTimer();
+
     await this.initialize();
 
     // Try to find an available ready page
@@ -306,9 +320,54 @@ export class ChatKitBrowserPool {
       const waiter = this.waitQueue.shift()!;
       pooledPage.inUse = true;
       waiter(pooledPage);
+      this.cancelIdleTimer();
     } else {
       // No one waiting, mark as available
       pooledPage.inUse = false;
+      this.scheduleIdleShutdown();
+    }
+  }
+
+  /**
+   * Schedule automatic shutdown if pool remains idle
+   */
+  private scheduleIdleShutdown(): void {
+    // Cancel any existing timer
+    this.cancelIdleTimer();
+
+    // Check if pool is completely idle (no pages in use, no waiters)
+    const inUseCount = this.pages.filter((p) => p.inUse).length;
+    if (inUseCount === 0 && this.waitQueue.length === 0 && this.pages.length > 0) {
+      logger.debug('[ChatKitPool] Pool idle, scheduling shutdown', {
+        delay: IDLE_SHUTDOWN_DELAY_MS,
+      });
+
+      this.idleTimer = setTimeout(() => {
+        // Double-check still idle
+        const stillInUse = this.pages.filter((p) => p.inUse).length;
+        if (stillInUse === 0 && this.waitQueue.length === 0) {
+          logger.debug('[ChatKitPool] Auto-shutting down idle pool');
+          this.shutdown().catch((err) => {
+            logger.debug('[ChatKitPool] Error during idle shutdown', { error: String(err) });
+          });
+          ChatKitBrowserPool.instance = null;
+        }
+      }, IDLE_SHUTDOWN_DELAY_MS);
+
+      // Don't let the timer prevent process exit
+      if (this.idleTimer.unref) {
+        this.idleTimer.unref();
+      }
+    }
+  }
+
+  /**
+   * Cancel scheduled idle shutdown
+   */
+  private cancelIdleTimer(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
     }
   }
 
@@ -369,6 +428,9 @@ export class ChatKitBrowserPool {
    */
   async shutdown(): Promise<void> {
     logger.debug('[ChatKitPool] Shutting down');
+
+    // Cancel any pending idle timer
+    this.cancelIdleTimer();
 
     // Clear pending waiters - they will timeout via PAGE_ACQUIRE_TIMEOUT_MS
     if (this.waitQueue.length > 0) {
