@@ -15,6 +15,7 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import * as http from 'http';
 import logger from '../../logger';
+import { providerRegistry } from '../providerRegistry';
 
 // Pool configuration constants
 const CHATKIT_READY_TIMEOUT_MS = 60000;
@@ -108,6 +109,19 @@ export class ChatKitBrowserPool {
         serverPort: config?.serverPort ?? 0,
       });
       ChatKitBrowserPool.registerCleanupHandlers();
+
+      // Register with providerRegistry for cleanup at end of evaluation
+      // This is cleaner than relying only on process exit handlers
+      const instance = ChatKitBrowserPool.instance;
+      providerRegistry.register({
+        id: () => 'chatkit-browser-pool',
+        async shutdown() {
+          if (instance) {
+            await instance.shutdown();
+            ChatKitBrowserPool.instance = null;
+          }
+        },
+      });
     } else if (config) {
       // Warn if different config is requested for existing instance
       const existing = ChatKitBrowserPool.instance.config;

@@ -34,6 +34,7 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import * as http from 'http';
 import logger from '../../logger';
+import { providerRegistry } from '../providerRegistry';
 import { OpenAiGenericProvider } from './index';
 import { ChatKitBrowserPool } from './chatkit-pool';
 import type { OpenAiChatKitOptions } from './chatkit-types';
@@ -612,7 +613,21 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     });
 
     this.initialized = true;
+
+    // Register for cleanup on process exit (non-pool mode only)
+    // Pool mode has its own cleanup mechanism
+    if (!this.chatKitConfig.usePool) {
+      providerRegistry.register(this);
+    }
+
     logger.debug('[ChatKitProvider] Initialized successfully');
+  }
+
+  /**
+   * Shutdown method for providerRegistry cleanup
+   */
+  async shutdown(): Promise<void> {
+    await this.cleanup();
   }
 
   /**
