@@ -1,7 +1,8 @@
 ---
+title: Python Integration
 sidebar_label: Python
 sidebar_position: 1
-description: Use Python throughout your promptfoo evals - custom providers, assertions, test generators, and prompts. Integrates with LangChain, LangGraph, CrewAI, OpenAI Agents, PydanticAI, Google ADK, and Strands.
+description: Use Python for promptfoo evals - providers, assertions, test generators, and prompts. Integrates with LangChain, LangGraph, CrewAI, and more.
 keywords:
   [
     promptfoo python,
@@ -10,7 +11,7 @@ keywords:
     python provider,
     langchain testing,
     langgraph testing,
-    python llm evaluation,
+    python llm eval,
     test llm python,
     crewai testing,
     pydantic ai testing,

@@ -1,6 +1,8 @@
 ---
+title: Python Provider
 sidebar_label: Python Provider
-description: 'Create custom Python scripts for advanced model integrations, evaluations, and complex testing logic with full flexibility'
+sidebar_position: 50
+description: 'Create custom Python scripts for advanced model integrations, evals, and complex testing logic'
 ---
 
 # Python Provider
