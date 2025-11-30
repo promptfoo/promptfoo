@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK basic usage - temp directory with no tools'
+
+prompts:
+  - 'Output a Python function that prints the first 10 numbers in the Fibonacci sequence. Do not create any files. Just output the code.'
+
+providers:
+  - opencode:sdk
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'fibonacci'
+      - type: llm-rubric
+        value: 'Should generate working Python code that prints first 10 Fibonacci numbers'
