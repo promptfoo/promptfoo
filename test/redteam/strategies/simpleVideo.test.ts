@@ -42,13 +42,17 @@ vi.mock('../../../src/cliState', () => ({
   })
 }));
 
-vi.mock('fs', async importOriginal => {
-  return ({
-    ...(await importOriginal()),
-    writeFileSync: vi.fn(),
-    existsSync: vi.fn(),
-    unlinkSync: vi.fn()
-  });
+const mockWriteFileSync = vi.hoisted(() => vi.fn());
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      writeFileSync: mockWriteFileSync,
+    },
+    writeFileSync: mockWriteFileSync,
+  };
 });
 
 // Mock for progress bar

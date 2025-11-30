@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers';
+import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
 
 import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types/index';
@@ -15,18 +16,19 @@ vi.mock('../../../src/matchers', async importOriginal => {
   });
 });
 
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
-    ...(await importOriginal()),
+vi.mock('../../../src/cache', () => ({
+  fetchWithCache: vi.fn().mockResolvedValue({
+    data: { intent: 'Access unauthorized customer data' },
+    status: 200,
+    statusText: 'OK',
+    cached: false,
+  }),
+}));
 
-    fetchWithCache: vi.fn().mockResolvedValue({
-      data: { intent: 'Access unauthorized customer data' },
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    })
-  });
-});
+vi.mock('../../../src/redteam/remoteGeneration', () => ({
+  getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.com'),
+  neverGenerateRemote: vi.fn().mockReturnValue(false),
+}));
 
 vi.mock('../../../src/database', async importOriginal => {
   return ({
