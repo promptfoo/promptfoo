@@ -1,3 +1,6 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'vitest';
+
 import fs from 'fs';
 import path from 'path';
 
@@ -8,62 +11,79 @@ import * as pythonUtils from '../../src/python/pythonUtils';
 import { getEnvInt } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
 
-jest.mock('../../src/python/pythonUtils');
-jest.mock('../../src/python/workerPool');
-jest.mock('../../src/cache');
-jest.mock('fs');
-jest.mock('path');
-jest.mock('../../src/util', () => ({
-  ...jest.requireActual('../../src/util'),
-  parsePathOrGlob: jest.fn((_basePath, runPath) => {
-    // Handle the special case for testing function names
-    if (runPath === 'script.py:custom_function') {
-      return {
-        filePath: 'script.py',
-        functionName: 'custom_function',
-        isPathPattern: false,
-        extension: '.py',
-      };
-    }
+vi.mock('../../src/python/pythonUtils');
+vi.mock('../../src/cache');
+vi.mock('fs');
+vi.mock('path');
+vi.mock('../../src/util', async () => {
+  const actual = await vi.importActual<typeof import('../../src/util')>('../../src/util');
+  return {
+    ...actual,
+    parsePathOrGlob: vi.fn((_basePath, runPath) => {
+      // Handle the special case for testing function names
+      if (runPath === 'script.py:custom_function') {
+        return {
+          filePath: 'script.py',
+          functionName: 'custom_function',
+          isPathPattern: false,
+          extension: '.py',
+        };
+      }
 
-    // Default case
-    return {
-      filePath: runPath,
-      functionName: undefined,
-      isPathPattern: false,
-      extension: path.extname(runPath),
-    };
-  }),
+      // Default case
+      return {
+        filePath: runPath,
+        functionName: undefined,
+        isPathPattern: false,
+        extension: path.extname(runPath),
+      };
+    }),
+  };
+});
+
+const workerPoolMocks = vi.hoisted(() => {
+  const mockPoolInstance = {
+    initialize: vi.fn().mockResolvedValue(undefined),
+    execute: vi.fn(),
+    getWorkerCount: vi.fn().mockReturnValue(1),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+  };
+  const PythonWorkerPoolMock = vi.fn(function () {
+    return mockPoolInstance as any;
+  });
+
+  return { mockPoolInstance, PythonWorkerPoolMock };
+});
+
+vi.mock('../../src/python/workerPool', () => ({
+  PythonWorkerPool: workerPoolMocks.PythonWorkerPoolMock,
 }));
 
 describe('PythonProvider', () => {
-  const mockPythonWorkerPool = jest.mocked(PythonWorkerPool);
-  const mockGetCache = jest.mocked(jest.mocked(getCache));
-  const mockIsCacheEnabled = jest.mocked(isCacheEnabled);
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
-  const mockResolve = jest.mocked(path.resolve);
-  const mockGetEnvInt = jest.mocked(getEnvInt);
-
-  let mockPoolInstance: {
-    initialize: jest.Mock;
-    execute: jest.Mock;
-    getWorkerCount: jest.Mock;
-    shutdown: jest.Mock;
+  const mockPythonWorkerPool = vi.mocked(PythonWorkerPool);
+  const mockGetCache = vi.mocked(getCache);
+  const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
+  const mockReadFileSync = vi.mocked(fs.readFileSync);
+  const mockResolve = vi.mocked(path.resolve);
+  const mockGetEnvInt = vi.mocked(getEnvInt);
+  const mockPoolInstance = workerPoolMocks.mockPoolInstance as {
+    initialize: Mock;
+    execute: Mock;
+    getWorkerCount: Mock;
+    shutdown: Mock;
   };
+  const PythonWorkerPoolMock = workerPoolMocks.PythonWorkerPoolMock;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-
-    // Create mock pool instance
-    mockPoolInstance = {
-      initialize: jest.fn().mockResolvedValue(undefined),
-      execute: jest.fn(),
-      getWorkerCount: jest.fn().mockReturnValue(1),
-      shutdown: jest.fn().mockResolvedValue(undefined),
-    };
-
-    // Mock the PythonWorkerPool constructor to return our mock instance
-    mockPythonWorkerPool.mockImplementation(() => mockPoolInstance as any);
+    vi.clearAllMocks();
+    PythonWorkerPoolMock.mockClear();
+    mockPoolInstance.initialize.mockReset();
+    mockPoolInstance.initialize.mockResolvedValue(undefined);
+    mockPoolInstance.execute.mockReset();
+    mockPoolInstance.getWorkerCount.mockReset();
+    mockPoolInstance.getWorkerCount.mockReturnValue(1);
+    mockPoolInstance.shutdown.mockReset();
+    mockPoolInstance.shutdown.mockResolvedValue(undefined);
 
     // Reset getEnvInt mock implementation (clears mockReturnValueOnce queue)
     mockGetEnvInt.mockReset();
@@ -73,8 +93,8 @@ describe('PythonProvider', () => {
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
     mockGetCache.mockResolvedValue({
-      get: jest.fn(),
-      set: jest.fn(),
+      get: vi.fn(),
+      set: vi.fn(),
     } as never);
     mockIsCacheEnabled.mockReturnValue(false);
     mockReadFileSync.mockReturnValue('mock file content');
@@ -227,10 +247,10 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
+        set: vi.fn(),
       };
-      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+      mockGetCache.mockResolvedValue(mockCache as never);
 
       const result = await provider.callApi('test prompt');
 
@@ -245,8 +265,8 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
       mockPoolInstance.execute.mockResolvedValue({ output: 'new result' });
@@ -263,7 +283,7 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(
+        get: vi.fn().mockResolvedValue(
           JSON.stringify({
             output: 'cached result with token usage',
             tokenUsage: {
@@ -273,9 +293,9 @@ describe('PythonProvider', () => {
             },
           }),
         ),
-        set: jest.fn(),
+        set: vi.fn(),
       };
-      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+      mockGetCache.mockResolvedValue(mockCache as never);
 
       const result = await provider.callApi('test prompt');
 
@@ -295,8 +315,8 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
       mockPoolInstance.execute.mockResolvedValue({
@@ -326,14 +346,14 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(
+        get: vi.fn().mockResolvedValue(
           JSON.stringify({
             output: 'cached result with no token usage',
           }),
         ),
-        set: jest.fn(),
+        set: vi.fn(),
       };
-      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+      mockGetCache.mockResolvedValue(mockCache as never);
 
       const result = await provider.callApi('test prompt');
 
@@ -346,7 +366,7 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(
+        get: vi.fn().mockResolvedValue(
           JSON.stringify({
             output: 'cached result with zero token usage',
             tokenUsage: {
@@ -356,9 +376,9 @@ describe('PythonProvider', () => {
             },
           }),
         ),
-        set: jest.fn(),
+        set: vi.fn(),
       };
-      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+      mockGetCache.mockResolvedValue(mockCache as never);
 
       const result = await provider.callApi('test prompt');
 
@@ -375,8 +395,8 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
       mockPoolInstance.execute.mockResolvedValue({
@@ -392,8 +412,8 @@ describe('PythonProvider', () => {
     it('should properly use different cache keys for different function names', async () => {
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
       mockPoolInstance.execute.mockResolvedValue({ output: 'test output' });

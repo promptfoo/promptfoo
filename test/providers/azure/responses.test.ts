@@ -1,31 +1,38 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import { fetchWithCache } from '../../../src/cache';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import fs from 'fs';
 
-// Mock external dependencies
-jest.mock('../../../src/cache');
-jest.mock('../../../src/util/file');
-jest.mock('fs');
+import type { Mocked, MockedFunction } from 'vitest';
 
-const mockFetchWithCache = fetchWithCache as jest.MockedFunction<typeof fetchWithCache>;
-const mockMaybeLoadFromExternalFile = maybeLoadFromExternalFile as jest.MockedFunction<
+// Mock external dependencies
+vi.mock('../../../src/cache');
+vi.mock('../../../src/util/file');
+vi.mock('fs');
+
+const mockFetchWithCache = fetchWithCache as MockedFunction<typeof fetchWithCache>;
+const mockMaybeLoadFromExternalFile = maybeLoadFromExternalFile as MockedFunction<
   typeof maybeLoadFromExternalFile
 >;
-const _mockFs = fs as jest.Mocked<typeof fs>;
+const _mockFs = fs as Mocked<typeof fs>;
+let authHeadersValue: Record<string, string>;
 
 describe('AzureResponsesProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Mock environment variables
     process.env.AZURE_API_KEY = 'test-key';
     process.env.AZURE_API_HOST = 'test.openai.azure.com';
+    authHeadersValue = { 'api-key': 'test-key' };
   });
 
   afterEach(() => {
     delete process.env.AZURE_API_KEY;
     delete process.env.AZURE_API_HOST;
+    delete (AzureResponsesProvider.prototype as any).authHeaders;
   });
 
   describe('constructor', () => {
@@ -136,7 +143,7 @@ describe('AzureResponsesProvider', () => {
 
     it('should handle inline response_format', async () => {
       // For inline schemas, maybeLoadFromExternalFile should return the object unchanged
-      mockMaybeLoadFromExternalFile.mockImplementation((input) => input);
+      mockMaybeLoadFromExternalFile.mockImplementation((input: any) => input);
 
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: {
@@ -232,19 +239,22 @@ describe('AzureResponsesProvider', () => {
   describe('callApi', () => {
     beforeEach(() => {
       // Mock the generic provider's method for getting auth headers and URL
-      AzureResponsesProvider.prototype.ensureInitialized = jest.fn().mockResolvedValue(void 0);
-      AzureResponsesProvider.prototype.getApiBaseUrl = jest
+      AzureResponsesProvider.prototype.ensureInitialized = vi.fn().mockResolvedValue(void 0);
+      AzureResponsesProvider.prototype.getApiBaseUrl = vi
         .fn()
         .mockReturnValue('https://test.openai.azure.com');
       Object.defineProperty(AzureResponsesProvider.prototype, 'authHeaders', {
-        get: jest.fn().mockReturnValue({ 'api-key': 'test-key' }),
+        get: vi.fn(() => authHeadersValue),
+        set: vi.fn((value: Record<string, string>) => {
+          authHeadersValue = value;
+        }),
         configurable: true,
       });
     });
 
     it('should provide clear error for missing API host', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
-      jest.spyOn(provider, 'getApiBaseUrl').mockReturnValue('');
+      vi.spyOn(provider, 'getApiBaseUrl').mockReturnValue('');
 
       await expect(provider.callApi('test')).rejects.toThrow(
         /Azure API configuration missing.*AZURE_API_HOST/,
@@ -255,7 +265,7 @@ describe('AzureResponsesProvider', () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
 
       // Mock initialization to set empty auth headers
-      jest.spyOn(provider, 'ensureInitialized').mockImplementation(async () => {
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async () => {
         (provider as any).authHeaders = {}; // Set empty auth headers
       });
 

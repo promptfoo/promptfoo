@@ -1,3 +1,6 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import dedent from 'dedent';
 import {
   AWS_BEDROCK_MODELS,
@@ -13,6 +16,7 @@ import {
   parseValue,
 } from '../../../src/providers/bedrock/index';
 import { AwsBedrockGenericProvider } from '../../../src/providers/bedrock/base';
+import { getCache, isCacheEnabled } from '../../../src/cache';
 
 import type {
   BedrockAI21GenerationOptions,
@@ -23,21 +27,47 @@ import type {
   TextGenerationOptions,
 } from '../../../src/providers/bedrock/index';
 
-jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
-  BedrockRuntime: jest.fn().mockImplementation(() => ({
-    invokeModel: jest.fn(),
-  })),
-}));
+const bedrockRuntimeFactory = vi.hoisted(() => {
+  const mockInvokeModel = vi.fn();
+  const BedrockRuntimeMock = vi.fn(function BedrockRuntimeMock(this: any) {
+    return { invokeModel: mockInvokeModel };
+  });
 
-const { BedrockRuntime } = jest.requireMock('@aws-sdk/client-bedrock-runtime');
+  return { BedrockRuntimeMock, mockInvokeModel };
+});
 
-jest.mock('@smithy/node-http-handler', () => {
+const nodeHttpHandlerFactory = vi.hoisted(() => {
+  let handlerFactory = () => ({ handle: vi.fn() });
+
+  const NodeHttpHandlerMock = vi.fn(function NodeHttpHandlerMock(this: any) {
+    return handlerFactory();
+  });
+
   return {
-    NodeHttpHandler: jest.fn().mockImplementation(() => ({
-      handle: jest.fn(),
-    })),
+    NodeHttpHandlerMock,
+    setHandlerFactory: (factory: () => any) => {
+      handlerFactory = factory;
+    },
   };
 });
+
+const credentialProviderSsoFactory = vi.hoisted(() => ({
+  mockSSOProvider: vi.fn(),
+}));
+
+vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
+  BedrockRuntime: bedrockRuntimeFactory.BedrockRuntimeMock,
+}));
+
+const BedrockRuntimeMock = vi.mocked(BedrockRuntime);
+
+vi.mock('@smithy/node-http-handler', () => ({
+  __esModule: true,
+  NodeHttpHandler: nodeHttpHandlerFactory.NodeHttpHandlerMock,
+  default: nodeHttpHandlerFactory.NodeHttpHandlerMock,
+}));
+
+const NodeHttpHandlerMock = vi.mocked(NodeHttpHandler);
 
 // Preserve proxy variables so they can be restored after each test. These are
 // set in the container environment and can influence proxy-related logic in the
@@ -45,11 +75,15 @@ jest.mock('@smithy/node-http-handler', () => {
 const ORIGINAL_HTTP_PROXY = process.env.HTTP_PROXY;
 const ORIGINAL_HTTPS_PROXY = process.env.HTTPS_PROXY;
 
-jest.mock('proxy-agent', () => jest.fn());
+vi.mock('proxy-agent', () => ({
+  __esModule: true,
+  ProxyAgent: vi.fn(function ProxyAgentMock() {}),
+  default: vi.fn(function ProxyAgentMock() {}),
+}));
 
-jest.mock('../../../src/cache', () => ({
-  getCache: jest.fn(),
-  isCacheEnabled: jest.fn(),
+vi.mock('../../../src/cache', () => ({
+  getCache: vi.fn(),
+  isCacheEnabled: vi.fn(),
 }));
 
 class TestBedrockProvider extends AwsBedrockGenericProvider {
@@ -74,7 +108,7 @@ class TestBedrockProvider extends AwsBedrockGenericProvider {
 
 describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     delete process.env.AWS_BEDROCK_MAX_RETRIES;
     delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     // Ensure proxy environment variables do not force proxy-specific code paths
@@ -83,10 +117,14 @@ describe('AwsBedrockGenericProvider', () => {
     // installed in the test environment.
     process.env.HTTP_PROXY = '';
     process.env.HTTPS_PROXY = '';
+
+    nodeHttpHandlerFactory.setHandlerFactory(function () {
+      return { handle: vi.fn() };
+    });
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
     process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
@@ -100,7 +138,7 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
-    expect(BedrockRuntime).toHaveBeenCalledWith({
+    expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
@@ -121,7 +159,7 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
-    expect(BedrockRuntime).toHaveBeenCalledWith({
+    expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
@@ -140,12 +178,12 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
-    expect(BedrockRuntime).toHaveBeenCalledWith({
+    expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
     });
-    expect(BedrockRuntime).not.toHaveBeenCalledWith(
+    expect(BedrockRuntimeMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ credentials: expect.anything() }),
     );
   });
@@ -159,7 +197,7 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
-    expect(BedrockRuntime).toHaveBeenCalledWith({
+    expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
@@ -167,11 +205,12 @@ describe('AwsBedrockGenericProvider', () => {
   });
 
   it('should create Bedrock instance with custom request handler for API key authentication', async () => {
-    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
     const mockHandler = {
-      handle: jest.fn(),
+      handle: vi.fn(),
     };
-    NodeHttpHandler.mockReturnValue(mockHandler);
+    nodeHttpHandlerFactory.setHandlerFactory(function () {
+      return mockHandler;
+    });
 
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
@@ -186,8 +225,8 @@ describe('AwsBedrockGenericProvider', () => {
 
     await provider.getBedrockInstance();
 
-    expect(NodeHttpHandler).toHaveBeenCalled();
-    expect(BedrockRuntime).toHaveBeenCalledWith({
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
@@ -197,11 +236,12 @@ describe('AwsBedrockGenericProvider', () => {
 
   it('should create custom request handler when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
     process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
-    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
     const mockHandler = {
-      handle: jest.fn(),
+      handle: vi.fn(),
     };
-    NodeHttpHandler.mockReturnValue(mockHandler);
+    nodeHttpHandlerFactory.setHandlerFactory(function () {
+      return mockHandler;
+    });
 
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
@@ -211,8 +251,8 @@ describe('AwsBedrockGenericProvider', () => {
 
     await provider.getBedrockInstance();
 
-    expect(NodeHttpHandler).toHaveBeenCalled();
-    expect(BedrockRuntime).toHaveBeenCalledWith({
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
@@ -223,12 +263,13 @@ describe('AwsBedrockGenericProvider', () => {
   });
 
   it('should add Authorization header with Bearer token to requests when using API key', async () => {
-    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
-    const mockOriginalHandle = jest.fn().mockResolvedValue('response');
+    const mockOriginalHandle = vi.fn().mockResolvedValue('response');
     const mockHandler = {
       handle: mockOriginalHandle,
     };
-    NodeHttpHandler.mockReturnValue(mockHandler);
+    nodeHttpHandlerFactory.setHandlerFactory(function () {
+      return mockHandler;
+    });
 
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
@@ -274,7 +315,7 @@ describe('AwsBedrockGenericProvider', () => {
 
       await provider.getBedrockInstance();
 
-      expect(BedrockRuntime).toHaveBeenCalledWith(
+      expect(BedrockRuntimeMock).toHaveBeenCalledWith(
         expect.objectContaining({
           region: 'us-east-1',
           retryMode: 'adaptive',
@@ -297,7 +338,7 @@ describe('AwsBedrockGenericProvider', () => {
 
       await provider.getBedrockInstance();
 
-      const callArgs = BedrockRuntime.mock.calls[0][0];
+      const callArgs = BedrockRuntimeMock.mock.calls[0][0];
       expect(callArgs).not.toHaveProperty('endpoint');
     });
   });
@@ -680,10 +721,9 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should return SSO credential provider when profile is specified', async () => {
-      const mockSSOProvider = jest.fn();
-      jest.mock('@aws-sdk/credential-provider-sso', () => ({
+      vi.mock('@aws-sdk/credential-provider-sso', () => ({
         fromSSO: (config: any) => {
-          mockSSOProvider();
+          credentialProviderSsoFactory.mockSSOProvider();
           expect(config).toEqual({ profile: 'test-profile' });
           return 'sso-provider';
         },
@@ -694,7 +734,7 @@ describe('AwsBedrockGenericProvider', () => {
       });
 
       const credentials = await provider.getCredentials();
-      expect(mockSSOProvider).toHaveBeenCalledWith();
+      expect(credentialProviderSsoFactory.mockSSOProvider).toHaveBeenCalledWith();
       expect(credentials).toBe('sso-provider');
     });
 
@@ -2496,40 +2536,40 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
 });
 
 describe('AwsBedrockCompletionProvider', () => {
-  const { BedrockRuntime } = jest.requireMock('@aws-sdk/client-bedrock-runtime');
-  const mockInvokeModel = jest.fn();
+  const mockInvokeModel = vi.fn();
   let originalModelHandler: IBedrockModel;
   let mockCache;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
-    BedrockRuntime.mockImplementation(() => ({
-      invokeModel: mockInvokeModel.mockResolvedValue({
-        body: {
-          transformToString: () => JSON.stringify({ completion: 'test response' }),
-        },
-      }),
-    }));
+    BedrockRuntimeMock.mockImplementation(function () {
+      return {
+        invokeModel: mockInvokeModel.mockResolvedValue({
+          body: {
+            transformToString: () => JSON.stringify({ completion: 'test response' }),
+          },
+        }),
+      };
+    });
 
     mockCache = {
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn().mockResolvedValue(null),
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn().mockResolvedValue(null),
     };
 
-    const { getCache, isCacheEnabled } = jest.requireMock('../../../src/cache');
-    getCache.mockResolvedValue(mockCache);
-    isCacheEnabled.mockReturnValue(false);
+    vi.mocked(getCache).mockResolvedValue(mockCache as any);
+    vi.mocked(isCacheEnabled).mockReturnValue(false);
 
     originalModelHandler = AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'];
 
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = {
-      params: jest.fn().mockImplementation((config) => ({
+      params: vi.fn().mockImplementation((config) => ({
         prompt: 'formatted prompt',
         ...config,
       })),
-      output: jest.fn().mockReturnValue('processed output'),
-      tokenUsage: jest.fn().mockReturnValue({
+      output: vi.fn().mockReturnValue('processed output'),
+      tokenUsage: vi.fn().mockReturnValue({
         prompt: 10,
         completion: 20,
         total: 30,

@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as path from 'path';
 
 import { runAssertion } from '../../src/assertions/index';
@@ -42,7 +42,8 @@ vi.mock('path', async () => {
   };
 });
 
-describe('Python file references', () => {
+// These tests can be slow on Windows due to heavy module imports
+describe('Python file references', { timeout: 15000 }, () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset mocked implementations to avoid test interference

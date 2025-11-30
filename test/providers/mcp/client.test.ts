@@ -1,8 +1,94 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 // Mock envars module before imports
-const mockGetEnvInt = jest.fn().mockReturnValue(undefined);
-jest.mock('../../../src/envars', () => ({
-  ...jest.requireActual('../../../src/envars'),
+const mockGetEnvInt = vi.hoisted(() => vi.fn().mockReturnValue(undefined));
+vi.mock('../../../src/envars', async () => ({
+  ...(await vi.importActual<typeof import('../../../src/envars')>('../../../src/envars')),
   getEnvInt: (...args: unknown[]) => mockGetEnvInt(...args),
+}));
+
+// Create mock implementations for the imported modules
+const mcpMocks = vi.hoisted(() => {
+  const mockClient = {
+    _clientInfo: {},
+    _capabilities: {},
+    registerCapabilities: vi.fn(),
+    assertCapability: vi.fn(),
+    connect: vi.fn(),
+    ping: vi.fn().mockResolvedValue({}),
+    listTools: vi.fn().mockResolvedValue({
+      tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+    }),
+    callTool: vi.fn(),
+    close: vi.fn(),
+  };
+
+  const mockStdioTransport = {
+    close: vi.fn(),
+    connect: vi.fn(),
+    start: vi.fn(),
+    send: vi.fn(),
+  };
+
+  const mockStreamableHTTPTransport = {
+    close: vi.fn(),
+    connect: vi.fn(),
+    start: vi.fn(),
+    send: vi.fn(),
+  };
+
+  const mockSSETransport = {
+    close: vi.fn(),
+    connect: vi.fn(),
+    start: vi.fn(),
+    send: vi.fn(),
+  };
+
+  const MockClient = vi.fn(function MockClient() {
+    return mockClient;
+  });
+
+  const MockStdioTransport = vi.fn(function MockStdioTransport() {
+    return mockStdioTransport;
+  });
+
+  const MockStreamableHTTPTransport = vi.fn(function MockStreamableHTTPTransport() {
+    return mockStreamableHTTPTransport;
+  });
+
+  const MockSSETransport = vi.fn(function MockSSETransport() {
+    return mockSSETransport;
+  });
+
+  return {
+    mockClient,
+    mockStdioTransport,
+    mockStreamableHTTPTransport,
+    mockSSETransport,
+    MockClient,
+    MockSSETransport,
+    MockStdioTransport,
+    MockStreamableHTTPTransport,
+  };
+});
+
+const { mockClient, mockStdioTransport, mockStreamableHTTPTransport } = mcpMocks;
+
+// Mock the modules before importing them
+vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
+  Client: mcpMocks.MockClient,
+}));
+
+vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
+  StdioClientTransport: mcpMocks.MockStdioTransport,
+}));
+
+vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
+  StreamableHTTPClientTransport: mcpMocks.MockStreamableHTTPTransport,
+}));
+
+vi.mock('@modelcontextprotocol/sdk/client/sse.js', () => ({
+  SSEClientTransport: mcpMocks.MockSSETransport,
 }));
 
 // Import the mocked modules after mocking
@@ -12,64 +98,11 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { MCPClient } from '../../../src/providers/mcp/client';
 
-// Create mock implementations for the imported modules
-const mockClient = {
-  _clientInfo: {},
-  _capabilities: {},
-  registerCapabilities: jest.fn(),
-  assertCapability: jest.fn(),
-  connect: jest.fn(),
-  ping: jest.fn().mockResolvedValue({}),
-  listTools: jest.fn().mockResolvedValue({
-    tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-  }),
-  callTool: jest.fn(),
-  close: jest.fn(),
-};
-
-const mockStdioTransport = {
-  close: jest.fn(),
-  connect: jest.fn(),
-  start: jest.fn(),
-  send: jest.fn(),
-};
-
-const mockStreamableHTTPTransport = {
-  close: jest.fn(),
-  connect: jest.fn(),
-  start: jest.fn(),
-  send: jest.fn(),
-};
-
-const mockSSETransport = {
-  close: jest.fn(),
-  connect: jest.fn(),
-  start: jest.fn(),
-  send: jest.fn(),
-};
-
-// Mock the modules before importing them
-jest.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
-  Client: jest.fn().mockImplementation(() => mockClient),
-}));
-
-jest.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
-  StdioClientTransport: jest.fn().mockImplementation(() => mockStdioTransport),
-}));
-
-jest.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
-  StreamableHTTPClientTransport: jest.fn().mockImplementation(() => mockStreamableHTTPTransport),
-}));
-
-jest.mock('@modelcontextprotocol/sdk/client/sse.js', () => ({
-  SSEClientTransport: jest.fn().mockImplementation(() => mockSSETransport),
-}));
-
 describe('MCPClient', () => {
   let mcpClient: MCPClient;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('initialize', () => {

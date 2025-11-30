@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createScriptBasedProviderFactory } from '../../src/providers/scriptBasedProvider';
 import { getResolvedRelativePath } from '../../src/util/file';
 
@@ -5,8 +6,8 @@ import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
 // Mock the getResolvedRelativePath function
-jest.mock('../../src/util/file', () => ({
-  getResolvedRelativePath: jest.fn((scriptPath, _basePath, _isCloudConfig) => {
+vi.mock('../../src/util/file', () => ({
+  getResolvedRelativePath: vi.fn((scriptPath, _basePath, _isCloudConfig) => {
     // For testing, just append '/resolved' to the path
     return `${scriptPath}/resolved`;
   }),
@@ -39,7 +40,7 @@ describe('scriptBasedProvider', () => {
     };
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should create a factory that tests for prefix pattern', () => {

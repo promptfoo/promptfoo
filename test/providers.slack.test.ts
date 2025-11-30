@@ -1,26 +1,38 @@
+import { vi } from 'vitest';
+
 import { WebClient } from '@slack/web-api';
 import { SlackProvider } from '../src/providers/slack';
 import type { ApiProvider } from '../src/types/index';
 
-jest.mock('@slack/web-api');
+const slackMocks = vi.hoisted(() => ({
+  webClientImpl: vi.fn(),
+}));
+
+vi.mock('@slack/web-api', () => {
+  const WebClientMock = vi.fn(function WebClientMock(...args: any[]) {
+    return slackMocks.webClientImpl(...args);
+  });
+
+  return { WebClient: WebClientMock };
+});
 
 describe('SlackProvider', () => {
   let mockWebClient: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.SLACK_BOT_TOKEN = 'xoxb-test-token';
 
     mockWebClient = {
       chat: {
-        postMessage: jest.fn(),
+        postMessage: vi.fn(),
       },
       conversations: {
-        history: jest.fn(),
+        history: vi.fn(),
       },
     };
 
-    (WebClient as jest.MockedClass<typeof WebClient>).mockImplementation(() => mockWebClient);
+    slackMocks.webClientImpl.mockReturnValue(mockWebClient);
   });
 
   afterEach(() => {

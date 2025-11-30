@@ -1,12 +1,15 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HyperbolicAudioProvider } from '../../src/providers/hyperbolic/audio';
 import { calculateHyperbolicCost, HyperbolicProvider } from '../../src/providers/hyperbolic/chat';
 import { HyperbolicImageProvider } from '../../src/providers/hyperbolic/image';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
-jest.mock('../../src/logger', () => ({
-  debug: jest.fn(),
-  error: jest.fn(),
-  warn: jest.fn(),
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+  },
 }));
 
 describe('HyperbolicProvider', () => {
@@ -14,7 +17,7 @@ describe('HyperbolicProvider', () => {
   const mockApiKey = 'test-api-key';
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HYPERBOLIC_API_KEY = mockApiKey;
   });
 
@@ -72,7 +75,7 @@ describe('HyperbolicProvider', () => {
         }),
       };
 
-      jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
+      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
 
       const result = await provider.callApi('Test prompt');
 
@@ -89,7 +92,7 @@ describe('HyperbolicProvider', () => {
       provider = new HyperbolicProvider('deepseek-ai/DeepSeek-R1', {});
 
       const mockError = { error: 'API Error' };
-      jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockError);
+      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockError);
 
       const result = await provider.callApi('Test prompt');
       expect(result).toEqual(mockError);
@@ -135,7 +138,7 @@ describe('HyperbolicImageProvider', () => {
   const mockApiKey = 'test-api-key';
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HYPERBOLIC_API_KEY = mockApiKey;
   });
 
@@ -187,7 +190,7 @@ describe('HyperbolicAudioProvider', () => {
   const mockApiKey = 'test-api-key';
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HYPERBOLIC_API_KEY = mockApiKey;
   });
 
