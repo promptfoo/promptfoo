@@ -91,6 +91,12 @@ vi.mock('../../src/util/promptfooCommand', async importOriginal => {
     isRunningUnderNpx: vi.fn().mockReturnValue(false)
   });
 });
+vi.mock('../../src/util/config/manage', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/dir'),
+  });
+});
 vi.mock('fs');
 vi.mock('js-yaml');
 vi.mock('os');
