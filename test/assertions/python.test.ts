@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as path from 'path';
 
 import { runAssertion } from '../../src/assertions/index';
