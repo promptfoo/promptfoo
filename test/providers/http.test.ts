@@ -3,6 +3,16 @@ import fs from 'fs';
 import path from 'path';
 
 import dedent from 'dedent';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  afterAll,
+  type MockInstance,
+} from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -23,30 +33,41 @@ import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../.
 import { sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
 
 // Mock console.warn to prevent test noise
-const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-jest.mock('../../src/cache', () => ({
-  ...jest.requireActual('../../src/cache'),
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../src/cache', async () => {
+  const actual = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
+  return {
+    ...actual,
+    fetchWithCache: vi.fn(),
+  };
+});
 
-jest.mock('../../src/util/fetch/index.ts', () => ({
-  ...jest.requireActual('../../src/util/fetch/index.ts'),
-  fetchWithRetries: jest.fn(),
-  fetchWithTimeout: jest.fn(),
-}));
+vi.mock('../../src/util/fetch/index.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../src/util/fetch/index.ts')>(
+    '../../src/util/fetch/index.ts',
+  );
+  return {
+    ...actual,
+    fetchWithRetries: vi.fn(),
+    fetchWithTimeout: vi.fn(),
+  };
+});
 
-jest.mock('../../src/util/file', () => ({
-  ...jest.requireActual('../../src/util/file'),
-  maybeLoadFromExternalFile: jest.fn((input) => input),
-  maybeLoadConfigFromExternalFile: jest.fn((input) => input),
-}));
+vi.mock('../../src/util/file', async () => {
+  const actual = await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+  return {
+    ...actual,
+    maybeLoadFromExternalFile: vi.fn((input) => input),
+    maybeLoadConfigFromExternalFile: vi.fn((input) => input),
+  };
+});
 
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(async (_modulePath: string, functionName?: string) => {
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn(async (_modulePath: string, functionName?: string) => {
     const mockModule = {
-      default: jest.fn((data) => data.defaultField),
-      parseResponse: jest.fn((data) => data.specificField),
+      default: vi.fn((data) => data.defaultField),
+      parseResponse: vi.fn((data) => data.specificField),
     };
     if (functionName) {
       return mockModule[functionName as keyof typeof mockModule];
@@ -55,27 +76,42 @@ jest.mock('../../src/esm', () => ({
   }),
 }));
 
-jest.mock('../../src/cliState', () => ({
-  basePath: '/mock/base/path',
-  config: {},
-}));
+vi.mock('../../src/cliState', async () => {
+  const actual = await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+  const mockState = { basePath: '/mock/base/path', config: {} };
+  return {
+    ...actual,
+    ...mockState,
+    default: mockState,
+  };
+});
 
 // Mock jks-js module for JKS tests
-jest.mock(
-  'jks-js',
-  () => ({
-    toPem: jest.fn(),
-  }),
-  { virtual: true },
-);
+vi.mock('jks-js', () => ({
+  toPem: vi.fn(),
+}));
+
+afterAll(() => {
+  consoleSpy.mockRestore();
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(fetchWithCache).mockReset();
+  vi.mocked(maybeLoadFromExternalFile).mockReset();
+  vi.mocked(maybeLoadConfigFromExternalFile).mockReset();
+  vi.mocked(fetchWithCache).mockResolvedValue(undefined as any);
+  vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => input);
+  vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((input) => input);
+});
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 describe('HttpProvider', () => {
   const mockUrl = 'http://example.com/api';
   let provider: HttpProvider;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
 
   it('should call the API and return the response', async () => {
     provider = new HttpProvider(mockUrl, {
@@ -92,7 +128,7 @@ describe('HttpProvider', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe('response text');
@@ -120,7 +156,7 @@ describe('HttpProvider', () => {
       },
     });
     const mockError = new Error('Network error');
-    jest.mocked(fetchWithCache).mockRejectedValueOnce(mockError);
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(mockError);
 
     await expect(provider.callApi('test prompt')).rejects.toThrow('Network error');
   });
@@ -141,7 +177,7 @@ describe('HttpProvider', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
     expect(fetchWithCache).toHaveBeenCalledWith(
@@ -172,7 +208,7 @@ describe('HttpProvider', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt', {
       vars: { userId: '12345' },
@@ -211,7 +247,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
       expect(result.output).toEqual(expected);
@@ -233,7 +269,7 @@ describe('HttpProvider', () => {
       status: 200,
       statusText: 'OK',
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
     expect(fetchWithCache).toHaveBeenCalledWith(
@@ -284,7 +320,7 @@ describe('HttpProvider', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
     expect(fetchWithCache).toHaveBeenCalledWith(
@@ -319,7 +355,7 @@ describe('HttpProvider', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -361,7 +397,7 @@ describe('HttpProvider', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test data');
 
@@ -402,7 +438,7 @@ describe('HttpProvider', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt', {
         vars: { userId: '12345' },
@@ -432,7 +468,7 @@ describe('HttpProvider', () => {
         GET /api/data HTTP/1.1
         Host: example.com
       `;
-      jest.mocked(maybeLoadFromExternalFile).mockReturnValueOnce(fileContent);
+      vi.mocked(maybeLoadFromExternalFile).mockReturnValueOnce(fileContent);
 
       const provider = new HttpProvider('https', {
         config: {
@@ -447,7 +483,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -499,7 +535,7 @@ describe('HttpProvider', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test prompt');
 
@@ -541,7 +577,7 @@ describe('HttpProvider', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -582,7 +618,7 @@ describe('HttpProvider', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -622,7 +658,7 @@ describe('HttpProvider', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -667,7 +703,7 @@ describe('HttpProvider', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('find doctors');
 
@@ -710,7 +746,7 @@ describe('HttpProvider', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('ignored', {
         vars: { meta: { user: { id: 'abc123' } } },
@@ -750,7 +786,7 @@ describe('HttpProvider', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('p');
 
@@ -1234,7 +1270,7 @@ describe('HttpProvider', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toEqual({ key: 'value' });
@@ -1254,7 +1290,7 @@ describe('HttpProvider', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toEqual({ custom: 'success' });
@@ -1262,8 +1298,8 @@ describe('HttpProvider', () => {
 
   describe('file:// transform integration tests', () => {
     it('should handle file:// response transform', async () => {
-      const mockParser = jest.fn((data: any) => ({ transformed: data.result }));
-      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+      const mockParser = vi.fn((data: any) => ({ transformed: data.result }));
+      vi.mocked(importModule).mockResolvedValueOnce(mockParser);
 
       const provider = new HttpProvider(mockUrl, {
         config: {
@@ -1279,7 +1315,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
       expect(result.output).toEqual({ transformed: 'success' });
@@ -1290,8 +1326,8 @@ describe('HttpProvider', () => {
     });
 
     it('should handle file:// response transform with specific function name', async () => {
-      const mockParser = jest.fn((data: any) => data.customField);
-      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+      const mockParser = vi.fn((data: any) => data.customField);
+      vi.mocked(importModule).mockResolvedValueOnce(mockParser);
 
       const provider = new HttpProvider(mockUrl, {
         config: {
@@ -1307,7 +1343,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
       expect(result.output).toBe('parsed value');
@@ -1318,8 +1354,8 @@ describe('HttpProvider', () => {
     });
 
     it('should handle file:// request transform', async () => {
-      const mockTransform = jest.fn((prompt: string) => ({ transformed: prompt.toUpperCase() }));
-      jest.mocked(importModule).mockResolvedValueOnce(mockTransform);
+      const mockTransform = vi.fn((prompt: string) => ({ transformed: prompt.toUpperCase() }));
+      vi.mocked(importModule).mockResolvedValueOnce(mockTransform);
 
       const provider = new HttpProvider(mockUrl, {
         config: {
@@ -1336,7 +1372,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
 
@@ -1360,8 +1396,8 @@ describe('HttpProvider', () => {
     });
 
     it('should handle file:// request transform with specific function name', async () => {
-      const mockTransform = jest.fn((prompt: string) => ({ custom: prompt }));
-      jest.mocked(importModule).mockResolvedValueOnce(mockTransform);
+      const mockTransform = vi.fn((prompt: string) => ({ custom: prompt }));
+      vi.mocked(importModule).mockResolvedValueOnce(mockTransform);
 
       const provider = new HttpProvider(mockUrl, {
         config: {
@@ -1378,7 +1414,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('hello');
 
@@ -1399,7 +1435,7 @@ describe('HttpProvider', () => {
     });
 
     it('should throw error for malformed file:// response transform', async () => {
-      jest.mocked(importModule).mockResolvedValueOnce({});
+      vi.mocked(importModule).mockResolvedValueOnce({});
 
       const provider = new HttpProvider(mockUrl, {
         config: {
@@ -1415,13 +1451,13 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await expect(provider.callApi('test prompt')).rejects.toThrow(/Transform module malformed/);
     });
 
     it('should throw error for malformed file:// request transform', async () => {
-      jest.mocked(importModule).mockResolvedValueOnce({});
+      vi.mocked(importModule).mockResolvedValueOnce({});
 
       const provider = new HttpProvider(mockUrl, {
         config: {
@@ -1561,7 +1597,7 @@ describe('HttpProvider', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
 
@@ -1595,7 +1631,7 @@ describe('HttpProvider', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
 
@@ -1649,7 +1685,7 @@ describe('HttpProvider', () => {
           'cache-control': 'no-cache',
         },
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -1694,7 +1730,7 @@ describe('HttpProvider', () => {
           'User-Agent': 'test-agent',
         },
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -1732,7 +1768,7 @@ describe('HttpProvider', () => {
         cached: false,
         headers: undefined,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -1765,7 +1801,7 @@ describe('HttpProvider', () => {
           etag: 'W/"123"',
         },
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt', {
         debug: true,
@@ -1801,7 +1837,7 @@ describe('HttpProvider', () => {
           'X-Request-ID': 'req-123',
         },
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -1829,7 +1865,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('world');
 
@@ -1861,7 +1897,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
 
@@ -1893,7 +1929,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
 
@@ -1925,7 +1961,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
 
@@ -1961,7 +1997,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const vars = {
         names: [
@@ -2017,7 +2053,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const vars = {
         names: [
@@ -2072,7 +2108,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test');
 
@@ -2101,7 +2137,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test');
 
@@ -2129,7 +2165,7 @@ describe('HttpProvider', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test');
 
@@ -2158,7 +2194,7 @@ describe('HttpProvider', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
 
@@ -2194,7 +2230,7 @@ describe('HttpProvider', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
 
@@ -2230,7 +2266,7 @@ describe('HttpProvider', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt', {
       prompt: { raw: 'test prompt', label: 'test' },
@@ -2447,7 +2483,7 @@ describe('content type handling', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test');
 
@@ -2479,7 +2515,7 @@ describe('content type handling', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test');
 
@@ -2511,7 +2547,7 @@ describe('content type handling', () => {
 
 describe('request transformation', () => {
   it('should handle string-based request transform', async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     const provider = new HttpProvider('http://test.com', {
       config: {
@@ -2528,7 +2564,7 @@ describe('request transformation', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('TEST');
 
@@ -2547,7 +2583,7 @@ describe('request transformation', () => {
   });
 
   it('should handle function-based request transform', async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     const provider = new HttpProvider('http://test.com', {
       config: {
@@ -2564,7 +2600,7 @@ describe('request transformation', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test');
 
@@ -2600,7 +2636,7 @@ describe('response handling', () => {
       cached: false,
       headers: {},
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.output).toEqual({ result: 'success' });
@@ -2622,7 +2658,7 @@ describe('response handling', () => {
       cached: false,
       headers: { 'Content-Type': 'text/plain' },
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.output).toBe('success');
@@ -2634,7 +2670,7 @@ describe('response handling', () => {
     const mockData = { result: 'success' };
 
     // Mock the fetchWithCache response
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: mockData,
       status: 200,
       headers: mockHeaders,
@@ -2672,7 +2708,7 @@ describe('response handling', () => {
     const mockData = 'Not a JSON response';
 
     // Mock the fetchWithCache response
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: mockData,
       status: 200,
       headers: {},
@@ -2696,7 +2732,7 @@ describe('response handling', () => {
     const mockData = 'text response';
 
     // Mock the fetchWithCache response
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: mockData,
       status: 200,
       headers: mockHeaders,
@@ -2732,7 +2768,7 @@ describe('response handling', () => {
     const mockData = { result: 'success' };
 
     // Mock the fetchWithCache response
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: mockData,
       status: 200,
       headers: {},
@@ -2762,7 +2798,7 @@ describe('response handling', () => {
     const mockData = 'text response';
 
     // Mock the fetchWithCache response
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: mockData,
       status: 200,
       headers: mockHeaders,
@@ -2799,7 +2835,7 @@ describe('response handling', () => {
 
 describe('session handling', () => {
   it('should extract session ID from headers when configured', async () => {
-    const sessionParser = jest.fn().mockReturnValue('test-session');
+    const sessionParser = vi.fn().mockReturnValue('test-session');
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'POST',
@@ -2816,7 +2852,7 @@ describe('session handling', () => {
       cached: false,
       headers: { 'x-session-id': 'test-session' },
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.sessionId).toBe('test-session');
@@ -2831,7 +2867,7 @@ describe('session handling', () => {
     const mockSessionId = 'test-session-123';
 
     // Mock the fetchWithCache response
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: { result: 'success' },
       status: 200,
       headers: { 'session-id': mockSessionId },
@@ -2873,7 +2909,7 @@ describe('error handling', () => {
       statusText: 'Bad Request',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow(
       'HTTP call failed with status 400 Bad Request: Error message',
@@ -2881,7 +2917,7 @@ describe('error handling', () => {
   });
 
   it('should throw session parsing errors', async () => {
-    const sessionParser = jest.fn().mockImplementation(() => {
+    const sessionParser = vi.fn().mockImplementation(() => {
       throw new Error('Session parsing failed');
     });
     const provider = new HttpProvider('http://test.com', {
@@ -2900,7 +2936,7 @@ describe('error handling', () => {
       cached: false,
       headers: { 'x-session-id': 'test-session' },
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Session parsing failed');
   });
@@ -2922,7 +2958,7 @@ describe('error handling', () => {
       statusText: 'Internal Server Error',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow(
       'HTTP call failed with status 500 Internal Server Error: Error occurred',
@@ -2954,7 +2990,7 @@ describe('validateStatus', () => {
           statusText,
           cached: false,
         };
-        jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
         const result = await provider.callApi('test');
         expect(result.output).toEqual({ result: 'success' });
@@ -2979,7 +3015,7 @@ describe('validateStatus', () => {
         statusText: 'Created',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test');
       expect(result.output).toEqual({ result: 'success' });
@@ -2991,7 +3027,7 @@ describe('validateStatus', () => {
         statusText: 'Bad Request',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
 
       await expect(provider.callApi('test')).rejects.toThrow(
         'HTTP call failed with status 400 Bad Request: Error message',
@@ -3014,7 +3050,7 @@ describe('validateStatus', () => {
         statusText: 'Not Found',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test');
       expect(result.output).toEqual({ result: 'success' });
@@ -3026,7 +3062,7 @@ describe('validateStatus', () => {
         statusText: 'Server Error',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
 
       await expect(provider.callApi('test')).rejects.toThrow(
         'HTTP call failed with status 500 Server Error: Error message',
@@ -3056,7 +3092,7 @@ describe('validateStatus', () => {
           statusText,
           cached: false,
         };
-        jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
         const result = await provider.callApi('test');
         expect(result.output).toEqual({ result: 'success' });
@@ -3079,7 +3115,7 @@ describe('validateStatus', () => {
         statusText: 'Not Found',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test');
       expect(result.output).toEqual({ result: 'success' });
@@ -3091,7 +3127,7 @@ describe('validateStatus', () => {
         statusText: 'Server Error',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
 
       await expect(provider.callApi('test')).rejects.toThrow(
         'HTTP call failed with status 500 Server Error: Error message',
@@ -3115,13 +3151,13 @@ describe('validateStatus', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
     });
 
     it('should throw error for malformed file-based validator', async () => {
-      jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
+      vi.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
 
       await expect(createValidateStatus('file://invalid-validator.js')).rejects.toThrow(
         /Status validator malformed/,
@@ -3137,8 +3173,8 @@ describe('validateStatus', () => {
 
   describe('file-based validators', () => {
     it('should handle file-based validateStatus', async () => {
-      const mockValidator = jest.fn((status) => status < 500);
-      jest.mocked(importModule).mockResolvedValueOnce(mockValidator);
+      const mockValidator = vi.fn((status) => status < 500);
+      vi.mocked(importModule).mockResolvedValueOnce(mockValidator);
 
       const provider = new HttpProvider('http://test.com', {
         config: {
@@ -3154,7 +3190,7 @@ describe('validateStatus', () => {
         statusText: 'Not Found',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test');
       expect(result.output).toEqual({ result: 'success' });
@@ -3166,8 +3202,8 @@ describe('validateStatus', () => {
     });
 
     it('should handle file-based validateStatus with specific function', async () => {
-      const mockValidator = jest.fn((status) => status < 500);
-      jest.mocked(importModule).mockResolvedValueOnce(mockValidator);
+      const mockValidator = vi.fn((status) => status < 500);
+      vi.mocked(importModule).mockResolvedValueOnce(mockValidator);
 
       const provider = new HttpProvider('http://test.com', {
         config: {
@@ -3183,7 +3219,7 @@ describe('validateStatus', () => {
         statusText: 'Not Found',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test');
       expect(result.output).toEqual({ result: 'success' });
@@ -3212,7 +3248,7 @@ describe('session parser', () => {
       cached: false,
       headers: { 'x-session-id': 'test-session' },
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.sessionId).toBe('test-session');
@@ -3242,7 +3278,7 @@ describe('transform response error handling', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Transform failed');
   });
@@ -3261,7 +3297,7 @@ describe('transform response error handling', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Failed to transform response');
   });
@@ -3282,7 +3318,7 @@ describe('arrow function parsing in transformResponse', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.output).toBe('test value');
@@ -3302,7 +3338,7 @@ describe('arrow function parsing in transformResponse', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.output).toBe('test value');
@@ -3322,7 +3358,7 @@ describe('arrow function parsing in transformResponse', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.output).toBe('test value');
@@ -3342,7 +3378,7 @@ describe('arrow function parsing in transformResponse', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.output).toBe(200);
@@ -3362,7 +3398,7 @@ describe('arrow function parsing in transformResponse', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.output).toBe('test value');
@@ -3385,7 +3421,7 @@ describe('arrow function parsing in transformResponse', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.output).toBe('TEST VALUE');
@@ -3421,13 +3457,13 @@ describe('status validator error handling', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
   });
 
   it('should throw error for malformed file-based validator', async () => {
-    jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
+    vi.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
 
     await expect(createValidateStatus('file://invalid-validator.js')).rejects.toThrow(
       /Status validator malformed/,
@@ -3458,7 +3494,7 @@ describe('string-based validators', () => {
       statusText: 'Created',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.output).toEqual({ result: 'success' });
@@ -3470,7 +3506,7 @@ describe('string-based validators', () => {
       statusText: 'Bad Request',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow(
       'HTTP call failed with status 400 Bad Request: Error message',
@@ -3493,7 +3529,7 @@ describe('string-based validators', () => {
       statusText: 'Not Found',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.output).toEqual({ result: 'success' });
@@ -3505,7 +3541,7 @@ describe('string-based validators', () => {
       statusText: 'Server Error',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow(
       'HTTP call failed with status 500 Server Error: Error message',
@@ -3535,7 +3571,7 @@ describe('string-based validators', () => {
         statusText,
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test');
       expect(result.output).toEqual({ result: 'success' });
@@ -3558,7 +3594,7 @@ describe('string-based validators', () => {
       statusText: 'Not Found',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
     expect(result.output).toEqual({ result: 'success' });
@@ -3570,7 +3606,7 @@ describe('string-based validators', () => {
       statusText: 'Server Error',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow(
       'HTTP call failed with status 500 Server Error: Error message',
@@ -3592,7 +3628,7 @@ describe('string-based validators', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
   });
@@ -3617,7 +3653,7 @@ describe('HttpProvider with token estimation', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('Test prompt');
 
@@ -3644,7 +3680,7 @@ describe('HttpProvider with token estimation', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('Test prompt');
 
@@ -3673,7 +3709,7 @@ describe('HttpProvider with token estimation', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('Test prompt here');
 
@@ -3704,7 +3740,7 @@ describe('HttpProvider with token estimation', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('Hello world');
 
@@ -3738,7 +3774,7 @@ describe('HttpProvider with token estimation', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('Test prompt');
 
@@ -3770,7 +3806,7 @@ describe('HttpProvider with token estimation', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('Hello world');
 
@@ -3800,7 +3836,7 @@ describe('HttpProvider with token estimation', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('Test prompt');
 
@@ -3827,7 +3863,7 @@ describe('HttpProvider with token estimation', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('Test prompt');
 
@@ -3839,17 +3875,17 @@ describe('HttpProvider with token estimation', () => {
 
 describe('RSA signature authentication', () => {
   let mockPrivateKey: string;
-  let mockSign: jest.SpyInstance;
-  let mockUpdate: jest.SpyInstance;
-  let mockEnd: jest.SpyInstance;
+  let mockSign: MockInstance;
+  let mockUpdate: MockInstance;
+  let mockEnd: MockInstance;
 
   beforeEach(() => {
     mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockPrivateKey);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(mockPrivateKey);
 
-    mockUpdate = jest.fn();
-    mockEnd = jest.fn();
-    mockSign = jest.fn().mockReturnValue(Buffer.from('mocksignature'));
+    mockUpdate = vi.fn();
+    mockEnd = vi.fn();
+    mockSign = vi.fn().mockReturnValue(Buffer.from('mocksignature'));
 
     const mockSignObject = {
       update: mockUpdate,
@@ -3857,12 +3893,12 @@ describe('RSA signature authentication', () => {
       sign: mockSign,
     };
 
-    jest.spyOn(crypto, 'createSign').mockReturnValue(mockSignObject as any);
-    jest.spyOn(Date, 'now').mockReturnValue(1000); // Mock timestamp
+    vi.spyOn(crypto, 'createSign').mockReturnValue(mockSignObject as any);
+    vi.spyOn(Date, 'now').mockReturnValue(1000); // Mock timestamp
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should generate and include signature in vars', async () => {
@@ -3883,7 +3919,7 @@ describe('RSA signature authentication', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test');
 
@@ -3913,14 +3949,14 @@ describe('RSA signature authentication', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     // First call should generate signature
     await provider.callApi('test');
     expect(crypto.createSign).toHaveBeenCalledTimes(1);
 
     // Second call within validity period should reuse signature
-    jest.spyOn(Date, 'now').mockReturnValue(2000); // Still within validity period
+    vi.spyOn(Date, 'now').mockReturnValue(2000); // Still within validity period
     await provider.callApi('test');
     expect(crypto.createSign).toHaveBeenCalledTimes(1); // Should not be called again
   });
@@ -3943,14 +3979,14 @@ describe('RSA signature authentication', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     // First call should generate signature
     await provider.callApi('test');
     expect(crypto.createSign).toHaveBeenCalledTimes(1);
 
     // Second call after validity period should regenerate signature
-    jest.spyOn(Date, 'now').mockReturnValue(301000); // After validity period
+    vi.spyOn(Date, 'now').mockReturnValue(301000); // After validity period
     await provider.callApi('test');
     expect(crypto.createSign).toHaveBeenCalledTimes(2); // Should be called again
   });
@@ -3974,7 +4010,7 @@ describe('RSA signature authentication', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test');
 
@@ -4004,7 +4040,7 @@ describe('RSA signature authentication', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test');
 
@@ -4016,7 +4052,7 @@ describe('RSA signature authentication', () => {
 
   it('should warn when vars already contain signatureTimestamp', async () => {
     // Direct test of the warning logic
-    const mockWarn = jest.spyOn(logger, 'warn');
+    const mockWarn = vi.spyOn(logger, 'warn');
     const timestampWarning =
       '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten';
 
@@ -4032,7 +4068,7 @@ describe('RSA signature authentication', () => {
 
   it('should use JKS keystore password from environment variable when config password not provided', async () => {
     // Get the mocked JKS module
-    const jksMock = jest.mocked(await import('jks-js'));
+    const jksMock = vi.mocked(await import('jks-js'));
     jksMock.toPem.mockReturnValue({
       client: {
         key: mockPrivateKey,
@@ -4040,7 +4076,7 @@ describe('RSA signature authentication', () => {
     });
 
     // Mock fs.readFileSync to return mock keystore data
-    const readFileSyncSpy = jest
+    const readFileSyncSpy = vi
       .spyOn(fs, 'readFileSync')
       .mockReturnValue(Buffer.from('mock-keystore-data'));
 
@@ -4065,7 +4101,7 @@ describe('RSA signature authentication', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test');
 
@@ -4078,7 +4114,7 @@ describe('RSA signature authentication', () => {
 
   it('should prioritize config keystorePassword over environment variable', async () => {
     // Get the mocked JKS module
-    const jksMock = jest.mocked(await import('jks-js'));
+    const jksMock = vi.mocked(await import('jks-js'));
     jksMock.toPem.mockReturnValue({
       client: {
         key: mockPrivateKey,
@@ -4086,7 +4122,7 @@ describe('RSA signature authentication', () => {
     });
 
     // Mock fs.readFileSync to return mock keystore data
-    const readFileSyncSpy = jest
+    const readFileSyncSpy = vi
       .spyOn(fs, 'readFileSync')
       .mockReturnValue(Buffer.from('mock-keystore-data'));
 
@@ -4111,7 +4147,7 @@ describe('RSA signature authentication', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test');
 
@@ -4124,13 +4160,13 @@ describe('RSA signature authentication', () => {
 
   it('should throw error when neither config password nor environment variable is provided for JKS', async () => {
     // Get the mocked JKS module
-    const jksMock = jest.mocked(await import('jks-js'));
+    const jksMock = vi.mocked(await import('jks-js'));
     jksMock.toPem.mockImplementation(() => {
       throw new Error('Should not be called');
     });
 
     // Mock fs.readFileSync to return mock keystore data
-    const readFileSyncSpy = jest
+    const readFileSyncSpy = vi
       .spyOn(fs, 'readFileSync')
       .mockReturnValue(Buffer.from('mock-keystore-data'));
 
@@ -4153,7 +4189,7 @@ describe('RSA signature authentication', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     delete process.env.PROMPTFOO_JKS_PASSWORD;
 
@@ -4201,8 +4237,8 @@ describe('createSessionParser', () => {
   });
 
   it('should handle file:// parser', async () => {
-    const mockParser = jest.fn(({ headers }) => headers['session-id']);
-    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+    const mockParser = vi.fn(({ headers }) => headers['session-id']);
+    vi.mocked(importModule).mockResolvedValueOnce(mockParser);
 
     const parser = await createSessionParser('file://session-parser.js');
     const result = parser({ headers: { 'session-id': 'test-session' } });
@@ -4215,8 +4251,8 @@ describe('createSessionParser', () => {
   });
 
   it('should handle file:// parser with specific function', async () => {
-    const mockParser = jest.fn(({ body }) => body.sessionId);
-    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+    const mockParser = vi.fn(({ body }) => body.sessionId);
+    vi.mocked(importModule).mockResolvedValueOnce(mockParser);
 
     const parser = await createSessionParser('file://session-parser.js:parseSession');
     const result = parser({ headers: {}, body: { sessionId: 'test-session' } });
@@ -4229,7 +4265,7 @@ describe('createSessionParser', () => {
   });
 
   it('should throw error for malformed file:// parser', async () => {
-    jest.mocked(importModule).mockResolvedValueOnce({});
+    vi.mocked(importModule).mockResolvedValueOnce({});
 
     await expect(createSessionParser('file://invalid-parser.js')).rejects.toThrow(
       /Response transform malformed/,
@@ -4396,7 +4432,7 @@ describe('Token Estimation', () => {
 
 describe('Body file resolution', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should resolve file:// references in body configuration', () => {
@@ -4405,7 +4441,7 @@ describe('Body file resolution', () => {
       { id: '2', amount: '250.75', date: '2025-06-02' },
     ];
 
-    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
       query: '{{prompt}}',
       date: '2025-06-03T22:01:13.797Z',
       transactions: mockTransactions,
@@ -4452,7 +4488,7 @@ describe('Body file resolution', () => {
       { name: 'Jane', email: 'jane@example.com' },
     ];
 
-    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
       query: '{{prompt}}',
       data: {
         transactions: mockTransactions,
@@ -4500,7 +4536,7 @@ describe('Body file resolution', () => {
     };
     const mockUsers = [{ name: 'John', email: 'john@example.com' }];
 
-    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue([
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue([
       'regular string',
       mockConfig,
       {
@@ -4542,7 +4578,7 @@ describe('Body file resolution', () => {
       },
     };
 
-    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(originalBody);
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(originalBody);
 
     const provider = new HttpProvider('http://test.com', {
       config: {
@@ -4559,7 +4595,7 @@ describe('Body file resolution', () => {
   it('should work with string body containing file:// reference', () => {
     const mockContent = 'This is the content from the file';
 
-    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(mockContent);
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(mockContent);
 
     const provider = new HttpProvider('http://test.com', {
       config: {
@@ -4579,7 +4615,7 @@ describe('Body file resolution', () => {
       { id: '2', amount: '250.75' },
     ];
 
-    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
       query: '{{prompt}}',
       transactions: mockTransactions,
     });
@@ -4601,7 +4637,7 @@ describe('Body file resolution', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
 
@@ -4609,7 +4645,7 @@ describe('Body file resolution', () => {
     // Note: processJsonBody may parse JSON strings, so check the actual call
     expect(fetchWithCache).toHaveBeenCalled();
 
-    const actualCall = jest.mocked(fetchWithCache).mock.calls[0];
+    const actualCall = vi.mocked(fetchWithCache).mock.calls[0];
     expect(actualCall).toBeDefined();
     expect(actualCall[0]).toBe('http://test.com');
 
@@ -4631,7 +4667,7 @@ describe('Body file resolution', () => {
 
   it('should handle GET requests without body file resolution', () => {
     // maybeLoadConfigFromExternalFile should not be called for GET requests without body
-    jest.mocked(maybeLoadConfigFromExternalFile).mockClear();
+    vi.mocked(maybeLoadConfigFromExternalFile).mockClear();
 
     new HttpProvider('http://test.com', {
       config: {
@@ -4657,7 +4693,7 @@ describe('Body file resolution', () => {
       arrayWithFiles: ['string', { fromFile: true }, ['nested', 'array']],
     };
 
-    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(mockData);
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(mockData);
 
     const provider = new HttpProvider('http://test.com', {
       config: {
@@ -4684,11 +4720,11 @@ describe('Body file resolution', () => {
 
 describe('HttpProvider - Sanitization', () => {
   const testUrl = 'http://example.com/api';
-  let loggerDebugSpy: jest.SpyInstance;
+  let loggerDebugSpy: MockInstance;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    loggerDebugSpy = jest.spyOn(logger, 'debug');
+    vi.clearAllMocks();
+    loggerDebugSpy = vi.spyOn(logger, 'debug');
   });
 
   afterEach(() => {
@@ -4714,7 +4750,7 @@ describe('HttpProvider - Sanitization', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
 
@@ -4727,7 +4763,7 @@ describe('HttpProvider - Sanitization', () => {
 
   it('should sanitize Authorization header in debug logs', async () => {
     // Mock the file resolution to return a simple body to avoid conflicts
-    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
       simple: 'test-value',
     });
 
@@ -4748,7 +4784,7 @@ describe('HttpProvider - Sanitization', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
 
@@ -4761,7 +4797,7 @@ describe('HttpProvider - Sanitization', () => {
 
   it('should sanitize multiple credential fields', async () => {
     // Simplified test without signature auth to avoid certificate issues
-    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
       simple: 'test-value',
     });
 
@@ -4785,7 +4821,7 @@ describe('HttpProvider - Sanitization', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
 
@@ -4797,7 +4833,7 @@ describe('HttpProvider - Sanitization', () => {
   });
 
   it('should preserve non-sensitive fields', async () => {
-    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
       simple: 'test-value',
     });
 
@@ -4820,12 +4856,12 @@ describe('HttpProvider - Sanitization', () => {
       statusText: 'OK',
       cached: false,
     };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
 
     const debugCall = loggerDebugSpy.mock.calls.find(
-      (call) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
+      (call: any) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
     );
     expect(debugCall).toBeDefined();
 
@@ -4857,7 +4893,7 @@ describe('HttpProvider - Sanitization', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test message');
 
@@ -4868,9 +4904,9 @@ describe('HttpProvider - Sanitization', () => {
       );
 
       // Extract the context object that was passed to the logger
-      const logCall = loggerDebugSpy.mock.calls.find((call) => call[0]?.includes('Calling'));
+      const logCall = loggerDebugSpy.mock.calls.find((call: any) => call[0]?.includes('Calling'));
       expect(logCall).toBeDefined();
-      const loggedContext = logCall[1];
+      const loggedContext = logCall![1];
 
       // Verify that when the logger sanitizes this context, sensitive headers are redacted
       const sanitizedContext = sanitizeObject(loggedContext, { context: 'test' });
@@ -4926,7 +4962,7 @@ describe('HttpProvider - Sanitization', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test message');
 
@@ -4955,14 +4991,14 @@ describe('HttpProvider - Sanitization', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
 
-      const debugCall = loggerDebugSpy.mock.calls.find((call) => call[0].includes('Calling'));
+      const debugCall = loggerDebugSpy.mock.calls.find((call: any) => call[0].includes('Calling'));
       expect(debugCall).toBeDefined();
 
-      const logMessage = debugCall[0];
+      const logMessage = debugCall![0];
       expect(logMessage).toContain('api_key=%5BREDACTED%5D');
       expect(logMessage).toContain('format=json'); // Non-sensitive param preserved
       // Note: The URL in config object may contain the original secret, but the main URL is sanitized
@@ -5014,7 +5050,7 @@ describe('HttpProvider - Sanitization', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test data');
 
@@ -5042,7 +5078,7 @@ describe('HttpProvider - Sanitization', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const startTime = Date.now();
 
@@ -5059,7 +5095,7 @@ describe('HttpProvider - Sanitization', () => {
 
       // Verify logger was called multiple times
       const debugCalls = loggerDebugSpy.mock.calls.filter(
-        (call) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
+        (call: any) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
       );
       expect(debugCalls.length).toBeGreaterThan(0);
     });
@@ -5084,7 +5120,7 @@ describe('HttpProvider - Sanitization', () => {
         statusText: 'OK',
         cached: false,
       };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       // Should not crash
       await expect(provider.callApi('test prompt')).resolves.not.toThrow();

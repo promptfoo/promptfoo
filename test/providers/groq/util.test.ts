@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { groqSupportsTemperature, isGroqReasoningModel } from '../../../src/providers/groq/index';
 
 describe('Groq utility functions', () => {

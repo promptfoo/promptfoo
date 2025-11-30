@@ -1,3 +1,5 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { clearCache } from '../../src/cache';
 import {
   TrueFoundryEmbeddingProvider,
@@ -8,19 +10,19 @@ import * as fetchModule from '../../src/util/fetch/index';
 
 const TRUEFOUNDRY_API_BASE = 'https://llm-gateway.truefoundry.com';
 
-jest.mock('../../src/util', () => ({
-  maybeLoadFromExternalFile: jest.fn((x) => x),
-  renderVarsInObject: jest.fn((x) => x),
+vi.mock('../../src/util', () => ({
+  maybeLoadFromExternalFile: vi.fn((x) => x),
+  renderVarsInObject: vi.fn((x) => x),
 }));
 
-jest.mock('../../src/util/fetch/index.ts');
+vi.mock('../../src/util/fetch/index.ts');
 
 describe('TrueFoundry', () => {
-  const mockedFetchWithRetries = jest.mocked(fetchModule.fetchWithRetries);
+  const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);
 
   afterEach(async () => {
     await clearCache();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('TrueFoundryProvider', () => {

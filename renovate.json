@@ -18,6 +18,22 @@
   ],
   "packageRules": [
     {
+      "description": "SDK packages: daily updates including patch, no waiting period",
+      "matchPackageNames": [
+        "@anthropic-ai/sdk",
+        "@aws-sdk/client-bedrock-runtime",
+        "@azure/identity",
+        "@azure/openai-assistants",
+        "cloudflare",
+        "groq-sdk",
+        "openai",
+        "replicate"
+      ],
+      "schedule": ["every weekday"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "0 days"
+    },
+    {
       "description": "Runtime npm deps: wait 5 days before updates",
       "matchDatasources": ["npm"],
       "matchDepTypes": ["dependencies"],

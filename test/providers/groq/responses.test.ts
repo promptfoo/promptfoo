@@ -1,13 +1,14 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { GroqResponsesProvider } from '../../../src/providers/groq/index';
 import * as fetchModule from '../../../src/util/fetch/index';
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
 
-jest.mock('../../../src/util/fetch/index.ts');
+vi.mock('../../../src/util/fetch/index.ts');
 
 describe('GroqResponsesProvider', () => {
-  const mockedFetchWithRetries = jest.mocked(fetchModule.fetchWithRetries);
+  const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);
 
   beforeEach(() => {
     process.env.GROQ_API_KEY = 'test-key';
@@ -16,7 +17,7 @@ describe('GroqResponsesProvider', () => {
   afterEach(async () => {
     delete process.env.GROQ_API_KEY;
     await clearCache();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('constructor and identification', () => {
