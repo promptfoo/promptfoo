@@ -54,50 +54,52 @@ defaultTest:
       value: file://assert.py:check
 ```
 
+{/* prettier-ignore */}
 <PythonFileViewer
-files={[
-{
-name: 'prompts.py',
-description: 'Generate prompts',
-content: `def create_prompt(context):
+  defaultOpen="provider.py"
+  files={[
+    {
+      name: 'prompts.py',
+      description: 'Generate prompts',
+      content: `def create_prompt(context):
     return [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": f"Explain {context['vars']['topic']}"},
     ]`,
-},
-{
-name: 'provider.py',
-description: 'Call any model',
-content: `from openai import OpenAI
+    },
+    {
+      name: 'provider.py',
+      description: 'Call any model',
+      content: `from openai import OpenAI
 
 client = OpenAI()
 
 def call_api(prompt, options, context):
-response = client.chat.completions.create(
-model="gpt-4.1-mini",
-messages=[{"role": "user", "content": prompt}],
-)
-return {"output": response.choices[0].message.content}`,
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return {"output": response.choices[0].message.content}`,
     },
     {
       name: 'tests.py',
       description: 'Generate tests',
       content: `def generate_tests(config=None):
-return [
-{"vars": {"topic": "decorators"}},
-{"vars": {"topic": "async/await"}},
-]`,
+    return [
+        {"vars": {"topic": "decorators"}},
+        {"vars": {"topic": "async/await"}},
+    ]`,
     },
     {
       name: 'assert.py',
       description: 'Validate output',
       content: `def check(output, context):
-topic = context["vars"]["topic"]
-if topic.lower() not in output.lower():
-return {"pass": False, "score": 0, "reason": f"Missing: {topic}"}
-return {"pass": True, "score": 1.0}`,
-},
-]}
+    topic = context["vars"]["topic"]
+    if topic.lower() not in output.lower():
+        return {"pass": False, "score": 0, "reason": f"Missing: {topic}"}
+    return {"pass": True, "score": 1.0}`,
+    },
+  ]}
 />
 
 ```bash
