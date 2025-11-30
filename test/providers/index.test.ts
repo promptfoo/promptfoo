@@ -178,12 +178,14 @@ describe('call provider apis', () => {
   beforeEach(() => {
     // Set Azure environment variables for Azure provider tests
     process.env.AZURE_API_HOST = 'test.openai.azure.com';
+    process.env.AZURE_API_KEY = 'test-api-key';
   });
 
   afterEach(async () => {
     vi.clearAllMocks();
     await clearCache();
     delete process.env.AZURE_API_HOST;
+    delete process.env.AZURE_API_KEY;
   });
 
   it('AzureOpenAiCompletionProvider callApi', async () => {
