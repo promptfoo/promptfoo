@@ -160,6 +160,50 @@ tests:
 
 Set `maxApprovals` to limit approval interactions per message (default: 5).
 
+## Comparing Workflow Versions
+
+Test changes between workflow versions by configuring multiple providers:
+
+```yaml title="promptfooconfig.yaml"
+description: Compare workflow v2 vs v3
+
+prompts:
+  - '{{message}}'
+
+providers:
+  - id: openai:chatkit:wf_xxxxx
+    label: v2
+    config:
+      version: '2'
+
+  - id: openai:chatkit:wf_xxxxx
+    label: v3
+    config:
+      version: '3'
+
+tests:
+  - vars:
+      message: 'What is your return policy?'
+    assert:
+      - type: llm-rubric
+        value: Provides accurate return policy information
+
+  - vars:
+      message: 'I want to cancel my subscription'
+    assert:
+      - type: llm-rubric
+        value: Explains cancellation process clearly
+```
+
+Run the eval to see responses side by side:
+
+```bash
+npx promptfoo eval
+npx promptfoo view
+```
+
+This helps verify that new versions maintain quality and don't regress on important behaviors.
+
 ## Complete Example
 
 ```yaml title="promptfooconfig.yaml"
