@@ -31,6 +31,7 @@ export default defineConfig({
       'test/providers/mcp/**/*.test.ts',
       'test/providers/functionCallbackUtils.test.ts',
       'test/providers/claude-agent-sdk.test.ts',
+      'test/providers/opencode-sdk.test.ts',
       'test/providers/cloudflare-ai.test.ts',
       'test/providers/browser.test.ts',
       'test/providers/groq/**/*.test.ts',
