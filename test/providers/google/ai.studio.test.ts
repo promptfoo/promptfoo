@@ -29,29 +29,14 @@ vi.mock('../../../src/util/templates', async importOriginal => {
   });
 });
 
+// Hoisted mock for maybeLoadFromExternalFile
+const mockMaybeLoadFromExternalFile = vi.hoisted(() => vi.fn((input) => input));
+
 vi.mock('../../../src/util/file', async importOriginal => {
   return ({
     ...(await importOriginal()),
     getNunjucksEngineForFilePath: vi.fn(),
-
-    maybeLoadFromExternalFile: vi.fn((input) => {
-      if (typeof input === 'string' && input.startsWith('file://')) {
-        // Simulate loading from file
-        const fs = require('fs');
-        const path = require('path');
-        const filePath = path.resolve(input.slice('file://'.length));
-
-        if (fs.existsSync(filePath)) {
-          const contents = fs.readFileSync(filePath, 'utf8');
-          if (filePath.endsWith('.json')) {
-            return JSON.parse(contents);
-          }
-          return contents;
-        }
-        throw new Error(`File does not exist: ${filePath}`);
-      }
-      return input;
-    })
+    maybeLoadFromExternalFile: mockMaybeLoadFromExternalFile,
   });
 });
 
@@ -1009,9 +994,13 @@ describe('AIStudioChatProvider', () => {
         },
       ];
 
-      // Mock file system operations
-      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockExternalTools));
+      // Mock maybeLoadFromExternalFile to return tools for file:// paths
+      mockMaybeLoadFromExternalFile.mockImplementation((input) => {
+        if (typeof input === 'string' && input === 'file://tools.json') {
+          return mockExternalTools;
+        }
+        return input;
+      });
 
       provider = new AIStudioChatProvider('gemini-pro', {
         config: {
@@ -1069,8 +1058,8 @@ describe('AIStudioChatProvider', () => {
         metadata: {},
       });
 
-      expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
+      // Verify maybeLoadFromExternalFile was called with the tools file path
+      expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith('file://tools.json');
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
         {
@@ -1415,9 +1404,13 @@ describe('AIStudioChatProvider', () => {
     it('should load system instructions from file', async () => {
       const mockSystemInstruction = 'You are a helpful assistant from a file.';
 
-      // Mock file system operations
-      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-      vi.spyOn(fs, 'readFileSync').mockReturnValue(mockSystemInstruction);
+      // Mock maybeLoadFromExternalFile to return file contents for file:// paths
+      mockMaybeLoadFromExternalFile.mockImplementation((input) => {
+        if (input === 'file://system-instruction.txt') {
+          return mockSystemInstruction;
+        }
+        return input;
+      });
 
       provider = new AIStudioChatProvider('gemini-pro', {
         config: {
@@ -1461,11 +1454,8 @@ describe('AIStudioChatProvider', () => {
         false,
       );
 
-      // Verify file was read
-      expect(fs.readFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('system-instruction.txt'),
-        'utf8',
-      );
+      // Verify maybeLoadFromExternalFile was called with the file path
+      expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith('file://system-instruction.txt');
     });
 
     describe('thinking token tracking', () => {
