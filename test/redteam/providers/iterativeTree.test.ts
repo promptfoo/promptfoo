@@ -29,7 +29,7 @@ import type {
 import { getNunjucksEngine } from '../../../src/util/templates';
 
 vi.mock('../../../src/providers/openai');
-vi.mock('../../../src/util/templates');
+// Note: We don't mock '../../../src/util/templates' because tests need the real nunjucks engine
 vi.mock('../../../src/redteam/graders', async importOriginal => {
   return ({
     ...(await importOriginal()),

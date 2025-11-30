@@ -339,14 +339,13 @@ describe('RedteamIterativeMetaProvider', () => {
         };
       }) as any;
 
-      // Mock the targetProvider.callApi directly (not mockGetTargetResponse)
-      mockTargetProvider.callApi = vi
-        .fn<() => Promise<ProviderResponse>>()
-        .mockImplementation(async function() {
-          const response = { output: targetResponses[targetCallCount] || 'Default' };
-          targetCallCount++;
-          return response;
-        }) as any;
+      // Set up mockGetTargetResponse (not mockTargetProvider.callApi) since getTargetResponse is mocked
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async function() {
+        const response = { output: targetResponses[targetCallCount] || 'Default' };
+        targetCallCount++;
+        return response;
+      });
 
       const result = await runMetaAgentRedteam({
         context: {
@@ -402,14 +401,13 @@ describe('RedteamIterativeMetaProvider', () => {
         };
       }) as any;
 
-      // Mock the targetProvider.callApi directly
-      mockTargetProvider.callApi = vi
-        .fn<() => Promise<ProviderResponse>>()
-        .mockImplementation(async function() {
-          const response = { output: targetResponses[targetCallCount] || 'Default' };
-          targetCallCount++;
-          return response;
-        }) as any;
+      // Set up mockGetTargetResponse (not mockTargetProvider.callApi) since getTargetResponse is mocked
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async function() {
+        const response = { output: targetResponses[targetCallCount] || 'Default' };
+        targetCallCount++;
+        return response;
+      });
 
       await runMetaAgentRedteam({
         context: {

@@ -439,6 +439,13 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should extract JSON object from fenced/narrative judge output', async () => {
+      // Reset and set up mockGetTargetResponse for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async () => ({
+        output: 'mock target response',
+        tokenUsage: { numRequests: 1 },
+      }));
+
       const fenced =
         "I'll evaluate now.\n```json\n{" +
         '"currentResponse": { "rating": 6, "explanation": "ok" },' +
@@ -779,6 +786,12 @@ describe('RedteamIterativeProvider', () => {
       mockTargetProvider.callApi.mockImplementation(async function(prompt: string) {
         targetPrompts.push(prompt);
         return { output: 'mock target response' };
+      });
+
+      // Set up mockGetTargetResponse to call mockTargetProvider.callApi
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, options) => {
+        return mockTargetProvider.callApi(prompt, context);
       });
 
       // Mock provider responses for 3 iterations
