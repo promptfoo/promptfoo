@@ -1,4 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
+
+// Mock logger for tests that need it
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 import {
   type BasePlugin,
   COLLECTIONS,
