@@ -54,7 +54,7 @@ defaultTest:
       value: file://assert.py:check
 ```
 
-{/* prettier-ignore */}
+<!-- prettier-ignore-start -->
 <PythonFileViewer
   defaultOpen="provider.py"
   files={[
@@ -101,6 +101,7 @@ def call_api(prompt, options, context):
     },
   ]}
 />
+<!-- prettier-ignore-end -->
 
 ```bash
 npx promptfoo@latest init --example python-provider
