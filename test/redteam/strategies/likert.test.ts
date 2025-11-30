@@ -12,6 +12,15 @@ vi.mock('cli-progress');
 vi.mock('../../../src/cache');
 vi.mock('../../../src/globalConfig/accounts');
 vi.mock('../../../src/redteam/remoteGeneration');
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
+}));
 
 describe('likert strategy', () => {
   let mockProgressBar: Mocked<SingleBar>;
