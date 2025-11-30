@@ -1,13 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { execFile } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 
-vi.mock('child_process');
-vi.mock('../../src/cache');
+// Hoisted mock functions
+const mockExecFile = vi.hoisted(() => vi.fn());
+const mockGetCache = vi.hoisted(() => vi.fn());
+const mockIsCacheEnabled = vi.hoisted(() => vi.fn());
+
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      execFile: mockExecFile,
+    },
+    execFile: mockExecFile,
+  };
+});
+
+vi.mock('../../src/cache', () => ({
+  getCache: mockGetCache,
+  isCacheEnabled: mockIsCacheEnabled,
+}));
+
 vi.mock('fs');
 vi.mock('path');
 
@@ -25,9 +44,6 @@ vi.mock('../../src/util', async () => {
 });
 
 describe('GolangProvider', () => {
-  const mockExecFile = vi.mocked(execFile);
-  const mockGetCache = vi.mocked(getCache);
-  const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
   const mockReadFileSync = vi.mocked(fs.readFileSync);
   const mockResolve = vi.mocked(path.resolve);
   const mockMkdtempSync = vi.mocked(fs.mkdtempSync);
@@ -42,7 +58,6 @@ describe('GolangProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    vi.resetAllMocks();
 
     // Reset all mocks to default behavior
     mockGetCache.mockResolvedValue({
