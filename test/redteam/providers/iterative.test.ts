@@ -866,8 +866,11 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should correctly track token usage when target provider returns tokens', async () => {
-      // Reset the mock to use the real getTargetResponse function
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
 
       // Mock the target provider directly to return tokens
       mockTargetProvider.callApi.mockResolvedValueOnce({
@@ -898,7 +901,11 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should accumulate token usage across multiple iterations', async () => {
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
 
       // Mock target provider for multiple calls with different token usage
       mockTargetProvider.callApi
@@ -940,7 +947,11 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should handle missing token usage from target responses', async () => {
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
 
       mockTargetProvider.callApi
         .mockResolvedValueOnce({
@@ -982,7 +993,11 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should handle error responses without affecting token counts', async () => {
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
 
       mockTargetProvider.callApi
         .mockResolvedValueOnce({
@@ -1022,7 +1037,11 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should handle zero token counts correctly', async () => {
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for this test
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
 
       mockTargetProvider.callApi
         .mockResolvedValueOnce({
@@ -1060,7 +1079,11 @@ describe('RedteamIterativeProvider', () => {
 
   describe('sessionId handling', () => {
     beforeEach(() => {
-      mockGetTargetResponse.mockRestore?.();
+      // Clear the mock to use the target provider directly for sessionId tests
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
     });
 
     it('should collect sessionIds from all iterations', async () => {
