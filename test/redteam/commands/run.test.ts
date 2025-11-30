@@ -11,6 +11,16 @@ vi.mock('../../../src/cliState', () => ({
   })
 }));
 
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
+}));
+
 vi.mock('../../../src/telemetry', () => ({
   default: ({
     record: vi.fn()
@@ -24,12 +34,9 @@ vi.mock('../../../src/util', async importOriginal => {
   });
 });
 
-vi.mock('../../../src/redteam/shared', async importOriginal => {
-  return ({
-    ...(await importOriginal()),
-    doRedteamRun: vi.fn().mockResolvedValue({})
-  });
-});
+vi.mock('../../../src/redteam/shared', () => ({
+  doRedteamRun: vi.fn().mockResolvedValue({}),
+}));
 
 vi.mock('../../../src/util/cloud', async importOriginal => {
   return ({

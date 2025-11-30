@@ -11,6 +11,16 @@ import {
 } from '../../src/providers/watsonx';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
+}));
+
 vi.mock('@ibm-cloud/watsonx-ai', async importOriginal => {
   return ({
     ...(await importOriginal()),
