@@ -12,9 +12,12 @@ import {
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
 
-vi.mock('child_process', () => ({
-  execFile: vi.fn(),
-}));
+vi.mock('child_process', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    execFile: vi.fn()
+  });
+});
 vi.mock('../../src/cache', async () => {
   const actual = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
   return {
@@ -86,7 +89,9 @@ describe('getFileHashes', () => {
     const mockHash1 = 'hash1';
     const mockHash2 = 'hash2';
 
-    existsSyncMock.mockImplementation((path: fs.PathLike) => path !== 'nonexistent.js');
+    existsSyncMock.mockImplementation(function(path: fs.PathLike) {
+      return path !== 'nonexistent.js';
+    });
     statSyncMock.mockReturnValue({
       isFile: () => true,
       isDirectory: () => false,
@@ -96,7 +101,7 @@ describe('getFileHashes', () => {
       isFIFO: () => false,
       isSocket: () => false,
     } as fs.Stats);
-    readFileSyncMock.mockImplementation((path: fs.PathOrFileDescriptor) => {
+    readFileSyncMock.mockImplementation(function(path: fs.PathOrFileDescriptor) {
       if (path === 'file1.js') {
         return mockFileContent1;
       }
@@ -110,7 +115,9 @@ describe('getFileHashes', () => {
       update: vi.fn().mockReturnThis(),
       digest: vi.fn(),
     } as unknown as crypto.Hash;
-    vi.mocked(mockHashUpdate.digest).mockReturnValueOnce(mockHash1).mockReturnValueOnce(mockHash2);
+    vi.mocked(mockHashUpdate.digest).mockImplementationOnce(function() {
+      return mockHash1;
+    }).mockReturnValueOnce(mockHash2);
     createHashMock.mockReturnValue(mockHashUpdate);
 
     const result = getFileHashes(scriptParts);
@@ -174,7 +181,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle UTF-8 characters in script output', async () => {
     const utf8Output = 'Hello, 世界!';
-    vi.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
+    vi.mocked(execFile).mockImplementation(function(_cmd, _args, _options, callback) {
       (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
         null,
         Buffer.from(utf8Output),
@@ -189,7 +196,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle UTF-8 characters in error output', async () => {
     const utf8Error = 'エラー発生';
-    vi.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
+    vi.mocked(execFile).mockImplementation(function(_cmd, _args, _options, callback) {
       if (typeof callback === 'function') {
         callback(null, '', Buffer.from(utf8Error));
       }
@@ -217,7 +224,9 @@ describe('ScriptCompletionProvider', () => {
       update: vi.fn().mockReturnThis(),
       digest: vi.fn().mockReturnValue('mock hash'),
     } as unknown as crypto.Hash;
-    vi.mocked(crypto.createHash).mockReturnValue(mockHashUpdate);
+    vi.mocked(crypto.createHash).mockImplementation(function() {
+      return mockHashUpdate;
+    });
 
     const result = await provider.callApi('test prompt');
     expect(result).toEqual(cachedResult);
@@ -229,7 +238,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle script execution errors', async () => {
     const errorMessage = 'Script execution failed';
-    vi.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
+    vi.mocked(execFile).mockImplementation(function(_cmd, _args, _options, callback) {
       if (typeof callback === 'function') {
         callback(new Error(errorMessage), '', '');
       }
@@ -241,7 +250,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle empty standard output with error output', async () => {
     const errorOutput = 'Warning: Something went wrong';
-    vi.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
+    vi.mocked(execFile).mockImplementation(function(_cmd, _args, _options, callback) {
       if (typeof callback === 'function') {
         callback(null, '', Buffer.from(errorOutput));
       }
@@ -254,7 +263,7 @@ describe('ScriptCompletionProvider', () => {
   it('should strip ANSI escape codes from output', async () => {
     const ansiOutput = '\x1b[31mColored\x1b[0m \x1b[1mBold\x1b[0m';
     const strippedOutput = 'Colored Bold';
-    vi.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
+    vi.mocked(execFile).mockImplementation(function(_cmd, _args, _options, callback) {
       if (typeof callback === 'function') {
         callback(null, Buffer.from(ansiOutput), '');
       }

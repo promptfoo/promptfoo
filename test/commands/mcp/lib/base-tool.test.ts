@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from 'zod';
 import { AbstractTool } from '../../../../src/commands/mcp/lib/baseTool';
 import { ValidationError } from '../../../../src/commands/mcp/lib/errors';
@@ -5,7 +6,7 @@ import type { ToolResult } from '../../../../src/commands/mcp/lib/types';
 
 // Mock MCP server
 const mockMcpServer = {
-  tool: jest.fn(),
+  tool: vi.fn(),
 };
 
 // Test implementation of AbstractTool
@@ -66,11 +67,11 @@ describe('AbstractTool', () => {
     testTool = new TestTool();
     noSchemaTestTool = new NoSchemaTestTool();
     helperMethodsTool = new HelperMethodsTool();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('basic properties', () => {

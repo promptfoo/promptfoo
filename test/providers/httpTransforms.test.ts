@@ -1,3 +1,4 @@
+import { describe, expect, it, vi } from "vitest";
 import {
   createTransformRequest,
   createTransformResponse,
@@ -194,7 +195,7 @@ describe('createTransformRequest', () => {
   });
 
   it('should pass all parameters to function-based transform', async () => {
-    const mockFn = jest.fn((prompt, vars, context) => ({ prompt, vars, context }));
+    const mockFn = vi.fn((prompt, vars, context) => ({ prompt, vars, context }));
     const transform = await createTransformRequest(mockFn);
     const vars = { foo: 'bar' };
     const context = { test: 'value' };

@@ -1,3 +1,4 @@
+import { Mocked, beforeEach, describe, expect, it, vi } from "vitest";
 import { SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../../src/cache';
 import { getUserEmail } from '../../../src/globalConfig/accounts';
@@ -7,25 +8,33 @@ import { addLikertTestCases } from '../../../src/redteam/strategies/likert';
 
 import type { TestCase } from '../../../src/types/index';
 
-jest.mock('cli-progress');
-jest.mock('../../../src/cache');
-jest.mock('../../../src/globalConfig/accounts');
-jest.mock('../../../src/redteam/remoteGeneration');
+vi.mock('cli-progress');
+vi.mock('../../../src/cache');
+vi.mock('../../../src/globalConfig/accounts');
+vi.mock('../../../src/redteam/remoteGeneration');
 
 describe('likert strategy', () => {
-  let mockProgressBar: jest.Mocked<SingleBar>;
+  let mockProgressBar: Mocked<SingleBar>;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     mockProgressBar = {
-      start: jest.fn(),
-      increment: jest.fn(),
-      stop: jest.fn(),
-    } as unknown as jest.Mocked<SingleBar>;
-    jest.mocked(SingleBar).mockReturnValue(mockProgressBar);
-    jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-    jest.mocked(getRemoteGenerationUrl).mockReturnValue('http://test.com');
-    jest.mocked(neverGenerateRemote).mockReturnValue(false);
+      start: vi.fn(),
+      increment: vi.fn(),
+      stop: vi.fn(),
+    } as unknown as Mocked<SingleBar>;
+    vi.mocked(SingleBar).mockImplementation(function() {
+      return mockProgressBar;
+    });
+    vi.mocked(getUserEmail).mockImplementation(function() {
+      return 'test@example.com';
+    });
+    vi.mocked(getRemoteGenerationUrl).mockImplementation(function() {
+      return 'http://test.com';
+    });
+    vi.mocked(neverGenerateRemote).mockImplementation(function() {
+      return false;
+    });
   });
 
   const testCases: TestCase[] = [
@@ -53,7 +62,7 @@ describe('likert strategy', () => {
       statusText: 'OK',
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const result = await addLikertTestCases(testCases, 'prompt', {});
 
@@ -73,7 +82,7 @@ describe('likert strategy', () => {
       statusText: 'Error',
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const result = await addLikertTestCases(testCases, 'prompt', {});
 
@@ -84,7 +93,9 @@ describe('likert strategy', () => {
   });
 
   it('should throw error when remote generation is disabled', async () => {
-    jest.mocked(neverGenerateRemote).mockReturnValue(true);
+    vi.mocked(neverGenerateRemote).mockImplementation(function() {
+      return true;
+    });
 
     await expect(addLikertTestCases(testCases, 'prompt', {})).rejects.toThrow(
       'Likert jailbreak strategy requires remote generation to be enabled',
@@ -93,7 +104,7 @@ describe('likert strategy', () => {
 
   it('should handle network errors', async () => {
     const networkError = new Error('Network error');
-    jest.mocked(fetchWithCache).mockRejectedValue(networkError);
+    vi.mocked(fetchWithCache).mockRejectedValue(networkError);
 
     const result = await addLikertTestCases(testCases, 'prompt', {});
 
@@ -118,7 +129,7 @@ describe('likert strategy', () => {
       statusText: 'OK',
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     await addLikertTestCases(testCases, 'prompt', {});
 

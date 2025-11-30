@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import {
   AGENTIC_EXEMPT_PLUGINS,
   ALL_PLUGINS,

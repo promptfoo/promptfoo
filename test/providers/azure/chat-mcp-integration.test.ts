@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 
-// Create hoisted mocks for the MCPClient class
 const mcpMocks = vi.hoisted(() => {
   const mockInitialize = vi.fn().mockResolvedValue(undefined);
   const mockCleanup = vi.fn().mockResolvedValue(undefined);
@@ -35,9 +34,12 @@ const mcpMocks = vi.hoisted(() => {
 // Mock external dependencies
 vi.mock('../../../src/cache');
 vi.mock('../../../src/logger');
-vi.mock('../../../src/providers/mcp/client', () => ({
-  MCPClient: mcpMocks.MockMCPClient,
-}));
+vi.mock('../../../src/providers/mcp/client', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    MCPClient: mcpMocks.MockMCPClient
+  });
+});
 
 describe('AzureChatCompletionProvider MCP Integration', () => {
   let provider: AzureChatCompletionProvider;

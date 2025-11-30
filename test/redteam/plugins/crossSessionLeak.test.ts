@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CrossSessionLeakGrader,
   CrossSessionLeakPlugin,
@@ -5,9 +6,12 @@ import {
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
-jest.mock('../../../src/matchers', () => ({
-  matchesLlmRubric: jest.fn(),
-}));
+vi.mock('../../../src/matchers', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn()
+  });
+});
 
 describe('CrossSessionLeakPlugin', () => {
   let plugin: CrossSessionLeakPlugin;
@@ -15,8 +19,8 @@ describe('CrossSessionLeakPlugin', () => {
 
   beforeEach(() => {
     mockProvider = {
-      callApi: jest.fn(),
-      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn(),
+      id: vi.fn().mockReturnValue('test-provider'),
     };
     plugin = new CrossSessionLeakPlugin(mockProvider, 'test-purpose', 'testVar');
   });
@@ -35,7 +39,7 @@ describe('CrossSessionLeakPlugin', () => {
       },
     ]);
 
-    jest.spyOn(mockProvider, 'callApi').mockResolvedValue({ output: mockApiResponse });
+    vi.spyOn(mockProvider, 'callApi').mockResolvedValue({ output: mockApiResponse });
 
     const tests = await plugin.generateTests(2, 0);
 

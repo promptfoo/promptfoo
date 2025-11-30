@@ -1,3 +1,4 @@
+import { describe, expect, it, vi } from "vitest";
 import {
   type BasePlugin,
   COLLECTIONS,
@@ -539,7 +540,7 @@ describe('redteamConfigSchema', () => {
   });
 
   it('should accept a provider object with callApi function', () => {
-    const mockCallApi = jest.fn();
+    const mockCallApi = vi.fn();
     const input = {
       provider: {
         id: () => 'custom-provider',

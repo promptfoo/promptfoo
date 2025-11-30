@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { getGraderById } from '../../../../src/redteam/graders';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
@@ -5,34 +6,49 @@ import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 
-jest.mock('../../../../src/providers/promptfoo', () => ({
-  PromptfooChatCompletionProvider: jest.fn().mockImplementation(() => ({
-    id: () => 'mock-unblocking',
-    callApi: jest.fn(),
-    delay: 0,
-  })),
+vi.mock('../../../../src/providers/promptfoo', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+
+    PromptfooChatCompletionProvider: vi.fn().mockImplementation(function() {
+      return ({
+        id: () => 'mock-unblocking',
+        callApi: vi.fn(),
+        delay: 0
+      });
+    })
+  });
+});
+
+vi.mock('../../../../src/util/server', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    checkServerFeatureSupport: vi.fn()
+  });
+});
+
+vi.mock('../../../../src/redteam/providers/shared', async () => ({
+  ...(await vi.importActual('../../../../src/redteam/providers/shared')),
+  tryUnblocking: vi.fn()
 }));
 
-jest.mock('../../../../src/util/server', () => ({
-  checkServerFeatureSupport: jest.fn(),
-}));
+vi.mock('../../../../src/redteam/graders', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    getGraderById: vi.fn()
+  });
+});
 
-jest.mock('../../../../src/redteam/providers/shared', () => ({
-  ...jest.requireActual('../../../../src/redteam/providers/shared'),
-  tryUnblocking: jest.fn(),
-}));
+vi.mock('../../../../src/redteam/remoteGeneration', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    shouldGenerateRemote: vi.fn(() => false)
+  });
+});
 
-jest.mock('../../../../src/redteam/graders', () => ({
-  getGraderById: jest.fn(),
-}));
-
-jest.mock('../../../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn(() => false),
-}));
-
-jest.mock('../../../../src/evaluatorHelpers', () => ({
-  ...jest.requireActual('../../../../src/evaluatorHelpers'),
-  renderPrompt: jest.fn(),
+vi.mock('../../../../src/evaluatorHelpers', async () => ({
+  ...(await vi.importActual('../../../../src/evaluatorHelpers')),
+  renderPrompt: vi.fn()
 }));
 
 describe('MemorySystem', () => {
@@ -85,22 +101,22 @@ describe('CrescendoProvider', () => {
   let mockTargetProvider: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create fresh mocks for each test
     mockRedTeamProvider = {
       id: () => 'mock-redteam',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
       delay: 0,
     };
     mockScoringProvider = {
       id: () => 'mock-scoring',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
       delay: 0,
     };
     mockTargetProvider = {
       id: () => 'mock-target',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
     };
 
     crescendoProvider = new CrescendoProvider({
@@ -112,7 +128,7 @@ describe('CrescendoProvider', () => {
     });
 
     // Set up redteamProviderManager mock
-    jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async (options) => {
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function(options) {
       // When the provider is already an object (not a string), return it for jsonOnly requests
       // For non-jsonOnly requests (scoring), return the scoring provider
       if (options.provider && typeof options.provider === 'object') {
@@ -122,25 +138,27 @@ describe('CrescendoProvider', () => {
     });
 
     // Mock server feature support to return true so unblocking logic runs
-    jest.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+    vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
 
     // Set up default getGraderById mock
-    jest.mocked(getGraderById).mockReset();
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: {
-          pass: false,
-        },
-      })),
-    } as any);
+    vi.mocked(getGraderById).mockReset();
+    vi.mocked(getGraderById).mockImplementation(function() {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: {
+            pass: false,
+          },
+        })),
+      } as any;
+    });
 
     // Set up default tryUnblocking mock
-    jest.mocked(tryUnblocking).mockReset();
-    jest.mocked(tryUnblocking).mockResolvedValue({ success: false });
+    vi.mocked(tryUnblocking).mockReset();
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should initialize with default config values', () => {
@@ -215,7 +233,7 @@ describe('CrescendoProvider', () => {
   });
 
   it('should include sessionId from target response when stateful is true', async () => {
-    jest.mocked(tryUnblocking).mockResolvedValue({ success: false });
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
 
     const provider = new CrescendoProvider({
       injectVar: 'objective',
@@ -225,15 +243,15 @@ describe('CrescendoProvider', () => {
       stateful: true,
     });
 
-    jest.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+    vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
       generatedQuestion: 'attack prompt',
     });
-    jest.spyOn(provider as any, 'sendPrompt').mockResolvedValue({
+    vi.spyOn(provider as any, 'sendPrompt').mockResolvedValue({
       output: 'target response',
       sessionId: 'response-session-id',
     });
-    jest.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
-    jest.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+    vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+    vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
       value: false,
       metadata: 0,
       rationale: '',
@@ -286,7 +304,7 @@ describe('CrescendoProvider', () => {
         });
 
       // Mock unblocking analysis - detects blocking question
-      jest.mocked(tryUnblocking).mockResolvedValue({
+      vi.mocked(tryUnblocking).mockResolvedValue({
         success: true,
         unblockingPrompt: 'Our company registration number is REG123456789',
       });
@@ -341,7 +359,7 @@ describe('CrescendoProvider', () => {
       });
 
       // Mock unblocking analysis - no blocking detected
-      jest.mocked(tryUnblocking).mockResolvedValue({
+      vi.mocked(tryUnblocking).mockResolvedValue({
         success: false,
       });
 
@@ -380,7 +398,7 @@ describe('CrescendoProvider', () => {
       });
 
       // Mock unblocking provider error
-      jest.mocked(tryUnblocking).mockResolvedValue({
+      vi.mocked(tryUnblocking).mockResolvedValue({
         success: false,
       });
 
@@ -419,7 +437,7 @@ describe('CrescendoProvider', () => {
         output: 'Which bank do you use for settlements?',
       });
 
-      jest.mocked(tryUnblocking).mockResolvedValue({
+      vi.mocked(tryUnblocking).mockResolvedValue({
         success: true,
         unblockingPrompt: 'We use Wells Fargo for our settlement processing',
       });
@@ -445,13 +463,15 @@ describe('CrescendoProvider', () => {
 
   it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: {
-          pass: true, // Pass means no jailbreak detected
-        },
-      })),
-    } as any);
+    vi.mocked(getGraderById).mockImplementation(function() {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: {
+            pass: true, // Pass means no jailbreak detected
+          },
+        })),
+      } as any;
+    });
 
     // Create a new provider with smaller max turns for this test
     const testProvider = new CrescendoProvider({
@@ -521,7 +541,7 @@ describe('CrescendoProvider', () => {
     };
 
     // Mock unblocking to return false so it doesn't interfere
-    jest.mocked(tryUnblocking).mockResolvedValue({
+    vi.mocked(tryUnblocking).mockResolvedValue({
       success: false,
     });
 
@@ -568,11 +588,13 @@ describe('CrescendoProvider', () => {
     };
 
     // Mock grader to fail (detect jailbreak)
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: mockGraderResult,
-      })),
-    } as any);
+    vi.mocked(getGraderById).mockImplementation(function() {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: mockGraderResult,
+        })),
+      } as any;
+    });
 
     // Create a new provider for this test
     const testProvider = new CrescendoProvider({
@@ -595,7 +617,7 @@ describe('CrescendoProvider', () => {
     };
 
     // Mock unblocking to return false so it doesn't interfere
-    jest.mocked(tryUnblocking).mockResolvedValue({
+    vi.mocked(tryUnblocking).mockResolvedValue({
       success: false,
     });
 
@@ -641,13 +663,15 @@ describe('CrescendoProvider', () => {
 
   it('should not create synthetic grader result when internal evaluator succeeds', async () => {
     // Mock grader to pass (not detect jailbreak)
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: {
-          pass: true,
-        },
-      })),
-    } as any);
+    vi.mocked(getGraderById).mockImplementation(function() {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: {
+            pass: true,
+          },
+        })),
+      } as any;
+    });
 
     const provider = new CrescendoProvider({
       injectVar: 'objective',
@@ -697,13 +721,15 @@ describe('CrescendoProvider', () => {
 
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: {
-          pass: true,
-        },
-      })),
-    } as any);
+    vi.mocked(getGraderById).mockImplementation(function() {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: {
+            pass: true,
+          },
+        })),
+      } as any;
+    });
 
     const testProvider = new CrescendoProvider({
       injectVar: 'objective',
@@ -956,18 +982,20 @@ describe('CrescendoProvider', () => {
   describe('continueAfterSuccess functionality', () => {
     beforeEach(() => {
       // Clear all mocks before each test
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should record success but continue when continueAfterSuccess is false', async () => {
       // Ensure grader passes for this test
-      jest.mocked(getGraderById).mockReturnValue({
-        getResult: jest.fn(async () => ({
-          grade: {
-            pass: true, // No jailbreak detected by grader
-          },
-        })),
-      } as any);
+      vi.mocked(getGraderById).mockImplementation(function() {
+        return {
+          getResult: vi.fn(async () => ({
+            grade: {
+              pass: true, // No jailbreak detected by grader
+            },
+          })),
+        } as any;
+      });
 
       const provider = new CrescendoProvider({
         injectVar: 'objective',
@@ -1051,7 +1079,7 @@ describe('CrescendoProvider', () => {
       };
 
       // Mock unblocking to return false so it doesn't interfere
-      jest.mocked(tryUnblocking).mockResolvedValue({
+      vi.mocked(tryUnblocking).mockResolvedValue({
         success: false,
       });
 
@@ -1289,8 +1317,8 @@ describe('CrescendoProvider', () => {
   });
 
   describe('Token Counting', () => {
-    beforeEach(() => {
-      const { TokenUsageTracker } = require('../../../../src/util/tokenUsage');
+    beforeEach(async () => {
+      const { TokenUsageTracker } = await import("../../../../src/util/tokenUsage");
       TokenUsageTracker.getInstance().resetAllUsage();
     });
 
@@ -1506,7 +1534,7 @@ describe('CrescendoProvider', () => {
         redteamProvider: mockRedTeamProvider,
       });
 
-      const { TokenUsageTracker } = require('../../../../src/util/tokenUsage');
+      const { TokenUsageTracker } = await import("../../../../src/util/tokenUsage");
       const tracker = TokenUsageTracker.getInstance();
 
       const context = {
@@ -1558,7 +1586,7 @@ describe('CrescendoProvider', () => {
         redteamProvider: mockRedTeamProvider,
       });
 
-      const { TokenUsageTracker } = require('../../../../src/util/tokenUsage');
+      const { TokenUsageTracker } = await import("../../../../src/util/tokenUsage");
       const tracker = TokenUsageTracker.getInstance();
 
       const context = {
@@ -1638,7 +1666,7 @@ describe('CrescendoProvider', () => {
         });
 
       // Mock unblocking to detect blocking question
-      jest.mocked(tryUnblocking).mockResolvedValue({
+      vi.mocked(tryUnblocking).mockResolvedValue({
         success: true,
         unblockingPrompt: 'Our registration number is REG123456',
       });
@@ -1717,21 +1745,21 @@ describe('CrescendoProvider - Chat Template Support', () => {
   let mockTargetProvider: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockRedTeamProvider = {
       id: () => 'mock-redteam',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
       delay: 0,
     };
     mockScoringProvider = {
       id: () => 'mock-scoring',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
       delay: 0,
     };
     mockTargetProvider = {
       id: () => 'mock-target',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
     };
 
     crescendoProvider = new CrescendoProvider({
@@ -1741,24 +1769,26 @@ describe('CrescendoProvider - Chat Template Support', () => {
       stateful: false, // Key: test with stateful=false to trigger the bug
     });
 
-    jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async (options) => {
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function(options) {
       if (options.provider && typeof options.provider === 'object') {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
     });
 
-    jest.mocked(checkServerFeatureSupport).mockResolvedValue(true);
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: { pass: true },
-      })),
-    } as any);
-    jest.mocked(tryUnblocking).mockResolvedValue({ success: false });
+    vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+    vi.mocked(getGraderById).mockImplementation(function() {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: { pass: true },
+        })),
+      } as any;
+    });
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should reject invalid chat structures with invalid roles', async () => {
@@ -1780,7 +1810,7 @@ describe('CrescendoProvider - Chat Template Support', () => {
       { role: 'system', content: 'You are a helpful assistant' },
       { role: 'invalid_role', content: 'This has an invalid role' },
     ]);
-    jest.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(invalidChatStructure);
+    vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(invalidChatStructure);
 
     mockRedTeamProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
@@ -1827,7 +1857,7 @@ describe('CrescendoProvider - Chat Template Support', () => {
 
     // Mock renderPrompt to return JSON object (not array)
     const nonArrayJson = JSON.stringify({ role: 'user', content: 'not an array' });
-    jest.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(nonArrayJson);
+    vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(nonArrayJson);
 
     mockRedTeamProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
@@ -1893,7 +1923,7 @@ describe('CrescendoProvider - Chat Template Support', () => {
     });
 
     // Mock renderPrompt to return structured JSON (simulating _conversation template)
-    jest.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(
+    vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(
       JSON.stringify([
         { role: 'system', content: 'You are a helpful assistant' },
         { role: 'user', content: 'test attack' },
@@ -1901,7 +1931,7 @@ describe('CrescendoProvider - Chat Template Support', () => {
     );
 
     // Mock target provider to verify it receives structured JSON, not stringified conversation
-    mockTargetProvider.callApi.mockImplementation((prompt: string) => {
+    mockTargetProvider.callApi.mockImplementation(function(prompt: string) {
       // Verify that the prompt is structured JSON, not a JSON string
       try {
         const parsed = JSON.parse(prompt);
@@ -1959,12 +1989,12 @@ describe('CrescendoProvider - Chat Template Support', () => {
     });
 
     // Mock renderPrompt to return plain text (non-chat template)
-    jest
+    vi
       .mocked(evaluatorHelpers.renderPrompt)
       .mockResolvedValueOnce('Please respond to: test attack');
 
     // Mock target provider to verify it receives JSON stringified conversation history
-    mockTargetProvider.callApi.mockImplementation((prompt: string) => {
+    mockTargetProvider.callApi.mockImplementation(function(prompt: string) {
       // For non-chat templates with stateful=false, should receive stringified conversation
       expect(typeof prompt).toBe('string');
 
@@ -2022,11 +2052,11 @@ describe('CrescendoProvider - Chat Template Support', () => {
     });
 
     // Mock renderPrompt to return structured JSON
-    jest
+    vi
       .mocked(evaluatorHelpers.renderPrompt)
       .mockResolvedValueOnce('[{"role": "user", "content": "test attack"}]');
 
-    mockTargetProvider.callApi.mockImplementation((prompt: string) => {
+    mockTargetProvider.callApi.mockImplementation(function(prompt: string) {
       // With stateful=true, should always receive rendered prompt directly
       expect(prompt).toBe('[{"role": "user", "content": "test attack"}]');
 

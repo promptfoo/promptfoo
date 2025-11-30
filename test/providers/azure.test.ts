@@ -10,9 +10,12 @@ import { OpenAiCompletionProvider } from '../../src/providers/openai/completion'
 
 import type { TestCase, TestSuite } from '../../src/types/index';
 
-vi.mock('../../src/cache', () => ({
-  fetchWithCache: vi.fn(),
-}));
+vi.mock('../../src/cache', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn()
+  });
+});
 
 describe('Azure Provider Tests', () => {
   beforeEach(() => {

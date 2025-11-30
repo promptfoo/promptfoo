@@ -1,3 +1,4 @@
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
@@ -6,21 +7,24 @@ import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
 import type { ApiProvider } from '../../../src/types/index';
 
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../../src/cache', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn()
+  });
+});
 
-jest.mock('../../../src/envars', () => {
-  const originalModule = jest.requireActual('../../../src/envars');
+vi.mock('../../../src/envars', async () => {
+  const originalModule = await vi.importActual('../../../src/envars');
   return {
     ...originalModule,
-    getEnvBool: jest.fn(originalModule.getEnvBool),
+    getEnvBool: vi.fn(originalModule.getEnvBool),
   };
 });
 
-jest.mock('../../../src/redteam/remoteGeneration', () => ({
-  ...jest.requireActual('../../../src/redteam/remoteGeneration'),
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
+vi.mock('../../../src/redteam/remoteGeneration', async () => ({
+  ...(await vi.importActual('../../../src/redteam/remoteGeneration')),
+  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task')
 }));
 
 describe('Entities Extractor', () => {
@@ -35,11 +39,13 @@ describe('Entities Extractor', () => {
     process.env = { ...originalEnv };
     delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
     provider = {
-      callApi: jest.fn().mockResolvedValue({ output: 'Entity: Apple\nEntity: Google' }),
-      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Entity: Apple\nEntity: Google' }),
+      id: vi.fn().mockReturnValue('test-provider'),
     };
-    jest.clearAllMocks();
-    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/api/v1/task');
+    vi.clearAllMocks();
+    vi.mocked(getRemoteGenerationUrl).mockImplementation(function() {
+      return 'https://api.promptfoo.app/api/v1/task';
+    });
   });
 
   afterEach(() => {
@@ -49,7 +55,7 @@ describe('Entities Extractor', () => {
   it('should use remote generation when enabled', async () => {
     process.env.OPENAI_API_KEY = undefined;
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       data: { task: 'entities', result: ['Apple', 'Google'] },
       status: 200,
       statusText: 'OK',
@@ -78,7 +84,7 @@ describe('Entities Extractor', () => {
   it('should not fall back to local extraction when remote generation fails', async () => {
     process.env.OPENAI_API_KEY = undefined;
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
-    jest.mocked(fetchWithCache).mockRejectedValue(new Error('Remote generation failed'));
+    vi.mocked(fetchWithCache).mockRejectedValue(new Error('Remote generation failed'));
 
     const result = await extractEntities(provider, ['prompt1', 'prompt2']);
 
@@ -101,7 +107,7 @@ describe('Entities Extractor', () => {
 
   it('should log debug message when no entities are found', async () => {
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
-    jest.mocked(provider.callApi).mockResolvedValue({ output: 'No entities found' });
+    vi.mocked(provider.callApi).mockResolvedValue({ output: 'No entities found' });
 
     const result = await extractEntities(provider, ['prompt']);
 
@@ -110,7 +116,7 @@ describe('Entities Extractor', () => {
 
   it('should ignore Nunjucks template variables in double curly braces', async () => {
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
-    jest.mocked(provider.callApi).mockResolvedValue({
+    vi.mocked(provider.callApi).mockResolvedValue({
       output: 'Entity: John Smith\nEntity: {{image}}\nEntity: Google\nEntity: {{prompt}}',
     });
 
@@ -128,7 +134,7 @@ describe('Entities Extractor', () => {
     // Currently our extraction simply returns whatever the AI returns as entities
     // We need to fix this to properly filter template variables
 
-    jest.mocked(provider.callApi).mockResolvedValue({
+    vi.mocked(provider.callApi).mockResolvedValue({
       output: 'Entity: Microsoft\nEntity: Bill Gates\nEntity: Seattle',
     });
 
@@ -143,7 +149,7 @@ describe('Entities Extractor', () => {
 
   it('should handle complex Nunjucks variables with spaces and special characters', async () => {
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
-    jest.mocked(provider.callApi).mockResolvedValue({
+    vi.mocked(provider.callApi).mockResolvedValue({
       output:
         'Entity: Microsoft\nEntity: {{ complex_variable with spaces }}\nEntity: {{nested.variable}}',
     });
@@ -167,7 +173,7 @@ describe('Entities Extractor', () => {
 
   it('should handle errors in local extraction', async () => {
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
-    jest.mocked(provider.callApi).mockRejectedValue(new Error('API call failed'));
+    vi.mocked(provider.callApi).mockRejectedValue(new Error('API call failed'));
 
     const result = await extractEntities(provider, ['prompt']);
 

@@ -1,8 +1,9 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RbacGrader, RbacPlugin } from '../../../src/redteam/plugins/rbac';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
-jest.mock('../../../src/util/fetch/index.ts');
+vi.mock('../../../src/util/fetch/index.ts');
 
 describe('RbacPlugin', () => {
   let mockProvider: ApiProvider;
@@ -10,7 +11,7 @@ describe('RbacPlugin', () => {
   beforeEach(() => {
     mockProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
     };
   });
 
@@ -32,7 +33,7 @@ describe('RbacPlugin', () => {
       output: 'Prompt: Test prompt 1\nPrompt: Test prompt 2',
     };
 
-    jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
+    vi.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
 
     const testCases = await plugin.generateTests(2);
 
@@ -71,7 +72,7 @@ describe('RbacPlugin', () => {
       output: '',
     };
 
-    jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
+    vi.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
 
     const testCases = await plugin.generateTests(2);
     expect(testCases).toHaveLength(0);
@@ -103,7 +104,7 @@ describe('RbacGrader', () => {
   it('should get result with default grader', async () => {
     const mockProvider: ApiProvider = {
       id: () => 'test',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           reason: 'test reason',
           score: 1,

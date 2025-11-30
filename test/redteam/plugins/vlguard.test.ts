@@ -1,3 +1,4 @@
+import { MockedFunction, beforeEach, describe, expect, it, vi } from "vitest";
 import logger from '../../../src/logger';
 import {
   VLGuardPlugin,
@@ -11,11 +12,11 @@ import * as imageDatasetUtils from '../../../src/redteam/plugins/imageDatasetUti
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
-jest.mock('../../../src/logger');
-jest.mock('../../../src/cache');
-jest.mock('../../../src/redteam/plugins/imageDatasetUtils', () => ({
-  ...jest.requireActual('../../../src/redteam/plugins/imageDatasetUtils'),
-  fetchImageAsBase64: jest.fn(),
+vi.mock('../../../src/logger');
+vi.mock('../../../src/cache');
+vi.mock('../../../src/redteam/plugins/imageDatasetUtils', async () => ({
+  ...(await vi.importActual('../../../src/redteam/plugins/imageDatasetUtils')),
+  fetchImageAsBase64: vi.fn()
 }));
 
 describe('VLGuardPlugin', () => {
@@ -104,10 +105,10 @@ describe('VLGuardPlugin', () => {
   });
 
   describe('generateTests', () => {
-    const mockFetchWithCache = cache.fetchWithCache as jest.MockedFunction<
+    const mockFetchWithCache = cache.fetchWithCache as MockedFunction<
       typeof cache.fetchWithCache
     >;
-    const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as jest.MockedFunction<
+    const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as MockedFunction<
       typeof imageDatasetUtils.fetchImageAsBase64
     >;
 
@@ -123,7 +124,7 @@ describe('VLGuardPlugin', () => {
     });
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       VLGuardDatasetManager.clearCache();
     });
 
@@ -147,7 +148,7 @@ describe('VLGuardPlugin', () => {
         },
       ]);
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
@@ -157,7 +158,7 @@ describe('VLGuardPlugin', () => {
         return { status: 404, data: null, cached: false } as any;
       });
 
-      mockFetchImageAsBase64.mockImplementation(async (url: string) => {
+      mockFetchImageAsBase64.mockImplementation(async function(url: string) {
         if (url.includes('image0')) {
           return 'data:image/jpeg;base64,test1';
         }
@@ -216,7 +217,7 @@ describe('VLGuardPlugin', () => {
         },
       ]);
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
@@ -250,7 +251,7 @@ describe('VLGuardPlugin', () => {
         },
       ]);
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
@@ -273,7 +274,7 @@ describe('VLGuardPlugin', () => {
     });
 
     it('should throw error when no records are found', async () => {
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: [], cached: false } as any;
         }
@@ -289,7 +290,7 @@ describe('VLGuardPlugin', () => {
     });
 
     it('should throw error when metadata fetch fails', async () => {
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 401, statusText: 'Unauthorized', data: null, cached: false } as any;
         }
@@ -313,7 +314,7 @@ describe('VLGuardPlugin', () => {
         },
       ]);
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
@@ -354,7 +355,7 @@ describe('VLGuardPlugin', () => {
         },
       ]);
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
@@ -365,7 +366,7 @@ describe('VLGuardPlugin', () => {
       });
 
       // First image fails, second succeeds
-      mockFetchImageAsBase64.mockImplementation(async (url: string) => {
+      mockFetchImageAsBase64.mockImplementation(async function(url: string) {
         if (url.includes('image0')) {
           return null;
         }
@@ -427,7 +428,7 @@ describe('VLGuardPlugin', () => {
         },
       ]);
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
@@ -459,10 +460,10 @@ describe('VLGuardPlugin', () => {
   });
 
   describe('Safe/Unsafe Filtering', () => {
-    const mockFetchWithCache = cache.fetchWithCache as jest.MockedFunction<
+    const mockFetchWithCache = cache.fetchWithCache as MockedFunction<
       typeof cache.fetchWithCache
     >;
-    const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as jest.MockedFunction<
+    const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as MockedFunction<
       typeof imageDatasetUtils.fetchImageAsBase64
     >;
 
@@ -474,7 +475,7 @@ describe('VLGuardPlugin', () => {
     });
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       VLGuardDatasetManager.clearCache();
     });
 
@@ -506,7 +507,7 @@ describe('VLGuardPlugin', () => {
         },
       ];
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
@@ -546,7 +547,7 @@ describe('VLGuardPlugin', () => {
         },
       ];
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
@@ -589,7 +590,7 @@ describe('VLGuardPlugin', () => {
         },
       ];
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
@@ -640,7 +641,7 @@ describe('VLGuardPlugin', () => {
         },
       ];
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
@@ -666,10 +667,10 @@ describe('VLGuardPlugin', () => {
   });
 
   describe('Split Selection', () => {
-    const mockFetchWithCache = cache.fetchWithCache as jest.MockedFunction<
+    const mockFetchWithCache = cache.fetchWithCache as MockedFunction<
       typeof cache.fetchWithCache
     >;
-    const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as jest.MockedFunction<
+    const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as MockedFunction<
       typeof imageDatasetUtils.fetchImageAsBase64
     >;
 
@@ -681,7 +682,7 @@ describe('VLGuardPlugin', () => {
     });
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       VLGuardDatasetManager.clearCache();
     });
 
@@ -707,7 +708,7 @@ describe('VLGuardPlugin', () => {
         },
       ];
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         // Should fetch from both train.json and test.json
         if (url.includes('train.json') && url.includes('VLGuard')) {
           return { status: 200, data: trainMetadata, cached: false } as any;
@@ -751,7 +752,7 @@ describe('VLGuardPlugin', () => {
         },
       ];
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('train.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }
@@ -790,7 +791,7 @@ describe('VLGuardPlugin', () => {
         },
       ];
 
-      mockFetchWithCache.mockImplementation(async (url: any) => {
+      mockFetchWithCache.mockImplementation(async function(url: any) {
         if (url.includes('test.json') && url.includes('VLGuard')) {
           return { status: 200, data: mockMetadata, cached: false } as any;
         }

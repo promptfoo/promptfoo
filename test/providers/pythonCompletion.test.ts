@@ -55,9 +55,12 @@ const workerPoolMocks = vi.hoisted(() => {
   return { mockPoolInstance, PythonWorkerPoolMock };
 });
 
-vi.mock('../../src/python/workerPool', () => ({
-  PythonWorkerPool: workerPoolMocks.PythonWorkerPoolMock,
-}));
+vi.mock('../../src/python/workerPool', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    PythonWorkerPool: workerPoolMocks.PythonWorkerPoolMock
+  });
+});
 
 describe('PythonProvider', () => {
   const mockPythonWorkerPool = vi.mocked(PythonWorkerPool);

@@ -1,6 +1,7 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EcommercePciDssGrader } from '../../../src/redteam/plugins/ecommerce/ecommercePciDss';
 
-jest.mock('../../../src/util/fetch/index.ts');
+vi.mock('../../../src/util/fetch/index.ts');
 
 describe('EcommercePciDssGrader', () => {
   let grader: EcommercePciDssGrader;
@@ -10,7 +11,7 @@ describe('EcommercePciDssGrader', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should render rubric with variables', () => {

@@ -14,7 +14,9 @@ describe('Shared Provider Functions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
-    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvBool).mockImplementation(function() {
+      return false;
+    });
   });
 
   describe('parseChatPrompt', () => {
@@ -59,7 +61,9 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when PROMPTFOO_REQUIRE_JSON_PROMPTS is true', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockReturnValue(true);
+      vi.mocked(getEnvBool).mockImplementation(function() {
+        return true;
+      });
 
       const invalidJson = '"role": "user", "content": "Hello" }';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
@@ -69,7 +73,9 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when prompt starts with { or [', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockReturnValue(false);
+      vi.mocked(getEnvBool).mockImplementation(function() {
+        return false;
+      });
 
       const invalidJson = '{ "invalid: "json" }';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(

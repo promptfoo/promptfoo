@@ -1,3 +1,4 @@
+import { Mock, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TextEncoder } from 'util';
 
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
@@ -5,35 +6,51 @@ import { NodeHttp2Handler } from '@smithy/node-http-handler';
 import { disableCache, enableCache } from '../../../src/cache';
 import { NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
 
-jest.mock('@smithy/node-http-handler', () => ({
-  NodeHttp2Handler: jest.fn(),
-}));
+vi.mock('@smithy/node-http-handler', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    NodeHttp2Handler: vi.fn()
+  });
+});
 
-jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
-  BedrockRuntimeClient: jest.fn().mockImplementation(() => ({
-    send: jest.fn(),
-  })),
-  InvokeModelWithBidirectionalStreamCommand: jest.fn().mockImplementation((params) => params),
-}));
+vi.mock('@aws-sdk/client-bedrock-runtime', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
 
-jest.mock('../../../src/logger', () => ({
+    BedrockRuntimeClient: vi.fn().mockImplementation(function() {
+      return ({
+        send: vi.fn()
+      });
+    }),
+
+    InvokeModelWithBidirectionalStreamCommand: vi.fn().mockImplementation(function(params) {
+      return params;
+    })
+  });
+});
+
+vi.mock('../../../src/logger', () => ({
   __esModule: true,
   default: {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
-jest.mock('node:timers', () => ({
-  setTimeout: jest.fn((callback) => {
-    if (typeof callback === 'function') {
-      callback();
-    }
-    return 123;
-  }),
-}));
+vi.mock('node:timers', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+
+    setTimeout: vi.fn((callback) => {
+      if (typeof callback === 'function') {
+        callback();
+      }
+      return 123;
+    })
+  });
+});
 
 const encodeChunk = (obj: any) => ({
   chunk: { bytes: new TextEncoder().encode(JSON.stringify(obj)) },
@@ -139,20 +156,22 @@ const _functionCallResponse = [
 ];
 
 describe('NovaSonic Provider', () => {
-  let mockSend: jest.Mock;
+  let mockSend: Mock;
   let bedrockClient: any;
   let provider: NovaSonicProvider;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     disableCache();
 
-    mockSend = jest.fn().mockResolvedValue(createMockStreamResponse(standardTextResponse));
+    mockSend = vi.fn().mockResolvedValue(createMockStreamResponse(standardTextResponse));
     bedrockClient = { send: mockSend };
 
-    jest.mocked(BedrockRuntimeClient).mockImplementation(() => bedrockClient);
+    vi.mocked(BedrockRuntimeClient).mockImplementation(function() {
+      return bedrockClient;
+    });
 
-    jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockImplementation(async function (
+    vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockImplementation(async function (
       this: any,
       _prompt,
     ) {
@@ -174,7 +193,7 @@ describe('NovaSonic Provider', () => {
       };
     });
 
-    jest.spyOn(NovaSonicProvider.prototype, 'endSession').mockImplementation(function (this: any) {
+    vi.spyOn(NovaSonicProvider.prototype, 'endSession').mockImplementation(function (this: any) {
       return Promise.resolve();
     });
 
@@ -184,8 +203,8 @@ describe('NovaSonic Provider', () => {
 
   afterEach(() => {
     enableCache();
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('Initialization', () => {
@@ -203,7 +222,7 @@ describe('NovaSonic Provider', () => {
         },
       };
 
-      jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
       const configuredProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', { config });
 
@@ -217,14 +236,14 @@ describe('NovaSonic Provider', () => {
     });
 
     it('should initialize with default model name if not provided', () => {
-      jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
       const defaultProvider = new NovaSonicProvider();
       expect(defaultProvider.modelName).toBe('amazon.nova-sonic-v1:0');
     });
 
     it('should create the Bedrock client with the correct configuration', async () => {
-      jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
       const testProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
         config: { region: 'us-west-2' },
@@ -281,7 +300,7 @@ describe('NovaSonic Provider', () => {
     });
 
     it('should handle session management correctly', async () => {
-      const createSessionSpy = jest.spyOn(provider as any, 'createSession');
+      const createSessionSpy = vi.spyOn(provider as any, 'createSession');
       const testPrompt = 'Test prompt';
 
       await provider.callApi(testPrompt);
@@ -292,9 +311,9 @@ describe('NovaSonic Provider', () => {
 
   describe('Response Handling', () => {
     it('should handle audio content in responses', async () => {
-      jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
-      jest.spyOn(provider, 'callApi').mockResolvedValue({
+      vi.spyOn(provider, 'callApi').mockResolvedValue({
         output: 'This is an audio response\n',
         tokenUsage: { total: 0, prompt: 0, completion: 0 },
         cached: false,
@@ -328,7 +347,7 @@ describe('NovaSonic Provider', () => {
     });
 
     it('should handle function calls correctly', async () => {
-      jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
       const toolProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
         config: {
@@ -350,7 +369,7 @@ describe('NovaSonic Provider', () => {
         },
       });
 
-      jest.spyOn(toolProvider, 'callApi').mockResolvedValue({
+      vi.spyOn(toolProvider, 'callApi').mockResolvedValue({
         output: 'I will check the weather for you\n',
         tokenUsage: { total: 0, prompt: 0, completion: 0 },
         cached: false,
@@ -374,17 +393,17 @@ describe('NovaSonic Provider', () => {
 
   describe('Error Handling', () => {
     it('should handle errors in API calls', async () => {
-      jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
-      jest.spyOn(provider, 'callApi').mockRejectedValue(new Error('Bedrock API error'));
+      vi.spyOn(provider, 'callApi').mockRejectedValue(new Error('Bedrock API error'));
 
       await expect(provider.callApi('Test prompt')).rejects.toThrow('Bedrock API error');
     });
 
     it('should handle network errors properly', async () => {
-      jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
-      jest.spyOn(provider, 'callApi').mockResolvedValue({
+      vi.spyOn(provider, 'callApi').mockResolvedValue({
         error: 'Network error',
         metadata: {},
       });

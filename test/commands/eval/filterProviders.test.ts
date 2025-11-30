@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { filterProviders } from '../../../src/commands/eval/filterProviders';
 
 import type { ApiProvider } from '../../../src/types/index';

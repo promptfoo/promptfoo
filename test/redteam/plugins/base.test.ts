@@ -1,3 +1,4 @@
+import { Mock, SpyInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import dedent from 'dedent';
 
 import { matchesLlmRubric } from '../../../src/matchers';
@@ -14,20 +15,28 @@ import type {
 } from '../../../src/types/index';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
-jest.mock('../../../src/matchers', () => ({
-  matchesLlmRubric: jest.fn(),
-}));
+vi.mock('../../../src/matchers', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn()
+  });
+});
 
-jest.mock('../../../src/util/file', () => ({
-  maybeLoadFromExternalFile: jest.fn(),
-  maybeLoadToolsFromExternalFile: jest.fn().mockImplementation((tools) => {
-    if (tools === 'file://tools.json') {
-      return [{ name: 'tool1' }, { name: 'tool2' }];
-    }
-    return tools;
-  }),
-  renderVarsInObject: jest.fn(),
-}));
+vi.mock('../../../src/util/file', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    maybeLoadFromExternalFile: vi.fn(),
+
+    maybeLoadToolsFromExternalFile: vi.fn().mockImplementation(function(tools) {
+      if (tools === 'file://tools.json') {
+        return [{ name: 'tool1' }, { name: 'tool2' }];
+      }
+      return tools;
+    }),
+
+    renderVarsInObject: vi.fn()
+  });
+});
 
 class TestPlugin extends RedteamPluginBase {
   readonly id = 'test-plugin-id';
@@ -46,16 +55,16 @@ describe('RedteamPluginBase', () => {
 
   beforeEach(() => {
     provider = {
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Prompt: test prompt\nPrompt: another prompt\nirrelevant line',
       }),
-      id: jest.fn().mockReturnValue('test-provider'),
+      id: vi.fn().mockReturnValue('test-provider'),
     };
     plugin = new TestPlugin(provider, 'test purpose', 'testVar', { language: 'German' });
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should generate test cases correctly', async () => {
@@ -137,7 +146,7 @@ describe('RedteamPluginBase', () => {
       },
     ];
 
-    jest
+    vi
       .spyOn(provider, 'callApi')
       .mockImplementation()
       .mockResolvedValueOnce(mockResponses[0])
@@ -152,7 +161,7 @@ describe('RedteamPluginBase', () => {
   });
 
   it('should deduplicate prompts', async () => {
-    jest
+    vi
       .spyOn(provider, 'callApi')
       .mockImplementation()
       .mockResolvedValueOnce({
@@ -195,7 +204,7 @@ describe('RedteamPluginBase', () => {
       { output: 'Prompt: test4' },
     ];
 
-    jest
+    vi
       .spyOn(provider, 'callApi')
       .mockImplementation()
       .mockResolvedValueOnce(mockResponses[0])
@@ -211,7 +220,7 @@ describe('RedteamPluginBase', () => {
   it('should bail after 2 retries if no new prompts are generated', async () => {
     const mockResponse = { output: 'Prompt: test1\nPrompt: test2' };
 
-    jest.spyOn(provider, 'callApi').mockImplementation().mockResolvedValue(mockResponse);
+    vi.spyOn(provider, 'callApi').mockImplementation().mockResolvedValue(mockResponse);
 
     const result = await plugin.generateTests(5);
 
@@ -220,7 +229,7 @@ describe('RedteamPluginBase', () => {
   });
 
   it('should sample prompts when more are generated than requested', async () => {
-    jest
+    vi
       .spyOn(provider, 'callApi')
       .mockImplementation()
       .mockResolvedValue({
@@ -552,7 +561,7 @@ describe('RedteamGraderBase', () => {
     mockTest = {
       metadata: { purpose: 'test-purpose', harmCategory: 'test-harm' },
     } as AtomicTestCase;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should throw an error if test is missing purpose metadata', async () => {
@@ -574,7 +583,7 @@ describe('RedteamGraderBase', () => {
       score: 1,
       reason: 'Test passed',
     };
-    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
     const testWithGoal = {
       ...mockTest,
@@ -609,7 +618,7 @@ describe('RedteamGraderBase', () => {
       score: 1,
       reason: 'Test passed',
     };
-    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
     await grader.getResult(
       'test prompt',
@@ -639,7 +648,7 @@ describe('RedteamGraderBase', () => {
       score: 1,
       reason: 'Test passed',
     };
-    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
     const result = await grader.getResult(
       'test prompt',
@@ -663,7 +672,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithExamples = {
         ...mockTest,
@@ -701,7 +710,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithoutExamples = {
         ...mockTest,
@@ -731,7 +740,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithMultipleExamples = {
         ...mockTest,
@@ -786,7 +795,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithSpecialChars = {
         ...mockTest,
@@ -825,7 +834,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       // Create plugin with graderExamples in config
       const configWithGraderExamples = {
@@ -836,10 +845,10 @@ describe('RedteamGraderBase', () => {
       };
 
       const testProvider: ApiProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'Prompt: test prompt',
         }),
-        id: jest.fn().mockReturnValue('test-provider'),
+        id: vi.fn().mockReturnValue('test-provider'),
       };
 
       const pluginWithExamples = new TestPlugin(
@@ -885,7 +894,7 @@ describe('RedteamGraderBase', () => {
         score: 0,
         reason: 'Test failed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       // Full integration test: plugin config -> test generation -> grading
       const fullConfig = {
@@ -908,10 +917,10 @@ describe('RedteamGraderBase', () => {
       };
 
       const testProvider: ApiProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'Prompt: test prompt',
         }),
-        id: jest.fn().mockReturnValue('test-provider'),
+        id: vi.fn().mockReturnValue('test-provider'),
       };
 
       const plugin = new TestPlugin(testProvider, 'Financial assistant', 'testVar', fullConfig);
@@ -956,7 +965,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithEmptyExamples = {
         ...mockTest,
@@ -987,7 +996,7 @@ describe('RedteamGraderBase', () => {
 
   describe('RedteamGraderBase with tools', () => {
     let toolProvider: any;
-    let maybeLoadFromExternalFileSpy: jest.SpyInstance;
+    let maybeLoadFromExternalFileSpy: SpyInstance;
     let ToolGrader: any;
 
     beforeEach(() => {
@@ -997,9 +1006,9 @@ describe('RedteamGraderBase', () => {
         },
       };
 
-      maybeLoadFromExternalFileSpy = jest
+      maybeLoadFromExternalFileSpy = vi
         .mocked(maybeLoadFromExternalFile)
-        .mockImplementation((input) => {
+        .mockImplementation(function(input) {
           if (input === 'file://tools.json') {
             return [{ name: 'tool1' }, { name: 'tool2' }];
           }
@@ -1022,7 +1031,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const toolGrader = new ToolGrader();
       await toolGrader.getResult('test prompt', 'test output', mockTest, toolProvider);
@@ -1045,7 +1054,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const toolGrader = new ToolGrader();
 
@@ -1099,7 +1108,7 @@ describe('RedteamGraderBase', () => {
       ];
 
       for (const response of refusalResponses) {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         const result = await grader.getResult(
           'test prompt',
           response,
@@ -1126,7 +1135,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const validResponses = [
         'Here is a valid response',
@@ -1151,10 +1160,10 @@ describe('RedteamGraderBase', () => {
 
     beforeEach(() => {
       testProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'Prompt: test prompt\nPrompt: another prompt',
         }),
-        id: jest.fn().mockReturnValue('test-provider'),
+        id: vi.fn().mockReturnValue('test-provider'),
       };
     });
 
@@ -1234,7 +1243,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithGuidance = {
         ...mockTest,
@@ -1273,7 +1282,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithoutGuidance = {
         ...mockTest,
@@ -1304,7 +1313,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithBoth = {
         ...mockTest,
@@ -1341,7 +1350,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithTemplate = {
         ...mockTest,
@@ -1381,7 +1390,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const TestGraderWithContext = class extends RedteamGraderBase {
         id = 'test-grader-context';
@@ -1416,7 +1425,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const TestGraderWithInsights = class extends RedteamGraderBase {
         id = 'test-grader-insights';
@@ -1451,7 +1460,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const TestGraderWithAllTrace = class extends RedteamGraderBase {
         id = 'test-grader-all-trace';
@@ -1478,7 +1487,7 @@ describe('RedteamGraderBase', () => {
         },
       );
 
-      const rubricCall = (matchesLlmRubric as jest.Mock).mock.calls[0][0];
+      const rubricCall = (matchesLlmRubric as Mock).mock.calls[0][0];
       expect(rubricCall).toContain('Summary: Full trace summary');
       expect(rubricCall).toContain('Insights: Detailed insights');
       expect(rubricCall).toContain('requestId');
@@ -1490,7 +1499,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const TestGraderWithCustomProps = class extends RedteamGraderBase {
         id = 'test-grader-custom-props';
@@ -1516,7 +1525,7 @@ describe('RedteamGraderBase', () => {
         } as any,
       );
 
-      const rubricCall = (matchesLlmRubric as jest.Mock).mock.calls[0][0];
+      const rubricCall = (matchesLlmRubric as Mock).mock.calls[0][0];
       // All properties from gradingContext should be available
       expect(rubricCall).toContain('Summary: Trace summary from context');
       expect(rubricCall).toContain('Custom: Custom value');
@@ -1529,7 +1538,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const result = await grader.getResult(
         'test prompt',
@@ -1552,7 +1561,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const result = await grader.getResult(
         'test prompt',
@@ -1575,7 +1584,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const TestGraderMerge = class extends RedteamGraderBase {
         id = 'test-grader-merge';
@@ -1597,7 +1606,7 @@ describe('RedteamGraderBase', () => {
         },
       );
 
-      const rubricCall = (matchesLlmRubric as jest.Mock).mock.calls[0][0];
+      const rubricCall = (matchesLlmRubric as Mock).mock.calls[0][0];
       // Both should be available in the rubric
       expect(rubricCall).toContain('Category: from-rendered-value');
       expect(rubricCall).toContain('Summary: from-grading-context');
@@ -1611,7 +1620,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const result = await grader.getResult(
         'test prompt',
@@ -1634,7 +1643,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const result = await grader.getResult(
         'test prompt',
@@ -1663,7 +1672,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithAll = {
         ...mockTest,
@@ -1707,7 +1716,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const minimalTest = {
         ...mockTest,
@@ -1737,7 +1746,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const beforeTime = new Date();
 
@@ -1778,10 +1787,10 @@ describe('RedteamGraderBase', () => {
 
     beforeEach(() => {
       _testProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'Prompt: test prompt',
         }),
-        id: jest.fn().mockReturnValue('test-provider'),
+        id: vi.fn().mockReturnValue('test-provider'),
       };
     });
 
@@ -1791,7 +1800,7 @@ describe('RedteamGraderBase', () => {
         score: 0,
         reason: 'Test failed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithBoth = {
         ...mockTest,
@@ -1859,7 +1868,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithEmptyGuidance = {
         ...mockTest,
@@ -1891,7 +1900,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithDeprecatedAlias = {
         ...mockTest,
@@ -1921,7 +1930,7 @@ describe('RedteamGraderBase', () => {
         score: 1,
         reason: 'Test passed',
       };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const testWithBothFields = {
         ...mockTest,

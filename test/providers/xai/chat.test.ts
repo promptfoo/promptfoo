@@ -14,13 +14,15 @@ import type { ProviderOptions } from '../../../src/types/providers';
 // Mock only external dependencies - NOT the OpenAiChatCompletionProvider class
 vi.mock('../../../src/logger');
 
-// Mock fetchWithCache for HTTP tests
-const mockFetchWithCache = vi.fn();
-vi.mock('../../../src/cache', () => ({
-  fetchWithCache: (...args: any[]) => mockFetchWithCache(...args),
-  getCache: vi.fn(),
-  isCacheEnabled: vi.fn().mockReturnValue(false),
-}));
+const mockFetchWithCache = vi.hoisted(() => vi.fn());
+vi.mock('../../../src/cache', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    fetchWithCache: (...args: any[]) => mockFetchWithCache(...args),
+    getCache: vi.fn(),
+    isCacheEnabled: vi.fn().mockReturnValue(false)
+  });
+});
 
 describe('xAI Chat Provider', () => {
   beforeEach(() => {

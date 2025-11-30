@@ -4,9 +4,12 @@ import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
 import { AI21ChatCompletionProvider } from '../../src/providers/ai21';
 
-vi.mock('../../src/cache', () => ({
-  fetchWithCache: vi.fn(),
-}));
+vi.mock('../../src/cache', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn()
+  });
+});
 vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -44,7 +47,7 @@ describe('AI21ChatCompletionProvider', () => {
   });
 
   it('should warn when constructing with unknown model', () => {
-    const mockWarn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const mockWarn = vi.spyOn(logger, 'warn').mockImplementation(function() {});
     new AI21ChatCompletionProvider('unknown-model');
     expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('unknown-model'));
     mockWarn.mockRestore();

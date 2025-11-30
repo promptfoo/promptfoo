@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from 'commander';
 import { authCommand } from '../../src/commands/auth';
 import { isNonInteractive } from '../../src/envars';
@@ -33,36 +34,36 @@ const mockApp = {
   url: 'https://app.example.com',
 };
 
-jest.mock('../../src/envars');
-jest.mock('../../src/globalConfig/accounts');
-jest.mock('../../src/globalConfig/cloud');
-jest.mock('../../src/logger');
-jest.mock('../../src/telemetry');
-jest.mock('../../src/util/cloud');
-jest.mock('../../src/util/fetch/index.ts');
-jest.mock('../../src/util/server');
+vi.mock('../../src/envars');
+vi.mock('../../src/globalConfig/accounts');
+vi.mock('../../src/globalConfig/cloud');
+vi.mock('../../src/logger');
+vi.mock('../../src/telemetry');
+vi.mock('../../src/util/cloud');
+vi.mock('../../src/util/fetch/index.ts');
+vi.mock('../../src/util/server');
 
-const mockFetch = jest.fn();
+const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
 describe('auth command', () => {
   let program: Command;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
     program = new Command();
     process.exitCode = undefined;
     authCommand(program);
 
     // Set up a basic mock that just returns the expected data
-    jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValue({
+    vi.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValue({
       user: mockCloudUser,
       organization: mockOrganization,
       app: mockApp,
     });
 
-    jest.spyOn(telemetry as any, 'record').mockImplementation(() => {});
+    vi.spyOn(telemetry as any, 'record').mockImplementation(function() {});
   });
 
   describe('login', () => {
@@ -88,8 +89,12 @@ describe('auth command', () => {
 
     it('should prompt for browser opening when no API key is provided in interactive environment', async () => {
       // Mock interactive environment
-      jest.mocked(isNonInteractive).mockReturnValue(false);
-      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
+      vi.mocked(isNonInteractive).mockImplementation(function() {
+        return false;
+      });
+      vi.mocked(cloudConfig.getAppUrl).mockImplementation(function() {
+        return 'https://www.promptfoo.app';
+      });
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -108,8 +113,12 @@ describe('auth command', () => {
 
     it('should exit with error when no API key is provided in non-interactive environment', async () => {
       // Mock non-interactive environment (CI, cron, SSH without TTY, etc.)
-      jest.mocked(isNonInteractive).mockReturnValue(true);
-      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
+      vi.mocked(isNonInteractive).mockImplementation(function() {
+        return true;
+      });
+      vi.mocked(cloudConfig.getAppUrl).mockImplementation(function() {
+        return 'https://www.promptfoo.app';
+      });
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -120,7 +129,7 @@ describe('auth command', () => {
         'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
       );
       // Check that both info calls were made
-      const infoCalls = jest.mocked(logger.info).mock.calls;
+      const infoCalls = vi.mocked(logger.info).mock.calls;
       const infoMessages = infoCalls.map((call) => stripAnsi(String(call[0])));
       expect(infoCalls.length).toBeGreaterThanOrEqual(2);
 
@@ -143,7 +152,9 @@ describe('auth command', () => {
 
     it('should use custom host for browser opening when provided in interactive environment', async () => {
       // Mock interactive environment
-      jest.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(isNonInteractive).mockImplementation(function() {
+        return false;
+      });
       const customHost = 'https://custom.promptfoo.com';
 
       const loginCmd = program.commands
@@ -174,7 +185,7 @@ describe('auth command', () => {
     });
 
     it('should handle login request failure', async () => {
-      jest
+      vi
         .mocked(cloudConfig.validateAndSetApiToken)
         .mockRejectedValueOnce(new Error('Bad Request'));
 
@@ -193,8 +204,10 @@ describe('auth command', () => {
 
     it('should overwrite existing email in config after successful login', async () => {
       const newCloudUser = { ...mockCloudUser, email: 'new@example.com' };
-      jest.mocked(getUserEmail).mockReturnValue('old@example.com');
-      jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
+      vi.mocked(getUserEmail).mockImplementation(function() {
+        return 'old@example.com';
+      });
+      vi.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
         user: newCloudUser,
         organization: mockOrganization,
         app: mockApp,
@@ -215,7 +228,7 @@ describe('auth command', () => {
 
     it('should handle non-Error objects in the catch block', async () => {
       // Mock validateAndSetApiToken to throw a non-Error object
-      jest.mocked(cloudConfig.validateAndSetApiToken).mockImplementationOnce(() => {
+      vi.mocked(cloudConfig.validateAndSetApiToken).mockImplementationOnce(function() {
         throw 'String error message'; // This will test line 57 in auth.ts
       });
 
@@ -238,8 +251,12 @@ describe('auth command', () => {
 
   describe('logout', () => {
     it('should unset email and delete cloud config after logout', async () => {
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('api-key');
+      vi.mocked(getUserEmail).mockImplementation(function() {
+        return 'test@example.com';
+      });
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+        return 'api-key';
+      });
 
       const logoutCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -252,8 +269,12 @@ describe('auth command', () => {
     });
 
     it('should show "already logged out" message when no session exists', async () => {
-      jest.mocked(getUserEmail).mockReturnValue(null);
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+      vi.mocked(getUserEmail).mockImplementation(function() {
+        return null;
+      });
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+        return undefined;
+      });
 
       const logoutCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -270,19 +291,27 @@ describe('auth command', () => {
 
   describe('whoami', () => {
     it('should show user info when logged in', async () => {
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      vi.mocked(getUserEmail).mockImplementation(function() {
+        return 'test@example.com';
+      });
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+        return 'test-api-key';
+      });
+      vi.mocked(cloudConfig.getApiHost).mockImplementation(function() {
+        return 'https://api.example.com';
+      });
+      vi.mocked(cloudConfig.getAppUrl).mockImplementation(function() {
+        return 'https://app.example.com';
+      });
 
-      jest.mocked(getDefaultTeam).mockResolvedValueOnce({
+      vi.mocked(getDefaultTeam).mockResolvedValueOnce({
         id: 'team-1',
         name: 'Default Team',
         organizationId: 'org-1',
         createdAt: '2023-01-01T00:00:00Z',
       });
 
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+      vi.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: true,
           body: {
@@ -304,10 +333,14 @@ describe('auth command', () => {
 
     it('should handle not logged in state', async () => {
       // Reset logger mock before test
-      jest.mocked(logger.info).mockClear();
+      vi.mocked(logger.info).mockClear();
 
-      jest.mocked(getUserEmail).mockReturnValue(null);
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+      vi.mocked(getUserEmail).mockImplementation(function() {
+        return null;
+      });
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+        return undefined;
+      });
 
       const whoamiCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -315,7 +348,7 @@ describe('auth command', () => {
       await whoamiCmd?.parseAsync(['node', 'test']);
 
       // Get the actual logged message
-      const infoMessages = jest.mocked(logger.info).mock.calls.map((call) => call[0]);
+      const infoMessages = vi.mocked(logger.info).mock.calls.map((call) => call[0]);
 
       // Verify it contains our expected text
       expect(infoMessages).toHaveLength(1);
@@ -326,11 +359,17 @@ describe('auth command', () => {
     });
 
     it('should handle API error', async () => {
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(getUserEmail).mockImplementation(function() {
+        return 'test@example.com';
+      });
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+        return 'test-api-key';
+      });
+      vi.mocked(cloudConfig.getApiHost).mockImplementation(function() {
+        return 'https://api.example.com';
+      });
 
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+      vi.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: false,
           statusText: 'Internal Server Error',
@@ -357,12 +396,18 @@ describe('auth command', () => {
     });
 
     it('should handle failed API response with empty body', async () => {
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(getUserEmail).mockImplementation(function() {
+        return 'test@example.com';
+      });
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+        return 'test-api-key';
+      });
+      vi.mocked(cloudConfig.getApiHost).mockImplementation(function() {
+        return 'https://api.example.com';
+      });
 
       // Mock response with an empty body to test line 120 in auth.ts
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+      vi.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: false,
           statusText: 'Internal Server Error',
@@ -387,12 +432,18 @@ describe('auth command', () => {
     });
 
     it('should handle non-Error object in the catch block', async () => {
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(getUserEmail).mockImplementation(function() {
+        return 'test@example.com';
+      });
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+        return 'test-api-key';
+      });
+      vi.mocked(cloudConfig.getApiHost).mockImplementation(function() {
+        return 'https://api.example.com';
+      });
 
       // Mock fetchWithProxy to throw a non-Error object to test line 120 in auth.ts
-      jest.mocked(fetchWithProxy).mockImplementationOnce(() => {
+      vi.mocked(fetchWithProxy).mockImplementationOnce(function() {
         throw 'String error from fetch'; // This is not an Error instance
       });
 

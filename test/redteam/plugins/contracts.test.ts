@@ -1,8 +1,9 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ContractPlugin, ContractsGrader } from '../../../src/redteam/plugins/contracts';
 
 import type { ApiProvider } from '../../../src/types/index';
 
-jest.mock('../../../src/util/fetch/index.ts');
+vi.mock('../../../src/util/fetch/index.ts');
 
 describe('ContractPlugin', () => {
   let mockProvider: ApiProvider;
@@ -10,7 +11,7 @@ describe('ContractPlugin', () => {
   beforeEach(() => {
     mockProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Prompt: Test prompt\nPrompt: Another test prompt',
       }),
     };
@@ -58,14 +59,14 @@ describe('ContractPlugin', () => {
   });
 
   it('should handle empty response from provider', async () => {
-    jest.spyOn(mockProvider, 'callApi').mockImplementation().mockResolvedValue({ output: '' });
+    vi.spyOn(mockProvider, 'callApi').mockImplementation().mockResolvedValue({ output: '' });
     const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(1);
     expect(tests).toHaveLength(0);
   });
 
   it('should handle error response from provider', async () => {
-    jest
+    vi
       .spyOn(mockProvider, 'callApi')
       .mockImplementation()
       .mockResolvedValue({ error: 'API error' });

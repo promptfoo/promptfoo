@@ -12,9 +12,12 @@ vi.mock('../../../src/logger', () => ({
     error: vi.fn(),
   },
 }));
-vi.mock('../../../src/providers/google/util', () => ({
-  hasGoogleDefaultCredentials: vi.fn().mockResolvedValue(false),
-}));
+vi.mock('../../../src/providers/google/util', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    hasGoogleDefaultCredentials: vi.fn().mockResolvedValue(false)
+  });
+});
 
 const mockedGetEnvString = vi.mocked(getEnvString);
 
@@ -25,7 +28,7 @@ describe('GitHub Models Default Providers', () => {
 
   it('should use GitHub token for github: model when only GITHUB_TOKEN is available', async () => {
     // Mock environment where only GITHUB_TOKEN is set
-    mockedGetEnvString.mockImplementation((key: string, defaultValue = '') => {
+    mockedGetEnvString.mockImplementation(function(key: string, defaultValue = '') {
       if (key === 'GITHUB_TOKEN') {
         return 'test-github-token';
       }
@@ -45,7 +48,7 @@ describe('GitHub Models Default Providers', () => {
   });
 
   it('should prefer OpenAI over GitHub when both tokens are available', async () => {
-    mockedGetEnvString.mockImplementation((key: string, defaultValue = '') => {
+    mockedGetEnvString.mockImplementation(function(key: string, defaultValue = '') {
       if (key === 'OPENAI_API_KEY') {
         return 'test-openai-key';
       }
@@ -62,7 +65,7 @@ describe('GitHub Models Default Providers', () => {
   });
 
   it('should prefer Anthropic over GitHub when Anthropic is available', async () => {
-    mockedGetEnvString.mockImplementation((key: string, defaultValue = '') => {
+    mockedGetEnvString.mockImplementation(function(key: string, defaultValue = '') {
       if (key === 'ANTHROPIC_API_KEY') {
         return 'test-anthropic-key';
       }
@@ -79,7 +82,9 @@ describe('GitHub Models Default Providers', () => {
   });
 
   it('should use GitHub with env overrides', async () => {
-    mockedGetEnvString.mockImplementation((_key: string, defaultValue = '') => defaultValue);
+    mockedGetEnvString.mockImplementation(function(_key: string, defaultValue = '') {
+      return defaultValue;
+    });
 
     const providers = await getDefaultProviders({
       GITHUB_TOKEN: 'override-github-token',

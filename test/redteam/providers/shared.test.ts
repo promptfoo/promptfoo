@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import cliState from '../../../src/cliState';
 import { loadApiProviders } from '../../../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
@@ -22,8 +23,8 @@ import type {
 } from '../../../src/types/index';
 import { sleep } from '../../../src/util/time';
 
-jest.mock('../../../src/util/time');
-jest.mock('../../../src/cliState', () => ({
+vi.mock('../../../src/util/time');
+vi.mock('../../../src/cliState', () => ({
   __esModule: true,
   default: {
     config: {
@@ -33,20 +34,23 @@ jest.mock('../../../src/cliState', () => ({
     },
   },
 }));
-jest.mock('../../../src/providers/openai');
-jest.mock('../../../src/providers', () => ({
-  loadApiProviders: jest.fn(),
-}));
+vi.mock('../../../src/providers/openai');
+vi.mock('../../../src/providers', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    loadApiProviders: vi.fn()
+  });
+});
 
-const mockedSleep = jest.mocked(sleep);
-const mockedLoadApiProviders = jest.mocked(loadApiProviders);
-const mockedOpenAiProvider = jest.mocked(OpenAiChatCompletionProvider);
+const mockedSleep = vi.mocked(sleep);
+const mockedLoadApiProviders = vi.mocked(loadApiProviders);
+const mockedOpenAiProvider = vi.mocked(OpenAiChatCompletionProvider);
 
 describe('shared redteam provider utilities', () => {
   beforeEach(() => {
     // Clear all mocks thoroughly
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
 
     // Reset specific mocks
     mockedSleep.mockClear();
@@ -64,17 +68,17 @@ describe('shared redteam provider utilities', () => {
     };
 
     // Reset OpenAI provider mock to default behavior
-    mockedOpenAiProvider.mockImplementation((model: string, options?: any) => {
+    mockedOpenAiProvider.mockImplementation(function(model: string, options?: any) {
       const mockInstance = {
         id: () => `openai:${model}`,
-        callApi: jest.fn(),
+        callApi: vi.fn(),
         toString: () => `OpenAI(${model})`,
         config: options?.config || {},
-        getApiKey: jest.fn(),
-        getApiUrl: jest.fn(),
-        getApiUrlDefault: jest.fn(),
-        getOrganization: jest.fn(),
-        requiresApiKey: jest.fn(),
+        getApiKey: vi.fn(),
+        getApiUrl: vi.fn(),
+        getApiUrlDefault: vi.fn(),
+        getOrganization: vi.fn(),
+        requiresApiKey: vi.fn(),
         initializationPromise: null,
         loadedFunctionCallbacks: {},
         mcpClient: null,
@@ -86,7 +90,7 @@ describe('shared redteam provider utilities', () => {
   describe('RedteamProviderManager', () => {
     const mockApiProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn<
+      callApi: vi.fn<
         Promise<ProviderResponse>,
         [string, CallApiContextParams | undefined, any]
       >(),
@@ -95,14 +99,14 @@ describe('shared redteam provider utilities', () => {
     it('creates default OpenAI provider when no provider specified', async () => {
       const mockOpenAiInstance = {
         id: () => `openai:${ATTACKER_MODEL}`,
-        callApi: jest.fn(),
+        callApi: vi.fn(),
         toString: () => `OpenAI(${ATTACKER_MODEL})`,
         config: { temperature: TEMPERATURE, response_format: undefined },
-        getApiKey: jest.fn(),
-        getApiUrl: jest.fn(),
-        getApiUrlDefault: jest.fn(),
-        getOrganization: jest.fn(),
-        requiresApiKey: jest.fn(),
+        getApiKey: vi.fn(),
+        getApiUrl: vi.fn(),
+        getApiUrlDefault: vi.fn(),
+        getOrganization: vi.fn(),
+        requiresApiKey: vi.fn(),
         initializationPromise: null,
         loadedFunctionCallbacks: {},
         mcpClient: null,
@@ -126,14 +130,14 @@ describe('shared redteam provider utilities', () => {
     it('clears cached providers', async () => {
       const mockOpenAiInstance = {
         id: () => `openai:${ATTACKER_MODEL}`,
-        callApi: jest.fn(),
+        callApi: vi.fn(),
         toString: () => `OpenAI(${ATTACKER_MODEL})`,
         config: { temperature: TEMPERATURE, response_format: undefined },
-        getApiKey: jest.fn(),
-        getApiUrl: jest.fn(),
-        getApiUrlDefault: jest.fn(),
-        getOrganization: jest.fn(),
-        requiresApiKey: jest.fn(),
+        getApiKey: vi.fn(),
+        getApiUrl: vi.fn(),
+        getApiUrlDefault: vi.fn(),
+        getOrganization: vi.fn(),
+        requiresApiKey: vi.fn(),
         initializationPromise: null,
         loadedFunctionCallbacks: {},
         mcpClient: null,
@@ -178,14 +182,14 @@ describe('shared redteam provider utilities', () => {
     it('uses small model when preferSmallModel is true', async () => {
       const mockOpenAiInstance = {
         id: () => `openai:${ATTACKER_MODEL_SMALL}`,
-        callApi: jest.fn(),
+        callApi: vi.fn(),
         toString: () => `OpenAI(${ATTACKER_MODEL_SMALL})`,
         config: { temperature: TEMPERATURE, response_format: undefined },
-        getApiKey: jest.fn(),
-        getApiUrl: jest.fn(),
-        getApiUrlDefault: jest.fn(),
-        getOrganization: jest.fn(),
-        requiresApiKey: jest.fn(),
+        getApiKey: vi.fn(),
+        getApiUrl: vi.fn(),
+        getApiUrlDefault: vi.fn(),
+        getOrganization: vi.fn(),
+        requiresApiKey: vi.fn(),
         initializationPromise: null,
         loadedFunctionCallbacks: {},
         mcpClient: null,
@@ -209,14 +213,14 @@ describe('shared redteam provider utilities', () => {
     it('sets response_format to json_object when jsonOnly is true', async () => {
       const mockOpenAiInstance = {
         id: () => `openai:${ATTACKER_MODEL}`,
-        callApi: jest.fn(),
+        callApi: vi.fn(),
         toString: () => `OpenAI(${ATTACKER_MODEL})`,
         config: { temperature: TEMPERATURE, response_format: { type: 'json_object' } },
-        getApiKey: jest.fn(),
-        getApiUrl: jest.fn(),
-        getApiUrlDefault: jest.fn(),
-        getOrganization: jest.fn(),
-        requiresApiKey: jest.fn(),
+        getApiKey: vi.fn(),
+        getApiUrl: vi.fn(),
+        getApiUrlDefault: vi.fn(),
+        getOrganization: vi.fn(),
+        requiresApiKey: vi.fn(),
         initializationPromise: null,
         loadedFunctionCallbacks: {},
         mcpClient: null,
@@ -240,7 +244,7 @@ describe('shared redteam provider utilities', () => {
     it('uses provider from cliState if available', async () => {
       const mockStateProvider: ApiProvider = {
         id: () => 'state-provider',
-        callApi: jest.fn<
+        callApi: vi.fn<
           Promise<ProviderResponse>,
           [string, CallApiContextParams | undefined, any]
         >(),
@@ -264,7 +268,7 @@ describe('shared redteam provider utilities', () => {
     it('sets and reuses providers', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest.fn<
+        callApi: vi.fn<
           Promise<ProviderResponse>,
           [string, CallApiContextParams | undefined, any]
         >(),
@@ -288,7 +292,7 @@ describe('shared redteam provider utilities', () => {
         redteamProviderManager.clearProvider();
         const gradingInstance: ApiProvider = {
           id: () => 'grading-cached',
-          callApi: jest.fn(),
+          callApi: vi.fn(),
         } as any;
 
         // Set concrete instance and retrieve it (jsonOnly false)
@@ -301,7 +305,7 @@ describe('shared redteam provider utilities', () => {
         redteamProviderManager.clearProvider();
         const mockProvider: ApiProvider = {
           id: () => 'from-defaultTest-provider',
-          callApi: jest.fn(),
+          callApi: vi.fn(),
         } as any;
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
@@ -330,7 +334,7 @@ describe('shared redteam provider utilities', () => {
     it('handles thrown errors in getTargetResponse', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest
+        callApi: vi
           .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
           .mockRejectedValue(new Error('Network error')),
       };
@@ -355,7 +359,7 @@ describe('shared redteam provider utilities', () => {
       it('setMultilingualProvider caches provider and getMultilingualProvider returns it', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-multilingual-provider',
-          callApi: jest.fn<
+          callApi: vi.fn<
             Promise<ProviderResponse>,
             [string, CallApiContextParams | undefined, any]
           >(),
@@ -373,14 +377,14 @@ describe('shared redteam provider utilities', () => {
       it('setMultilingualProvider uses jsonOnly response_format when defaulting to OpenAI', async () => {
         const mockOpenAiInstance = {
           id: () => `openai:${ATTACKER_MODEL}`,
-          callApi: jest.fn(),
+          callApi: vi.fn(),
           toString: () => `OpenAI(${ATTACKER_MODEL})`,
           config: { temperature: TEMPERATURE, response_format: { type: 'json_object' } },
-          getApiKey: jest.fn(),
-          getApiUrl: jest.fn(),
-          getApiUrlDefault: jest.fn(),
-          getOrganization: jest.fn(),
-          requiresApiKey: jest.fn(),
+          getApiKey: vi.fn(),
+          getApiUrl: vi.fn(),
+          getApiUrlDefault: vi.fn(),
+          getOrganization: vi.fn(),
+          requiresApiKey: vi.fn(),
           initializationPromise: null,
           loadedFunctionCallbacks: {},
           mcpClient: null,
@@ -406,7 +410,7 @@ describe('shared redteam provider utilities', () => {
     it('returns successful response with string output', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest
+        callApi: vi
           .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
           .mockResolvedValue({
             output: 'test response',
@@ -425,7 +429,7 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('passes through context and options', async () => {
-      const mockCallApi = jest
+      const mockCallApi = vi
         .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
         .mockResolvedValue({
           output: 'test response',
@@ -456,7 +460,7 @@ describe('shared redteam provider utilities', () => {
     it('stringifies non-string output', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest
+        callApi: vi
           .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
           .mockResolvedValue({
             output: { key: 'value' },
@@ -475,7 +479,7 @@ describe('shared redteam provider utilities', () => {
     it('handles provider error response', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest
+        callApi: vi
           .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
           .mockResolvedValue({
             error: 'API error',
@@ -497,7 +501,7 @@ describe('shared redteam provider utilities', () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         delay: 100,
-        callApi: jest
+        callApi: vi
           .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
           .mockResolvedValue({
             output: 'test response',
@@ -514,7 +518,7 @@ describe('shared redteam provider utilities', () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         delay: 100,
-        callApi: jest
+        callApi: vi
           .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
           .mockResolvedValue({
             output: 'test response',
@@ -531,7 +535,7 @@ describe('shared redteam provider utilities', () => {
     it('throws error when neither output nor error is set', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest
+        callApi: vi
           .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
           .mockResolvedValue({}),
       };
@@ -544,7 +548,7 @@ describe('shared redteam provider utilities', () => {
     it('uses default tokenUsage when not provided', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest
+        callApi: vi
           .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
           .mockResolvedValue({
             output: 'test response',
@@ -563,7 +567,7 @@ describe('shared redteam provider utilities', () => {
       it('handles empty string output correctly', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: jest
+          callApi: vi
             .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
             .mockResolvedValue({
               output: '', // Empty string
@@ -582,7 +586,7 @@ describe('shared redteam provider utilities', () => {
       it('handles zero output correctly', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: jest
+          callApi: vi
             .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
             .mockResolvedValue({
               output: 0, // Zero value
@@ -601,7 +605,7 @@ describe('shared redteam provider utilities', () => {
       it('handles false output correctly', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: jest
+          callApi: vi
             .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
             .mockResolvedValue({
               output: false, // Boolean false
@@ -620,7 +624,7 @@ describe('shared redteam provider utilities', () => {
       it('handles null output correctly', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: jest
+          callApi: vi
             .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
             .mockResolvedValue({
               output: null, // Null value
@@ -639,7 +643,7 @@ describe('shared redteam provider utilities', () => {
       it('still fails when output property is missing', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: jest
+          callApi: vi
             .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
             .mockResolvedValue({
               // No output property at all
@@ -655,7 +659,7 @@ describe('shared redteam provider utilities', () => {
       it('still fails when both output and error are missing', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: jest
+          callApi: vi
             .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
             .mockResolvedValue({
               someOtherField: 'value',
@@ -771,7 +775,7 @@ describe('shared redteam provider utilities', () => {
       process.env.PROMPTFOO_ENABLE_UNBLOCKING = 'true';
 
       // Spy on logger to verify we don't see the "disabled by default" message
-      const loggerSpy = jest.spyOn(require('../../../src/logger').default, 'debug');
+      const loggerSpy = vi.spyOn((await import("../../../src/logger")).default, 'debug');
 
       const result = await tryUnblocking({
         messages: [],

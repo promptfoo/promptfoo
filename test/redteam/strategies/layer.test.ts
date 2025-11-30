@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
 
 import type { Strategy } from '../../../src/redteam/strategies/index';
@@ -7,7 +8,7 @@ describe('addLayerTestCases', () => {
   const mockStrategies: Strategy[] = [
     {
       id: 'base64',
-      action: jest.fn(async (testCases: TestCaseWithPlugin[]) =>
+      action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
         testCases.map((tc) => ({
           ...tc,
           vars: {
@@ -24,7 +25,7 @@ describe('addLayerTestCases', () => {
     },
     {
       id: 'rot13',
-      action: jest.fn(async (testCases: TestCaseWithPlugin[]) =>
+      action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
         testCases.map((tc) => ({
           ...tc,
           vars: {
@@ -45,7 +46,7 @@ describe('addLayerTestCases', () => {
     },
     {
       id: 'multilingual',
-      action: jest.fn(async (testCases: TestCaseWithPlugin[]) =>
+      action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
         testCases.map((tc) => ({
           ...tc,
           vars: {
@@ -62,7 +63,7 @@ describe('addLayerTestCases', () => {
     },
   ];
 
-  const mockLoadStrategy = jest.fn(async (path: string): Promise<Strategy> => {
+  const mockLoadStrategy = vi.fn(async (path: string): Promise<Strategy> => {
     if (path === 'file://custom-strategy.js') {
       return {
         id: 'custom',
@@ -85,7 +86,7 @@ describe('addLayerTestCases', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should return empty array when no steps are provided', async () => {
@@ -283,7 +284,7 @@ describe('addLayerTestCases', () => {
     // Mock a strategy that returns empty array
     const emptyStrategy: Strategy = {
       id: 'filter-all',
-      action: jest.fn(async () => []),
+      action: vi.fn(async () => []),
     };
 
     const testCases: TestCaseWithPlugin[] = [
@@ -311,7 +312,7 @@ describe('addLayerTestCases', () => {
   it('should handle colon-separated strategy IDs', async () => {
     const colonStrategy: Strategy = {
       id: 'jailbreak',
-      action: jest.fn(async (testCases: TestCaseWithPlugin[]) =>
+      action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
         testCases.map((tc) => ({
           ...tc,
           vars: {

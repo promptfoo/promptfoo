@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from 'commander';
 import { viewCommand } from '../../src/commands/view';
 import { getDefaultPort } from '../../src/constants';
@@ -7,17 +8,22 @@ import { setupEnv } from '../../src/util/index';
 import { setConfigDirectoryPath } from '../../src/util/config/manage';
 import { BrowserBehavior } from '../../src/util/server';
 
-jest.mock('../../src/server/server');
-jest.mock('../../src/telemetry');
-jest.mock('../../src/util');
-jest.mock('../../src/util/config/manage');
+vi.mock('../../src/util/config/manage', () => ({
+  getConfigDirectoryPath: vi.fn().mockReturnValue('/tmp/test-config'),
+  setConfigDirectoryPath: vi.fn(),
+  maybeReadConfig: vi.fn(),
+  readConfigs: vi.fn(),
+}));
+vi.mock('../../src/server/server');
+vi.mock('../../src/telemetry');
+vi.mock('../../src/util');
 
 describe('viewCommand', () => {
   let program: Command;
 
   beforeEach(() => {
     program = new Command();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should register view command with correct options', () => {
@@ -58,7 +64,7 @@ describe('viewCommand', () => {
     await viewCmd.parseAsync(['node', 'test', '--yes']);
     expect(startServer).toHaveBeenCalledWith(getDefaultPort(), BrowserBehavior.OPEN);
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Reset program and viewCommand for the second test
     program = new Command();
@@ -195,7 +201,7 @@ describe('viewCommand', () => {
     viewCommand(program);
     const viewCmd = program.commands[0];
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Only --no, no --yes
     await viewCmd.parseAsync(['node', 'test', '--no', '--port', '15501']);
     // Commander sets --no to true, --yes to undefined, so browserBehavior should be SKIP
@@ -206,7 +212,7 @@ describe('viewCommand', () => {
     viewCommand(program);
     const viewCmd = program.commands[0];
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await viewCmd.parseAsync(['node', 'test', '--yes', '--port', '16600']);
     expect(startServer).toHaveBeenCalledWith(16600, BrowserBehavior.OPEN);
   });
@@ -215,7 +221,7 @@ describe('viewCommand', () => {
     viewCommand(program);
     const viewCmd = program.commands[0];
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await viewCmd.parseAsync(['node', 'test', '--port', '17700']);
     expect(startServer).toHaveBeenCalledWith(17700, BrowserBehavior.ASK);
   });

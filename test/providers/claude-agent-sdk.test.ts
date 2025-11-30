@@ -18,15 +18,22 @@ vi.mock('../../src/cliState', () => ({
   default: { basePath: '/test/basePath' },
   basePath: '/test/basePath',
 }));
-vi.mock('../../src/esm', () => ({
-  importModule: vi.fn(),
-}));
+vi.mock('../../src/esm', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    importModule: vi.fn()
+  });
+});
 vi.mock('../../src/providers/mcp/transform');
-vi.mock('node:module', () => ({
-  createRequire: vi.fn(() => ({
-    resolve: vi.fn(() => '@anthropic-ai/claude-agent-sdk'),
-  })),
-}));
+vi.mock('node:module', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+
+    createRequire: vi.fn(() => ({
+      resolve: vi.fn(() => '@anthropic-ai/claude-agent-sdk'),
+    }))
+  });
+});
 
 const mockQuery = vi.fn();
 const mockTransformMCPConfigToClaudeCode = vi.mocked(transformMCPConfigToClaudeCode);
@@ -149,7 +156,7 @@ describe('ClaudeCodeSDKProvider', () => {
     statSyncSpy = vi.spyOn(fs, 'statSync').mockReturnValue({
       isDirectory: () => true,
     } as fs.Stats);
-    rmSyncSpy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {});
+    rmSyncSpy = vi.spyOn(fs, 'rmSync').mockImplementation(function() {});
   });
 
   afterEach(async () => {
@@ -185,7 +192,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should warn about unknown model', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function() {});
 
       new ClaudeCodeSDKProvider({ config: { model: 'unknown-model' } });
 
@@ -197,7 +204,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should warn about unknown fallback model', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function() {});
 
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
 
@@ -209,7 +216,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should not warn about Claude Agent SDK model aliases', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function() {});
 
       // Test all Claude Agent SDK aliases
       CLAUDE_CODE_MODEL_ALIASES.forEach((alias) => {
@@ -223,7 +230,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     it('should not warn about known Anthropic models', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function() {});
 
       new ClaudeCodeSDKProvider({ config: { model: 'claude-3-5-sonnet-20241022' } });
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'claude-3-5-haiku-20241022' } });
@@ -292,7 +299,7 @@ describe('ClaudeCodeSDKProvider', () => {
       });
 
       it('should handle SDK exceptions', async () => {
-        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(function() {});
         mockQuery.mockRejectedValue(new Error('Network error'));
 
         const provider = new ClaudeCodeSDKProvider({
@@ -423,7 +430,7 @@ describe('ClaudeCodeSDKProvider', () => {
       });
 
       it('should error when working_dir does not exist', async () => {
-        statSyncSpy.mockImplementation(() => {
+        statSyncSpy.mockImplementation(function() {
           throw new Error('ENOENT: no such file or directory');
         });
 
@@ -751,7 +758,7 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(mockQuery).not.toHaveBeenCalled();
 
         // Test abort during execution
-        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function() {});
         const abortError = new Error('AbortError');
         abortError.name = 'AbortError';
         mockQuery.mockRejectedValue(abortError);
@@ -1036,8 +1043,9 @@ describe('ClaudeCodeSDKProvider', () => {
 
     describe('caching behavior', () => {
       it('should cache responses', async () => {
-        mockQuery.mockImplementation(() =>
-          createMockResponse('Cached response', { input_tokens: 10, output_tokens: 20 }),
+        mockQuery.mockImplementation(function() {
+          return createMockResponse('Cached response', { input_tokens: 10, output_tokens: 20 });
+        },
         );
 
         const provider = new ClaudeCodeSDKProvider({
@@ -1110,7 +1118,7 @@ describe('ClaudeCodeSDKProvider', () => {
         ] as any);
 
         const originalStatSync = statSyncSpy.getMockImplementation();
-        statSyncSpy.mockImplementation((path: any) => {
+        statSyncSpy.mockImplementation(function(path: any) {
           if (path === '/custom/dir') {
             return {
               isDirectory: () => true,
@@ -1140,7 +1148,7 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(mockQuery).toHaveBeenCalledTimes(1);
 
         // Simulate file change by updating mtime
-        statSyncSpy.mockImplementation((path: any) => {
+        statSyncSpy.mockImplementation(function(path: any) {
           if (path === '/custom/dir') {
             return {
               isDirectory: () => true,
@@ -1200,11 +1208,11 @@ describe('ClaudeCodeSDKProvider', () => {
 
         // Mock cache.set to throw an error
         const cache = await getCache();
-        const setSpy = vi.spyOn(cache, 'set').mockImplementation(async () => {
+        const setSpy = vi.spyOn(cache, 'set').mockImplementation(async function() {
           throw new Error('Cache write failed');
         });
 
-        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(function() {});
 
         const provider = new ClaudeCodeSDKProvider({
           env: { ANTHROPIC_API_KEY: 'test-api-key' },

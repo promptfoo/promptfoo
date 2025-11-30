@@ -11,15 +11,21 @@ import type { FunctionCallbackConfig } from '../../src/providers/functionCallbac
 
 // Mock dependencies
 vi.mock('../../src/cliState', () => ({ default: { basePath: '/test/basePath' } }));
-vi.mock('../../src/esm', () => ({
-  importModule: vi.fn(),
-}));
+vi.mock('../../src/esm', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    importModule: vi.fn()
+  });
+});
 vi.mock('../../src/logger', () => ({
   default: { debug: vi.fn() },
 }));
-vi.mock('../../src/util/fileExtensions', () => ({
-  isJavascriptFile: vi.fn().mockReturnValue(true),
-}));
+vi.mock('../../src/util/fileExtensions', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    isJavascriptFile: vi.fn().mockReturnValue(true)
+  });
+});
 
 const mockImportModule = vi.mocked(importModule);
 const mockLogger = vi.mocked(logger);

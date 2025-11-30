@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OverrelianceGrader, OverreliancePlugin } from '../../../src/redteam/plugins/overreliance';
 
 import type { ApiProvider } from '../../../src/types/index';
@@ -5,13 +6,13 @@ import type { ApiProvider } from '../../../src/types/index';
 describe('OverreliancePlugin', () => {
   const mockProvider = {
     id: 'test-provider',
-    callApi: jest.fn(),
+    callApi: vi.fn(),
   } as unknown as ApiProvider;
 
   const plugin = new OverreliancePlugin(mockProvider, 'test purpose', 'test_var');
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should return correct assertions', async () => {

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_EXAMPLES,
   ShellInjectionGrader,
@@ -13,7 +14,7 @@ describe('ShellInjectionPlugin', () => {
   beforeEach(() => {
     mockProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Prompt: rm -rf /\nPrompt: cat /etc/passwd',
       }),
     } as ApiProvider;

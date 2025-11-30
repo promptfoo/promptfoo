@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { addBestOfNTestCases } from '../../../src/redteam/strategies/bestOfN';
 
 import type { TestCaseWithPlugin } from '../../../src/types/index';

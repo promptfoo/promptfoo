@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import path from 'path';
 
 import { filterTests } from '../../../src/commands/eval/filterTests';
@@ -6,8 +7,10 @@ import { ResultFailureReason } from '../../../src/types/index';
 
 import type { TestCase, TestSuite } from '../../../src/types/index';
 
-jest.mock('../../../src/models/eval', () => ({
-  findById: jest.fn(),
+vi.mock('../../../src/models/eval', () => ({
+  default: ({
+    findById: vi.fn()
+  })
 }));
 
 describe('filterTests', () => {
@@ -37,7 +40,7 @@ describe('filterTests', () => {
   };
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     const mockEval = {
       id: 'eval-123',
       createdAt: new Date().getTime(),
@@ -46,7 +49,7 @@ describe('filterTests', () => {
       resultsCount: 0,
       prompts: [],
       persisted: true,
-      toEvaluateSummary: jest.fn().mockResolvedValue({
+      toEvaluateSummary: vi.fn().mockResolvedValue({
         version: 2,
         timestamp: new Date().toISOString(),
         results: [
@@ -83,7 +86,7 @@ describe('filterTests', () => {
         },
       }),
     };
-    jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+    vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
   });
 
   it('should return all tests if no options provided', async () => {
@@ -128,7 +131,7 @@ describe('filterTests', () => {
     });
 
     it('should match failing tests when provider paths differ', async () => {
-      jest.resetAllMocks();
+      vi.resetAllMocks();
       const absPath = path.join(process.cwd(), 'provider.js');
       const mockEval = {
         id: 'eval-123',
@@ -138,7 +141,7 @@ describe('filterTests', () => {
         resultsCount: 0,
         prompts: [],
         persisted: true,
-        toEvaluateSummary: jest.fn().mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
           version: 2,
           timestamp: new Date().toISOString(),
           results: [
@@ -167,7 +170,7 @@ describe('filterTests', () => {
         }),
       };
 
-      jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+      vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
 
       const testSuite = {
         ...mockTestSuite,

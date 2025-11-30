@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import fs from 'fs';
 import path from 'path';
 
@@ -10,20 +11,22 @@ import {
 } from '../../../src/redteam/commands/poison';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
-jest.mock('fs');
-jest.mock('path', () => ({
-  ...jest.requireActual('path'),
-  resolve: jest.fn(),
-  join: jest.fn(),
-  relative: jest.fn(),
-  dirname: jest.fn().mockReturnValue('mock-dir'),
+vi.mock('fs');
+vi.mock('path', async () => ({
+  ...(await vi.importActual('path')),
+  resolve: vi.fn(),
+  join: vi.fn(),
+  relative: vi.fn(),
+  dirname: vi.fn().mockReturnValue('mock-dir')
 }));
 
 describe('poison command', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(fs.mkdirSync).mockReturnValue('/mock/dir');
-    jest.mocked(fs.writeFileSync).mockReturnValue();
+    vi.resetAllMocks();
+    vi.mocked(fs.mkdirSync).mockImplementation(function() {
+      return '/mock/dir';
+    });
+    vi.mocked(fs.writeFileSync).mockReturnValue();
   });
 
   describe('getAllFiles', () => {
@@ -31,17 +34,24 @@ describe('poison command', () => {
       const mockFiles = ['file1.txt', 'file2.txt'];
       const mockDirs = ['dir1'];
 
-      jest.mocked(fs.readdirSync).mockReturnValueOnce([...mockFiles, ...mockDirs] as any);
-      jest.mocked(fs.readdirSync).mockReturnValueOnce([] as any);
+      vi.mocked(fs.readdirSync).mockImplementationOnce(function() {
+        return [...mockFiles, ...mockDirs] as any;
+      });
+      vi.mocked(fs.readdirSync).mockImplementationOnce(function() {
+        return [] as any;
+      });
 
-      jest.mocked(fs.statSync).mockImplementation(
-        (filePath) =>
-          ({
+      vi.mocked(fs.statSync).mockImplementation(
+        function(filePath) {
+          return ({
             isDirectory: () => filePath.toString().includes('dir1'),
-          }) as fs.Stats,
+          }) as fs.Stats;
+        },
       );
 
-      jest.mocked(path.join).mockImplementation((...parts) => parts.join('/'));
+      vi.mocked(path.join).mockImplementation(function(...parts) {
+        return parts.join('/');
+      });
 
       const files = getAllFiles('testDir');
       expect(files).toEqual(['testDir/file1.txt', 'testDir/file2.txt']);
@@ -66,7 +76,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      jest.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
 
       const result = await generatePoisonedDocument('test doc', 'test goal');
 
@@ -102,7 +112,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      jest.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
 
       await expect(generatePoisonedDocument('test doc')).rejects.toThrow(
         'Failed to generate poisoned document',
@@ -118,12 +128,18 @@ describe('poison command', () => {
         dir: null,
       };
 
-      jest.mocked(fs.readFileSync).mockReturnValue('test content');
-      jest.mocked(path.relative).mockImplementation((_from, _to) => {
+      vi.mocked(fs.readFileSync).mockImplementation(function() {
+        return 'test content';
+      });
+      vi.mocked(path.relative).mockImplementation(function(_from, _to) {
         return 'test.txt';
       });
-      jest.mocked(path.dirname).mockReturnValue('output-dir');
-      jest.mocked(path.join).mockImplementation((...args) => args.join('/'));
+      vi.mocked(path.dirname).mockImplementation(function() {
+        return 'output-dir';
+      });
+      vi.mocked(path.join).mockImplementation(function(...args) {
+        return args.join('/');
+      });
 
       const mockPoisonResponse = {
         poisonedDocument: 'poisoned content',
@@ -142,7 +158,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      jest.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
 
       const result = await poisonDocument(mockDoc, 'output-dir');
 
@@ -177,7 +193,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      jest.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
 
       const result = await poisonDocument(mockDoc, 'output-dir');
 
@@ -194,7 +210,7 @@ describe('poison command', () => {
         dir: null,
       };
 
-      jest.mocked(fs.readFileSync).mockImplementation(() => {
+      vi.mocked(fs.readFileSync).mockImplementation(function() {
         throw new Error('File read error');
       });
 
@@ -213,14 +229,24 @@ describe('poison command', () => {
         outputDir: 'output-dir',
       };
 
-      jest.mocked(fs.existsSync).mockImplementation((path) => path === 'test.txt');
-      jest.mocked(fs.statSync).mockReturnValue({
-        isDirectory: () => false,
-      } as fs.Stats);
+      vi.mocked(fs.existsSync).mockImplementation(function(path) {
+        return path === 'test.txt';
+      });
+      vi.mocked(fs.statSync).mockImplementation(function() {
+        return {
+          isDirectory: () => false,
+        } as fs.Stats;
+      });
 
-      jest.mocked(path.relative).mockImplementation((_from, _to) => 'test.txt');
-      jest.mocked(path.dirname).mockReturnValue('output-dir');
-      jest.mocked(path.join).mockImplementation((...args) => args.join('/'));
+      vi.mocked(path.relative).mockImplementation(function(_from, _to) {
+        return 'test.txt';
+      });
+      vi.mocked(path.dirname).mockImplementation(function() {
+        return 'output-dir';
+      });
+      vi.mocked(path.join).mockImplementation(function(...args) {
+        return args.join('/');
+      });
 
       const mockPoisonResponse = {
         poisonedDocument: 'poisoned content',
@@ -239,7 +265,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      jest.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
 
       await doPoisonDocuments(options);
 
@@ -255,20 +281,32 @@ describe('poison command', () => {
         outputDir: 'output-dir',
       };
 
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest
+      vi.mocked(fs.existsSync).mockImplementation(function() {
+        return true;
+      });
+      vi
         .mocked(fs.statSync)
-        .mockReturnValueOnce({
-          isDirectory: () => true,
-        } as fs.Stats)
+        .mockImplementationOnce(function() {
+        return {
+            isDirectory: () => true,
+          } as fs.Stats;
+      })
         .mockReturnValue({
           isDirectory: () => false,
         } as fs.Stats);
 
-      jest.mocked(fs.readdirSync).mockReturnValueOnce(['file1.txt'] as any);
-      jest.mocked(path.join).mockImplementation((...parts) => parts.join('/'));
-      jest.mocked(path.relative).mockImplementation((_from, _to) => 'file1.txt');
-      jest.mocked(path.dirname).mockReturnValue('output-dir');
+      vi.mocked(fs.readdirSync).mockImplementationOnce(function() {
+        return ['file1.txt'] as any;
+      });
+      vi.mocked(path.join).mockImplementation(function(...parts) {
+        return parts.join('/');
+      });
+      vi.mocked(path.relative).mockImplementation(function(_from, _to) {
+        return 'file1.txt';
+      });
+      vi.mocked(path.dirname).mockImplementation(function() {
+        return 'output-dir';
+      });
 
       const mockPoisonResponse = {
         poisonedDocument: 'poisoned content',
@@ -287,7 +325,7 @@ describe('poison command', () => {
         url: 'test-url',
       } as Response;
 
-      jest.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
+      vi.spyOn(global, 'fetch').mockImplementation().mockResolvedValue(mockResponse);
 
       await doPoisonDocuments(options);
 

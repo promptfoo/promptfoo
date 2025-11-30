@@ -1,15 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 
-vi.mock('../../../src/cache', () => ({
-  getCache: vi.fn(),
-  isCacheEnabled: vi.fn().mockReturnValue(false),
-}));
+vi.mock('../../../src/cache', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    getCache: vi.fn(),
+    isCacheEnabled: vi.fn().mockReturnValue(false)
+  });
+});
 
-vi.mock('../../../src/util/time', () => ({
-  sleep: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock('../../../src/util/time', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    sleep: vi.fn().mockResolvedValue(undefined)
+  });
+});
 
 vi.mock('../../../src/logger', () => ({
   __esModule: true,

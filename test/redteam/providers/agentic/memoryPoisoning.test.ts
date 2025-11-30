@@ -1,25 +1,26 @@
+import { Mocked, SpyInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryPoisoningProvider } from '../../../../src/redteam/providers/agentic/memoryPoisoning';
 
 import type { ApiProvider, CallApiContextParams } from '../../../../src/types/providers';
 
 describe('MemoryPoisoningProvider', () => {
   let provider: MemoryPoisoningProvider;
-  let mockTargetProvider: jest.Mocked<ApiProvider>;
-  let mockFetch: jest.SpyInstance;
+  let mockTargetProvider: Mocked<ApiProvider>;
+  let mockFetch: SpyInstance;
 
   beforeEach(() => {
     provider = new MemoryPoisoningProvider({});
 
     mockTargetProvider = {
-      id: jest.fn(),
-      callApi: jest.fn(),
+      id: vi.fn(),
+      callApi: vi.fn(),
     };
 
-    mockFetch = jest.spyOn(global, 'fetch').mockImplementation();
+    mockFetch = vi.spyOn(global, 'fetch').mockImplementation();
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should have correct ID', () => {

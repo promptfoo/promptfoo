@@ -1,11 +1,22 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearCache } from '../../src/cache';
 import { DatabricksMosaicAiChatCompletionProvider } from '../../src/providers/databricks';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
 import type { DatabricksMosaicAiProviderOptions } from '../../src/providers/databricks';
 
-jest.mock('../../src/logger');
-jest.mock('../../src/providers/openai/chat');
+const MockOpenAiChatCompletionProvider = vi.hoisted(() =>
+  vi.fn(function (this: any, modelName: string, options: any) {
+    this.modelName = modelName;
+    this.options = options;
+    return this;
+  }),
+);
+
+vi.mock('../../src/logger');
+vi.mock('../../src/providers/openai/chat', () => ({
+  OpenAiChatCompletionProvider: MockOpenAiChatCompletionProvider,
+}));
 
 describe('Databricks Foundation Model APIs Provider', () => {
   const originalEnv = process.env;
@@ -17,7 +28,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env = { ...originalEnv };
     delete process.env.DATABRICKS_WORKSPACE_URL;
     delete process.env.DATABRICKS_TOKEN;
@@ -268,8 +279,8 @@ describe('Databricks Foundation Model APIs Provider', () => {
   describe('getApiUrl method', () => {
     // Need to unmock for these specific tests
     beforeEach(() => {
-      jest.unmock('../../src/providers/openai/chat');
-      jest.resetModules();
+      vi.unmock('../../src/providers/openai/chat');
+      vi.resetModules();
     });
 
     it('should return custom URL for pay-per-token endpoints', async () => {

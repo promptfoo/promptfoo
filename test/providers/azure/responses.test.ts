@@ -143,7 +143,9 @@ describe('AzureResponsesProvider', () => {
 
     it('should handle inline response_format', async () => {
       // For inline schemas, maybeLoadFromExternalFile should return the object unchanged
-      mockMaybeLoadFromExternalFile.mockImplementation((input: any) => input);
+      mockMaybeLoadFromExternalFile.mockImplementation(function(input: any) {
+        return input;
+      });
 
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: {
@@ -265,7 +267,7 @@ describe('AzureResponsesProvider', () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
 
       // Mock initialization to set empty auth headers
-      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async () => {
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function() {
         (provider as any).authHeaders = {}; // Set empty auth headers
       });
 
@@ -279,7 +281,7 @@ describe('AzureResponsesProvider', () => {
         config: { response_format: 'file://missing.json' as any },
       });
 
-      mockMaybeLoadFromExternalFile.mockImplementation(() => {
+      mockMaybeLoadFromExternalFile.mockImplementation(function() {
         throw new Error('File does not exist');
       });
 

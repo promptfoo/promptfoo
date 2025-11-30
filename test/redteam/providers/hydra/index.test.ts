@@ -1,3 +1,4 @@
+import { Mock, Mocked, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import { getGraderById } from '../../../../src/redteam/graders';
@@ -5,55 +6,64 @@ import { HydraProvider } from '../../../../src/redteam/providers/hydra/index';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
 import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types/index';
 
-jest.mock('../../../../src/providers/promptfoo', () => ({
-  PromptfooChatCompletionProvider: jest.fn(),
+vi.mock('../../../../src/providers/promptfoo', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    PromptfooChatCompletionProvider: vi.fn()
+  });
+});
+
+vi.mock('../../../../src/redteam/graders', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    getGraderById: vi.fn()
+  });
+});
+
+vi.mock('../../../../src/redteam/remoteGeneration', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    shouldGenerateRemote: vi.fn()
+  });
+});
+
+vi.mock('../../../../src/evaluatorHelpers', async () => ({
+  ...(await vi.importActual('../../../../src/evaluatorHelpers')),
+  renderPrompt: vi.fn()
 }));
 
-jest.mock('../../../../src/redteam/graders', () => ({
-  getGraderById: jest.fn(),
-}));
-
-jest.mock('../../../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn(),
-}));
-
-jest.mock('../../../../src/evaluatorHelpers', () => ({
-  ...jest.requireActual('../../../../src/evaluatorHelpers'),
-  renderPrompt: jest.fn(),
-}));
-
-jest.mock('../../../../src/redteam/util', () => ({
-  ...jest.requireActual('../../../../src/redteam/util'),
-  isBasicRefusal: jest.fn(),
-  getSessionId: jest.fn(),
+vi.mock('../../../../src/redteam/util', async () => ({
+  ...(await vi.importActual('../../../../src/redteam/util')),
+  isBasicRefusal: vi.fn(),
+  getSessionId: vi.fn()
 }));
 
 describe('HydraProvider', () => {
-  let mockAgentProvider: jest.Mocked<ApiProvider>;
-  let mockTargetProvider: jest.Mocked<ApiProvider>;
+  let mockAgentProvider: Mocked<ApiProvider>;
+  let mockTargetProvider: Mocked<ApiProvider>;
   let mockGrader: any;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+  beforeEach(async () => {
+    vi.clearAllMocks();
 
     // Mock agent provider (cloud provider)
     mockAgentProvider = {
-      id: jest.fn().mockReturnValue('mock-agent'),
-      callApi: jest.fn(),
+      id: vi.fn().mockReturnValue('mock-agent'),
+      callApi: vi.fn(),
       delay: 0,
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     // Mock target provider
     mockTargetProvider = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('mock-target'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Target response',
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     // Mock grader
     mockGrader = {
-      getResult: jest.fn().mockResolvedValue({
+      getResult: vi.fn().mockResolvedValue({
         grade: {
           pass: true,
           score: 1,
@@ -63,17 +73,23 @@ describe('HydraProvider', () => {
     };
 
     // Setup mocks
-    (PromptfooChatCompletionProvider as jest.Mock).mockImplementation(() => mockAgentProvider);
-    jest.mocked(getGraderById).mockReturnValue(mockGrader);
-    jest.mocked(shouldGenerateRemote).mockReturnValue(true);
-    jest.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
+    (PromptfooChatCompletionProvider as Mock).mockImplementation(function() {
+      return mockAgentProvider;
+    });
+    vi.mocked(getGraderById).mockImplementation(function() {
+      return mockGrader;
+    });
+    vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+      return true;
+    });
+    vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
 
-    const { isBasicRefusal } = jest.requireMock('../../../../src/redteam/util');
+    const { isBasicRefusal } = await import('../../../../src/redteam/util');
     isBasicRefusal.mockReturnValue(false);
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('constructor', () => {
@@ -105,7 +121,9 @@ describe('HydraProvider', () => {
     });
 
     it('should throw error when remote generation is not available', () => {
-      jest.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+        return false;
+      });
 
       expect(() => {
         new HydraProvider({ injectVar: 'input' });
@@ -115,7 +133,7 @@ describe('HydraProvider', () => {
     });
 
     it('should warn when backtracking is enabled in stateful mode', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation();
 
       new HydraProvider({
         injectVar: 'input',
@@ -232,7 +250,7 @@ describe('HydraProvider', () => {
 
     it('should handle multiple turns until max turns reached', async () => {
       let callCount = 0;
-      mockAgentProvider.callApi.mockImplementation(async () => {
+      mockAgentProvider.callApi.mockImplementation(async function() {
         callCount++;
         return {
           output: `Attack message ${callCount}`,
@@ -302,7 +320,7 @@ describe('HydraProvider', () => {
       expect(request.goal).toBe('metadata goal');
 
       // Reset mocks
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -361,7 +379,7 @@ describe('HydraProvider', () => {
       expect(result.metadata?.sessionId).toBe('session-123');
       expect(result.metadata?.sessionIds).toEqual(['session-123', 'session-123']);
       // Check that the second call includes sessionId
-      const renderCalls = (evaluatorHelpers.renderPrompt as jest.Mock).mock.calls;
+      const renderCalls = (evaluatorHelpers.renderPrompt as Mock).mock.calls;
       const secondCall = renderCalls[1];
       expect(secondCall[1]).toMatchObject({
         sessionId: 'session-123',
@@ -397,7 +415,7 @@ describe('HydraProvider', () => {
       await provider.callApi('', context);
 
       // Check that the call with the escaped message was made
-      const renderCalls = (evaluatorHelpers.renderPrompt as jest.Mock).mock.calls;
+      const renderCalls = (evaluatorHelpers.renderPrompt as Mock).mock.calls;
       const escapedCall = renderCalls.find(
         (call) => call[1].input === 'Attack with { {template} } and { % block % }',
       );
@@ -452,10 +470,10 @@ describe('HydraProvider', () => {
 
   describe('callApi() - backtracking', () => {
     it('should backtrack when target refuses in stateless mode', async () => {
-      const { isBasicRefusal } = jest.requireMock('../../../../src/redteam/util');
+      const { isBasicRefusal } = await import('../../../../src/redteam/util');
 
       let attackCallCount = 0;
-      mockAgentProvider.callApi.mockImplementation(async (prompt) => {
+      mockAgentProvider.callApi.mockImplementation(async function(prompt) {
         const request = JSON.parse(prompt as string);
         // Don't count learning updates
         if (!request.testComplete) {
@@ -468,7 +486,7 @@ describe('HydraProvider', () => {
       });
 
       let targetCallCount = 0;
-      mockTargetProvider.callApi.mockImplementation(async () => {
+      mockTargetProvider.callApi.mockImplementation(async function() {
         targetCallCount++;
         // First call is refused, second succeeds
         if (targetCallCount === 1) {
@@ -505,7 +523,7 @@ describe('HydraProvider', () => {
     });
 
     it('should stop when max backtracks reached', async () => {
-      const { isBasicRefusal } = jest.requireMock('../../../../src/redteam/util');
+      const { isBasicRefusal } = await import('../../../../src/redteam/util');
       isBasicRefusal.mockReturnValue(true); // Always refuse
 
       mockAgentProvider.callApi.mockResolvedValue({
@@ -541,7 +559,7 @@ describe('HydraProvider', () => {
     });
 
     it('should not backtrack in stateful mode', async () => {
-      const { isBasicRefusal } = jest.requireMock('../../../../src/redteam/util');
+      const { isBasicRefusal } = await import('../../../../src/redteam/util');
       isBasicRefusal.mockReturnValue(true); // Always refuse
 
       mockAgentProvider.callApi.mockResolvedValue({
@@ -1185,7 +1203,7 @@ describe('HydraProvider', () => {
 
   describe('callApi() - metadata output', () => {
     it('should return complete metadata', async () => {
-      const { getSessionId } = jest.requireMock('../../../../src/redteam/util');
+      const { getSessionId } = await import('../../../../src/redteam/util');
       getSessionId.mockReturnValue('session-123');
 
       mockAgentProvider.callApi.mockResolvedValue({

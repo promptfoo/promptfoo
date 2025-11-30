@@ -1,25 +1,33 @@
-import { jest } from '@jest/globals';
+import { Mock, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 
 // Mock AWS SDK modules
-jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
-  BedrockAgentRuntimeClient: jest.fn(),
-  InvokeAgentCommand: jest.fn(),
-}));
+vi.mock('@aws-sdk/client-bedrock-agent-runtime', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+    BedrockAgentRuntimeClient: vi.fn(),
+    InvokeAgentCommand: vi.fn()
+  });
+});
 
-jest.mock('../../src/cache', () => ({
-  getCache: jest.fn(() =>
-    Promise.resolve({
-      get: jest.fn(() => Promise.resolve(null)),
-      set: jest.fn(),
-    }),
-  ),
-  isCacheEnabled: jest.fn(() => false),
-}));
+vi.mock('../../src/cache', async importOriginal => {
+  return ({
+    ...(await importOriginal()),
+
+    getCache: vi.fn(() =>
+      Promise.resolve({
+        get: vi.fn(() => Promise.resolve(null)),
+        set: vi.fn(),
+      }),
+    ),
+
+    isCacheEnabled: vi.fn(() => false)
+  });
+});
 
 describe('AwsBedrockAgentsProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('constructor', () => {
@@ -72,24 +80,28 @@ describe('AwsBedrockAgentsProvider', () => {
   });
 
   describe('callApi', () => {
-    let mockSend: jest.Mock;
+    let mockSend: Mock;
     let provider: AwsBedrockAgentsProvider;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       // Create a fresh mock for each test
-      mockSend = jest.fn();
+      mockSend = vi.fn();
       const {
         BedrockAgentRuntimeClient,
         InvokeAgentCommand,
       } = require('@aws-sdk/client-bedrock-agent-runtime');
 
-      BedrockAgentRuntimeClient.mockImplementation(() => ({
-        send: mockSend,
-      }));
+      BedrockAgentRuntimeClient.mockImplementation(function() {
+        return ({
+          send: mockSend
+        });
+      });
 
-      InvokeAgentCommand.mockImplementation((input: any) => input);
+      InvokeAgentCommand.mockImplementation(function(input: any) {
+        return input;
+      });
 
       // Create provider after mocks are set up
       provider = new AwsBedrockAgentsProvider('test-agent', {
@@ -102,8 +114,8 @@ describe('AwsBedrockAgentsProvider', () => {
     });
 
     afterEach(() => {
-      jest.clearAllMocks();
-      jest.restoreAllMocks();
+      vi.clearAllMocks();
+      vi.restoreAllMocks();
     });
 
     it('should require agentAliasId', async () => {

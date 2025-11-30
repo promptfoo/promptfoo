@@ -1,9 +1,10 @@
+import { describe, expect, it, vi } from "vitest";
 import { HttpProviderConfigSchema } from '../../src/providers/http';
 
 // Mock fs to prevent actual file system access during tests
-jest.mock('fs');
+vi.mock('fs');
 // Mock crypto to prevent actual signature generation in tests
-jest.mock('crypto');
+vi.mock('crypto');
 
 describe('Http Provider Certificate Content Support', () => {
   describe('generateSignature with certificate content', () => {

@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { Severity } from '../../src/redteam/constants';
 
 import type {

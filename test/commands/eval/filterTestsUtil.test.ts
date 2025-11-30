@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { filterTestsByResults } from '../../../src/commands/eval/filterTestsUtil';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
@@ -5,16 +6,19 @@ import * as util from '../../../src/util/index';
 
 import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index';
 
-jest.mock('../../../src/models/eval', () => ({
-  findById: jest.fn(),
+vi.mock('../../../src/models/eval', () => ({
+  default: ({
+    findById: vi.fn()
+  })
 }));
 
-jest.mock('../../../src/util', () => ({
-  ...jest.requireActual('../../../src/util'),
-  readOutput: jest.fn(),
-  resultIsForTestCase: jest.fn().mockImplementation((result, test) => {
+vi.mock('../../../src/util', async () => ({
+  ...(await vi.importActual('../../../src/util')),
+  readOutput: vi.fn(),
+
+  resultIsForTestCase: vi.fn().mockImplementation(function(result, test) {
     return result.testCase === test;
-  }),
+  })
 }));
 
 describe('filterTestsUtil', () => {
@@ -108,8 +112,8 @@ describe('filterTestsUtil', () => {
     };
 
     beforeEach(() => {
-      jest.resetAllMocks();
-      jest.mocked(util.resultIsForTestCase).mockImplementation((result, test) => {
+      vi.resetAllMocks();
+      vi.mocked(util.resultIsForTestCase).mockImplementation(function(result, test) {
         return result.testCase === test;
       });
     });
@@ -125,7 +129,7 @@ describe('filterTestsUtil', () => {
 
     describe('with file path', () => {
       beforeEach(() => {
-        jest.mocked(util.readOutput).mockResolvedValue({
+        vi.mocked(util.readOutput).mockResolvedValue({
           evalId: null,
           results: {
             version: 2,
@@ -172,7 +176,7 @@ describe('filterTestsUtil', () => {
       it('should handle non-json file path as eval ID', async () => {
         const mockEval = {
           id: 'results.txt',
-          toEvaluateSummary: jest.fn().mockResolvedValue({
+          toEvaluateSummary: vi.fn().mockResolvedValue({
             version: 2,
             timestamp: new Date().toISOString(),
             results: mockResults,
@@ -185,7 +189,7 @@ describe('filterTestsUtil', () => {
             },
           }),
         };
-        jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+        vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
 
         const result = await filterTestsByResults(
           mockTestSuite,
@@ -198,7 +202,7 @@ describe('filterTestsUtil', () => {
       });
 
       it('should handle readOutput returning summary without results', async () => {
-        jest.mocked(util.readOutput).mockResolvedValue({
+        vi.mocked(util.readOutput).mockResolvedValue({
           evalId: null,
           results: {
             version: 2,
@@ -221,7 +225,7 @@ describe('filterTestsUtil', () => {
       });
 
       it('should handle readOutput throwing an error', async () => {
-        jest.mocked(util.readOutput).mockRejectedValue(new Error('Failed to read file'));
+        vi.mocked(util.readOutput).mockRejectedValue(new Error('Failed to read file'));
         const result = await filterTestsByResults(mockTestSuite, 'results.json', () => true);
         expect(result).toHaveLength(0);
       });
@@ -229,15 +233,17 @@ describe('filterTestsUtil', () => {
       it('should handle toEvaluateSummary throwing an error', async () => {
         const mockEval = {
           id: 'eval-123',
-          toEvaluateSummary: jest.fn().mockRejectedValue(new Error('Failed to get summary')),
+          toEvaluateSummary: vi.fn().mockRejectedValue(new Error('Failed to get summary')),
         };
-        jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+        vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
         const result = await filterTestsByResults(mockTestSuite, 'eval-123', () => true);
         expect(result).toHaveLength(0);
       });
 
       it('should handle case where no test matches any result', async () => {
-        jest.mocked(util.resultIsForTestCase).mockReturnValue(false);
+        vi.mocked(util.resultIsForTestCase).mockImplementation(function() {
+          return false;
+        });
         const result = await filterTestsByResults(mockTestSuite, 'results.json', () => true);
         expect(result).toHaveLength(0);
       });
@@ -291,7 +297,7 @@ describe('filterTestsUtil', () => {
           },
         ];
 
-        jest.mocked(util.readOutput).mockResolvedValue({
+        vi.mocked(util.readOutput).mockResolvedValue({
           evalId: null,
           results: {
             version: 2,
@@ -310,7 +316,7 @@ describe('filterTestsUtil', () => {
         });
 
         // Mock resultIsForTestCase to return true only for the first test
-        jest.mocked(util.resultIsForTestCase).mockImplementation((_result, test) => {
+        vi.mocked(util.resultIsForTestCase).mockImplementation(function(_result, test) {
           return test === mockTestSuite.tests![0];
         });
 
@@ -330,7 +336,7 @@ describe('filterTestsUtil', () => {
           resultsCount: 0,
           prompts: [],
           persisted: true,
-          toEvaluateSummary: jest.fn().mockResolvedValue({
+          toEvaluateSummary: vi.fn().mockResolvedValue({
             version: 2,
             timestamp: new Date().toISOString(),
             results: mockResults,
@@ -343,7 +349,7 @@ describe('filterTestsUtil', () => {
             },
           }),
         };
-        jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+        vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
       });
 
       it('should filter tests based on success', async () => {
@@ -367,7 +373,7 @@ describe('filterTestsUtil', () => {
       });
 
       it('should return empty array if eval not found', async () => {
-        jest.mocked(Eval.findById).mockResolvedValue(undefined);
+        vi.mocked(Eval.findById).mockResolvedValue(undefined);
         const result = await filterTestsByResults(mockTestSuite, 'eval-123', () => true);
         expect(result).toHaveLength(0);
       });
@@ -381,7 +387,7 @@ describe('filterTestsUtil', () => {
           resultsCount: 0,
           prompts: [],
           persisted: true,
-          toEvaluateSummary: jest.fn().mockResolvedValue({
+          toEvaluateSummary: vi.fn().mockResolvedValue({
             version: 2,
             timestamp: new Date().toISOString(),
             results: [],
@@ -394,7 +400,7 @@ describe('filterTestsUtil', () => {
             },
           }),
         };
-        jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+        vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
         const result = await filterTestsByResults(mockTestSuite, 'eval-123', () => true);
         expect(result).toHaveLength(0);
       });
@@ -408,7 +414,7 @@ describe('filterTestsUtil', () => {
           resultsCount: 0,
           prompts: [],
           persisted: true,
-          toEvaluateSummary: jest.fn().mockResolvedValue({
+          toEvaluateSummary: vi.fn().mockResolvedValue({
             version: 2,
             timestamp: new Date().toISOString(),
             table: { head: { prompts: [], vars: [] }, body: [] },
@@ -420,7 +426,7 @@ describe('filterTestsUtil', () => {
             },
           }),
         };
-        jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+        vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
         const result = await filterTestsByResults(mockTestSuite, 'eval-123', () => true);
         expect(result).toHaveLength(0);
       });
