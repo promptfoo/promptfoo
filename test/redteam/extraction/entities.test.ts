@@ -14,6 +14,16 @@ vi.mock('../../../src/cache', async importOriginal => {
   });
 });
 
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
+}));
+
 vi.mock('../../../src/envars', async () => {
   const originalModule = await vi.importActual('../../../src/envars');
   return {

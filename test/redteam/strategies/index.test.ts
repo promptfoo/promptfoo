@@ -15,6 +15,15 @@ vi.mock('../../../src/esm', async importOriginal => {
     importModule: vi.fn()
   });
 });
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
+}));
 
 describe('validateStrategies', () => {
   beforeEach(() => {
