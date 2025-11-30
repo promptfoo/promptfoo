@@ -34,6 +34,7 @@ jest.mock('http', () => ({
     listen: jest.fn((_port: number, callback: () => void) => callback()),
     address: jest.fn().mockReturnValue({ port: 3000 }),
     close: jest.fn(),
+    once: jest.fn(), // Error handler registration
   }),
 }));
 

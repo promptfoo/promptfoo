@@ -44,6 +44,19 @@ import type {
 } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 
+// Configuration constants
+const DEFAULT_TIMEOUT_MS = 120000;
+const DEFAULT_MAX_APPROVALS = 5;
+const DEFAULT_POOL_SIZE = 4;
+const CHATKIT_READY_TIMEOUT_MS = 60000;
+const DOM_SETTLE_DELAY_MS = 2000;
+const APPROVAL_PROCESS_DELAY_MS = 500;
+const APPROVAL_CLICK_DELAY_MS = 1000;
+const RESPONSE_EXTRACT_RETRY_DELAY_MS = 500;
+// Note: MIN_RESPONSE_LENGTH (20), MIN_MESSAGE_LENGTH (30), MAX_INIT_ATTEMPTS (100),
+// and INIT_POLL_INTERVAL_MS (100) are hardcoded in the HTML template string
+// and in DOM evaluation functions where constants cannot be easily passed.
+
 /**
  * Check if a URL is from OpenAI's CDN by parsing the hostname.
  * This is more secure than substring matching which could be bypassed.
@@ -329,7 +342,7 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
 
     // Wait before retry
     if (attempt < maxRetries - 1) {
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(RESPONSE_EXTRACT_RETRY_DELAY_MS);
     }
   }
 
@@ -369,7 +382,7 @@ async function handleApproval(
               });
               await button.click();
               // Wait for the approval to be processed
-              await page.waitForTimeout(1000);
+              await page.waitForTimeout(APPROVAL_CLICK_DELAY_MS);
               return true;
             }
           }
@@ -390,7 +403,7 @@ async function handleApproval(
 
         if (hasApproval) {
           logger.debug('[ChatKitProvider] Clicked approval button via evaluate', { action });
-          await page.waitForTimeout(1000);
+          await page.waitForTimeout(APPROVAL_CLICK_DELAY_MS);
           return true;
         }
       } catch (e) {
@@ -420,7 +433,7 @@ async function processApprovals(
 
   while (approvalCount < maxApprovals) {
     // Small delay to let UI settle
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(APPROVAL_PROCESS_DELAY_MS);
 
     const handled = await handleApproval(page, approvalHandling);
     if (!handled) {
@@ -442,7 +455,7 @@ async function processApprovals(
       );
 
       // Let DOM settle after new response
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(DOM_SETTLE_DELAY_MS);
     } catch {
       // Timeout waiting for response after approval - might be final response
       break;
@@ -466,23 +479,23 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     options: { config?: OpenAiChatKitOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(workflowId, options);
-    // Default poolSize to PROMPTFOO_MAX_CONCURRENCY env var if set, otherwise 4
+    // Default poolSize to PROMPTFOO_MAX_CONCURRENCY env var if set, otherwise DEFAULT_POOL_SIZE
     const envPoolSize = process.env.PROMPTFOO_MAX_CONCURRENCY
       ? parseInt(process.env.PROMPTFOO_MAX_CONCURRENCY, 10)
       : NaN;
-    const defaultPoolSize = Number.isNaN(envPoolSize) ? 4 : envPoolSize;
+    const defaultPoolSize = Number.isNaN(envPoolSize) ? DEFAULT_POOL_SIZE : envPoolSize;
 
     this.chatKitConfig = {
       workflowId: options.config?.workflowId || workflowId,
       version: options.config?.version,
       userId: options.config?.userId || 'promptfoo-eval',
-      timeout: options.config?.timeout || 120000,
+      timeout: options.config?.timeout || DEFAULT_TIMEOUT_MS,
       headless: options.config?.headless ?? true,
       serverPort: options.config?.serverPort || 0,
       usePool: options.config?.usePool ?? false,
       poolSize: options.config?.poolSize ?? defaultPoolSize,
       approvalHandling: options.config?.approvalHandling ?? 'auto-approve',
-      maxApprovals: options.config?.maxApprovals ?? 5,
+      maxApprovals: options.config?.maxApprovals ?? DEFAULT_MAX_APPROVALS,
     };
   }
 
@@ -571,7 +584,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     // Wait for ChatKit to be ready
     logger.debug('[ChatKitProvider] Waiting for ChatKit ready');
     await this.page.waitForFunction(() => (window as any).__state?.ready === true, {
-      timeout: 60000,
+      timeout: CHATKIT_READY_TIMEOUT_MS,
     });
 
     this.initialized = true;
@@ -630,7 +643,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
 
       // Wait for ChatKit to be ready again after reload
       await this.page.waitForFunction(() => (window as any).__state?.ready === true, {
-        timeout: 60000,
+        timeout: CHATKIT_READY_TIMEOUT_MS,
       });
 
       // Send the message
@@ -648,14 +661,14 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       });
 
       // Allow DOM to settle - ChatKit iframe needs time to render the response
-      await this.page.waitForTimeout(2000);
+      await this.page.waitForTimeout(DOM_SETTLE_DELAY_MS);
 
       // Handle any approval steps in the workflow
       const approvalsHandled = await processApprovals(
         this.page,
         this.chatKitConfig.approvalHandling ?? 'auto-approve',
-        this.chatKitConfig.maxApprovals ?? 5,
-        this.chatKitConfig.timeout ?? 120000,
+        this.chatKitConfig.maxApprovals ?? DEFAULT_MAX_APPROVALS,
+        this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
       );
 
       if (approvalsHandled > 0) {
@@ -780,14 +793,14 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       });
 
       // Allow DOM to settle
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(DOM_SETTLE_DELAY_MS);
 
       // Handle any approval steps in the workflow
       const approvalsHandled = await processApprovals(
         page,
         this.chatKitConfig.approvalHandling ?? 'auto-approve',
-        this.chatKitConfig.maxApprovals ?? 5,
-        this.chatKitConfig.timeout ?? 120000,
+        this.chatKitConfig.maxApprovals ?? DEFAULT_MAX_APPROVALS,
+        this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
       );
 
       if (approvalsHandled > 0) {

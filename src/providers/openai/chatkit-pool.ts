@@ -16,6 +16,11 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import * as http from 'http';
 import logger from '../../logger';
 
+// Pool configuration constants
+const CHATKIT_READY_TIMEOUT_MS = 60000;
+const PAGE_REFRESH_TIMEOUT_MS = 30000;
+const PAGE_ACQUIRE_TIMEOUT_MS = 120000;
+
 interface PooledPage {
   context: BrowserContext;
   page: Page;
@@ -36,6 +41,7 @@ interface ChatKitPoolConfig {
  */
 export class ChatKitBrowserPool {
   private static instance: ChatKitBrowserPool | null = null;
+  private static cleanupRegistered: boolean = false;
 
   private browser: Browser | null = null;
   private server: http.Server | null = null;
@@ -53,6 +59,34 @@ export class ChatKitBrowserPool {
   }
 
   /**
+   * Register process exit handlers to clean up browser resources
+   */
+  private static registerCleanupHandlers(): void {
+    if (ChatKitBrowserPool.cleanupRegistered) {
+      return;
+    }
+    ChatKitBrowserPool.cleanupRegistered = true;
+
+    const cleanup = () => {
+      if (ChatKitBrowserPool.instance) {
+        // Synchronous cleanup - close browser immediately
+        ChatKitBrowserPool.instance.shutdown().catch(() => {});
+        ChatKitBrowserPool.instance = null;
+      }
+    };
+
+    process.on('exit', cleanup);
+    process.on('SIGINT', () => {
+      cleanup();
+      process.exit(130);
+    });
+    process.on('SIGTERM', () => {
+      cleanup();
+      process.exit(143);
+    });
+  }
+
+  /**
    * Get the singleton pool instance
    */
   static getInstance(config?: Partial<ChatKitPoolConfig>): ChatKitBrowserPool {
@@ -62,6 +96,23 @@ export class ChatKitBrowserPool {
         headless: config?.headless ?? true,
         serverPort: config?.serverPort ?? 0,
       });
+      ChatKitBrowserPool.registerCleanupHandlers();
+    } else if (config) {
+      // Warn if different config is requested for existing instance
+      const existing = ChatKitBrowserPool.instance.config;
+      if (
+        (config.maxConcurrency !== undefined &&
+          config.maxConcurrency !== existing.maxConcurrency) ||
+        (config.headless !== undefined && config.headless !== existing.headless)
+      ) {
+        logger.warn(
+          '[ChatKitPool] Pool already exists with different config, ignoring new config',
+          {
+            existing: { maxConcurrency: existing.maxConcurrency, headless: existing.headless },
+            requested: { maxConcurrency: config.maxConcurrency, headless: config.headless },
+          },
+        );
+      }
     }
     return ChatKitBrowserPool.instance;
   }
@@ -76,6 +127,7 @@ export class ChatKitBrowserPool {
       });
       ChatKitBrowserPool.instance = null;
     }
+    // Don't reset cleanupRegistered - process handlers should only be registered once
   }
 
   /**
@@ -121,7 +173,10 @@ export class ChatKitBrowserPool {
       res.end(this.htmlTemplate);
     });
 
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
+      this.server!.once('error', (err: NodeJS.ErrnoException) => {
+        reject(new Error(`Failed to start ChatKit pool server: ${err.message}`));
+      });
       this.server!.listen(this.config.serverPort, () => {
         const address = this.server!.address();
         this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
@@ -153,7 +208,7 @@ export class ChatKitBrowserPool {
   async acquirePage(): Promise<PooledPage> {
     await this.initialize();
 
-    // Try to find an available page
+    // Try to find an available ready page
     const available = this.pages.find((p) => !p.inUse && p.ready);
     if (available) {
       // Ensure the page matches the current template/configuration
@@ -168,6 +223,17 @@ export class ChatKitBrowserPool {
       return available;
     }
 
+    // Try to find an idle page that needs refresh (handles template change while pool is full)
+    const needsRefresh = this.pages.find((p) => !p.inUse && !p.ready);
+    if (needsRefresh) {
+      await this.refreshPooledPage(needsRefresh);
+      needsRefresh.inUse = true;
+      logger.debug('[ChatKitPool] Acquired and refreshed page', {
+        poolSize: this.pages.length,
+      });
+      return needsRefresh;
+    }
+
     // Create new page if under limit
     if (this.pages.length < this.config.maxConcurrency) {
       const pooledPage = await this.createPooledPage();
@@ -179,14 +245,32 @@ export class ChatKitBrowserPool {
       return pooledPage;
     }
 
-    // Wait for a page to become available
+    // Wait for a page to become available with timeout
     logger.debug('[ChatKitPool] Waiting for available page', {
       poolSize: this.pages.length,
       waiting: this.waitQueue.length + 1,
     });
 
-    return new Promise((resolve) => {
-      this.waitQueue.push(resolve);
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        const index = this.waitQueue.indexOf(wrappedResolve);
+        if (index >= 0) {
+          this.waitQueue.splice(index, 1);
+        }
+        reject(
+          new Error(
+            `Timeout waiting for available page after ${PAGE_ACQUIRE_TIMEOUT_MS}ms. ` +
+              `Pool has ${this.pages.length} pages, ${this.pages.filter((p) => p.inUse).length} in use.`,
+          ),
+        );
+      }, PAGE_ACQUIRE_TIMEOUT_MS);
+
+      const wrappedResolve = (page: PooledPage) => {
+        clearTimeout(timeoutId);
+        resolve(page);
+      };
+
+      this.waitQueue.push(wrappedResolve);
     });
   }
 
@@ -194,8 +278,7 @@ export class ChatKitBrowserPool {
    * Release a page back to the pool
    */
   async releasePage(pooledPage: PooledPage): Promise<void> {
-    pooledPage.inUse = false;
-
+    // Keep inUse=true during refresh to prevent race conditions
     // Reset the page for next use by reloading
     try {
       await this.refreshPooledPage(pooledPage);
@@ -218,11 +301,14 @@ export class ChatKitBrowserPool {
       pooledPage = newPage;
     }
 
-    // If someone is waiting, give them the page
+    // If someone is waiting, give them the page directly (keep inUse=true)
     if (this.waitQueue.length > 0) {
       const waiter = this.waitQueue.shift()!;
       pooledPage.inUse = true;
       waiter(pooledPage);
+    } else {
+      // No one waiting, mark as available
+      pooledPage.inUse = false;
     }
   }
 
@@ -246,7 +332,7 @@ export class ChatKitBrowserPool {
     });
 
     await page.waitForFunction(() => (window as any).__state?.ready === true, {
-      timeout: 60000,
+      timeout: CHATKIT_READY_TIMEOUT_MS,
     });
 
     return {
@@ -261,7 +347,7 @@ export class ChatKitBrowserPool {
   private async refreshPooledPage(pooledPage: PooledPage): Promise<void> {
     await pooledPage.page.reload({ waitUntil: 'domcontentloaded' });
     await pooledPage.page.waitForFunction(() => (window as any).__state?.ready === true, {
-      timeout: 30000,
+      timeout: PAGE_REFRESH_TIMEOUT_MS,
     });
     pooledPage.templateVersion = this.templateVersion;
     pooledPage.ready = true;
@@ -283,6 +369,12 @@ export class ChatKitBrowserPool {
    */
   async shutdown(): Promise<void> {
     logger.debug('[ChatKitPool] Shutting down');
+
+    // Clear pending waiters - they will timeout via PAGE_ACQUIRE_TIMEOUT_MS
+    if (this.waitQueue.length > 0) {
+      logger.debug('[ChatKitPool] Clearing pending waiters', { count: this.waitQueue.length });
+      this.waitQueue = [];
+    }
 
     // Close all contexts
     for (const pooledPage of this.pages) {
@@ -311,6 +403,7 @@ export class ChatKitBrowserPool {
     }
 
     this.initialized = false;
+    this.templateVersion = 0;
     logger.debug('[ChatKitPool] Shutdown complete');
   }
 }
