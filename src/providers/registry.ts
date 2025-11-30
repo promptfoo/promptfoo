@@ -200,6 +200,21 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
+      providerPath.startsWith('opencode:sdk') || providerPath === 'opencode',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { OpenCodeSDKProvider } = await import('./opencode-sdk');
+      return new OpenCodeSDKProvider({
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) =>
       providerPath.startsWith('anthropic:claude-agent-sdk') ||
       providerPath.startsWith('anthropic:claude-code'),
     create: async (
