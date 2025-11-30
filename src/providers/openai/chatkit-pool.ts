@@ -114,7 +114,6 @@ export class ChatKitBrowserPool {
       // This is cleaner than relying only on process exit handlers
       const instance = ChatKitBrowserPool.instance;
       providerRegistry.register({
-        id: () => 'chatkit-browser-pool',
         async shutdown() {
           if (instance) {
             await instance.shutdown();
