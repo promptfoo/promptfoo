@@ -686,8 +686,8 @@ describe('GoogleLiveProvider', () => {
   });
   describe('Python executable integration', () => {
     it('should handle Python executable validation correctly', async () => {
-      const mockSpawn = (await import('child_process')).spawn;
-      const validatePythonPathMock = (await import('../../../src/python/pythonUtils')).validatePythonPath;
+      const mockSpawn = vi.mocked((await import('child_process')).spawn);
+      const validatePythonPathMock = vi.mocked((await import('../../../src/python/pythonUtils')).validatePythonPath);
 
       validatePythonPathMock.mockResolvedValueOnce('/custom/python/bin');
 
@@ -726,8 +726,8 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should handle errors when spawning Python process', async () => {
-      const mockSpawn = (await import('child_process')).spawn;
-      const validatePythonPathMock = (await import('../../../src/python/pythonUtils')).validatePythonPath;
+      const mockSpawn = vi.mocked((await import('child_process')).spawn);
+      const validatePythonPathMock = vi.mocked((await import('../../../src/python/pythonUtils')).validatePythonPath);
 
       validatePythonPathMock.mockRejectedValueOnce(new Error('Python not found'));
 
@@ -769,7 +769,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should handle stdout and stderr from the Python process', async () => {
-      const mockSpawn = (await import('child_process')).spawn;
+      const mockSpawn = vi.mocked((await import('child_process')).spawn);
 
       const mockStdout = { on: vi.fn() };
       const mockStderr = { on: vi.fn() };
@@ -780,9 +780,9 @@ describe('GoogleLiveProvider', () => {
         on: vi.fn(),
         kill: vi.fn(),
         killed: false,
-      });
+      } as any);
 
-      const validatePythonPathMock = (await import('../../../src/python/pythonUtils')).validatePythonPath;
+      const validatePythonPathMock = vi.mocked((await import('../../../src/python/pythonUtils')).validatePythonPath);
       validatePythonPathMock.mockResolvedValueOnce('python3');
 
       const providerWithStatefulApi = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -819,8 +819,8 @@ describe('GoogleLiveProvider', () => {
       const originalEnv = process.env.PROMPTFOO_PYTHON;
       process.env.PROMPTFOO_PYTHON = '/env/python3';
 
-      const mockSpawn = (await import('child_process')).spawn;
-      const validatePythonPathMock = (await import('../../../src/python/pythonUtils')).validatePythonPath;
+      const mockSpawn = vi.mocked((await import('child_process')).spawn);
+      const validatePythonPathMock = vi.mocked((await import('../../../src/python/pythonUtils')).validatePythonPath);
       validatePythonPathMock.mockResolvedValueOnce('/env/python3');
 
       try {
@@ -873,10 +873,10 @@ describe('GoogleLiveProvider', () => {
         killed: false,
       };
 
-      const mockSpawn = (await import('child_process')).spawn;
-      mockSpawn.mockReturnValueOnce(mockProcess);
+      const mockSpawn = vi.mocked((await import('child_process')).spawn);
+      mockSpawn.mockReturnValueOnce(mockProcess as any);
 
-      const validatePythonPathMock = (await import('../../../src/python/pythonUtils')).validatePythonPath;
+      const validatePythonPathMock = vi.mocked((await import('../../../src/python/pythonUtils')).validatePythonPath);
       validatePythonPathMock.mockResolvedValueOnce('python3');
 
       const providerWithCleanup = new GoogleLiveProvider('gemini-2.0-flash-exp', {

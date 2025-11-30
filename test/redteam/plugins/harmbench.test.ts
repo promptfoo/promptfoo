@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HarmbenchGrader, HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
 import * as fetchModule from '../../../src/util/fetch/index';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase, CallApiFunction } from '../../../src/types/index';
 
 vi.mock('../../../src/matchers', async importOriginal => {
   return ({
@@ -24,7 +24,7 @@ describe('HarmbenchPlugin', () => {
 
   beforeEach(() => {
     mockProvider = {
-      callApi: vi.fn(),
+      callApi: vi.fn() as CallApiFunction,
       id: vi.fn().mockReturnValue('test-provider'),
     };
     plugin = new HarmbenchPlugin(mockProvider, 'test-purpose', 'testVar');
@@ -77,7 +77,7 @@ describe('HarmbenchGrader', () => {
       },
     } as AtomicTestCase;
     mockProvider = {
-      callApi: vi.fn(),
+      callApi: vi.fn() as CallApiFunction,
       id: vi.fn().mockReturnValue('test-provider'),
     };
   });

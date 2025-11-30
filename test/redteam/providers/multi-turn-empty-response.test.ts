@@ -7,6 +7,7 @@ import { getTargetResponse } from '../../../src/redteam/providers/shared';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiFunction,
   AtomicTestCase,
   ProviderResponse,
 } from '../../../src/types/index';
@@ -34,7 +35,7 @@ const mockGetTargetResponse = getTargetResponse as MockedFunction<typeof getTarg
 describe('Multi-turn strategies empty response handling', () => {
   const createMockTargetProvider = (): ApiProvider => ({
     id: () => 'mock-target',
-    callApi: vi.fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>(),
+    callApi: vi.fn() as CallApiFunction,
   });
 
   const createTestContext = (targetProvider: ApiProvider): CallApiContextParams => ({

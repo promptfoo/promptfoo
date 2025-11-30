@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RbacGrader, RbacPlugin } from '../../../src/redteam/plugins/rbac';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase, CallApiFunction } from '../../../src/types/index';
 
 vi.mock('../../../src/util/fetch/index.ts');
 
@@ -11,7 +11,7 @@ describe('RbacPlugin', () => {
   beforeEach(() => {
     mockProvider = {
       id: () => 'test-provider',
-      callApi: vi.fn(),
+      callApi: vi.fn() as CallApiFunction,
     };
   });
 
@@ -110,7 +110,7 @@ describe('RbacGrader', () => {
           score: 1,
           pass: true,
         }),
-      }),
+      }) as CallApiFunction,
     };
 
     const testCase: AtomicTestCase = {

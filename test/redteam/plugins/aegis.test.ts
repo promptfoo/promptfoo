@@ -8,7 +8,7 @@ import {
 } from '../../../src/redteam/plugins/aegis';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 
-import type { ApiProvider, TestCase } from '../../../src/types/index';
+import type { ApiProvider, CallApiFunction, TestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/integrations/huggingfaceDatasets');
 
@@ -16,7 +16,7 @@ describe('AegisPlugin', () => {
   let plugin: AegisPlugin;
   const mockProvider: ApiProvider = {
     id: () => 'test-provider',
-    callApi: vi.fn(),
+    callApi: vi.fn() as CallApiFunction,
   };
 
   beforeEach(() => {

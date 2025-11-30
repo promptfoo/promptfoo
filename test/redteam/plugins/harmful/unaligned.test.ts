@@ -9,7 +9,7 @@ import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmfu
 import { getHarmfulTests } from '../../../../src/redteam/plugins/harmful/unaligned';
 
 import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider } from '../../../../src/types/index';
+import type { ApiProvider, CallApiFunction } from '../../../../src/types/index';
 
 vi.mock('../../../../src/envars');
 
@@ -20,7 +20,7 @@ describe('harmful plugin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockProvider = {
-      callApi: vi.fn(),
+      callApi: vi.fn() as CallApiFunction,
       id: vi.fn().mockReturnValue('test-provider'),
     };
     if (mockCallApi) {

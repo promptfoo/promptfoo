@@ -148,7 +148,6 @@ describe('RedteamPluginBase', () => {
 
     vi
       .spyOn(provider, 'callApi')
-      .mockImplementation()
       .mockResolvedValueOnce(mockResponses[0])
       .mockResolvedValueOnce(mockResponses[1]);
 
@@ -163,7 +162,6 @@ describe('RedteamPluginBase', () => {
   it('should deduplicate prompts', async () => {
     vi
       .spyOn(provider, 'callApi')
-      .mockImplementation()
       .mockResolvedValueOnce({
         output: 'Prompt: duplicate\nPrompt: duplicate',
       })
@@ -206,7 +204,6 @@ describe('RedteamPluginBase', () => {
 
     vi
       .spyOn(provider, 'callApi')
-      .mockImplementation()
       .mockResolvedValueOnce(mockResponses[0])
       .mockResolvedValueOnce(mockResponses[1])
       .mockResolvedValueOnce(mockResponses[2]);
@@ -220,7 +217,7 @@ describe('RedteamPluginBase', () => {
   it('should bail after 2 retries if no new prompts are generated', async () => {
     const mockResponse = { output: 'Prompt: test1\nPrompt: test2' };
 
-    vi.spyOn(provider, 'callApi').mockImplementation().mockResolvedValue(mockResponse);
+    vi.spyOn(provider, 'callApi').mockResolvedValue(mockResponse);
 
     const result = await plugin.generateTests(5);
 
@@ -231,7 +228,6 @@ describe('RedteamPluginBase', () => {
   it('should sample prompts when more are generated than requested', async () => {
     vi
       .spyOn(provider, 'callApi')
-      .mockImplementation()
       .mockResolvedValue({
         output: Array(10)
           .fill(0)

@@ -5,9 +5,9 @@ import RedteamIterativeProvider, {
 } from '../../../src/redteam/providers/iterative';
 import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
-const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
-const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());
-const mockCheckPenalizedPhrases = vi.hoisted(() => vi.fn<() => boolean>());
+const mockGetProvider = vi.hoisted(() => vi.fn());
+const mockGetTargetResponse = vi.hoisted(() => vi.fn());
+const mockCheckPenalizedPhrases = vi.hoisted(() => vi.fn());
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../src/logger', () => ({

@@ -59,7 +59,7 @@ describe('ContractPlugin', () => {
   });
 
   it('should handle empty response from provider', async () => {
-    vi.spyOn(mockProvider, 'callApi').mockImplementation().mockResolvedValue({ output: '' });
+    vi.spyOn(mockProvider, 'callApi').mockResolvedValue({ output: '' });
     const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(1);
     expect(tests).toHaveLength(0);
@@ -68,7 +68,6 @@ describe('ContractPlugin', () => {
   it('should handle error response from provider', async () => {
     vi
       .spyOn(mockProvider, 'callApi')
-      .mockImplementation()
       .mockResolvedValue({ error: 'API error' });
     const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(1);

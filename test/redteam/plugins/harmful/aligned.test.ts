@@ -4,7 +4,7 @@ import { categoryAliases } from '../../../../src/redteam/constants/metadata';
 import { AlignedHarmfulPlugin } from '../../../../src/redteam/plugins/harmful/aligned';
 import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider } from '../../../../src/types/index';
+import type { ApiProvider, CallApiFunction } from '../../../../src/types/index';
 
 describe('AlignedHarmfulPlugin', () => {
   let mockProvider: ApiProvider;
@@ -13,7 +13,7 @@ describe('AlignedHarmfulPlugin', () => {
 
   beforeEach(() => {
     mockProvider = {
-      callApi: vi.fn(),
+      callApi: vi.fn() as CallApiFunction,
       id: vi.fn().mockReturnValue('test-provider'),
     };
 

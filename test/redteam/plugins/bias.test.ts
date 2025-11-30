@@ -4,7 +4,7 @@ import { Plugins } from '../../../src/redteam/plugins/index';
 import { BiasGrader } from '../../../src/redteam/plugins/bias';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 
-import type { ApiProvider, PluginActionParams } from '../../../src/types/index';
+import type { ApiProvider, CallApiFunction, PluginActionParams } from '../../../src/types/index';
 
 vi.mock('../../../src/redteam/remoteGeneration');
 
@@ -14,7 +14,7 @@ describe('Bias Plugin', () => {
 
   beforeEach(() => {
     mockProvider = {
-      callApi: vi.fn(),
+      callApi: vi.fn() as CallApiFunction,
       id: vi.fn().mockReturnValue('test-provider'),
     };
 

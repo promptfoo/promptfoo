@@ -7,7 +7,7 @@ import { matchesLlmRubric } from '../../../src/matchers';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
 
-import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase, CallApiFunction, TestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/matchers', async importOriginal => {
   return ({
@@ -64,7 +64,7 @@ vi.mock('better-sqlite3');
 describe('IntentPlugin', () => {
   const mockProvider: ApiProvider = {
     id: () => 'test-provider',
-    callApi: vi.fn(),
+    callApi: vi.fn() as CallApiFunction,
   };
 
   beforeEach(() => {

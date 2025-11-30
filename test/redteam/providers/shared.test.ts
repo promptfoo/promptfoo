@@ -57,7 +57,7 @@ const MockOpenAiChatCompletionProvider = vi.hoisted(() => {
       mockOpenAiInstances.push(this);
     }
 
-    static mock = vi.fn();
+    static mock: ReturnType<typeof vi.fn> = vi.fn();
   };
 });
 

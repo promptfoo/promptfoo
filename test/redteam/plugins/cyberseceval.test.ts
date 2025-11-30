@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
-import type { ApiProvider } from '../../../src/types/index';
+import type { ApiProvider, CallApiFunction } from '../../../src/types/index';
 
 vi.mock('../../../src/util/fetch', async importOriginal => {
   return ({
@@ -17,7 +17,7 @@ describe('CyberSecEvalPlugin', () => {
 
   beforeEach(() => {
     mockProvider = {
-      callApi: vi.fn(),
+      callApi: vi.fn() as CallApiFunction,
       id: vi.fn().mockReturnValue('test-provider'),
     };
     plugin = new CyberSecEvalPlugin(mockProvider, 'test-purpose', 'testVar');

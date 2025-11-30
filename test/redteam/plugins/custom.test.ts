@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CustomPlugin, loadCustomPluginDefinition } from '../../../src/redteam/plugins/custom';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
-import type { ApiProvider } from '../../../src/types/index';
+import type { ApiProvider, CallApiFunction } from '../../../src/types/index';
 
 vi.mock('../../../src/util/file', async importOriginal => {
   return ({
@@ -17,7 +17,7 @@ describe('CustomPlugin', () => {
 
   beforeEach(() => {
     mockProvider = {
-      callApi: vi.fn(),
+      callApi: vi.fn() as CallApiFunction,
       id: vi.fn().mockReturnValue('test-provider'),
     };
 

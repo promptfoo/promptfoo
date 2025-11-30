@@ -16,7 +16,7 @@ describe('MemoryPoisoningProvider', () => {
       callApi: vi.fn(),
     };
 
-    mockFetch = vi.spyOn(global, 'fetch').mockImplementation();
+    mockFetch = vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
   });
 
   afterEach(() => {

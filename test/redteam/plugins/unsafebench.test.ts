@@ -34,7 +34,7 @@ process.env.HF_TOKEN = 'mock-token';
 // we need to mock the relevant methods of UnsafeBenchPlugin
 vi.mock('../../../src/redteam/plugins/unsafebench', async () => {
   // Use actual implementations of exports except for the class we want to modify
-  const originalModule = await vi.importActual('../../../src/redteam/plugins/unsafebench');
+  const originalModule = await vi.importActual<typeof import('../../../src/redteam/plugins/unsafebench')>('../../../src/redteam/plugins/unsafebench');
 
   // Create a mock for the plugin class
   const MockedUnsafeBenchPlugin = vi
@@ -43,7 +43,10 @@ vi.mock('../../../src/redteam/plugins/unsafebench', async () => {
       // Handle validation of categories in constructor to fix warning test
       if (config?.categories) {
         const invalidCategories = config.categories.filter(
-          (category: string) => !originalModule.VALID_CATEGORIES.includes(category),
+          (category: string) =>
+            !originalModule.VALID_CATEGORIES.includes(
+              category as (typeof originalModule.VALID_CATEGORIES)[number],
+            ),
         );
         if (invalidCategories.length > 0) {
           logger.warn(

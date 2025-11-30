@@ -7,8 +7,9 @@ import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../
 // Import HydraProvider dynamically after mocks are set up
 let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index').HydraProvider;
 
-// Hoisted mock for getGraderById
+// Hoisted mocks
 const mockGetGraderById = vi.hoisted(() => vi.fn());
+const mockIsBasicRefusal = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   return {
@@ -38,7 +39,7 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
 
 vi.mock('../../../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../../../src/redteam/util')),
-  isBasicRefusal: vi.fn(),
+  isBasicRefusal: mockIsBasicRefusal,
   getSessionId: vi.fn(),
 }));
 
@@ -95,8 +96,7 @@ describe('HydraProvider', () => {
     });
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
 
-    const { isBasicRefusal } = await import('../../../../src/redteam/util');
-    isBasicRefusal.mockReturnValue(false);
+    mockIsBasicRefusal.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -144,7 +144,7 @@ describe('HydraProvider', () => {
     });
 
     it('should warn when backtracking is enabled in stateful mode', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       new HydraProvider({
         injectVar: 'input',
@@ -511,7 +511,7 @@ describe('HydraProvider', () => {
       });
 
       // First response is a refusal, second is not
-      isBasicRefusal.mockReturnValueOnce(true).mockReturnValueOnce(false);
+      mockIsBasicRefusal.mockReturnValueOnce(true).mockReturnValueOnce(false);
 
       const provider = new HydraProvider({
         injectVar: 'input',
@@ -539,7 +539,7 @@ describe('HydraProvider', () => {
 
     it('should stop when max backtracks reached', async () => {
       const { isBasicRefusal } = await import('../../../../src/redteam/util');
-      isBasicRefusal.mockReturnValue(true); // Always refuse
+      mockIsBasicRefusal.mockReturnValue(true); // Always refuse
 
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
@@ -575,7 +575,7 @@ describe('HydraProvider', () => {
 
     it('should not backtrack in stateful mode', async () => {
       const { isBasicRefusal } = await import('../../../../src/redteam/util');
-      isBasicRefusal.mockReturnValue(true); // Always refuse
+      mockIsBasicRefusal.mockReturnValue(true); // Always refuse
 
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
@@ -1229,7 +1229,7 @@ describe('HydraProvider', () => {
   describe('callApi() - metadata output', () => {
     it('should return complete metadata', async () => {
       const { getSessionId } = await import('../../../../src/redteam/util');
-      getSessionId.mockReturnValue('session-123');
+      vi.mocked(getSessionId).mockReturnValue('session-123');
 
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
