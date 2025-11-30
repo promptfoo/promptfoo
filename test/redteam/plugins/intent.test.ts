@@ -4,7 +4,6 @@ import * as path from 'path';
 
 import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers';
-import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
 
 import type { ApiProvider, AtomicTestCase, CallApiFunction, TestCase } from '../../../src/types/index';

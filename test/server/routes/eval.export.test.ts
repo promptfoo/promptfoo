@@ -1,4 +1,4 @@
-import { Mock, MockedFunction, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Mock, MockedFunction, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Request, Response } from 'express';
 
 import type { CompletedPrompt } from '../../../src/types/index';

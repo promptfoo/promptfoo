@@ -485,7 +485,8 @@ describe('HydraProvider', () => {
 
   describe('callApi() - backtracking', () => {
     it('should backtrack when target refuses in stateless mode', async () => {
-      const { isBasicRefusal } = await import('../../../../src/redteam/util');
+      // Import to trigger the mock
+      await import('../../../../src/redteam/util');
 
       let attackCallCount = 0;
       mockAgentProvider.callApi.mockImplementation(async function (prompt) {
@@ -538,7 +539,8 @@ describe('HydraProvider', () => {
     });
 
     it('should stop when max backtracks reached', async () => {
-      const { isBasicRefusal } = await import('../../../../src/redteam/util');
+      // Import to trigger the mock
+      await import('../../../../src/redteam/util');
       mockIsBasicRefusal.mockReturnValue(true); // Always refuse
 
       mockAgentProvider.callApi.mockResolvedValue({
@@ -574,7 +576,8 @@ describe('HydraProvider', () => {
     });
 
     it('should not backtrack in stateful mode', async () => {
-      const { isBasicRefusal } = await import('../../../../src/redteam/util');
+      // Import to trigger the mock
+      await import('../../../../src/redteam/util');
       mockIsBasicRefusal.mockReturnValue(true); // Always refuse
 
       mockAgentProvider.callApi.mockResolvedValue({

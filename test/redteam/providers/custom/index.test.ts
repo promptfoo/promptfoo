@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getGraderById } from '../../../../src/redteam/graders';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
 import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';

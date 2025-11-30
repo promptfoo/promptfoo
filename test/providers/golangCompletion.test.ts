@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import fs from 'fs';
 import path from 'path';
 
-import { getCache, isCacheEnabled } from '../../src/cache';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 
 // Hoisted mock functions

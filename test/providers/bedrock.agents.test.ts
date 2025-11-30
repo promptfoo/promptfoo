@@ -1,4 +1,4 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 
 // Hoisted mocks for AWS SDK

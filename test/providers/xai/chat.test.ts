@@ -536,7 +536,7 @@ describe('xAI Chat Provider', () => {
       expect(grok4?.aliases).toContain('grok-4-latest');
 
       // grok-3-beta should have aliases
-      const grok3 = XAI_CHAT_MODELS.find((m) => m.id === 'grok-3-beta');
+      const _grok3 = XAI_CHAT_MODELS.find((m) => m.id === 'grok-3-beta');
       const modelWithAliases = XAI_CHAT_MODELS.find((m) => m.aliases?.includes('grok-3'));
       expect(modelWithAliases).toBeDefined();
       expect(modelWithAliases?.aliases).toEqual(['grok-3', 'grok-3-latest']);

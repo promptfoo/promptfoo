@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import fs from 'fs';
 import crypto from 'crypto';
 import { generateSignature } from '../../src/providers/http';
 

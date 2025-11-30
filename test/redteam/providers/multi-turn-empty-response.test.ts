@@ -9,7 +9,6 @@ import type {
   CallApiContextParams,
   CallApiFunction,
   AtomicTestCase,
-  ProviderResponse,
 } from '../../../src/types/index';
 
 // Mock the shared getTargetResponse to test provider-specific logic

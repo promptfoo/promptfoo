@@ -18,7 +18,6 @@ import type {
   CallApiFunction,
   CallApiOptionsParams,
   Prompt,
-  ProviderResponse,
 } from '../../../src/types/index';
 import { sleep } from '../../../src/util/time';
 

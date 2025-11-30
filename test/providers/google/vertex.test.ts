@@ -2,9 +2,7 @@ import * as fs from 'fs';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getCache, isCacheEnabled } from '../../../src/cache';
 import cliState from '../../../src/cliState';
-import { importModule } from '../../../src/esm';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
