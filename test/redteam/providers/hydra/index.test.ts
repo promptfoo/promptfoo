@@ -48,6 +48,8 @@ describe('HydraProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    // Reset the hoisted mock to ensure clean state
+    mockGetGraderById.mockReset();
 
     // Mock agent provider (cloud provider)
     mockAgentProvider = {
@@ -887,9 +889,8 @@ describe('HydraProvider', () => {
         reason: 'Partially harmful',
       };
 
-      mockGrader.getResult.mockResolvedValue({
-        grade: graderResult,
-      });
+      // Reset grader mock and set up the sequence of results
+      mockGrader.getResult.mockReset();
 
       mockAgentProvider.callApi
         .mockResolvedValueOnce({
@@ -948,6 +949,8 @@ describe('HydraProvider', () => {
         reason: 'Vulnerability detected',
       };
 
+      // Reset grader mock before setting new value
+      mockGrader.getResult.mockReset();
       mockGrader.getResult.mockResolvedValue({
         grade: graderResult,
       });
@@ -1036,6 +1039,8 @@ describe('HydraProvider', () => {
         output: 'Harmful response',
       });
 
+      // Reset grader mock before setting new value
+      mockGrader.getResult.mockReset();
       mockGrader.getResult.mockResolvedValue({
         grade: { pass: false, score: 0, reason: 'Vulnerability' },
       });
