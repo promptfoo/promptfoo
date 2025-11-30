@@ -1,44 +1,45 @@
-import { Mock, Mocked, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, Mocked, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
-import { getGraderById } from '../../../../src/redteam/graders';
-import { HydraProvider } from '../../../../src/redteam/providers/hydra/index';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
 import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types/index';
+
+// Import HydraProvider dynamically after mocks are set up
+let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index').HydraProvider;
 
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 
-vi.mock('../../../../src/providers/promptfoo', async importOriginal => {
-  return ({
+vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    PromptfooChatCompletionProvider: vi.fn()
-  });
+    PromptfooChatCompletionProvider: vi.fn(),
+  };
 });
 
-vi.mock('../../../../src/redteam/graders', async importOriginal => {
-  return ({
+vi.mock('../../../../src/redteam/graders', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getGraderById: mockGetGraderById
-  });
+    getGraderById: mockGetGraderById,
+  };
 });
 
-vi.mock('../../../../src/redteam/remoteGeneration', async importOriginal => {
-  return ({
+vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    shouldGenerateRemote: vi.fn()
-  });
+    shouldGenerateRemote: vi.fn(),
+  };
 });
 
 vi.mock('../../../../src/evaluatorHelpers', async () => ({
   ...(await vi.importActual('../../../../src/evaluatorHelpers')),
-  renderPrompt: vi.fn()
+  renderPrompt: vi.fn(),
 }));
 
 vi.mock('../../../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../../../src/redteam/util')),
   isBasicRefusal: vi.fn(),
-  getSessionId: vi.fn()
+  getSessionId: vi.fn(),
 }));
 
 describe('HydraProvider', () => {
@@ -50,6 +51,11 @@ describe('HydraProvider', () => {
     vi.clearAllMocks();
     // Reset the hoisted mock to ensure clean state
     mockGetGraderById.mockReset();
+
+    // Reset modules and dynamically import HydraProvider so it gets the mocked graders
+    vi.resetModules();
+    const hydraModule = await import('../../../../src/redteam/providers/hydra/index');
+    HydraProvider = hydraModule.HydraProvider;
 
     // Mock agent provider (cloud provider)
     mockAgentProvider = {
@@ -78,13 +84,13 @@ describe('HydraProvider', () => {
     };
 
     // Setup mocks
-    (PromptfooChatCompletionProvider as Mock).mockImplementation(function() {
+    (PromptfooChatCompletionProvider as Mock).mockImplementation(function () {
       return mockAgentProvider;
     });
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return mockGrader;
     });
-    vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
       return true;
     });
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
@@ -126,7 +132,7 @@ describe('HydraProvider', () => {
     });
 
     it('should throw error when remote generation is not available', () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return false;
       });
 
@@ -217,14 +223,17 @@ describe('HydraProvider', () => {
         tokenUsage: { total: 50, prompt: 25, completion: 25 },
       });
 
-      // Grader fails (vulnerability detected) - reset first then set new value
-      mockGrader.getResult.mockReset();
-      mockGrader.getResult.mockResolvedValue({
-        grade: {
-          pass: false,
-          score: 0,
-          reason: 'Harmful content detected',
-        },
+      // Grader fails (vulnerability detected) - set up mockGetGraderById directly
+      mockGetGraderById.mockImplementation(function () {
+        return {
+          getResult: vi.fn().mockResolvedValue({
+            grade: {
+              pass: false,
+              score: 0,
+              reason: 'Harmful content detected',
+            },
+          }),
+        } as any;
       });
 
       const provider = new HydraProvider({
@@ -256,7 +265,7 @@ describe('HydraProvider', () => {
 
     it('should handle multiple turns until max turns reached', async () => {
       let callCount = 0;
-      mockAgentProvider.callApi.mockImplementation(async function() {
+      mockAgentProvider.callApi.mockImplementation(async function () {
         callCount++;
         return {
           output: `Attack message ${callCount}`,
@@ -479,7 +488,7 @@ describe('HydraProvider', () => {
       const { isBasicRefusal } = await import('../../../../src/redteam/util');
 
       let attackCallCount = 0;
-      mockAgentProvider.callApi.mockImplementation(async function(prompt) {
+      mockAgentProvider.callApi.mockImplementation(async function (prompt) {
         const request = JSON.parse(prompt as string);
         // Don't count learning updates
         if (!request.testComplete) {
@@ -492,7 +501,7 @@ describe('HydraProvider', () => {
       });
 
       let targetCallCount = 0;
-      mockTargetProvider.callApi.mockImplementation(async function() {
+      mockTargetProvider.callApi.mockImplementation(async function () {
         targetCallCount++;
         // First call is refused, second succeeds
         if (targetCallCount === 1) {
@@ -872,7 +881,7 @@ describe('HydraProvider', () => {
 
       await provider.callApi('', context);
 
-      expect(getGraderById).toHaveBeenCalledWith('harmful:violent-crime');
+      expect(mockGetGraderById).toHaveBeenCalledWith('harmful:violent-crime');
       expect(mockGrader.getResult).toHaveBeenCalledWith(
         'Attack message',
         'Target response',
@@ -889,9 +898,6 @@ describe('HydraProvider', () => {
         reason: 'Partially harmful',
       };
 
-      // Reset grader mock and set up the sequence of results
-      mockGrader.getResult.mockReset();
-
       mockAgentProvider.callApi
         .mockResolvedValueOnce({
           output: 'First attack',
@@ -906,14 +912,18 @@ describe('HydraProvider', () => {
         output: 'Target response',
       });
 
-      // First turn passes grader
-      mockGrader.getResult
+      // First turn passes grader, second turn fails - set up mockGetGraderById directly
+      const mockGetResult = vi
+        .fn()
         .mockResolvedValueOnce({
           grade: { pass: true, score: 1, reason: 'Safe' },
         })
         .mockResolvedValueOnce({
           grade: graderResult,
         });
+      mockGetGraderById.mockImplementation(function () {
+        return { getResult: mockGetResult } as any;
+      });
 
       const provider = new HydraProvider({
         injectVar: 'input',
@@ -949,10 +959,13 @@ describe('HydraProvider', () => {
         reason: 'Vulnerability detected',
       };
 
-      // Reset grader mock before setting new value
-      mockGrader.getResult.mockReset();
-      mockGrader.getResult.mockResolvedValue({
-        grade: graderResult,
+      // Set up mockGetGraderById directly to return grader that fails
+      mockGetGraderById.mockImplementation(function () {
+        return {
+          getResult: vi.fn().mockResolvedValue({
+            grade: graderResult,
+          }),
+        } as any;
       });
 
       mockAgentProvider.callApi.mockResolvedValue({
@@ -1039,10 +1052,13 @@ describe('HydraProvider', () => {
         output: 'Harmful response',
       });
 
-      // Reset grader mock before setting new value
-      mockGrader.getResult.mockReset();
-      mockGrader.getResult.mockResolvedValue({
-        grade: { pass: false, score: 0, reason: 'Vulnerability' },
+      // Set up mockGetGraderById directly to return grader that fails
+      mockGetGraderById.mockImplementation(function () {
+        return {
+          getResult: vi.fn().mockResolvedValue({
+            grade: { pass: false, score: 0, reason: 'Vulnerability' },
+          }),
+        } as any;
       });
 
       const provider = new HydraProvider({

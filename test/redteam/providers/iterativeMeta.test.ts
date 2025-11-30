@@ -1,4 +1,4 @@
-import { Mocked, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mocked, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { runMetaAgentRedteam } from '../../../src/redteam/providers/iterativeMeta';
 import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
@@ -6,8 +6,8 @@ import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());
 
-vi.mock('../../../src/redteam/providers/shared', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     redteamProviderManager: {
@@ -19,26 +19,26 @@ vi.mock('../../../src/redteam/providers/shared', async importOriginal => {
     createIterationContext: vi.fn<any>().mockResolvedValue({
       iterationVars: {},
       iterationContext: {},
-    })
-  });
+    }),
+  };
 });
 
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 
-vi.mock('../../../src/redteam/graders', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/graders', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getGraderById: mockGetGraderById
-  });
+    getGraderById: mockGetGraderById,
+  };
 });
 
 const mockShouldGenerateRemote = vi.hoisted(() => vi.fn(() => true));
 
-vi.mock('../../../src/redteam/remoteGeneration', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    shouldGenerateRemote: mockShouldGenerateRemote
-  });
+    shouldGenerateRemote: mockShouldGenerateRemote,
+  };
 });
 
 describe('RedteamIterativeMetaProvider', () => {
@@ -79,7 +79,7 @@ describe('RedteamIterativeMetaProvider', () => {
       }),
     } as Mocked<ApiProvider>;
 
-    mockGetProvider.mockImplementation(async function() {
+    mockGetProvider.mockImplementation(async function () {
       return mockAgentProvider;
     });
 
@@ -331,7 +331,7 @@ describe('RedteamIterativeMetaProvider', () => {
       let targetCallCount = 0;
 
       // Override mockAgentProvider to capture requests
-      mockAgentProvider.callApi = vi.fn().mockImplementation(async function(input: any) {
+      mockAgentProvider.callApi = vi.fn().mockImplementation(async function (input: any) {
         cloudRequests.push(JSON.parse(input as string));
         return {
           output: { result: 'Next attack' },
@@ -341,7 +341,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
       // Set up mockGetTargetResponse (not mockTargetProvider.callApi) since getTargetResponse is mocked
       mockGetTargetResponse.mockReset();
-      mockGetTargetResponse.mockImplementation(async function() {
+      mockGetTargetResponse.mockImplementation(async function () {
         const response = { output: targetResponses[targetCallCount] || 'Default' };
         targetCallCount++;
         return response;
@@ -393,7 +393,7 @@ describe('RedteamIterativeMetaProvider', () => {
       const targetResponses = [targetResponse, 'Target defended'];
       let targetCallCount = 0;
 
-      mockAgentProvider.callApi = vi.fn().mockImplementation(async function(input: any) {
+      mockAgentProvider.callApi = vi.fn().mockImplementation(async function (input: any) {
         cloudRequests.push(JSON.parse(input as string));
         return {
           output: { result: 'Next attack' },
@@ -403,7 +403,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
       // Set up mockGetTargetResponse (not mockTargetProvider.callApi) since getTargetResponse is mocked
       mockGetTargetResponse.mockReset();
-      mockGetTargetResponse.mockImplementation(async function() {
+      mockGetTargetResponse.mockImplementation(async function () {
         const response = { output: targetResponses[targetCallCount] || 'Default' };
         targetCallCount++;
         return response;
@@ -448,7 +448,7 @@ describe('RedteamIterativeMetaProvider', () => {
       const cloudRequests: any[] = [];
       let targetCallCount = 0;
 
-      mockAgentProvider.callApi = vi.fn().mockImplementation(async function(input: any) {
+      mockAgentProvider.callApi = vi.fn().mockImplementation(async function (input: any) {
         cloudRequests.push(JSON.parse(input as string));
         return {
           output: { result: 'Attack' },
@@ -459,7 +459,7 @@ describe('RedteamIterativeMetaProvider', () => {
       // Mock the targetProvider.callApi directly (not mockGetTargetResponse)
       mockTargetProvider.callApi = vi
         .fn<() => Promise<ProviderResponse>>()
-        .mockImplementation(async function() {
+        .mockImplementation(async function () {
           const response = { output: sensitiveResponses[targetCallCount] || 'Default' };
           targetCallCount++;
           return response;

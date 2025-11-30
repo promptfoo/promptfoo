@@ -1,7 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
-import { loadApiProviders } from '../../../src/providers/index';
-import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
@@ -82,7 +80,7 @@ vi.mock('../../../src/providers/index', () => ({
 
 const mockedSleep = vi.mocked(sleep);
 const mockedLoadApiProviders = mockLoadApiProviders;
-const mockedOpenAiProvider = MockOpenAiChatCompletionProvider;
+const _mockedOpenAiProvider = MockOpenAiChatCompletionProvider;
 
 describe('shared redteam provider utilities', () => {
   beforeEach(() => {
@@ -110,10 +108,7 @@ describe('shared redteam provider utilities', () => {
   describe('RedteamProviderManager', () => {
     const mockApiProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: vi.fn<
-        Promise<ProviderResponse>,
-        [string, CallApiContextParams | undefined, any]
-      >(),
+      callApi: vi.fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>(),
     };
 
     it('creates default OpenAI provider when no provider specified', async () => {
@@ -704,7 +699,7 @@ describe('shared redteam provider utilities', () => {
       process.env.PROMPTFOO_ENABLE_UNBLOCKING = 'true';
 
       // Spy on logger to verify we don't see the "disabled by default" message
-      const loggerSpy = vi.spyOn((await import("../../../src/logger")).default, 'debug');
+      const loggerSpy = vi.spyOn((await import('../../../src/logger')).default, 'debug');
 
       const result = await tryUnblocking({
         messages: [],
