@@ -6,11 +6,10 @@ import {
   PerplexityProvider,
 } from '../../src/providers/perplexity';
 
-vi.mock('../../src/providers/openai/chat');
-
 describe('Perplexity Provider', () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('createPerplexityProvider', () => {
