@@ -48,7 +48,7 @@ function HomepageHeader() {
               className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
               to="/docs/intro/"
             >
-              Explore Open Source
+              Try Open Source
             </Link>
           </div>
         </div>
@@ -612,7 +612,7 @@ function CommunitySection() {
               </li>
             </ul>
             <Link to="https://github.com/promptfoo/promptfoo" className="button button--secondary">
-              Explore Open Source
+              Try Open Source
             </Link>
           </div>
 
