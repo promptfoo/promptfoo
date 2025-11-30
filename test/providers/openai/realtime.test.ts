@@ -193,6 +193,9 @@ describe('OpenAI Realtime Provider', () => {
       // Create a promise for the API call
       const responsePromise = provider.callApi('Hello');
 
+      // Wait for microtask to process so handler is registered
+      await Promise.resolve();
+
       // Get the message handler
       const messageHandlers = mockHandlers.message;
       const lastHandler = messageHandlers[messageHandlers.length - 1];
@@ -388,6 +391,8 @@ describe('OpenAI Realtime Provider', () => {
 
       // First message
       const firstResponsePromise = provider.callApi('First message');
+      // Wait for microtask to process so handler is registered
+      await Promise.resolve();
       await simulateMessageSequence('msg_1', 'assistant_1', 'resp_1', 'First response');
       const firstResponse = await firstResponsePromise;
 
@@ -401,6 +406,9 @@ describe('OpenAI Realtime Provider', () => {
       provider.config.maintainContext = true;
 
       const secondResponsePromise = provider.callApi('Second message');
+
+      // Wait for microtask to process so handler is registered
+      await Promise.resolve();
 
       // Skip the WebSocket send assertion as it's not reliable in the test
 
@@ -443,6 +451,9 @@ describe('OpenAI Realtime Provider', () => {
 
       const responsePromise = provider.callApi('Hello');
 
+      // Wait for microtask to process so handler is registered
+      await Promise.resolve();
+
       // Get the error handler and simulate a WebSocket error
       const errorHandlers = mockHandlers.error;
       const lastErrorHandler = errorHandlers[errorHandlers.length - 1];
@@ -482,6 +493,9 @@ describe('OpenAI Realtime Provider', () => {
       } as unknown as WebSocket;
 
       const responsePromise = provider.callApi('Hello');
+
+      // Wait for microtask to process so handler is registered
+      await Promise.resolve();
 
       // Get the message handler
       const messageHandlers = mockHandlers.message;

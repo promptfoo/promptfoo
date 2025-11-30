@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesLlmRubric } from '../../../src/matchers';
 import { RbacGrader, RbacPlugin } from '../../../src/redteam/plugins/rbac';
 
 import type { ApiProvider, AtomicTestCase, CallApiFunction } from '../../../src/types/index';
 
 vi.mock('../../../src/util/fetch/index.ts');
+vi.mock('../../../src/matchers', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn(),
+  };
+});
 
 describe('RbacPlugin', () => {
   let mockProvider: ApiProvider;
@@ -102,6 +109,13 @@ describe('RbacGrader', () => {
   });
 
   it('should get result with default grader', async () => {
+    // Mock the matchesLlmRubric function to return a passing grade
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'test reason',
+    });
+
     const mockProvider: ApiProvider = {
       id: () => 'test',
       callApi: vi.fn().mockResolvedValue({
