@@ -5,6 +5,9 @@ import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 
+// Hoisted mocks for getGraderById
+const mockGetGraderById = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../../src/providers/promptfoo', async importOriginal => {
   return ({
     ...(await importOriginal()),
@@ -34,7 +37,7 @@ vi.mock('../../../../src/redteam/providers/shared', async () => ({
 vi.mock('../../../../src/redteam/graders', async importOriginal => {
   return ({
     ...(await importOriginal()),
-    getGraderById: vi.fn()
+    getGraderById: mockGetGraderById
   });
 });
 
@@ -136,8 +139,8 @@ describe('CustomProvider', () => {
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
 
     // Set up default getGraderById mock
-    vi.mocked(getGraderById).mockReset();
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockReset();
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -378,7 +381,7 @@ describe('CustomProvider', () => {
 
   it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -497,7 +500,7 @@ describe('CustomProvider', () => {
 
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -807,7 +810,7 @@ describe('CustomProvider', () => {
 
     // Capture the additionalRubric parameter
     let capturedAdditionalRubric: string | undefined;
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(
           async (
@@ -877,7 +880,7 @@ describe('CustomProvider', () => {
     };
 
     // Mock grader to fail (jailbreak success)
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(async () => ({
           grade: mockGraderResult,
@@ -948,7 +951,7 @@ describe('CustomProvider', () => {
     });
 
     // Mock grader to pass (no jailbreak)
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -1035,13 +1038,16 @@ describe('CustomProvider', () => {
       reason: 'No jailbreak on second turn',
     };
 
+    // Create the mock getResult function outside mockImplementation so it persists across calls
+    const mockGetResult = vi
+      .fn()
+      .mockResolvedValueOnce({ grade: firstGraderResult })
+      .mockResolvedValueOnce({ grade: secondGraderResult });
+
     // Mock grader to fail on first turn, pass on second
-    vi.mocked(getGraderById).mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function() {
       return {
-        getResult: vi
-          .fn()
-          .mockResolvedValueOnce({ grade: firstGraderResult })
-          .mockResolvedValueOnce({ grade: secondGraderResult }),
+        getResult: mockGetResult,
       } as any;
     });
 
