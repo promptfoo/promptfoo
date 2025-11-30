@@ -1,4 +1,4 @@
-import { Mock, Mocked, MockedClass, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, Mocked, MockedClass, beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -18,22 +18,22 @@ vi.mock('../../src/models/eval');
 vi.mock('../../src/redteam/remoteGeneration');
 vi.mock('../../src/remoteGrading');
 vi.mock('../../src/util/fetch');
-vi.mock('../../src/globalConfig/cloud', async importOriginal => {
-  return ({
+vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     cloudConfig: {
       getApiHost: vi.fn(() => 'https://api.promptfoo.app'),
       getApiKey: vi.fn(() => 'test-api-key'),
       isEnabled: vi.fn(() => true),
-    }
-  });
+    },
+  };
 });
-vi.mock('uuid', async importOriginal => {
-  return ({
+vi.mock('uuid', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    v4: vi.fn(() => 'test-uuid-1234')
-  });
+    v4: vi.fn(() => 'test-uuid-1234'),
+  };
 });
 
 describe('Provider Test Functions', () => {
@@ -92,7 +92,7 @@ describe('Provider Test Functions', () => {
     };
 
     // Mock Eval.constructor
-    (Eval as MockedClass<typeof Eval>).mockImplementation(function() {
+    (Eval as MockedClass<typeof Eval>).mockImplementation(function () {
       return mockEvalRecord;
     });
     mockEvalRecord.toEvaluateSummary.mockResolvedValue(mockSummary);

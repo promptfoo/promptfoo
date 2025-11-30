@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
@@ -75,22 +75,20 @@ describe('poison command', () => {
       const mockFiles = ['file1.txt', 'file2.txt'];
       const mockDirs = ['dir1'];
 
-      vi.mocked(fs.readdirSync).mockImplementationOnce(function() {
+      vi.mocked(fs.readdirSync).mockImplementationOnce(function () {
         return [...mockFiles, ...mockDirs] as any;
       });
-      vi.mocked(fs.readdirSync).mockImplementationOnce(function() {
+      vi.mocked(fs.readdirSync).mockImplementationOnce(function () {
         return [] as any;
       });
 
-      vi.mocked(fs.statSync).mockImplementation(
-        function(filePath) {
-          return ({
-            isDirectory: () => filePath.toString().includes('dir1'),
-          }) as fs.Stats;
-        },
-      );
+      vi.mocked(fs.statSync).mockImplementation(function (filePath) {
+        return {
+          isDirectory: () => filePath.toString().includes('dir1'),
+        } as fs.Stats;
+      });
 
-      vi.mocked(path.join).mockImplementation(function(...parts) {
+      vi.mocked(path.join).mockImplementation(function (...parts) {
         return parts.join('/');
       });
 
@@ -169,16 +167,16 @@ describe('poison command', () => {
         dir: null,
       };
 
-      vi.mocked(fs.readFileSync).mockImplementation(function() {
+      vi.mocked(fs.readFileSync).mockImplementation(function () {
         return 'test content';
       });
-      vi.mocked(path.relative).mockImplementation(function(_from, _to) {
+      vi.mocked(path.relative).mockImplementation(function (_from, _to) {
         return 'test.txt';
       });
-      vi.mocked(path.dirname).mockImplementation(function() {
+      vi.mocked(path.dirname).mockImplementation(function () {
         return 'output-dir';
       });
-      vi.mocked(path.join).mockImplementation(function(...args) {
+      vi.mocked(path.join).mockImplementation(function (...args) {
         return args.join('/');
       });
 
@@ -251,7 +249,7 @@ describe('poison command', () => {
         dir: null,
       };
 
-      vi.mocked(fs.readFileSync).mockImplementation(function() {
+      vi.mocked(fs.readFileSync).mockImplementation(function () {
         throw new Error('File read error');
       });
 
@@ -270,22 +268,22 @@ describe('poison command', () => {
         outputDir: 'output-dir',
       };
 
-      vi.mocked(fs.existsSync).mockImplementation(function(path) {
+      vi.mocked(fs.existsSync).mockImplementation(function (path) {
         return path === 'test.txt';
       });
-      vi.mocked(fs.statSync).mockImplementation(function() {
+      vi.mocked(fs.statSync).mockImplementation(function () {
         return {
           isDirectory: () => false,
         } as fs.Stats;
       });
 
-      vi.mocked(path.relative).mockImplementation(function(_from, _to) {
+      vi.mocked(path.relative).mockImplementation(function (_from, _to) {
         return 'test.txt';
       });
-      vi.mocked(path.dirname).mockImplementation(function() {
+      vi.mocked(path.dirname).mockImplementation(function () {
         return 'output-dir';
       });
-      vi.mocked(path.join).mockImplementation(function(...args) {
+      vi.mocked(path.join).mockImplementation(function (...args) {
         return args.join('/');
       });
 
@@ -322,30 +320,29 @@ describe('poison command', () => {
         outputDir: 'output-dir',
       };
 
-      vi.mocked(fs.existsSync).mockImplementation(function() {
+      vi.mocked(fs.existsSync).mockImplementation(function () {
         return true;
       });
-      vi
-        .mocked(fs.statSync)
-        .mockImplementationOnce(function() {
-        return {
+      vi.mocked(fs.statSync)
+        .mockImplementationOnce(function () {
+          return {
             isDirectory: () => true,
           } as fs.Stats;
-      })
+        })
         .mockReturnValue({
           isDirectory: () => false,
         } as fs.Stats);
 
-      vi.mocked(fs.readdirSync).mockImplementationOnce(function() {
+      vi.mocked(fs.readdirSync).mockImplementationOnce(function () {
         return ['file1.txt'] as any;
       });
-      vi.mocked(path.join).mockImplementation(function(...parts) {
+      vi.mocked(path.join).mockImplementation(function (...parts) {
         return parts.join('/');
       });
-      vi.mocked(path.relative).mockImplementation(function(_from, _to) {
+      vi.mocked(path.relative).mockImplementation(function (_from, _to) {
         return 'file1.txt';
       });
-      vi.mocked(path.dirname).mockImplementation(function() {
+      vi.mocked(path.dirname).mockImplementation(function () {
         return 'output-dir';
       });
 

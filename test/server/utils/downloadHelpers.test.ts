@@ -1,4 +1,4 @@
-import { Mock, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Response } from 'express';
 import { setDownloadHeaders } from '../../../src/server/utils/downloadHelpers';
 

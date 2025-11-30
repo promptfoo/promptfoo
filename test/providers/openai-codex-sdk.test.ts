@@ -21,11 +21,11 @@ const mockThread = {
 };
 
 // Mock Codex class
-const MockCodex = vi.fn().mockImplementation(function() {
-  return ({
+const MockCodex = vi.fn().mockImplementation(function () {
+  return {
     startThread: mockStartThread.mockReturnValue(mockThread),
-    resumeThread: mockResumeThread.mockReturnValue(mockThread)
-  });
+    resumeThread: mockResumeThread.mockReturnValue(mockThread),
+  };
 });
 
 // Mock SDK module export
@@ -36,11 +36,11 @@ const mockCodexSDK = {
 };
 
 // Mock the ESM loader to return our mock SDK
-vi.mock('../../src/esm', async importOriginal => {
-  return ({
+vi.mock('../../src/esm', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    importModule: vi.fn()
-  });
+    importModule: vi.fn(),
+  };
 });
 
 // Mock the SDK package (for type safety)
@@ -243,7 +243,7 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should error when working_dir does not exist', async () => {
-        statSyncSpy.mockImplementation(function() {
+        statSyncSpy.mockImplementation(function () {
           throw new Error('ENOENT: no such file or directory');
         });
 

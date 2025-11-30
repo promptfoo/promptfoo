@@ -2,19 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getCache: vi.fn(),
-    isCacheEnabled: vi.fn().mockReturnValue(false)
-  });
+    isCacheEnabled: vi.fn().mockReturnValue(false),
+  };
 });
 
-vi.mock('../../../src/util/time', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/time', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    sleep: vi.fn().mockResolvedValue(undefined)
-  });
+    sleep: vi.fn().mockResolvedValue(undefined),
+  };
 });
 
 vi.mock('../../../src/logger', () => ({

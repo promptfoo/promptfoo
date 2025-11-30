@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 
 // Hoisted mocks for AWS SDK
@@ -12,8 +12,8 @@ vi.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
   InvokeAgentCommand: MockInvokeAgentCommand,
 }));
 
-vi.mock('../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     getCache: vi.fn(() =>
@@ -23,8 +23,8 @@ vi.mock('../../src/cache', async importOriginal => {
       }),
     ),
 
-    isCacheEnabled: vi.fn(() => false)
-  });
+    isCacheEnabled: vi.fn(() => false),
+  };
 });
 
 describe('AwsBedrockAgentsProvider', () => {

@@ -14,20 +14,20 @@ vi.mock('../../src/models/modelAudit', () => ({
     findByRevision: vi.fn().mockResolvedValue(null),
   },
 }));
-vi.mock('../../src/updates', async importOriginal => {
-  return ({
+vi.mock('../../src/updates', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     checkModelAuditUpdates: vi.fn().mockResolvedValue(undefined),
-    getModelAuditCurrentVersion: vi.fn().mockResolvedValue('0.2.16')
-  });
+    getModelAuditCurrentVersion: vi.fn().mockResolvedValue('0.2.16'),
+  };
 });
-vi.mock('../../src/util/huggingfaceMetadata', async importOriginal => {
-  return ({
+vi.mock('../../src/util/huggingfaceMetadata', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     isHuggingFaceModel: vi.fn().mockReturnValue(false),
     getHuggingFaceMetadata: vi.fn().mockResolvedValue(null),
-    parseHuggingFaceModel: vi.fn().mockReturnValue(null)
-  });
+    parseHuggingFaceModel: vi.fn().mockReturnValue(null),
+  };
 });
 
 describe('modelScanCommand', () => {
@@ -36,7 +36,7 @@ describe('modelScanCommand', () => {
 
   beforeEach(() => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function() {
+    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
     vi.clearAllMocks();
@@ -76,13 +76,13 @@ describe('modelScanCommand', () => {
     const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     // Mock getModelAuditCurrentVersion to return null (not installed)
-    const { getModelAuditCurrentVersion } = await import("../../src/updates");
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
     (getModelAuditCurrentVersion as Mock).mockResolvedValueOnce(null);
 
     // Mock for fallback spawn check - simulate not installed
     const versionCheckProcess = {
       stdout: { on: vi.fn() },
-      on: vi.fn().mockImplementation(function(event: string, callback: any) {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'error') {
           callback(new Error('command not found'));
         }
@@ -113,7 +113,7 @@ describe('modelScanCommand', () => {
       stderr: {
         on: vi.fn(),
       },
-      on: vi.fn().mockImplementation(function(event: string, callback: any) {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
         }
@@ -188,7 +188,7 @@ describe('modelScanCommand', () => {
       stderr: {
         on: vi.fn(),
       },
-      on: vi.fn().mockImplementation(function(event: string, callback: any) {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'error') {
           callback(new Error('spawn error'));
         }
@@ -236,7 +236,7 @@ describe('modelScanCommand', () => {
 
     const mockChildProcess = {
       stdout: {
-        on: vi.fn().mockImplementation(function(event: string, callback: any) {
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
           if (event === 'data') {
             callback(Buffer.from(mockOutput));
           }
@@ -245,7 +245,7 @@ describe('modelScanCommand', () => {
       stderr: {
         on: vi.fn(),
       },
-      on: vi.fn().mockImplementation(function(event: string, callback: any) {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(1);
         }
@@ -276,13 +276,13 @@ describe('modelScanCommand', () => {
         on: vi.fn(),
       },
       stderr: {
-        on: vi.fn().mockImplementation(function(event: string, callback: any) {
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
           if (event === 'data') {
             callback(Buffer.from('Some error output'));
           }
         }),
       },
-      on: vi.fn().mockImplementation(function(event: string, callback: any) {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(2);
         }
@@ -311,7 +311,7 @@ describe('Re-scan on version change behavior', () => {
 
   beforeEach(() => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function() {
+    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
     vi.clearAllMocks();
@@ -322,10 +322,11 @@ describe('Re-scan on version change behavior', () => {
   });
 
   it('should skip scan when model already scanned with same version', async () => {
-    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } =
-      await import("../../src/util/huggingfaceMetadata");
-    const ModelAudit = (await import("../../src/models/modelAudit")).default;
-    const { getModelAuditCurrentVersion } = await import("../../src/updates");
+    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
+      '../../src/util/huggingfaceMetadata'
+    );
+    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
 
     // Mock HuggingFace model detection
     (isHuggingFaceModel as Mock).mockReturnValue(true);
@@ -359,10 +360,11 @@ describe('Re-scan on version change behavior', () => {
   });
 
   it('should re-scan when scanner version has changed', async () => {
-    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } =
-      await import("../../src/util/huggingfaceMetadata");
-    const ModelAudit = (await import("../../src/models/modelAudit")).default;
-    const { getModelAuditCurrentVersion } = await import("../../src/updates");
+    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
+      '../../src/util/huggingfaceMetadata'
+    );
+    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
 
     // Mock HuggingFace model detection
     (isHuggingFaceModel as Mock).mockReturnValue(true);
@@ -400,14 +402,14 @@ describe('Re-scan on version change behavior', () => {
 
     const mockScanProcess = {
       stdout: {
-        on: vi.fn().mockImplementation(function(event: string, callback: any) {
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
           if (event === 'data') {
             callback(Buffer.from(mockScanOutput));
           }
         }),
       },
       stderr: { on: vi.fn() },
-      on: vi.fn().mockImplementation(function(event: string, callback: any) {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
         }
@@ -429,10 +431,11 @@ describe('Re-scan on version change behavior', () => {
   });
 
   it('should re-scan when previous scan has no version info', async () => {
-    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } =
-      await import("../../src/util/huggingfaceMetadata");
-    const ModelAudit = (await import("../../src/models/modelAudit")).default;
-    const { getModelAuditCurrentVersion } = await import("../../src/updates");
+    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
+      '../../src/util/huggingfaceMetadata'
+    );
+    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
 
     // Mock HuggingFace model detection
     (isHuggingFaceModel as Mock).mockReturnValue(true);
@@ -470,14 +473,14 @@ describe('Re-scan on version change behavior', () => {
 
     const mockScanProcess = {
       stdout: {
-        on: vi.fn().mockImplementation(function(event: string, callback: any) {
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
           if (event === 'data') {
             callback(Buffer.from(mockScanOutput));
           }
         }),
       },
       stderr: { on: vi.fn() },
-      on: vi.fn().mockImplementation(function(event: string, callback: any) {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
         }
@@ -505,7 +508,7 @@ describe('checkModelAuditInstalled', () => {
   });
 
   it('should return installed: true and version when getModelAuditCurrentVersion returns version', async () => {
-    const { getModelAuditCurrentVersion } = await import("../../src/updates");
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
     (getModelAuditCurrentVersion as Mock).mockResolvedValue('0.2.16');
 
     const result = await checkModelAuditInstalled();
@@ -515,7 +518,7 @@ describe('checkModelAuditInstalled', () => {
   });
 
   it('should return installed: false when modelaudit is not installed', async () => {
-    const { getModelAuditCurrentVersion } = await import("../../src/updates");
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
     (getModelAuditCurrentVersion as Mock).mockResolvedValue(null);
 
     const result = await checkModelAuditInstalled();
@@ -523,7 +526,7 @@ describe('checkModelAuditInstalled', () => {
   });
 
   it('should handle different version formats from getModelAuditCurrentVersion', async () => {
-    const { getModelAuditCurrentVersion } = await import("../../src/updates");
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
     (getModelAuditCurrentVersion as Mock).mockResolvedValue('1.0.0');
 
     const result = await checkModelAuditInstalled();
@@ -531,7 +534,7 @@ describe('checkModelAuditInstalled', () => {
   });
 
   it('should return installed: true with version even when fallback would return exit code 1', async () => {
-    const { getModelAuditCurrentVersion } = await import("../../src/updates");
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
     // getModelAuditCurrentVersion returns version successfully
     (getModelAuditCurrentVersion as Mock).mockResolvedValue('0.2.19');
 
@@ -548,7 +551,7 @@ describe('Command Options Validation', () => {
 
   beforeEach(() => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function() {
+    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
     vi.clearAllMocks();
@@ -622,13 +625,13 @@ describe('Command Options Validation', () => {
     // Mock for checkModelAuditInstalled (returns { installed, version })
     const versionCheckProcess = {
       stdout: {
-        on: vi.fn().mockImplementation(function(event: string, callback: any) {
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
           if (event === 'data') {
             callback(Buffer.from('modelaudit, version 0.2.16\n'));
           }
         }),
       },
-      on: vi.fn().mockImplementation(function(event: string, callback: any) {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
         }
@@ -639,7 +642,7 @@ describe('Command Options Validation', () => {
     const mockScanProcess = {
       stdout: { on: vi.fn() },
       stderr: { on: vi.fn() },
-      on: vi.fn().mockImplementation(function(event: string, callback: any) {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
         }
@@ -694,13 +697,13 @@ describe('Command Options Validation', () => {
     // Mock for checkModelAuditInstalled (returns { installed, version })
     const versionCheckProcess = {
       stdout: {
-        on: vi.fn().mockImplementation(function(event: string, callback: any) {
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
           if (event === 'data') {
             callback(Buffer.from('modelaudit, version 0.2.16\n'));
           }
         }),
       },
-      on: vi.fn().mockImplementation(function(event: string, callback: any) {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
         }
@@ -711,7 +714,7 @@ describe('Command Options Validation', () => {
     const mockScanProcess = {
       stdout: { on: vi.fn() },
       stderr: { on: vi.fn() },
-      on: vi.fn().mockImplementation(function(event: string, callback: any) {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
         }

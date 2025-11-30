@@ -1,4 +1,4 @@
-import { Mock, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
@@ -9,8 +9,8 @@ import type { ProviderOptions } from '../../src/types/index';
 import type { EnvOverrides } from '../../src/types/env';
 
 vi.mock('../../src/providers/openai');
-vi.mock('../../src/envars', async importOriginal => {
-  return ({
+vi.mock('../../src/envars', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getEnvString: vi.fn(),
     getEnvBool: vi.fn((_key: string, defaultValue: boolean) => defaultValue),
@@ -18,8 +18,8 @@ vi.mock('../../src/envars', async importOriginal => {
     getEnvFloat: vi.fn((_key: string, defaultValue: number) => defaultValue),
     getEvalTimeoutMs: vi.fn((defaultValue: number) => defaultValue),
     getMaxEvalTimeMs: vi.fn((defaultValue: number) => defaultValue),
-    isCI: vi.fn(() => false)
-  });
+    isCI: vi.fn(() => false),
+  };
 });
 
 import { getEnvString } from '../../src/envars';

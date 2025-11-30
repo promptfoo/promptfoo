@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -10,11 +10,11 @@ import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions } from '../../../src/types/index';
 
-vi.mock('../../../src/evaluator', async importOriginal => {
-  return ({
+vi.mock('../../../src/evaluator', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    evaluate: vi.fn().mockResolvedValue({ results: [], summary: {} })
-  });
+    evaluate: vi.fn().mockResolvedValue({ results: [], summary: {} }),
+  };
 });
 
 vi.mock('../../../src/logger', () => ({
@@ -27,19 +27,19 @@ vi.mock('../../../src/logger', () => ({
   getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
-vi.mock('../../../src/migrate', async importOriginal => {
-  return ({
+vi.mock('../../../src/migrate', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    runDbMigrations: vi.fn().mockResolvedValue(undefined)
-  });
+    runDbMigrations: vi.fn().mockResolvedValue(undefined),
+  };
 });
 
 vi.mock('../../../src/telemetry', () => ({
-  default: ({
+  default: {
     record: vi.fn(),
     recordAndSendOnce: vi.fn(),
-    send: vi.fn().mockResolvedValue(undefined)
-  })
+    send: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 const evaluateMock = vi.mocked(evaluatorModule.evaluate);

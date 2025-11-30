@@ -6,14 +6,14 @@ import {
 } from '../../../src/providers/anthropic/defaults';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 
-vi.mock('proxy-agent', async importOriginal => {
-  return ({
+vi.mock('proxy-agent', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    ProxyAgent: vi.fn().mockImplementation(function() {
-      return ({});
-    })
-  });
+    ProxyAgent: vi.fn().mockImplementation(function () {
+      return {};
+    }),
+  };
 });
 
 describe('Anthropic Default Providers', () => {

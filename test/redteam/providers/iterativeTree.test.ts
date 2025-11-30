@@ -1,4 +1,4 @@
-import { Mocked, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mocked, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -30,11 +30,11 @@ import { getNunjucksEngine } from '../../../src/util/templates';
 
 vi.mock('../../../src/providers/openai');
 // Note: We don't mock '../../../src/util/templates' because tests need the real nunjucks engine
-vi.mock('../../../src/redteam/graders', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/graders', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getGraderById: vi.fn()
-  });
+    getGraderById: vi.fn(),
+  };
 });
 
 describe('RedteamIterativeProvider', () => {
@@ -1094,7 +1094,7 @@ describe('Metadata Validation with New Fields', () => {
 describe('Token Counting', () => {
   beforeEach(async () => {
     // Reset TokenUsageTracker between tests to ensure clean state
-    const { TokenUsageTracker } = await import("../../../src/util/tokenUsage");
+    const { TokenUsageTracker } = await import('../../../src/util/tokenUsage');
     TokenUsageTracker.getInstance().resetAllUsage();
   });
 

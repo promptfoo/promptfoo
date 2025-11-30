@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
@@ -25,11 +25,11 @@ import { DefaultModerationProvider } from '../../src/providers/openai/defaults';
 import type { ApiProvider } from '../../src/types/index';
 import type { EnvOverrides } from '../../src/types/env';
 
-vi.mock('../../src/providers/google/util', async importOriginal => {
-  return ({
+vi.mock('../../src/providers/google/util', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    hasGoogleDefaultCredentials: vi.fn().mockResolvedValue(false)
-  });
+    hasGoogleDefaultCredentials: vi.fn().mockResolvedValue(false),
+  };
 });
 
 class MockProvider implements ApiProvider {

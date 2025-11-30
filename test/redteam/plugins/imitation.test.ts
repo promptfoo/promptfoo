@@ -1,14 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { ImitationGrader } from '../../../src/redteam/plugins/imitation';
 
 import type { AtomicTestCase } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', async importOriginal => {
-  return ({
+vi.mock('../../../src/matchers', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    matchesLlmRubric: vi.fn()
-  });
+    matchesLlmRubric: vi.fn(),
+  };
 });
 
 describe('ImitationGrader', () => {

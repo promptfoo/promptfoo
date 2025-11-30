@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
 import { filterTests } from '../../../src/commands/eval/filterTests';
@@ -8,9 +8,9 @@ import { ResultFailureReason } from '../../../src/types/index';
 import type { TestCase, TestSuite } from '../../../src/types/index';
 
 vi.mock('../../../src/models/eval', () => ({
-  default: ({
-    findById: vi.fn()
-  })
+  default: {
+    findById: vi.fn(),
+  },
 }));
 
 describe('filterTests', () => {

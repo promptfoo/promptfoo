@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import child_process from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -46,14 +46,14 @@ import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeT
 
 import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
-vi.mock('proxy-agent', async importOriginal => {
-  return ({
+vi.mock('proxy-agent', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    ProxyAgent: vi.fn().mockImplementation(function() {
-      return ({});
-    })
-  });
+    ProxyAgent: vi.fn().mockImplementation(function () {
+      return {};
+    }),
+  };
 });
 
 const mockExecFile = vi.hoisted(() => vi.fn());
@@ -71,7 +71,7 @@ vi.mock('child_process', async (importOriginal) => {
 
 vi.mock('../../src/esm', async () => ({
   ...(await vi.importActual('../../src/esm')),
-  importModule: vi.fn()
+  importModule: vi.fn(),
 }));
 
 const mockFsReadFileSync = vi.hoisted(() => vi.fn());
@@ -93,8 +93,8 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('glob', async importOriginal => {
-  return ({
+vi.mock('glob', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     globSync: vi.fn(),
 
@@ -102,43 +102,43 @@ vi.mock('glob', async importOriginal => {
       // Match the real hasMagic behavior: only detect patterns in forward-slash paths
       // This mimics glob's actual behavior where backslash paths return false
       return /[*?[\]{}]/.test(path) && !path.includes('\\');
-    }
-  });
+    },
+  };
 });
 
-vi.mock('../../src/database', async importOriginal => {
-  return ({
+vi.mock('../../src/database', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getDb: vi.fn()
-  });
+    getDb: vi.fn(),
+  };
 });
 
-vi.mock('../../src/redteam/remoteGeneration', async importOriginal => {
-  return ({
+vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     shouldGenerateRemote: vi.fn().mockReturnValue(false),
     neverGenerateRemote: vi.fn().mockReturnValue(false),
-    getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url')
-  });
+    getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
+  };
 });
 vi.mock('../../src/providers/websocket');
 
-vi.mock('../../src/globalConfig/cloud', async importOriginal => {
-  return ({
+vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     cloudConfig: {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
       getApiKey: vi.fn().mockReturnValue('test-api-key'),
-    }
-  });
+    },
+  };
 });
 
 vi.mock('../../src/util/cloud', async () => ({
   ...(await vi.importActual('../../src/util/cloud')),
   getProviderFromCloud: vi.fn(),
-  validateLinkedTargetId: vi.fn()
+  validateLinkedTargetId: vi.fn(),
 }));
 
 const mockFetch = vi.mocked(vi.fn());
@@ -154,24 +154,24 @@ const defaultMockResponse = {
 };
 
 // Dynamic import
-vi.mock('../../src/providers/adaline.gateway', async importOriginal => {
-  return ({
+vi.mock('../../src/providers/adaline.gateway', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    AdalineGatewayChatProvider: vi.fn().mockImplementation(function(providerName, modelName) {
-      return ({
+    AdalineGatewayChatProvider: vi.fn().mockImplementation(function (providerName, modelName) {
+      return {
         id: () => `adaline:${providerName}:chat:${modelName}`,
-        constructor: { name: 'AdalineGatewayChatProvider' }
-      });
+        constructor: { name: 'AdalineGatewayChatProvider' },
+      };
     }),
 
-    AdalineGatewayEmbeddingProvider: vi.fn().mockImplementation(function(providerName, modelName) {
-      return ({
+    AdalineGatewayEmbeddingProvider: vi.fn().mockImplementation(function (providerName, modelName) {
+      return {
         id: () => `adaline:${providerName}:embedding:${modelName}`,
-        constructor: { name: 'AdalineGatewayEmbeddingProvider' }
-      });
-    })
-  });
+        constructor: { name: 'AdalineGatewayEmbeddingProvider' },
+      };
+    }),
+  };
 });
 
 describe('call provider apis', () => {
@@ -451,12 +451,7 @@ describe('call provider apis', () => {
         stderr: new Stream.Readable(),
       } as child_process.ChildProcess;
 
-      mockExecFile.mockImplementation(((
-        _file: any,
-        _args: any,
-        _options: any,
-        callback: any,
-      ) => {
+      mockExecFile.mockImplementation(((_file: any, _args: any, _options: any, callback: any) => {
         process.nextTick(
           () => callback && callback(null, Buffer.from(mockResponse), Buffer.from('')),
         );
@@ -527,7 +522,7 @@ describe('loadApiProvider', () => {
     "key": "value"
   }
 }`;
-    vi.mocked(fs.readFileSync).mockImplementationOnce(function() {
+    vi.mocked(fs.readFileSync).mockImplementationOnce(function () {
       return mockJsonContent;
     });
 
@@ -986,7 +981,7 @@ describe('loadApiProvider', () => {
         config: { key: 'value2' },
       },
     ]);
-    vi.mocked(fs.readFileSync).mockImplementationOnce(function() {
+    vi.mocked(fs.readFileSync).mockImplementationOnce(function () {
       return mockJsonContent;
     });
 
@@ -1148,13 +1143,11 @@ describe('loadApiProvider', () => {
 
     it('should throw error when linkedTargetId validation fails', async () => {
       const { validateLinkedTargetId } = await import('../../src/util/cloud');
-      vi
-        .mocked(validateLinkedTargetId)
-        .mockRejectedValue(
-          new Error(
-            "Target promptfoo://provider/12345678-1234-1234-1234-123456789abc not found in cloud or you don't have access to it",
-          ),
-        );
+      vi.mocked(validateLinkedTargetId).mockRejectedValue(
+        new Error(
+          "Target promptfoo://provider/12345678-1234-1234-1234-123456789abc not found in cloud or you don't have access to it",
+        ),
+      );
 
       const mockYamlContent = dedent`
         id: 'openai:gpt-4'

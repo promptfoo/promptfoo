@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from 'vitest';
 import { FerpaGrader } from '../../../src/redteam/plugins/compliance/ferpa';
 
 describe('FerpaGrader', () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from 'vitest';
 
 // Mock logger for tests that need it
 vi.mock('../../src/logger', () => ({

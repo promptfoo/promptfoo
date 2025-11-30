@@ -1,4 +1,4 @@
-import { Mock, MockInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import dedent from 'dedent';
 
 import { matchesLlmRubric } from '../../../src/matchers';
@@ -15,27 +15,27 @@ import type {
 } from '../../../src/types/index';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
-vi.mock('../../../src/matchers', async importOriginal => {
-  return ({
+vi.mock('../../../src/matchers', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    matchesLlmRubric: vi.fn()
-  });
+    matchesLlmRubric: vi.fn(),
+  };
 });
 
-vi.mock('../../../src/util/file', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/file', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     maybeLoadFromExternalFile: vi.fn(),
 
-    maybeLoadToolsFromExternalFile: vi.fn().mockImplementation(function(tools) {
+    maybeLoadToolsFromExternalFile: vi.fn().mockImplementation(function (tools) {
       if (tools === 'file://tools.json') {
         return [{ name: 'tool1' }, { name: 'tool2' }];
       }
       return tools;
     }),
 
-    renderVarsInObject: vi.fn()
-  });
+    renderVarsInObject: vi.fn(),
+  };
 });
 
 class TestPlugin extends RedteamPluginBase {
@@ -146,8 +146,7 @@ describe('RedteamPluginBase', () => {
       },
     ];
 
-    vi
-      .spyOn(provider, 'callApi')
+    vi.spyOn(provider, 'callApi')
       .mockResolvedValueOnce(mockResponses[0])
       .mockResolvedValueOnce(mockResponses[1]);
 
@@ -160,8 +159,7 @@ describe('RedteamPluginBase', () => {
   });
 
   it('should deduplicate prompts', async () => {
-    vi
-      .spyOn(provider, 'callApi')
+    vi.spyOn(provider, 'callApi')
       .mockResolvedValueOnce({
         output: 'Prompt: duplicate\nPrompt: duplicate',
       })
@@ -202,8 +200,7 @@ describe('RedteamPluginBase', () => {
       { output: 'Prompt: test4' },
     ];
 
-    vi
-      .spyOn(provider, 'callApi')
+    vi.spyOn(provider, 'callApi')
       .mockResolvedValueOnce(mockResponses[0])
       .mockResolvedValueOnce(mockResponses[1])
       .mockResolvedValueOnce(mockResponses[2]);
@@ -226,14 +223,12 @@ describe('RedteamPluginBase', () => {
   });
 
   it('should sample prompts when more are generated than requested', async () => {
-    vi
-      .spyOn(provider, 'callApi')
-      .mockResolvedValue({
-        output: Array(10)
-          .fill(0)
-          .map((_, i) => `Prompt: test prompt ${i}`)
-          .join('\n'),
-      });
+    vi.spyOn(provider, 'callApi').mockResolvedValue({
+      output: Array(10)
+        .fill(0)
+        .map((_, i) => `Prompt: test prompt ${i}`)
+        .join('\n'),
+    });
 
     const result = await plugin.generateTests(5);
 
@@ -1004,7 +999,7 @@ describe('RedteamGraderBase', () => {
 
       maybeLoadFromExternalFileSpy = vi
         .mocked(maybeLoadFromExternalFile)
-        .mockImplementation(function(input) {
+        .mockImplementation(function (input) {
           if (input === 'file://tools.json') {
             return [{ name: 'tool1' }, { name: 'tool2' }];
           }

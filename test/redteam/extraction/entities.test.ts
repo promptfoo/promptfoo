@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
@@ -7,11 +7,11 @@ import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
 import type { ApiProvider } from '../../../src/types/index';
 
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithCache: vi.fn()
-  });
+    fetchWithCache: vi.fn(),
+  };
 });
 
 vi.mock('../../../src/logger', () => ({
@@ -25,7 +25,8 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 vi.mock('../../../src/envars', async () => {
-  const originalModule = await vi.importActual<typeof import('../../../src/envars')>('../../../src/envars');
+  const originalModule =
+    await vi.importActual<typeof import('../../../src/envars')>('../../../src/envars');
   return {
     ...originalModule,
     getEnvBool: vi.fn(originalModule.getEnvBool),
@@ -34,7 +35,7 @@ vi.mock('../../../src/envars', async () => {
 
 vi.mock('../../../src/redteam/remoteGeneration', async () => ({
   ...(await vi.importActual('../../../src/redteam/remoteGeneration')),
-  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task')
+  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
 }));
 
 describe('Entities Extractor', () => {
@@ -53,7 +54,7 @@ describe('Entities Extractor', () => {
       id: vi.fn().mockReturnValue('test-provider'),
     };
     vi.clearAllMocks();
-    vi.mocked(getRemoteGenerationUrl).mockImplementation(function() {
+    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
       return 'https://api.promptfoo.app/api/v1/task';
     });
   });

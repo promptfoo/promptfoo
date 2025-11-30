@@ -1,4 +1,4 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Request, Response } from 'express';
 import { updateResult } from '../../src/util/database';
 
@@ -88,7 +88,7 @@ describe('evalRouter - PATCH /:id', () => {
     mockReq.body = { config: { description: 'New Description' } };
 
     // Mock updateResult to throw an error
-    (updateResult as Mock).mockImplementation(function() {
+    (updateResult as Mock).mockImplementation(function () {
       throw new Error('Database error');
     });
 

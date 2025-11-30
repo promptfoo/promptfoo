@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import logger from '../../../src/logger';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
@@ -6,9 +6,9 @@ import { doRedteamRun } from '../../../src/redteam/shared';
 import { getConfigFromCloud } from '../../../src/util/cloud';
 
 vi.mock('../../../src/cliState', () => ({
-  default: ({
-    remote: false
-  })
+  default: {
+    remote: false,
+  },
 }));
 
 vi.mock('../../../src/logger', () => ({
@@ -22,27 +22,27 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 vi.mock('../../../src/telemetry', () => ({
-  default: ({
-    record: vi.fn()
-  })
+  default: {
+    record: vi.fn(),
+  },
 }));
 
-vi.mock('../../../src/util', async importOriginal => {
-  return ({
+vi.mock('../../../src/util', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    setupEnv: vi.fn()
-  });
+    setupEnv: vi.fn(),
+  };
 });
 
 vi.mock('../../../src/redteam/shared', () => ({
   doRedteamRun: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('../../../src/util/cloud', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/cloud', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getConfigFromCloud: vi.fn()
-  });
+    getConfigFromCloud: vi.fn(),
+  };
 });
 
 describe('redteamRunCommand', () => {

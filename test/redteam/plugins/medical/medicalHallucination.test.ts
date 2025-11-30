@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from 'vitest';
 import { MedicalHallucinationPluginGrader } from '../../../../src/redteam/plugins/medical/medicalHallucination';
 
 describe('MedicalHallucinationPluginGrader', () => {

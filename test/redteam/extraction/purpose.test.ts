@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import { DEFAULT_PURPOSE, extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
@@ -6,15 +6,15 @@ import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
 import type { ApiProvider } from '../../../src/types/index';
 
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithCache: vi.fn()
-  });
+    fetchWithCache: vi.fn(),
+  };
 });
 vi.mock('../../../src/redteam/remoteGeneration', async () => ({
   ...(await vi.importActual('../../../src/redteam/remoteGeneration')),
-  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task')
+  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
 }));
 
 describe('System Purpose Extractor', () => {
@@ -29,13 +29,11 @@ describe('System Purpose Extractor', () => {
     process.env = { ...originalEnv };
     delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
     provider = {
-      callApi: vi
-        .fn()
-        .mockResolvedValue({ output: '<Purpose>Extracted system purpose</Purpose>' }),
+      callApi: vi.fn().mockResolvedValue({ output: '<Purpose>Extracted system purpose</Purpose>' }),
       id: vi.fn().mockReturnValue('test-provider'),
     };
     vi.clearAllMocks();
-    vi.mocked(getRemoteGenerationUrl).mockImplementation(function() {
+    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
       return 'https://api.promptfoo.app/api/v1/task';
     });
   });

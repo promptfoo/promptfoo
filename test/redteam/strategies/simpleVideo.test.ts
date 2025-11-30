@@ -3,7 +3,7 @@
  *
  * Tests core functionality with proper mocks to avoid depending on fs, ffmpeg, etc.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import fs from 'fs';
 
@@ -21,25 +21,25 @@ import type { TestCase } from '../../../src/types/index';
 const DUMMY_VIDEO_BASE64 = 'AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAu1tZGF0';
 
 // Mock video generator function
-const mockVideoGenerator = vi.fn().mockImplementation(function() {
+const mockVideoGenerator = vi.fn().mockImplementation(function () {
   return Promise.resolve(DUMMY_VIDEO_BASE64);
 });
 
 // Mock required dependencies
 vi.mock('../../../src/logger', () => ({
-  default: ({
+  default: {
     level: 'info',
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
-    error: vi.fn()
-  })
+    error: vi.fn(),
+  },
 }));
 
 vi.mock('../../../src/cliState', () => ({
-  default: ({
-    webUI: false
-  })
+  default: {
+    webUI: false,
+  },
 }));
 
 const mockWriteFileSync = vi.hoisted(() => vi.fn());
@@ -56,20 +56,20 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 // Mock for progress bar
-vi.mock('cli-progress', async importOriginal => {
-  return ({
+vi.mock('cli-progress', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    SingleBar: vi.fn().mockImplementation(function() {
-      return ({
+    SingleBar: vi.fn().mockImplementation(function () {
+      return {
         start: vi.fn(),
         increment: vi.fn(),
-        stop: vi.fn()
-      });
+        stop: vi.fn(),
+      };
     }),
 
-    Presets: { shades_classic: {} }
-  });
+    Presets: { shades_classic: {} },
+  };
 });
 
 describe('simpleVideo strategy', () => {
@@ -132,7 +132,7 @@ describe('simpleVideo strategy', () => {
 
     it('throws an error if writing fails', async () => {
       const mockError = new Error('Write failed');
-      vi.mocked(fs.writeFileSync).mockImplementationOnce(function() {
+      vi.mocked(fs.writeFileSync).mockImplementationOnce(function () {
         throw mockError;
       });
 
@@ -233,7 +233,7 @@ describe('simpleVideo strategy', () => {
       };
 
       // Mock generator that throws an error
-      const errorGenerator = vi.fn().mockImplementation(function() {
+      const errorGenerator = vi.fn().mockImplementation(function () {
         throw new Error('Test error');
       });
 

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { DatabricksMosaicAiChatCompletionProvider } from '../../src/providers/databricks';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
@@ -103,9 +103,11 @@ describe('Databricks Foundation Model APIs Provider', () => {
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
       // The env is passed to the parent constructor, check it's accessible
-      expect((provider as any).env).toEqual(expect.objectContaining({
-        DATABRICKS_TOKEN: 'test-token',
-      }));
+      expect((provider as any).env).toEqual(
+        expect.objectContaining({
+          DATABRICKS_TOKEN: 'test-token',
+        }),
+      );
     });
 
     it('should pass through OpenAI configuration options', () => {

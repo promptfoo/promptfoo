@@ -34,11 +34,11 @@ const mcpMocks = vi.hoisted(() => {
 // Mock external dependencies
 vi.mock('../../../src/cache');
 vi.mock('../../../src/logger');
-vi.mock('../../../src/providers/mcp/client', async importOriginal => {
-  return ({
+vi.mock('../../../src/providers/mcp/client', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    MCPClient: mcpMocks.MockMCPClient
-  });
+    MCPClient: mcpMocks.MockMCPClient,
+  };
 });
 
 describe('AzureChatCompletionProvider MCP Integration', () => {

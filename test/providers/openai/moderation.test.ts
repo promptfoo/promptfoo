@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../../src/cache';
 import {
   formatModerationInput,
@@ -17,16 +17,16 @@ describe('OpenAiModerationProvider', () => {
   // Standard setup for all tests
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(isCacheEnabled).mockImplementation(function() {
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
       return false;
     });
-    vi.mocked(fetchWithCache).mockImplementation(async function() {
-      return ({
+    vi.mocked(fetchWithCache).mockImplementation(async function () {
+      return {
         data: {},
         status: 200,
         statusText: 'OK',
-        cached: false
-      });
+        cached: false,
+      };
     });
   });
 
@@ -201,7 +201,7 @@ describe('OpenAiModerationProvider', () => {
 
   describe('Caching', () => {
     it('should use cache when enabled', async () => {
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
 
@@ -222,7 +222,7 @@ describe('OpenAiModerationProvider', () => {
         set: vi.fn(),
       };
 
-      vi.mocked(getCache).mockImplementation(function() {
+      vi.mocked(getCache).mockImplementation(function () {
         return mockCache as any;
       });
 
@@ -237,7 +237,7 @@ describe('OpenAiModerationProvider', () => {
     });
 
     it('should store results in cache when caching is enabled', async () => {
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
 
@@ -260,7 +260,7 @@ describe('OpenAiModerationProvider', () => {
         set: vi.fn().mockResolvedValue(undefined),
       };
 
-      vi.mocked(getCache).mockImplementation(function() {
+      vi.mocked(getCache).mockImplementation(function () {
         return mockCache as any;
       });
       vi.mocked(fetchWithCache).mockResolvedValueOnce({

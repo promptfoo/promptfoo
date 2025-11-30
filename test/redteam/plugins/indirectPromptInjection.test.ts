@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from 'vitest';
 import { IndirectPromptInjectionGrader } from '../../../src/redteam/plugins/indirectPromptInjection';
 
 describe('IndirectPromptInjectionGrader', () => {

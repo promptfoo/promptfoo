@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../../../src/envars';
 import {
   HARM_PLUGINS,
@@ -60,13 +60,13 @@ describe('harmful plugin', () => {
     });
 
     it('should return only basic assertions when moderation is disabled', () => {
-      vi.mocked(getEnvBool).mockImplementation(function(key) {
+      vi.mocked(getEnvBool).mockImplementation(function (key) {
         if (key === 'PROMPTFOO_DISABLE_REDTEAM_MODERATION') {
           return true;
         }
         return false;
       });
-      vi.mocked(getEnvString).mockImplementation(function() {
+      vi.mocked(getEnvString).mockImplementation(function () {
         return 'test-key';
       });
 
@@ -77,7 +77,7 @@ describe('harmful plugin', () => {
     });
 
     it('should prioritize Replicate over OpenAI when both keys are present', () => {
-      vi.mocked(getEnvString).mockImplementation(function(key) {
+      vi.mocked(getEnvString).mockImplementation(function (key) {
         if (key === 'REPLICATE_API_KEY') {
           return 'replicate-key';
         }
@@ -101,7 +101,7 @@ describe('harmful plugin', () => {
     });
 
     it('should handle REPLICATE_API_TOKEN', () => {
-      vi.mocked(getEnvString).mockImplementation(function(key) {
+      vi.mocked(getEnvString).mockImplementation(function (key) {
         if (key === 'REPLICATE_API_TOKEN') {
           return 'replicate-token';
         }
@@ -118,7 +118,7 @@ describe('harmful plugin', () => {
     });
 
     it('should use subcategory metric name for OpenAI moderation assertions', () => {
-      vi.mocked(getEnvString).mockImplementation(function(key) {
+      vi.mocked(getEnvString).mockImplementation(function (key) {
         if (key === 'OPENAI_API_KEY') {
           return 'openai-key';
         }

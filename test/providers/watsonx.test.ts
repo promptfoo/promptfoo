@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
@@ -21,32 +21,32 @@ vi.mock('../../src/logger', () => ({
   getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
-vi.mock('@ibm-cloud/watsonx-ai', async importOriginal => {
-  return ({
+vi.mock('@ibm-cloud/watsonx-ai', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     WatsonXAI: {
       newInstance: vi.fn(),
-    }
-  });
+    },
+  };
 });
 
-vi.mock('ibm-cloud-sdk-core', async importOriginal => {
-  return ({
+vi.mock('ibm-cloud-sdk-core', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     IamAuthenticator: vi.fn(),
-    BearerTokenAuthenticator: vi.fn()
-  });
+    BearerTokenAuthenticator: vi.fn(),
+  };
 });
 
-vi.mock('../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getCache: vi.fn(),
     isCacheEnabled: vi.fn(),
 
-    fetchWithCache: vi.fn().mockImplementation(async function() {
-      return ({
+    fetchWithCache: vi.fn().mockImplementation(async function () {
+      return {
         data: {
           resources: [
             {
@@ -64,18 +64,18 @@ vi.mock('../../src/cache', async importOriginal => {
           ],
         },
 
-        cached: false
-      });
-    })
-  });
+        cached: false,
+      };
+    }),
+  };
 });
 
-vi.mock('../../src/envars', async importOriginal => {
-  return ({
+vi.mock('../../src/envars', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getEnvString: vi.fn(),
-    getEnvInt: vi.fn()
-  });
+    getEnvInt: vi.fn(),
+  };
 });
 
 describe('WatsonXProvider', () => {
@@ -103,7 +103,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -120,7 +120,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -134,7 +134,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -148,7 +148,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -162,7 +162,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -202,7 +202,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -222,7 +222,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -242,7 +242,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -271,7 +271,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -296,7 +296,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -334,7 +334,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -347,10 +347,10 @@ describe('WatsonXProvider', () => {
         store: {} as any,
       };
 
-      vi.mocked(getCache).mockImplementation(function() {
+      vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
 
@@ -415,10 +415,10 @@ describe('WatsonXProvider', () => {
         store: {} as any,
       };
 
-      vi.mocked(getCache).mockImplementation(function() {
+      vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
 
@@ -434,7 +434,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn().mockRejectedValue(new Error('API error')),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
       const cache: Partial<any> = {
@@ -446,10 +446,10 @@ describe('WatsonXProvider', () => {
         store: {} as any,
       };
 
-      vi.mocked(getCache).mockImplementation(function() {
+      vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
       const provider = new WatsonXProvider(modelName, { config });
@@ -473,8 +473,8 @@ describe('WatsonXProvider', () => {
     beforeEach(() => {
       vi.clearAllMocks();
       clearModelSpecsCache();
-      vi.mocked(fetchWithCache).mockImplementation(async function() {
-        return ({
+      vi.mocked(fetchWithCache).mockImplementation(async function () {
+        return {
           data: {
             resources: [
               {
@@ -495,8 +495,8 @@ describe('WatsonXProvider', () => {
           cached: false,
           status: 200,
           statusText: 'OK',
-          headers: {}
-        });
+          headers: {},
+        };
       });
     });
 
@@ -518,7 +518,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -527,10 +527,10 @@ describe('WatsonXProvider', () => {
         set: vi.fn(),
       };
 
-      vi.mocked(getCache).mockImplementation(function() {
+      vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
 
@@ -551,8 +551,8 @@ describe('WatsonXProvider', () => {
       const configWithClass9ModelId = { ...config, modelId };
 
       clearModelSpecsCache();
-      vi.mocked(fetchWithCache).mockImplementation(async function() {
-        return ({
+      vi.mocked(fetchWithCache).mockImplementation(async function () {
+        return {
           data: {
             resources: [
               {
@@ -575,8 +575,8 @@ describe('WatsonXProvider', () => {
           cached: false,
           status: 200,
           statusText: 'OK',
-          headers: {}
-        });
+          headers: {},
+        };
       });
 
       const mockedWatsonXAIClient: Partial<any> = {
@@ -596,7 +596,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -605,10 +605,10 @@ describe('WatsonXProvider', () => {
         set: vi.fn(),
       };
 
-      vi.mocked(getCache).mockImplementation(function() {
+      vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
 
@@ -629,8 +629,8 @@ describe('WatsonXProvider', () => {
       const configWithGraniteModelId = { ...config, modelId };
 
       clearModelSpecsCache();
-      vi.mocked(fetchWithCache).mockImplementation(async function() {
-        return ({
+      vi.mocked(fetchWithCache).mockImplementation(async function () {
+        return {
           data: {
             resources: [
               {
@@ -653,8 +653,8 @@ describe('WatsonXProvider', () => {
           cached: false,
           status: 200,
           statusText: 'OK',
-          headers: {}
-        });
+          headers: {},
+        };
       });
 
       const mockedWatsonXAIClient: Partial<any> = {
@@ -674,7 +674,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function() {
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
         return mockedWatsonXAIClient as any;
       });
 
@@ -683,10 +683,10 @@ describe('WatsonXProvider', () => {
         set: vi.fn(),
       };
 
-      vi.mocked(getCache).mockImplementation(function() {
+      vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
 

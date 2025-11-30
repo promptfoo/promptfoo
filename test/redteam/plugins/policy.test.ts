@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy/index';
 import { POLICY_METRIC_PREFIX } from '../../../src/redteam/plugins/policy/constants';
@@ -215,9 +215,9 @@ describe('PolicyViolationGrader', () => {
       },
     } as AtomicTestCase;
 
-    vi
-      .spyOn(RedteamGraderBase.prototype, 'getResult')
-      .mockRejectedValueOnce(new Error('Grading failed'));
+    vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockRejectedValueOnce(
+      new Error('Grading failed'),
+    );
 
     await expect(
       grader.getResult('test prompt', 'test output', testCase, mockProvider),

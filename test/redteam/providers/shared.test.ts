@@ -268,9 +268,7 @@ describe('shared redteam provider utilities', () => {
     it('handles thrown errors in getTargetResponse', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: vi
-          .fn()
-          .mockRejectedValue(new Error('Network error')),
+        callApi: vi.fn().mockRejectedValue(new Error('Network error')),
       };
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
@@ -323,13 +321,11 @@ describe('shared redteam provider utilities', () => {
     it('returns successful response with string output', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: vi
-          .fn()
-          .mockResolvedValue({
-            output: 'test response',
-            tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
-            sessionId: 'test-session',
-          }),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'test response',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+          sessionId: 'test-session',
+        }),
       };
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
@@ -342,12 +338,10 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('passes through context and options', async () => {
-      const mockCallApi = vi
-        .fn()
-        .mockResolvedValue({
-          output: 'test response',
-          tokenUsage: { numRequests: 1 },
-        });
+      const mockCallApi = vi.fn().mockResolvedValue({
+        output: 'test response',
+        tokenUsage: { numRequests: 1 },
+      });
 
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
@@ -373,12 +367,10 @@ describe('shared redteam provider utilities', () => {
     it('stringifies non-string output', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: vi
-          .fn()
-          .mockResolvedValue({
-            output: { key: 'value' },
-            tokenUsage: { numRequests: 1 },
-          }),
+        callApi: vi.fn().mockResolvedValue({
+          output: { key: 'value' },
+          tokenUsage: { numRequests: 1 },
+        }),
       };
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
@@ -392,12 +384,10 @@ describe('shared redteam provider utilities', () => {
     it('handles provider error response', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: vi
-          .fn()
-          .mockResolvedValue({
-            error: 'API error',
-            sessionId: 'error-session',
-          }),
+        callApi: vi.fn().mockResolvedValue({
+          error: 'API error',
+          sessionId: 'error-session',
+        }),
       };
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
@@ -414,12 +404,10 @@ describe('shared redteam provider utilities', () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         delay: 100,
-        callApi: vi
-          .fn()
-          .mockResolvedValue({
-            output: 'test response',
-            tokenUsage: { numRequests: 1 },
-          }),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'test response',
+          tokenUsage: { numRequests: 1 },
+        }),
       };
 
       await getTargetResponse(mockProvider, 'test prompt');
@@ -431,13 +419,11 @@ describe('shared redteam provider utilities', () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         delay: 100,
-        callApi: vi
-          .fn()
-          .mockResolvedValue({
-            output: 'test response',
-            cached: true,
-            tokenUsage: { numRequests: 1 },
-          }),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'test response',
+          cached: true,
+          tokenUsage: { numRequests: 1 },
+        }),
       };
 
       await getTargetResponse(mockProvider, 'test prompt');
@@ -448,9 +434,7 @@ describe('shared redteam provider utilities', () => {
     it('throws error when neither output nor error is set', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: vi
-          .fn()
-          .mockResolvedValue({}),
+        callApi: vi.fn().mockResolvedValue({}),
       };
 
       await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
@@ -461,11 +445,9 @@ describe('shared redteam provider utilities', () => {
     it('uses default tokenUsage when not provided', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: vi
-          .fn()
-          .mockResolvedValue({
-            output: 'test response',
-          }),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'test response',
+        }),
       };
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
@@ -480,12 +462,10 @@ describe('shared redteam provider utilities', () => {
       it('handles empty string output correctly', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: vi
-            .fn()
-            .mockResolvedValue({
-              output: '', // Empty string
-              tokenUsage: { numRequests: 1 },
-            }),
+          callApi: vi.fn().mockResolvedValue({
+            output: '', // Empty string
+            tokenUsage: { numRequests: 1 },
+          }),
         };
 
         const result = await getTargetResponse(mockProvider, 'test prompt');
@@ -499,12 +479,10 @@ describe('shared redteam provider utilities', () => {
       it('handles zero output correctly', async () => {
         const mockProvider: ApiProvider = {
           id: () => 'test-provider',
-          callApi: vi
-            .fn()
-            .mockResolvedValue({
-              output: 0, // Zero value
-              tokenUsage: { numRequests: 1 },
-            }),
+          callApi: vi.fn().mockResolvedValue({
+            output: 0, // Zero value
+            tokenUsage: { numRequests: 1 },
+          }),
         };
 
         const result = await getTargetResponse(mockProvider, 'test prompt');

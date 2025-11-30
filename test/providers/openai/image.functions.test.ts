@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import {
   calculateImageCost,
@@ -11,11 +11,11 @@ import {
   validateSizeForModel,
 } from '../../../src/providers/openai/image';
 
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithCache: vi.fn()
-  });
+    fetchWithCache: vi.fn(),
+  };
 });
 
 describe('OpenAI Image Provider Functions', () => {

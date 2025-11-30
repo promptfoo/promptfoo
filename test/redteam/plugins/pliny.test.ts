@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { PlinyGrader, PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { isBasicRefusal, isEmptyResponse } from '../../../src/redteam/util';
@@ -6,26 +6,26 @@ import { isBasicRefusal, isEmptyResponse } from '../../../src/redteam/util';
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
-vi.mock('../../../src/matchers', async importOriginal => {
-  return ({
+vi.mock('../../../src/matchers', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    matchesLlmRubric: vi.fn()
-  });
+    matchesLlmRubric: vi.fn(),
+  };
 });
 
-vi.mock('../../../src/util/fetch/index.ts', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/fetch/index.ts', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithProxy: vi.fn()
-  });
+    fetchWithProxy: vi.fn(),
+  };
 });
 
-vi.mock('../../../src/redteam/util', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/util', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     isBasicRefusal: vi.fn().mockReturnValue(false),
-    isEmptyResponse: vi.fn().mockReturnValue(false)
-  });
+    isEmptyResponse: vi.fn().mockReturnValue(false),
+  };
 });
 
 describe('PlinyPlugin', () => {
@@ -153,10 +153,10 @@ describe('PlinyGrader', () => {
       'I cannot comply with that request as it appears to be attempting to bypass my safety guidelines.';
 
     // Mock isEmptyResponse and isBasicRefusal to return false so it calls matchesLlmRubric
-    vi.mocked(isEmptyResponse).mockImplementation(function() {
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
       return false;
     });
-    vi.mocked(isBasicRefusal).mockImplementation(function() {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
       return false;
     });
 
@@ -177,10 +177,10 @@ describe('PlinyGrader', () => {
     const aiOutput = 'I cannot comply with that request.';
 
     // Mock isEmptyResponse and isBasicRefusal to return false so it calls matchesLlmRubric
-    vi.mocked(isEmptyResponse).mockImplementation(function() {
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
       return false;
     });
-    vi.mocked(isBasicRefusal).mockImplementation(function() {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
       return false;
     });
 
@@ -197,7 +197,7 @@ describe('PlinyGrader', () => {
 
   it('should classify a refusal correctly', async () => {
     // Mock empty responses to test the refusal path
-    vi.mocked(isEmptyResponse).mockImplementation(function() {
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
       return true;
     });
 
@@ -219,10 +219,10 @@ describe('PlinyGrader', () => {
 
   it('should classify a basic refusal correctly', async () => {
     // Mock basic refusal detection
-    vi.mocked(isEmptyResponse).mockImplementation(function() {
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
       return false;
     });
-    vi.mocked(isBasicRefusal).mockImplementation(function() {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
       return true;
     });
 
@@ -244,10 +244,10 @@ describe('PlinyGrader', () => {
 
   it('should return correct result for failed grading', async () => {
     // Mock a failing grading result
-    vi.mocked(isEmptyResponse).mockImplementation(function() {
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
       return false;
     });
-    vi.mocked(isBasicRefusal).mockImplementation(function() {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
       return false;
     });
     vi.mocked(matchesLlmRubric).mockResolvedValue({
@@ -277,10 +277,10 @@ describe('PlinyGrader', () => {
       options: {},
     } as AtomicTestCase;
 
-    vi.mocked(isEmptyResponse).mockImplementation(function() {
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
       return false;
     });
-    vi.mocked(isBasicRefusal).mockImplementation(function() {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
       return false;
     });
 

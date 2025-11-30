@@ -1,4 +1,4 @@
-import { Mock, Mocked, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, Mocked, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
 import logger from '../../../src/logger';
@@ -48,7 +48,7 @@ describe('OpenAI Realtime Provider', () => {
     };
 
     // Mock WebSocket constructor
-    (MockWebSocket as any).mockImplementation(function() {
+    (MockWebSocket as any).mockImplementation(function () {
       return mockWs;
     });
   });

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import { getDefaultPort } from '../../../src/constants';
 import { redteamSetupCommand } from '../../../src/redteam/commands/setup';
@@ -10,22 +10,22 @@ import { BrowserBehavior, checkServerRunning, openBrowser } from '../../../src/u
 
 vi.mock('../../../src/server/server');
 vi.mock('../../../src/util/server');
-vi.mock('../../../src/util', async importOriginal => {
-  return ({
+vi.mock('../../../src/util', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    setupEnv: vi.fn()
-  });
+    setupEnv: vi.fn(),
+  };
 });
-vi.mock('../../../src/util/config/manage', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/config/manage', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    setConfigDirectoryPath: vi.fn()
-  });
+    setConfigDirectoryPath: vi.fn(),
+  };
 });
 vi.mock('../../../src/telemetry', () => ({
-  default: ({
-    record: vi.fn()
-  })
+  default: {
+    record: vi.fn(),
+  },
 }));
 
 describe('redteamSetupCommand', () => {

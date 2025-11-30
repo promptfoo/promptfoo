@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RbacGrader, RbacPlugin } from '../../../src/redteam/plugins/rbac';
 
 import type { ApiProvider, AtomicTestCase, CallApiFunction } from '../../../src/types/index';

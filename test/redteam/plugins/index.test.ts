@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FetchWithCacheResult } from '../../../src/cache';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
@@ -21,24 +21,24 @@ vi.mock('../../../src/cliState', () => ({
   __esModule: true,
   default: { remote: false },
 }));
-vi.mock('../../../src/redteam/remoteGeneration', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
     getRemoteHealthUrl: vi.fn().mockReturnValue('http://test-health-url'),
     neverGenerateRemote: vi.fn().mockReturnValue(false),
-    shouldGenerateRemote: vi.fn().mockReturnValue(false)
-  });
+    shouldGenerateRemote: vi.fn().mockReturnValue(false),
+  };
 });
-vi.mock('../../../src/util/apiHealth', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/apiHealth', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     checkRemoteHealth: vi.fn().mockResolvedValue({
       status: 'OK',
       message: 'API is healthy',
-    })
-  });
+    }),
+  };
 });
 
 // Helper function to create mock fetch responses
@@ -167,10 +167,10 @@ describe('Plugins', () => {
 
     it('should call remote generation with correct parameters', async () => {
       // Mock both functions for this test
-      vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
       });
-      vi.mocked(neverGenerateRemote).mockImplementation(function() {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return false;
       });
 
@@ -215,7 +215,7 @@ describe('Plugins', () => {
 
     it('should handle remote generation errors', async () => {
       // Mock shouldGenerateRemote to return true for this test
-      vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
       });
 
@@ -235,10 +235,10 @@ describe('Plugins', () => {
     });
 
     it('should add harmful assertions for harmful remote plugins', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
       });
-      vi.mocked(neverGenerateRemote).mockImplementation(function() {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return false;
       });
       const mockResponse: FetchWithCacheResult<unknown> = {
@@ -277,7 +277,7 @@ describe('Plugins', () => {
     });
 
     it('should not modify assertions for non-harmful remote plugins', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function() {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return false;
       });
       const originalTestCase = {
@@ -315,10 +315,10 @@ describe('Plugins', () => {
 
   describe('unaligned harm plugins', () => {
     it('should require remote generation', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return false;
       });
-      vi.mocked(neverGenerateRemote).mockImplementation(function() {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return true;
       });
       const unalignedPlugin = Plugins.find(

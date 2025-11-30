@@ -1,21 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HarmbenchGrader, HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
 import * as fetchModule from '../../../src/util/fetch/index';
 
 import type { ApiProvider, AtomicTestCase, CallApiFunction } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', async importOriginal => {
-  return ({
+vi.mock('../../../src/matchers', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    matchesLlmRubric: vi.fn()
-  });
+    matchesLlmRubric: vi.fn(),
+  };
 });
 
-vi.mock('../../../src/util/fetch/index.ts', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/fetch/index.ts', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithTimeout: vi.fn()
-  });
+    fetchWithTimeout: vi.fn(),
+  };
 });
 
 describe('HarmbenchPlugin', () => {

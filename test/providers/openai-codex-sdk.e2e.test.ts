@@ -4,7 +4,7 @@
  * Run with: OPENAI_API_KEY=... npx jest openai-codex-sdk.e2e --runInBand
  */
 
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 

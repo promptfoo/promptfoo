@@ -1,4 +1,4 @@
-import { Mocked, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mocked, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../../src/cache';
 import { getUserEmail } from '../../../src/globalConfig/accounts';
@@ -32,16 +32,16 @@ describe('likert strategy', () => {
       increment: vi.fn(),
       stop: vi.fn(),
     } as unknown as Mocked<SingleBar>;
-    vi.mocked(SingleBar).mockImplementation(function() {
+    vi.mocked(SingleBar).mockImplementation(function () {
       return mockProgressBar;
     });
-    vi.mocked(getUserEmail).mockImplementation(function() {
+    vi.mocked(getUserEmail).mockImplementation(function () {
       return 'test@example.com';
     });
-    vi.mocked(getRemoteGenerationUrl).mockImplementation(function() {
+    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
       return 'http://test.com';
     });
-    vi.mocked(neverGenerateRemote).mockImplementation(function() {
+    vi.mocked(neverGenerateRemote).mockImplementation(function () {
       return false;
     });
   });
@@ -102,7 +102,7 @@ describe('likert strategy', () => {
   });
 
   it('should throw error when remote generation is disabled', async () => {
-    vi.mocked(neverGenerateRemote).mockImplementation(function() {
+    vi.mocked(neverGenerateRemote).mockImplementation(function () {
       return true;
     });
 

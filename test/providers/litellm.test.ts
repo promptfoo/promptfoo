@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
 
 // Mock fetch for API call tests

@@ -1,14 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
 import type { ApiProvider, CallApiFunction } from '../../../src/types/index';
 
-vi.mock('../../../src/util/fetch', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/fetch', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithTimeout: vi.fn()
-  });
+    fetchWithTimeout: vi.fn(),
+  };
 });
 
 describe('CyberSecEvalPlugin', () => {

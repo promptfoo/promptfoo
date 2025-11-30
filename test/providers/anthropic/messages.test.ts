@@ -26,21 +26,21 @@ const mcpMocks = vi.hoisted(() => {
   return { cleanup, getAllTools, initialize, instances, MockMCPClient };
 });
 
-vi.mock('proxy-agent', async importOriginal => {
-  return ({
+vi.mock('proxy-agent', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    ProxyAgent: vi.fn().mockImplementation(function() {
-      return ({});
-    })
-  });
+    ProxyAgent: vi.fn().mockImplementation(function () {
+      return {};
+    }),
+  };
 });
 
-vi.mock('../../../src/providers/mcp/client', async importOriginal => {
-  return ({
+vi.mock('../../../src/providers/mcp/client', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    MCPClient: mcpMocks.MockMCPClient
-  });
+    MCPClient: mcpMocks.MockMCPClient,
+  };
 });
 
 const TEST_API_KEY = 'test-api-key';

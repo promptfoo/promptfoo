@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 import type { CompletedPrompt } from '../../../src/types/index';
 
 // Mock dependencies first
-vi.mock('../../../src/database', async importOriginal => {
+vi.mock('../../../src/database', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     getDb: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock('../../../src/database', async importOriginal => {
 
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/server/utils/evalTableUtils');
-vi.mock('../../../src/server/utils/downloadHelpers', async importOriginal => {
+vi.mock('../../../src/server/utils/downloadHelpers', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     setDownloadHeaders: vi.fn(),

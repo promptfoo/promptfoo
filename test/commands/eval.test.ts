@@ -1,4 +1,4 @@
-import { Mocked, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mocked, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 
 import { Command } from 'commander';
@@ -29,29 +29,29 @@ import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/inde
 vi.mock('../../src/cache');
 vi.mock('../../src/evaluator');
 vi.mock('../../src/globalConfig/accounts');
-vi.mock('../../src/globalConfig/cloud', async importOriginal => {
-  return ({
+vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     cloudConfig: {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
-    }
-  });
+    },
+  };
 });
 vi.mock('../../src/migrate');
 vi.mock('../../src/providers');
-vi.mock('../../src/redteam/shared', async importOriginal => {
-  return ({
-    ...(await importOriginal())
-  });
+vi.mock('../../src/redteam/shared', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+  };
 });
 vi.mock('../../src/share');
 vi.mock('../../src/table');
 vi.mock('../../src/util/cloud', async () => ({
   ...(await vi.importActual('../../src/util/cloud')),
   getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
-  checkCloudPermissions: vi.fn().mockResolvedValue(undefined)
+  checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('fs');
 vi.mock('path', async () => {
@@ -62,8 +62,8 @@ vi.mock('path', async () => {
 });
 vi.mock('../../src/util/config/load');
 vi.mock('../../src/util/tokenUsage');
-vi.mock('../../src/database/index', async importOriginal => {
-  return ({
+vi.mock('../../src/database/index', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     getDb: vi.fn(() => ({
@@ -83,8 +83,8 @@ vi.mock('../../src/database/index', async importOriginal => {
           })),
         })),
       })),
-    }))
-  });
+    })),
+  };
 });
 
 describe('evalCommand', () => {
@@ -177,7 +177,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function() {
+    vi.mocked(isSharingEnabled).mockImplementation(function () {
       return true;
     });
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
@@ -202,7 +202,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function() {
+    vi.mocked(isSharingEnabled).mockImplementation(function () {
       return true;
     });
 
@@ -226,7 +226,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function() {
+    vi.mocked(isSharingEnabled).mockImplementation(function () {
       return true;
     });
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
@@ -251,7 +251,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function() {
+    vi.mocked(isSharingEnabled).mockImplementation(function () {
       return true;
     });
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
@@ -267,7 +267,7 @@ describe('evalCommand', () => {
     const evalRecord = new Eval(config);
 
     // Mock cloud config as enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
       return true;
     });
 
@@ -281,7 +281,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function() {
+    vi.mocked(isSharingEnabled).mockImplementation(function () {
       return true;
     });
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
@@ -297,7 +297,7 @@ describe('evalCommand', () => {
     const evalRecord = new Eval(config);
 
     // Mock cloud config as enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementationOnce(function() {
+    vi.mocked(cloudConfig.isEnabled).mockImplementationOnce(function () {
       return true;
     });
 
@@ -311,7 +311,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementationOnce(function() {
+    vi.mocked(isSharingEnabled).mockImplementationOnce(function () {
       return true;
     });
 
@@ -402,7 +402,7 @@ describe('checkCloudPermissions', () => {
 
   it('should fail when checkCloudPermissions throws an error', async () => {
     // Mock cloudConfig to be enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
       return true;
     });
 
@@ -440,7 +440,7 @@ describe('checkCloudPermissions', () => {
 
   it('should call checkCloudPermissions and proceed when it succeeds', async () => {
     // Mock cloudConfig to be enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
       return true;
     });
 
@@ -481,7 +481,7 @@ describe('checkCloudPermissions', () => {
 
   it('should call checkCloudPermissions but skip permission check when cloudConfig is disabled', async () => {
     // Mock cloudConfig to be disabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
       return false;
     });
 
@@ -621,7 +621,7 @@ describe('Provider Token Tracking', () => {
       cleanup: vi.fn(),
     } as any;
 
-    vi.mocked(TokenUsageTracker.getInstance).mockImplementation(function() {
+    vi.mocked(TokenUsageTracker.getInstance).mockImplementation(function () {
       return mockTokenUsageTracker;
     });
   });
@@ -654,11 +654,9 @@ describe('Provider Token Tracking', () => {
     };
 
     mockTokenUsageTracker.getProviderIds.mockReturnValue(['openai:gpt-4', 'anthropic:claude-3']);
-    mockTokenUsageTracker.getProviderUsage.mockImplementation(
-      function(id: string) {
-        return providerUsageData[id as keyof typeof providerUsageData];
-      },
-    );
+    mockTokenUsageTracker.getProviderUsage.mockImplementation(function (id: string) {
+      return providerUsageData[id as keyof typeof providerUsageData];
+    });
 
     const tracker = TokenUsageTracker.getInstance();
     const providerIds = tracker.getProviderIds();
@@ -845,10 +843,10 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
       return false;
     });
-    vi.mocked(isSharingEnabled).mockImplementation(function() {
+    vi.mocked(isSharingEnabled).mockImplementation(function () {
       return true;
     });
     vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/share/123');
@@ -868,7 +866,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: true } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return true;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -889,7 +887,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: true } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return true;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -912,7 +910,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: false } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return false;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -932,7 +930,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return false;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -955,7 +953,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: false } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return false;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -976,7 +974,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return true;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -999,7 +997,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: true } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return false;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -1019,7 +1017,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: false } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return true;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -1039,7 +1037,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: { apiBaseUrl: 'https://custom.api.url' } } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return false;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -1061,7 +1059,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return true;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -1081,7 +1079,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return false;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -1103,7 +1101,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: undefined } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return true;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -1123,7 +1121,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: false } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
         return false;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -1144,7 +1142,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(isSharingEnabled).mockImplementation(function() {
+      vi.mocked(isSharingEnabled).mockImplementation(function () {
         return false;
       });
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -1229,7 +1227,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
           const config = (cfgShare !== undefined ? { sharing: cfgShare } : {}) as UnifiedConfig;
           const evalRecord = new Eval(config);
 
-          vi.mocked(cloudConfig.isEnabled).mockImplementation(function() {
+          vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
             return cloudEnabled;
           });
           vi.mocked(resolveConfigs).mockResolvedValue({

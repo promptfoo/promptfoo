@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 
 import * as cache from '../../../src/cache';
@@ -7,54 +7,54 @@ import * as util from '../../../src/providers/google/util';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
 
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithCache: vi.fn()
-  });
+    fetchWithCache: vi.fn(),
+  };
 });
 
 vi.mock('../../../src/providers/google/util', async () => ({
   ...(await vi.importActual('../../../src/providers/google/util')),
-  maybeCoerceToGeminiFormat: vi.fn()
+  maybeCoerceToGeminiFormat: vi.fn(),
 }));
 
-vi.mock('../../../src/util/templates', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/templates', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     getNunjucksEngine: vi.fn(() => ({
       renderString: vi.fn((str) => str),
-    }))
-  });
+    })),
+  };
 });
 
 // Hoisted mock for maybeLoadFromExternalFile
 const mockMaybeLoadFromExternalFile = vi.hoisted(() => vi.fn((input) => input));
 
-vi.mock('../../../src/util/file', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/file', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getNunjucksEngineForFilePath: vi.fn(),
     maybeLoadFromExternalFile: mockMaybeLoadFromExternalFile,
-  });
+  };
 });
 
-vi.mock('glob', async importOriginal => {
-  return ({
+vi.mock('glob', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    globSync: vi.fn().mockReturnValue([])
-  });
+    globSync: vi.fn().mockReturnValue([]),
+  };
 });
 
-vi.mock('fs', async importOriginal => {
-  return ({
+vi.mock('fs', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     existsSync: vi.fn(),
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
-    statSync: vi.fn()
-  });
+    statSync: vi.fn(),
+  };
 });
 
 describe('AIStudioChatProvider', () => {
@@ -62,7 +62,7 @@ describe('AIStudioChatProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(templates.getNunjucksEngine).mockImplementation(function() {
+    vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
       return {
         renderString: vi.fn((str) => str),
       } as any;
@@ -71,7 +71,7 @@ describe('AIStudioChatProvider', () => {
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(fs.writeFileSync).mockReset();
     vi.mocked(fs.statSync).mockReset();
-    vi.mocked(getNunjucksEngineForFilePath).mockImplementation(function() {
+    vi.mocked(getNunjucksEngineForFilePath).mockImplementation(function () {
       return {
         renderString: vi.fn((str) => str),
       } as any;
@@ -90,7 +90,7 @@ describe('AIStudioChatProvider', () => {
   describe('constructor and configuration', () => {
     it('should handle API key from different sources and render with Nunjucks', () => {
       const mockRenderString = vi.fn((str) => (str ? `rendered-${str}` : str));
-      vi.mocked(templates.getNunjucksEngine).mockImplementation(function() {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
           renderString: mockRenderString,
         } as any;
@@ -120,7 +120,7 @@ describe('AIStudioChatProvider', () => {
 
     it('should resolve API URL from various sources and render with Nunjucks', () => {
       const mockRenderString = vi.fn((str) => `rendered-${str}`);
-      vi.mocked(templates.getNunjucksEngine).mockImplementation(function() {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
           renderString: mockRenderString,
         } as any;
@@ -160,7 +160,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should prioritize apiHost over apiBaseUrl', () => {
-      vi.mocked(templates.getNunjucksEngine).mockImplementation(function() {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
           renderString: vi.fn((str) => `rendered-${str}`),
         } as any;
@@ -212,7 +212,7 @@ describe('AIStudioChatProvider', () => {
         },
       });
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -242,7 +242,7 @@ describe('AIStudioChatProvider', () => {
         },
       });
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -282,7 +282,7 @@ describe('AIStudioChatProvider', () => {
         },
       });
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -322,7 +322,7 @@ describe('AIStudioChatProvider', () => {
         },
       });
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -362,7 +362,7 @@ describe('AIStudioChatProvider', () => {
   describe('non-Gemini models', () => {
     beforeEach(() => {
       vi.clearAllMocks();
-      vi.mocked(templates.getNunjucksEngine).mockImplementation(function() {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
           renderString: vi.fn((str) => str),
         } as any;
@@ -371,7 +371,7 @@ describe('AIStudioChatProvider', () => {
       vi.mocked(fs.readFileSync).mockReset();
       vi.mocked(fs.writeFileSync).mockReset();
       vi.mocked(fs.statSync).mockReset();
-      vi.mocked(getNunjucksEngineForFilePath).mockImplementation(function() {
+      vi.mocked(getNunjucksEngineForFilePath).mockImplementation(function () {
         return {
           renderString: vi.fn((str) => str),
         } as any;
@@ -457,7 +457,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -506,7 +506,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -541,7 +541,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -567,7 +567,7 @@ describe('AIStudioChatProvider', () => {
         },
       });
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -602,7 +602,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -647,7 +647,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -696,7 +696,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -733,7 +733,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
         return {
           contents: [
             {
@@ -782,7 +782,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -821,7 +821,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -852,7 +852,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle function calling configuration', async () => {
-      vi.mocked(templates.getNunjucksEngine).mockImplementation(function() {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
           renderString: vi.fn((str) => `rendered-${str}`),
         } as any;
@@ -919,7 +919,7 @@ describe('AIStudioChatProvider', () => {
         headers: {},
       };
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'What is the weather in San Francisco?' }] }],
           coerced: false,
@@ -971,7 +971,7 @@ describe('AIStudioChatProvider', () => {
         }
         return `rendered-${str}`;
       });
-      vi.mocked(templates.getNunjucksEngine).mockImplementation(function() {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
           renderString: mockRenderString,
         } as any;
@@ -1030,7 +1030,7 @@ describe('AIStudioChatProvider', () => {
         headers: {},
       };
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'What is the weather in San Francisco?' }] }],
           coerced: false,
@@ -1075,7 +1075,7 @@ describe('AIStudioChatProvider', () => {
 
     it('should handle Google Search as a tool', async () => {
       // Reset the Nunjucks mock to return the non-rendered value for these tests
-      vi.mocked(templates.getNunjucksEngine).mockImplementation(function() {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
           renderString: vi.fn((str) => str),
         } as any;
@@ -1128,9 +1128,11 @@ describe('AIStudioChatProvider', () => {
         headers: {},
       };
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
         return {
-          contents: [{ role: 'user', parts: [{ text: 'What is the current Google stock price?' }] }],
+          contents: [
+            { role: 'user', parts: [{ text: 'What is the current Google stock price?' }] },
+          ],
           coerced: false,
           systemInstruction: undefined,
         };
@@ -1170,7 +1172,7 @@ describe('AIStudioChatProvider', () => {
 
     it('should handle Google Search retrieval for Gemini 1.5 models', async () => {
       // Reset the Nunjucks mock to return the non-rendered value for these tests
-      vi.mocked(templates.getNunjucksEngine).mockImplementation(function() {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
           renderString: vi.fn((str) => str),
         } as any;
@@ -1228,9 +1230,11 @@ describe('AIStudioChatProvider', () => {
         headers: {},
       };
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
         return {
-          contents: [{ role: 'user', parts: [{ text: 'What is the current Google stock price?' }] }],
+          contents: [
+            { role: 'user', parts: [{ text: 'What is the current Google stock price?' }] },
+          ],
           coerced: false,
           systemInstruction: undefined,
         };
@@ -1272,7 +1276,7 @@ describe('AIStudioChatProvider', () => {
 
     it('should handle object-based tools format', async () => {
       // Reset the Nunjucks mock to return the non-rendered value for these tests
-      vi.mocked(templates.getNunjucksEngine).mockImplementation(function() {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
           renderString: vi.fn((str) => str),
         } as any;
@@ -1310,7 +1314,7 @@ describe('AIStudioChatProvider', () => {
         headers: {},
       };
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'What is the latest news?' }] }],
           coerced: false,
@@ -1375,7 +1379,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -1432,7 +1436,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
         return {
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -1485,7 +1489,7 @@ describe('AIStudioChatProvider', () => {
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
           return {
             contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
             coerced: false,
@@ -1529,7 +1533,7 @@ describe('AIStudioChatProvider', () => {
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
           return {
             contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
             coerced: false,
@@ -1574,7 +1578,7 @@ describe('AIStudioChatProvider', () => {
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
           return {
             contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
             coerced: false,
@@ -1623,7 +1627,7 @@ describe('AIStudioChatProvider', () => {
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function() {
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
           return {
             contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
             coerced: false,

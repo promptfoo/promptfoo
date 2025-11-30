@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
@@ -8,39 +8,39 @@ import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/s
 import type { TestCase } from '../../../src/types/index';
 
 // Mock the remoteGeneration module
-vi.mock('../../../src/redteam/remoteGeneration', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.url'),
-    neverGenerateRemote: vi.fn().mockReturnValue(false)
-  });
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
+  };
 });
 
 // Mock the cache module
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithCache: vi.fn()
-  });
+    fetchWithCache: vi.fn(),
+  };
 });
 
 // Mock cli-progress
-vi.mock('cli-progress', async importOriginal => {
-  return ({
+vi.mock('cli-progress', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     Presets: {
       shades_classic: {},
     },
 
-    SingleBar: vi.fn().mockImplementation(function() {
-      return ({
+    SingleBar: vi.fn().mockImplementation(function () {
+      return {
         increment: vi.fn(),
         start: vi.fn(),
-        stop: vi.fn()
-      });
-    })
-  });
+        stop: vi.fn(),
+      };
+    }),
+  };
 });
 
 const originalConsoleLog = console.log;
@@ -243,7 +243,7 @@ describe('audio strategy', () => {
       // Cast SingleBar to any to avoid TypeScript errors with mocking
       const mockSingleBar = SingleBar as any;
       const originalImplementation = mockSingleBar.mockImplementation;
-      mockSingleBar.mockImplementation(function() {
+      mockSingleBar.mockImplementation(function () {
         return mockBarInstance;
       });
 

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
 import { Command } from 'commander';
@@ -34,58 +34,58 @@ vi.mock('../../../src/logger', () => ({
   },
   getLogLevel: vi.fn().mockReturnValue('info'),
 }));
-vi.mock('uuid', async importOriginal => {
-  return ({
+vi.mock('uuid', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     validate: vi.fn((str: string) => {
       // Simple UUID validation for testing
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       return uuidRegex.test(str);
-    })
-  });
+    }),
+  };
 });
-vi.mock('../../../src/util', async importOriginal => {
-  return ({
+vi.mock('../../../src/util', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     setupEnv: vi.fn(),
-    printBorder: vi.fn()
-  });
+    printBorder: vi.fn(),
+  };
 });
 
-vi.mock('../../../src/util/promptfooCommand', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/promptfooCommand', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     promptfooCommand: vi.fn().mockReturnValue('promptfoo redteam init'),
     detectInstaller: vi.fn().mockReturnValue('unknown'),
-    isRunningUnderNpx: vi.fn().mockReturnValue(false)
-  });
+    isRunningUnderNpx: vi.fn().mockReturnValue(false),
+  };
 });
-vi.mock('../../../src/util/config/load', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/config/load', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     combineConfigs: vi.fn(),
     resolveConfigs: vi.fn(),
-    readConfig: vi.fn()
-  });
+    readConfig: vi.fn(),
+  };
 });
 
-vi.mock('../../../src/redteam/extraction/mcpTools', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/extraction/mcpTools', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    extractMcpToolsInfo: vi.fn()
-  });
+    extractMcpToolsInfo: vi.fn(),
+  };
 });
 
 vi.mock('../../../src/envars', async () => ({
   ...(await vi.importActual('../../../src/envars')),
 
-  getEnvBool: vi.fn().mockImplementation(function(key) {
+  getEnvBool: vi.fn().mockImplementation(function (key) {
     if (key === 'PROMPTFOO_REDTEAM_ENABLE_PURPOSE_DISCOVERY_AGENT') {
       return true;
     }
     return false;
-  })
+  }),
 }));
 
 vi.mock('../../../src/util/cloud', async () => ({
@@ -95,54 +95,54 @@ vi.mock('../../../src/util/cloud', async () => ({
   getPluginSeverityOverridesFromCloud: vi.fn(),
   isCloudProvider: vi.fn(),
   getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
-  checkCloudPermissions: vi.fn().mockResolvedValue(undefined)
+  checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../../src/util/config/writer', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/config/writer', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    writePromptfooConfig: vi.fn()
-  });
+    writePromptfooConfig: vi.fn(),
+  };
 });
 
 vi.mock('../../../src/cliState', () => ({
-  default: ({
-    remote: false
-  })
+  default: {
+    remote: false,
+  },
 }));
 
-vi.mock('../../../src/globalConfig/cloud', async importOriginal => {
-  return ({
+vi.mock('../../../src/globalConfig/cloud', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    CloudConfig: vi.fn().mockImplementation(function() {
-      return ({
+    CloudConfig: vi.fn().mockImplementation(function () {
+      return {
         isEnabled: vi.fn().mockReturnValue(false),
-        getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app')
-      });
+        getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
+      };
     }),
 
     cloudConfig: {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
-    }
-  });
+    },
+  };
 });
 
-vi.mock('../../../src/redteam/commands/discover', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/commands/discover', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    doTargetPurposeDiscovery: vi.fn()
-  });
+    doTargetPurposeDiscovery: vi.fn(),
+  };
 });
 
-vi.mock('../../../src/redteam/remoteGeneration', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     shouldGenerateRemote: vi.fn().mockReturnValue(false),
     neverGenerateRemote: vi.fn().mockReturnValue(false),
-    getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url')
-  });
+    getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
+  };
 });
 
 vi.mock('../../../src/util/config/manage', () => ({
@@ -152,16 +152,16 @@ vi.mock('../../../src/util/config/manage', () => ({
   readConfigs: vi.fn(),
   writeMultipleOutputs: vi.fn(),
 }));
-vi.mock('../../../src/globalConfig/accounts', async importOriginal => {
-  return ({
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getAuthor: vi.fn(),
     getUserEmail: vi.fn(),
-    getUserId: vi.fn().mockReturnValue('test-id')
-  });
+    getUserId: vi.fn().mockReturnValue('test-id'),
+  };
 });
-vi.mock('../../../src/providers', async importOriginal => {
-  return ({
+vi.mock('../../../src/providers', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     loadApiProviders: vi.fn().mockResolvedValue([
@@ -172,8 +172,8 @@ vi.mock('../../../src/providers', async importOriginal => {
       },
     ]),
 
-    getProviderIds: vi.fn().mockReturnValue(['test-provider'])
-  });
+    getProviderIds: vi.fn().mockReturnValue(['test-provider']),
+  };
 });
 
 describe('doGenerateRedteam', () => {
@@ -217,15 +217,13 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    vi.mocked(fs.readFileSync).mockImplementation(
-      function() {
-        return JSON.stringify({
-          prompts: [{ raw: 'Test prompt' }],
-          providers: [],
-          tests: [],
-        });
-      },
-    );
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
 
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [
@@ -283,7 +281,7 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    vi.mocked(fs.readFileSync).mockImplementation(function() {
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
       return JSON.stringify({});
     });
     vi.mocked(synthesize).mockResolvedValue({
@@ -402,15 +400,13 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    vi.mocked(fs.readFileSync).mockImplementation(
-      function() {
-        return JSON.stringify({
-          prompts: [{ raw: 'Test prompt' }],
-          providers: [],
-          tests: [],
-        });
-      },
-    );
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
 
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [
@@ -472,15 +468,13 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    vi.mocked(fs.readFileSync).mockImplementation(
-      function() {
-        return JSON.stringify({
-          prompts: [{ raw: 'Test prompt' }],
-          providers: [],
-          tests: [],
-        });
-      },
-    );
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
 
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [
@@ -543,15 +537,13 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    vi.mocked(fs.readFileSync).mockImplementation(
-      function() {
-        return JSON.stringify({
-          prompts: [{ raw: 'Test prompt' }],
-          providers: [],
-          tests: [],
-        });
-      },
-    );
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
 
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [
@@ -602,15 +594,13 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    vi.mocked(fs.readFileSync).mockImplementation(
-      function() {
-        return JSON.stringify({
-          prompts: [{ raw: 'Test prompt' }],
-          providers: [],
-          tests: [],
-        });
-      },
-    );
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
 
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [
@@ -665,15 +655,13 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    vi.mocked(fs.readFileSync).mockImplementation(
-      function() {
-        return JSON.stringify({
-          prompts: [{ raw: 'Test prompt' }],
-          providers: [],
-          tests: [],
-        });
-      },
-    );
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
 
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [
@@ -789,15 +777,13 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    vi.mocked(fs.readFileSync).mockImplementation(
-      function() {
-        return JSON.stringify({
-          prompts: [{ raw: 'Prompt' }],
-          providers: [],
-          tests: [],
-        });
-      },
-    );
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
 
     vi.mocked(doTargetPurposeDiscovery).mockResolvedValue({
       purpose: 'Generated purpose',
@@ -930,13 +916,13 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should include header comments with author and cloud host when available', async () => {
-      vi.mocked(getAuthor).mockImplementation(function() {
+      vi.mocked(getAuthor).mockImplementation(function () {
         return 'test@example.com';
       });
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return 'test@example.com';
       });
-      vi.mocked(cloudConfig.getApiHost).mockImplementation(function() {
+      vi.mocked(cloudConfig.getApiHost).mockImplementation(function () {
         return 'https://api.promptfoo.app';
       });
 
@@ -977,10 +963,10 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should show "Not logged in" when no user email', async () => {
-      vi.mocked(getAuthor).mockImplementation(function() {
+      vi.mocked(getAuthor).mockImplementation(function () {
         return null;
       });
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return null;
       });
 
@@ -1015,13 +1001,13 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should include different headers for updates vs new configs', async () => {
-      vi.mocked(getAuthor).mockImplementation(function() {
+      vi.mocked(getAuthor).mockImplementation(function () {
         return 'test@example.com';
       });
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return 'test@example.com';
       });
-      vi.mocked(fs.readFileSync).mockImplementation(function() {
+      vi.mocked(fs.readFileSync).mockImplementation(function () {
         return JSON.stringify({});
       });
 
@@ -1060,10 +1046,10 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should include plugin and strategy information in headers', async () => {
-      vi.mocked(getAuthor).mockImplementation(function() {
+      vi.mocked(getAuthor).mockImplementation(function () {
         return 'test@example.com';
       });
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return 'test@example.com';
       });
 
@@ -1116,13 +1102,13 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should handle missing author gracefully', async () => {
-      vi.mocked(getAuthor).mockImplementation(function() {
+      vi.mocked(getAuthor).mockImplementation(function () {
         return null;
       });
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return 'test@example.com';
       });
-      vi.mocked(cloudConfig.getApiHost).mockImplementation(function() {
+      vi.mocked(cloudConfig.getApiHost).mockImplementation(function () {
         return 'https://api.promptfoo.app';
       });
 
@@ -1274,10 +1260,10 @@ describe('doGenerateRedteam', () => {
 describe('doGenerateRedteam with external defaultTest', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return false;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(function() {
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
       return '';
     });
   });
@@ -1298,10 +1284,10 @@ describe('doGenerateRedteam with external defaultTest', () => {
       defaultTest: 'file://external/defaultTest.yaml', // String defaultTest
     };
 
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(function() {
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
       return yaml.dump(existingConfig);
     });
     vi.mocked(readConfig).mockResolvedValue(existingConfig);
@@ -1356,10 +1342,10 @@ describe('doGenerateRedteam with external defaultTest', () => {
       },
     };
 
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(function() {
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
       return yaml.dump(existingConfig);
     });
     vi.mocked(readConfig).mockResolvedValue(existingConfig);
@@ -1412,10 +1398,10 @@ describe('doGenerateRedteam with external defaultTest', () => {
       // No defaultTest
     };
 
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(function() {
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
       return yaml.dump(existingConfig);
     });
     vi.mocked(readConfig).mockResolvedValue(existingConfig);
@@ -1508,10 +1494,10 @@ describe('redteam generate command with target option', () => {
     vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // Mock fs to handle the temp file write
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return false;
     });
-    vi.mocked(fs.writeFileSync).mockImplementation(function() {});
+    vi.mocked(fs.writeFileSync).mockImplementation(function () {});
 
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
@@ -1560,10 +1546,10 @@ describe('redteam generate command with target option', () => {
     vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // Mock fs to handle the temp file write
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return false;
     });
-    vi.mocked(fs.writeFileSync).mockImplementation(function() {});
+    vi.mocked(fs.writeFileSync).mockImplementation(function () {});
 
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
@@ -1628,18 +1614,16 @@ describe('redteam generate command with target option', () => {
     const targetUUID = '87654321-4321-4321-4321-210987654321';
 
     // Mock fs.existsSync to return true for the config file
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(
-      function() {
-        return yaml.dump({
-          prompts: ['Test prompt'],
-          providers: [],
-          tests: [],
-        });
-      },
-    );
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return yaml.dump({
+        prompts: ['Test prompt'],
+        providers: [],
+        tests: [],
+      });
+    });
 
     // Find the generate command
     const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
@@ -1725,10 +1709,10 @@ describe('redteam generate command with target option', () => {
     vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // Mock fs to handle the temp file write
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return false;
     });
-    vi.mocked(fs.writeFileSync).mockImplementation(function() {});
+    vi.mocked(fs.writeFileSync).mockImplementation(function () {});
 
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [],

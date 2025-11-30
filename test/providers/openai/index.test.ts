@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from 'vitest';
 import { OpenAiGenericProvider } from '../../../src/providers/openai/index';
 
 describe('OpenAI Provider', () => {

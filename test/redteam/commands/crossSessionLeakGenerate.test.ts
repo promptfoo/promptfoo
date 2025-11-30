@@ -1,30 +1,30 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { synthesize } from '../../../src/redteam/index';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import * as configModule from '../../../src/util/config/load';
 
 import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
 
-vi.mock('../../../src/redteam', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    synthesize: vi.fn()
-  });
+    synthesize: vi.fn(),
+  };
 });
-vi.mock('../../../src/util/config/load', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/config/load', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    resolveConfigs: vi.fn()
-  });
+    resolveConfigs: vi.fn(),
+  };
 });
-vi.mock('../../../src/util/config/writer', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/config/writer', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    writePromptfooConfig: vi.fn()
-  });
+    writePromptfooConfig: vi.fn(),
+  };
 });
-vi.mock('../../../src/providers', async importOriginal => {
-  return ({
+vi.mock('../../../src/providers', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     loadApiProviders: vi.fn().mockResolvedValue([
@@ -35,8 +35,8 @@ vi.mock('../../../src/providers', async importOriginal => {
       },
     ]),
 
-    getProviderIds: vi.fn().mockReturnValue(['openai:gpt-4'])
-  });
+    getProviderIds: vi.fn().mockReturnValue(['openai:gpt-4']),
+  };
 });
 vi.mock('../../../src/logger', () => ({
   __esModule: true,

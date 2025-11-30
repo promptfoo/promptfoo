@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from 'vitest';
 import { MedicalAnchoringBiasPluginGrader } from '../../../../src/redteam/plugins/medical/medicalAnchoringBias';
 
 describe('MedicalAnchoringBiasPluginGrader', () => {

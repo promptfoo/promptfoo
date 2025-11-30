@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { filterTestsByResults } from '../../../src/commands/eval/filterTestsUtil';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
@@ -7,18 +7,18 @@ import * as util from '../../../src/util/index';
 import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index';
 
 vi.mock('../../../src/models/eval', () => ({
-  default: ({
-    findById: vi.fn()
-  })
+  default: {
+    findById: vi.fn(),
+  },
 }));
 
 vi.mock('../../../src/util', async () => ({
   ...(await vi.importActual('../../../src/util')),
   readOutput: vi.fn(),
 
-  resultIsForTestCase: vi.fn().mockImplementation(function(result, test) {
+  resultIsForTestCase: vi.fn().mockImplementation(function (result, test) {
     return result.testCase === test;
-  })
+  }),
 }));
 
 describe('filterTestsUtil', () => {
@@ -113,7 +113,7 @@ describe('filterTestsUtil', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
-      vi.mocked(util.resultIsForTestCase).mockImplementation(function(result, test) {
+      vi.mocked(util.resultIsForTestCase).mockImplementation(function (result, test) {
         return result.testCase === test;
       });
     });
@@ -241,7 +241,7 @@ describe('filterTestsUtil', () => {
       });
 
       it('should handle case where no test matches any result', async () => {
-        vi.mocked(util.resultIsForTestCase).mockImplementation(function() {
+        vi.mocked(util.resultIsForTestCase).mockImplementation(function () {
           return false;
         });
         const result = await filterTestsByResults(mockTestSuite, 'results.json', () => true);
@@ -316,7 +316,7 @@ describe('filterTestsUtil', () => {
         });
 
         // Mock resultIsForTestCase to return true only for the first test
-        vi.mocked(util.resultIsForTestCase).mockImplementation(function(_result, test) {
+        vi.mocked(util.resultIsForTestCase).mockImplementation(function (_result, test) {
           return test === mockTestSuite.tests![0];
         });
 

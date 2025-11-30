@@ -11,17 +11,17 @@ import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 
 vi.mock('../../src/logger', () => ({
-  default: ({
+  default: {
     debug: vi.fn(),
     info: vi.fn(),
-    error: vi.fn()
-  })
+    error: vi.fn(),
+  },
 }));
 
 vi.mock('../../src/telemetry', () => ({
-  default: ({
-    record: vi.fn()
-  })
+  default: {
+    record: vi.fn(),
+  },
 }));
 
 describe('importCommand', () => {
@@ -35,7 +35,7 @@ describe('importCommand', () => {
 
   beforeEach(async () => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function() {
+    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
 

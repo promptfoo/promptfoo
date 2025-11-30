@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OpenAI from 'openai';
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
@@ -460,18 +460,19 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle callbacks that access context properties', async () => {
-      const contextAwareCallback = vi
-        .fn()
-        .mockImplementation(function(args: any, context?: CallbackContext) {
-          const result = {
-            originalArgs: args,
-            contextInfo: {
-              threadId: context?.threadId,
-              provider: context?.provider,
-            },
-          };
-          return Promise.resolve(JSON.stringify(result));
-        });
+      const contextAwareCallback = vi.fn().mockImplementation(function (
+        args: any,
+        context?: CallbackContext,
+      ) {
+        const result = {
+          originalArgs: args,
+          contextInfo: {
+            threadId: context?.threadId,
+            provider: context?.provider,
+          },
+        };
+        return Promise.resolve(JSON.stringify(result));
+      });
 
       const provider = new OpenAiAssistantProvider('asst_test', {
         config: {

@@ -11,8 +11,8 @@ import { loadDefaultConfig } from '../../src/util/config/default';
 import FakeDataFactory from '../factories/data/fakeDataFactory';
 
 vi.mock('../../src/redteam/commands/generate');
-vi.mock('../../src/commands/eval', async importOriginal => {
-  return ({
+vi.mock('../../src/commands/eval', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     doEval: vi.fn().mockResolvedValue({
@@ -30,8 +30,8 @@ vi.mock('../../src/commands/eval', async importOriginal => {
           },
         },
       },
-    })
-  });
+    }),
+  };
 });
 vi.mock('../../src/util/apiHealth');
 vi.mock('../../src/util/config/default');
@@ -46,41 +46,41 @@ vi.mock('../../src/logger', () => ({
   setLogCallback: vi.fn(),
   setLogLevel: vi.fn(),
 }));
-vi.mock('../../src/globalConfig/accounts', async importOriginal => {
-  return ({
+vi.mock('../../src/globalConfig/accounts', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getUserEmail: vi.fn(() => 'test@example.com'),
     setUserEmail: vi.fn(),
     getAuthor: vi.fn(() => 'test@example.com'),
     promptForEmailUnverified: vi.fn().mockResolvedValue(undefined),
-    checkEmailStatusAndMaybeExit: vi.fn().mockResolvedValue(undefined)
-  });
+    checkEmailStatusAndMaybeExit: vi.fn().mockResolvedValue(undefined),
+  };
 });
 vi.mock('../../src/telemetry', () => ({
-  default: ({
+  default: {
     record: vi.fn().mockResolvedValue(undefined),
     send: vi.fn().mockResolvedValue(undefined),
-    saveConsent: vi.fn().mockResolvedValue(undefined)
-  })
+    saveConsent: vi.fn().mockResolvedValue(undefined),
+  },
 }));
-vi.mock('../../src/share', async importOriginal => {
-  return ({
+vi.mock('../../src/share', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    createShareableUrl: vi.fn().mockResolvedValue('http://example.com')
-  });
+    createShareableUrl: vi.fn().mockResolvedValue('http://example.com'),
+  };
 });
-vi.mock('../../src/util', async importOriginal => {
-  return ({
+vi.mock('../../src/util', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    setupEnv: vi.fn()
-  });
+    setupEnv: vi.fn(),
+  };
 });
 
-vi.mock('../../src/util/promptfooCommand', async importOriginal => {
-  return ({
+vi.mock('../../src/util/promptfooCommand', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    promptfooCommand: vi.fn().mockImplementation(function(cmd) {
+    promptfooCommand: vi.fn().mockImplementation(function (cmd) {
       if (cmd === '') {
         return 'promptfoo';
       }
@@ -88,14 +88,14 @@ vi.mock('../../src/util/promptfooCommand', async importOriginal => {
     }),
 
     detectInstaller: vi.fn().mockReturnValue('unknown'),
-    isRunningUnderNpx: vi.fn().mockReturnValue(false)
-  });
+    isRunningUnderNpx: vi.fn().mockReturnValue(false),
+  };
 });
-vi.mock('../../src/util/config/manage', async importOriginal => {
-  return ({
+vi.mock('../../src/util/config/manage', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/dir'),
-  });
+  };
 });
 vi.mock('fs');
 vi.mock('js-yaml');
@@ -114,17 +114,17 @@ describe('doRedteamRun', () => {
       defaultConfig: {},
       defaultConfigPath: 'promptfooconfig.yaml',
     });
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
-    vi.mocked(os.tmpdir).mockImplementation(function() {
+    vi.mocked(os.tmpdir).mockImplementation(function () {
       return '/tmp';
     });
-    vi.mocked(fs.mkdirSync).mockImplementation(function() {
+    vi.mocked(fs.mkdirSync).mockImplementation(function () {
       return '';
     });
-    vi.mocked(fs.writeFileSync).mockImplementation(function() {});
-    vi.mocked(yaml.dump).mockImplementation(function() {
+    vi.mocked(fs.writeFileSync).mockImplementation(function () {});
+    vi.mocked(yaml.dump).mockImplementation(function () {
       return 'mocked-yaml-content';
     });
     vi.mocked(doGenerateRedteam).mockResolvedValue({});

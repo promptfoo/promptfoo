@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import { doValidate, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
@@ -9,10 +9,10 @@ import type { UnifiedConfig } from '../../src/types/index';
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/load');
 vi.mock('../../src/telemetry', () => ({
-  default: ({
+  default: {
     record: vi.fn(),
-    send: vi.fn()
-  })
+    send: vi.fn(),
+  },
 }));
 
 describe('Validate Command Exit Codes', () => {

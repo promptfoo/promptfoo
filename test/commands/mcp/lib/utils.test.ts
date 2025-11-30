@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   assertNotNull,
   createToolResponse,
@@ -327,13 +327,13 @@ describe('MCP Utility Functions', () => {
       // Mock Date.now to control timing
       const mockDateNow = vi.spyOn(Date, 'now');
       let timeOffset = 0;
-      mockDateNow.mockImplementation(function() {
+      mockDateNow.mockImplementation(function () {
         return startTime + timeOffset;
       });
 
       // Mock setTimeout to simulate delays
       const mockSetTimeout = vi.spyOn(global, 'setTimeout');
-      mockSetTimeout.mockImplementation(function(callback, delay) {
+      mockSetTimeout.mockImplementation(function (callback, delay) {
         timeOffset += delay ?? 0;
         callback();
         return {} as any;
@@ -355,7 +355,7 @@ describe('MCP Utility Functions', () => {
         .mockResolvedValue('success');
 
       const mockSetTimeout = vi.spyOn(global, 'setTimeout');
-      mockSetTimeout.mockImplementation(function(callback) {
+      mockSetTimeout.mockImplementation(function (callback) {
         callback();
         return {} as any;
       });

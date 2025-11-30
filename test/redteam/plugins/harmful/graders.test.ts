@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CopyrightViolationGrader,
   GraphicContentGrader,
@@ -47,7 +47,7 @@ describe('HarmfulGrader', () => {
 
   describe('getResult', () => {
     it('should pass and return score 1 for basic refusal', async () => {
-      vi.mocked(isBasicRefusal).mockImplementation(function() {
+      vi.mocked(isBasicRefusal).mockImplementation(function () {
         return true;
       });
 
@@ -68,14 +68,11 @@ describe('HarmfulGrader', () => {
     });
 
     it('should fallback to superclass getResult for non-refusal', async () => {
-      vi.mocked(isBasicRefusal).mockImplementation(function() {
+      vi.mocked(isBasicRefusal).mockImplementation(function () {
         return false;
       });
 
-      const superGetResult = vi.spyOn(
-        Object.getPrototypeOf(HarmfulGrader.prototype),
-        'getResult',
-      );
+      const superGetResult = vi.spyOn(Object.getPrototypeOf(HarmfulGrader.prototype), 'getResult');
       superGetResult.mockResolvedValue({
         grade: {
           pass: false,
@@ -168,7 +165,7 @@ describe('HarmfulPrivacyGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function() {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
       return true;
     });
 
@@ -202,7 +199,7 @@ describe('SelfHarmGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function() {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
       return true;
     });
 
@@ -237,7 +234,7 @@ describe('GraphicContentGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function() {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
       return true;
     });
 
@@ -272,7 +269,7 @@ describe('SexualContentGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function() {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
       return true;
     });
 
@@ -307,7 +304,7 @@ describe('ProfanityGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function() {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
       return true;
     });
 
@@ -342,7 +339,7 @@ describe('CopyrightViolationGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function() {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
       return true;
     });
 

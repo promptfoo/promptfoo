@@ -7,15 +7,15 @@ import { FalImageGenerationProvider } from '../../src/providers/fal';
 const mockSubscribe = vi.hoisted(() => vi.fn());
 const mockConfig = vi.hoisted(() => vi.fn());
 
-vi.mock('@fal-ai/client', async importOriginal => {
-  return ({
+vi.mock('@fal-ai/client', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     fal: {
       subscribe: mockSubscribe,
       config: mockConfig,
-    }
-  });
+    },
+  };
 });
 
 vi.mock('../../src/cache', async () => {
@@ -27,23 +27,23 @@ vi.mock('../../src/cache', async () => {
   };
 });
 
-vi.mock('../../src/envars', async importOriginal => {
-  return ({
+vi.mock('../../src/envars', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getEnvString: vi.fn(),
     getEnvInt: vi.fn().mockReturnValue(300000),
     getEnvBool: vi.fn().mockReturnValue(true),
-    getEnvFloat: vi.fn()
-  });
+    getEnvFloat: vi.fn(),
+  };
 });
 
 describe('Fal Provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(isCacheEnabled).mockImplementation(function() {
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
       return false;
     });
-    vi.mocked(getCache).mockImplementation(function() {
+    vi.mocked(getCache).mockImplementation(function () {
       return {
         get: vi.fn().mockResolvedValue(null),
         set: vi.fn(),
@@ -107,7 +107,7 @@ describe('Fal Provider', () => {
       });
 
       it('should use environment variable for API key when not provided in config', () => {
-        vi.mocked(getEnvString).mockImplementation(function() {
+        vi.mocked(getEnvString).mockImplementation(function () {
           return 'env-api-key';
         });
 
@@ -138,7 +138,7 @@ describe('Fal Provider', () => {
 
     describe('API key validation', () => {
       it('should throw error when API key is not set', async () => {
-        vi.mocked(getEnvString).mockImplementation(function() {
+        vi.mocked(getEnvString).mockImplementation(function () {
           return undefined as any;
         });
 
@@ -302,7 +302,7 @@ describe('Fal Provider', () => {
 
     describe('caching behavior', () => {
       it('should use cached response when cache is enabled and available', async () => {
-        vi.mocked(isCacheEnabled).mockImplementation(function() {
+        vi.mocked(isCacheEnabled).mockImplementation(function () {
           return true;
         });
         const mockCachedResponse = JSON.stringify(
@@ -320,7 +320,7 @@ describe('Fal Provider', () => {
             set: vi.fn(),
           },
         };
-        vi.mocked(getCache).mockImplementation(function() {
+        vi.mocked(getCache).mockImplementation(function () {
           return mockCache;
         });
 
@@ -337,7 +337,7 @@ describe('Fal Provider', () => {
       });
 
       it('should set cache when enabled and response is fresh', async () => {
-        vi.mocked(isCacheEnabled).mockImplementation(function() {
+        vi.mocked(isCacheEnabled).mockImplementation(function () {
           return true;
         });
         const mockCache = {
@@ -351,7 +351,7 @@ describe('Fal Provider', () => {
             set: vi.fn(),
           },
         };
-        vi.mocked(getCache).mockImplementation(function() {
+        vi.mocked(getCache).mockImplementation(function () {
           return mockCache;
         });
 
@@ -378,7 +378,7 @@ describe('Fal Provider', () => {
       });
 
       it('should handle cache set errors gracefully', async () => {
-        vi.mocked(isCacheEnabled).mockImplementation(function() {
+        vi.mocked(isCacheEnabled).mockImplementation(function () {
           return true;
         });
         const mockCache = {
@@ -392,7 +392,7 @@ describe('Fal Provider', () => {
             set: vi.fn(),
           },
         };
-        vi.mocked(getCache).mockImplementation(function() {
+        vi.mocked(getCache).mockImplementation(function () {
           return mockCache;
         });
 

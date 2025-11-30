@@ -1,4 +1,4 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
@@ -16,18 +16,18 @@ const mockGrader = {
 
 const mockGetGraderById = vi.fn().mockReturnValue(mockGrader);
 
-vi.mock('../../../src/redteam/graders', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/graders', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getGraderById: mockGetGraderById
-  });
+    getGraderById: mockGetGraderById,
+  };
 });
 
-vi.mock('../../../src/util/server', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/server', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    checkServerFeatureSupport: vi.fn(() => Promise.resolve(false))
-  });
+    checkServerFeatureSupport: vi.fn(() => Promise.resolve(false)),
+  };
 });
 
 describe('RedteamGoatProvider', () => {
@@ -66,14 +66,14 @@ describe('RedteamGoatProvider', () => {
   });
 
   beforeEach(() => {
-    mockFetch = vi.fn().mockImplementation(async function() {
-      return ({
+    mockFetch = vi.fn().mockImplementation(async function () {
+      return {
         json: async () => ({
           message: { role: 'assistant', content: 'test response' },
         }),
 
-        ok: true
-      });
+        ok: true,
+      };
     });
     global.fetch = mockFetch as unknown as typeof fetch;
 
@@ -580,25 +580,23 @@ describe('RedteamGoatProvider', () => {
 
     // Mock grader to capture the additionalRubric parameter
     let capturedAdditionalRubric: string | undefined;
-    (mockGrader.getResult as any).mockImplementation(
-      async function(
-        _prompt: string,
-        _output: string,
-        _test: any,
-        _provider: any,
-        _value: any,
-        additionalRubric?: string
-      ) {
-        capturedAdditionalRubric = additionalRubric;
-        return {
-          grade: {
-            pass: false,
-            score: 0,
-            reason: 'Test jailbreak detected',
-          },
-        };
-      },
-    );
+    (mockGrader.getResult as any).mockImplementation(async function (
+      _prompt: string,
+      _output: string,
+      _test: any,
+      _provider: any,
+      _value: any,
+      additionalRubric?: string,
+    ) {
+      capturedAdditionalRubric = additionalRubric;
+      return {
+        grade: {
+          pass: false,
+          score: 0,
+          reason: 'Test jailbreak detected',
+        },
+      };
+    });
 
     const testConfig = {
       vars: {},
@@ -883,14 +881,14 @@ describe('RedteamGoatProvider', () => {
       });
 
     // Mock remote generation API for second turn
-    mockFetch.mockImplementationOnce(async function() {
-      return ({
+    mockFetch.mockImplementationOnce(async function () {
+      return {
         json: async () => ({
           message: { role: 'assistant', content: 'attack prompt' },
         }),
 
-        ok: true
-      });
+        ok: true,
+      };
     });
 
     const testConfig = {
@@ -924,7 +922,7 @@ describe('RedteamGoatProvider', () => {
   describe('Token Counting', () => {
     beforeEach(async () => {
       // Reset TokenUsageTracker between tests to ensure clean state
-      const { TokenUsageTracker } = await import("../../../src/util/tokenUsage");
+      const { TokenUsageTracker } = await import('../../../src/util/tokenUsage');
       TokenUsageTracker.getInstance().resetAllUsage();
     });
 

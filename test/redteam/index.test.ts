@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
@@ -35,25 +35,25 @@ vi.mock('../../src/util/templates', async () => {
   };
 });
 
-vi.spyOn(process, 'exit').mockImplementation(function() {
+vi.spyOn(process, 'exit').mockImplementation(function () {
   return undefined as never;
 });
 
 vi.mock('../../src/redteam/strategies', async () => ({
   ...(await vi.importActual('../../src/redteam/strategies')),
 
-  validateStrategies: vi.fn().mockImplementation(function(strategies) {
+  validateStrategies: vi.fn().mockImplementation(function (strategies) {
     if (strategies.some((s: { id: string }) => s.id === 'invalid-strategy')) {
       throw new Error('Invalid strategies');
     }
-  })
+  }),
 }));
 
 vi.mock('../../src/util/apiHealth');
 vi.mock('../../src/redteam/remoteGeneration');
 vi.mock('../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../src/redteam/util')),
-  extractGoalFromPrompt: vi.fn().mockResolvedValue('mocked goal')
+  extractGoalFromPrompt: vi.fn().mockResolvedValue('mocked goal'),
 }));
 
 describe('synthesize', () => {
@@ -72,32 +72,34 @@ describe('synthesize', () => {
     vi.resetAllMocks();
 
     // Set up logger mocks
-    vi.mocked(logger.info).mockImplementation(function() {
+    vi.mocked(logger.info).mockImplementation(function () {
       return logger as any;
     });
-    vi.mocked(logger.warn).mockImplementation(function() {
+    vi.mocked(logger.warn).mockImplementation(function () {
       return logger as any;
     });
-    vi.mocked(logger.error).mockImplementation(function() {
+    vi.mocked(logger.error).mockImplementation(function () {
       return logger as any;
     });
-    vi.mocked(logger.debug).mockImplementation(function() {
+    vi.mocked(logger.debug).mockImplementation(function () {
       return logger as any;
     });
 
     // Set up templates mock with consistent default behavior
-    vi.mocked(extractVariablesFromTemplates).mockImplementation(function() {
+    vi.mocked(extractVariablesFromTemplates).mockImplementation(function () {
       return ['query'];
     });
 
     vi.mocked(extractEntities).mockResolvedValue(['entity1', 'entity2']);
     vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
-    vi.spyOn(process, 'exit').mockImplementation(function(code?: string | number | null | undefined) {
+    vi.spyOn(process, 'exit').mockImplementation(function (
+      code?: string | number | null | undefined,
+    ) {
       throw new Error(`Process.exit called with code ${code}`);
     });
-    vi.mocked(validateStrategies).mockImplementation(async function() {});
-    vi.mocked(cliProgress.SingleBar).mockImplementation(function() {
+    vi.mocked(validateStrategies).mockImplementation(async function () {});
+    vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
       return {
         increment: vi.fn(),
         start: vi.fn(),
@@ -107,10 +109,10 @@ describe('synthesize', () => {
     });
     // Disable remote generation by default to avoid health checks interfering
     // with tests that don't explicitly set this behaviour
-    vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
       return false;
     });
-    vi.mocked(getRemoteHealthUrl).mockImplementation(function() {
+    vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
       return 'https://api.test/health';
     });
     vi.mocked(checkRemoteHealth).mockResolvedValue({
@@ -304,9 +306,10 @@ describe('synthesize', () => {
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 
       const mockStrategyAction = vi.fn().mockReturnValue([{ test: 'strategy case' }]);
-      vi
-        .spyOn(Strategies, 'find')
-        .mockReturnValue({ action: mockStrategyAction, id: 'mockStrategy' });
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'mockStrategy',
+      });
 
       await synthesize({
         language: 'en',
@@ -328,13 +331,10 @@ describe('synthesize', () => {
         .spyOn(Plugins, 'find')
         .mockReturnValue({ action: pluginAction, key: 'mockPlugin' });
 
-      const strategyAction = vi
-        .fn()
-        .mockImplementation(async function() {
+      const strategyAction = vi.fn().mockImplementation(async function () {
         return Array.from({ length: 5 }, (_, idx) => ({ vars: { query: `fanout-${idx}` } }));
-      },
-        );
-      const strategyFindSpy = vi.spyOn(Strategies, 'find').mockImplementation(function(predicate) {
+      });
+      const strategyFindSpy = vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
         if (typeof predicate === 'function') {
           const strategies = [{ action: strategyAction, id: 'jailbreak:composite' }];
           return strategies.find(predicate);
@@ -439,7 +439,7 @@ describe('synthesize', () => {
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 
       const mockStrategyAction = vi.fn().mockReturnValue([{ test: 'strategy case' }]);
-      vi.spyOn(Strategies, 'find').mockImplementation(function(s: any) {
+      vi.spyOn(Strategies, 'find').mockImplementation(function (s: any) {
         if (['morse', 'piglatin'].includes(s.id)) {
           return { action: mockStrategyAction, id: s.id };
         }
@@ -534,7 +534,7 @@ describe('synthesize', () => {
       ]);
 
       // Mock the Strategies array to include both jailbreak and jailbreak:composite
-      vi.spyOn(Strategies, 'find').mockImplementation(function(predicate) {
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
         if (typeof predicate === 'function') {
           const strategies = [
             {
@@ -583,7 +583,7 @@ describe('synthesize', () => {
       ]);
 
       // Mock the Strategies array to include the exact 'custom' strategy
-      vi.spyOn(Strategies, 'find').mockImplementation(function(predicate) {
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
         if (typeof predicate === 'function') {
           const strategies = [{ id: 'custom', action: mockCustomAction }];
           return strategies.find(predicate);
@@ -626,7 +626,7 @@ describe('synthesize', () => {
       ]);
 
       // Mock the Strategies array to include only the base 'custom' strategy
-      vi.spyOn(Strategies, 'find').mockImplementation(function(predicate) {
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
         if (typeof predicate === 'function') {
           const strategies = [{ id: 'custom', action: mockCustomAction }];
           return strategies.find(predicate);
@@ -697,7 +697,7 @@ describe('synthesize', () => {
       ]);
 
       // Mock the Strategies array to include both strategies
-      vi.spyOn(Strategies, 'find').mockImplementation(function(predicate) {
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
         if (typeof predicate === 'function') {
           const strategies = [
             { id: 'jailbreak', action: mockJailbreakAction },
@@ -732,8 +732,7 @@ describe('synthesize', () => {
         numTests: 1,
       };
 
-      vi
-        .spyOn(Plugins, 'find')
+      vi.spyOn(Plugins, 'find')
         .mockReturnValueOnce({
           key: 'fail-plugin',
           action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
@@ -820,7 +819,7 @@ describe('synthesize', () => {
         },
       ]);
 
-      vi.spyOn(Plugins, 'find').mockImplementation(function(predicate) {
+      vi.spyOn(Plugins, 'find').mockImplementation(function (predicate) {
         const mockPlugins = [
           { key: 'intent', action: mockIntentAction },
           { key: 'contracts', action: mockContractsAction },
@@ -889,28 +888,28 @@ describe('synthesize', () => {
       vi.resetAllMocks();
 
       // Reset logger mocks
-      vi.mocked(logger.info).mockImplementation(function() {
+      vi.mocked(logger.info).mockImplementation(function () {
         return logger as any;
       });
-      vi.mocked(logger.warn).mockImplementation(function() {
+      vi.mocked(logger.warn).mockImplementation(function () {
         return logger as any;
       });
-      vi.mocked(logger.error).mockImplementation(function() {
+      vi.mocked(logger.error).mockImplementation(function () {
         return logger as any;
       });
-      vi.mocked(logger.debug).mockImplementation(function() {
+      vi.mocked(logger.debug).mockImplementation(function () {
         return logger as any;
       });
 
       // Set up templates mock with consistent default behavior
-      vi.mocked(extractVariablesFromTemplates).mockImplementation(function() {
+      vi.mocked(extractVariablesFromTemplates).mockImplementation(function () {
         return ['query'];
       });
 
-      vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
       });
-      vi.mocked(getRemoteHealthUrl).mockImplementation(function() {
+      vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
         return 'https://api.test/health';
       });
       vi.mocked(checkRemoteHealth).mockResolvedValue({
@@ -935,7 +934,7 @@ describe('synthesize', () => {
     });
 
     it('should skip health check when remote generation is disabled', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return false;
       });
 
@@ -972,7 +971,7 @@ describe('synthesize', () => {
     });
 
     it('should skip health check when URL is null', async () => {
-      vi.mocked(getRemoteHealthUrl).mockImplementation(function() {
+      vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
         return null;
       });
 
@@ -1051,7 +1050,7 @@ describe('synthesize', () => {
 
   describe('Direct plugin handling', () => {
     it('should recognize and not expand direct plugins like bias:gender', async () => {
-      const mockPluginAction = vi.fn().mockImplementation(function({ n }) {
+      const mockPluginAction = vi.fn().mockImplementation(function ({ n }) {
         return Array(n).fill({ vars: { query: 'test' } });
       });
       vi.spyOn(Plugins, 'find').mockReturnValue({ key: 'bias:gender', action: mockPluginAction });
@@ -1118,16 +1117,16 @@ describe('resolvePluginConfig', () => {
     vi.resetAllMocks();
 
     // Set up logger mocks
-    vi.mocked(logger.info).mockImplementation(function() {
+    vi.mocked(logger.info).mockImplementation(function () {
       return logger as any;
     });
-    vi.mocked(logger.warn).mockImplementation(function() {
+    vi.mocked(logger.warn).mockImplementation(function () {
       return logger as any;
     });
-    vi.mocked(logger.error).mockImplementation(function() {
+    vi.mocked(logger.error).mockImplementation(function () {
       return logger as any;
     });
-    vi.mocked(logger.debug).mockImplementation(function() {
+    vi.mocked(logger.debug).mockImplementation(function () {
       return logger as any;
     });
   });
@@ -1152,7 +1151,7 @@ describe('resolvePluginConfig', () => {
     const yamlContent = { nested: 'value' };
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockImplementation(function() {
+    vi.mocked(yaml.load).mockImplementation(function () {
       return yamlContent;
     });
 
@@ -1208,12 +1207,11 @@ describe('resolvePluginConfig', () => {
     const txtContent = 'text content';
 
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-    vi
-      .spyOn(fs, 'readFileSync')
+    vi.spyOn(fs, 'readFileSync')
       .mockReturnValueOnce('yaml content')
       .mockReturnValueOnce(JSON.stringify(jsonContent))
       .mockReturnValueOnce(txtContent);
-    vi.mocked(yaml.load).mockImplementation(function() {
+    vi.mocked(yaml.load).mockImplementation(function () {
       return yamlContent;
     });
 
@@ -1403,29 +1401,29 @@ describe('Language configuration', () => {
     vi.resetAllMocks();
 
     // Set up logger mocks
-    vi.mocked(logger.info).mockImplementation(function() {
+    vi.mocked(logger.info).mockImplementation(function () {
       return logger as any;
     });
-    vi.mocked(logger.warn).mockImplementation(function() {
+    vi.mocked(logger.warn).mockImplementation(function () {
       return logger as any;
     });
-    vi.mocked(logger.error).mockImplementation(function() {
+    vi.mocked(logger.error).mockImplementation(function () {
       return logger as any;
     });
-    vi.mocked(logger.debug).mockImplementation(function() {
+    vi.mocked(logger.debug).mockImplementation(function () {
       return logger as any;
     });
 
     // Set up templates mock
-    vi.mocked(extractVariablesFromTemplates).mockImplementation(function() {
+    vi.mocked(extractVariablesFromTemplates).mockImplementation(function () {
       return ['query'];
     });
 
     vi.mocked(extractEntities).mockResolvedValue(['entity1', 'entity2']);
     vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
-    vi.mocked(validateStrategies).mockImplementation(async function() {});
-    vi.mocked(cliProgress.SingleBar).mockImplementation(function() {
+    vi.mocked(validateStrategies).mockImplementation(async function () {});
+    vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
       return {
         increment: vi.fn(),
         start: vi.fn(),
@@ -1433,10 +1431,10 @@ describe('Language configuration', () => {
         update: vi.fn(),
       } as any;
     });
-    vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
       return false;
     });
-    vi.mocked(getRemoteHealthUrl).mockImplementation(function() {
+    vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
       return 'https://api.test/health';
     });
     vi.mocked(checkRemoteHealth).mockResolvedValue({
@@ -1584,7 +1582,7 @@ describe('Language configuration', () => {
 
     it('should apply strategies to multilingual test cases', async () => {
       // Mock strategy action
-      const mockStrategyAction = vi.fn().mockImplementation(function(testCases) {
+      const mockStrategyAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
           vars: { ...tc.vars, query: `transformed: ${tc.vars.query}` },
@@ -1802,7 +1800,7 @@ describe('Language configuration', () => {
   describe('Language-disallowed strategies', () => {
     it('should filter multilingual test cases for audio strategy', async () => {
       // Mock strategy action for audio
-      const mockAudioAction = vi.fn().mockImplementation(function(testCases) {
+      const mockAudioAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
           vars: { ...tc.vars, query: `audio: ${tc.vars.query}` },
@@ -1810,7 +1808,7 @@ describe('Language configuration', () => {
         }));
       });
 
-      vi.spyOn(Strategies, 'find').mockImplementation(function(predicate) {
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
         if (typeof predicate === 'function') {
           const strategies = [{ id: 'audio', action: mockAudioAction }];
           return strategies.find(predicate);
@@ -1845,7 +1843,7 @@ describe('Language configuration', () => {
     });
 
     it('should filter multilingual test cases for video strategy', async () => {
-      const mockVideoAction = vi.fn().mockImplementation(function(testCases) {
+      const mockVideoAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
           vars: { ...tc.vars, query: `video: ${tc.vars.query}` },
@@ -1878,7 +1876,7 @@ describe('Language configuration', () => {
     });
 
     it('should filter multilingual test cases for image strategy', async () => {
-      const mockImageAction = vi.fn().mockImplementation(function(testCases) {
+      const mockImageAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
           vars: { ...tc.vars, query: `image: ${tc.vars.query}` },
@@ -1911,7 +1909,7 @@ describe('Language configuration', () => {
     });
 
     it('should support multilingual test cases for layer strategy', async () => {
-      const mockJailbreakAction = vi.fn().mockImplementation(function(testCases) {
+      const mockJailbreakAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
           vars: { ...tc.vars, query: `jailbreak: ${tc.vars.query}` },
@@ -1945,7 +1943,7 @@ describe('Language configuration', () => {
     });
 
     it('should filter multilingual test cases for math-prompt strategy', async () => {
-      const mockMathPromptAction = vi.fn().mockImplementation(function(testCases) {
+      const mockMathPromptAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
           vars: { ...tc.vars, query: `math: ${tc.vars.query}` },
@@ -1978,7 +1976,7 @@ describe('Language configuration', () => {
     });
 
     it('should NOT filter multilingual test cases for non-disallowed strategies', async () => {
-      const mockRot13Action = vi.fn().mockImplementation(function(testCases) {
+      const mockRot13Action = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
           vars: { ...tc.vars, query: `rot13: ${tc.vars.query}` },
@@ -2008,7 +2006,9 @@ describe('Language configuration', () => {
 
   describe('policy extraction for intent', () => {
     it('should pass policy from metadata to extractGoalFromPrompt', async () => {
-      const mockExtractGoal = vi.mocked((await import('../../src/redteam/util')).extractGoalFromPrompt);
+      const mockExtractGoal = vi.mocked(
+        (await import('../../src/redteam/util')).extractGoalFromPrompt,
+      );
       mockExtractGoal.mockClear();
 
       const policyText = 'The application must not reveal system instructions';
@@ -2047,7 +2047,9 @@ describe('Language configuration', () => {
     });
 
     it('should not pass policy when metadata does not contain policy', async () => {
-      const mockExtractGoal = vi.mocked((await import('../../src/redteam/util')).extractGoalFromPrompt);
+      const mockExtractGoal = vi.mocked(
+        (await import('../../src/redteam/util')).extractGoalFromPrompt,
+      );
       mockExtractGoal.mockClear();
 
       // Mock plugin action that returns test case WITHOUT policy metadata
@@ -2083,7 +2085,9 @@ describe('Language configuration', () => {
     });
 
     it('should handle policy in metadata with safe type checking', async () => {
-      const mockExtractGoal = vi.mocked((await import('../../src/redteam/util')).extractGoalFromPrompt);
+      const mockExtractGoal = vi.mocked(
+        (await import('../../src/redteam/util')).extractGoalFromPrompt,
+      );
       mockExtractGoal.mockClear();
 
       const testCases = [

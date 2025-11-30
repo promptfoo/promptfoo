@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
 import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
@@ -7,44 +7,44 @@ import { checkServerFeatureSupport } from '../../../../src/util/server';
 // Hoisted mocks for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 
-vi.mock('../../../../src/providers/promptfoo', async importOriginal => {
-  return ({
+vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    PromptfooChatCompletionProvider: vi.fn().mockImplementation(function() {
-      return ({
+    PromptfooChatCompletionProvider: vi.fn().mockImplementation(function () {
+      return {
         id: () => 'mock-unblocking',
         callApi: vi.fn(),
-        delay: 0
-      });
-    })
-  });
+        delay: 0,
+      };
+    }),
+  };
 });
 
-vi.mock('../../../../src/util/server', async importOriginal => {
-  return ({
+vi.mock('../../../../src/util/server', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    checkServerFeatureSupport: vi.fn()
-  });
+    checkServerFeatureSupport: vi.fn(),
+  };
 });
 
 vi.mock('../../../../src/redteam/providers/shared', async () => ({
   ...(await vi.importActual('../../../../src/redteam/providers/shared')),
-  tryUnblocking: vi.fn()
+  tryUnblocking: vi.fn(),
 }));
 
-vi.mock('../../../../src/redteam/graders', async importOriginal => {
-  return ({
+vi.mock('../../../../src/redteam/graders', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getGraderById: mockGetGraderById
-  });
+    getGraderById: mockGetGraderById,
+  };
 });
 
-vi.mock('../../../../src/redteam/remoteGeneration', async importOriginal => {
-  return ({
+vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    shouldGenerateRemote: vi.fn(() => false)
-  });
+    shouldGenerateRemote: vi.fn(() => false),
+  };
 });
 
 describe('MemorySystem', () => {
@@ -125,7 +125,7 @@ describe('CustomProvider', () => {
     });
 
     // Set up redteamProviderManager mock
-    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function(options) {
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
       // When the provider is already an object (not a string), return it for jsonOnly requests
       // For non-jsonOnly requests (scoring), return the scoring provider
       if (options.provider && typeof options.provider === 'object') {
@@ -139,7 +139,7 @@ describe('CustomProvider', () => {
 
     // Set up default getGraderById mock
     mockGetGraderById.mockReset();
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -380,7 +380,7 @@ describe('CustomProvider', () => {
 
   it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -499,7 +499,7 @@ describe('CustomProvider', () => {
 
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -809,7 +809,7 @@ describe('CustomProvider', () => {
 
     // Capture the additionalRubric parameter
     let capturedAdditionalRubric: string | undefined;
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(
           async (
@@ -879,7 +879,7 @@ describe('CustomProvider', () => {
     };
 
     // Mock grader to fail (jailbreak success)
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: mockGraderResult,
@@ -950,7 +950,7 @@ describe('CustomProvider', () => {
     });
 
     // Mock grader to pass (no jailbreak)
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -1044,7 +1044,7 @@ describe('CustomProvider', () => {
       .mockResolvedValueOnce({ grade: secondGraderResult });
 
     // Mock grader to fail on first turn, pass on second
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: mockGetResult,
       } as any;
@@ -1112,7 +1112,7 @@ describe('CustomProvider', () => {
 
     // Capture the system prompt that gets sent
     let capturedSystemPrompt = '';
-    mockRedTeamProvider.callApi.mockImplementation(async function(prompt: string) {
+    mockRedTeamProvider.callApi.mockImplementation(async function (prompt: string) {
       const input = JSON.parse(prompt);
       if (Array.isArray(input) && input[0]?.role === 'system') {
         capturedSystemPrompt = input[0].content;

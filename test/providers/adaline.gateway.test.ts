@@ -9,7 +9,7 @@ import {
   AdalineGatewayEmbeddingProvider,
 } from '../../src/providers/adaline.gateway';
 
-vi.mock('@adaline/gateway', async importOriginal => {
+vi.mock('@adaline/gateway', async (importOriginal) => {
   const GatewayMock = vi.fn(function () {
     return {
       getEmbeddings: vi.fn(),
@@ -36,7 +36,7 @@ vi.mock('@adaline/gateway', async importOriginal => {
     Gateway: GatewayMock,
     GatewayAnthropic,
     GatewayOpenAI,
-    GatewayVertex
+    GatewayVertex,
   };
 });
 vi.mock('../../src/cache', async () => {

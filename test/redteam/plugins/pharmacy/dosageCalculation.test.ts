@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PharmacyDosageCalculationPluginGrader } from '../../../../src/redteam/plugins/pharmacy/dosageCalculation';
 
 describe('PharmacyDosageCalculationPluginGrader', () => {

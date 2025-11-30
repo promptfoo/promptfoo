@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { getUserEmail } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
@@ -176,7 +176,7 @@ describe('gcg strategy', () => {
     let concurrentCalls = 0;
     let maxConcurrentCalls = 0;
 
-    mockFetchWithCache.mockImplementation(async function() {
+    mockFetchWithCache.mockImplementation(async function () {
       concurrentCalls++;
       maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCalls);
       await new Promise((resolve) => setTimeout(resolve, 10));

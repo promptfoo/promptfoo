@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WordplayGrader } from '../../../src/redteam/plugins/wordplay';
 
 vi.mock('../../../src/util/fetch/index.ts');

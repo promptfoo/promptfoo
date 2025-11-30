@@ -36,8 +36,8 @@ const googleAuthMock = vi.hoisted(() => ({
 
 vi.mock('google-auth-library', () => googleAuthMock);
 
-vi.mock('glob', async importOriginal => {
-  return ({
+vi.mock('glob', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     globSync: vi.fn().mockReturnValue([]),
 
@@ -45,22 +45,22 @@ vi.mock('glob', async importOriginal => {
       // Match the real hasMagic behavior: only detect patterns in forward-slash paths
       // This mimics glob's actual behavior where backslash paths return false
       return /[*?[\]{}]/.test(path) && !path.includes('\\');
-    }
-  });
+    },
+  };
 });
 
-vi.mock('fs', async importOriginal => {
-  return ({
+vi.mock('fs', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    existsSync: vi.fn().mockImplementation(function(path) {
+    existsSync: vi.fn().mockImplementation(function (path) {
       if (path === 'file://system_instruction.json') {
         return true;
       }
       return false;
     }),
 
-    readFileSync: vi.fn().mockImplementation(function(path) {
+    readFileSync: vi.fn().mockImplementation(function (path) {
       if (path === 'file://system_instruction.json') {
         return 'system instruction';
       }
@@ -69,8 +69,8 @@ vi.mock('fs', async importOriginal => {
 
     writeFileSync: vi.fn(),
     statSync: vi.fn(),
-    mkdirSync: vi.fn()
-  });
+    mkdirSync: vi.fn(),
+  };
 });
 
 describe('util', () => {

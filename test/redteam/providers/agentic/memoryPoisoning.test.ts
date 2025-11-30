@@ -1,4 +1,4 @@
-import { Mocked, MockInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mocked, MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryPoisoningProvider } from '../../../../src/redteam/providers/agentic/memoryPoisoning';
 
 import type { ApiProvider, CallApiContextParams } from '../../../../src/types/providers';

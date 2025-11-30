@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OverrelianceGrader, OverreliancePlugin } from '../../../src/redteam/plugins/overreliance';
 
 import type { ApiProvider } from '../../../src/types/index';

@@ -6,15 +6,15 @@ import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
 // Mock the getResolvedRelativePath function
-vi.mock('../../src/util/file', async importOriginal => {
-  return ({
+vi.mock('../../src/util/file', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     getResolvedRelativePath: vi.fn((scriptPath, _basePath, _isCloudConfig) => {
       // For testing, just append '/resolved' to the path
       return `${scriptPath}/resolved`;
-    })
-  });
+    }),
+  };
 });
 
 // Create a mock provider constructor

@@ -1,22 +1,22 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
 import { loadApiProvider } from '../../src/providers/index';
 import type { ApiProvider } from '../../src/types/index';
 
-vi.mock('../../src/providers', async importOriginal => {
-  return ({
+vi.mock('../../src/providers', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    loadApiProvider: vi.fn()
-  });
+    loadApiProvider: vi.fn(),
+  };
 });
 
 vi.mock('../../src/logger', () => ({
-  default: ({
+  default: {
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
-    error: vi.fn()
-  })
+    error: vi.fn(),
+  },
 }));
 
 describe('webSearchUtils', () => {

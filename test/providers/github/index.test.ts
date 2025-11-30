@@ -8,11 +8,11 @@ const mockOpenAiChatCompletionProvider = vi.hoisted(() =>
   }),
 );
 
-vi.mock('../../../src/providers/openai/chat', async importOriginal => {
-  return ({
+vi.mock('../../../src/providers/openai/chat', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    OpenAiChatCompletionProvider: mockOpenAiChatCompletionProvider
-  });
+    OpenAiChatCompletionProvider: mockOpenAiChatCompletionProvider,
+  };
 });
 
 describe('createGitHubProvider', () => {

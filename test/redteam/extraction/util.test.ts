@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
@@ -13,11 +13,11 @@ import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
 import type { ApiProvider } from '../../../src/types/index';
 
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithCache: vi.fn()
-  });
+    fetchWithCache: vi.fn(),
+  };
 });
 
 vi.mock('../../../src/logger', () => ({
@@ -30,11 +30,11 @@ vi.mock('../../../src/logger', () => ({
   getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
-vi.mock('../../../src/redteam/remoteGeneration', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task')
-  });
+    getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
+  };
 });
 
 describe('fetchRemoteGeneration', () => {
@@ -44,7 +44,7 @@ describe('fetchRemoteGeneration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getRemoteGenerationUrl).mockImplementation(function() {
+    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
       return 'https://api.promptfoo.app/api/v1/task';
     });
   });
@@ -143,7 +143,7 @@ describe('fetchRemoteGeneration', () => {
 
   it('should use custom remote generation URL when provided', async () => {
     const customUrl = 'https://custom-api.example.com/generate';
-    vi.mocked(getRemoteGenerationUrl).mockImplementation(function() {
+    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
       return customUrl;
     });
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
 import {
   MistralChatCompletionProvider,
@@ -9,7 +9,7 @@ vi.mock('../../src/cache', async () => ({
   ...(await vi.importActual('../../src/cache')),
   fetchWithCache: vi.fn(),
   getCache: vi.fn(),
-  isCacheEnabled: vi.fn()
+  isCacheEnabled: vi.fn(),
 }));
 
 vi.mock('../../src/util');
@@ -18,10 +18,10 @@ describe('Mistral', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchWithCache).mockReset();
-    vi.mocked(isCacheEnabled).mockImplementation(function() {
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
       return false;
     });
-    vi.mocked(getCache).mockImplementation(function() {
+    vi.mocked(getCache).mockImplementation(function () {
       return {
         get: vi.fn().mockResolvedValue(null),
         set: vi.fn(),
@@ -161,10 +161,10 @@ describe('Mistral', () => {
     });
 
     it('should use cache when enabled', async () => {
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
-      vi.mocked(getCache).mockImplementation(function() {
+      vi.mocked(getCache).mockImplementation(function () {
         return {
           get: vi.fn().mockResolvedValue({
             output: 'Cached output',
@@ -203,7 +203,7 @@ describe('Mistral', () => {
         choices: [{ message: { content: 'Fresh output' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return false;
       });
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
@@ -233,7 +233,7 @@ describe('Mistral', () => {
     });
 
     it('should handle API errors', async () => {
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return false;
       });
       const mockError = new Error('API Error');
@@ -316,9 +316,12 @@ describe('Mistral', () => {
         data: [{ embedding: [0.1, 0.2, 0.3] }],
         usage: { total_tokens: 5, prompt_tokens: 5 },
       };
-      vi
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: false, status: 200, statusText: 'OK' });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const result = await provider.callEmbeddingApi('Test text');
 
@@ -352,12 +355,15 @@ describe('Mistral', () => {
         data: [{ embedding: [0.1, 0.2, 0.3] }],
         usage: { total_tokens: 5, prompt_tokens: 5 },
       };
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
-      vi
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: true, status: 200, statusText: 'OK' });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: mockResponse,
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const result = await provider.callEmbeddingApi('Test text');
 
@@ -382,12 +388,15 @@ describe('Mistral', () => {
         data: [{ embedding: [0.1, 0.2, 0.3] }],
         usage: { total_tokens: 5, prompt_tokens: 5 },
       };
-      vi.mocked(isCacheEnabled).mockImplementation(function() {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
         return false;
       });
-      vi
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: false, status: 200, statusText: 'OK' });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const result = await provider.callEmbeddingApi('Test text');
 
@@ -429,9 +438,12 @@ describe('Mistral', () => {
         data: [{ embedding: [0.1, 0.2, 0.3] }],
         usage: { total_tokens: 5, prompt_tokens: 5 },
       };
-      vi
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: false, status: 200, statusText: 'OK' });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       await customProvider.callEmbeddingApi('Test text');
 

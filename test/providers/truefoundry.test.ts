@@ -10,12 +10,12 @@ import * as fetchModule from '../../src/util/fetch/index';
 
 const TRUEFOUNDRY_API_BASE = 'https://llm-gateway.truefoundry.com';
 
-vi.mock('../../src/util', async importOriginal => {
-  return ({
+vi.mock('../../src/util', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     maybeLoadFromExternalFile: vi.fn((x) => x),
-    renderVarsInObject: vi.fn((x) => x)
-  });
+    renderVarsInObject: vi.fn((x) => x),
+  };
 });
 
 vi.mock('../../src/util/fetch/index.ts');

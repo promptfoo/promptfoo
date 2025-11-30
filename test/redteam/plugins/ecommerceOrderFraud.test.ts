@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EcommerceOrderFraudPlugin,
   EcommerceOrderFraudGrader,
@@ -84,9 +84,7 @@ describe('EcommerceOrderFraudPlugin', () => {
   });
 
   it('should handle error response from provider', async () => {
-    vi
-      .spyOn(mockProvider, 'callApi')
-      .mockResolvedValue({ error: 'API error' });
+    vi.spyOn(mockProvider, 'callApi').mockResolvedValue({ error: 'API error' });
     const plugin = new EcommerceOrderFraudPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(1);
     expect(tests).toHaveLength(0);

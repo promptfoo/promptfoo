@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SingleBar } from 'cli-progress';
 import logger from '../../../src/logger';
 import { addImageToBase64 } from '../../../src/redteam/strategies/simpleImage';
@@ -7,16 +7,16 @@ import type { TestCase } from '../../../src/types/index';
 
 vi.mock('sharp', () => {
   return {
-    default: vi.fn().mockImplementation(function() {
-      return ({
+    default: vi.fn().mockImplementation(function () {
+      return {
         png: vi.fn().mockReturnValue({
           toBuffer: vi
             .fn()
             .mockResolvedValue(
               Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]),
             ),
-        })
-      });
+        }),
+      };
     }),
   };
 });
@@ -24,13 +24,13 @@ vi.mock('sharp', () => {
 vi.mock('cli-progress');
 
 vi.mock('../../../src/logger', () => ({
-  default: ({
+  default: {
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-    level: 'info'
-  })
+    level: 'info',
+  },
 }));
 
 describe('Image strategy', () => {
@@ -147,7 +147,7 @@ describe('Image strategy', () => {
         stop: mockStop,
       };
 
-      vi.mocked(SingleBar).mockImplementation(function() {
+      vi.mocked(SingleBar).mockImplementation(function () {
         return mockSingleBar as unknown as SingleBar;
       });
 

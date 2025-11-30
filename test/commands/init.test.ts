@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs/promises';
 
 import { Command } from 'commander';
@@ -8,15 +8,15 @@ import logger from '../../src/logger';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { createMockResponse } from '../util/utils';
 
-vi.mock('../../src/redteam/commands/init', async importOriginal => {
-  return ({
+vi.mock('../../src/redteam/commands/init', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    redteamInit: vi.fn()
-  });
+    redteamInit: vi.fn(),
+  };
 });
 
-vi.mock('../../src/server/server', async importOriginal => {
-  return ({
+vi.mock('../../src/server/server', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     startServer: vi.fn(),
 
@@ -26,15 +26,15 @@ vi.mock('../../src/server/server', async importOriginal => {
       SKIP: 2,
       OPEN_TO_REPORT: 3,
       OPEN_TO_REDTEAM_CREATE: 4,
-    }
-  });
+    },
+  };
 });
 
-vi.mock('../../src/util/fetch/index', async importOriginal => {
-  return ({
+vi.mock('../../src/util/fetch/index', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithProxy: vi.fn()
-  });
+    fetchWithProxy: vi.fn(),
+  };
 });
 
 vi.mock('fs/promises');
@@ -48,7 +48,7 @@ vi.mock('../../src/logger', () => ({
 }));
 vi.mock('path', async () => ({
   ...(await vi.importActual('path')),
-  resolve: vi.fn()
+  resolve: vi.fn(),
 }));
 vi.mock('../../src/constants');
 vi.mock('../../src/onboarding');

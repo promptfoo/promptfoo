@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createDockerProvider,
   fetchLocalModels,
@@ -148,8 +148,7 @@ describe('docker model runner provider', () => {
     describe('DMRChatCompletionProvider', () => {
       it('warns when model is not found but continues execution', async () => {
         // First call is for model check, second is for actual API call
-        vi
-          .mocked(fetchWithCache)
+        vi.mocked(fetchWithCache)
           .mockResolvedValueOnce({
             data: { data: [] }, // No models found
             cached: false,
@@ -185,8 +184,7 @@ describe('docker model runner provider', () => {
       });
 
       it('does not warn when model exists', async () => {
-        vi
-          .mocked(fetchWithCache)
+        vi.mocked(fetchWithCache)
           .mockResolvedValueOnce({
             data: { data: [{ id: 'ai/existing-model' }] }, // Model exists
             cached: false,
@@ -213,8 +211,7 @@ describe('docker model runner provider', () => {
 
     describe('DMRCompletionProvider', () => {
       it('warns when model is not found but continues execution', async () => {
-        vi
-          .mocked(fetchWithCache)
+        vi.mocked(fetchWithCache)
           .mockResolvedValueOnce({
             data: { data: [] }, // No models found
             cached: false,
@@ -244,8 +241,7 @@ describe('docker model runner provider', () => {
 
     describe('DMREmbeddingProvider', () => {
       it('warns when model is not found but continues execution', async () => {
-        vi
-          .mocked(fetchWithCache)
+        vi.mocked(fetchWithCache)
           .mockResolvedValueOnce({
             data: { data: [] }, // No models found
             cached: false,

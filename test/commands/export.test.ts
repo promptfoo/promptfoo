@@ -20,13 +20,13 @@ import { writeOutput } from '../../src/util/index';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 
 vi.mock('../../src/telemetry', () => ({
-  default: ({
-    record: vi.fn()
-  })
+  default: {
+    record: vi.fn(),
+  },
 }));
 
-vi.mock('../../src/util', async importOriginal => {
-  return ({
+vi.mock('../../src/util', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     writeOutput: vi.fn(),
 
@@ -38,15 +38,15 @@ vi.mock('../../src/util', async importOriginal => {
       exportedAt: '2025-07-01T00:00:00.000Z',
       evaluationCreatedAt: '2025-07-01T00:00:00.000Z',
       author: 'test-author',
-    })
-  });
+    }),
+  };
 });
 
 vi.mock('../../src/logger', () => ({
-  default: ({
+  default: {
     info: vi.fn(),
-    error: vi.fn()
-  })
+    error: vi.fn(),
+  },
 }));
 
 vi.mock('../../src/util/config/manage', () => ({
@@ -75,19 +75,19 @@ vi.mock('fs', () => ({
   writeFileSync: vi.fn(),
 }));
 
-vi.mock('zlib', async importOriginal => {
-  return ({
+vi.mock('zlib', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     createGzip: vi.fn(),
-    gzip: vi.fn()
-  });
+    gzip: vi.fn(),
+  };
 });
 
-vi.mock('../../src/database', async importOriginal => {
-  return ({
+vi.mock('../../src/database', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getDbInstance: vi.fn()
-  });
+    getDbInstance: vi.fn(),
+  };
 });
 
 describe('exportCommand', () => {
@@ -101,7 +101,7 @@ describe('exportCommand', () => {
 
   beforeEach(() => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function() {
+    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
     mockEval = {

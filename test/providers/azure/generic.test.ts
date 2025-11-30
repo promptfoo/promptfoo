@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from 'vitest';
 import { AzureGenericProvider } from '../../../src/providers/azure/generic';
 
 describe('AzureGenericProvider', () => {

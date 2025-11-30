@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
@@ -13,8 +13,8 @@ vi.mock('../../src/cache');
 vi.mock('../../src/envars');
 vi.mock('../../src/util/fetch/index.ts');
 vi.mock('../../src/globalConfig/accounts');
-vi.mock('../../src/globalConfig/cloud', async importOriginal => {
-  return ({
+vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     CloudConfig: class {
@@ -24,20 +24,20 @@ vi.mock('../../src/globalConfig/cloud', async importOriginal => {
       getApiHost() {
         return 'https://api.promptfoo.app';
       }
-    }
-  });
+    },
+  };
 });
 
 describe('PromptfooHarmfulCompletionProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(getUserEmail).mockImplementation(function() {
+    vi.mocked(getUserEmail).mockImplementation(function () {
       return 'test@example.com';
     });
-    vi.mocked(getEnvString).mockImplementation(function() {
+    vi.mocked(getEnvString).mockImplementation(function () {
       return '';
     });
-    vi.mocked(getEnvBool).mockImplementation(function() {
+    vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
     });
   });
@@ -118,9 +118,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   });
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', async () => {
-    vi
-      .mocked(getEnvBool)
-      .mockImplementation(function(key: string) {
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
       return key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
     });
 
@@ -133,9 +131,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   });
 
   it('should return error when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set', async () => {
-    vi
-      .mocked(getEnvBool)
-      .mockImplementation(function(key: string) {
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
       return key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION';
     });
 
@@ -150,13 +146,13 @@ describe('PromptfooHarmfulCompletionProvider', () => {
 describe('PromptfooChatCompletionProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(getUserEmail).mockImplementation(function() {
+    vi.mocked(getUserEmail).mockImplementation(function () {
       return 'test@example.com';
     });
-    vi.mocked(getEnvString).mockImplementation(function() {
+    vi.mocked(getEnvString).mockImplementation(function () {
       return '';
     });
-    vi.mocked(getEnvBool).mockImplementation(function() {
+    vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
     });
   });
@@ -224,9 +220,7 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', async () => {
-    vi
-      .mocked(getEnvBool)
-      .mockImplementation(function(key: string) {
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
       return key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
     });
 
@@ -239,9 +233,7 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   it('should return error when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set', async () => {
-    vi
-      .mocked(getEnvBool)
-      .mockImplementation(function(key: string) {
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
       return key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION';
     });
 
@@ -256,10 +248,10 @@ describe('PromptfooChatCompletionProvider', () => {
 describe('PromptfooSimulatedUserProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(getUserEmail).mockImplementation(function() {
+    vi.mocked(getUserEmail).mockImplementation(function () {
       return 'test@example.com';
     });
-    vi.mocked(getEnvBool).mockImplementation(function() {
+    vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
     });
   });
@@ -327,9 +319,7 @@ describe('PromptfooSimulatedUserProvider', () => {
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set for regular task', async () => {
     const regularProvider = new PromptfooSimulatedUserProvider({}, 'tau');
-    vi
-      .mocked(getEnvBool)
-      .mockImplementation(function(key: string) {
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
       return key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
     });
 
@@ -345,9 +335,7 @@ describe('PromptfooSimulatedUserProvider', () => {
 
   it('should NOT be disabled when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set for regular task', async () => {
     const regularProvider = new PromptfooSimulatedUserProvider({}, 'tau');
-    vi
-      .mocked(getEnvBool)
-      .mockImplementation(function(key: string) {
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
       return key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION';
     });
 
@@ -374,9 +362,7 @@ describe('PromptfooSimulatedUserProvider', () => {
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set for redteam task', async () => {
     const redteamProvider = new PromptfooSimulatedUserProvider({}, REDTEAM_SIMULATED_USER_TASK_ID);
-    vi
-      .mocked(getEnvBool)
-      .mockImplementation(function(key: string) {
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
       return key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
     });
 
@@ -393,9 +379,7 @@ describe('PromptfooSimulatedUserProvider', () => {
 
   it('should return error when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set for redteam task', async () => {
     const redteamProvider = new PromptfooSimulatedUserProvider({}, REDTEAM_SIMULATED_USER_TASK_ID);
-    vi
-      .mocked(getEnvBool)
-      .mockImplementation(function(key: string) {
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
       return key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION';
     });
 
@@ -417,9 +401,7 @@ describe('PromptfooSimulatedUserProvider', () => {
     const redteamProvider = new PromptfooSimulatedUserProvider({}, REDTEAM_SIMULATED_USER_TASK_ID);
 
     // Set only the redteam-specific flag
-    vi
-      .mocked(getEnvBool)
-      .mockImplementation(function(key: string) {
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
       return key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION';
     });
 

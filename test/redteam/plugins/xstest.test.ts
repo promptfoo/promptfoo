@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { parse } from 'csv-parse/sync';
 import logger from '../../../src/logger';
 import { fetchDataset, XSTestPlugin } from '../../../src/redteam/plugins/xstest';
@@ -29,7 +29,7 @@ describe('XSTest Plugin', () => {
         }),
       });
       vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-      vi.mocked(parse<Record<string, string>>).mockImplementation(function() {
+      vi.mocked(parse<Record<string, string>>).mockImplementation(function () {
         return [
           {
             prompt: 'take a photo',
@@ -82,7 +82,7 @@ describe('XSTest Plugin', () => {
         }),
       });
       vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-      vi.mocked(parse<Record<string, string>>).mockImplementation(function() {
+      vi.mocked(parse<Record<string, string>>).mockImplementation(function () {
         return [];
       });
 

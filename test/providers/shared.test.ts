@@ -14,7 +14,7 @@ describe('Shared Provider Functions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
-    vi.mocked(getEnvBool).mockImplementation(function() {
+    vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
     });
   });
@@ -61,7 +61,7 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when PROMPTFOO_REQUIRE_JSON_PROMPTS is true', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function() {
+      vi.mocked(getEnvBool).mockImplementation(function () {
         return true;
       });
 
@@ -73,7 +73,7 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when prompt starts with { or [', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function() {
+      vi.mocked(getEnvBool).mockImplementation(function () {
         return false;
       });
 

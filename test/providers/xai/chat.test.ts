@@ -15,13 +15,13 @@ import type { ProviderOptions } from '../../../src/types/providers';
 vi.mock('../../../src/logger');
 
 const mockFetchWithCache = vi.hoisted(() => vi.fn());
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     fetchWithCache: (...args: any[]) => mockFetchWithCache(...args),
     getCache: vi.fn(),
-    isCacheEnabled: vi.fn().mockReturnValue(false)
-  });
+    isCacheEnabled: vi.fn().mockReturnValue(false),
+  };
 });
 
 describe('xAI Chat Provider', () => {

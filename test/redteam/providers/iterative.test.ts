@@ -1,4 +1,4 @@
-import { Mocked, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mocked, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RedteamIterativeProvider, {
   runRedteamConversation,
@@ -20,8 +20,8 @@ vi.mock('../../../src/logger', () => ({
   getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
-vi.mock('../../../src/redteam/providers/shared', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     redteamProviderManager: {
@@ -29,15 +29,15 @@ vi.mock('../../../src/redteam/providers/shared', async importOriginal => {
     },
 
     getTargetResponse: mockGetTargetResponse,
-    checkPenalizedPhrases: mockCheckPenalizedPhrases
-  });
+    checkPenalizedPhrases: mockCheckPenalizedPhrases,
+  };
 });
 
-vi.mock('../../../src/redteam/graders', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/graders', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getGraderById: mockGetGraderById
-  });
+    getGraderById: mockGetGraderById,
+  };
 });
 
 describe('RedteamIterativeProvider', () => {
@@ -51,7 +51,7 @@ describe('RedteamIterativeProvider', () => {
       id: vi.fn().mockReturnValue('mock-redteam'),
       callApi: vi
         .fn<(prompt: string, context?: any) => Promise<ProviderResponse>>()
-        .mockImplementation(async function(prompt: string) {
+        .mockImplementation(async function (prompt: string) {
           const input = JSON.parse(prompt);
 
           if (Array.isArray(input) && input[0]?.role === 'system') {
@@ -83,16 +83,15 @@ describe('RedteamIterativeProvider', () => {
       }),
     } as Mocked<ApiProvider>;
 
-    mockGetProvider.mockImplementation(function() {
+    mockGetProvider.mockImplementation(function () {
       return Promise.resolve(mockRedteamProvider);
     });
-    mockGetTargetResponse.mockImplementation(async function() {
+    mockGetTargetResponse.mockImplementation(async function () {
       return Promise.resolve({
         output: 'mock target response',
       });
-    },
-    );
-    mockCheckPenalizedPhrases.mockImplementation(function() {
+    });
+    mockCheckPenalizedPhrases.mockImplementation(function () {
       return false;
     });
   });
@@ -133,22 +132,22 @@ describe('RedteamIterativeProvider', () => {
   describe('runRedteamConversation', () => {
     it('should complete all iterations when score reaches 10 and grader passes', async () => {
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 10, explanation: 'perfect' },
+              previousBestResponse: { rating: 5, explanation: 'good' },
+            }),
+          };
         });
-      })
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            currentResponse: { rating: 10, explanation: 'perfect' },
-            previousBestResponse: { rating: 5, explanation: 'good' },
-          })
-        });
-      });
 
       const result = await runRedteamConversation({
         context: { prompt: { raw: '', label: '' }, vars: {} },
@@ -185,22 +184,22 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 5, explanation: 'moderate' },
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
         });
-      })
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            currentResponse: { rating: 5, explanation: 'moderate' },
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          })
-        });
-      });
 
       const test: AtomicTestCase = {
         vars: {},
@@ -255,22 +254,22 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(null); // No grader available
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 10, explanation: 'Excellent jailbreak achieved' },
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
         });
-      })
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            currentResponse: { rating: 10, explanation: 'Excellent jailbreak achieved' },
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          })
-        });
-      });
 
       const result = await runRedteamConversation({
         context: {
@@ -492,22 +491,22 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 5, explanation: 'moderate' },
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
         });
-      })
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            currentResponse: { rating: 5, explanation: 'moderate' },
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          })
-        });
-      });
 
       const test: AtomicTestCase = {
         vars: {},
@@ -579,7 +578,7 @@ describe('RedteamIterativeProvider', () => {
       // Capture the FIRST system prompt that gets sent (attacker, not judge)
       let capturedSystemPrompt = '';
       let firstSystemCapture = false;
-      mockRedteamProvider.callApi.mockImplementation(async function(prompt: string) {
+      mockRedteamProvider.callApi.mockImplementation(async function (prompt: string) {
         const input = JSON.parse(prompt);
         if (Array.isArray(input) && input[0]?.role === 'system' && !firstSystemCapture) {
           capturedSystemPrompt = input[0].content;
@@ -644,27 +643,27 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({ onTopic: true }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 5, explanation: 'moderate' },
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
         });
-      })
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({ onTopic: true })
-        });
-      })
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            currentResponse: { rating: 5, explanation: 'moderate' },
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          })
-        });
-      });
 
       const test: AtomicTestCase = {
         vars: {},
@@ -722,22 +721,22 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            improvement: 'test',
-            prompt: 'test',
-          })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              improvement: 'test',
+              prompt: 'test',
+            }),
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 10, explanation: 'Judge also thinks its great' }, // Judge success
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
         });
-      })
-        .mockImplementationOnce(async function() {
-        return ({
-          output: JSON.stringify({
-            currentResponse: { rating: 10, explanation: 'Judge also thinks its great' }, // Judge success
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          })
-        });
-      });
 
       const test: AtomicTestCase = {
         vars: {},
@@ -783,7 +782,7 @@ describe('RedteamIterativeProvider', () => {
 
       // Track the prompts sent to the target provider
       const targetPrompts: string[] = [];
-      mockTargetProvider.callApi.mockImplementation(async function(prompt: string) {
+      mockTargetProvider.callApi.mockImplementation(async function (prompt: string) {
         targetPrompts.push(prompt);
         return { output: 'mock target response' };
       });
@@ -874,7 +873,7 @@ describe('RedteamIterativeProvider', () => {
   describe('Token Counting', () => {
     beforeEach(async () => {
       // Reset TokenUsageTracker between tests to ensure clean state
-      const { TokenUsageTracker } = await import("../../../src/util/tokenUsage");
+      const { TokenUsageTracker } = await import('../../../src/util/tokenUsage');
       TokenUsageTracker.getInstance().resetAllUsage();
     });
 

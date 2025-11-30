@@ -1,14 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomPlugin, loadCustomPluginDefinition } from '../../../src/redteam/plugins/custom';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
 import type { ApiProvider, CallApiFunction } from '../../../src/types/index';
 
-vi.mock('../../../src/util/file', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/file', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    maybeLoadFromExternalFile: vi.fn()
-  });
+    maybeLoadFromExternalFile: vi.fn(),
+  };
 });
 
 describe('CustomPlugin', () => {
@@ -21,7 +21,7 @@ describe('CustomPlugin', () => {
       id: vi.fn().mockReturnValue('test-provider'),
     };
 
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Generate {{ n }} test prompts for {{ purpose }}',
         grader: 'Grade the response based on {{ purpose }}',
@@ -84,7 +84,7 @@ describe('CustomPlugin', () => {
   });
 
   it('should include threshold in assertions when specified', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Generate {{ n }} test prompts for {{ purpose }}',
         grader: 'Grade the response based on {{ purpose }}',
@@ -111,7 +111,7 @@ describe('CustomPlugin', () => {
   });
 
   it('should not include threshold in assertions when not specified', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Generate {{ n }} test prompts for {{ purpose }}',
         grader: 'Grade the response based on {{ purpose }}',
@@ -133,7 +133,7 @@ describe('CustomPlugin', () => {
   });
 
   it('should use the correct metric name', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Valid generator template',
         grader: 'Valid grader template',
@@ -152,7 +152,7 @@ describe('CustomPlugin', () => {
   });
 
   it('should use the default metric name if not specified', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Valid generator template',
         grader: 'Valid grader template',
@@ -170,7 +170,7 @@ describe('CustomPlugin', () => {
   });
 
   it('should include the metric name in the assertion', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Valid generator template',
         grader: 'Valid grader template',
@@ -202,7 +202,7 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should load a valid custom plugin definition', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Valid generator template',
         grader: 'Valid grader template',
@@ -218,7 +218,7 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should load a valid custom plugin definition with threshold', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Valid generator template',
         grader: 'Valid grader template',
@@ -236,7 +236,7 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should load a valid custom plugin definition with optional id', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Valid generator template',
         grader: 'Valid grader template',
@@ -256,7 +256,7 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should throw an error for an invalid custom plugin definition', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: '',
         grader: 'Valid grader template',
@@ -269,7 +269,7 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should throw an error when the plugin definition is missing a required field', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Valid generator template',
       };
@@ -281,7 +281,7 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should throw an error when the plugin definition contains extra fields', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Valid generator template',
         grader: 'Valid grader template',
@@ -295,7 +295,7 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should throw an error when threshold is not a number', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function() {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {
         generator: 'Valid generator template',
         grader: 'Valid grader template',

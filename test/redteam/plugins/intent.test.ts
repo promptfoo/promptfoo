@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -6,13 +6,18 @@ import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
 
-import type { ApiProvider, AtomicTestCase, CallApiFunction, TestCase } from '../../../src/types/index';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiFunction,
+  TestCase,
+} from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', async importOriginal => {
-  return ({
+vi.mock('../../../src/matchers', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    matchesLlmRubric: vi.fn()
-  });
+    matchesLlmRubric: vi.fn(),
+  };
 });
 
 vi.mock('../../../src/cache', () => ({
@@ -29,24 +34,24 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
   neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock('../../../src/database', async importOriginal => {
-  return ({
+vi.mock('../../../src/database', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getDb: vi.fn()
-  });
+    getDb: vi.fn(),
+  };
 });
 
-vi.mock('fs', async importOriginal => {
-  return ({
+vi.mock('fs', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
-    existsSync: vi.fn()
-  });
+    existsSync: vi.fn(),
+  };
 });
 
-vi.mock('glob', async importOriginal => {
-  return ({
+vi.mock('glob', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     globSync: vi.fn(),
 
@@ -54,8 +59,8 @@ vi.mock('glob', async importOriginal => {
       // Match the real hasMagic behavior: only detect patterns in forward-slash paths
       // This mimics glob's actual behavior where backslash paths return false
       return /[*?[\]{}]/.test(path) && !path.includes('\\');
-    }
-  });
+    },
+  };
 });
 
 vi.mock('better-sqlite3');
@@ -129,10 +134,10 @@ describe('IntentPlugin', () => {
 
   it('should load intents from a CSV file', async () => {
     const mockFileContent = 'header\nintent1\nintent2\nintent3';
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(function() {
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
 
@@ -151,10 +156,10 @@ describe('IntentPlugin', () => {
 
   it('should load intents from a JSON file', async () => {
     const mockFileContent = '["intent1","intent2","intent3"]';
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(function() {
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
 
@@ -172,10 +177,10 @@ describe('IntentPlugin', () => {
 
   it('should load nested intent arrays from a JSON file', async () => {
     const mockFileContent = '[["step1", "step2"], ["other1", "other2"]]';
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(function() {
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
 
@@ -204,10 +209,10 @@ describe('IntentPlugin', () => {
 
   it('should handle empty JSON array', async () => {
     const mockFileContent = '[]';
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(function() {
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
 
@@ -222,10 +227,10 @@ describe('IntentPlugin', () => {
 
   it('should handle mixed string and array intents in JSON', async () => {
     const mockFileContent = '["single_intent", ["multi", "step"], "another_single"]';
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(function() {
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
 
@@ -258,10 +263,10 @@ describe('IntentPlugin', () => {
 
   it('should throw error for malformed JSON file', () => {
     const mockFileContent = '["invalid", json}';
-    vi.mocked(fs.existsSync).mockImplementation(function() {
+    vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(function() {
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
 

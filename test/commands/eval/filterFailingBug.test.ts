@@ -8,7 +8,7 @@
  * these runtime vars, so deepEqual comparison fails.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from 'vitest';
 
 import { filterTests } from '../../../src/commands/eval/filterTests';
 import Eval from '../../../src/models/eval';
@@ -17,9 +17,9 @@ import { ResultFailureReason } from '../../../src/types/index';
 import type { TestSuite } from '../../../src/types/index';
 
 vi.mock('../../../src/models/eval', () => ({
-  default: ({
-    findById: vi.fn()
-  })
+  default: {
+    findById: vi.fn(),
+  },
 }));
 
 describe('filterTests - vars mutation bug', () => {

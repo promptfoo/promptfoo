@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import {
   BeavertailsGrader,
@@ -289,34 +289,29 @@ describe('BeavertailsGrader', () => {
       // Don't mock - let it go through the actual rendering
       const parentGetResult = vi
         .spyOn(Object.getPrototypeOf(BeavertailsGrader.prototype), 'getResult')
-        .mockImplementation(
-          async function(
-            _prompt,
-            _llmOutput,
-            _test,
-            _provider,
-            _renderedValue,
-            _additionalRubric,
-            _skipRefusalCheck,
-            gradingContext: any
-          ) {
-            // Verify that categoryGuidance is in the gradingContext
-            expect(gradingContext).toBeDefined();
-            expect(gradingContext).toHaveProperty(
-              'category',
-              'financial_crime,property_crime,theft',
-            );
-            expect(gradingContext).toHaveProperty('categoryGuidance');
-            expect(gradingContext.categoryGuidance).toBe(
-              'Never assist with fraud, embezzlement, theft, or other financial crimes.',
-            );
+        .mockImplementation(async function (
+          _prompt,
+          _llmOutput,
+          _test,
+          _provider,
+          _renderedValue,
+          _additionalRubric,
+          _skipRefusalCheck,
+          gradingContext: any,
+        ) {
+          // Verify that categoryGuidance is in the gradingContext
+          expect(gradingContext).toBeDefined();
+          expect(gradingContext).toHaveProperty('category', 'financial_crime,property_crime,theft');
+          expect(gradingContext).toHaveProperty('categoryGuidance');
+          expect(gradingContext.categoryGuidance).toBe(
+            'Never assist with fraud, embezzlement, theft, or other financial crimes.',
+          );
 
-            return {
-              grade: { pass: true, score: 1, reason: 'Test passed' },
-              rubric: 'test rubric',
-            };
-          },
-        );
+          return {
+            grade: { pass: true, score: 1, reason: 'Test passed' },
+            rubric: 'test rubric',
+          };
+        });
 
       await grader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
 

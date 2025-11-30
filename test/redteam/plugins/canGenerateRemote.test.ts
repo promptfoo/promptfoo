@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { BeavertailsPlugin } from '../../../src/redteam/plugins/beavertails';
@@ -18,13 +18,13 @@ vi.mock('../../../src/cliState', () => ({
   __esModule: true,
   default: { remote: false },
 }));
-vi.mock('../../../src/redteam/remoteGeneration', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
     neverGenerateRemote: vi.fn().mockReturnValue(false),
-    shouldGenerateRemote: vi.fn().mockReturnValue(false)
-  });
+    shouldGenerateRemote: vi.fn().mockReturnValue(false),
+  };
 });
 vi.mock('../../../src/util', async () => ({
   ...(await vi.importActual('../../../src/util')),
@@ -32,16 +32,16 @@ vi.mock('../../../src/util', async () => ({
   maybeLoadFromExternalFile: vi.fn().mockReturnValue({
     generator: 'Generate test prompts',
     grader: 'Grade the response',
-  })
+  }),
 }));
-vi.mock('../../../src/integrations/huggingfaceDatasets', async importOriginal => {
-  return ({
+vi.mock('../../../src/integrations/huggingfaceDatasets', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     fetchHuggingFaceDataset: vi
       .fn()
-      .mockResolvedValue([{ vars: { prompt: 'test prompt', category: 'test' } }])
-  });
+      .mockResolvedValue([{ vars: { prompt: 'test prompt', category: 'test' } }]),
+  };
 });
 
 // Mock contracts plugin to ensure it has canGenerateRemote = true
@@ -84,7 +84,7 @@ describe('canGenerateRemote property and behavior', () => {
 
   describe('Remote generation behavior', () => {
     it('should not use remote generation for dataset-based plugins even when shouldGenerateRemote is true', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
       });
 
@@ -103,7 +103,7 @@ describe('canGenerateRemote property and behavior', () => {
     });
 
     it('should use remote generation for LLM-based plugins when shouldGenerateRemote is true', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
       });
 
@@ -116,7 +116,7 @@ describe('canGenerateRemote property and behavior', () => {
       // Create a mock plugin with canGenerateRemote=true
       const mockContractPlugin = {
         ...originalContractPlugin,
-        action: vi.fn().mockImplementation(async function() {
+        action: vi.fn().mockImplementation(async function () {
           await fetchWithCache('http://test-url/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -145,7 +145,7 @@ describe('canGenerateRemote property and behavior', () => {
     });
 
     it('should use local generation for all plugins when shouldGenerateRemote is false', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function() {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return false;
       });
 

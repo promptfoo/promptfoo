@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ArgsSchema,
   doTargetPurposeDiscovery,
@@ -135,15 +135,14 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(function() {
+    mockedFetchWithProxy.mockImplementation(function () {
       return Promise.resolve(
         new Response(JSON.stringify(mockResponses.shift()), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
       );
-    },
-    );
+    });
 
     const target = {
       id: () => 'test',
@@ -205,15 +204,14 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(function() {
+    mockedFetchWithProxy.mockImplementation(function () {
       return Promise.resolve(
         new Response(JSON.stringify(mockResponses.shift()), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
       );
-    },
-    );
+    });
 
     const target = {
       id: () => 'test',
@@ -272,15 +270,14 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(function() {
+    mockedFetchWithProxy.mockImplementation(function () {
       return Promise.resolve(
         new Response(JSON.stringify(mockResponses.shift()), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
       );
-    },
-    );
+    });
 
     const target = {
       id: () => 'test',
@@ -327,15 +324,14 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(function() {
+    mockedFetchWithProxy.mockImplementation(function () {
       return Promise.resolve(
         new Response(JSON.stringify(mockResponses.shift()), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
       );
-    },
-    );
+    });
 
     const target = {
       id: () => 'test',

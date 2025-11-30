@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
 import { configCommand } from '../../src/commands/config';
@@ -37,7 +37,7 @@ describe('config command', () => {
   describe('set email', () => {
     it('should not allow setting email when user is logged in', async () => {
       // Mock logged in state
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return 'test-api-key';
       });
 
@@ -61,7 +61,7 @@ describe('config command', () => {
 
     it('should allow setting email when user is not logged in', async () => {
       // Mock logged out state
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
 
@@ -86,7 +86,7 @@ describe('config command', () => {
 
     it('should validate email format even when not logged in', async () => {
       // Mock logged out state
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
 
@@ -110,10 +110,10 @@ describe('config command', () => {
   describe('unset email', () => {
     it('should not allow unsetting email when user is logged in', async () => {
       // Mock logged in state
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return 'test-api-key';
       });
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return 'test@example.com';
       });
 
@@ -137,10 +137,10 @@ describe('config command', () => {
 
     it('should allow unsetting email when user is not logged in with force flag', async () => {
       // Mock logged out state
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return 'test@example.com';
       });
 
@@ -163,10 +163,10 @@ describe('config command', () => {
 
     it('should handle user confirmation for unsetting email', async () => {
       // Mock logged out state and user confirmation
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return 'test@example.com';
       });
       vi.mocked(confirm).mockResolvedValueOnce(true);
@@ -190,10 +190,10 @@ describe('config command', () => {
 
     it('should handle user cancellation for unsetting email', async () => {
       // Mock logged out state and user cancellation
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return 'test@example.com';
       });
       vi.mocked(confirm).mockResolvedValueOnce(false);
@@ -215,10 +215,10 @@ describe('config command', () => {
 
     it('should handle case when no email is set', async () => {
       // Mock logged out state and no existing email
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function() {
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return null;
       });
 
@@ -241,7 +241,7 @@ describe('config command', () => {
   describe('get email', () => {
     it('should show email when it exists', async () => {
       // Mock existing email
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return 'test@example.com';
       });
 
@@ -263,7 +263,7 @@ describe('config command', () => {
 
     it('should show message when no email is set', async () => {
       // Mock no existing email
-      vi.mocked(getUserEmail).mockImplementation(function() {
+      vi.mocked(getUserEmail).mockImplementation(function () {
         return null;
       });
 

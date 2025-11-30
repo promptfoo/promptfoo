@@ -1,4 +1,4 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TextEncoder } from 'util';
 
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
@@ -6,27 +6,27 @@ import { NodeHttp2Handler } from '@smithy/node-http-handler';
 import { disableCache, enableCache } from '../../../src/cache';
 import { NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
 
-vi.mock('@smithy/node-http-handler', async importOriginal => {
-  return ({
+vi.mock('@smithy/node-http-handler', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    NodeHttp2Handler: vi.fn()
-  });
+    NodeHttp2Handler: vi.fn(),
+  };
 });
 
-vi.mock('@aws-sdk/client-bedrock-runtime', async importOriginal => {
-  return ({
+vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    BedrockRuntimeClient: vi.fn().mockImplementation(function() {
-      return ({
-        send: vi.fn()
-      });
+    BedrockRuntimeClient: vi.fn().mockImplementation(function () {
+      return {
+        send: vi.fn(),
+      };
     }),
 
-    InvokeModelWithBidirectionalStreamCommand: vi.fn().mockImplementation(function(params) {
+    InvokeModelWithBidirectionalStreamCommand: vi.fn().mockImplementation(function (params) {
       return params;
-    })
-  });
+    }),
+  };
 });
 
 vi.mock('../../../src/logger', () => ({
@@ -39,8 +39,8 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
-vi.mock('node:timers', async importOriginal => {
-  return ({
+vi.mock('node:timers', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     setTimeout: vi.fn((callback) => {
@@ -48,8 +48,8 @@ vi.mock('node:timers', async importOriginal => {
         callback();
       }
       return 123;
-    })
-  });
+    }),
+  };
 });
 
 const encodeChunk = (obj: any) => ({
@@ -167,7 +167,7 @@ describe('NovaSonic Provider', () => {
     mockSend = vi.fn().mockResolvedValue(createMockStreamResponse(standardTextResponse));
     bedrockClient = { send: mockSend };
 
-    vi.mocked(BedrockRuntimeClient).mockImplementation(function() {
+    vi.mocked(BedrockRuntimeClient).mockImplementation(function () {
       return bedrockClient;
     });
 

@@ -1,4 +1,14 @@
-import { Mocked, MockedFunction, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  Mocked,
+  MockedFunction,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { strategyDisplayNames } from '../../../src/redteam/constants/metadata';
 import {
   type ApiProvider,
@@ -11,28 +21,28 @@ import type * as TokenUsageUtilsModule from '../../../src/util/tokenUsageUtils';
 
 const mockGetUserEmail = vi.hoisted(() => vi.fn());
 const mockGetUserId = vi.fn().mockReturnValue('test-user');
-vi.mock('../../../src/globalConfig/accounts', async importOriginal => {
-  return ({
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getUserEmail: mockGetUserEmail,
-    getUserId: mockGetUserId
-  });
+    getUserId: mockGetUserId,
+  };
 });
 
 const mockFetchWithRetries = vi.hoisted(() => vi.fn<(...args: any[]) => Promise<any>>());
-vi.mock('../../../src/util/fetch', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/fetch', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithRetries: mockFetchWithRetries
-  });
+    fetchWithRetries: mockFetchWithRetries,
+  };
 });
 
 const mockBuildRemoteUrl = vi.hoisted(() => vi.fn());
-vi.mock('../../../src/redteam/remoteGeneration', async importOriginal => {
-  return ({
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    buildRemoteUrl: mockBuildRemoteUrl
-  });
+    buildRemoteUrl: mockBuildRemoteUrl,
+  };
 });
 
 const mockLogger = {
@@ -50,9 +60,9 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 vi.mock('../../../src/util/tokenUsageUtils', async () => {
-  const actual = await vi.importActual(
+  const actual = (await vi.importActual(
     '../../../src/util/tokenUsageUtils',
-  ) as typeof import('../../../src/util/tokenUsageUtils');
+  )) as typeof import('../../../src/util/tokenUsageUtils');
   return {
     __esModule: true,
     ...actual,
@@ -62,9 +72,9 @@ vi.mock('../../../src/util/tokenUsageUtils', async () => {
 });
 
 vi.mock('../../../src/redteam/providers/shared', async () => {
-  const actual = await vi.importActual(
+  const actual = (await vi.importActual(
     '../../../src/redteam/providers/shared',
-  ) as typeof import('../../../src/redteam/providers/shared');
+  )) as typeof import('../../../src/redteam/providers/shared');
   return {
     __esModule: true,
     ...actual,
@@ -96,19 +106,20 @@ describe('SimbaProvider', () => {
     sharedModule = await import('../../../src/redteam/providers/shared');
     actualSharedModule = await vi.importActual('../../../src/redteam/providers/shared');
 
-    accumulateResponseTokenUsageMock = tokenUsageUtils.accumulateResponseTokenUsage as MockedFunction<
-      typeof actualTokenUsageUtils.accumulateResponseTokenUsage
-    >;
+    accumulateResponseTokenUsageMock =
+      tokenUsageUtils.accumulateResponseTokenUsage as MockedFunction<
+        typeof actualTokenUsageUtils.accumulateResponseTokenUsage
+      >;
   });
 
   const createMockResponse = (body: unknown, overrides: Record<string, unknown> = {}) =>
-    (({
+    ({
       ok: true,
       status: 200,
       statusText: 'OK',
       json: vi.fn<() => Promise<unknown>>().mockResolvedValue(body),
-      ...overrides
-    }) as any);
+      ...overrides,
+    }) as any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -117,7 +128,7 @@ describe('SimbaProvider', () => {
     mockGetUserId.mockReset();
     mockGetUserId.mockReturnValue('test-user');
     mockBuildRemoteUrl.mockReset();
-    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(function() {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(function () {});
     mockBuildRemoteUrl.mockReturnValue('https://mocked-base');
   });
 
@@ -211,7 +222,7 @@ describe('SimbaProvider', () => {
       createMockResponse(finalOutputs),
     ];
 
-    mockFetchWithRetries.mockImplementation(async function() {
+    mockFetchWithRetries.mockImplementation(async function () {
       const next = fetchQueue.shift();
       if (!next) {
         throw new Error('Unexpected fetch call');
@@ -321,17 +332,19 @@ describe('SimbaProvider', () => {
     const createIterationContextMock = sharedModule.createIterationContext as MockedFunction<
       typeof actualSharedModule.createIterationContext
     >;
-    createIterationContextMock.mockImplementation(
-      async function({ context, originalVars, iterationNumber }) {
-        if (!context) {
-          return undefined;
-        }
-        return {
-          ...context,
-          vars: { ...originalVars, clientSessionId: `client-${iterationNumber}` },
-        };
-      },
-    );
+    createIterationContextMock.mockImplementation(async function ({
+      context,
+      originalVars,
+      iterationNumber,
+    }) {
+      if (!context) {
+        return undefined;
+      }
+      return {
+        ...context,
+        vars: { ...originalVars, clientSessionId: `client-${iterationNumber}` },
+      };
+    });
 
     const provider = new SimbaProvider({ injectVar: 'prompt' });
 
@@ -343,11 +356,11 @@ describe('SimbaProvider', () => {
     ];
     const targetProvider: ApiProvider = {
       id: () => 'target-provider',
-      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function() {
-        return ({
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function () {
+        return {
           output: targetResponses.shift() ?? 'default target answer',
-          tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage()
-        });
+          tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
+        };
       }),
     };
 
@@ -445,7 +458,7 @@ describe('SimbaProvider', () => {
       createMockResponse(finalOutputs),
     ];
 
-    mockFetchWithRetries.mockImplementation(async function() {
+    mockFetchWithRetries.mockImplementation(async function () {
       const next = fetchQueue.shift();
       if (!next) {
         throw new Error('Unexpected fetch call');
@@ -571,7 +584,7 @@ describe('SimbaProvider', () => {
       createMockResponse(finalOutputs),
     ];
 
-    mockFetchWithRetries.mockImplementation(async function() {
+    mockFetchWithRetries.mockImplementation(async function () {
       const next = fetchQueue.shift();
       if (!next) {
         throw new Error('Unexpected fetch call');
@@ -627,7 +640,7 @@ describe('SimbaProvider', () => {
 
     const targetProvider: ApiProvider = {
       id: () => 'target-provider',
-      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function(prompt, ctx) {
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function (prompt, ctx) {
         callSnapshots.push({
           prompt,
           context: ctx
@@ -746,7 +759,7 @@ describe('SimbaProvider', () => {
       createMockResponse(finalOutputs),
     ];
 
-    mockFetchWithRetries.mockImplementation(async function() {
+    mockFetchWithRetries.mockImplementation(async function () {
       const next = fetchQueue.shift();
       if (!next) {
         throw new Error('Unexpected fetch call');

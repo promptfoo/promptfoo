@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest';
 import { addLeetspeak } from '../../../src/redteam/strategies/leetspeak';
 
 import type { TestCase } from '../../../src/types/index';

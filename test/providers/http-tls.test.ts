@@ -5,24 +5,24 @@ import { fetchWithCache } from '../../src/cache';
 import { HttpProvider } from '../../src/providers/http';
 
 // Mock dependencies
-vi.mock('../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithCache: vi.fn()
-  });
+    fetchWithCache: vi.fn(),
+  };
 });
 
-vi.mock('undici', async importOriginal => {
-  return ({
+vi.mock('undici', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    Agent: vi.fn().mockImplementation(function(options) {
-      return ({
+    Agent: vi.fn().mockImplementation(function (options) {
+      return {
         options,
-        dispatcher: 'mock-agent'
-      });
-    })
-  });
+        dispatcher: 'mock-agent',
+      };
+    }),
+  };
 });
 
 // Hoisted mock for fs.readFileSync

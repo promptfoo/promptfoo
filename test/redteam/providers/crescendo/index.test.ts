@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import type { Message } from '../../../../src/redteam/providers/shared';
@@ -8,49 +8,49 @@ import { checkServerFeatureSupport } from '../../../../src/util/server';
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 
-vi.mock('../../../../src/providers/promptfoo', async importOriginal => {
-  return ({
+vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    PromptfooChatCompletionProvider: vi.fn().mockImplementation(function() {
-      return ({
+    PromptfooChatCompletionProvider: vi.fn().mockImplementation(function () {
+      return {
         id: () => 'mock-unblocking',
         callApi: vi.fn(),
-        delay: 0
-      });
-    })
-  });
+        delay: 0,
+      };
+    }),
+  };
 });
 
-vi.mock('../../../../src/util/server', async importOriginal => {
-  return ({
+vi.mock('../../../../src/util/server', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    checkServerFeatureSupport: vi.fn()
-  });
+    checkServerFeatureSupport: vi.fn(),
+  };
 });
 
 vi.mock('../../../../src/redteam/providers/shared', async () => ({
   ...(await vi.importActual('../../../../src/redteam/providers/shared')),
-  tryUnblocking: vi.fn()
+  tryUnblocking: vi.fn(),
 }));
 
-vi.mock('../../../../src/redteam/graders', async importOriginal => {
-  return ({
+vi.mock('../../../../src/redteam/graders', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    getGraderById: mockGetGraderById
-  });
+    getGraderById: mockGetGraderById,
+  };
 });
 
-vi.mock('../../../../src/redteam/remoteGeneration', async importOriginal => {
-  return ({
+vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    shouldGenerateRemote: vi.fn(() => false)
-  });
+    shouldGenerateRemote: vi.fn(() => false),
+  };
 });
 
 vi.mock('../../../../src/evaluatorHelpers', async () => ({
   ...(await vi.importActual('../../../../src/evaluatorHelpers')),
-  renderPrompt: vi.fn()
+  renderPrompt: vi.fn(),
 }));
 
 describe('MemorySystem', () => {
@@ -130,7 +130,7 @@ describe('CrescendoProvider', () => {
     });
 
     // Set up redteamProviderManager mock
-    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function(options) {
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
       // When the provider is already an object (not a string), return it for jsonOnly requests
       // For non-jsonOnly requests (scoring), return the scoring provider
       if (options.provider && typeof options.provider === 'object') {
@@ -144,7 +144,7 @@ describe('CrescendoProvider', () => {
 
     // Set up default getGraderById mock
     mockGetGraderById.mockReset();
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -465,7 +465,7 @@ describe('CrescendoProvider', () => {
 
   it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -590,7 +590,7 @@ describe('CrescendoProvider', () => {
     };
 
     // Mock grader to fail (detect jailbreak)
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: mockGraderResult,
@@ -665,7 +665,7 @@ describe('CrescendoProvider', () => {
 
   it('should not create synthetic grader result when internal evaluator succeeds', async () => {
     // Mock grader to pass (not detect jailbreak)
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -723,7 +723,7 @@ describe('CrescendoProvider', () => {
 
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: {
@@ -989,7 +989,7 @@ describe('CrescendoProvider', () => {
 
     it('should record success but continue when continueAfterSuccess is false', async () => {
       // Ensure grader passes for this test
-      mockGetGraderById.mockImplementation(function() {
+      mockGetGraderById.mockImplementation(function () {
         return {
           getResult: vi.fn(async () => ({
             grade: {
@@ -1320,7 +1320,7 @@ describe('CrescendoProvider', () => {
 
   describe('Token Counting', () => {
     beforeEach(async () => {
-      const { TokenUsageTracker } = await import("../../../../src/util/tokenUsage");
+      const { TokenUsageTracker } = await import('../../../../src/util/tokenUsage');
       TokenUsageTracker.getInstance().resetAllUsage();
     });
 
@@ -1536,7 +1536,7 @@ describe('CrescendoProvider', () => {
         redteamProvider: mockRedTeamProvider,
       });
 
-      const { TokenUsageTracker } = await import("../../../../src/util/tokenUsage");
+      const { TokenUsageTracker } = await import('../../../../src/util/tokenUsage');
       const tracker = TokenUsageTracker.getInstance();
 
       const context = {
@@ -1588,7 +1588,7 @@ describe('CrescendoProvider', () => {
         redteamProvider: mockRedTeamProvider,
       });
 
-      const { TokenUsageTracker } = await import("../../../../src/util/tokenUsage");
+      const { TokenUsageTracker } = await import('../../../../src/util/tokenUsage');
       const tracker = TokenUsageTracker.getInstance();
 
       const context = {
@@ -1771,7 +1771,7 @@ describe('CrescendoProvider - Chat Template Support', () => {
       stateful: false, // Key: test with stateful=false to trigger the bug
     });
 
-    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function(options) {
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
       if (options.provider && typeof options.provider === 'object') {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
@@ -1779,7 +1779,7 @@ describe('CrescendoProvider - Chat Template Support', () => {
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
-    mockGetGraderById.mockImplementation(function() {
+    mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: { pass: true },
@@ -1933,7 +1933,7 @@ describe('CrescendoProvider - Chat Template Support', () => {
     );
 
     // Mock target provider to verify it receives structured JSON, not stringified conversation
-    mockTargetProvider.callApi.mockImplementation(function(prompt: string) {
+    mockTargetProvider.callApi.mockImplementation(function (prompt: string) {
       // Verify that the prompt is structured JSON, not a JSON string
       try {
         const parsed = JSON.parse(prompt);
@@ -1991,12 +1991,12 @@ describe('CrescendoProvider - Chat Template Support', () => {
     });
 
     // Mock renderPrompt to return plain text (non-chat template)
-    vi
-      .mocked(evaluatorHelpers.renderPrompt)
-      .mockResolvedValueOnce('Please respond to: test attack');
+    vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(
+      'Please respond to: test attack',
+    );
 
     // Mock target provider to verify it receives JSON stringified conversation history
-    mockTargetProvider.callApi.mockImplementation(function(prompt: string) {
+    mockTargetProvider.callApi.mockImplementation(function (prompt: string) {
       // For non-chat templates with stateful=false, should receive stringified conversation
       expect(typeof prompt).toBe('string');
 
@@ -2054,11 +2054,11 @@ describe('CrescendoProvider - Chat Template Support', () => {
     });
 
     // Mock renderPrompt to return structured JSON
-    vi
-      .mocked(evaluatorHelpers.renderPrompt)
-      .mockResolvedValueOnce('[{"role": "user", "content": "test attack"}]');
+    vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(
+      '[{"role": "user", "content": "test attack"}]',
+    );
 
-    mockTargetProvider.callApi.mockImplementation(function(prompt: string) {
+    mockTargetProvider.callApi.mockImplementation(function (prompt: string) {
       // With stateful=true, should always receive rendered prompt directly
       expect(prompt).toBe('[{"role": "user", "content": "test attack"}]');
 

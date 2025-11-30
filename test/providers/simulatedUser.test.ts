@@ -1,31 +1,31 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
 import * as timeUtils from '../../src/util/time';
 
 import type { ApiProvider } from '../../src/types/index';
 
-vi.mock('../../src/util/time', async importOriginal => {
-  return ({
+vi.mock('../../src/util/time', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    sleep: vi.fn().mockResolvedValue(undefined)
-  });
+    sleep: vi.fn().mockResolvedValue(undefined),
+  };
 });
 
 vi.mock('../../src/util/fetch/index.ts');
 
 // Mock PromptfooSimulatedUserProvider
 const mockUserProviderCallApi = vi.fn().mockResolvedValue({ output: 'user response' });
-vi.mock('../../src/providers/promptfoo', async importOriginal => {
+vi.mock('../../src/providers/promptfoo', async (importOriginal) => {
   return {
     ...(await importOriginal()),
 
-    PromptfooSimulatedUserProvider: vi.fn().mockImplementation(function() {
-      return ({
+    PromptfooSimulatedUserProvider: vi.fn().mockImplementation(function () {
+      return {
         callApi: mockUserProviderCallApi,
         id: vi.fn().mockReturnValue('mock-user-provider'),
-        options: {}
-      });
-    })
+        options: {},
+      };
+    }),
   };
 });
 
@@ -39,11 +39,11 @@ describe('SimulatedUser', () => {
 
     originalProvider = {
       id: () => 'test-agent',
-      callApi: vi.fn().mockImplementation(async function() {
-        return ({
+      callApi: vi.fn().mockImplementation(async function () {
+        return {
           output: 'agent response',
-          tokenUsage: { numRequests: 1 }
-        });
+          tokenUsage: { numRequests: 1 },
+        };
       }),
     };
 
@@ -117,11 +117,11 @@ describe('SimulatedUser', () => {
       // Set up an initial message exchange to have some conversation history
       // First call is regular exchange
       const mockedCallApi = vi.mocked(originalProvider.callApi);
-      mockedCallApi.mockImplementationOnce(async function() {
-        return ({
+      mockedCallApi.mockImplementationOnce(async function () {
+        return {
           output: 'initial agent response',
-          tokenUsage: { numRequests: 1 }
-        });
+          tokenUsage: { numRequests: 1 },
+        };
       });
 
       // Second call returns stop command
@@ -202,12 +202,12 @@ describe('SimulatedUser', () => {
     it('should include sessionId from agentResponse in metadata', async () => {
       const providerWithSessionId = {
         id: () => 'test-agent',
-        callApi: vi.fn().mockImplementation(async function() {
-          return ({
+        callApi: vi.fn().mockImplementation(async function () {
+          return {
             output: 'agent response',
             sessionId: 'test-session-123',
-            tokenUsage: { numRequests: 1 }
-          });
+            tokenUsage: { numRequests: 1 },
+          };
         }),
       };
 
@@ -235,12 +235,12 @@ describe('SimulatedUser', () => {
     it('should prioritize agentResponse.sessionId over context.vars.sessionId', async () => {
       const providerWithSessionId = {
         id: () => 'test-agent',
-        callApi: vi.fn().mockImplementation(async function() {
-          return ({
+        callApi: vi.fn().mockImplementation(async function () {
+          return {
             output: 'agent response',
             sessionId: 'response-session-priority',
-            tokenUsage: { numRequests: 1 }
-          });
+            tokenUsage: { numRequests: 1 },
+          };
         }),
       };
 
@@ -311,20 +311,20 @@ describe('SimulatedUser', () => {
         id: () => 'test-agent',
         callApi: vi
           .fn()
-          .mockImplementationOnce(async function() {
-          return ({
-            output: 'first response',
-            sessionId: 'session-123',
-            tokenUsage: { numRequests: 1 }
-          });
-        })
-          .mockImplementationOnce(async function() {
-          return ({
-            output: 'second response',
-            sessionId: 'session-123',
-            tokenUsage: { numRequests: 1 }
-          });
-        }),
+          .mockImplementationOnce(async function () {
+            return {
+              output: 'first response',
+              sessionId: 'session-123',
+              tokenUsage: { numRequests: 1 },
+            };
+          })
+          .mockImplementationOnce(async function () {
+            return {
+              output: 'second response',
+              sessionId: 'session-123',
+              tokenUsage: { numRequests: 1 },
+            };
+          }),
       };
 
       const statefulUser = new SimulatedUser({

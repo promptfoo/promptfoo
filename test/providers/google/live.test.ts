@@ -1,4 +1,4 @@
-import { Mocked, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mocked, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
 import dedent from 'dedent';
@@ -20,23 +20,23 @@ global.setTimeout = vi.fn((callback: any, delay?: number) => {
 }) as any;
 
 vi.mock('ws');
-vi.mock('../../../src/esm', async importOriginal => {
-  return ({
+vi.mock('../../../src/esm', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    importModule: vi.fn()
-  });
+    importModule: vi.fn(),
+  };
 });
-vi.mock('../../../src/python/pythonUtils', async importOriginal => {
-  return ({
+vi.mock('../../../src/python/pythonUtils', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    validatePythonPath: vi.fn().mockImplementation(async function(path) {
+    validatePythonPath: vi.fn().mockImplementation(async function (path) {
       return path;
-    })
-  });
+    }),
+  };
 });
-vi.mock('child_process', async importOriginal => {
-  return ({
+vi.mock('child_process', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     spawn: vi.fn(() => ({
@@ -50,14 +50,14 @@ vi.mock('child_process', async importOriginal => {
       }),
       kill: vi.fn(),
       killed: false,
-    }))
-  });
+    })),
+  };
 });
-vi.mock('../../../src/util/fetch', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/fetch', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithProxy: vi.fn()
-  });
+    fetchWithProxy: vi.fn(),
+  };
 });
 
 const mockImportModule = vi.mocked(importModule);
@@ -105,14 +105,14 @@ describe('GoogleLiveProvider', () => {
       onopen: vi.fn(),
     } as unknown as Mocked<WebSocket>;
 
-    vi.mocked(WebSocket).mockImplementation(function() {
+    vi.mocked(WebSocket).mockImplementation(function () {
       return mockWs;
     });
 
     // Reset validatePythonPath mock for each test
-    vi
-      .mocked((await import('../../../src/python/pythonUtils')).validatePythonPath)
-      .mockImplementation(async function(path: string) {
+    vi.mocked(
+      (await import('../../../src/python/pythonUtils')).validatePythonPath,
+    ).mockImplementation(async function (path: string) {
       return path;
     });
 
@@ -141,7 +141,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send message and handle basic response', async () => {
-    vi.mocked(WebSocket).mockImplementation(function() {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -166,7 +166,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send message and handle function call response', async () => {
-    vi.mocked(WebSocket).mockImplementation(function() {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -216,7 +216,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send message and handle sequential function calls', async () => {
-    vi.mocked(WebSocket).mockImplementation(function() {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -255,7 +255,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send message and handle in-built google search tool', async () => {
-    vi.mocked(WebSocket).mockImplementation(function() {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -298,7 +298,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send message and handle in-built code execution tool', async () => {
-    vi.mocked(WebSocket).mockImplementation(function() {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -327,7 +327,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should handle multiple user inputs', async () => {
-    vi.mocked(WebSocket).mockImplementation(function() {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -357,7 +357,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should handle WebSocket errors', async () => {
-    vi.mocked(WebSocket).mockImplementation(function() {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onerror?.({
           type: 'error',
@@ -409,7 +409,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should handle function tool callbacks correctly', async () => {
-    vi.mocked(WebSocket).mockImplementation(function() {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -484,7 +484,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should handle errors in function tool callbacks', async () => {
-    vi.mocked(WebSocket).mockImplementation(function() {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -557,7 +557,7 @@ describe('GoogleLiveProvider', () => {
   it('should handle function tool calls to a spawned stateful api', async () => {
     const mockFetchWithProxy = vi.mocked(fetchModule.fetchWithProxy);
 
-    vi.mocked(WebSocket).mockImplementation(function() {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -687,7 +687,9 @@ describe('GoogleLiveProvider', () => {
   describe('Python executable integration', () => {
     it('should handle Python executable validation correctly', async () => {
       const mockSpawn = vi.mocked((await import('child_process')).spawn);
-      const validatePythonPathMock = vi.mocked((await import('../../../src/python/pythonUtils')).validatePythonPath);
+      const validatePythonPathMock = vi.mocked(
+        (await import('../../../src/python/pythonUtils')).validatePythonPath,
+      );
 
       validatePythonPathMock.mockResolvedValueOnce('/custom/python/bin');
 
@@ -706,7 +708,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -727,7 +729,9 @@ describe('GoogleLiveProvider', () => {
 
     it('should handle errors when spawning Python process', async () => {
       const mockSpawn = vi.mocked((await import('child_process')).spawn);
-      const validatePythonPathMock = vi.mocked((await import('../../../src/python/pythonUtils')).validatePythonPath);
+      const validatePythonPathMock = vi.mocked(
+        (await import('../../../src/python/pythonUtils')).validatePythonPath,
+      );
 
       validatePythonPathMock.mockRejectedValueOnce(new Error('Python not found'));
 
@@ -750,7 +754,7 @@ describe('GoogleLiveProvider', () => {
           },
         });
 
-        vi.mocked(WebSocket).mockImplementation(function() {
+        vi.mocked(WebSocket).mockImplementation(function () {
           setImmediate(() => {
             mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
             simulateSetupMessage(mockWs);
@@ -782,7 +786,9 @@ describe('GoogleLiveProvider', () => {
         killed: false,
       } as any);
 
-      const validatePythonPathMock = vi.mocked((await import('../../../src/python/pythonUtils')).validatePythonPath);
+      const validatePythonPathMock = vi.mocked(
+        (await import('../../../src/python/pythonUtils')).validatePythonPath,
+      );
       validatePythonPathMock.mockResolvedValueOnce('python3');
 
       const providerWithStatefulApi = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -799,7 +805,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -820,7 +826,9 @@ describe('GoogleLiveProvider', () => {
       process.env.PROMPTFOO_PYTHON = '/env/python3';
 
       const mockSpawn = vi.mocked((await import('child_process')).spawn);
-      const validatePythonPathMock = vi.mocked((await import('../../../src/python/pythonUtils')).validatePythonPath);
+      const validatePythonPathMock = vi.mocked(
+        (await import('../../../src/python/pythonUtils')).validatePythonPath,
+      );
       validatePythonPathMock.mockResolvedValueOnce('/env/python3');
 
       try {
@@ -838,7 +846,7 @@ describe('GoogleLiveProvider', () => {
           },
         });
 
-        vi.mocked(WebSocket).mockImplementation(function() {
+        vi.mocked(WebSocket).mockImplementation(function () {
           setImmediate(() => {
             mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
             simulateSetupMessage(mockWs);
@@ -876,7 +884,9 @@ describe('GoogleLiveProvider', () => {
       const mockSpawn = vi.mocked((await import('child_process')).spawn);
       mockSpawn.mockReturnValueOnce(mockProcess as any);
 
-      const validatePythonPathMock = vi.mocked((await import('../../../src/python/pythonUtils')).validatePythonPath);
+      const validatePythonPathMock = vi.mocked(
+        (await import('../../../src/python/pythonUtils')).validatePythonPath,
+      );
       validatePythonPathMock.mockResolvedValueOnce('python3');
 
       const providerWithCleanup = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -893,7 +903,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -927,7 +937,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -962,7 +972,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -1001,7 +1011,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -1041,7 +1051,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -1085,7 +1095,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -1122,7 +1132,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -1161,7 +1171,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should load and execute external function callbacks from file', async () => {
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -1215,7 +1225,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should cache external functions and not reload them on subsequent calls', async () => {
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -1264,7 +1274,7 @@ describe('GoogleLiveProvider', () => {
       expect(result1.output.text).toBe('Cached result');
 
       // Reset WebSocket mock for second call
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -1285,7 +1295,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should handle errors in external function loading gracefully', async () => {
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -1337,7 +1347,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should handle mixed inline and external function callbacks', async () => {
-      vi.mocked(WebSocket).mockImplementation(function() {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);

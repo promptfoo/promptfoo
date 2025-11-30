@@ -8,7 +8,7 @@
  * 4. Handles errors gracefully
  */
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import request from 'supertest';
 import { getDb } from '../../../src/database/index';

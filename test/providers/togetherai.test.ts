@@ -8,23 +8,23 @@ import { createTogetherAiProvider } from '../../src/providers/togetherai';
 import type { ProviderOptions } from '../../src/types/index';
 import type { EnvOverrides } from '../../src/types/env';
 
-vi.mock('../../src/providers/openai/chat', async importOriginal => {
-  return ({
+vi.mock('../../src/providers/openai/chat', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    OpenAiChatCompletionProvider: vi.fn()
-  });
+    OpenAiChatCompletionProvider: vi.fn(),
+  };
 });
-vi.mock('../../src/providers/openai/completion', async importOriginal => {
-  return ({
+vi.mock('../../src/providers/openai/completion', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    OpenAiCompletionProvider: vi.fn()
-  });
+    OpenAiCompletionProvider: vi.fn(),
+  };
 });
-vi.mock('../../src/providers/openai/embedding', async importOriginal => {
-  return ({
+vi.mock('../../src/providers/openai/embedding', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    OpenAiEmbeddingProvider: vi.fn()
-  });
+    OpenAiEmbeddingProvider: vi.fn(),
+  };
 });
 
 describe('createTogetherAiProvider', () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
 import cliState from '../../../src/cliState';
@@ -9,11 +9,11 @@ import { loadStrategy, validateStrategies } from '../../../src/redteam/strategie
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types/index';
 
 vi.mock('../../../src/cliState');
-vi.mock('../../../src/esm', async importOriginal => {
-  return ({
+vi.mock('../../../src/esm', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    importModule: vi.fn()
-  });
+    importModule: vi.fn(),
+  };
 });
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -64,7 +64,7 @@ describe('validateStrategies', () => {
   });
 
   it('should exit for invalid strategies', async () => {
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(function() {
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
     const invalidStrategies: RedteamStrategyObject[] = [{ id: 'invalid-strategy' }];
@@ -297,7 +297,7 @@ describe('custom strategy validation', () => {
   });
 
   it('should reject invalid custom-like strategy patterns', async () => {
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(function() {
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
     const strategies: RedteamStrategyObject[] = [

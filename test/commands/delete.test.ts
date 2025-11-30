@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
 import { deleteCommand, handleEvalDelete, handleEvalDeleteAll } from '../../src/commands/delete';
@@ -33,7 +33,7 @@ describe('delete command', () => {
     });
 
     it('should handle error when deleting evaluation', async () => {
-      const mockExit = vi.spyOn(process, 'exit').mockImplementation(function() {
+      const mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
         return undefined as never;
       });
       const error = new Error('Delete failed');

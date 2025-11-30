@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import { viewCommand } from '../../src/commands/view';
 import { getDefaultPort } from '../../src/constants';

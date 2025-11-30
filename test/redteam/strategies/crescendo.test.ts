@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest';
 import { addCrescendo } from '../../../src/redteam/strategies/crescendo';
 
 import type { TestCase } from '../../../src/types/index';

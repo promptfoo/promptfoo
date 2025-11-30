@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../../src/cache';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
@@ -36,7 +36,7 @@ describe('mathPrompt', () => {
         getProgress: vi.fn(),
       } as unknown as SingleBar;
 
-      (SingleBar as any).mockImplementation(function() {
+      (SingleBar as any).mockImplementation(function () {
         return mockProgressBar;
       });
 
@@ -65,15 +65,13 @@ describe('mathPrompt', () => {
 
     it('should handle errors gracefully', async () => {
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
-      (SingleBar as any).mockImplementation(
-        function() {
-          return ({
-            start: vi.fn(),
-            increment: vi.fn(),
-            stop: vi.fn(),
-          }) as unknown as SingleBar;
-        },
-      );
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
 
       const result = await generateMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {});
       expect(result).toEqual([]);
@@ -119,7 +117,7 @@ describe('mathPrompt', () => {
     });
 
     it('should use custom math concepts when provided', async () => {
-      vi.mocked(remoteGeneration.shouldGenerateRemote).mockImplementation(function() {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockImplementation(function () {
         return false;
       });
       const customConcepts = ['topology', 'calculus'];
@@ -132,15 +130,13 @@ describe('mathPrompt', () => {
       } as any;
 
       vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
-      (SingleBar as any).mockImplementation(
-        function() {
-          return ({
-            start: vi.fn(),
-            increment: vi.fn(),
-            stop: vi.fn(),
-          }) as unknown as SingleBar;
-        },
-      );
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
 
       const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
         mathConcepts: customConcepts,

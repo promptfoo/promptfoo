@@ -1,4 +1,4 @@
-import { MockedFunction, beforeEach, describe, expect, it, vi } from "vitest";
+import { MockedFunction, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CrescendoProvider } from '../../../src/redteam/providers/crescendo/index';
 import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
 import { CustomProvider } from '../../../src/redteam/providers/custom/index';

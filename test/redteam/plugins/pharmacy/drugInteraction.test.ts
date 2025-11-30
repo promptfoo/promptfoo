@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PharmacyDrugInteractionPluginGrader } from '../../../../src/redteam/plugins/pharmacy/drugInteraction';
 
 describe('PharmacyDrugInteractionPluginGrader', () => {

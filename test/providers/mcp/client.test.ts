@@ -73,32 +73,32 @@ const mcpMocks = vi.hoisted(() => {
 const { mockClient, mockStdioTransport, mockStreamableHTTPTransport } = mcpMocks;
 
 // Mock the modules before importing them
-vi.mock('@modelcontextprotocol/sdk/client/index.js', async importOriginal => {
-  return ({
+vi.mock('@modelcontextprotocol/sdk/client/index.js', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    Client: mcpMocks.MockClient
-  });
+    Client: mcpMocks.MockClient,
+  };
 });
 
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js', async importOriginal => {
-  return ({
+vi.mock('@modelcontextprotocol/sdk/client/stdio.js', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    StdioClientTransport: mcpMocks.MockStdioTransport
-  });
+    StdioClientTransport: mcpMocks.MockStdioTransport,
+  };
 });
 
-vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', async importOriginal => {
-  return ({
+vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    StreamableHTTPClientTransport: mcpMocks.MockStreamableHTTPTransport
-  });
+    StreamableHTTPClientTransport: mcpMocks.MockStreamableHTTPTransport,
+  };
 });
 
-vi.mock('@modelcontextprotocol/sdk/client/sse.js', async importOriginal => {
-  return ({
+vi.mock('@modelcontextprotocol/sdk/client/sse.js', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    SSEClientTransport: mcpMocks.MockSSETransport
-  });
+    SSEClientTransport: mcpMocks.MockSSETransport,
+  };
 });
 
 // Import the mocked modules after mocking
@@ -246,7 +246,7 @@ describe('MCPClient', () => {
     it('should fall back to SSEClientTransport if StreamableHTTPClientTransport fails', async () => {
       // Reset mocks for this test
       mockClient.connect
-        .mockImplementationOnce(function() {
+        .mockImplementationOnce(function () {
           throw new Error('Connection failed');
         })
         .mockResolvedValueOnce(undefined);
@@ -272,7 +272,7 @@ describe('MCPClient', () => {
     it('should fall back to SSEClientTransport with headers if StreamableHTTPClientTransport fails', async () => {
       // Reset mocks for this test
       mockClient.connect
-        .mockImplementationOnce(function() {
+        .mockImplementationOnce(function () {
           throw new Error('Connection failed');
         })
         .mockResolvedValueOnce(undefined);

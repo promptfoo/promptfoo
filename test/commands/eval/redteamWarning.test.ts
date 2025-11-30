@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { doEval } from '../../../src/commands/eval';
 import logger from '../../../src/logger';
 
 // Mock util/config/default.ts
-vi.mock('../../../src/util/config/default', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/config/default', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     loadDefaultConfig: vi.fn().mockResolvedValue({
@@ -12,12 +12,12 @@ vi.mock('../../../src/util/config/default', async importOriginal => {
       defaultConfigPath: null,
     }),
 
-    clearConfigCache: vi.fn()
-  });
+    clearConfigCache: vi.fn(),
+  };
 });
 
-vi.mock('../../../src/util/config/load', async importOriginal => {
-  return ({
+vi.mock('../../../src/util/config/load', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     resolveConfigs: vi.fn().mockResolvedValue({
@@ -32,42 +32,42 @@ vi.mock('../../../src/util/config/load', async importOriginal => {
         tests: [], // Empty tests array
       },
       basePath: '',
-    })
-  });
+    }),
+  };
 });
 
-vi.mock('../../../src/evaluator', async importOriginal => {
-  return ({
+vi.mock('../../../src/evaluator', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     evaluate: vi.fn().mockResolvedValue({}),
-    DEFAULT_MAX_CONCURRENCY: 4
-  });
+    DEFAULT_MAX_CONCURRENCY: 4,
+  };
 });
 
 // Mock other dependencies to prevent actual execution
-vi.mock('../../../src/migrate', async importOriginal => {
-  return ({
+vi.mock('../../../src/migrate', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    runDbMigrations: vi.fn().mockResolvedValue(undefined)
-  });
+    runDbMigrations: vi.fn().mockResolvedValue(undefined),
+  };
 });
 
 // Mock the table generation
-vi.mock('../../../src/table', async importOriginal => {
-  return ({
+vi.mock('../../../src/table', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     generateTable: vi.fn().mockReturnValue({
       toString: vi.fn().mockReturnValue('Mock Table Output'),
-    })
-  });
+    }),
+  };
 });
 
 vi.mock('../../../src/models/eval', () => {
   return {
     __esModule: true,
-    default: vi.fn().mockImplementation(function(config) {
-      return ({
+    default: vi.fn().mockImplementation(function (config) {
+      return {
         addResult: vi.fn().mockResolvedValue({}),
         addPrompts: vi.fn().mockResolvedValue({}),
         clearResults: vi.fn().mockReturnValue(undefined),
@@ -84,8 +84,8 @@ vi.mock('../../../src/models/eval', () => {
         prompts: [],
         persisted: false,
         results: [],
-        config: config || {}
-      });
+        config: config || {},
+      };
     }),
   };
 });

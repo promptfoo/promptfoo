@@ -1,16 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import * as fetchModule from '../../src/util/fetch/index';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
 
-vi.mock('../../src/util', async importOriginal => {
-  return ({
+vi.mock('../../src/util', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     maybeLoadFromExternalFile: vi.fn((x) => x),
-    renderVarsInObject: vi.fn((x) => x)
-  });
+    renderVarsInObject: vi.fn((x) => x),
+  };
 });
 
 vi.mock('../../src/util/fetch');

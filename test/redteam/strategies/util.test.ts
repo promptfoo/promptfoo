@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest';
 import { pluginMatchesStrategyTargets } from '../../../src/redteam/strategies/util';
 import type { TestCaseWithPlugin } from '../../../src/types/index';
 

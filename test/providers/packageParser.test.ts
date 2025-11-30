@@ -12,14 +12,14 @@ import {
 
 import type { ProviderOptions } from '../../src/types/providers';
 
-vi.mock('node:module', async importOriginal => {
+vi.mock('node:module', async (importOriginal) => {
   return {
     ...(await importOriginal()),
-    createRequire: vi.fn(() => vi.fn((modulePath: string) => modulePath))
+    createRequire: vi.fn(() => vi.fn((modulePath: string) => modulePath)),
   };
 });
-vi.mock('../../src/esm', async importOriginal => {
-  return ({
+vi.mock('../../src/esm', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
     importModule: vi.fn(async (_modulePath: string, functionName?: string) => {
@@ -31,8 +31,8 @@ vi.mock('../../src/esm', async importOriginal => {
         return mockModule[functionName as keyof typeof mockModule];
       }
       return mockModule;
-    })
-  });
+    }),
+  };
 });
 
 describe('isPackagePath', () => {
@@ -62,10 +62,10 @@ describe('loadFromPackage', () => {
     const mockFunction = vi.fn();
 
     const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
-    vi.mocked(mockRequire.resolve).mockImplementation(function() {
+    vi.mocked(mockRequire.resolve).mockImplementation(function () {
       return mockPackagePath;
     });
-    vi.mocked(createRequire).mockImplementation(function() {
+    vi.mocked(createRequire).mockImplementation(function () {
       return mockRequire;
     });
     vi.mocked(importModule).mockResolvedValue({ getVariable: mockFunction });
@@ -85,10 +85,10 @@ describe('loadFromPackage', () => {
   });
 
   it('should throw an error if package is not found', async () => {
-    vi.mocked(mockRequire.resolve).mockImplementationOnce(function() {
+    vi.mocked(mockRequire.resolve).mockImplementationOnce(function () {
       throw new Error('Cannot find module');
     });
-    vi.mocked(createRequire).mockImplementation(function() {
+    vi.mocked(createRequire).mockImplementation(function () {
       return mockRequire;
     });
 
@@ -105,10 +105,10 @@ describe('loadFromPackage', () => {
     };
 
     const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
-    vi.mocked(mockRequire.resolve).mockImplementation(function() {
+    vi.mocked(mockRequire.resolve).mockImplementation(function () {
       return mockPackagePath;
     });
-    vi.mocked(createRequire).mockImplementation(function() {
+    vi.mocked(createRequire).mockImplementation(function () {
       return mockRequire;
     });
     vi.mocked(importModule).mockResolvedValue(mockModule);
@@ -147,10 +147,10 @@ describe('parsePackageProvider', () => {
     };
 
     const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
-    vi.mocked(mockRequire.resolve).mockImplementation(function() {
+    vi.mocked(mockRequire.resolve).mockImplementation(function () {
       return mockPackagePath;
     });
-    vi.mocked(createRequire).mockImplementation(function() {
+    vi.mocked(createRequire).mockImplementation(function () {
       return mockRequire;
     });
     vi.mocked(importModule).mockResolvedValue({ Provider: mockProvider });
@@ -168,10 +168,10 @@ describe('parsePackageProvider', () => {
   });
 
   it('should throw an error if package is not found', async () => {
-    vi.mocked(mockRequire.resolve).mockImplementationOnce(function() {
+    vi.mocked(mockRequire.resolve).mockImplementationOnce(function () {
       throw new Error('Cannot find module');
     });
-    vi.mocked(createRequire).mockImplementation(function() {
+    vi.mocked(createRequire).mockImplementation(function () {
       return mockRequire;
     });
 
@@ -193,10 +193,10 @@ describe('parsePackageProvider', () => {
     };
 
     const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
-    vi.mocked(mockRequire.resolve).mockImplementation(function() {
+    vi.mocked(mockRequire.resolve).mockImplementation(function () {
       return mockPackagePath;
     });
-    vi.mocked(createRequire).mockImplementation(function() {
+    vi.mocked(createRequire).mockImplementation(function () {
       return mockRequire;
     });
     vi.mocked(importModule).mockResolvedValue(mockModule);
@@ -214,10 +214,10 @@ describe('parsePackageProvider', () => {
     const MockProvider = vi.fn();
 
     const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
-    vi.mocked(mockRequire.resolve).mockImplementation(function() {
+    vi.mocked(mockRequire.resolve).mockImplementation(function () {
       return mockPackagePath;
     });
-    vi.mocked(createRequire).mockImplementation(function() {
+    vi.mocked(createRequire).mockImplementation(function () {
       return mockRequire;
     });
     vi.mocked(importModule).mockResolvedValue({ Provider: MockProvider });

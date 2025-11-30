@@ -7,13 +7,13 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     fetchWithCache: vi.fn(),
     enableCache: vi.fn(),
-    disableCache: vi.fn()
-  });
+    disableCache: vi.fn(),
+  };
 });
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -23,11 +23,11 @@ vi.mock('../../../src/logger', () => ({
     error: vi.fn(),
   },
 }));
-vi.mock('../../../src/esm', async importOriginal => {
-  return ({
+vi.mock('../../../src/esm', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    importModule: vi.fn()
-  });
+    importModule: vi.fn(),
+  };
 });
 
 const mockFetchWithCache = vi.mocked(fetchWithCache);

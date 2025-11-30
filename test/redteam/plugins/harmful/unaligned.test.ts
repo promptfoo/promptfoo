@@ -1,4 +1,4 @@
-import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../../../src/envars';
 import { PromptfooHarmfulCompletionProvider } from '../../../../src/providers/promptfoo';
 import {
@@ -130,7 +130,7 @@ describe('harmful plugin', () => {
     });
 
     it('should handle moderation assertions with OPENAI_API_KEY', async () => {
-      vi.mocked(getEnvString).mockImplementation(function(key) {
+      vi.mocked(getEnvString).mockImplementation(function (key) {
         if (key === 'OPENAI_API_KEY') {
           return 'test-key';
         }
@@ -165,7 +165,7 @@ describe('harmful plugin', () => {
       };
       vi.spyOn(REDTEAM_MODEL_CATEGORIES, 'find').mockReturnValue(mockCategory);
 
-      vi.mocked(getEnvString).mockImplementation(function(key) {
+      vi.mocked(getEnvString).mockImplementation(function (key) {
         if (key === 'REPLICATE_API_KEY') {
           return 'test-key';
         }
@@ -173,9 +173,9 @@ describe('harmful plugin', () => {
       });
 
       const mockOutput = 'Test output';
-      vi
-        .spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi')
-        .mockResolvedValue({ output: [mockOutput] });
+      vi.spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi').mockResolvedValue({
+        output: [mockOutput],
+      });
 
       const result = await getHarmfulTests(
         {

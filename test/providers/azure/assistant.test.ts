@@ -185,7 +185,7 @@ describe('Azure Assistant Provider', () => {
       const completedResponse = { id: 'run-123', status: 'completed' };
 
       // Mock implementation to avoid timeout errors
-      vi.spyOn(provider as any, 'pollRun').mockImplementation(async function() {
+      vi.spyOn(provider as any, 'pollRun').mockImplementation(async function () {
         // Simulate sleep call to verify it was made
         await mockSleep(1000);
         return completedResponse;
@@ -207,7 +207,7 @@ describe('Azure Assistant Provider', () => {
       // Replace the implementation for this test only
 
       // Create a minimal implementation that just throws the expected error
-      vi.spyOn(provider as any, 'pollRun').mockImplementation(async function() {
+      vi.spyOn(provider as any, 'pollRun').mockImplementation(async function () {
         throw new Error('Run polling timed out after 300000ms. Last status: in_progress');
       });
 

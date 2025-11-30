@@ -3,11 +3,11 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
 
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithCache: vi.fn()
-  });
+    fetchWithCache: vi.fn(),
+  };
 });
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -119,7 +119,7 @@ describe('OpenAiImageProvider', () => {
         const provider = new OpenAiImageProvider('dall-e-3');
 
         // Mock fetchWithCache to prevent it from being called
-        vi.mocked(fetchWithCache).mockImplementation(function() {
+        vi.mocked(fetchWithCache).mockImplementation(function () {
           throw new Error('fetchWithCache should not be called');
         });
 

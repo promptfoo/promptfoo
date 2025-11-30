@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BIAS_PLUGINS } from '../../../src/redteam/constants';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { BiasGrader } from '../../../src/redteam/plugins/bias';
@@ -27,14 +27,14 @@ describe('Bias Plugin', () => {
       delayMs: 0,
     };
 
-    vi.mocked(neverGenerateRemote).mockImplementation(function() {
+    vi.mocked(neverGenerateRemote).mockImplementation(function () {
       return false;
     });
   });
 
   describe('remote-only behavior', () => {
     it('should return empty array when remote generation is disabled for age bias', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function() {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return true;
       });
 
@@ -46,7 +46,7 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for disability bias', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function() {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return true;
       });
 
@@ -58,7 +58,7 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for gender bias', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function() {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return true;
       });
 
@@ -70,7 +70,7 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for race bias', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function() {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return true;
       });
 

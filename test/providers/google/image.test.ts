@@ -1,26 +1,26 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { GoogleImageProvider } from '../../../src/providers/google/image';
 
-vi.mock('../../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithCache: vi.fn()
-  });
+    fetchWithCache: vi.fn(),
+  };
 });
 
-vi.mock('../../../src/providers/google/util', async importOriginal => {
-  return ({
+vi.mock('../../../src/providers/google/util', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
     getGoogleClient: vi.fn(),
     loadCredentials: vi.fn(),
-    resolveProjectId: vi.fn()
-  });
+    resolveProjectId: vi.fn(),
+  };
 });
 
 describe('GoogleImageProvider', async () => {
   const mockFetchWithCache = fetchWithCache as Mock;
-  const utilMocks = await import("../../../src/providers/google/util");
+  const utilMocks = await import('../../../src/providers/google/util');
   const mockGetGoogleClient = utilMocks.getGoogleClient as Mock;
   const mockLoadCredentials = utilMocks.loadCredentials as Mock;
   const mockResolveProjectId = utilMocks.resolveProjectId as Mock;
@@ -32,7 +32,7 @@ describe('GoogleImageProvider', async () => {
     delete process.env.GEMINI_API_KEY;
 
     // Set up default mock behaviors
-    mockLoadCredentials.mockImplementation(function(creds) {
+    mockLoadCredentials.mockImplementation(function (creds) {
       return creds;
     });
     mockResolveProjectId.mockResolvedValue('test-project');

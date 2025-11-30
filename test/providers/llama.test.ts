@@ -3,11 +3,11 @@ import { fetchWithCache } from '../../src/cache';
 import { LlamaProvider } from '../../src/providers/llama';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 
-vi.mock('../../src/cache', async importOriginal => {
-  return ({
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
-    fetchWithCache: vi.fn()
-  });
+    fetchWithCache: vi.fn(),
+  };
 });
 
 describe('LlamaProvider', () => {

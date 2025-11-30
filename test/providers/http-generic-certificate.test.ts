@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from 'vitest';
 import { HttpProviderConfigSchema } from '../../src/providers/http';
 
 // Mock fs to prevent actual file system access during tests

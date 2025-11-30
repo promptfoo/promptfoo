@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
 import { providerMap } from '../../src/providers/registry';
@@ -6,59 +6,59 @@ import { providerMap } from '../../src/providers/registry';
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
-vi.mock('../../src/providers/adaline.gateway', async importOriginal => {
-  return ({
+vi.mock('../../src/providers/adaline.gateway', async (importOriginal) => {
+  return {
     ...(await importOriginal()),
 
-    AdalineGatewayChatProvider: vi.fn().mockImplementation(function(providerName, modelName) {
-      return ({
-        id: () => `adaline:${providerName}:chat:${modelName}`
-      });
+    AdalineGatewayChatProvider: vi.fn().mockImplementation(function (providerName, modelName) {
+      return {
+        id: () => `adaline:${providerName}:chat:${modelName}`,
+      };
     }),
 
-    AdalineGatewayEmbeddingProvider: vi.fn().mockImplementation(function(providerName, modelName) {
-      return ({
-        id: () => `adaline:${providerName}:embedding:${modelName}`
-      });
-    })
-  });
-});
-
-vi.mock('../../src/providers/pythonCompletion', async importOriginal => {
-  return {
-    ...(await importOriginal()),
-
-    PythonProvider: vi.fn().mockImplementation(function() {
-      return ({
-        id: () => 'python:script.py:default'
-      });
-    })
+    AdalineGatewayEmbeddingProvider: vi.fn().mockImplementation(function (providerName, modelName) {
+      return {
+        id: () => `adaline:${providerName}:embedding:${modelName}`,
+      };
+    }),
   };
 });
 
-vi.mock('../../src/providers/golangCompletion', async importOriginal => {
+vi.mock('../../src/providers/pythonCompletion', async (importOriginal) => {
   return {
     ...(await importOriginal()),
 
-    GolangProvider: vi.fn().mockImplementation(function() {
-      return ({
+    PythonProvider: vi.fn().mockImplementation(function () {
+      return {
+        id: () => 'python:script.py:default',
+      };
+    }),
+  };
+});
+
+vi.mock('../../src/providers/golangCompletion', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    GolangProvider: vi.fn().mockImplementation(function () {
+      return {
         id: () => 'golang:script.go',
-        callApi: vi.fn()
-      });
-    })
+        callApi: vi.fn(),
+      };
+    }),
   };
 });
 
-vi.mock('../../src/providers/scriptCompletion', async importOriginal => {
+vi.mock('../../src/providers/scriptCompletion', async (importOriginal) => {
   return {
     ...(await importOriginal()),
 
-    ScriptCompletionProvider: vi.fn().mockImplementation(function() {
-      return ({
+    ScriptCompletionProvider: vi.fn().mockImplementation(function () {
+      return {
         id: () => 'exec:script.sh',
-        callApi: vi.fn()
-      });
-    })
+        callApi: vi.fn(),
+      };
+    }),
   };
 });
 
