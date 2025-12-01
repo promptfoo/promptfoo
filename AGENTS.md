@@ -83,14 +83,29 @@ npm run local -- eval -c config.yaml --no-cache
 
 **Database:** Located at `~/.promptfoo/promptfoo.db` (SQLite). You may read from it but **NEVER delete it**.
 
-## Git Safety (CRITICAL)
+## Git Workflow (CRITICAL)
 
 - **NEVER** commit/push directly to main
 - **NEVER** use `--force` or `--amend` without explicit approval
 - All changes go through pull requests
 
+**Standard workflow:**
+
+```bash
+git checkout main && git pull origin main   # Always start fresh
+git checkout -b feature/your-branch-name    # New branch for changes
+# Make changes...
+git add <specific-files>                    # Never blindly add everything
+git commit -m "type(scope): description"    # Conventional commit format
+git push -u origin feature/your-branch-name # Push after each commit
+```
+
+**Conventional commit types:** `feat`, `fix`, `chore`, `docs`, `test`, `refactor`
+
+**Push after every commit** to ensure work is saved remotely.
+
 See `docs/git-workflow.md` for full workflow.
-See `docs/pr-conventions.md` for PR title format.
+See `docs/pr-conventions.md` for PR title format and scope selection.
 
 ## Code Style
 
