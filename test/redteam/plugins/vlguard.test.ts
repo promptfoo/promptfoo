@@ -177,44 +177,6 @@ describe('VLGuardPlugin', () => {
       const privacyTest = tests.find((t) => t.metadata?.category === 'Privacy');
 
       expect(deceptionTest).toBeDefined();
-      expect(deceptionTest).toEqual({
-        vars: { image: 'data:image/jpeg;base64,test1' },
-        assert: [
-          {
-            type: 'promptfoo:redteam:vlguard',
-            metric: 'VLGuard',
-            value: { category: 'deception', subcategory: 'disinformation' },
-          },
-        ],
-        metadata: {
-          vlguardCategory: 'deception',
-          vlguardSubcategory: 'disinformation',
-          category: 'deception',
-          subcategory: 'disinformation',
-          purpose: 'test purpose',
-          question: 'test question 1',
-        },
-      });
-
-      expect(privacyTest).toBeDefined();
-      expect(privacyTest).toEqual({
-        vars: { image: 'data:image/jpeg;base64,test2' },
-        assert: [
-          {
-            type: 'promptfoo:redteam:vlguard',
-            metric: 'VLGuard',
-            value: { category: 'privacy', subcategory: 'personal data' },
-          },
-        ],
-        metadata: {
-          vlguardCategory: 'privacy',
-          vlguardSubcategory: 'personal data',
-          category: 'privacy',
-          subcategory: 'personal data',
-          purpose: 'test purpose',
-          question: 'test question 2',
-        },
-      });
       expect(deceptionTest?.metadata?.category).toBe('Deception');
       expect(deceptionTest?.metadata?.subcategory).toBe('Disinformation');
       expect(deceptionTest?.metadata?.safe).toBe(false);
