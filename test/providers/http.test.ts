@@ -3,15 +3,16 @@ import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
   afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
   type MockInstance,
+  vi,
 } from 'vitest';
+
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
