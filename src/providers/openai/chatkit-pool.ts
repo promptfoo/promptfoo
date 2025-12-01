@@ -19,7 +19,7 @@ import { providerRegistry } from '../providerRegistry';
 
 // Pool configuration constants
 const CHATKIT_READY_TIMEOUT_MS = 60000;
-const PAGE_REFRESH_TIMEOUT_MS = 30000;
+const PAGE_REFRESH_TIMEOUT_MS = 60000;
 const PAGE_ACQUIRE_TIMEOUT_MS = 120000;
 const IDLE_SHUTDOWN_DELAY_MS = 5000; // Shutdown pool if idle for this long
 
@@ -480,6 +480,8 @@ export class ChatKitBrowserPool {
     const context = await this.browser.newContext({
       viewport: { width: 800, height: 600 },
     });
+    // Set longer default timeout to prevent Playwright's 30s default from interfering
+    context.setDefaultTimeout(120000);
 
     try {
       const page = await context.newPage();
@@ -513,6 +515,7 @@ export class ChatKitBrowserPool {
   }
 
   private async refreshPooledPage(pooledPage: PooledPage): Promise<void> {
+    logger.debug('[ChatKitPool] Refreshing page', { timeout: PAGE_REFRESH_TIMEOUT_MS });
     await pooledPage.page.reload({ waitUntil: 'domcontentloaded' });
     await pooledPage.page.waitForFunction(() => (window as any).__state?.ready === true, {
       timeout: PAGE_REFRESH_TIMEOUT_MS,
