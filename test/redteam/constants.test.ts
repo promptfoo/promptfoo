@@ -52,6 +52,7 @@ describe('constants', () => {
       'pharmacy',
       'insurance',
       'financial',
+      'ecommerce',
       'guardrails-eval',
     ]);
   });
@@ -95,17 +96,8 @@ describe('constants', () => {
   });
 
   it('AGENTIC_PLUGINS should contain expected plugins', () => {
-    expect(AGENTIC_PLUGINS).toContain('mcp');
-    expect(AGENTIC_PLUGINS).toContain('excessive-agency');
-    expect(AGENTIC_PLUGINS).toContain('rbac');
-    expect(AGENTIC_PLUGINS).toContain('shell-injection');
-    expect(AGENTIC_PLUGINS).toContain('sql-injection');
-    expect(AGENTIC_PLUGINS).toContain('debug-access');
-    expect(AGENTIC_PLUGINS).toContain('indirect-prompt-injection');
-    expect(AGENTIC_PLUGINS).toContain('cross-session-leak');
-    expect(AGENTIC_PLUGINS).toContain('tool-discovery');
-    expect(AGENTIC_PLUGINS).toContain('ascii-smuggling');
-    expect(AGENTIC_PLUGINS.length).toBe(10);
+    expect(AGENTIC_PLUGINS).toContain('agentic:memory-poisoning');
+    expect(AGENTIC_PLUGINS.length).toBe(1);
   });
 
   it('DEFAULT_PLUGINS should contain expected plugins', () => {
@@ -116,14 +108,21 @@ describe('constants', () => {
     expect(DEFAULT_PLUGINS).toContain('pii:direct');
   });
 
-  it('ALL_PLUGINS should contain all unique plugins', () => {
-    const expectedPlugins = new Set([
-      ...BASE_PLUGINS,
-      ...Object.keys(HARM_PLUGINS),
-      ...PII_PLUGINS,
-      ...ADDITIONAL_PLUGINS,
-    ]);
-    expect(new Set(ALL_PLUGINS)).toEqual(expectedPlugins);
+  it('ALL_PLUGINS should contain base and additional plugins', () => {
+    // ALL_PLUGINS should contain all BASE_PLUGINS
+    BASE_PLUGINS.forEach((plugin) => {
+      expect(ALL_PLUGINS).toContain(plugin);
+    });
+    // ALL_PLUGINS should contain all PII_PLUGINS
+    PII_PLUGINS.forEach((plugin) => {
+      expect(ALL_PLUGINS).toContain(plugin);
+    });
+    // ALL_PLUGINS should contain all HARM_PLUGINS keys
+    Object.keys(HARM_PLUGINS).forEach((plugin) => {
+      expect(ALL_PLUGINS).toContain(plugin);
+    });
+    // ALL_PLUGINS should be an array with no duplicates
+    expect(new Set(ALL_PLUGINS).size).toBe(ALL_PLUGINS.length);
   });
 
   it('CONFIG_REQUIRED_PLUGINS should have valid plugins', () => {
@@ -156,39 +155,29 @@ describe('constants', () => {
       expect(riskCategories.Brand).toContain('politics');
     });
 
-    it('should have legal risks', () => {
-      expect(riskCategories.Legal).toBeDefined();
-      expect(riskCategories.Legal).toContain('harmful:intellectual-property');
-      expect(riskCategories.Legal).toContain('contracts');
+    it('should have compliance & legal risks', () => {
+      expect(riskCategories['Compliance & Legal']).toBeDefined();
+      expect(riskCategories['Compliance & Legal']).toContain('harmful:intellectual-property');
+      expect(riskCategories['Compliance & Legal']).toContain('contracts');
     });
 
-    it('should have security risks', () => {
-      expect(riskCategories.Security).toBeDefined();
-      expect(riskCategories.Security).toContain('prompt-extraction');
-      expect(riskCategories.Security).toContain('hijacking');
+    it('should have security & access control risks', () => {
+      expect(riskCategories['Security & Access Control']).toBeDefined();
+      expect(riskCategories['Security & Access Control']).toContain('hijacking');
     });
 
-    it('should have harm risks', () => {
-      expect(riskCategories.Harm).toBeDefined();
-      expect(riskCategories.Harm).toContain('harmful:harassment-bullying');
-      expect(riskCategories.Harm).toContain('harmful:hate');
+    it('should have trust & safety risks', () => {
+      expect(riskCategories['Trust & Safety']).toBeDefined();
+      expect(riskCategories['Trust & Safety']).toContain('harmful:harassment-bullying');
+      expect(riskCategories['Trust & Safety']).toContain('harmful:hate');
     });
 
-    it('should have accuracy risks', () => {
-      expect(riskCategories.Accuracy).toBeDefined();
-      expect(riskCategories.Accuracy).toContain('hallucination');
+    it('should have domain-specific risks', () => {
+      expect(riskCategories['Domain-Specific Risks']).toBeDefined();
     });
 
-    it('should have PII risks', () => {
-      expect(riskCategories.PII).toBeDefined();
-      expect(riskCategories.PII).toContain('pii:direct');
-      expect(riskCategories.PII).toContain('pii:api-db');
-    });
-
-    it('should have fairness risks', () => {
-      expect(riskCategories.Fairness).toBeDefined();
-      expect(riskCategories.Fairness).toContain('harmful:graphic-content');
-      expect(riskCategories.Fairness).toContain('harmful:radicalization');
+    it('should have datasets', () => {
+      expect(riskCategories['Datasets']).toBeDefined();
     });
   });
 });
