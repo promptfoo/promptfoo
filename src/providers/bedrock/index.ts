@@ -392,14 +392,15 @@ export function addConfigParam(
   }
 }
 
-export enum LlamaVersion {
-  V2 = 2,
-  V3 = 3,
-  V3_1 = 3.1,
-  V3_2 = 3.2,
-  V3_3 = 3.3,
-  V4 = 4,
-}
+export const LlamaVersion = {
+  V2: 2,
+  V3: 3,
+  V3_1: 3.1,
+  V3_2: 3.2,
+  V3_3: 3.3,
+  V4: 4,
+} as const;
+export type LlamaVersion = (typeof LlamaVersion)[keyof typeof LlamaVersion];
 
 export interface LlamaMessage {
   role: 'system' | 'user' | 'assistant';

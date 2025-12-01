@@ -4,20 +4,25 @@ import { z } from 'zod';
 // Enums
 // ============================================================================
 
-export enum CodeScanSeverity {
-  CRITICAL = 'critical',
-  HIGH = 'high',
-  MEDIUM = 'medium',
-  LOW = 'low',
-  NONE = 'none',
-}
+export const CodeScanSeverity = {
+  CRITICAL: 'critical',
+  HIGH: 'high',
+  MEDIUM: 'medium',
+  LOW: 'low',
+  NONE: 'none',
+} as const;
+export type CodeScanSeverity = (typeof CodeScanSeverity)[keyof typeof CodeScanSeverity];
 
-export enum FileChangeStatus {
-  ADDED = 'added',
-  MODIFIED = 'modified',
-  REMOVED = 'removed',
-  RENAMED = 'renamed',
-}
+// Zod schema for CodeScanSeverity validation
+export const CodeScanSeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'none']);
+
+export const FileChangeStatus = {
+  ADDED: 'added',
+  MODIFIED: 'modified',
+  REMOVED: 'removed',
+  RENAMED: 'renamed',
+} as const;
+export type FileChangeStatus = (typeof FileChangeStatus)[keyof typeof FileChangeStatus];
 
 // ============================================================================
 // Severity Utility Types
@@ -122,7 +127,7 @@ export function formatSeverity(
  * @returns Object with counts for each severity level
  */
 export function countBySeverity(comments: Array<{ severity?: CodeScanSeverity }>): SeverityCounts {
-  const validSeverities = [
+  const validSeverities: CodeScanSeverity[] = [
     CodeScanSeverity.CRITICAL,
     CodeScanSeverity.HIGH,
     CodeScanSeverity.MEDIUM,
@@ -161,8 +166,8 @@ export function validateSeverity(severity: string): CodeScanSeverity {
   // Normalize input: trim whitespace and convert to lowercase
   const normalized = severity.trim().toLowerCase();
 
-  // Validate against enum using zod
-  return z.nativeEnum(CodeScanSeverity).parse(normalized);
+  // Validate against schema using zod
+  return CodeScanSeveritySchema.parse(normalized);
 }
 
 // ============================================================================
@@ -196,7 +201,7 @@ export const GitMetadataSchema = z.object({
 });
 
 export const ScanConfigSchema = z.object({
-  minimumSeverity: z.nativeEnum(CodeScanSeverity),
+  minimumSeverity: CodeScanSeveritySchema,
   diffsOnly: z.boolean(),
   guidance: z.string().optional(),
 });
@@ -222,7 +227,7 @@ export const CommentSchema = z.object({
   line: z.number().nullable(),
   finding: z.string(),
   fix: z.string().nullable().optional(),
-  severity: z.nativeEnum(CodeScanSeverity).optional(),
+  severity: CodeScanSeveritySchema.optional(),
   aiAgentPrompt: z.string().nullable().optional(),
 });
 
