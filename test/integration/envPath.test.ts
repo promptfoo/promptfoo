@@ -1,21 +1,25 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import fs from 'fs';
 import * as path from 'path';
 import { doEval } from '../../src/commands/eval';
 import { setupEnv } from '../../src/util/index';
 
-jest.mock('../../src/cache');
-jest.mock('../../src/evaluator');
-jest.mock('../../src/globalConfig/accounts');
-jest.mock('../../src/migrate');
-jest.mock('../../src/providers');
-jest.mock('../../src/share');
-jest.mock('../../src/table');
-jest.mock('../../src/util', () => ({
-  ...jest.requireActual('../../src/util'),
-  setupEnv: jest.fn(),
-}));
+vi.mock('../../src/cache');
+vi.mock('../../src/evaluator');
+vi.mock('../../src/globalConfig/accounts');
+vi.mock('../../src/migrate');
+vi.mock('../../src/providers');
+vi.mock('../../src/share');
+vi.mock('../../src/table');
+vi.mock('../../src/util', async () => {
+  const actual = await vi.importActual('../../src/util');
+  return {
+    ...(actual as any),
+    setupEnv: vi.fn(),
+  };
+});
 
-const mockSetupEnv = setupEnv as jest.MockedFunction<typeof setupEnv>;
+const mockSetupEnv = setupEnv as MockedFunction<typeof setupEnv>;
 
 describe('Integration: commandLineOptions.envPath', () => {
   let tempDir: string;
@@ -33,7 +37,7 @@ describe('Integration: commandLineOptions.envPath', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should load environment from config-specified envPath', async () => {
