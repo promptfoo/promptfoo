@@ -1,9 +1,17 @@
+import { vi } from 'vitest';
+
 import chalk from 'chalk';
 import { checkNodeVersion } from '../src/checkNodeVersion';
 import logger from '../src/logger';
 
-jest.mock('../package.json', () => ({
+vi.mock('../package.json', () => ({
   engines: { node: '>=20.0.1' },
+}));
+
+vi.mock('../src/logger', () => ({
+  default: {
+    warn: vi.fn(),
+  },
 }));
 
 const setNodeVersion = (version: string) => {
@@ -18,6 +26,7 @@ describe('checkNodeVersion', () => {
 
   afterEach(() => {
     setNodeVersion(originalProcessVersion);
+    vi.clearAllMocks();
   });
 
   it('should handle version strings correctly and throw if required version is not met', () => {

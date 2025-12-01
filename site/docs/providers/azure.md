@@ -65,14 +65,48 @@ providers:
 
 ## Provider Types
 
-- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-4o, gpt-5-mini, gpt-5, gpt-5-mini, gpt-5-nano)
+- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-5.1, gpt-5.1-mini, gpt-5.1-nano, gpt-5, gpt-4o)
 - `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
-- `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-4.1, gpt-5, o3-mini)
+- `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-4.1, gpt-5.1)
 - `azure:assistant:<assistant id>` - For Azure OpenAI Assistants (using Azure OpenAI API)
 - `azure:foundry-agent:<assistant id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
 
-Vision-capable models (GPT-4o, GPT-4.1) use the standard `azure:chat:` provider type.
+Vision-capable models (GPT-5.1, GPT-4o, GPT-4.1) use the standard `azure:chat:` provider type.
+
+## Available Models
+
+Azure provides access to OpenAI models as well as third-party models through Azure AI Foundry (Microsoft Foundry).
+
+### OpenAI Models
+
+| Category             | Models                                                                         |
+| -------------------- | ------------------------------------------------------------------------------ |
+| **GPT-5 Series**     | `gpt-5.1`, `gpt-5.1-mini`, `gpt-5.1-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano` |
+| **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                      |
+| **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                     |
+| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`                |
+| **Specialized**      | `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`                     |
+| **Deep Research**    | `o3-deep-research`, `o4-mini-deep-research`                                    |
+| **Embeddings**       | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`   |
+
+### Third-Party Models (Azure AI Foundry)
+
+Azure AI Foundry provides access to models from multiple providers:
+
+| Provider             | Models                                                                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anthropic Claude** | `claude-opus-4-5-20251101` (Claude Opus 4.5), `claude-sonnet-4-5-20250929` (Claude Sonnet 4.5), `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022`                                         |
+| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct` |
+| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                         |
+| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                              |
+| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                         |
+| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                         |
+| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                        |
+| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                     |
+| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                            |
+
+For the complete list of 200+ models with pricing, see the [Azure model catalog](https://azure.microsoft.com/en-us/products/ai-services/ai-foundry/).
 
 ## Azure Responses API
 
@@ -108,7 +142,7 @@ providers:
 
 The Responses API supports all Azure OpenAI models:
 
-- **GPT-5 Series**: `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-chat`
+- **GPT-5 Series**: `gpt-5.1`, `gpt-5.1-mini`, `gpt-5.1-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`
 - **GPT-4 Series**: `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
 - **Reasoning Models**: `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`
 - **Specialized Models**: `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`
@@ -679,7 +713,7 @@ This means you're using a reasoning model without setting the `isReasoningModel`
 
 ## Using Vision Models
 
-Azure OpenAI supports vision-capable models like GPT-4o and GPT-4.1 for image analysis.
+Azure OpenAI supports vision-capable models like GPT-5.1, GPT-4o, and GPT-4.1 for image analysis.
 
 ### Configuration
 
@@ -731,7 +765,77 @@ tests:
 
 ### Example
 
-See the [azure-openai example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai) for a complete working example with image analysis. Use `promptfooconfig.vision.yaml` for vision-specific features.
+See the [Azure OpenAI example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/openai) for a complete working example with image analysis. Use `promptfooconfig.vision.yaml` for vision-specific features.
+
+## Using Claude Models
+
+Azure AI Foundry provides access to Anthropic Claude models. These models use the standard Azure chat endpoint:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: azure:chat:claude-opus-4-5-20251101
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 4096
+      temperature: 0.7
+```
+
+Available Claude models on Azure:
+
+| Model                        | Description                              |
+| ---------------------------- | ---------------------------------------- |
+| `claude-opus-4-5-20251101`   | Claude Opus 4.5 - Most capable model     |
+| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 - Balanced performance |
+| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet                        |
+| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku - Fast, efficient       |
+
+### Claude Configuration Example
+
+```yaml title="promptfooconfig.yaml"
+description: Azure Claude evaluation
+
+providers:
+  - id: azure:chat:claude-sonnet-4-5-20250929
+    label: claude-sonnet
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 4096
+      temperature: 0.7
+
+prompts:
+  - 'Explain {{concept}} in simple terms.'
+
+tests:
+  - vars:
+      concept: quantum computing
+    assert:
+      - type: contains-any
+        value: ['qubit', 'superposition']
+```
+
+## Using Llama Models
+
+Azure AI Foundry provides access to Meta's Llama models, including Llama 4:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: azure:chat:Llama-4-Maverick-17B-128E-Instruct-FP8
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 4096
+```
+
+Available Llama models include:
+
+- `Llama-4-Maverick-17B-128E-Instruct-FP8` - Llama 4 Maverick (128 experts)
+- `Llama-4-Scout-17B-16E-Instruct` - Llama 4 Scout (16 experts)
+- `Llama-3.3-70B-Instruct` - Llama 3.3 70B
+- `Meta-Llama-3.1-405B-Instruct` - Llama 3.1 405B
+- `Meta-Llama-3.1-70B-Instruct` - Llama 3.1 70B
+- `Meta-Llama-3.1-8B-Instruct` - Llama 3.1 8B
 
 ## Using DeepSeek Models
 
@@ -876,7 +980,7 @@ tests:
       topic: bananas
 ```
 
-For complete working examples of Azure OpenAI Assistants with various tool configurations, check out the [azure-openai-assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant).
+For complete working examples of Azure OpenAI Assistants with various tool configurations, check out the [Azure Assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant).
 
 See the guide on [How to evaluate OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.
 
@@ -1100,11 +1204,18 @@ Use standard Azure Assistants when:
 
 ### Example Repository
 
-For complete working examples, check out the [azure-foundry-agent example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-foundry-agent).
+For complete working examples, check out the [Azure Foundry Agent example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent).
 
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai) - The base provider that Azure shares configuration with
 - [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Learn how to compare different models and instructions
-- [Azure OpenAI Assistant Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant) - Complete working examples with various tool configurations
-- [Azure OpenAI Example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai) - Example configurations including vision model support
+- [Azure Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure) - All Azure examples in one place:
+  - [OpenAI](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/openai) - Chat, vision, and embedding examples
+  - [Claude](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/claude) - Anthropic Claude on Azure AI Foundry
+  - [Llama](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/llama) - Meta Llama models
+  - [DeepSeek](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/deepseek) - DeepSeek reasoning models
+  - [Mistral](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/mistral) - Mistral models
+  - [Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/comparison) - Multi-provider comparison
+  - [Assistants](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant) - Assistant with tools examples
+  - [Foundry Agent](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent) - Azure AI Foundry Agents

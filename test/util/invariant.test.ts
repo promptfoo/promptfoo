@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import invariant from '../../src/util/invariant';
 
 describe('invariant', () => {

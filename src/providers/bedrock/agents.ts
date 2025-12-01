@@ -4,7 +4,7 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { AwsBedrockGenericProvider } from './index';
+import { AwsBedrockGenericProvider } from './base';
 import type {
   BedrockAgentRuntimeClient,
   InvokeAgentCommandInput,

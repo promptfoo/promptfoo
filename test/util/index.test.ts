@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -29,16 +30,16 @@ import {
 } from '../../src/util/index';
 import { TestGrader } from './utils';
 
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(),
 }));
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
   hasMagic: (path: string) => {
     // Match the real hasMagic behavior: only detect patterns in forward-slash paths
     // This mimics glob's actual behavior where backslash paths return false
@@ -46,24 +47,32 @@ jest.mock('glob', () => ({
   },
 }));
 
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs');
+  return {
+    ...actual,
+    readFileSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    statSync: vi.fn(),
+    readdirSync: vi.fn(),
+    existsSync: vi.fn(),
+    mkdirSync: vi.fn(),
+  };
+});
+
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn(),
 }));
 
-jest.mock('../../src/esm');
+// Import after mocking
+import { importModule } from '../../src/esm';
 
-jest.mock('../../src/python/pythonUtils', () => ({
-  runPython: jest.fn(),
+vi.mock('../../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
 }));
 
-jest.mock('../../src/googleSheets', () => ({
-  writeCsvToGoogleSheet: jest.fn(),
+vi.mock('../../src/googleSheets', () => ({
+  writeCsvToGoogleSheet: vi.fn(),
 }));
 
 describe('maybeLoadToolsFromExternalFile', () => {
@@ -73,9 +82,9 @@ describe('maybeLoadToolsFromExternalFile', () => {
   ];
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+    vi.resetAllMocks();
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
   });
 
   it('should process tool objects directly', async () => {
@@ -177,8 +186,8 @@ describe('maybeLoadToolsFromExternalFile', () => {
     it('should throw error for invalid string content', async () => {
       // Simulate a text file being loaded
       const textContent = 'this is not valid JSON or YAML';
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.readFileSync).mockReturnValue(textContent);
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(textContent);
 
       const tools = 'file://tools.txt';
 
@@ -193,8 +202,8 @@ describe('maybeLoadToolsFromExternalFile', () => {
     name: test
     parameters:
       type: object`;
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(yamlContent);
 
       const tools = 'file://tools.yaml';
       const result = await maybeLoadToolsFromExternalFile(tools);
@@ -207,8 +216,8 @@ describe('maybeLoadToolsFromExternalFile', () => {
       const jsonContent = JSON.stringify([
         { type: 'function', function: { name: 'test', parameters: { type: 'object' } } },
       ]);
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.readFileSync).mockReturnValue(jsonContent);
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(jsonContent);
 
       const tools = 'file://tools.json';
       const result = await maybeLoadToolsFromExternalFile(tools);
@@ -234,8 +243,8 @@ describe('maybeLoadToolsFromExternalFile', () => {
     });
 
     it('should reject number return types from functions', async () => {
-      const { importModule } = jest.requireMock('../../src/esm');
-      importModule.mockResolvedValue({
+      const mockedImportModule = vi.mocked(importModule);
+      mockedImportModule.mockResolvedValue({
         getTools: () => 42,
       });
 
@@ -246,8 +255,8 @@ describe('maybeLoadToolsFromExternalFile', () => {
     });
 
     it('should reject boolean return types from functions', async () => {
-      const { importModule } = jest.requireMock('../../src/esm');
-      importModule.mockResolvedValue({
+      const mockedImportModule = vi.mocked(importModule);
+      mockedImportModule.mockResolvedValue({
         getTools: () => true,
       });
 
@@ -258,9 +267,9 @@ describe('maybeLoadToolsFromExternalFile', () => {
     });
 
     it('should handle async function exports from JS files', async () => {
-      const { importModule } = jest.requireMock('../../src/esm');
+      const mockedImportModule = vi.mocked(importModule);
       const expectedTools = [{ type: 'function', function: { name: 'asyncTool' } }];
-      importModule.mockResolvedValue({
+      mockedImportModule.mockResolvedValue({
         getTools: async () => expectedTools,
       });
 
@@ -271,8 +280,8 @@ describe('maybeLoadToolsFromExternalFile', () => {
     });
 
     it('should show empty exports message when no functions available', async () => {
-      const { importModule } = jest.requireMock('../../src/esm');
-      importModule.mockResolvedValue({
+      const mockedImportModule = vi.mocked(importModule);
+      mockedImportModule.mockResolvedValue({
         default: {},
       });
 
@@ -283,9 +292,9 @@ describe('maybeLoadToolsFromExternalFile', () => {
     });
 
     it('should handle JavaScript syntax errors gracefully', async () => {
-      const { importModule } = jest.requireMock('../../src/esm');
+      const mockedImportModule = vi.mocked(importModule);
       const syntaxError = new SyntaxError('Unexpected token )');
-      importModule.mockRejectedValue(syntaxError);
+      mockedImportModule.mockRejectedValue(syntaxError);
 
       const tools = 'file://tools.js:getTools';
       await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Failed to load tools/);
@@ -295,8 +304,9 @@ describe('maybeLoadToolsFromExternalFile', () => {
     it('should handle Python syntax errors gracefully', async () => {
       // Mock runPython to simulate a Python syntax error
       const { runPython } = await import('../../src/python/pythonUtils');
-      const mockRunPython = runPython as jest.MockedFunction<typeof runPython>;
-      mockRunPython.mockRejectedValue(new Error('SyntaxError: invalid syntax (tools.py, line 2)'));
+      vi.mocked(runPython).mockRejectedValue(
+        new Error('SyntaxError: invalid syntax (tools.py, line 2)'),
+      );
 
       const tools = 'file://tools.py:get_tools';
       await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Failed to load tools/);
@@ -307,24 +317,24 @@ describe('maybeLoadToolsFromExternalFile', () => {
 
 describe('util', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('writeOutput', () => {
-    let consoleLogSpy: jest.SpyInstance;
+    let consoleLogSpy: MockInstance;
 
     beforeEach(() => {
-      consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       // @ts-ignore
-      jest.mocked(getDb).mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([]),
+      vi.mocked(getDb).mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([]),
           }),
         }),
-        insert: jest.fn().mockReturnValue({
-          values: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([]),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([]),
           }),
         }),
       });
@@ -335,15 +345,15 @@ describe('util', () => {
     });
     it('writeOutput with CSV output', async () => {
       // @ts-ignore
-      jest.mocked(getDb).mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockReturnValue({ all: jest.fn().mockResolvedValue([]) }),
+      vi.mocked(getDb).mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
           }),
         }),
-        insert: jest.fn().mockReturnValue({
-          values: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([]),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([]),
           }),
         }),
       });
@@ -419,7 +429,7 @@ describe('util', () => {
 
     it('writeOutput with HTML template escapes special characters', async () => {
       // Use the real fs module to read the template
-      const realFs = jest.requireActual('fs') as typeof fs;
+      const realFs = await vi.importActual<typeof import('fs')>('fs');
       const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
       const templateContent = realFs.readFileSync(templatePath, 'utf-8');
 
@@ -449,7 +459,7 @@ describe('util', () => {
   describe('readOutput', () => {
     it('reads JSON output', async () => {
       const outputPath = 'output.json';
-      jest.mocked(fs.readFileSync).mockReturnValue('{}');
+      vi.mocked(fs.readFileSync).mockReturnValue('{}');
       const output = await readOutput(outputPath);
       expect(output).toEqual({});
     });
@@ -478,11 +488,11 @@ describe('util', () => {
   });
 
   it('readFilters', async () => {
-    const mockFilter = jest.fn();
-    const { importModule } = jest.requireMock('../../src/esm');
+    const mockFilter = vi.fn();
+    const mockedImportModule = vi.mocked(importModule);
 
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
-    importModule.mockResolvedValueOnce(mockFilter);
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+    mockedImportModule.mockResolvedValueOnce(mockFilter);
 
     const filters = await readFilters({ testFilter: 'filter.js' });
 
@@ -707,11 +717,11 @@ describe('util', () => {
 
   describe('parsePathOrGlob', () => {
     afterEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should parse a simple file path with extension', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'file.txt')).toEqual({
         extension: '.txt',
         functionName: undefined,
@@ -721,7 +731,7 @@ describe('util', () => {
     });
 
     it('should parse a file path with function name', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'file.py:myFunction')).toEqual({
         extension: '.py',
         functionName: 'myFunction',
@@ -731,7 +741,7 @@ describe('util', () => {
     });
 
     it('should parse a Go file path with function name', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'script.go:CallApi')).toEqual({
         extension: '.go',
         functionName: 'CallApi',
@@ -741,7 +751,7 @@ describe('util', () => {
     });
 
     it('should parse a directory path', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
       expect(parsePathOrGlob('/base', 'dir')).toEqual({
         extension: undefined,
         functionName: undefined,
@@ -751,7 +761,7 @@ describe('util', () => {
     });
 
     it('should handle non-existent file path gracefully when PROMPTFOO_STRICT_FILES is false', async () => {
-      jest.spyOn(fs, 'statSync').mockImplementation(() => {
+      vi.spyOn(fs, 'statSync').mockImplementation(() => {
         throw new Error('File does not exist');
       });
       expect(parsePathOrGlob('/base', 'nonexistent.js')).toEqual({
@@ -764,7 +774,7 @@ describe('util', () => {
 
     it('should throw an error for non-existent file path when PROMPTFOO_STRICT_FILES is true', async () => {
       process.env.PROMPTFOO_STRICT_FILES = 'true';
-      jest.spyOn(fs, 'statSync').mockImplementation(() => {
+      vi.spyOn(fs, 'statSync').mockImplementation(() => {
         throw new Error('File does not exist');
       });
       expect(() => parsePathOrGlob('/base', 'nonexistent.js')).toThrow('File does not exist');
@@ -772,13 +782,13 @@ describe('util', () => {
     });
 
     it('should properly test file existence when function name in the path', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       parsePathOrGlob('/base', 'script.py:myFunction');
       expect(fs.statSync).toHaveBeenCalledWith(path.join('/base', 'script.py'));
     });
 
     it('should return empty extension for files without extension', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'file')).toEqual({
         extension: '',
         functionName: undefined,
@@ -788,7 +798,7 @@ describe('util', () => {
     });
 
     it('should handle relative paths', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('./base', 'file.txt')).toEqual({
         extension: '.txt',
         functionName: undefined,
@@ -798,7 +808,7 @@ describe('util', () => {
     });
 
     it('should handle paths with environment variables', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       process.env.FILE_PATH = 'file.txt';
       expect(parsePathOrGlob('/base', process.env.FILE_PATH)).toEqual({
         extension: '.txt',
@@ -810,7 +820,7 @@ describe('util', () => {
     });
 
     it('should handle glob patterns in file path', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', '*.js')).toEqual({
         extension: undefined,
         functionName: undefined,
@@ -820,7 +830,7 @@ describe('util', () => {
     });
 
     it('should handle complex file paths', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'dir/subdir/file.py:func')).toEqual({
         extension: '.py',
         functionName: 'func',
@@ -830,7 +840,7 @@ describe('util', () => {
     });
 
     it('should handle non-standard file extensions', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'file.customext')).toEqual({
         extension: '.customext',
         functionName: undefined,
@@ -840,7 +850,7 @@ describe('util', () => {
     });
 
     it('should handle deeply nested file paths', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'a/b/c/d/e/f/g/file.py:func')).toEqual({
         extension: '.py',
         functionName: 'func',
@@ -850,7 +860,7 @@ describe('util', () => {
     });
 
     it('should handle complex directory paths', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
       expect(parsePathOrGlob('/base', 'a/b/c/d/e/f/g')).toEqual({
         extension: undefined,
         functionName: undefined,
@@ -860,7 +870,7 @@ describe('util', () => {
     });
 
     it('should join basePath and safeFilename correctly', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       const basePath = 'base';
       const relativePath = 'relative/path/to/file.txt';
       expect(parsePathOrGlob(basePath, relativePath)).toEqual({
@@ -872,7 +882,7 @@ describe('util', () => {
     });
 
     it('should handle empty basePath', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('', 'file.txt')).toEqual({
         extension: '.txt',
         functionName: undefined,
@@ -882,7 +892,7 @@ describe('util', () => {
     });
 
     it('should handle file:// prefix', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('', 'file://file.txt')).toEqual({
         extension: '.txt',
         functionName: undefined,
@@ -892,7 +902,7 @@ describe('util', () => {
     });
 
     it('should handle file://./... with absolute base path', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/absolute/base', 'file://./prompts/file.txt')).toEqual({
         extension: '.txt',
         functionName: undefined,
@@ -902,7 +912,7 @@ describe('util', () => {
     });
 
     it('should handle file://./... with relative base path', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('relative/base', 'file://file.txt')).toEqual({
         extension: '.txt',
         functionName: undefined,
@@ -912,7 +922,7 @@ describe('util', () => {
     });
 
     it('should handle file:// prefix with Go function', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'file://script.go:CallApi')).toEqual({
         extension: '.go',
         functionName: 'CallApi',
@@ -922,7 +932,7 @@ describe('util', () => {
     });
 
     it('should handle file:// prefix with absolute path and Go function', async () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'file:///absolute/path/script.go:CallApi')).toEqual({
         extension: '.go',
         functionName: 'CallApi',
@@ -953,9 +963,8 @@ describe('util', () => {
 
 describe('setupEnv', () => {
   let originalEnv: typeof process.env;
-  let dotenvConfigSpy: jest.SpyInstance<
-    dotenv.DotenvConfigOutput,
-    [options?: dotenv.DotenvConfigOptions]
+  let dotenvConfigSpy: MockInstance<
+    (options?: dotenv.DotenvConfigOptions) => dotenv.DotenvConfigOutput
   >;
 
   beforeEach(() => {
@@ -963,12 +972,12 @@ describe('setupEnv', () => {
     // Ensure NODE_ENV is not set at the start of each test
     delete process.env.NODE_ENV;
     // Spy on dotenv.config to verify it's called with the right parameters
-    dotenvConfigSpy = jest.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
+    dotenvConfigSpy = vi.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should call dotenv.config with quiet=true when envPath is undefined', async () => {
@@ -1108,7 +1117,7 @@ describe('renderVarsInObject', () => {
   });
 
   it('should handle function objects by calling them with vars', async () => {
-    const mockFunction = jest.fn().mockReturnValue({ result: '{{ value }}' });
+    const mockFunction = vi.fn().mockReturnValue({ result: '{{ value }}' });
     const vars = { value: 'function_result' };
     const rendered = renderVarsInObject(mockFunction, vars);
 
@@ -1178,7 +1187,7 @@ describe('renderVarsInObject', () => {
   });
 
   it('should handle function that returns complex object structure', async () => {
-    const complexFunction = jest.fn().mockReturnValue({
+    const complexFunction = vi.fn().mockReturnValue({
       data: {
         items: ['{{ item1 }}', '{{ item2 }}'],
         metadata: { value: '{{ meta }}' },
@@ -1618,14 +1627,14 @@ describe('createOutputMetadata', () => {
   });
 
   it('should create consistent exportedAt timestamps', async () => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date('2025-01-15T10:30:00.000Z'));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-15T10:30:00.000Z'));
 
     const evalRecord = {} as any as Eval;
     const metadata = createOutputMetadata(evalRecord);
 
     expect(metadata.exportedAt).toBe('2025-01-15T10:30:00.000Z');
 
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 });

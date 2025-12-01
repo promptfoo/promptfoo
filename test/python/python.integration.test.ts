@@ -1,7 +1,8 @@
-import { PythonProvider } from '../../src/providers/pythonCompletion';
 import fs from 'fs';
-import path from 'path';
 import os from 'os';
+import path from 'path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 
 describe('Python Provider Integration Tests', () => {
   let tempFiles: string[] = [];

@@ -24,7 +24,7 @@ providers:
 
 | API Providers                                       | Description                                                  | Syntax & Example                                                                |
 | --------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| [OpenAI](./openai.md)                               | GPT models including GPT-5 and reasoning models              | `openai:gpt-5` or `openai:gpt-5-mini`                                           |
+| [OpenAI](./openai.md)                               | GPT models including GPT-5.1 and reasoning models            | `openai:gpt-5.1` or `openai:o4-mini`                                            |
 | [Anthropic](./anthropic.md)                         | Claude models                                                | `anthropic:messages:claude-sonnet-4-5-20250929`                                 |
 | [Claude Agent SDK](./claude-agent-sdk.md)           | Claude Agent SDK                                             | `anthropic:claude-agent-sdk`                                                    |
 | [HTTP](./http.md)                                   | Generic HTTP-based providers                                 | `https://api.example.com/v1/chat/completions`                                   |
@@ -32,6 +32,9 @@ providers:
 | [Python](./python.md)                               | Custom - Python file                                         | `file://path/to/custom_provider.py`                                             |
 | [Ruby](./ruby.md)                                   | Custom - Ruby file                                           | `file://path/to/custom_provider.rb`                                             |
 | [Shell Command](./custom-script.md)                 | Custom - script-based providers                              | `exec: python chain.py`                                                         |
+| [Claude Agent SDK](./claude-agent-sdk.md)           | Claude Agent SDK                                             | `anthropic:claude-agent-sdk`                                                    |
+| [OpenAI ChatKit](./openai-chatkit.md)               | ChatKit workflows from Agent Builder                         | `openai:chatkit:wf_xxxxx`                                                       |
+| [OpenAI Codex SDK](./openai-codex-sdk.md)           | OpenAI Codex SDK for code generation and analysis            | `openai:codex-sdk`                                                              |
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                                    | `ai21:jamba-1.5-mini`                                                           |
 | [AI/ML API](./aimlapi.md)                           | Tap into 300+ cutting-edge AI models with a single API       | `aimlapi:chat:deepseek-r1`                                                      |
 | [Alibaba Cloud (Qwen)](./alibaba.md)                | Alibaba Cloud's Qwen models                                  | `alibaba:qwen-max` or `qwen-plus`                                               |

@@ -1,16 +1,17 @@
+import { vi } from 'vitest';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { matchesLlmRubric } from '../../src/matchers';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
-jest.mock('../../src/matchers');
+vi.mock('../../src/matchers');
 
 describe('handleLlmRubric', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
-  const mockMatchesLlmRubric = jest.mocked(matchesLlmRubric);
+  const mockMatchesLlmRubric = vi.mocked(matchesLlmRubric);
 
   const defaultParams: AssertionParams = {
     assertion: {

@@ -1,47 +1,52 @@
+import { vi } from 'vitest';
 import * as path from 'path';
 
 import cliState from '../../src/cliState';
+import { importModule } from '../../src/esm';
 import * as matchers from '../../src/matchers';
 
 import type { ProviderResponse } from '../../src/types/index';
 
 // Mock dependencies
-jest.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+vi.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-jest.mock('better-sqlite3');
+vi.mock('better-sqlite3');
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('node:module', () => {
+vi.mock('node:module', () => {
   const mockRequire: NodeJS.Require = {
-    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
+    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
   } as unknown as NodeJS.Require;
   return {
-    createRequire: jest.fn().mockReturnValue(mockRequire),
+    createRequire: vi.fn().mockReturnValue(mockRequire),
   };
 });
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
 }));
 
-jest.mock('../../src/esm');
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn(),
+  getDirectory: vi.fn().mockReturnValue('/test/dir'),
+}));
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(),
 }));
 
-jest.mock('../../src/matchers', () => {
-  const actual = jest.requireActual('../../src/matchers');
+vi.mock('../../src/matchers', async () => {
+  const actual = await vi.importActual('../../src/matchers');
   return {
     ...actual,
-    matchesLlmRubric: jest.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
-    matchesFactuality: jest.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
-    matchesClosedQa: jest.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
-    matchesSimilarity: jest.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
+    matchesLlmRubric: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
+    matchesFactuality: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
+    matchesClosedQa: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
+    matchesSimilarity: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
   };
 });
 
@@ -49,11 +54,10 @@ describe('Script value resolution', () => {
   const originalBasePath = cliState.basePath;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
 
     // Restore importModule mock implementation after reset
-    const { importModule } = jest.requireMock('../../src/esm');
-    importModule.mockImplementation((filePath: string, functionName?: string) => {
+    vi.mocked(importModule).mockImplementation((filePath: string, functionName?: string) => {
       const mod = require(path.resolve(filePath));
       if (functionName) {
         return Promise.resolve(mod[functionName]);
@@ -76,7 +80,7 @@ describe('Script value resolution', () => {
   describe('llm-rubric with file:// script', () => {
     it('should pass script output to matchesLlmRubric', async () => {
       const { runAssertion } = await import('../../src/assertions/index');
-      const mockMatchesLlmRubric = jest.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({
@@ -101,7 +105,7 @@ describe('Script value resolution', () => {
 
     it('should pass direct value to matchesLlmRubric when no script', async () => {
       const { runAssertion } = await import('../../src/assertions/index');
-      const mockMatchesLlmRubric = jest.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({
@@ -126,7 +130,7 @@ describe('Script value resolution', () => {
 
     it('should pass object returned by script to matchesLlmRubric', async () => {
       const { runAssertion } = await import('../../src/assertions/index');
-      const mockMatchesLlmRubric = jest.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({

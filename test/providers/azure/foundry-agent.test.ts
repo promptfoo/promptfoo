@@ -1,21 +1,29 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 
-jest.mock('../../../src/cache', () => ({
-  getCache: jest.fn(),
-  isCacheEnabled: jest.fn().mockReturnValue(false),
-}));
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getCache: vi.fn(),
+    isCacheEnabled: vi.fn().mockReturnValue(false),
+  };
+});
 
-jest.mock('../../../src/util/time', () => ({
-  sleep: jest.fn().mockResolvedValue(undefined),
-}));
+vi.mock('../../../src/util/time', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    sleep: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
-jest.mock('../../../src/logger', () => ({
+vi.mock('../../../src/logger', () => ({
   __esModule: true,
   default: {
-    debug: jest.fn(),
-    error: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -27,13 +35,13 @@ const mockRunCompleted = { id: 'run-123', status: 'completed' };
 
 const mockClient = {
   agents: {
-    getAgent: jest.fn().mockResolvedValue(mockAgent),
+    getAgent: vi.fn().mockResolvedValue(mockAgent),
     threads: {
-      create: jest.fn().mockResolvedValue(mockThread),
+      create: vi.fn().mockResolvedValue(mockThread),
     },
     messages: {
-      create: jest.fn().mockResolvedValue(mockMessage),
-      list: jest.fn().mockReturnValue({
+      create: vi.fn().mockResolvedValue(mockMessage),
+      list: vi.fn().mockReturnValue({
         async *[Symbol.asyncIterator]() {
           yield {
             id: 'msg-1',
@@ -44,9 +52,9 @@ const mockClient = {
       }),
     },
     runs: {
-      create: jest.fn().mockResolvedValue(mockRunCompleted),
-      get: jest.fn().mockResolvedValue(mockRunCompleted),
-      submitToolOutputs: jest.fn().mockResolvedValue(mockRunCompleted),
+      create: vi.fn().mockResolvedValue(mockRunCompleted),
+      get: vi.fn().mockResolvedValue(mockRunCompleted),
+      submitToolOutputs: vi.fn().mockResolvedValue(mockRunCompleted),
     },
   },
 };
@@ -56,12 +64,26 @@ const mockClient = {
 
 describe('Azure Foundry Agent Provider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    process.env.AZURE_API_HOST = 'test.azure.com';
+    process.env.AZURE_API_KEY = 'test-key';
+    vi.spyOn(AzureFoundryAgentProvider.prototype as any, 'ensureInitialized').mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(AzureFoundryAgentProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
+      'api-key': 'test-key',
+    });
 
     // Mock the initializeClient private method to return our mock client
-    jest
-      .spyOn(AzureFoundryAgentProvider.prototype as any, 'initializeClient')
-      .mockResolvedValue(mockClient);
+    vi.spyOn(AzureFoundryAgentProvider.prototype as any, 'initializeClient').mockResolvedValue(
+      mockClient,
+    );
+  });
+
+  afterEach(() => {
+    delete process.env.AZURE_API_HOST;
+    delete process.env.AZURE_API_KEY;
+    vi.restoreAllMocks();
   });
 
   describe('instantiation', () => {
