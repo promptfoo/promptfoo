@@ -126,34 +126,25 @@ describe('constants', () => {
     expect(new Set(ALL_PLUGINS)).toEqual(expectedPlugins);
   });
 
-  it('CONFIG_REQUIRED_PLUGINS should have valid configurations', () => {
-    expect(CONFIG_REQUIRED_PLUGINS).toHaveProperty('policy');
-    expect(CONFIG_REQUIRED_PLUGINS.policy).toEqual({
-      key: 'policy',
-      required: true,
-    });
-    expect(CONFIG_REQUIRED_PLUGINS['prompt-extraction']).toEqual({
-      key: 'systemPrompt',
-      required: true,
-    });
+  it('CONFIG_REQUIRED_PLUGINS should have valid plugins', () => {
+    expect(CONFIG_REQUIRED_PLUGINS).toContain('policy');
+    expect(CONFIG_REQUIRED_PLUGINS).toContain('intent');
+    expect(Array.isArray(CONFIG_REQUIRED_PLUGINS)).toBe(true);
   });
 
   describe('categoryDescriptions', () => {
     it('should have descriptions for all categories', () => {
       const expectedKeys = [
-        'Security',
-        'Legal',
+        'Security & Access Control',
+        'Compliance & Legal',
+        'Trust & Safety',
         'Brand',
-        'Accuracy',
-        'Fairness',
-        'Harm',
-        'PII',
-        'Custom',
-        'Compliance',
+        'Datasets',
+        'Domain-Specific Risks',
       ];
       expectedKeys.forEach((key) => {
         expect(categoryDescriptions).toHaveProperty(key);
-        expect(categoryDescriptions[key]).toBeTruthy();
+        expect(categoryDescriptions[key as keyof typeof categoryDescriptions]).toBeTruthy();
       });
     });
   });
