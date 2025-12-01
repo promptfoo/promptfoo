@@ -51,6 +51,8 @@ export default defineConfig({
       'test/sagemaker.test.ts',
       'test/main.test.ts',
       'test/guardrails.test.ts',
+      'test/evaluatorHelpers-skiprender.test.ts',
+      'test/evaluator.progress.test.ts',
     ],
     // Exclude integration tests
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],

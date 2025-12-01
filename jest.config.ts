@@ -65,6 +65,8 @@ const config: Config = {
     '<rootDir>/test/sagemaker.test.ts',
     '<rootDir>/test/main.test.ts',
     '<rootDir>/test/guardrails.test.ts',
+    '<rootDir>/test/evaluatorHelpers-skiprender.test.ts',
+    '<rootDir>/test/evaluator.progress.test.ts',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
