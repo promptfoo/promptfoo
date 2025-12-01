@@ -8,14 +8,18 @@
  * these runtime vars, so deepEqual comparison fails.
  */
 
+import { describe, expect, it, vi } from 'vitest';
+
 import { filterTests } from '../../../src/commands/eval/filterTests';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
 
 import type { TestSuite } from '../../../src/types/index';
 
-jest.mock('../../../src/models/eval', () => ({
-  findById: jest.fn(),
+vi.mock('../../../src/models/eval', () => ({
+  default: {
+    findById: vi.fn(),
+  },
 }));
 
 describe('filterTests - vars mutation bug', () => {
@@ -53,7 +57,7 @@ describe('filterTests - vars mutation bug', () => {
       resultsCount: 0,
       prompts: [],
       persisted: true,
-      toEvaluateSummary: jest.fn().mockResolvedValue({
+      toEvaluateSummary: vi.fn().mockResolvedValue({
         version: 2,
         timestamp: new Date().toISOString(),
         results: [
@@ -99,7 +103,7 @@ describe('filterTests - vars mutation bug', () => {
       }),
     };
 
-    jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+    vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
 
     // When filtering failing tests, it should match based on the original vars
     // not fail because of the extra _conversation property

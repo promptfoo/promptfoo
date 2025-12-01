@@ -1,3 +1,4 @@
+import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
@@ -9,22 +10,28 @@ import { testProviderConnectivity, testProviderSession } from '../../src/validat
 import type { UnifiedConfig } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
 
-jest.mock('../../src/logger');
-jest.mock('../../src/util/config/load');
-jest.mock('../../src/providers/index');
-jest.mock('../../src/validators/testProvider');
-jest.mock('../../src/util/cloud');
-jest.mock('../../src/telemetry', () => ({
-  record: jest.fn(),
-  send: jest.fn(),
+vi.mock('../../src/logger');
+vi.mock('../../src/util/config/load');
+vi.mock('../../src/providers/index');
+vi.mock('../../src/validators/testProvider');
+vi.mock('../../src/util/cloud');
+vi.mock('../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+    send: vi.fn(),
+  },
 }));
-jest.mock('uuid', () => ({
-  validate: jest.fn((str: string) => {
-    // Check if the string looks like a UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(str);
-  }),
-}));
+vi.mock('uuid', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    validate: vi.fn((str: string) => {
+      // Check if the string looks like a UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      return uuidRegex.test(str);
+    }),
+  };
+});
 
 describe('Validate Command Provider Tests', () => {
   let program: Command;
@@ -34,51 +41,51 @@ describe('Validate Command Provider Tests', () => {
   // Mock provider objects
   const mockHttpProvider: ApiProvider = {
     id: () => 'http://example.com',
-    callApi: jest.fn(),
+    callApi: vi.fn(),
     constructor: { name: 'HttpProvider' },
   } as any;
 
   const mockEchoProvider: ApiProvider = {
     id: () => 'echo',
-    callApi: jest.fn(),
+    callApi: vi.fn(),
     constructor: { name: 'EchoProvider' },
   } as any;
 
   const mockOpenAIProvider: ApiProvider = {
     id: 'openai:gpt-4',
-    callApi: jest.fn(),
+    callApi: vi.fn(),
     constructor: { name: 'OpenAIProvider' },
   } as any;
 
   beforeEach(() => {
     program = new Command();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.exitCode = 0;
 
     // Default mock for successful basic connectivity
-    (mockEchoProvider.callApi as jest.Mock).mockResolvedValue({
+    (mockEchoProvider.callApi as Mock).mockResolvedValue({
       output: 'Hello, world!',
     });
 
-    (mockHttpProvider.callApi as jest.Mock).mockResolvedValue({
+    (mockHttpProvider.callApi as Mock).mockResolvedValue({
       output: 'Test response',
     });
 
-    (mockOpenAIProvider.callApi as jest.Mock).mockResolvedValue({
+    (mockOpenAIProvider.callApi as Mock).mockResolvedValue({
       output: 'OpenAI response',
     });
   });
 
   describe('Provider testing with -t flag (specific target)', () => {
     it('should test HTTP provider with comprehensive tests when -t flag is provided and connectivity passes', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
-      jest.mocked(testProviderConnectivity).mockResolvedValue({
+      vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Connectivity test passed',
         providerResponse: { output: 'test' },
         transformedRequest: {},
       });
-      jest.mocked(testProviderSession).mockResolvedValue({
+      vi.mocked(testProviderSession).mockResolvedValue({
         success: true,
         message: 'Session test passed',
       });
@@ -104,8 +111,8 @@ describe('Validate Command Provider Tests', () => {
     });
 
     it('should skip session test when connectivity test fails', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
-      jest.mocked(testProviderConnectivity).mockResolvedValue({
+      vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
         success: false,
         message: 'Connection failed',
         error: 'Network error',
@@ -125,13 +132,13 @@ describe('Validate Command Provider Tests', () => {
     it('should skip session test when target is not stateful (stateful=false)', async () => {
       const mockNonStatefulHttpProvider: ApiProvider = {
         id: () => 'http://example.com',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
         config: { stateful: false },
         constructor: { name: 'HttpProvider' },
       } as any;
 
-      jest.mocked(loadApiProvider).mockResolvedValue(mockNonStatefulHttpProvider);
-      jest.mocked(testProviderConnectivity).mockResolvedValue({
+      vi.mocked(loadApiProvider).mockResolvedValue(mockNonStatefulHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Connectivity test passed',
         providerResponse: { output: 'test' },
@@ -148,7 +155,7 @@ describe('Validate Command Provider Tests', () => {
     });
 
     it('should test non-HTTP provider with basic connectivity only when -t flag is provided', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
@@ -166,8 +173,8 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
 
-      jest.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
-      jest.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
+      vi.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
@@ -196,7 +203,7 @@ describe('Validate Command Provider Tests', () => {
         tests: [],
       };
 
-      jest.mocked(resolveConfigs).mockResolvedValue({
+      vi.mocked(resolveConfigs).mockResolvedValue({
         config: mockValidConfig as any,
         testSuite: mockValidTestSuite as any,
         basePath: '/test',
@@ -226,7 +233,7 @@ describe('Validate Command Provider Tests', () => {
         tests: [],
       };
 
-      jest.mocked(resolveConfigs).mockResolvedValue({
+      vi.mocked(resolveConfigs).mockResolvedValue({
         config: mockValidConfig as any,
         testSuite: mockValidTestSuite as any,
         basePath: '/test',
@@ -241,8 +248,8 @@ describe('Validate Command Provider Tests', () => {
 
   describe('Error handling in provider tests', () => {
     it('should warn but not fail validation when provider test fails', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
-      (mockEchoProvider.callApi as jest.Mock).mockRejectedValue(new Error('Connection failed'));
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+      (mockEchoProvider.callApi as Mock).mockRejectedValue(new Error('Connection failed'));
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
@@ -251,8 +258,8 @@ describe('Validate Command Provider Tests', () => {
     });
 
     it('should warn but not fail validation when provider returns error', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
-      (mockEchoProvider.callApi as jest.Mock).mockResolvedValue({
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+      (mockEchoProvider.callApi as Mock).mockResolvedValue({
         error: 'Provider error',
       });
 
@@ -264,8 +271,8 @@ describe('Validate Command Provider Tests', () => {
     });
 
     it('should warn but not fail validation when provider returns no output', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
-      (mockEchoProvider.callApi as jest.Mock).mockResolvedValue({});
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+      (mockEchoProvider.callApi as Mock).mockResolvedValue({});
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
@@ -276,7 +283,7 @@ describe('Validate Command Provider Tests', () => {
     });
 
     it('should warn when loadApiProvider fails with -t flag', async () => {
-      jest.mocked(loadApiProvider).mockRejectedValue(new Error('Failed to load provider'));
+      vi.mocked(loadApiProvider).mockRejectedValue(new Error('Failed to load provider'));
 
       await doValidateTarget({ target: 'invalid-provider' }, defaultConfig);
 
@@ -291,18 +298,18 @@ describe('Validate Command Provider Tests', () => {
     it('should detect HTTP provider by url in id when using target', async () => {
       const mockHttpProviderById: ApiProvider = {
         id: () => 'http://custom-api.com',
-        callApi: jest.fn().mockResolvedValue({ output: 'HTTP response' }),
+        callApi: vi.fn().mockResolvedValue({ output: 'HTTP response' }),
         constructor: { name: 'HttpProvider' },
       } as any;
 
-      jest.mocked(loadApiProvider).mockResolvedValue(mockHttpProviderById);
-      jest.mocked(testProviderConnectivity).mockResolvedValue({
+      vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProviderById);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Test passed',
         providerResponse: { output: 'test' },
         transformedRequest: {},
       });
-      jest.mocked(testProviderSession).mockResolvedValue({
+      vi.mocked(testProviderSession).mockResolvedValue({
         success: true,
         message: 'Test passed',
       });
@@ -318,7 +325,7 @@ describe('Validate Command Provider Tests', () => {
   describe('Testing without config file', () => {
     it('should test provider with -t flag when no config file is present', async () => {
       // No config paths provided
-      jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
@@ -335,8 +342,8 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
 
-      jest.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
-      jest.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
+      vi.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
@@ -350,7 +357,7 @@ describe('Validate Command Provider Tests', () => {
     });
 
     it('should handle errors gracefully when testing without config', async () => {
-      jest.mocked(loadApiProvider).mockRejectedValue(new Error('Provider not found'));
+      vi.mocked(loadApiProvider).mockRejectedValue(new Error('Provider not found'));
 
       await doValidateTarget({ target: 'invalid-provider' }, defaultConfig);
 

@@ -1,54 +1,42 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
 
-// Create mocks inside the factory to avoid hoisting issues
-jest.mock('playwright', () => {
-  const mockPage = {
-    goto: jest.fn().mockResolvedValue(undefined),
-    waitForFunction: jest.fn().mockResolvedValue(undefined),
-    reload: jest.fn().mockResolvedValue(undefined),
-  };
-
-  const mockContext = {
-    newPage: jest.fn().mockResolvedValue(mockPage),
-    close: jest.fn().mockResolvedValue(undefined),
-    setDefaultTimeout: jest.fn(),
-  };
-
-  const mockBrowser = {
-    newContext: jest.fn().mockResolvedValue(mockContext),
-    close: jest.fn().mockResolvedValue(undefined),
-  };
-
-  return {
-    chromium: {
-      launch: jest.fn().mockResolvedValue(mockBrowser),
-    },
-    __mockPage: mockPage,
-    __mockContext: mockContext,
-    __mockBrowser: mockBrowser,
-  };
-});
-
-// Mock http server
-jest.mock('http', () => ({
-  createServer: jest.fn().mockReturnValue({
-    listen: jest.fn((_port: number, callback: () => void) => callback()),
-    address: jest.fn().mockReturnValue({ port: 3000 }),
-    close: jest.fn(),
-    once: jest.fn(), // Error handler registration
-  }),
+// Create hoisted mocks to access them in tests
+const mockPage = vi.hoisted(() => ({
+  goto: vi.fn().mockResolvedValue(undefined),
+  waitForFunction: vi.fn().mockResolvedValue(undefined),
+  reload: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Get the mocked objects for assertions
-const getMocks = () => {
-  const playwright = require('playwright');
-  return {
-    mockPage: playwright.__mockPage,
-    mockContext: playwright.__mockContext,
-    mockBrowser: playwright.__mockBrowser,
-    chromium: playwright.chromium,
-  };
-};
+const mockContext = vi.hoisted(() => ({
+  newPage: vi.fn().mockResolvedValue(mockPage),
+  close: vi.fn().mockResolvedValue(undefined),
+  setDefaultTimeout: vi.fn(),
+}));
+
+const mockBrowser = vi.hoisted(() => ({
+  newContext: vi.fn().mockResolvedValue(mockContext),
+  close: vi.fn().mockResolvedValue(undefined),
+}));
+
+const mockChromium = vi.hoisted(() => ({
+  launch: vi.fn().mockResolvedValue(mockBrowser),
+}));
+
+// Mock playwright
+vi.mock('playwright', () => ({
+  chromium: mockChromium,
+}));
+
+// Mock http server
+vi.mock('http', () => ({
+  createServer: vi.fn().mockReturnValue({
+    listen: vi.fn((_port: number, callback: () => void) => callback()),
+    address: vi.fn().mockReturnValue({ port: 3000 }),
+    close: vi.fn(),
+    once: vi.fn(), // Error handler registration
+  }),
+}));
 
 // Test constants
 const TEST_TEMPLATE_KEY = 'wf_test123:default:default';
@@ -56,14 +44,14 @@ const TEST_HTML = '<html>test</html>';
 
 describe('ChatKitBrowserPool', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset the singleton between tests
     ChatKitBrowserPool.resetInstance();
   });
 
   afterEach(async () => {
     // Use clearAllMocks instead of resetAllMocks to preserve mock implementations
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Ensure clean state after each test
     ChatKitBrowserPool.resetInstance();
   });
@@ -162,7 +150,6 @@ describe('ChatKitBrowserPool', () => {
 
   describe('initialize', () => {
     it('should start HTTP server and launch browser', async () => {
-      const { mockBrowser } = getMocks();
       const instance = ChatKitBrowserPool.getInstance();
 
       await instance.initialize();
@@ -173,31 +160,28 @@ describe('ChatKitBrowserPool', () => {
     });
 
     it('should not reinitialize if already initialized', async () => {
-      const { chromium } = getMocks();
       const instance = ChatKitBrowserPool.getInstance();
 
       await instance.initialize();
       await instance.initialize();
 
       // Should only launch browser once
-      expect(chromium.launch).toHaveBeenCalledTimes(1);
+      expect(mockChromium.launch).toHaveBeenCalledTimes(1);
     });
 
     it('should handle concurrent initialization calls', async () => {
-      const { chromium } = getMocks();
       const instance = ChatKitBrowserPool.getInstance();
 
       // Multiple concurrent initialize calls
       await Promise.all([instance.initialize(), instance.initialize(), instance.initialize()]);
 
       // Should still only launch browser once
-      expect(chromium.launch).toHaveBeenCalledTimes(1);
+      expect(mockChromium.launch).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('acquirePage', () => {
     it('should create a new page when pool is empty', async () => {
-      const { mockPage, mockContext } = getMocks();
       const instance = ChatKitBrowserPool.getInstance();
       instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
 
@@ -277,7 +261,6 @@ describe('ChatKitBrowserPool', () => {
     });
 
     it('should reload page for fresh state', async () => {
-      const { mockPage } = getMocks();
       const instance = ChatKitBrowserPool.getInstance();
       instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
 
@@ -335,7 +318,6 @@ describe('ChatKitBrowserPool', () => {
 
   describe('shutdown', () => {
     it('should close all contexts and browser', async () => {
-      const { mockContext, mockBrowser } = getMocks();
       const instance = ChatKitBrowserPool.getInstance();
       instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
 
@@ -379,8 +361,7 @@ describe('ChatKitBrowserPool', () => {
 
   describe('error handling', () => {
     it('should throw helpful error when Playwright not installed', async () => {
-      const { chromium } = getMocks();
-      chromium.launch.mockRejectedValueOnce(
+      mockChromium.launch.mockRejectedValueOnce(
         new Error("Executable doesn't exist at /path/to/browser"),
       );
 
