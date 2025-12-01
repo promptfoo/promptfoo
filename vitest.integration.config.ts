@@ -6,9 +6,14 @@ export default defineConfig({
       interopDefault: true,
     },
     environment: 'node',
-    exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
+    exclude: ['**/node_modules/**'],
     globals: true,
-    include: ['test/**/*.test.ts'],
+    include: ['**/*.integration.test.ts'],
+    poolOptions: {
+      threads: {
+        maxThreads: 2,
+      },
+    },
     root: '.',
     setupFiles: ['./vitest.setup.ts'],
   },

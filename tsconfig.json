@@ -27,17 +27,18 @@
     "src/types/globals.d.ts"
   ],
   "exclude": [
-    "node_modules",
     "dist",
-    "src/workers/**/*",
+    "node_modules",
     "src/app/**/*",
+    "src/workers/**/*",
     "test/app/**/*",
-    "test/site/",
+    "test/code-scan-action/**/*",
     "test/codeScans/**/*",
-    "test/matchers/**/*",
     "test/database/**/*",
+    "test/matchers/**/*",
+    "test/site/",
     "test/testCase/**/*",
-    "test/validators/**/*",
-    "test/utils/**/*"
+    "test/utils/**/*",
+    "test/validators/**/*"
   ]
 }
