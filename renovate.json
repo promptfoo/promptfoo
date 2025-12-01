@@ -2,6 +2,7 @@
   "extends": ["config:base", ":disableDependencyDashboard"],
   "pinVersions": false,
   "rebaseStalePrs": true,
+  "separateMajorMinor": true,
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -16,27 +17,16 @@
     "code-scan-action/package.json",
     "examples/**/package.json"
   ],
-  "separateMajorMinor": true,
   "packageRules": [
-    {
-      "description": "Group @inquirer packages together",
-      "matchPackagePatterns": ["^@inquirer/"],
-      "groupName": "@inquirer packages"
-    },
-    {
-      "description": "Group AWS SDK packages together",
-      "matchPackagePatterns": ["^@aws-sdk/", "^@smithy/"],
-      "groupName": "AWS SDK packages"
-    },
     {
       "description": "Group @adaline provider packages together",
       "matchPackagePatterns": ["^@adaline/"],
       "groupName": "@adaline packages"
     },
     {
-      "description": "Group Azure packages together",
-      "matchPackagePatterns": ["^@azure/"],
-      "groupName": "Azure packages"
+      "description": "Group @inquirer packages together",
+      "matchPackagePatterns": ["^@inquirer/"],
+      "groupName": "@inquirer packages"
     },
     {
       "description": "Group Anthropic packages together",
@@ -44,14 +34,19 @@
       "groupName": "Anthropic packages"
     },
     {
-      "description": "Group OpenAI packages together",
-      "matchPackagePatterns": ["^@openai/", "^openai$"],
-      "groupName": "OpenAI packages"
+      "description": "Group AWS SDK packages together",
+      "matchPackagePatterns": ["^@aws-sdk/", "^@smithy/"],
+      "groupName": "AWS SDK packages"
     },
     {
-      "description": "Group MUI packages together",
-      "matchPackagePatterns": ["^@mui/", "^@emotion/"],
-      "groupName": "MUI packages"
+      "description": "Group Azure packages together",
+      "matchPackagePatterns": ["^@azure/"],
+      "groupName": "Azure packages"
+    },
+    {
+      "description": "Group Biome packages together",
+      "matchPackagePatterns": ["^@biomejs/"],
+      "groupName": "Biome"
     },
     {
       "description": "Group Docusaurus packages together",
@@ -59,14 +54,9 @@
       "groupName": "Docusaurus packages"
     },
     {
-      "description": "Group testing library packages together",
-      "matchPackagePatterns": ["^@testing-library/"],
-      "groupName": "Testing library packages"
-    },
-    {
-      "description": "Group TanStack packages together",
-      "matchPackagePatterns": ["^@tanstack/"],
-      "groupName": "TanStack packages"
+      "description": "Group GitHub Actions packages together",
+      "matchPackagePatterns": ["^@actions/"],
+      "groupName": "GitHub Actions"
     },
     {
       "description": "Group IBM packages together",
@@ -74,19 +64,9 @@
       "groupName": "IBM packages"
     },
     {
-      "description": "Group Biome platform binaries",
-      "matchPackagePatterns": ["^@biomejs/"],
-      "groupName": "Biome"
-    },
-    {
-      "description": "Group SWC platform binaries",
-      "matchPackagePatterns": ["^@swc/"],
-      "groupName": "SWC"
-    },
-    {
-      "description": "Group GitHub Actions packages together",
-      "matchPackagePatterns": ["^@actions/"],
-      "groupName": "GitHub Actions"
+      "description": "Group MUI packages together",
+      "matchPackagePatterns": ["^@mui/", "^@emotion/"],
+      "groupName": "MUI packages"
     },
     {
       "description": "Group Octokit packages together",
@@ -94,14 +74,44 @@
       "groupName": "Octokit"
     },
     {
+      "description": "Group OpenAI packages together",
+      "matchPackagePatterns": ["^@openai/", "^openai$"],
+      "groupName": "OpenAI packages"
+    },
+    {
       "description": "Group OpenTelemetry packages together",
       "matchPackagePatterns": ["^@opentelemetry/"],
       "groupName": "OpenTelemetry"
     },
     {
+      "description": "Group SWC packages together",
+      "matchPackagePatterns": ["^@swc/"],
+      "groupName": "SWC"
+    },
+    {
+      "description": "Group TanStack packages together",
+      "matchPackagePatterns": ["^@tanstack/"],
+      "groupName": "TanStack packages"
+    },
+    {
+      "description": "Group Testing Library packages together",
+      "matchPackagePatterns": ["^@testing-library/"],
+      "groupName": "Testing Library packages"
+    },
+    {
       "description": "Group Vitest packages together",
       "matchPackagePatterns": ["^vitest$", "^@vitest/"],
       "groupName": "Vitest"
+    },
+    {
+      "description": "Keep Drizzle ORM packages in sync",
+      "matchPackageNames": ["drizzle-orm", "drizzle-kit"],
+      "groupName": "Drizzle ORM"
+    },
+    {
+      "description": "Keep Playwright packages in sync",
+      "matchPackagePatterns": ["^@playwright/", "^playwright$", "^playwright-"],
+      "groupName": "Playwright"
     },
     {
       "description": "Keep React packages in sync",
@@ -112,16 +122,6 @@
       "description": "Keep socket.io packages in sync",
       "matchPackageNames": ["socket.io", "socket.io-client"],
       "groupName": "socket.io"
-    },
-    {
-      "description": "Keep Drizzle packages in sync",
-      "matchPackageNames": ["drizzle-orm", "drizzle-kit"],
-      "groupName": "Drizzle ORM"
-    },
-    {
-      "description": "Keep Playwright packages in sync",
-      "matchPackagePatterns": ["^@playwright/", "^playwright$", "^playwright-"],
-      "groupName": "Playwright"
     },
     {
       "description": "Group all @types packages together",
@@ -138,20 +138,20 @@
     {
       "description": "LLM provider packages: frequent updates, minimal stabilization",
       "matchPackagePatterns": [
+        "^@adaline/",
         "^@anthropic-ai/",
         "^@aws-sdk/client-bedrock",
         "^@aws-sdk/client-sagemaker",
         "^@azure/ai-",
         "^@azure/openai",
-        "^@openai/",
-        "^openai$",
-        "^@adaline/",
+        "^@fal-ai/",
         "^@ibm-cloud/watsonx",
         "^@ibm-generative-ai/",
         "^@modelcontextprotocol/",
-        "^@fal-ai/",
+        "^@openai/",
+        "^google-auth-library$",
         "^langfuse$",
-        "^google-auth-library$"
+        "^openai$"
       ],
       "schedule": ["every weekday"],
       "minimumReleaseAge": "1 day"
@@ -163,7 +163,7 @@
       "minimumReleaseAge": "5 days"
     },
     {
-      "description": "Dev npm deps: wait 2 days (tooling, linters, CI helpers)",
+      "description": "Dev npm deps: wait 2 days before updates",
       "matchDatasources": ["npm"],
       "matchDepTypes": ["devDependencies"],
       "minimumReleaseAge": "2 days"
