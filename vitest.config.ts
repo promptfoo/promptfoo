@@ -47,6 +47,8 @@ export default defineConfig({
       'test/table.test.ts',
       'test/globalConfig.test.ts',
       'test/esm.test.ts',
+      'test/onboarding.test.ts',
+      'test/sagemaker.test.ts',
     ],
     // Exclude integration tests
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],

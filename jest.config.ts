@@ -61,6 +61,8 @@ const config: Config = {
     '<rootDir>/test/table.test.ts',
     '<rootDir>/test/globalConfig.test.ts',
     '<rootDir>/test/esm.test.ts',
+    '<rootDir>/test/onboarding.test.ts',
+    '<rootDir>/test/sagemaker.test.ts',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
