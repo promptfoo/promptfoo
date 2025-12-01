@@ -11,6 +11,7 @@ jest.mock('playwright', () => {
   const mockContext = {
     newPage: jest.fn().mockResolvedValue(mockPage),
     close: jest.fn().mockResolvedValue(undefined),
+    setDefaultTimeout: jest.fn(),
   };
 
   const mockBrowser = {
