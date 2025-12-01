@@ -226,7 +226,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.0",
-    "@apidevtools/json-schema-ref-parser": "^12.0.2",
+    "@apidevtools/json-schema-ref-parser": "^15.0.0",
     "@googleapis/sheets": "^12.0.0",
     "@inquirer/checkbox": "^5.0.1",
     "@inquirer/confirm": "^6.0.1",
