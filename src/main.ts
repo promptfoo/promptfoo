@@ -1,8 +1,9 @@
-#!/usr/bin/env node
-
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { Command } from 'commander';
 import { getGlobalDispatcher } from 'undici';
-import { version } from '../package.json';
+
+import { VERSION } from './version';
 import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { codeScansCommand } from './codeScan/index';
@@ -82,6 +83,11 @@ export function addCommonOptionsRecursively(command: Command) {
 async function main() {
   initializeRunLogging();
 
+  // Set PROMPTFOO_DISABLE_UPDATE=true in CI to prevent hanging on network requests
+  if (!process.env.PROMPTFOO_DISABLE_UPDATE && typeof process.env.CI !== 'undefined') {
+    process.env.PROMPTFOO_DISABLE_UPDATE = 'true';
+  }
+
   await checkForUpdates();
   await runDbMigrations();
 
@@ -89,7 +95,7 @@ async function main() {
 
   const program = new Command('promptfoo');
   program
-    .version(version)
+    .version(VERSION)
     .showHelpAfterError()
     .showSuggestionAfterError()
     .on('option:*', function () {
@@ -157,20 +163,26 @@ async function main() {
   await program.parseAsync();
 }
 
-if (require.main === module) {
-  checkNodeVersion();
-  main().finally(async () => {
-    logger.debug('Shutting down gracefully...');
-    await telemetry.shutdown();
-    logger.debug('Shutdown complete');
+// ESM replacement for require.main === module check
+// Check if this module is being run directly (not imported)
+try {
+  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] || '')) {
+    checkNodeVersion();
+    main().finally(async () => {
+      logger.debug('Shutting down gracefully...');
+      await telemetry.shutdown();
+      logger.debug('Shutdown complete');
 
-    closeLogger();
-    closeDbIfOpen();
-    try {
-      const dispatcher = getGlobalDispatcher();
-      await dispatcher.destroy();
-    } catch {
-      // Silently handle dispatcher destroy errors
-    }
-  });
+      closeLogger();
+      closeDbIfOpen();
+      try {
+        const dispatcher = getGlobalDispatcher();
+        await dispatcher.destroy();
+      } catch {
+        // Silently handle dispatcher destroy errors
+      }
+    });
+  }
+} catch {
+  // In CJS builds, this will fail silently - CJS entry point is handled differently
 }

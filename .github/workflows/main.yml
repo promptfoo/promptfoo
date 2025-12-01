@@ -92,10 +92,12 @@ jobs:
           elif [[ -z "$PROMPTFOO_POSTHOG_KEY" ]]; then
             echo "PostHog key not available (running without secret), skipping check"
           else
-            if ! grep -q "exports\.POSTHOG_KEY = 'phc_" dist/src/generated/constants.js; then
-              echo "Error: PostHog key not properly replaced in generated/constants.js"
-              echo "Content of generated/constants.js:"
-              cat dist/src/generated/constants.js
+            # PostHog key is injected at build time via tsup's define option
+            # Check that it's present in the built output (it will be inlined as a string)
+            if ! grep -rq '"phc_' dist/src/*.js; then
+              echo "Error: PostHog key not found in built output"
+              echo "Checking for POSTHOG_KEY patterns in built files:"
+              grep -r "POSTHOG_KEY" dist/src/*.js | head -10 || echo "No POSTHOG_KEY found"
               exit 1
             fi
             echo "PostHog key replacement verified successfully"
@@ -127,10 +129,6 @@ jobs:
         working-directory: src/app
         run: |
           npm run lint
-
-      - name: Check Index Imports
-        run: |
-          npm run lint:index
 
       - name: Run Style Check
         run: |

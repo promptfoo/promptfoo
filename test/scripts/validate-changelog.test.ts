@@ -15,7 +15,7 @@ const {
   findUnreleasedEnd,
   findEntriesInVersionedSections,
   validateChangelogDiff,
-} = require('../../scripts/validate-changelog') as {
+} = require('../../scripts/validate-changelog.cjs') as {
   findEntriesMissingPrNumber: (entries: string[]) => string[];
   findEntriesWithCommitHash: (entries: string[]) => string[];
   parseAddedEntries: (diff: string) => string[];

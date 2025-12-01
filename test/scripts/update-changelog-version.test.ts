@@ -9,7 +9,7 @@ const {
   extractUnreleasedContent,
   buildUpdatedChangelog,
   CHANGELOG_CATEGORIES,
-} = require('../../scripts/update-changelog-version') as {
+} = require('../../scripts/update-changelog-version.cjs') as {
   updateChangelog: (options?: {
     changelogPath?: string;
     packageJsonPath?: string;
