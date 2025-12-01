@@ -76,7 +76,6 @@ jest.mock('../src/constants/build', () => ({
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let fetchWithProxySpy: jest.MockedFunction<typeof fetchWithProxy>;
-  let fetchWithTimeoutSpy: jest.MockedFunction<typeof fetchWithTimeout>;
   let sendEventSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -84,14 +83,10 @@ describe('Telemetry', () => {
     process.env = { ...originalEnv };
     process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
 
-    // Get the mocked fetch functions
+    // Get the mocked fetchWithProxy function
     fetchWithProxySpy = fetchWithProxy as jest.MockedFunction<typeof fetchWithProxy>;
     fetchWithProxySpy.mockClear();
     fetchWithProxySpy.mockResolvedValue({ ok: true } as any);
-
-    fetchWithTimeoutSpy = fetchWithTimeout as jest.MockedFunction<typeof fetchWithTimeout>;
-    fetchWithTimeoutSpy.mockClear();
-    fetchWithTimeoutSpy.mockResolvedValue({ ok: true } as any);
 
     sendEventSpy = jest.spyOn(Telemetry.prototype, 'sendEvent' as any);
 
@@ -118,21 +113,18 @@ describe('Telemetry', () => {
 
   it('should include version in telemetry events', () => {
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-    delete process.env.IS_TESTING; // Clear IS_TESTING to allow PostHog client creation
     const _telemetry = new Telemetry();
     _telemetry.record('eval_ran', { foo: 'bar' });
 
     expect(sendEventSpy).toHaveBeenCalledWith('eval_ran', { foo: 'bar' });
-    // R_ENDPOINT now uses fetchWithTimeout instead of fetchWithProxy
-    expect(fetchWithTimeoutSpy).toHaveBeenCalledWith(
+    expect(fetchWithProxySpy).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         method: 'POST',
       }),
-      expect.any(Number),
     );
 
-    const fetchCalls = fetchWithTimeoutSpy.mock.calls;
+    const fetchCalls = fetchWithProxySpy.mock.calls;
     let foundVersion = false;
 
     for (const call of fetchCalls) {
@@ -148,7 +140,6 @@ describe('Telemetry', () => {
     }
 
     expect(foundVersion).toBe(true);
-    process.env.IS_TESTING = 'true'; // Reset IS_TESTING
   });
 
   it('should include version and CI status in telemetry events', async () => {
@@ -160,14 +151,14 @@ describe('Telemetry', () => {
     const isCI = jest.requireMock('../src/envars').isCI;
     const originalMockValue = isCI.getMockImplementation();
     isCI.mockReturnValue(true);
-    fetchWithTimeoutSpy.mockClear();
+    fetchWithProxySpy.mockClear();
 
     const _telemetry = new Telemetry();
     _telemetry.record('feature_used', { test: 'value' });
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const fetchCalls = fetchWithTimeoutSpy.mock.calls;
+    const fetchCalls = fetchWithProxySpy.mock.calls;
     expect(fetchCalls.length).toBeGreaterThan(0);
 
     let foundExpectedProperties = false;
@@ -508,6 +499,7 @@ describe('Telemetry', () => {
       expect(sendEventSpy).toHaveBeenCalledWith('feature_used', { feature: 'telemetry disabled' });
       expect(sendEventSpy).toHaveBeenCalledTimes(1);
 
+      sendEventSpy.mockClear();
       _telemetry.record('command_used', { name: 'test' });
       expect(sendEventSpy).not.toHaveBeenCalled();
     });
