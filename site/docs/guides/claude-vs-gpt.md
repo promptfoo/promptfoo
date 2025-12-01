@@ -33,23 +33,23 @@ Open the generated `promptfooconfig.yaml` file. This is where you'll configure t
 
 ### Configure the Models
 
-Specify the Claude 3.7 and GPT-4.1 model IDs under `providers`:
+Specify the Claude 4.5 and GPT-5 model IDs under `providers`:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-3-7-sonnet-20250219
-  - openai:chat:gpt-4.1
+  - anthropic:messages:claude-sonnet-4-5-20250929
+  - openai:chat:gpt-5
 ```
 
 You can optionally set parameters like temperature and max tokens for each model:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-7-sonnet-20250219
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       temperature: 0.3
       max_tokens: 1024
-  - id: openai:chat:gpt-4.1
+  - id: openai:chat:gpt-5
     config:
       temperature: 0.3
       max_tokens: 1024

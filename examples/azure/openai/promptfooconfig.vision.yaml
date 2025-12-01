@@ -7,7 +7,7 @@ prompts:
 
 providers:
   # Update with your Azure OpenAI deployment details
-  - id: azure:chat:gpt-4o
+  - id: azure:chat:gpt-5
     config:
       apiHost: promptfoo.openai.azure.com
       apiVersion: 2024-02-15-preview

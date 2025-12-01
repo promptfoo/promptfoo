@@ -1,8 +1,7 @@
 /**
- * Vitest setup file for codeScans tests
+ * Vitest setup file for all backend tests
  *
- * This is a minimal setup for the codeScans test suite.
- * As we migrate more tests, we can expand this setup.
+ * This file configures the test environment for all tests in the test/ directory.
  */
 
 const TEST_CONFIG_DIR = './.local/vitest/config';

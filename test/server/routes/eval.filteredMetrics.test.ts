@@ -8,6 +8,8 @@
  * 4. Handles errors gracefully
  */
 
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import request from 'supertest';
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
@@ -34,11 +36,11 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
     await db.run('DELETE FROM evals');
 
     // Reset mocks
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('Filtered metrics behavior', () => {

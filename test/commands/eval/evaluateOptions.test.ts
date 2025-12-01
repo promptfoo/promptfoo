@@ -1,3 +1,4 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -9,29 +10,39 @@ import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions } from '../../../src/types/index';
 
-jest.mock('../../../src/evaluator', () => ({
-  evaluate: jest.fn().mockResolvedValue({ results: [], summary: {} }),
+vi.mock('../../../src/evaluator', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    evaluate: vi.fn().mockResolvedValue({ results: [], summary: {} }),
+  };
+});
+
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
-jest.mock('../../../src/logger', () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-  getLogLevel: jest.fn().mockReturnValue('info'),
+vi.mock('../../../src/migrate', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    runDbMigrations: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+vi.mock('../../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+    recordAndSendOnce: vi.fn(),
+    send: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
-jest.mock('../../../src/migrate', () => ({
-  runDbMigrations: jest.fn().mockResolvedValue(undefined),
-}));
-
-jest.mock('../../../src/telemetry', () => ({
-  record: jest.fn(),
-  recordAndSendOnce: jest.fn(),
-  send: jest.fn().mockResolvedValue(undefined),
-}));
-
-const evaluateMock = jest.mocked(evaluatorModule.evaluate);
+const evaluateMock = vi.mocked(evaluatorModule.evaluate);
 
 function makeConfig(configPath: string, evaluateOptions: Partial<EvaluateOptions> = {}) {
   fs.writeFileSync(
@@ -62,7 +73,7 @@ describe('evaluateOptions behavior', () => {
   const originalExit = process.exit;
 
   beforeAll(() => {
-    process.exit = jest.fn() as any;
+    process.exit = vi.fn() as any;
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-test-'));
 
@@ -80,7 +91,7 @@ describe('evaluateOptions behavior', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterAll(() => {

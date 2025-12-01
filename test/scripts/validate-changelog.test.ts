@@ -1,3 +1,13 @@
+import { describe, expect, it } from 'vitest';
+
+interface ValidationResult {
+  valid: boolean;
+  error?: string;
+  message?: string;
+  entries?: string[];
+  footer?: string;
+}
+
 const {
   findEntriesMissingPrNumber,
   findEntriesWithCommitHash,
@@ -5,7 +15,22 @@ const {
   findUnreleasedEnd,
   findEntriesInVersionedSections,
   validateChangelogDiff,
-} = require('../../scripts/validate-changelog');
+} = require('../../scripts/validate-changelog.cjs') as {
+  findEntriesMissingPrNumber: (entries: string[]) => string[];
+  findEntriesWithCommitHash: (entries: string[]) => string[];
+  parseAddedEntries: (diff: string) => string[];
+  findUnreleasedEnd: (changelogContent: string) => number;
+  findEntriesInVersionedSections: (
+    diff: string,
+    unreleasedEnd: number,
+  ) => Array<{ line: number; content: string }>;
+  validateChangelogDiff: (options: {
+    diff: string;
+    changelogContent: string;
+    branchName: string;
+    prNumber: string;
+  }) => ValidationResult;
+};
 
 describe('validate-changelog', () => {
   describe('findEntriesMissingPrNumber', () => {

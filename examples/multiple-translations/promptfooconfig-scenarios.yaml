@@ -8,7 +8,7 @@ prompts:
 providers:
   - openai:gpt-4.1-mini
   - openai:gpt-4.1
-  - anthropic:claude-sonnet-4-20250514
+  - anthropic:claude-sonnet-4-5-20250929
 
 scenarios:
   - description: Translation accuracy with expected results

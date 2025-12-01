@@ -36,7 +36,7 @@ providers:
 
 tests:
   - vars:
-      model: 'gpt-4.1-mini'
+      model: 'gpt-5-mini'
       language: 'French'
 ```
 
@@ -144,7 +144,7 @@ tests:
         - role: 'assistant'
           content: 'baz'
       // highlight-end
-      model: 'gpt-4.1-mini'
+      model: 'gpt-5-mini'
       language: 'French'
 ```
 
@@ -301,7 +301,7 @@ Extracts the message content from this response:
   "id": "chatcmpl-abc123",
   "object": "chat.completion",
   "created": 1677858242,
-  "model": "gpt-4.1-mini",
+  "model": "gpt-5-mini",
   "usage": {
     "prompt_tokens": 13,
     "completion_tokens": 7,

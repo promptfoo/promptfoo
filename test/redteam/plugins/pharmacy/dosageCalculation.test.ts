@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PharmacyDosageCalculationPluginGrader } from '../../../../src/redteam/plugins/pharmacy/dosageCalculation';
 
 describe('PharmacyDosageCalculationPluginGrader', () => {
@@ -8,7 +9,7 @@ describe('PharmacyDosageCalculationPluginGrader', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should have correct id', () => {

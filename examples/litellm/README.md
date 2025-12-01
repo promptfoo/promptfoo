@@ -31,7 +31,7 @@ LiteLLM provides a unified interface to 400+ LLMs. Instead of managing different
 
    # Or manually:
    pip install litellm[proxy]
-   litellm --model gpt-4.1 --model claude-sonnet-4-20250514 --model gemini-2.5-pro --model text-embedding-3-large
+   litellm --model gpt-4.1 --model claude-sonnet-4-5-20250929 --model gemini-2.5-pro --model text-embedding-3-large
    ```
 
 3. **Run the evaluation**:
@@ -42,7 +42,7 @@ LiteLLM provides a unified interface to 400+ LLMs. Instead of managing different
 ## Features
 
 - **Unified Interface**: Access OpenAI, Anthropic, Google, and 400+ other models through one API
-- **Chat Models**: GPT-4.1, Claude Sonnet 4, Gemini 2.5
+- **Chat Models**: GPT-4.1, Claude Sonnet 4.5, Gemini 2.5
 - **Embedding Models**: Support for similarity assertions via embedding models
 - **Simple Configuration**: One provider syntax for all models
 - **Cost Tracking**: LiteLLM proxy can track usage across providers
@@ -70,7 +70,7 @@ The example evaluates translation and creative writing tasks across three differ
 ```yaml
 providers:
   - litellm:gpt-4.1
-  - litellm:claude-sonnet-4-20250514
+  - litellm:claude-sonnet-4-5-20250929
   - litellm:gemini-2.5-pro
 
 defaultTest:

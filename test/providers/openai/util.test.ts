@@ -1,3 +1,5 @@
+import { describe, expect, it, vi } from 'vitest';
+
 import OpenAI from 'openai';
 import {
   calculateOpenAICost,
@@ -8,7 +10,7 @@ import {
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
 
-jest.mock('../../../src/cache');
+vi.mock('../../../src/cache');
 
 describe('failApiCall', () => {
   it('should format OpenAI API errors', () => {

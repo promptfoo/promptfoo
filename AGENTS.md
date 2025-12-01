@@ -43,7 +43,7 @@ const response = await fetch('/api/traces/evaluation/123');
 - `npm run test:watch` - Run tests in watch mode
 - `npm run test:integration` - Run integration tests
 - `npm run test:redteam:integration` - Run red team integration tests
-- `npx jest path/to/test-file` - Run a specific test
+- `npx vitest path/to/test-file` - Run a specific test file
 - `npm run dev` - Start development environment (both server and app)
 - `npm run dev:app` - Start only the frontend app in dev mode
 - `npm run dev:server` - Start only the server in dev mode
@@ -149,7 +149,7 @@ The OG image generation process can take several minutes and may cause CI timeou
 - Prefer const over let; avoid var
 - Use object shorthand syntax whenever possible
 - Use async/await for asynchronous code
-- Follow Jest best practices with describe/it blocks
+- Use Vitest for all tests (both backend tests in `test/` and frontend tests in `src/app/`)
 - Use consistent error handling with proper type checks
 
 ### React Hooks

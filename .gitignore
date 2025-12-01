@@ -13,7 +13,6 @@ dist
 .aider*
 .vite
 **/*.tsbuildinfo
-src/generated/
 task.md
 
 # pnpm-specific
@@ -46,4 +45,4 @@ examples/grok-4-political-bias/results-multi-judge.json
 .serena/
 
 # Code scan
-code-scan-action/dist/
+code-scan-action/dist/test.mp4

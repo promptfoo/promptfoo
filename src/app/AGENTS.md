@@ -21,7 +21,7 @@ const data = await fetch('/api/traces/evaluation/123');
 ## Tech Stack
 
 - **React 18** + **TypeScript** + **Vite** (not Next.js, not CRA)
-- **Vitest** for testing (NOT Jest - main codebase uses Jest)
+- **Vitest** for testing (same as main codebase)
 - **MUI (Material-UI)** - Component library
 - **Zustand** - State management (not Redux)
 - **React Router v7** - Routing
@@ -77,17 +77,17 @@ npm run test -- src/components/JsonTextField.test.tsx
 npm run test -- --coverage
 ```
 
-**Note:** This is **Vitest**, not Jest. Different API, different config.
+**Note:** Both frontend and backend tests use **Vitest**.
 
-### Vitest vs Jest Differences
+### Vitest Imports
 
-**Import from vitest:**
+**Import from vitest when you need mocking utilities:**
 
 ```typescript
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 ```
 
-**NOT from @jest/globals** (that's for the main codebase).
+**Note:** With `globals: true` in vitest config, `describe`, `it`, `expect`, etc. are available without imports. Only `vi` needs to be imported for mocking.
 
 ### Writing Vitest Tests
 
@@ -193,14 +193,14 @@ const response = await fetch('/api/endpoint');
 const response = await callApi('/endpoint');
 ```
 
-### Using Jest in Vitest tests
+### Using @jest/globals (removed)
 
 ```typescript
-// WRONG - This is for main codebase
+// WRONG - Jest has been removed from this project
 import { describe, it, expect } from '@jest/globals';
 
-// CORRECT - For frontend tests
-import { describe, it, expect, vi } from 'vitest';
+// CORRECT - Use vitest (or globals are available without import)
+import { vi } from 'vitest'; // Only needed for mocking
 ```
 
 ### Over-optimization
