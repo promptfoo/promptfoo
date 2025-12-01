@@ -19,10 +19,10 @@ declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
  * - ESM (production/bundled): BUILD_FORMAT='esm', import.meta.url is valid
  * - CJS (library build): BUILD_FORMAT='cjs', import.meta.url may be empty, __dirname available
  * - Development (tsx): BUILD_FORMAT=undefined, import.meta.url is valid
- * - Jest tests: BUILD_FORMAT=undefined, import.meta is syntax error, __dirname available
+ * - Vitest tests: BUILD_FORMAT=undefined, import.meta is valid in ESM mode
  *
  * The try-catch is necessary because `import.meta` syntax itself causes a SyntaxError
- * in CJS environments (Jest, Node require), not just an undefined value.
+ * in CJS environments (Node require), not just an undefined value.
  */
 export function getDirectory(): string {
   // In bundled CJS builds, skip the ESM path entirely - import.meta.url will be empty
@@ -33,7 +33,7 @@ export function getDirectory(): string {
 
   try {
     // Try ESM approach - import.meta.url is available in ESM and tsx
-    // This will throw SyntaxError in CJS environments (Jest) where import.meta is invalid syntax
+    // This will throw SyntaxError in CJS environments where import.meta is invalid syntax
     const url = import.meta.url;
     if (url && url !== '') {
       return path.dirname(fileURLToPath(url));
@@ -43,7 +43,7 @@ export function getDirectory(): string {
     // Fall through to __dirname fallback
   }
 
-  // Fall back to CJS __dirname (available in Jest tests and CJS builds)
+  // Fall back to CJS __dirname (available in CJS builds)
   // @ts-ignore - __dirname exists in CJS but not in ESM types
   if (typeof __dirname !== 'undefined') {
     // @ts-ignore

@@ -1,6 +1,7 @@
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 const {
   updateChangelog,
@@ -8,7 +9,29 @@ const {
   extractUnreleasedContent,
   buildUpdatedChangelog,
   CHANGELOG_CATEGORIES,
-} = require('../../scripts/update-changelog-version');
+} = require('../../scripts/update-changelog-version') as {
+  updateChangelog: (options?: {
+    changelogPath?: string;
+    packageJsonPath?: string;
+    date?: string;
+  }) => {
+    success: boolean;
+    error?: string;
+    version?: string;
+    changelog?: string;
+  };
+  isEmptySection: (content: string) => boolean;
+  extractUnreleasedContent: (
+    changelog: string,
+  ) => { content: string; match: RegExpMatchArray } | null;
+  buildUpdatedChangelog: (
+    changelog: string,
+    version: string,
+    unreleasedContent: string,
+    date: string,
+  ) => string;
+  CHANGELOG_CATEGORIES: string[];
+};
 
 describe('update-changelog-version', () => {
   describe('CHANGELOG_CATEGORIES', () => {
@@ -112,7 +135,7 @@ describe('update-changelog-version', () => {
 
       const result = extractUnreleasedContent(changelog);
       expect(result).not.toBeNull();
-      expect(result.content).toContain('feat: new feature (#1234)');
+      expect(result!.content).toContain('feat: new feature (#1234)');
     });
 
     it('should return null if no Unreleased section', () => {
@@ -153,8 +176,8 @@ describe('update-changelog-version', () => {
 ## [1.0.0] - 2024-01-01`;
 
       const result = extractUnreleasedContent(changelog);
-      expect(result.content).not.toMatch(/^\s/);
-      expect(result.content).not.toMatch(/\s$/);
+      expect(result!.content).not.toMatch(/^\s/);
+      expect(result!.content).not.toMatch(/\s$/);
     });
   });
 
@@ -239,9 +262,9 @@ describe('update-changelog-version', () => {
   });
 
   describe('updateChangelog', () => {
-    let tempDir;
-    let changelogPath;
-    let packageJsonPath;
+    let tempDir: string;
+    let changelogPath: string;
+    let packageJsonPath: string;
 
     beforeEach(() => {
       tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'changelog-test-'));

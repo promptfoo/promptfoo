@@ -6,6 +6,8 @@ prompts:
   - 'Calculate the following and provide a brief explanation: {{calculation}}'
 
 providers:
+  - id: groq:llama-4-scout-17b-16e-instruct
+  - id: groq:llama-4-maverick-17b-128e-instruct
   - id: groq:llama-3.3-70b-versatile
     config:
       max_completion_tokens: 300
