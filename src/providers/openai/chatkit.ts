@@ -859,8 +859,9 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         cached: false, // ChatKit responses are never cached (browser-based)
         latencyMs,
         isRefusal,
+        // Use sessionId for consistency with HTTP provider's stateful handling
+        sessionId: threadId,
         metadata: {
-          threadId,
           workflowId: this.chatKitConfig.workflowId,
           version: this.chatKitConfig.version,
           stateful: this.chatKitConfig.stateful,
@@ -1015,8 +1016,9 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         cached: false, // ChatKit responses are never cached (browser-based)
         latencyMs,
         isRefusal,
+        // Use sessionId for consistency with HTTP provider's stateful handling
+        sessionId: threadId,
         metadata: {
-          threadId,
           workflowId: this.chatKitConfig.workflowId,
           version: this.chatKitConfig.version,
           poolMode: true,
