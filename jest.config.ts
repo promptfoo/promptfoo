@@ -67,6 +67,7 @@ const config: Config = {
     '<rootDir>/test/guardrails.test.ts',
     '<rootDir>/test/evaluatorHelpers-skiprender.test.ts',
     '<rootDir>/test/evaluator.progress.test.ts',
+    '<rootDir>/test/evaluatorHelpers.langfuse.test.ts',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
