@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import logger from '../../../src/logger';
 import { matchesLlmRubric } from '../../../src/matchers';
@@ -7,37 +8,47 @@ import {
   VALID_CATEGORIES,
 } from '../../../src/redteam/plugins/unsafebench';
 
-jest.mock('../../../src/integrations/huggingfaceDatasets');
-jest.mock('../../../src/logger', () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
+vi.mock('../../../src/integrations/huggingfaceDatasets');
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
-jest.mock('../../../src/matchers', () => ({
-  matchesLlmRubric: jest.fn(),
-}));
+vi.mock('../../../src/matchers', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn(),
+  };
+});
 
-const mockFetchHuggingFaceDataset = jest.mocked(fetchHuggingFaceDataset);
-const mockMatchesLlmRubric = jest.mocked(matchesLlmRubric);
+const mockFetchHuggingFaceDataset = vi.mocked(fetchHuggingFaceDataset);
+const mockMatchesLlmRubric = vi.mocked(matchesLlmRubric);
 
 // Mock environment variables
 process.env.HF_TOKEN = 'mock-token';
 
 // Need to access the DatasetManager - since it's a private implementation detail,
 // we need to mock the relevant methods of UnsafeBenchPlugin
-jest.mock('../../../src/redteam/plugins/unsafebench', () => {
+vi.mock('../../../src/redteam/plugins/unsafebench', async () => {
   // Use actual implementations of exports except for the class we want to modify
-  const originalModule = jest.requireActual('../../../src/redteam/plugins/unsafebench');
+  const originalModule = await vi.importActual<
+    typeof import('../../../src/redteam/plugins/unsafebench')
+  >('../../../src/redteam/plugins/unsafebench');
 
   // Create a mock for the plugin class
-  const MockedUnsafeBenchPlugin = jest
+  const MockedUnsafeBenchPlugin = vi
     .fn()
-    .mockImplementation((provider, purpose, injectVar, config) => {
+    .mockImplementation(function (_provider, _purpose, injectVar, config) {
       // Handle validation of categories in constructor to fix warning test
       if (config?.categories) {
         const invalidCategories = config.categories.filter(
-          (category: string) => !originalModule.VALID_CATEGORIES.includes(category),
+          (category: string) =>
+            !originalModule.VALID_CATEGORIES.includes(
+              category as (typeof originalModule.VALID_CATEGORIES)[number],
+            ),
         );
         if (invalidCategories.length > 0) {
           logger.warn(
@@ -51,15 +62,17 @@ jest.mock('../../../src/redteam/plugins/unsafebench', () => {
         id: 'promptfoo:redteam:unsafebench',
         pluginConfig: config,
         canGenerateRemote: false,
-        getTemplate: jest.fn().mockResolvedValue(injectVar),
-        getAssertions: jest.fn().mockImplementation((category) => [
-          {
-            type: 'promptfoo:redteam:unsafebench',
-            metric: 'UnsafeBench',
-            value: { category },
-          },
-        ]),
-        generateTests: jest.fn().mockImplementation(async (n) => {
+        getTemplate: vi.fn().mockResolvedValue(injectVar),
+        getAssertions: vi.fn().mockImplementation(function (category) {
+          return [
+            {
+              type: 'promptfoo:redteam:unsafebench',
+              metric: 'UnsafeBench',
+              value: { category },
+            },
+          ];
+        }),
+        generateTests: vi.fn().mockImplementation(async function (n) {
           // Mock dataset results based on config
           const categories = config?.categories || [];
 
@@ -140,7 +153,7 @@ jest.mock('../../../src/redteam/plugins/unsafebench', () => {
 
 describe('UnsafeBenchPlugin', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Default mock implementation for HF dataset API
     mockFetchHuggingFaceDataset.mockResolvedValue([
@@ -224,7 +237,7 @@ describe('UnsafeBenchPlugin', () => {
   });
 
   it('should warn about invalid categories', () => {
-    const loggerWarnSpy = jest.spyOn(logger, 'warn');
+    const loggerWarnSpy = vi.spyOn(logger, 'warn');
 
     // Create plugin with an invalid category
     new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {

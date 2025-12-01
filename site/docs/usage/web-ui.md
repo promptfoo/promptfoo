@@ -6,30 +6,53 @@ description: Compare and analyze LLM outputs side-by-side with promptfoo's web v
 
 # Using the web viewer
 
-The web viewer is an experimental, work-in-progress UI for viewing prompt outputs side-by-side.
-
-To start it, run:
+View and compare eval results in your browser.
 
 ```sh
 npx promptfoo@latest view
 ```
 
-After you [run an eval](/docs/getting-started), the viewer will present the latest results in a view like this one:
+After you [run an eval](/docs/getting-started), the viewer displays results side-by-side:
 
 ![promptfoo web viewer](https://user-images.githubusercontent.com/310310/244891219-2b79e8f8-9b79-49e7-bffb-24cba18352f2.png)
 
-Currently, the viewer is just an easier way to look at output. It automatically updates on every eval, and allows you to thumbs up/thumbs down individual outputs to more easily compare prompts.
+## Features
 
-Remember, you can always [output](/docs/configuration/outputs) to terminal, HTML, CSV, or JSON instead if you're looking for something more portable.
+- **Compare prompts** - See outputs across models and prompts in one view
+- **Rate outputs** - Mark good and bad responses to identify top performers
+- **Filter** - Narrow results by metrics, metadata, or pass/fail status
+- **Keyboard shortcuts** - Navigate quickly without the mouse
+- **Bulk operations** - Export or delete multiple evals at once
+- **Live updates** - Results refresh automatically after each eval
 
-The web viewer is under development and will eventually include features such as: configuring and re-running evals and viewing history.
+For terminal, HTML, CSV, or JSON output, see [output formats](/docs/configuration/outputs).
 
 ## Sharing
 
-To get a URL that you can send to others, click the 'Share' button in the top right. This will generate a URL that others can load to view your config and results.
+Click the **Share** button to send results to teammates.
 
-Shared data is temporarily stored on our servers, and permanently deleted after 2 weeks, at which point the URL will cease to function. Shared data is "private" in the sense that the UUID-based URL is unguessable, but if you publish your URL then anyone can access it (similar to a Github secret gist).
+### Cloud (free forever)
 
-You can configure the web viewer to share to your own hosted Promptfoo instance by clicking on the API Settings button in the top right of the viewer.
+Sharing to [promptfoo.app](https://promptfoo.app/welcome) is free and creates private links visible only to your organization.
 
-[&raquo; More information on sharing](/docs/usage/sharing)
+```sh
+# One-time setup
+promptfoo auth login -k YOUR_API_KEY
+
+# Share any eval
+promptfoo share
+```
+
+### Self-hosted
+
+Share to your own server by setting these in your config:
+
+```yaml title="promptfooconfig.yaml"
+sharing:
+  apiBaseUrl: http://your-server:3000
+  appBaseUrl: http://your-server:3000
+```
+
+Or configure via **API Settings** in the viewer's top-right menu.
+
+See [sharing documentation](/docs/usage/sharing) for authentication, enterprise options, and CI/CD setup.

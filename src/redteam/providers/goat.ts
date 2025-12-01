@@ -10,7 +10,7 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types';
+import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -305,6 +305,7 @@ export default class GoatProvider implements ApiProvider {
           targetVars,
           context.filters,
           targetProvider,
+          [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
         messages.push({

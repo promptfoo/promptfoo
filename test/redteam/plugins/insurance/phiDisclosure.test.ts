@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InsurancePhiDisclosurePluginGrader } from '../../../../src/redteam/plugins/insurance/phiDisclosure';
 
 describe('InsurancePhiDisclosurePluginGrader', () => {
@@ -8,7 +9,7 @@ describe('InsurancePhiDisclosurePluginGrader', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should have correct id', () => {

@@ -1,3 +1,4 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -7,31 +8,41 @@ import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, EvaluateOptions } from '../../../src/types';
+import type { CommandLineOptions, EvaluateOptions } from '../../../src/types/index';
 
-jest.mock('../../../src/evaluator', () => ({
-  evaluate: jest.fn().mockResolvedValue({ results: [], summary: {} }),
+vi.mock('../../../src/evaluator', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    evaluate: vi.fn().mockResolvedValue({ results: [], summary: {} }),
+  };
+});
+
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
-jest.mock('../../../src/logger', () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-  getLogLevel: jest.fn().mockReturnValue('info'),
+vi.mock('../../../src/migrate', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    runDbMigrations: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+vi.mock('../../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+    recordAndSendOnce: vi.fn(),
+    send: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
-jest.mock('../../../src/migrate', () => ({
-  runDbMigrations: jest.fn().mockResolvedValue(undefined),
-}));
-
-jest.mock('../../../src/telemetry', () => ({
-  record: jest.fn(),
-  recordAndSendOnce: jest.fn(),
-  send: jest.fn().mockResolvedValue(undefined),
-}));
-
-const evaluateMock = jest.mocked(evaluatorModule.evaluate);
+const evaluateMock = vi.mocked(evaluatorModule.evaluate);
 
 function makeConfig(configPath: string, evaluateOptions: Partial<EvaluateOptions> = {}) {
   fs.writeFileSync(
@@ -62,7 +73,7 @@ describe('evaluateOptions behavior', () => {
   const originalExit = process.exit;
 
   beforeAll(() => {
-    process.exit = jest.fn() as any;
+    process.exit = vi.fn() as any;
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-test-'));
 
@@ -80,7 +91,7 @@ describe('evaluateOptions behavior', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterAll(() => {
@@ -345,6 +356,116 @@ describe('evaluateOptions behavior', () => {
       expect(options.delay).toBeUndefined(); // CLI delay 0 should result in undefined
       expect(options.repeat).toBe(1); // CLI override
       expect(options.maxConcurrency).toBe(9); // From config
+    });
+  });
+
+  describe('commandLineOptions behavior', () => {
+    it('should respect commandLineOptions.generateSuggestions from config', async () => {
+      const tempConfig = path.join(process.cwd(), 'test-generate-suggestions.yaml');
+      fs.writeFileSync(
+        tempConfig,
+        yaml.dump({
+          commandLineOptions: {
+            generateSuggestions: true,
+          },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        }),
+      );
+
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        write: false,
+        config: [tempConfig],
+      };
+
+      await doEval(cmdObj, {}, undefined, {});
+
+      const options = evaluateMock.mock.calls[0][2];
+      expect(options.generateSuggestions).toBe(true);
+      fs.unlinkSync(tempConfig);
+    });
+
+    it('should prioritize CLI --suggest-prompts over commandLineOptions.generateSuggestions', async () => {
+      const tempConfig = path.join(process.cwd(), 'test-generate-suggestions-override.yaml');
+      fs.writeFileSync(
+        tempConfig,
+        yaml.dump({
+          commandLineOptions: {
+            generateSuggestions: false,
+          },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        }),
+      );
+
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        write: false,
+        config: [tempConfig],
+        generateSuggestions: true, // CLI override
+      };
+
+      await doEval(cmdObj, {}, undefined, {});
+
+      const options = evaluateMock.mock.calls[0][2];
+      expect(options.generateSuggestions).toBe(true);
+      fs.unlinkSync(tempConfig);
+    });
+
+    it('should respect commandLineOptions.table from config', async () => {
+      const tempConfig = path.join(process.cwd(), 'test-table.yaml');
+      fs.writeFileSync(
+        tempConfig,
+        yaml.dump({
+          commandLineOptions: {
+            table: false,
+          },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        }),
+      );
+
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        write: false,
+        config: [tempConfig],
+      };
+
+      // We can't directly check table output, but we can verify the config loads
+      await doEval(cmdObj, {}, undefined, {});
+
+      // If this completes without error, the config was respected
+      expect(evaluateMock).toHaveBeenCalled();
+      fs.unlinkSync(tempConfig);
+    });
+
+    it('should respect commandLineOptions.write = false from config', async () => {
+      const tempConfig = path.join(process.cwd(), 'test-write.yaml');
+      fs.writeFileSync(
+        tempConfig,
+        yaml.dump({
+          commandLineOptions: {
+            write: false,
+          },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        }),
+      );
+
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        table: false,
+        config: [tempConfig],
+      };
+
+      await doEval(cmdObj, {}, undefined, {});
+
+      // Verify eval completed successfully with write=false
+      expect(evaluateMock).toHaveBeenCalled();
+      fs.unlinkSync(tempConfig);
     });
   });
 });

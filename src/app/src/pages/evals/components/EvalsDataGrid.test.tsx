@@ -17,7 +17,7 @@ vi.mock('@mui/x-data-grid', () => ({
     slots = {},
     slotProps = {},
     getRowClassName,
-    rowSelectionModel = [],
+    rowSelectionModel = { type: 'include', ids: new Set() },
     onRowSelectionModelChange,
   }: any) => {
     if (loading && slots?.loadingOverlay) {
@@ -40,7 +40,7 @@ vi.mock('@mui/x-data-grid', () => ({
           {!loading &&
             rows.map((row: any) => {
               const className = getRowClassName ? getRowClassName({ id: row.evalId }) : '';
-              const checked = rowSelectionModel.includes(row.evalId);
+              const checked = rowSelectionModel?.ids?.has(row.evalId) || false;
               return (
                 <div key={row.evalId}>
                   <input
@@ -48,9 +48,16 @@ vi.mock('@mui/x-data-grid', () => ({
                     data-testid={`checkbox-${row.evalId}`}
                     checked={checked}
                     onChange={(e) => {
-                      const newSelection = e.target.checked
-                        ? [...rowSelectionModel, row.evalId]
-                        : rowSelectionModel.filter((id: string) => id !== row.evalId);
+                      const newIds = new Set(rowSelectionModel?.ids || new Set());
+                      if (e.target.checked) {
+                        newIds.add(row.evalId);
+                      } else {
+                        newIds.delete(row.evalId);
+                      }
+                      const newSelection = {
+                        type: 'include' as const,
+                        ids: newIds,
+                      };
                       onRowSelectionModelChange?.(newSelection);
                     }}
                   />
@@ -155,6 +162,9 @@ const mockEvalsWithDifferentDatasets = [
 describe('EvalsDataGrid', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Note: This test file uses real timers because the navigation tests
+    // rely on complex setTimeout patterns in React components.
+    // The global cleanup in setupTests.ts will clear any orphaned timers.
   });
 
   it('should fetch data on initial mount', async () => {

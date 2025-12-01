@@ -290,7 +290,7 @@ function ResultsTable({
       rowIndex: number,
       promptIndex: number,
       resultId: string,
-      isPass?: boolean,
+      isPass?: boolean | null,
       score?: number,
       comment?: string,
     ) => {
@@ -299,20 +299,18 @@ function ResultsTable({
       const updatedOutputs = [...updatedRow.outputs];
       const existingOutput = updatedOutputs[promptIndex];
 
-      const finalPass = typeof isPass === 'undefined' ? existingOutput.pass : isPass;
-
-      let finalScore = existingOutput.score;
-      if (typeof score !== 'undefined') {
-        finalScore = score;
-      } else if (typeof isPass !== 'undefined') {
-        finalScore = isPass ? 1 : 0;
-      }
-
-      updatedOutputs[promptIndex].pass = finalPass;
-      updatedOutputs[promptIndex].score = finalScore;
-
       let componentResults = existingOutput.gradingResult?.componentResults;
       let modifiedComponentResults = false;
+      let finalPass = existingOutput.pass;
+      let finalScore = existingOutput.score;
+
+      // Update finalScore first if score parameter is provided
+      if (typeof score !== 'undefined') {
+        finalScore = score;
+      } else if (typeof isPass !== 'undefined' && isPass !== null) {
+        // Only default to 0/1 if no explicit score is provided and isPass is not null
+        finalScore = isPass ? 1 : 0;
+      }
 
       if (typeof isPass !== 'undefined') {
         // Make a copy to avoid mutating the original
@@ -323,20 +321,45 @@ function ResultsTable({
           (result) => result.assertion?.type === 'human',
         );
 
-        const newResult = {
-          pass: finalPass,
-          score: finalScore,
-          reason: 'Manual result (overrides all other grading results)',
-          comment,
-          assertion: { type: 'human' as const },
-        };
-
-        if (humanResultIndex === -1) {
-          componentResults.push(newResult);
+        // If isPass is null, remove the human assertion (unset manual grading)
+        if (isPass === null) {
+          if (humanResultIndex !== -1) {
+            componentResults.splice(humanResultIndex, 1);
+          }
+          // Recalculate pass/score from remaining assertions
+          if (componentResults.length > 0) {
+            const passCount = componentResults.filter((r) => r.pass).length;
+            finalPass = passCount === componentResults.length;
+            // Calculate average score from remaining assertions
+            const scores = componentResults
+              .map((r) => r.score)
+              .filter((s) => typeof s === 'number');
+            if (scores.length > 0) {
+              finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+            }
+          }
         } else {
-          componentResults[humanResultIndex] = newResult;
+          // Add or update the human assertion
+          finalPass = isPass;
+
+          const newResult = {
+            pass: finalPass,
+            score: finalScore,
+            reason: 'Manual result (overrides all other grading results)',
+            comment,
+            assertion: { type: 'human' as const },
+          };
+
+          if (humanResultIndex === -1) {
+            componentResults.push(newResult);
+          } else {
+            componentResults[humanResultIndex] = newResult;
+          }
         }
       }
+
+      updatedOutputs[promptIndex].pass = finalPass;
+      updatedOutputs[promptIndex].score = finalScore;
 
       // Build gradingResult, ensuring required fields are always present
       // Destructure to exclude componentResults initially

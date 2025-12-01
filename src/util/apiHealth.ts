@@ -1,7 +1,7 @@
 import { getEnvString } from '../envars';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { fetchWithTimeout } from './fetch';
+import { fetchWithTimeout } from './fetch/index';
 
 interface HealthResponse {
   status: string;

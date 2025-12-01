@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle } from 'react';
+import React from 'react';
 
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, queryByRole, render, screen } from '@testing-library/react';
@@ -20,10 +20,12 @@ vi.mock('../../hooks/useRedTeamConfig', () => ({
 
 const mockValidate = vi.fn();
 vi.mock('./ProviderConfigEditor', () => ({
-  default: forwardRef((props: any, ref: any) => {
-    useImperativeHandle(ref, () => ({
-      validate: mockValidate,
-    }));
+  default: (props: any) => {
+    React.useEffect(() => {
+      if (props.onValidationRequest) {
+        props.onValidationRequest(mockValidate);
+      }
+    }, [props.onValidationRequest]);
 
     // Render different content based on provider type to test that the right configuration is shown
     return (
@@ -43,7 +45,7 @@ vi.mock('./ProviderConfigEditor', () => ({
         </button>
       </div>
     );
-  }),
+  },
 }));
 
 vi.mock('../LoadExampleButton', () => ({
@@ -60,8 +62,8 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('TargetConfiguration', () => {
-  let onNextMock: ReturnType<typeof vi.fn>;
-  let onBackMock: ReturnType<typeof vi.fn>;
+  let onNextMock: () => void;
+  let onBackMock: () => void;
 
   beforeEach(() => {
     vi.clearAllMocks();

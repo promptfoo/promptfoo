@@ -3,7 +3,8 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { normalizeFinishReason } from '../../util/finishReason';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
@@ -99,12 +100,37 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     // Load and process tools from config (handles both external files and inline tool definitions)
-    const configTools = maybeLoadToolsFromExternalFile(config.tools) || [];
+    const configTools = (await maybeLoadToolsFromExternalFile(config.tools)) || [];
     const { processedTools: processedConfigTools, requiredBetaFeatures } =
       processAnthropicTools(configTools);
 
     // Combine all tools
     const allTools = [...mcpTools, ...processedConfigTools];
+
+    // Process output_format with external file loading and variable rendering
+    let processedOutputFormat = config.output_format;
+    if (config.output_format) {
+      // First load the outer output_format if it's a file reference
+      const renderedOutputFormat = renderVarsInObject(config.output_format, context?.vars);
+      const loadedOutputFormat = maybeLoadFromExternalFile(renderedOutputFormat);
+
+      // Then load the nested schema if it's a file reference
+      if (
+        loadedOutputFormat &&
+        typeof loadedOutputFormat === 'object' &&
+        'schema' in loadedOutputFormat
+      ) {
+        const loadedSchema = maybeLoadFromExternalFile(
+          renderVarsInObject(loadedOutputFormat.schema, context?.vars),
+        );
+        processedOutputFormat = {
+          ...loadedOutputFormat,
+          schema: loadedSchema,
+        } as typeof config.output_format;
+      } else {
+        processedOutputFormat = loadedOutputFormat as typeof config.output_format;
+      }
+    }
 
     const shouldStream = config.stream ?? false;
     const params: Anthropic.MessageCreateParams = {
@@ -122,6 +148,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(allTools.length > 0 ? { tools: allTools as any } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.thinking || thinking ? { thinking: config.thinking || thinking } : {}),
+      ...(processedOutputFormat ? { output_format: processedOutputFormat as any } : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 
@@ -132,7 +159,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     };
 
     // Add beta features header if specified
-    const allBetaFeatures = [...(config.beta || []), ...requiredBetaFeatures];
+    let allBetaFeatures = [...(config.beta || []), ...requiredBetaFeatures];
+
+    // Automatically add structured-outputs beta when output_format is used
+    if (processedOutputFormat && !allBetaFeatures.includes('structured-outputs-2025-11-13')) {
+      allBetaFeatures.push('structured-outputs-2025-11-13');
+    }
+
+    // Deduplicate beta features
+    allBetaFeatures = [...new Set(allBetaFeatures)];
+
     if (allBetaFeatures.length > 0) {
       headers['anthropic-beta'] = allBetaFeatures.join(',');
     }
@@ -148,8 +184,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         try {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
           const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
+          let output = outputFromMessage(parsedCachedResponse, config.showThinking ?? true);
+
+          // Handle structured JSON output parsing
+          if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
+            try {
+              output = JSON.parse(output);
+            } catch (error) {
+              logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
+            }
+          }
+
           return {
-            output: outputFromMessage(parsedCachedResponse, config.showThinking ?? true),
+            output,
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
             ...(finishReason && { finishReason }),
             cost: calculateAnthropicCost(
@@ -189,8 +236,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         }
 
         const finishReason = normalizeFinishReason(finalMessage.stop_reason);
+        let output = outputFromMessage(finalMessage, config.showThinking ?? true);
+
+        // Handle structured JSON output parsing
+        if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
+          try {
+            output = JSON.parse(output);
+          } catch (error) {
+            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
+          }
+        }
+
         return {
-          output: outputFromMessage(finalMessage, config.showThinking ?? true),
+          output,
           tokenUsage: getTokenUsage(finalMessage, false),
           ...(finishReason && { finishReason }),
           cost: calculateAnthropicCost(
@@ -216,8 +274,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         }
 
         const finishReason = normalizeFinishReason(response.stop_reason);
+        let output = outputFromMessage(response, config.showThinking ?? true);
+
+        // Handle structured JSON output parsing
+        if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
+          try {
+            output = JSON.parse(output);
+          } catch (error) {
+            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
+          }
+        }
+
         return {
-          output: outputFromMessage(response, config.showThinking ?? true),
+          output,
           tokenUsage: getTokenUsage(response, false),
           ...(finishReason && { finishReason }),
           cost: calculateAnthropicCost(

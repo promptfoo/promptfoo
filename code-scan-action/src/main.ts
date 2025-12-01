@@ -10,13 +10,13 @@ import * as github from '@actions/github';
 import * as fs from 'fs';
 import { generateConfigFile } from './config';
 import { getGitHubContext, getPRFiles } from './github';
+import { prepareComments } from '../../src/codeScan/util/github';
 import {
   type Comment,
   type ScanResponse,
   CodeScanSeverity,
   FileChangeStatus,
   formatSeverity,
-  getSeverityRank,
 } from '../../src/types/codeScan';
 
 async function run(): Promise<void> {
@@ -211,24 +211,12 @@ async function run(): Promise<void> {
       try {
         const octokit = github.getOctokit(githubToken);
 
-        // Construct review body (append minimum severity if provided)
-        let reviewBody = review || '';
-        if (minimumSeverity && reviewBody) {
-          const capitalizedSeverity =
-            minimumSeverity.charAt(0).toUpperCase() + minimumSeverity.slice(1);
-          reviewBody += `\n\n_Minimum severity threshold for this scan: ${capitalizedSeverity}_`;
-        }
-
-        // Sort comments by severity (descending: critical > high > medium > low)
-        const sortedComments = [...comments].sort((a, b) => {
-          const rankA = a.severity ? getSeverityRank(a.severity) : 0;
-          const rankB = b.severity ? getSeverityRank(b.severity) : 0;
-          return rankB - rankA;
-        });
-
-        // Separate line-specific comments from general PR comments
-        const lineComments = sortedComments.filter((c) => c.file && c.finding);
-        const generalComments = sortedComments.filter((c) => !c.file && c.finding);
+        // Prepare comments and review body for posting
+        const { lineComments, generalComments, reviewBody } = prepareComments(
+          comments,
+          review,
+          minimumSeverity,
+        );
 
         // Post review with line-specific comments
         if (lineComments.length > 0 || reviewBody) {

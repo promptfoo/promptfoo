@@ -1,6 +1,7 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { AsciiSmugglingGrader } from '../../../src/redteam/plugins/asciiSmuggling';
 
-import type { AtomicTestCase } from '../../../src/types';
+import type { AtomicTestCase } from '../../../src/types/index';
 
 describe('AsciiSmugglingGrader', () => {
   let grader: AsciiSmugglingGrader;

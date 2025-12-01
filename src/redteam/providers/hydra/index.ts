@@ -13,7 +13,7 @@ import type {
   Prompt,
   ProviderResponse,
   TokenUsage,
-} from '../../../types';
+} from '../../../types/index';
 import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
@@ -61,6 +61,7 @@ interface HydraConfig {
   maxTurns?: number;
   maxBacktracks?: number;
   stateful?: boolean;
+  excludeTargetOutputFromAgenticAttackGeneration?: boolean;
 }
 
 export class HydraProvider implements ApiProvider {
@@ -71,6 +72,7 @@ export class HydraProvider implements ApiProvider {
   private readonly maxTurns: number;
   private readonly maxBacktracks: number;
   private readonly stateful: boolean;
+  private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private conversationHistory: Message[] = [];
   private sessionId?: string;
 
@@ -81,9 +83,11 @@ export class HydraProvider implements ApiProvider {
     this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
     this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
     this.stateful = config.stateful ?? false;
+    this.excludeTargetOutputFromAgenticAttackGeneration =
+      config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
 
     if (this.stateful && this.maxBacktracks > 0) {
-      logger.warn('[Hydra] Backtracking disabled in stateful mode');
+      logger.debug('[Hydra] Backtracking disabled in stateful mode');
     }
 
     // Hydra strategy requires cloud
@@ -104,6 +108,8 @@ export class HydraProvider implements ApiProvider {
       maxBacktracks: this.maxBacktracks,
       stateful: this.stateful,
       injectVar: this.injectVar,
+      excludeTargetOutputFromAgenticAttackGeneration:
+        this.excludeTargetOutputFromAgenticAttackGeneration,
     });
   }
 
@@ -201,6 +207,15 @@ export class HydraProvider implements ApiProvider {
       logger.debug(`[Hydra] Turn ${turn}/${this.maxTurns}`);
 
       // Build request for cloud agent
+      // Conditionally exclude target outputs from conversation history for privacy
+      const conversationHistoryForCloud = this.excludeTargetOutputFromAgenticAttackGeneration
+        ? this.conversationHistory.map((msg) =>
+            msg.role === 'assistant'
+              ? { ...msg, content: '[Response hidden for privacy - grader feedback provided]' }
+              : msg,
+          )
+        : this.conversationHistory;
+
       const cloudRequest = {
         task: 'hydra-decision',
         testRunId,
@@ -209,7 +224,7 @@ export class HydraProvider implements ApiProvider {
         goal,
         purpose: test?.metadata?.purpose,
         modifiers: test?.metadata?.modifiers,
-        conversationHistory: this.conversationHistory,
+        conversationHistory: conversationHistoryForCloud,
         lastGraderResult:
           turn > 1 && storedGraderResult
             ? {
@@ -219,6 +234,8 @@ export class HydraProvider implements ApiProvider {
             : undefined,
         stateful: this.stateful,
         maxTurns: this.maxTurns,
+        excludeTargetOutputFromAgenticAttackGeneration:
+          this.excludeTargetOutputFromAgenticAttackGeneration,
       };
 
       // Get next message from cloud
@@ -287,6 +304,7 @@ export class HydraProvider implements ApiProvider {
           },
           filters,
           targetProvider,
+          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
       } else {
         // Stateless: send full conversation history as JSON
@@ -299,6 +317,7 @@ export class HydraProvider implements ApiProvider {
           },
           filters,
           targetProvider,
+          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
         if (isValidJson(samplePrompt)) {

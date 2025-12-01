@@ -47,7 +47,7 @@ jest.spyOn(global, 'Function').mockImplementation((...args) => {
   // For JavaScript expression evaluation in extractOutput
   if (args.length === 2 && args[0] === 'json') {
     const jsExpression = args[1];
-    return (json: any) => {
+    return (_json: any) => {
       // Handle specific test cases
       if (jsExpression.includes('json.data.nested.value')) {
         return 'Nested data value';

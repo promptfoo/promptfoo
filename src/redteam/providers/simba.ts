@@ -11,8 +11,8 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   TokenUsage,
-} from '../../types';
-import { fetchWithRetries } from '../../util/fetch';
+} from '../../types/index';
+import { fetchWithRetries } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import {

@@ -3,7 +3,7 @@
 import path from 'path';
 
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
 
@@ -84,6 +84,14 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
     globals: true,
+    // Enable CSS processing for MUI X v8
+    css: true,
+    // Force vitest to transform MUI packages including CSS imports
+    server: {
+      deps: {
+        inline: ['@mui/x-data-grid', '@mui/x-charts'],
+      },
+    },
     // Suppress known MUI and React Testing Library warnings that don't indicate real problems
     onConsoleLog(log: string, type: 'stdout' | 'stderr'): false | undefined {
       if (type === 'stderr') {

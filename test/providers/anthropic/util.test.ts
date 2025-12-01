@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import dedent from 'dedent';
 import {
   calculateAnthropicCost,
@@ -72,6 +73,16 @@ describe('Anthropic utilities', () => {
     it('should calculate default cost for Claude Haiku 4.5 latest model', () => {
       const cost = calculateAnthropicCost('claude-haiku-4-5-latest', {}, 100, 200);
       expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
+    });
+
+    it('should calculate default cost for Claude Opus 4.5 model', () => {
+      const cost = calculateAnthropicCost('claude-opus-4-5-20251101', {}, 100, 200);
+      expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
+    });
+
+    it('should calculate default cost for Claude Opus 4.5 latest model', () => {
+      const cost = calculateAnthropicCost('claude-opus-4-5-latest', {}, 100, 200);
+      expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
     });
 
     it('should calculate tiered cost for Claude Sonnet 4.5 with prompt <= 200k tokens', () => {
@@ -906,6 +917,131 @@ describe('Anthropic utilities', () => {
 
       expect(processedTools).toHaveLength(2);
       expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
+    });
+
+    it('should add structured-outputs beta for tools with strict mode', () => {
+      const strictTool: Anthropic.Tool & { strict: boolean } = {
+        name: 'get_weather',
+        description: 'Get weather information',
+        strict: true,
+        input_schema: {
+          type: 'object',
+          properties: {
+            location: { type: 'string' },
+          },
+          required: ['location'],
+          additionalProperties: false,
+        },
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([strictTool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toEqual(strictTool);
+      expect(requiredBetaFeatures).toEqual(['structured-outputs-2025-11-13']);
+    });
+
+    it('should not add structured-outputs beta for tools without strict mode', () => {
+      const nonStrictTool: Anthropic.Tool = {
+        name: 'get_weather',
+        description: 'Get weather information',
+        input_schema: {
+          type: 'object',
+          properties: {
+            location: { type: 'string' },
+          },
+          required: ['location'],
+        },
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([nonStrictTool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toEqual(nonStrictTool);
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should not add structured-outputs beta when strict is false', () => {
+      const nonStrictTool: Anthropic.Tool & { strict: boolean } = {
+        name: 'get_weather',
+        description: 'Get weather information',
+        strict: false,
+        input_schema: {
+          type: 'object',
+          properties: {
+            location: { type: 'string' },
+          },
+        },
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([nonStrictTool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should handle multiple strict tools without duplicating beta features', () => {
+      const strictTool1: Anthropic.Tool & { strict: boolean } = {
+        name: 'get_weather',
+        description: 'Get weather',
+        strict: true,
+        input_schema: {
+          type: 'object',
+          properties: { location: { type: 'string' } },
+          required: ['location'],
+          additionalProperties: false,
+        },
+      };
+
+      const strictTool2: Anthropic.Tool & { strict: boolean } = {
+        name: 'get_time',
+        description: 'Get time',
+        strict: true,
+        input_schema: {
+          type: 'object',
+          properties: { timezone: { type: 'string' } },
+          required: ['timezone'],
+          additionalProperties: false,
+        },
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([
+        strictTool1,
+        strictTool2,
+      ]);
+
+      expect(processedTools).toHaveLength(2);
+      expect(requiredBetaFeatures).toEqual(['structured-outputs-2025-11-13']);
+    });
+
+    it('should combine multiple beta features correctly', () => {
+      const strictTool: Anthropic.Tool & { strict: boolean } = {
+        name: 'calculate',
+        description: 'Perform calculation',
+        strict: true,
+        input_schema: {
+          type: 'object',
+          properties: { expression: { type: 'string' } },
+          required: ['expression'],
+          additionalProperties: false,
+        },
+      };
+
+      const webFetchTool: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 5,
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([
+        strictTool,
+        webFetchTool,
+      ]);
+
+      expect(processedTools).toHaveLength(2);
+      expect(requiredBetaFeatures).toContain('structured-outputs-2025-11-13');
+      expect(requiredBetaFeatures).toContain('web-fetch-2025-09-10');
+      expect(requiredBetaFeatures).toHaveLength(2);
     });
   });
 });

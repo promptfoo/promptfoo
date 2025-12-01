@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest';
 import { addCrescendo } from '../../../src/redteam/strategies/crescendo';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('addCrescendo', () => {
   it('should add crescendo configuration to test cases', () => {

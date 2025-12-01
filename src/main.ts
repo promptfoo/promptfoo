@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import { getGlobalDispatcher } from 'undici';
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
+import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
-import { codeScansCommand } from './codeScan';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
@@ -25,7 +26,8 @@ import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
-import logger, { initializeRunLogging, setLogLevel } from './logger';
+import { closeDbIfOpen } from './database/index';
+import logger, { closeLogger, initializeRunLogging, setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
@@ -38,7 +40,7 @@ import { simbaCommand } from './redteam/commands/simba';
 import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
-import { printErrorInformation } from './util/errors';
+import { printErrorInformation } from './util/errors/index';
 import { setupEnv } from './util/index';
 
 /**
@@ -152,7 +154,7 @@ async function main() {
     }
   });
 
-  program.parse();
+  await program.parseAsync();
 }
 
 if (require.main === module) {
@@ -161,5 +163,14 @@ if (require.main === module) {
     logger.debug('Shutting down gracefully...');
     await telemetry.shutdown();
     logger.debug('Shutdown complete');
+
+    closeLogger();
+    closeDbIfOpen();
+    try {
+      const dispatcher = getGlobalDispatcher();
+      await dispatcher.destroy();
+    } catch {
+      // Silently handle dispatcher destroy errors
+    }
   });
 }

@@ -1,5 +1,6 @@
+import { describe, expect, it } from 'vitest';
 import { addHydra } from '../../../src/redteam/strategies/hydra';
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('addHydra', () => {
   it('should add hydra configuration to test cases', () => {
@@ -203,6 +204,132 @@ describe('addHydra', () => {
       existingField: 'should be preserved',
       strategyId: 'jailbreak:hydra',
       originalText: 'test',
+    });
+  });
+
+  describe('Privacy protection - excludeTargetOutputFromAgenticAttackGeneration', () => {
+    it('should pass privacy flag through to provider config when enabled', () => {
+      const testCases: TestCase[] = [
+        {
+          description: 'Test case with privacy enabled',
+          vars: { input: 'test input' },
+        },
+      ];
+
+      const config = {
+        maxTurns: 5,
+        stateful: false,
+        excludeTargetOutputFromAgenticAttackGeneration: true,
+      };
+
+      const result = addHydra(testCases, 'input', config);
+
+      expect(result).toHaveLength(1);
+      expect(
+        (result[0].provider as any)?.config?.excludeTargetOutputFromAgenticAttackGeneration,
+      ).toBe(true);
+    });
+
+    it('should pass privacy flag when disabled', () => {
+      const testCases: TestCase[] = [
+        {
+          description: 'Test case with privacy disabled',
+          vars: { input: 'test input' },
+        },
+      ];
+
+      const config = {
+        maxTurns: 5,
+        stateful: false,
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      };
+
+      const result = addHydra(testCases, 'input', config);
+
+      expect(result).toHaveLength(1);
+      expect(
+        (result[0].provider as any)?.config?.excludeTargetOutputFromAgenticAttackGeneration,
+      ).toBe(false);
+    });
+
+    it('should default to undefined when privacy flag not specified', () => {
+      const testCases: TestCase[] = [
+        {
+          description: 'Test case without privacy flag',
+          vars: { input: 'test input' },
+        },
+      ];
+
+      const config = {
+        maxTurns: 5,
+        stateful: false,
+      };
+
+      const result = addHydra(testCases, 'input', config);
+
+      expect(result).toHaveLength(1);
+      const privacyFlag = (result[0].provider as any)?.config
+        ?.excludeTargetOutputFromAgenticAttackGeneration;
+      expect(privacyFlag).toBeFalsy();
+    });
+
+    it('should pass privacy flag alongside other config options', () => {
+      const testCases: TestCase[] = [
+        {
+          description: 'Test case with full config',
+          vars: { query: 'test query' },
+        },
+      ];
+
+      const config = {
+        maxTurns: 15,
+        maxBacktracks: 5,
+        stateful: true,
+        excludeTargetOutputFromAgenticAttackGeneration: true,
+      };
+
+      const result = addHydra(testCases, 'query', config);
+
+      expect((result[0].provider as any)?.config).toMatchObject({
+        injectVar: 'query',
+        maxTurns: 15,
+        maxBacktracks: 5,
+        stateful: true,
+        excludeTargetOutputFromAgenticAttackGeneration: true,
+        scanId: expect.any(String),
+      });
+    });
+
+    it('should apply privacy flag to all test cases in a batch', () => {
+      const testCases: TestCase[] = [
+        {
+          description: 'Test case 1',
+          vars: { input: 'test 1' },
+        },
+        {
+          description: 'Test case 2',
+          vars: { input: 'test 2' },
+        },
+        {
+          description: 'Test case 3',
+          vars: { input: 'test 3' },
+        },
+      ];
+
+      const config = {
+        excludeTargetOutputFromAgenticAttackGeneration: true,
+      };
+
+      const result = addHydra(testCases, 'input', config);
+
+      expect(result).toHaveLength(3);
+
+      // All test cases should have privacy flag set
+      result.forEach((testCase) => {
+        expect(
+          (testCase.provider as any)?.config?.excludeTargetOutputFromAgenticAttackGeneration,
+        ).toBe(true);
+      });
     });
   });
 });

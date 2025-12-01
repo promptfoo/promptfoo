@@ -1,32 +1,33 @@
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import cliState from '../../src/cliState';
 import { getGradingProvider } from '../../src/matchers';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 
-jest.mock('../../src/providers', () => ({
-  loadApiProvider: jest.fn(),
+vi.mock('../../src/providers', () => ({
+  loadApiProvider: vi.fn(),
 }));
 
-jest.mock('../../src/cliState');
+vi.mock('../../src/cliState');
 
 describe('getGradingProvider', () => {
   const mockProvider = {
     id: () => 'test-provider',
-    callApi: jest.fn(),
+    callApi: vi.fn(),
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
     (cliState as any).config = {};
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('explicit provider parameter', () => {
     it('should use provider when specified as string', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const result = await getGradingProvider('text', 'openai:gpt-4', null);
 
@@ -48,7 +49,7 @@ describe('getGradingProvider', () => {
           temperature: 0.5,
         },
       };
-      jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const result = await getGradingProvider('text', providerOptions, null);
 
@@ -64,7 +65,7 @@ describe('getGradingProvider', () => {
       const providerMap = {
         embedding: 'openai:embedding',
       };
-      jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const result = await getGradingProvider('embedding', providerMap, null);
 
@@ -76,7 +77,7 @@ describe('getGradingProvider', () => {
       const providerMap = {
         classification: 'openai:gpt-4',
       };
-      jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const result = await getGradingProvider('classification', providerMap, null);
 
@@ -88,7 +89,7 @@ describe('getGradingProvider', () => {
       const providerMap = {
         text: 'anthropic:claude-3-sonnet',
       };
-      jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const result = await getGradingProvider('text', providerMap, null);
 
@@ -101,7 +102,7 @@ describe('getGradingProvider', () => {
     it('should use defaultTest.options.provider when no provider specified', async () => {
       const azureProvider = {
         id: () => 'azureopenai:chat:gpt-4',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       (cliState as any).config = {
@@ -112,7 +113,7 @@ describe('getGradingProvider', () => {
         },
       };
 
-      jest.mocked(loadApiProvider).mockResolvedValue(azureProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
 
       const result = await getGradingProvider('text', undefined, null);
 
@@ -123,7 +124,7 @@ describe('getGradingProvider', () => {
     it('should use defaultTest.provider when options.provider not specified', async () => {
       const azureProvider = {
         id: () => 'azureopenai:chat:gpt-4',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       (cliState as any).config = {
@@ -132,7 +133,7 @@ describe('getGradingProvider', () => {
         },
       };
 
-      jest.mocked(loadApiProvider).mockResolvedValue(azureProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
 
       const result = await getGradingProvider('text', undefined, null);
 
@@ -143,7 +144,7 @@ describe('getGradingProvider', () => {
     it('should use defaultTest.options.provider.text when specified', async () => {
       const azureProvider = {
         id: () => 'azureopenai:chat:gpt-4',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       (cliState as any).config = {
@@ -156,7 +157,7 @@ describe('getGradingProvider', () => {
         },
       };
 
-      jest.mocked(loadApiProvider).mockResolvedValue(azureProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
 
       const result = await getGradingProvider('text', undefined, null);
 
@@ -167,7 +168,7 @@ describe('getGradingProvider', () => {
     it('should prefer defaultTest.provider over defaultTest.options.provider', async () => {
       const azureProvider = {
         id: () => 'azureopenai:chat:gpt-4',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       (cliState as any).config = {
@@ -179,7 +180,7 @@ describe('getGradingProvider', () => {
         },
       };
 
-      jest.mocked(loadApiProvider).mockResolvedValue(azureProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
 
       const result = await getGradingProvider('text', undefined, null);
 
@@ -190,7 +191,7 @@ describe('getGradingProvider', () => {
     it('should fall back to defaultProvider when no defaultTest provider configured', async () => {
       const defaultProvider = {
         id: () => 'default-provider',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       (cliState as any).config = {
@@ -206,7 +207,7 @@ describe('getGradingProvider', () => {
     it('should fall back to defaultProvider when cliState.config is undefined', async () => {
       const defaultProvider = {
         id: () => 'default-provider',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       (cliState as any).config = undefined;
@@ -228,7 +229,7 @@ describe('getGradingProvider', () => {
     it('should work with full Azure provider configuration', async () => {
       const azureProvider = {
         id: () => 'azureopenai:chat:gpt-4o',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       (cliState as any).config = {
@@ -246,7 +247,7 @@ describe('getGradingProvider', () => {
         },
       };
 
-      jest.mocked(loadApiProvider).mockResolvedValue(azureProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
 
       const result = await getGradingProvider('text', undefined, null);
 
@@ -270,7 +271,7 @@ describe('getGradingProvider', () => {
     it('should use explicit provider over defaultTest.options.provider', async () => {
       const explicitProvider = {
         id: () => 'explicit-provider',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       (cliState as any).config = {
@@ -281,7 +282,7 @@ describe('getGradingProvider', () => {
         },
       };
 
-      jest.mocked(loadApiProvider).mockResolvedValue(explicitProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(explicitProvider);
 
       const result = await getGradingProvider('text', 'openai:gpt-4o', null);
 
@@ -292,7 +293,7 @@ describe('getGradingProvider', () => {
     it('should use explicit provider object over defaultTest', async () => {
       const explicitProvider = {
         id: () => 'explicit-provider',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       (cliState as any).config = {
@@ -332,7 +333,7 @@ describe('getGradingProvider', () => {
     it('should maintain existing behavior when defaultTest not configured', async () => {
       const defaultProvider = {
         id: () => 'default-provider',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       // No defaultTest in config
@@ -347,7 +348,7 @@ describe('getGradingProvider', () => {
     it('should maintain existing behavior with explicit provider', async () => {
       const explicitProvider = {
         id: () => 'explicit-provider',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       (cliState as any).config = {
@@ -358,7 +359,7 @@ describe('getGradingProvider', () => {
         },
       };
 
-      jest.mocked(loadApiProvider).mockResolvedValue(explicitProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(explicitProvider);
 
       const result = await getGradingProvider('text', 'openai:gpt-4', null);
 

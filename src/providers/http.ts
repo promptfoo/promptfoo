@@ -998,18 +998,29 @@ function parseRawRequest(input: string) {
   // If the injectVar is in a query param, we need to encode the URL in the first line
   const encoded = urlEncodeRawRequestPath(adjusted);
   try {
-    const messageModel = httpZ.parse(encoded) as httpZ.HttpZRequestModel;
+    const messageModel = httpZ.parse(encoded);
+    // Type assertion for request model (http-z v8 doesn't export types)
+    const requestModel = messageModel as {
+      method: string;
+      target: string;
+      headers: Array<{ name: string; value: string }>;
+      body?: {
+        contentType?: string;
+        text?: string;
+        params?: Array<{ name: string; value: string }>;
+      };
+    };
     return {
-      method: messageModel.method,
-      url: messageModel.target,
-      headers: messageModel.headers.reduce(
-        (acc, header) => {
+      method: requestModel.method,
+      url: requestModel.target,
+      headers: requestModel.headers.reduce(
+        (acc: Record<string, string>, header: { name: string; value: string }) => {
           acc[header.name.toLowerCase()] = header.value;
           return acc;
         },
         {} as Record<string, string>,
       ),
-      body: messageModel.body,
+      body: requestModel.body,
     };
   } catch (err) {
     throw new Error(`Error parsing raw HTTP request: ${String(err)}`);
@@ -1768,7 +1779,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
-      ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
+      ...(parsedRequest.body?.text && { body: parsedRequest.body.text.trim() }),
     };
 
     // Add HTTPS agent as dispatcher if configured

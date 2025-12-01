@@ -18,7 +18,7 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('DigitalSignatureAuthTab', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
   let selectedTarget: ProviderOptions;
 
   beforeEach(() => {

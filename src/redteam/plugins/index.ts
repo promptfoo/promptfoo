@@ -39,7 +39,7 @@ import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
-import { PolicyPlugin } from './policy';
+import { PolicyPlugin } from './policy/index';
 import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';

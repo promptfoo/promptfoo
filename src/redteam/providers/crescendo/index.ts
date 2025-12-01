@@ -3,6 +3,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import {
+  extractTraceIdFromTraceparent,
+  fetchTraceContext,
+  type TraceContextData,
+} from '../../../tracing/traceContext';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
@@ -21,6 +26,12 @@ import {
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
+import { formatTraceForMetadata, formatTraceSummary } from '../traceFormatting';
+import {
+  type RawTracingConfig,
+  type RedteamTracingOptions,
+  resolveTracingOptions,
+} from '../tracingOptions';
 import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
 import type {
@@ -37,17 +48,6 @@ import type {
 } from '../../../types/index';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
-import {
-  extractTraceIdFromTraceparent,
-  fetchTraceContext,
-  type TraceContextData,
-} from '../../../tracing/traceContext';
-import { formatTraceForMetadata, formatTraceSummary } from '../traceFormatting';
-import {
-  resolveTracingOptions,
-  type RawTracingConfig,
-  type RedteamTracingOptions,
-} from '../tracingOptions';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -522,7 +522,9 @@ export class CrescendoProvider implements ApiProvider {
         }
         logger.debug(`[Crescendo] Continuing to round ${roundNum + 1}`);
       } catch (error) {
-        logger.error(`[Crescendo] Error Running crescendo step`, { error });
+        logger.error(`[Crescendo] Error Running crescendo step`, {
+          error: (error as Error).message,
+        });
       }
     }
 
@@ -717,6 +719,7 @@ export class CrescendoProvider implements ApiProvider {
       { ...vars, [this.config.injectVar]: attackPrompt },
       filters,
       provider,
+      [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     try {

@@ -32,6 +32,12 @@
     "src/workers/**/*",
     "src/app/**/*",
     "test/app/**/*",
-    "test/site/"
+    "test/site/",
+    "test/codeScans/**/*",
+    "test/matchers/**/*",
+    "test/database/**/*",
+    "test/testCase/**/*",
+    "test/validators/**/*",
+    "test/utils/**/*"
   ]
 }

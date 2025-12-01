@@ -441,7 +441,7 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    if (!resumeEval && cmdObj.generateSuggestions) {
+    if (!resumeEval && (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions)) {
       options.generateSuggestions = true;
     }
     // load scenarios or tests from an external file
@@ -536,13 +536,28 @@ export async function doEval(
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
-    // Check for explicit disable signals first
-    const hasExplicitDisable =
-      cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
-
-    const wantsToShare = hasExplicitDisable
-      ? false
-      : cmdObj.share || config.sharing || cloudConfig.isEnabled();
+    // Determine sharing with explicit precedence handling
+    let wantsToShare: boolean;
+    if (
+      cmdObj.share === false ||
+      cmdObj.noShare === true ||
+      getEnvBool('PROMPTFOO_DISABLE_SHARING')
+    ) {
+      // Explicit disable via CLI or env var takes highest priority
+      wantsToShare = false;
+    } else if (cmdObj.share === true) {
+      // Explicit enable via CLI
+      wantsToShare = true;
+    } else if (commandLineOptions?.share !== undefined) {
+      // Config file commandLineOptions.share (can be true or false)
+      wantsToShare = commandLineOptions.share;
+    } else if (config.sharing !== undefined) {
+      // Config file sharing setting (can be false, true, or object)
+      wantsToShare = Boolean(config.sharing);
+    } else {
+      // Default: auto-share when cloud is enabled
+      wantsToShare = cloudConfig.isEnabled();
+    }
 
     const canShareEval = isSharingEnabled(evalRecord);
 
@@ -1094,7 +1109,7 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
       }
-      doEval(
+      await doEval(
         validatedOpts as Partial<CommandLineOptions & Command>,
         defaultConfig,
         defaultConfigPath,

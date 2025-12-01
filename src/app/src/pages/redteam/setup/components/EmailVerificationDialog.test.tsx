@@ -1,8 +1,8 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 
 const mockSaveEmail = vi.fn();
@@ -43,8 +43,13 @@ describe('EmailVerificationDialog', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Note: Do NOT use vi.useFakeTimers() here - it breaks userEvent interactions
     mockSaveEmail.mockResolvedValue({ error: null });
     mockCheckEmailStatus.mockResolvedValue({ canProceed: true, error: null });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   it('renders correctly when open', () => {
@@ -175,10 +180,11 @@ describe('EmailVerificationDialog', () => {
   });
 
   it('disables form during submission', async () => {
+    let resolveSaveEmail: (value: { error: null }) => void;
     mockSaveEmail.mockImplementation(
       () =>
         new Promise((resolve) => {
-          setTimeout(() => resolve({ error: null }), 100);
+          resolveSaveEmail = resolve;
         }),
     );
 
@@ -189,8 +195,16 @@ describe('EmailVerificationDialog', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /verify email/i }));
 
-    expect(screen.getByRole('button', { name: /verifying/i })).toBeDisabled();
+    // Wait for the button to change to "Verifying..." state
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /verifying/i })).toBeDisabled();
+    });
     expect(emailInput).toBeDisabled();
+
+    // Resolve the save email promise
+    await act(async () => {
+      resolveSaveEmail!({ error: null });
+    });
 
     await waitFor(() => {
       expect(mockProps.onSuccess).toHaveBeenCalled();

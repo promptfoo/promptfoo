@@ -28,13 +28,13 @@ export default function FilterModeProvider({ children }: { children: React.React
     DEFAULT_FILTER_MODE,
   );
   return (
-    <FilterModeContext.Provider
+    <FilterModeContext
       value={{
         filterMode: filterMode ?? DEFAULT_FILTER_MODE,
         setFilterMode,
       }}
     >
       {children}
-    </FilterModeContext.Provider>
+    </FilterModeContext>
   );
 }

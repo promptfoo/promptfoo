@@ -1,31 +1,51 @@
+import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
 import { fetchWithCache } from '../../src/cache';
 import { HttpProvider } from '../../src/providers/http';
 
 // Mock dependencies
-jest.mock('../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
 
-jest.mock('undici', () => ({
-  Agent: jest.fn().mockImplementation((options) => ({
-    options,
-    dispatcher: 'mock-agent',
-  })),
-}));
+vi.mock('undici', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    Agent: vi.fn().mockImplementation(function (options) {
+      return {
+        options,
+        dispatcher: 'mock-agent',
+      };
+    }),
+  };
+});
+
+// Hoisted mock for fs.readFileSync
+const mockReadFileSync = vi.hoisted(() => vi.fn());
 
 // Mock fs module
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  readFileSync: jest.fn(),
-}));
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      readFileSync: mockReadFileSync,
+    },
+    readFileSync: mockReadFileSync,
+  };
+});
 
 describe('HttpProvider with TLS Configuration', () => {
-  const mockFetchWithCache = jest.mocked(fetchWithCache);
+  const mockFetchWithCache = vi.mocked(fetchWithCache);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Setup default mock response
     mockFetchWithCache.mockResolvedValue({
@@ -40,7 +60,7 @@ describe('HttpProvider with TLS Configuration', () => {
   describe('TLS certificate configuration', () => {
     it('should create HTTPS agent when TLS config is provided', async () => {
       // Mock file reads before creating provider
-      (fs.readFileSync as jest.Mock)
+      (fs.readFileSync as Mock)
         .mockReturnValueOnce('CA_CERT_CONTENT')
         .mockReturnValueOnce('CLIENT_CERT_CONTENT')
         .mockReturnValueOnce('PRIVATE_KEY_CONTENT');
@@ -79,7 +99,7 @@ describe('HttpProvider with TLS Configuration', () => {
       );
 
       // Verify files were read
-      expect(fs.readFileSync).toHaveBeenCalledTimes(3);
+      expect(mockReadFileSync).toHaveBeenCalledTimes(3);
     });
 
     it('should support inline certificates', async () => {
@@ -99,7 +119,7 @@ describe('HttpProvider with TLS Configuration', () => {
       await provider.callApi('test prompt');
 
       // Should not read from files when inline certs are provided
-      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(mockReadFileSync).not.toHaveBeenCalled();
 
       // Verify dispatcher was included
       expect(mockFetchWithCache).toHaveBeenCalledWith(
@@ -118,7 +138,7 @@ describe('HttpProvider with TLS Configuration', () => {
 
     it('should support PFX certificates', async () => {
       // Mock PFX file read (returns Buffer)
-      (fs.readFileSync as jest.Mock).mockReturnValue(Buffer.from('PFX_CONTENT'));
+      mockReadFileSync.mockReturnValue(Buffer.from('PFX_CONTENT'));
 
       const provider = new HttpProvider('https://api.example.com', {
         config: {
@@ -135,7 +155,7 @@ describe('HttpProvider with TLS Configuration', () => {
       await provider.callApi('test prompt');
 
       // Verify PFX file was read
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('cert.pfx'));
+      expect(mockReadFileSync).toHaveBeenCalledWith(expect.stringContaining('cert.pfx'));
 
       // Verify dispatcher was included
       expect(mockFetchWithCache).toHaveBeenCalledWith(
@@ -172,7 +192,7 @@ describe('HttpProvider with TLS Configuration', () => {
       await provider.callApi('test prompt');
 
       // Should not read from files when inline PFX is provided
-      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(mockReadFileSync).not.toHaveBeenCalled();
 
       // Verify dispatcher was included
       expect(mockFetchWithCache).toHaveBeenCalledWith(
@@ -207,7 +227,7 @@ describe('HttpProvider with TLS Configuration', () => {
       await provider.callApi('test prompt');
 
       // Should not read from files when inline PFX is provided
-      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(mockReadFileSync).not.toHaveBeenCalled();
 
       // Verify dispatcher was included
       expect(mockFetchWithCache).toHaveBeenCalledWith(
@@ -294,7 +314,7 @@ describe('HttpProvider with TLS Configuration', () => {
     });
 
     it('should work with raw request and TLS', async () => {
-      (fs.readFileSync as jest.Mock).mockReturnValue('CA_CERT_CONTENT');
+      mockReadFileSync.mockReturnValue('CA_CERT_CONTENT');
 
       const provider = new HttpProvider('https://api.example.com', {
         config: {
@@ -328,13 +348,13 @@ describe('HttpProvider with TLS Configuration', () => {
     it('should support both TLS and signature authentication', async () => {
       // Mock crypto.createSign to avoid actual signature generation
       const mockSign = {
-        update: jest.fn(),
-        end: jest.fn(),
-        sign: jest.fn().mockReturnValue(Buffer.from('mock-signature')),
+        update: vi.fn(),
+        end: vi.fn(),
+        sign: vi.fn().mockReturnValue(Buffer.from('mock-signature')),
       };
-      jest.spyOn(require('crypto'), 'createSign').mockReturnValue(mockSign as any);
+      vi.spyOn(require('crypto'), 'createSign').mockReturnValue(mockSign as any);
 
-      (fs.readFileSync as jest.Mock).mockReturnValue('CA_CERT_CONTENT');
+      mockReadFileSync.mockReturnValue('CA_CERT_CONTENT');
 
       const provider = new HttpProvider('https://api.example.com', {
         config: {

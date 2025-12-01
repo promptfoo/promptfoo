@@ -2,7 +2,7 @@ import logger from '../../logger';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { Strategy } from './types';
-import type { TestCase, TestCaseWithPlugin } from '../../types';
+import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
 export async function addLayerTestCases(
   testCases: TestCaseWithPlugin[],

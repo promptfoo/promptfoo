@@ -95,6 +95,7 @@ const redTeamSidebar = [
           'red-team/plugins/coppa',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
+          'red-team/plugins/ecommerce',
           'red-team/plugins/ferpa',
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
@@ -296,7 +297,7 @@ const redTeamSidebar = [
       {
         type: 'doc',
         label: 'Agent Red Teaming',
-        id: 'red-team/agents',
+        id: 'red-team/llm-agents',
       },
       {
         type: 'doc',
@@ -312,6 +313,16 @@ const redTeamSidebar = [
         type: 'doc',
         label: 'Foundation Model Red Teaming',
         id: 'red-team/foundation-models',
+      },
+      {
+        type: 'doc',
+        label: 'LLM Supply Chain Security',
+        id: 'red-team/llm-supply-chain',
+      },
+      {
+        type: 'doc',
+        label: 'Detecting Model Drift',
+        id: 'red-team/model-drift',
       },
       {
         type: 'doc',
@@ -407,7 +418,7 @@ const sidebars = {
       link: {
         type: 'generated-index',
       },
-      items: [...redTeamSidebar, { type: 'doc', id: 'guides/llm-redteaming' }],
+      items: redTeamSidebar,
     },
     {
       type: 'category',
@@ -420,6 +431,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'code-scanning/github-action' },
         { type: 'doc', id: 'code-scanning/cli' },
+        { type: 'doc', id: 'code-scanning/vscode-extension' },
       ],
     },
     {

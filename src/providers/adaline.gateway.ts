@@ -19,7 +19,7 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { calculateAzureCost } from './azure/util';
 import { AIStudioChatProvider } from './google/ai.studio';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
-import { GroqProvider } from './groq';
+import { GroqProvider } from './groq/index';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { calculateOpenAICost } from './openai/util';
@@ -383,7 +383,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           this.modelName,
           this.providerOptions,
         );
-        const { body } = openAiProvider.getOpenAiBody(prompt, context, callApiOptions);
+        const { body } = await openAiProvider.getOpenAiBody(prompt, context, callApiOptions);
         // create a temp gateway openai model to transform the body to gateway types
         const gatewayOpenAiDummyModel = new GatewayOpenAI().chatModel({
           modelName: 'gpt-4o',
@@ -420,7 +420,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           { role: 'user', content: [{ modality: 'text', value: prompt }] },
         ]);
         gatewayTools = _config.tools
-          ? (maybeLoadToolsFromExternalFile(_config.tools) as GatewayToolType[])
+          ? ((await maybeLoadToolsFromExternalFile(_config.tools)) as GatewayToolType[])
           : undefined;
       }
 

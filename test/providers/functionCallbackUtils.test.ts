@@ -1,30 +1,42 @@
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
+import { importModule } from '../../src/esm';
+import logger from '../../src/logger';
+import { isJavascriptFile } from '../../src/util/fileExtensions';
 
 import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';
 
 // Mock dependencies
-jest.mock('../../src/cliState', () => ({ basePath: '/test/basePath' }));
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(),
+vi.mock('../../src/cliState', () => ({ default: { basePath: '/test/basePath' } }));
+vi.mock('../../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    importModule: vi.fn(),
+  };
+});
+vi.mock('../../src/logger', () => ({
+  default: { debug: vi.fn() },
 }));
-jest.mock('../../src/logger', () => ({
-  debug: jest.fn(),
-}));
-jest.mock('../../src/util/fileExtensions', () => ({
-  isJavascriptFile: jest.fn().mockReturnValue(true),
-}));
+vi.mock('../../src/util/fileExtensions', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    isJavascriptFile: vi.fn().mockReturnValue(true),
+  };
+});
 
-const mockImportModule = jest.mocked(jest.requireMock('../../src/esm').importModule);
-const mockLogger = jest.requireMock('../../src/logger');
+const mockImportModule = vi.mocked(importModule);
+const mockLogger = vi.mocked(logger);
+vi.mocked(isJavascriptFile);
 
 describe('FunctionCallbackHandler', () => {
   let handler: FunctionCallbackHandler;
 
   beforeEach(() => {
     handler = new FunctionCallbackHandler();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('processCall', () => {
@@ -59,7 +71,7 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should execute function callback successfully', async () => {
-      const mockCallback = jest.fn().mockResolvedValue('callback result');
+      const mockCallback = vi.fn().mockResolvedValue('callback result');
       const callbacks: FunctionCallbackConfig = {
         testFunction: mockCallback,
       };
@@ -75,7 +87,7 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should pass context to callback', async () => {
-      const mockCallback = jest.fn().mockResolvedValue('callback result');
+      const mockCallback = vi.fn().mockResolvedValue('callback result');
       const callbacks: FunctionCallbackConfig = {
         testFunction: mockCallback,
       };
@@ -92,7 +104,7 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should handle tool call format', async () => {
-      const mockCallback = jest.fn().mockResolvedValue('tool result');
+      const mockCallback = vi.fn().mockResolvedValue('tool result');
       const callbacks: FunctionCallbackConfig = {
         testTool: mockCallback,
       };
@@ -114,7 +126,7 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should stringify non-string callback results', async () => {
-      const mockCallback = jest.fn().mockResolvedValue({ result: 'object' });
+      const mockCallback = vi.fn().mockResolvedValue({ result: 'object' });
       const callbacks: FunctionCallbackConfig = {
         testFunction: mockCallback,
       };
@@ -129,7 +141,7 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should return original call on callback error', async () => {
-      const mockCallback = jest.fn().mockRejectedValue(new Error('Callback failed'));
+      const mockCallback = vi.fn().mockRejectedValue(new Error('Callback failed'));
       const callbacks: FunctionCallbackConfig = {
         testFunction: mockCallback,
       };
@@ -148,7 +160,7 @@ describe('FunctionCallbackHandler', () => {
 
     it('should handle calls with no function information', async () => {
       const callbacks: FunctionCallbackConfig = {
-        testFunction: jest.fn(),
+        testFunction: vi.fn() as any,
       };
       const call = { notAFunction: true };
 
@@ -168,7 +180,7 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should process single call and return output directly', async () => {
-      const mockCallback = jest.fn().mockResolvedValue('single result');
+      const mockCallback = vi.fn().mockResolvedValue('single result');
       const callbacks: FunctionCallbackConfig = {
         testFunction: mockCallback,
       };
@@ -180,8 +192,8 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should process array of calls and join string results', async () => {
-      const mockCallback1 = jest.fn().mockResolvedValue('result1');
-      const mockCallback2 = jest.fn().mockResolvedValue('result2');
+      const mockCallback1 = vi.fn().mockResolvedValue('result1');
+      const mockCallback2 = vi.fn().mockResolvedValue('result2');
       const callbacks: FunctionCallbackConfig = {
         func1: mockCallback1,
         func2: mockCallback2,
@@ -197,8 +209,8 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should return output array when results are not all strings', async () => {
-      const mockCallback1 = jest.fn().mockResolvedValue('string result');
-      const mockCallback2 = jest.fn().mockResolvedValue({ object: 'result' });
+      const mockCallback1 = vi.fn().mockResolvedValue('string result');
+      const mockCallback2 = vi.fn().mockResolvedValue({ object: 'result' });
       const callbacks: FunctionCallbackConfig = {
         func1: mockCallback1,
         func2: mockCallback2,
@@ -239,7 +251,7 @@ describe('FunctionCallbackHandler', () => {
 
   describe('executeCallback', () => {
     it('should cache and reuse loaded callbacks', async () => {
-      const mockCallback = jest.fn().mockResolvedValue('cached result');
+      const mockCallback = vi.fn().mockResolvedValue('cached result');
       const callbacks: FunctionCallbackConfig = {
         testFunction: mockCallback,
       };
@@ -252,7 +264,7 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should load external file-based callbacks', async () => {
-      const mockExternalFunction = jest.fn().mockResolvedValue('external result');
+      const mockExternalFunction = vi.fn().mockResolvedValue('external result');
       mockImportModule.mockResolvedValue({ default: mockExternalFunction });
 
       const callbacks: FunctionCallbackConfig = {
@@ -273,9 +285,9 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should load specific function from external file', async () => {
-      const mockSpecificFunction = jest.fn().mockResolvedValue('specific result');
+      const mockSpecificFunction = vi.fn().mockResolvedValue('specific result');
       const mockModule = {
-        default: jest.fn(),
+        default: vi.fn(),
         specificFunction: mockSpecificFunction,
       };
       mockImportModule.mockResolvedValue(mockModule);
@@ -354,7 +366,7 @@ describe('FunctionCallbackHandler', () => {
 
   describe('clearCache', () => {
     it('should clear cached callbacks', async () => {
-      const mockCallback = jest.fn().mockResolvedValue('result');
+      const mockCallback = vi.fn().mockResolvedValue('result');
       const callbacks: FunctionCallbackConfig = {
         testFunction: mockCallback,
       };
@@ -366,7 +378,7 @@ describe('FunctionCallbackHandler', () => {
       handler.clearCache();
 
       // Mock a different implementation
-      const newMockCallback = jest.fn().mockResolvedValue('new result');
+      const newMockCallback = vi.fn().mockResolvedValue('new result');
       const newCallbacks: FunctionCallbackConfig = {
         testFunction: newMockCallback,
       };
@@ -420,14 +432,17 @@ describe('FunctionCallbackHandler', () => {
   });
 
   describe('MCP Integration', () => {
-    let mockMCPClient: jest.Mocked<any>;
+    let mockMCPClient: {
+      getAllTools: ReturnType<typeof vi.fn>;
+      callTool: ReturnType<typeof vi.fn>;
+    };
 
     beforeEach(() => {
       mockMCPClient = {
-        getAllTools: jest.fn(),
-        callTool: jest.fn(),
+        getAllTools: vi.fn(),
+        callTool: vi.fn(),
       };
-      handler = new FunctionCallbackHandler(mockMCPClient);
+      handler = new FunctionCallbackHandler(mockMCPClient as any);
     });
 
     it('should execute MCP tool when tool name matches available MCP tools', async () => {
@@ -498,7 +513,7 @@ describe('FunctionCallbackHandler', () => {
       mockMCPClient.getAllTools.mockReturnValue([{ name: 'mcp_tool', description: 'An MCP tool' }]);
 
       const callbacks: FunctionCallbackConfig = {
-        regular_function: async (args: string) => 'callback result',
+        regular_function: async (_args: string) => 'callback result',
       };
       const call = { name: 'regular_function', arguments: '{}' };
       const result = await handler.processCall(call, callbacks);
@@ -519,7 +534,7 @@ describe('FunctionCallbackHandler', () => {
       });
 
       const callbacks: FunctionCallbackConfig = {
-        shared_name: async (args: string) => 'callback result',
+        shared_name: async (_args: string) => 'callback result',
       };
       const call = { name: 'shared_name', arguments: '{}' };
       const result = await handler.processCall(call, callbacks);
@@ -534,7 +549,7 @@ describe('FunctionCallbackHandler', () => {
     it('should work without MCP client (backwards compatibility)', async () => {
       const handlerWithoutMCP = new FunctionCallbackHandler();
       const callbacks: FunctionCallbackConfig = {
-        test_function: async (args: string) => 'no MCP result',
+        test_function: async (_args: string) => 'no MCP result',
       };
       const call = { name: 'test_function', arguments: '{}' };
       const result = await handlerWithoutMCP.processCall(call, callbacks);

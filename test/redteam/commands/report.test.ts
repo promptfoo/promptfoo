@@ -1,23 +1,29 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import { redteamReportCommand } from '../../../src/redteam/commands/report';
 import { startServer } from '../../../src/server/server';
 import telemetry from '../../../src/telemetry';
-import { setupEnv } from '../../../src/util';
+import { setupEnv } from '../../../src/util/index';
 import { setConfigDirectoryPath } from '../../../src/util/config/manage';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../../src/util/server';
 
-jest.mock('../../../src/server/server');
-jest.mock('../../../src/telemetry');
-jest.mock('../../../src/util');
-jest.mock('../../../src/util/config/manage');
-jest.mock('../../../src/util/server');
+vi.mock('../../../src/server/server');
+vi.mock('../../../src/telemetry');
+vi.mock('../../../src/util');
+vi.mock('../../../src/util/config/manage', () => ({
+  getConfigDirectoryPath: vi.fn().mockReturnValue('/tmp/test-config'),
+  setConfigDirectoryPath: vi.fn(),
+  maybeReadConfig: vi.fn(),
+  readConfigs: vi.fn(),
+}));
+vi.mock('../../../src/util/server');
 
 describe('redteamReportCommand', () => {
   let program: Command;
 
   beforeEach(() => {
     program = new Command();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should set up command with correct options', () => {
@@ -37,7 +43,7 @@ describe('redteamReportCommand', () => {
     redteamReportCommand(program);
     const cmd = program.commands[0];
 
-    jest.mocked(checkServerRunning).mockResolvedValue(false);
+    vi.mocked(checkServerRunning).mockResolvedValue(false);
 
     await cmd.parseAsync(['node', 'test', 'testdir', '--port', '3000']);
 
@@ -53,7 +59,7 @@ describe('redteamReportCommand', () => {
     redteamReportCommand(program);
     const cmd = program.commands[0];
 
-    jest.mocked(checkServerRunning).mockResolvedValue(true);
+    vi.mocked(checkServerRunning).mockResolvedValue(true);
 
     await cmd.parseAsync(['node', 'test', '--port', '3000']);
 
@@ -65,7 +71,7 @@ describe('redteamReportCommand', () => {
     redteamReportCommand(program);
     const cmd = program.commands[0];
 
-    jest.mocked(checkServerRunning).mockResolvedValue(false);
+    vi.mocked(checkServerRunning).mockResolvedValue(false);
 
     await cmd.parseAsync(['node', 'test', '--filter-description', 'test.*']);
 
