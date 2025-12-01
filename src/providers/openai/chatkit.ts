@@ -861,6 +861,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         isRefusal,
         // Use sessionId for consistency with HTTP provider's stateful handling
         sessionId: threadId,
+        // Token usage not available from ChatKit, but track request count
+        tokenUsage: { numRequests: 1 },
         metadata: {
           workflowId: this.chatKitConfig.workflowId,
           version: this.chatKitConfig.version,
@@ -1018,6 +1020,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         isRefusal,
         // Use sessionId for consistency with HTTP provider's stateful handling
         sessionId: threadId,
+        // Token usage not available from ChatKit, but track request count
+        tokenUsage: { numRequests: 1 },
         metadata: {
           workflowId: this.chatKitConfig.workflowId,
           version: this.chatKitConfig.version,
