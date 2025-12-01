@@ -1178,7 +1178,7 @@ describe('AIStudioChatProvider', () => {
         } as any;
       });
 
-      provider = new AIStudioChatProvider('gemini-1.5-flash', {
+      provider = new AIStudioChatProvider('gemini-2.5-flash', {
         config: {
           apiKey: 'test-key',
           tools: [
@@ -1260,7 +1260,7 @@ describe('AIStudioChatProvider', () => {
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=test-key',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=test-key',
         {
           body: expect.stringContaining(
             '"googleSearchRetrieval":{"dynamicRetrievalConfig":{"mode":"MODE_DYNAMIC","dynamicThreshold":0.3}}',
