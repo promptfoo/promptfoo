@@ -1,82 +1,100 @@
+import {
+  type Mock,
+  type MockedFunction,
+  type MockInstance,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import * as envars from '../src/envars';
 import { Telemetry } from '../src/telemetry';
 import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
 
-jest.mock('../src/util/fetch/index.ts', () => ({
-  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-  fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+vi.mock('../src/util/fetch/index.ts', () => ({
+  fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
+  fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
-jest.mock('crypto', () => ({
-  randomUUID: jest.fn().mockReturnValue('test-uuid'),
+vi.mock('crypto', () => ({
+  randomUUID: vi.fn().mockReturnValue('test-uuid'),
 }));
 
-jest.mock('../src/globalConfig/globalConfig', () => ({
-  readGlobalConfig: jest
+vi.mock('../src/globalConfig/globalConfig', () => ({
+  readGlobalConfig: vi
     .fn()
     .mockReturnValue({ id: 'test-user-id', account: { email: 'test@example.com' } }),
-  writeGlobalConfig: jest.fn(),
+  writeGlobalConfig: vi.fn(),
 }));
 
-jest.mock('../src/constants', () => ({
-  ...jest.requireActual('../src/constants'),
-  VERSION: '1.0.0',
-}));
+vi.mock('../src/constants', async () => {
+  const actual = await vi.importActual<typeof import('../src/constants')>('../src/constants');
+  return {
+    ...actual,
+    VERSION: '1.0.0',
+  };
+});
 
-jest.mock('../src/cliState', () => ({
+vi.mock('../src/cliState', () => ({
   __esModule: true,
   default: {
     config: undefined,
   },
 }));
 
-jest.mock('../src/envars', () => ({
-  ...jest.requireActual('../src/envars'),
-  getEnvBool: jest.fn().mockImplementation((key) => {
-    if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
-      return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
-    }
-    if (key === 'IS_TESTING') {
-      return process.env.IS_TESTING === 'true' || process.env.IS_TESTING === '1';
-    }
-    return false;
-  }),
-  getEnvString: jest.fn().mockImplementation((key) => {
-    if (key === 'PROMPTFOO_POSTHOG_KEY') {
-      return process.env.PROMPTFOO_POSTHOG_KEY || 'test-key';
-    }
-    if (key === 'PROMPTFOO_POSTHOG_HOST') {
-      return process.env.PROMPTFOO_POSTHOG_HOST || undefined;
-    }
-    if (key === 'NODE_ENV') {
-      return process.env.NODE_ENV || undefined;
-    }
-    return undefined;
-  }),
-  isCI: jest.fn().mockReturnValue(false),
-}));
+vi.mock('../src/envars', async () => {
+  const actual = await vi.importActual<typeof import('../src/envars')>('../src/envars');
+  return {
+    ...actual,
+    getEnvBool: vi.fn().mockImplementation((key) => {
+      if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
+        return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+      }
+      if (key === 'IS_TESTING') {
+        return process.env.IS_TESTING === 'true' || process.env.IS_TESTING === '1';
+      }
+      return false;
+    }),
+    getEnvString: vi.fn().mockImplementation((key) => {
+      if (key === 'PROMPTFOO_POSTHOG_KEY') {
+        return process.env.PROMPTFOO_POSTHOG_KEY || 'test-key';
+      }
+      if (key === 'PROMPTFOO_POSTHOG_HOST') {
+        return process.env.PROMPTFOO_POSTHOG_HOST || undefined;
+      }
+      if (key === 'NODE_ENV') {
+        return process.env.NODE_ENV || undefined;
+      }
+      return undefined;
+    }),
+    isCI: vi.fn().mockReturnValue(false),
+  };
+});
 
-jest.mock('../src/logger', () => ({
+vi.mock('../src/logger', () => ({
   __esModule: true,
   default: {
-    debug: jest.fn(),
+    debug: vi.fn(),
   },
 }));
 
-jest.mock('../src/globalConfig/accounts', () => ({
-  isLoggedIntoCloud: jest.fn().mockReturnValue(false),
-  getAuthMethod: jest.fn().mockReturnValue('none'),
-  getUserEmail: jest.fn().mockReturnValue('test@example.com'),
-  getUserId: jest.fn().mockReturnValue('test-user-id'),
+vi.mock('../src/globalConfig/accounts', () => ({
+  isLoggedIntoCloud: vi.fn().mockReturnValue(false),
+  getAuthMethod: vi.fn().mockReturnValue('none'),
+  getUserEmail: vi.fn().mockReturnValue('test@example.com'),
+  getUserId: vi.fn().mockReturnValue('test-user-id'),
 }));
 
-jest.mock('../src/constants/build', () => ({
+vi.mock('../src/constants/build', () => ({
   POSTHOG_KEY: 'test-posthog-key',
 }));
 
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
-  let fetchWithProxySpy: jest.MockedFunction<typeof fetchWithProxy>;
-  let sendEventSpy: jest.SpyInstance;
+  let fetchWithProxySpy: MockedFunction<typeof fetchWithProxy>;
+  let sendEventSpy: MockInstance;
 
   beforeEach(() => {
     originalEnv = process.env;
@@ -84,24 +102,23 @@ describe('Telemetry', () => {
     process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
 
     // Get the mocked fetchWithProxy function
-    fetchWithProxySpy = fetchWithProxy as jest.MockedFunction<typeof fetchWithProxy>;
+    fetchWithProxySpy = fetchWithProxy as MockedFunction<typeof fetchWithProxy>;
     fetchWithProxySpy.mockClear();
     fetchWithProxySpy.mockResolvedValue({ ok: true } as any);
 
-    sendEventSpy = jest.spyOn(Telemetry.prototype, 'sendEvent' as any);
+    sendEventSpy = vi.spyOn(Telemetry.prototype, 'sendEvent' as any);
 
-    jest.useFakeTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
-    jest.useRealTimers();
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
 
     // Reset isCI mock to default value to prevent test pollution
-    const isCI = jest.requireMock('../src/envars').isCI;
-    isCI.mockReturnValue(false);
+    vi.mocked(envars.isCI).mockReturnValue(false);
   });
 
   it('should not track events with PostHog when telemetry is disabled', () => {
@@ -143,14 +160,14 @@ describe('Telemetry', () => {
   });
 
   it('should include version and CI status in telemetry events', async () => {
-    jest.useRealTimers(); // Temporarily use real timers for this test
+    vi.useRealTimers(); // Temporarily use real timers for this test
 
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
     delete process.env.IS_TESTING; // Clear IS_TESTING to allow fetch calls
 
-    const isCI = jest.requireMock('../src/envars').isCI;
-    const originalMockValue = isCI.getMockImplementation();
-    isCI.mockReturnValue(true);
+    const isCIMock = vi.mocked(envars.isCI);
+    const originalMockValue = isCIMock.getMockImplementation();
+    isCIMock.mockReturnValue(true);
     fetchWithProxySpy.mockClear();
 
     const _telemetry = new Telemetry();
@@ -190,16 +207,16 @@ describe('Telemetry', () => {
 
     // Restore original mock
     if (originalMockValue) {
-      isCI.mockImplementation(originalMockValue);
+      isCIMock.mockImplementation(originalMockValue);
     } else {
-      isCI.mockReturnValue(false);
+      isCIMock.mockReturnValue(false);
     }
     process.env.IS_TESTING = 'true'; // Reset IS_TESTING
-    jest.useFakeTimers(); // Restore fake timers
+    vi.useFakeTimers(); // Restore fake timers
   });
 
   it('should save consent successfully', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
+    vi.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
     const _telemetry = new Telemetry();
 
     await _telemetry.saveConsent('test@example.com', { source: 'test' });
@@ -218,7 +235,7 @@ describe('Telemetry', () => {
   });
 
   it('should handle failed consent save', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: false, statusText: 'Not Found' } as any);
+    vi.mocked(fetchWithTimeout).mockResolvedValue({ ok: false, statusText: 'Not Found' } as any);
     const _telemetry = new Telemetry();
 
     await _telemetry.saveConsent('test@example.com', { source: 'test' });
@@ -239,19 +256,19 @@ describe('Telemetry', () => {
   it('should not send user events when telemetry is disabled', async () => {
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
 
-    jest.resetModules();
+    vi.resetModules();
 
     // Re-establish fetch mocks after module reset
-    jest.doMock('../src/util/fetch/index.ts', () => ({
-      fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-      fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+    vi.doMock('../src/util/fetch/index.ts', () => ({
+      fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
+      fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
     }));
 
     const telemetryModule = await import('../src/telemetry');
     const { Telemetry: TelemetryClass, default: telemetryInstance } = telemetryModule;
 
     // Create spy on the dynamically imported class (not the statically imported one)
-    const localSendEventSpy = jest.spyOn(TelemetryClass.prototype as any, 'sendEvent');
+    const localSendEventSpy = vi.spyOn(TelemetryClass.prototype as any, 'sendEvent');
 
     telemetryInstance.record('eval_ran', { foo: 'bar' });
 
@@ -270,21 +287,21 @@ describe('Telemetry', () => {
       delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
-      const mockPostHog = jest.fn().mockImplementation(() => ({
-        identify: jest.fn(),
-        capture: jest.fn(),
-        flush: jest.fn().mockResolvedValue(undefined),
+      const mockPostHog = vi.fn().mockImplementation(() => ({
+        identify: vi.fn(),
+        capture: vi.fn(),
+        flush: vi.fn().mockResolvedValue(undefined),
       }));
 
-      jest.resetModules();
+      vi.resetModules();
 
       // Re-establish fetch mocks after module reset
-      jest.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      vi.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
       }));
 
-      jest.doMock('posthog-node', () => ({
+      vi.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
       }));
 
@@ -305,19 +322,19 @@ describe('Telemetry', () => {
       delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
-      const mockPostHog = jest.fn().mockImplementation(() => {
+      const mockPostHog = vi.fn().mockImplementation(() => {
         throw new Error('PostHog initialization failed');
       });
 
-      jest.resetModules();
+      vi.resetModules();
 
       // Re-establish fetch mocks after module reset
-      jest.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      vi.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
       }));
 
-      jest.doMock('posthog-node', () => ({
+      vi.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
       }));
 
@@ -330,29 +347,97 @@ describe('Telemetry', () => {
 
   describe('PostHog operations', () => {
     let mockPostHogInstance: any;
-    let mockPostHog: jest.Mock;
+    let mockPostHog: Mock;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       mockPostHogInstance = {
-        identify: jest.fn(),
-        capture: jest.fn(),
-        flush: jest.fn().mockResolvedValue(undefined),
-        on: jest.fn(), // Add the 'on' method for error handling
+        identify: vi.fn(),
+        capture: vi.fn(),
+        flush: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(), // Add the 'on' method for error handling
       };
-      mockPostHog = jest.fn().mockImplementation(() => mockPostHogInstance);
+      // Use a class-like constructor for PostHog
+      mockPostHog = vi.fn(function (this: any) {
+        Object.assign(this, mockPostHogInstance);
+        return this;
+      });
 
       // Clear all modules and re-mock
-      jest.resetModules();
-      jest.clearAllMocks();
+      vi.resetModules();
+      vi.clearAllMocks();
 
-      // Re-establish fetch mocks after module reset
-      jest.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      // Re-establish all mocks after module reset
+      vi.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
       }));
 
-      jest.doMock('posthog-node', () => ({
+      vi.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
+      }));
+
+      vi.doMock('../src/constants', async () => {
+        const actual = await vi.importActual('../src/constants');
+        return { ...actual, VERSION: '1.0.0' };
+      });
+
+      vi.doMock('../src/cliState', () => ({
+        __esModule: true,
+        default: { config: undefined },
+      }));
+
+      vi.doMock('../src/envars', async () => {
+        const actual = await vi.importActual('../src/envars');
+        return {
+          ...actual,
+          getEnvBool: vi.fn().mockImplementation((key: string) => {
+            if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
+              return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+            }
+            if (key === 'IS_TESTING') {
+              return process.env.IS_TESTING === 'true' || process.env.IS_TESTING === '1';
+            }
+            return false;
+          }),
+          getEnvString: vi.fn().mockImplementation((key: string) => {
+            if (key === 'PROMPTFOO_POSTHOG_KEY') {
+              return process.env.PROMPTFOO_POSTHOG_KEY || 'test-key';
+            }
+            if (key === 'PROMPTFOO_POSTHOG_HOST') {
+              return process.env.PROMPTFOO_POSTHOG_HOST || undefined;
+            }
+            if (key === 'NODE_ENV') {
+              return process.env.NODE_ENV || undefined;
+            }
+            return undefined;
+          }),
+          isCI: vi.fn().mockReturnValue(false),
+        };
+      });
+
+      vi.doMock('../src/logger', () => ({
+        __esModule: true,
+        default: { debug: vi.fn() },
+      }));
+
+      vi.doMock('../src/globalConfig/accounts', () => ({
+        isLoggedIntoCloud: vi.fn().mockReturnValue(false),
+        getAuthMethod: vi.fn().mockReturnValue('none'),
+        getUserEmail: vi.fn().mockReturnValue('test@example.com'),
+        getUserId: vi.fn().mockReturnValue('test-user-id'),
+      }));
+
+      vi.doMock('../src/constants/build', () => ({
+        POSTHOG_KEY: 'test-posthog-key',
+      }));
+
+      vi.doMock('../src/globalConfig/globalConfig', () => ({
+        readGlobalConfig: vi.fn().mockReturnValue({ id: 'test-user-id', account: { email: 'test@example.com' } }),
+        writeGlobalConfig: vi.fn(),
+      }));
+
+      vi.doMock('crypto', () => ({
+        randomUUID: vi.fn().mockReturnValue('test-uuid'),
       }));
     });
 
@@ -388,7 +473,7 @@ describe('Telemetry', () => {
       });
 
       const { default: logger } = await import('../src/logger');
-      const loggerSpy = jest.spyOn(logger, 'debug');
+      const loggerSpy = vi.spyOn(logger, 'debug');
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
 
@@ -428,7 +513,7 @@ describe('Telemetry', () => {
       });
 
       const { default: logger } = await import('../src/logger');
-      const loggerSpy = jest.spyOn(logger, 'debug');
+      const loggerSpy = vi.spyOn(logger, 'debug');
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
 
@@ -454,7 +539,7 @@ describe('Telemetry', () => {
       delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
-      mockPostHogInstance.shutdown = jest.fn().mockResolvedValue(undefined);
+      mockPostHogInstance.shutdown = vi.fn().mockResolvedValue(undefined);
 
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
@@ -469,10 +554,10 @@ describe('Telemetry', () => {
       delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
-      mockPostHogInstance.shutdown = jest.fn().mockRejectedValue(new Error('Shutdown failed'));
+      mockPostHogInstance.shutdown = vi.fn().mockRejectedValue(new Error('Shutdown failed'));
 
       const { default: logger } = await import('../src/logger');
-      const loggerSpy = jest.spyOn(logger, 'debug');
+      const loggerSpy = vi.spyOn(logger, 'debug');
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
 
@@ -510,18 +595,18 @@ describe('Telemetry', () => {
       const mockError = new Error('Network error');
 
       // Reset modules to ensure clean state
-      jest.resetModules();
+      vi.resetModules();
 
       // Re-mock fetchWithTimeout
-      jest.doMock('../src/util/fetch', () => ({
-        fetchWithTimeout: jest.fn().mockRejectedValue(mockError),
+      vi.doMock('../src/util/fetch', () => ({
+        fetchWithTimeout: vi.fn().mockRejectedValue(mockError),
       }));
 
       // Re-mock logger to capture debug calls
-      jest.doMock('../src/logger', () => ({
+      vi.doMock('../src/logger', () => ({
         __esModule: true,
         default: {
-          debug: jest.fn(),
+          debug: vi.fn(),
         },
       }));
 
@@ -535,7 +620,7 @@ describe('Telemetry', () => {
     });
 
     it('should save consent without metadata', async () => {
-      jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
+      vi.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
       const _telemetry = new Telemetry();
 
       await _telemetry.saveConsent('test@example.com');
@@ -567,20 +652,20 @@ describe('Telemetry', () => {
     it('should register beforeExit handler only once across multiple module loads', async () => {
       const beforeExitListenersBefore = process.listenerCount('beforeExit');
 
-      jest.resetModules();
-      jest.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      vi.resetModules();
+      vi.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
       }));
 
       // First import
       await import('../src/telemetry');
       const listenersAfterFirst = process.listenerCount('beforeExit');
 
-      jest.resetModules();
-      jest.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      vi.resetModules();
+      vi.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
       }));
 
       // Second import
@@ -593,10 +678,10 @@ describe('Telemetry', () => {
     });
 
     it('should store telemetry instance on process for beforeExit handler', async () => {
-      jest.resetModules();
-      jest.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      vi.resetModules();
+      vi.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
       }));
 
       const telemetryModule = await import('../src/telemetry');
@@ -609,19 +694,19 @@ describe('Telemetry', () => {
     });
 
     it('should update stored instance when module is reloaded', async () => {
-      jest.resetModules();
-      jest.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      vi.resetModules();
+      vi.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
       }));
 
       const firstModule = await import('../src/telemetry');
       const firstInstance = firstModule.default;
 
-      jest.resetModules();
-      jest.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
+      vi.resetModules();
+      vi.doMock('../src/util/fetch/index.ts', () => ({
+        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
+        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
       }));
 
       const secondModule = await import('../src/telemetry');

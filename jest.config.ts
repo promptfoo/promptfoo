@@ -79,6 +79,7 @@ const config: Config = {
     '<rootDir>/test/scripts',
     '<rootDir>/test/fetch.test.ts',
     '<rootDir>/test/evaluator.test.ts',
+    '<rootDir>/test/telemetry.test.ts',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',

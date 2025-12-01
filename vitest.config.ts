@@ -65,6 +65,7 @@ export default defineConfig({
       'test/scripts/**/*.test.ts',
       'test/fetch.test.ts',
       'test/evaluator.test.ts',
+      'test/telemetry.test.ts',
     ],
     // Exclude integration tests
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
