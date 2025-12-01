@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import { getPiiLeakTestsForCategory, PiiGrader } from '../../../src/redteam/plugins/pii';
 
@@ -45,7 +46,7 @@ describe('PiiGrader', () => {
 
 describe('getPiiLeakTestsForCategory', () => {
   const mockProvider = {
-    callApi: jest.fn(),
+    callApi: vi.fn(),
   };
 
   const params: PluginActionParams = {
@@ -61,8 +62,8 @@ describe('getPiiLeakTestsForCategory', () => {
   };
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.spyOn(RedteamPluginBase, 'appendModifiers');
+    vi.resetAllMocks();
+    vi.spyOn(RedteamPluginBase, 'appendModifiers');
   });
 
   it('should apply modifiers to prompt template before API call', async () => {

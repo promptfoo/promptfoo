@@ -16,10 +16,13 @@ vi.mock('../../src/util/file');
 vi.mock('../../src/logger');
 vi.mock('../../src/util');
 
-vi.mock('../../src/util/fileReference', () => ({
-  loadFileReference: vi.fn(),
-  processConfigFileReferences: vi.fn(),
-}));
+vi.mock('../../src/util/fileReference', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    loadFileReference: vi.fn(),
+    processConfigFileReferences: vi.fn(),
+  };
+});
 
 const mocks = vi.hoisted(() => {
   const mockPoolInstance = {
@@ -37,14 +40,20 @@ const mocks = vi.hoisted(() => {
   return { mockPoolInstance, PythonWorkerPoolMock, importModuleMock, isEsmModuleMock };
 });
 
-vi.mock('../../src/esm', () => ({
-  importModule: mocks.importModuleMock,
-  isEsmModule: mocks.isEsmModuleMock,
-}));
+vi.mock('../../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    importModule: mocks.importModuleMock,
+    isEsmModule: mocks.isEsmModuleMock,
+  };
+});
 
-vi.mock('../../src/python/workerPool', () => ({
-  PythonWorkerPool: mocks.PythonWorkerPoolMock,
-}));
+vi.mock('../../src/python/workerPool', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    PythonWorkerPool: mocks.PythonWorkerPoolMock,
+  };
+});
 
 describe('PythonProvider with file references', () => {
   const mockPoolInstance = mocks.mockPoolInstance;
@@ -66,31 +75,35 @@ describe('PythonProvider with file references', () => {
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
 
-    vi.mocked(logger.debug).mockImplementation(
-      () =>
-        ({
-          debug: vi.fn(),
-          info: vi.fn(),
-          warn: vi.fn(),
-          error: vi.fn(),
-        }) as unknown as Logger,
-    );
+    vi.mocked(logger.debug).mockImplementation(function () {
+      return {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as unknown as Logger;
+    });
 
-    vi.mocked(logger.error).mockImplementation(
-      () =>
-        ({
-          debug: vi.fn(),
-          info: vi.fn(),
-          warn: vi.fn(),
-          error: vi.fn(),
-        }) as unknown as Logger,
-    );
+    vi.mocked(logger.error).mockImplementation(function () {
+      return {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as unknown as Logger;
+    });
 
-    vi.mocked(path.resolve).mockImplementation((...parts) => parts.join('/'));
-    vi.mocked(path.relative).mockReturnValue('relative/path');
-    vi.mocked(path.join).mockImplementation((...parts) => parts.join('/'));
+    vi.mocked(path.resolve).mockImplementation(function (...parts) {
+      return parts.join('/');
+    });
+    vi.mocked(path.relative).mockImplementation(function () {
+      return 'relative/path';
+    });
+    vi.mocked(path.join).mockImplementation(function (...parts) {
+      return parts.join('/');
+    });
 
-    vi.mocked(parsePathOrGlob).mockImplementation((_basePath, runPath) => {
+    vi.mocked(parsePathOrGlob).mockImplementation(function (_basePath, runPath) {
       if (runPath.includes(':')) {
         const [filePath, functionName] = runPath.split(':');
         return {
@@ -109,7 +122,9 @@ describe('PythonProvider with file references', () => {
       };
     });
 
-    vi.mocked(fs.readFileSync).mockReturnValue('mock file content');
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return 'mock file content';
+    });
   });
 
   afterEach(async () => {

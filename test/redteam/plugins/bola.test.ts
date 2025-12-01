@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { BolaGrader } from '../../../src/redteam/plugins/bola';
 
 describe('BolaGrader', () => {

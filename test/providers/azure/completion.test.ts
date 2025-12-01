@@ -3,9 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureCompletionProvider } from '../../../src/providers/azure/completion';
 
-vi.mock('../../../src/cache', () => ({
-  fetchWithCache: vi.fn(),
-}));
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
 
 const setAuthHeaders = (
   provider: AzureCompletionProvider,
@@ -140,7 +143,7 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should handle missing API host', async () => {
-    vi.mocked(fetchWithCache).mockImplementationOnce(() => {
+    vi.mocked(fetchWithCache).mockImplementationOnce(function () {
       throw new Error('Azure API host must be set.');
     });
 

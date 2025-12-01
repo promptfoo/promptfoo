@@ -17,14 +17,24 @@ const mockBrowser = {
   close: vi.fn(),
 };
 
-vi.mock('playwright-extra', () => ({
-  chromium: {
-    use: vi.fn(),
-    launch: vi.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
-    connectOverCDP: vi.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
-    connect: vi.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
-  },
-}));
+vi.mock('playwright-extra', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    chromium: {
+      use: vi.fn(),
+      launch: vi.fn().mockImplementation(function () {
+        return Promise.resolve(mockBrowser);
+      }),
+      connectOverCDP: vi.fn().mockImplementation(function () {
+        return Promise.resolve(mockBrowser);
+      }),
+      connect: vi.fn().mockImplementation(function () {
+        return Promise.resolve(mockBrowser);
+      }),
+    },
+  };
+});
 
 vi.mock('puppeteer-extra-plugin-stealth', () => ({
   default: vi.fn(),
@@ -483,11 +493,11 @@ describe('BrowserProvider - Connect to Existing Session', () => {
   let mockFetch: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    mockFetch = vi.spyOn(global, 'fetch').mockImplementation(() =>
-      Promise.resolve({
+    mockFetch = vi.spyOn(global, 'fetch').mockImplementation(function () {
+      return Promise.resolve({
         json: () => Promise.resolve({ Browser: 'Chrome/120.0.0.0' }),
-      } as Response),
-    );
+      } as Response);
+    });
   });
 
   afterEach(() => {
@@ -610,9 +620,9 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       close: mockCloseFn,
     };
 
-    (chromium.connectOverCDP as Mock).mockImplementationOnce(() =>
-      Promise.resolve(mockConnectedBrowser),
-    );
+    (chromium.connectOverCDP as Mock).mockImplementationOnce(function () {
+      return Promise.resolve(mockConnectedBrowser);
+    });
 
     const provider = new BrowserProvider('test', {
       config: {
@@ -648,14 +658,14 @@ describe('BrowserProvider - Connect to Existing Session', () => {
   });
 
   it('should handle 404 error when Chrome debugging port is not available', async () => {
-    mockFetch.mockImplementation(() =>
-      Promise.resolve({
+    mockFetch.mockImplementation(function () {
+      return Promise.resolve({
         ok: false,
         status: 404,
         statusText: 'Not Found',
         json: () => Promise.reject(new Error('Not Found')),
-      } as Response),
-    );
+      } as Response);
+    });
 
     const provider = new BrowserProvider('test', {
       config: {
@@ -673,14 +683,14 @@ describe('BrowserProvider - Connect to Existing Session', () => {
   });
 
   it('should handle 500 server error from Chrome debugging port', async () => {
-    mockFetch.mockImplementation(() =>
-      Promise.resolve({
+    mockFetch.mockImplementation(function () {
+      return Promise.resolve({
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
         json: () => Promise.reject(new Error('Server Error')),
-      } as Response),
-    );
+      } as Response);
+    });
 
     const provider = new BrowserProvider('test', {
       config: {

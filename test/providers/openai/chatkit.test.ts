@@ -1,45 +1,46 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiChatKitProvider } from '../../../src/providers/openai/chatkit';
 import { disableCache, enableCache } from '../../../src/cache';
 
 // Mock Playwright - we don't want to actually launch browsers in unit tests
-jest.mock('playwright', () => ({
+vi.mock('playwright', () => ({
   chromium: {
-    launch: jest.fn().mockResolvedValue({
-      newContext: jest.fn().mockResolvedValue({
-        newPage: jest.fn().mockResolvedValue({
-          goto: jest.fn().mockResolvedValue(undefined),
-          waitForFunction: jest.fn().mockResolvedValue(undefined),
-          waitForTimeout: jest.fn().mockResolvedValue(undefined),
-          evaluate: jest.fn().mockResolvedValue(undefined),
-          reload: jest.fn().mockResolvedValue(undefined),
-          frames: jest.fn().mockReturnValue([]),
+    launch: vi.fn().mockResolvedValue({
+      newContext: vi.fn().mockResolvedValue({
+        newPage: vi.fn().mockResolvedValue({
+          goto: vi.fn().mockResolvedValue(undefined),
+          waitForFunction: vi.fn().mockResolvedValue(undefined),
+          waitForTimeout: vi.fn().mockResolvedValue(undefined),
+          evaluate: vi.fn().mockResolvedValue(undefined),
+          reload: vi.fn().mockResolvedValue(undefined),
+          frames: vi.fn().mockReturnValue([]),
         }),
-        close: jest.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
       }),
-      close: jest.fn().mockResolvedValue(undefined),
+      close: vi.fn().mockResolvedValue(undefined),
     }),
   },
 }));
 
 // Mock http server
-jest.mock('http', () => ({
-  createServer: jest.fn().mockReturnValue({
-    listen: jest.fn((_port: number, callback: () => void) => callback()),
-    address: jest.fn().mockReturnValue({ port: 3000 }),
-    close: jest.fn(),
-    once: jest.fn(), // For error event handler
+vi.mock('http', () => ({
+  createServer: vi.fn().mockReturnValue({
+    listen: vi.fn((_port: number, callback: () => void) => callback()),
+    address: vi.fn().mockReturnValue({ port: 3000 }),
+    close: vi.fn(),
+    once: vi.fn(), // For error event handler
   }),
 }));
 
 describe('OpenAiChatKitProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     disableCache();
   });
 
   afterEach(() => {
     // Use clearAllMocks instead of resetAllMocks to preserve mock implementations
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     enableCache();
   });
 
