@@ -155,7 +155,7 @@ describe('OpenCodeSDKProvider', () => {
       const provider = new OpenCodeSDKProvider({ config });
 
       expect(provider.config).toEqual(config);
-      expect(provider.apiKey).toBe('test-key');
+      expect(provider.getApiKey()).toBe('test-key');
     });
 
     it('should use custom id when provided', () => {
@@ -172,7 +172,7 @@ describe('OpenCodeSDKProvider', () => {
         env: { ANTHROPIC_API_KEY: 'env-key' },
       });
 
-      expect(provider.apiKey).toBe('config-key');
+      expect(provider.getApiKey()).toBe('config-key');
     });
 
     it('should use ANTHROPIC_API_KEY for anthropic provider', () => {
@@ -181,7 +181,7 @@ describe('OpenCodeSDKProvider', () => {
         env: { ANTHROPIC_API_KEY: 'anthropic-key' },
       });
 
-      expect(provider.apiKey).toBe('anthropic-key');
+      expect(provider.getApiKey()).toBe('anthropic-key');
     });
 
     it('should use OPENAI_API_KEY for openai provider', () => {
@@ -190,7 +190,7 @@ describe('OpenCodeSDKProvider', () => {
         env: { OPENAI_API_KEY: 'openai-key' },
       });
 
-      expect(provider.apiKey).toBe('openai-key');
+      expect(provider.getApiKey()).toBe('openai-key');
     });
 
     it('should fall back to common env vars', () => {
@@ -198,7 +198,7 @@ describe('OpenCodeSDKProvider', () => {
         env: { ANTHROPIC_API_KEY: 'fallback-key' },
       });
 
-      expect(provider.apiKey).toBe('fallback-key');
+      expect(provider.getApiKey()).toBe('fallback-key');
     });
   });
 

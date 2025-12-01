@@ -8,7 +8,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
-import logger from '../logger';
+import logger, { getLogLevel } from '../logger';
 
 import type {
   ApiProvider,
@@ -42,8 +42,8 @@ import type { EnvOverrides } from '../types/env';
  * For side effects (file writes, bash commands), configure tools and permissions explicitly.
  */
 
-// Default read-only tools when working_dir is specified
-export const FS_READONLY_TOOLS = ['read', 'grep', 'glob', 'list'].sort();
+// Default read-only tools when working_dir is specified (alphabetically sorted)
+export const FS_READONLY_TOOLS = ['glob', 'grep', 'list', 'read'];
 
 /**
  * Tool configuration for OpenCode SDK
@@ -86,15 +86,31 @@ export interface OpenCodeAgentConfig {
 }
 
 /**
- * MCP server configuration
+ * MCP local server configuration
  */
-export interface OpenCodeMCPServerConfig {
-  type: 'local' | 'remote';
-  command?: string;
-  args?: string[];
-  url?: string;
-  headers?: Record<string, string>;
+export interface OpenCodeMCPLocalConfig {
+  type: 'local';
+  command: string[];
+  environment?: Record<string, string>;
+  enabled?: boolean;
+  timeout?: number;
 }
+
+/**
+ * MCP remote server configuration
+ */
+export interface OpenCodeMCPRemoteConfig {
+  type: 'remote';
+  url: string;
+  headers?: Record<string, string>;
+  enabled?: boolean;
+  timeout?: number;
+}
+
+/**
+ * MCP server configuration (local or remote)
+ */
+export type OpenCodeMCPServerConfig = OpenCodeMCPLocalConfig | OpenCodeMCPRemoteConfig;
 
 /**
  * OpenCode SDK Provider Configuration
@@ -205,6 +221,13 @@ export interface OpenCodeSDKConfig {
 }
 
 /**
+ * Check if promptfoo is in debug mode
+ */
+function isDebugMode(): boolean {
+  return getLogLevel() === 'debug';
+}
+
+/**
  * Helper to load the OpenCode SDK ESM module
  * Uses importModule utility which handles ESM loading in CommonJS environments
  */
@@ -290,7 +313,6 @@ async function getWorkingDirFingerprint(workingDir: string): Promise<string> {
 export class OpenCodeSDKProvider implements ApiProvider {
   config: OpenCodeSDKConfig;
   env?: EnvOverrides;
-  apiKey?: string;
 
   private providerId = 'opencode:sdk';
   private opencodeModule?: any;
@@ -308,7 +330,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const { config, env, id } = options;
     this.config = config ?? {};
     this.env = env;
-    this.apiKey = this.getApiKey();
     this.providerId = id ?? this.providerId;
   }
 
@@ -481,12 +502,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     if (shouldCache) {
       let workingDirFingerprint: string | null = null;
-      if (config.working_dir) {
+      if (config.working_dir && workingDir) {
         try {
-          workingDirFingerprint = await getWorkingDirFingerprint(config.working_dir);
+          // Use resolved absolute path for fingerprinting
+          workingDirFingerprint = await getWorkingDirFingerprint(workingDir);
         } catch (error) {
           logger.error(
-            dedent`Error getting working directory fingerprint for cache key - ${config.working_dir}: ${String(error)}
+            dedent`Error getting working directory fingerprint for cache key - ${workingDir}: ${String(error)}
 
             Caching is disabled.`,
           );
@@ -552,6 +574,59 @@ export class OpenCodeSDKProvider implements ApiProvider {
             timeout: config.timeout ?? 30000,
           };
 
+          // Build config object for advanced features (MCP, custom agents, permissions, etc.)
+          const serverConfig: any = {};
+
+          // Add MCP server configuration if specified
+          if (config.mcp && Object.keys(config.mcp).length > 0) {
+            serverConfig.mcp = config.mcp;
+            logger.debug(
+              `[OpenCode SDK] Configuring MCP servers: ${Object.keys(config.mcp).join(', ')}`,
+            );
+          }
+
+          // Add custom agent configuration if specified
+          // The SDK supports multiple agent types: build, plan, general, explore, and custom
+          if (config.custom_agent) {
+            serverConfig.agent = {
+              custom: {
+                description: config.custom_agent.description,
+                model: config.custom_agent.model,
+                temperature: config.custom_agent.temperature,
+                tools: config.custom_agent.tools,
+                permission: config.custom_agent.permission,
+                prompt: config.custom_agent.prompt,
+                mode: config.custom_agent.mode ?? 'primary',
+              },
+            };
+            logger.debug(
+              `[OpenCode SDK] Configuring custom agent: ${config.custom_agent.description}`,
+            );
+          }
+
+          // Add global permission configuration if specified
+          if (config.permission) {
+            serverConfig.permission = config.permission;
+            logger.debug('[OpenCode SDK] Configuring global permissions');
+          }
+
+          // Add global tools configuration if specified
+          const toolsConfig = this.buildToolsConfig(config);
+          if (toolsConfig) {
+            serverConfig.tools = toolsConfig;
+          }
+
+          // Sync debug mode: enable OpenCode debug logging when promptfoo is in debug mode
+          if (config.log_level === 'debug' || isDebugMode()) {
+            process.env.DEBUG = process.env.DEBUG || 'opencode:*';
+            logger.debug('[OpenCode SDK] Debug mode enabled, synced from promptfoo log level');
+          }
+
+          // Only add config if we have any settings
+          if (Object.keys(serverConfig).length > 0) {
+            serverOptions.config = serverConfig;
+          }
+
           // Note: Model selection uses OpenCode's configured default model.
           // Per-prompt model selection is not supported by the SDK.
 
@@ -609,6 +684,19 @@ export class OpenCodeSDKProvider implements ApiProvider {
       // Add agent if specified
       if (config.agent) {
         promptBody.agent = config.agent;
+      } else if (config.custom_agent) {
+        // When custom_agent is configured, use the 'custom' agent type
+        promptBody.agent = 'custom';
+      }
+
+      // Add custom agent system prompt if specified
+      if (config.custom_agent?.prompt) {
+        promptBody.system = config.custom_agent.prompt;
+      }
+
+      // Add permission configuration if specified
+      if (config.permission) {
+        promptBody.permission = config.permission;
       }
 
       // Build the full options object for session.prompt()
@@ -630,6 +718,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         body: promptBody,
         query: promptOptions.query,
       });
+
       const response = await this.client.session.prompt(promptOptions);
 
       logger.debug(`OpenCode SDK response received`);

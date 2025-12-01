@@ -141,21 +141,28 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 | `apiKey`           | string  | API key for the LLM provider                   | Environment variable       |
 | `baseUrl`          | string  | URL for existing OpenCode server               | Auto-start server          |
 | `hostname`         | string  | Server hostname when starting new server       | `127.0.0.1`                |
-| `port`             | number  | Server port when starting new server           | `4096`                     |
+| `port`             | number  | Server port when starting new server           | Auto-select                |
 | `timeout`          | number  | Server startup timeout (ms)                    | `30000`                    |
 | `working_dir`      | string  | Directory for file operations                  | Temporary directory        |
 | `provider_id`      | string  | LLM provider (anthropic, openai, google, etc.) | Auto-detect                |
 | `model`            | string  | Model to use                                   | Provider default           |
 | `tools`            | object  | Tool configuration                             | Read-only with working_dir |
-| `permission`       | object  | Permission configuration for tools             | Default permissions        |
+| `permission`       | object  | Permission configuration for tools             | Ask for dangerous tools    |
 | `agent`            | string  | Built-in agent to use (build, plan)            | Default agent              |
 | `custom_agent`     | object  | Custom agent configuration                     | None                       |
 | `session_id`       | string  | Resume existing session                        | Create new session         |
 | `persist_sessions` | boolean | Keep sessions between calls                    | `false`                    |
 | `mcp`              | object  | MCP server configuration                       | None                       |
-| `max_retries`      | number  | Maximum retries for API calls                  | `2`                        |
-| `log_level`        | string  | SDK log level                                  | `warn`                     |
-| `enable_streaming` | boolean | Enable streaming responses                     | `false`                    |
+
+:::note Planned Features
+
+The following parameters are defined but not yet supported by the OpenCode SDK:
+
+- `max_retries` - Maximum retries for API calls
+- `log_level` - SDK log level
+- `enable_streaming` - Enable streaming responses
+
+:::
 
 ## Supported Providers
 
@@ -321,13 +328,14 @@ providers:
       mcp:
         weather-server:
           type: local
-          command: node
-          args: ['mcp-weather-server.js']
+          command: ['node', 'mcp-weather-server.js']
+          environment:
+            API_KEY: '{{env.WEATHER_API_KEY}}'
         api-server:
           type: remote
           url: https://api.example.com/mcp
           headers:
-            Authorization: 'Bearer token'
+            Authorization: 'Bearer {{env.API_TOKEN}}'
 ```
 
 ## Caching Behavior
