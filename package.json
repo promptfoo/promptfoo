@@ -157,7 +157,7 @@
     "pdf-parse": "^2.0.0",
     "playwright": "^1.57.0",
     "playwright-extra": "^4.3.6",
-    "prettier": "3.6.2",
+    "prettier": "^3.7.3",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^6.0.1",
     "sharp": "^0.34.5",
