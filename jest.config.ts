@@ -78,6 +78,7 @@ const config: Config = {
     '<rootDir>/test/evaluator/trace-integration.test.ts',
     '<rootDir>/test/scripts',
     '<rootDir>/test/fetch.test.ts',
+    '<rootDir>/test/evaluator.test.ts',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
