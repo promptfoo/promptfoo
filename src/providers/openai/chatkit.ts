@@ -524,6 +524,14 @@ async function waitForContentStabilization(
     // The full content includes "You said: ... The assistant said: ..."
     const assistantMatch = currentContent.match(/The assistant said:\s*\n*([\s\S]*)/i);
     const assistantResponse = assistantMatch ? assistantMatch[1].trim() : currentContent;
+    if (!assistantMatch && currentContent.length > 0) {
+      logger.debug(
+        '[ChatKitProvider] Assistant pattern not found, using full content for length check',
+        {
+          contentLength: currentContent.length,
+        },
+      );
+    }
     const isShortResponse = assistantResponse.length < SHORT_RESPONSE_THRESHOLD;
 
     // For short responses (possibly intermediate like JSON classification),
