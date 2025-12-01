@@ -1,22 +1,23 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import { setLogLevel } from '../src/logger';
 import { addCommonOptionsRecursively } from '../src/main';
 import { setupEnv } from '../src/util/index';
 
 // Mock the dependencies
-jest.mock('../src/util', () => ({
-  setupEnv: jest.fn(),
+vi.mock('../src/util', () => ({
+  setupEnv: vi.fn(),
 }));
 
-jest.mock('../src/logger', () => ({
+vi.mock('../src/logger', () => ({
   __esModule: true,
-  default: { debug: jest.fn() },
-  setLogLevel: jest.fn(),
+  default: { debug: vi.fn() },
+  setLogLevel: vi.fn(),
 }));
 
 // Mock code scan commands to avoid ESM import issues with execa
-jest.mock('../src/codeScan', () => ({
-  codeScansCommand: jest.fn(),
+vi.mock('../src/codeScan', () => ({
+  codeScansCommand: vi.fn(),
 }));
 
 describe('addCommonOptionsRecursively', () => {
@@ -25,7 +26,7 @@ describe('addCommonOptionsRecursively', () => {
   let subCommand: Command;
 
   beforeAll(() => {
-    process.exit = jest.fn() as any;
+    process.exit = vi.fn() as any;
   });
 
   beforeEach(() => {
@@ -33,7 +34,7 @@ describe('addCommonOptionsRecursively', () => {
     program.action(() => {});
     subCommand = program.command('subcommand');
     subCommand.action(() => {});
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterAll(() => {
@@ -147,7 +148,7 @@ describe('addCommonOptionsRecursively', () => {
 
   it('should register a single hook that handles both options', () => {
     // Create a fake action that manually mocks the Commander hook system
-    const mockHookRegister = jest.fn();
+    const mockHookRegister = vi.fn();
     (program as any).hook = mockHookRegister;
 
     // Apply common options
