@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
@@ -17,60 +18,59 @@ import {
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 
-jest.mock('../src/util/time', () => ({
-  sleep: jest.fn().mockResolvedValue(undefined),
+vi.mock('../src/util/time', () => ({
+  sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('../src/logger', () => ({
+vi.mock('../src/logger', () => ({
   __esModule: true,
   default: {
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
-  logRequestResponse: jest.fn(),
+  logRequestResponse: vi.fn(),
 }));
 
-jest.mock('../src/globalConfig/cloud', () => ({
+vi.mock('../src/globalConfig/cloud', () => ({
   CLOUD_API_HOST: 'https://api.promptfoo.dev',
   cloudConfig: {
-    getApiKey: jest.fn(),
+    getApiKey: vi.fn(),
   },
 }));
 
-jest.mock('undici', () => {
-  const mockProxyAgentConstructor = jest.fn();
+vi.mock('undici', () => {
   const mockProxyAgentInstance = {
     options: null,
-    addRequest: jest.fn(),
-    destroy: jest.fn(),
+    addRequest: vi.fn(),
+    destroy: vi.fn(),
   };
 
-  mockProxyAgentConstructor.mockImplementation((options) => {
+  const mockAgentInstance = {
+    addRequest: vi.fn(),
+    destroy: vi.fn(),
+  };
+
+  // Use regular functions instead of arrow functions for constructors
+  const ProxyAgent = vi.fn(function (this: any, options: any) {
     mockProxyAgentInstance.options = options;
     return mockProxyAgentInstance;
   });
 
-  const mockAgentConstructor = jest.fn();
-  const mockAgentInstance = {
-    addRequest: jest.fn(),
-    destroy: jest.fn(),
-  };
-
-  mockAgentConstructor.mockImplementation(() => {
+  const Agent = vi.fn(function (this: any) {
     return mockAgentInstance;
   });
 
   return {
-    ProxyAgent: mockProxyAgentConstructor,
-    Agent: mockAgentConstructor,
-    setGlobalDispatcher: jest.fn(),
+    ProxyAgent,
+    Agent,
+    setGlobalDispatcher: vi.fn(),
   };
 });
 
-jest.mock('../src/envars', () => {
+vi.mock('../src/envars', () => {
   return {
-    getEnvString: jest.fn().mockImplementation((key: string, defaultValue: string = '') => {
+    getEnvString: vi.fn().mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'HTTPS_PROXY' && process.env.HTTPS_PROXY) {
         return process.env.HTTPS_PROXY;
       }
@@ -97,7 +97,7 @@ jest.mock('../src/envars', () => {
       }
       return defaultValue;
     }),
-    getEnvBool: jest.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
+    getEnvBool: vi.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_RETRY_5XX_ENABLED') {
         return process.env.PROMPTFOO_RETRY_5XX_ENABLED === 'true' || false;
       }
@@ -109,7 +109,7 @@ jest.mock('../src/envars', () => {
       }
       return defaultValue;
     }),
-    getEnvInt: jest.fn().mockImplementation((key: string, defaultValue: number = 0) => {
+    getEnvInt: vi.fn().mockImplementation((key: string, defaultValue: number = 0) => {
       if (key === 'REQUEST_TIMEOUT_MS') {
         return Number.parseInt(process.env.REQUEST_TIMEOUT_MS || '300000', 10);
       }
@@ -118,11 +118,14 @@ jest.mock('../src/envars', () => {
   };
 });
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
+vi.mock('fs', () => ({
+  default: {
+    readFileSync: vi.fn(),
+  },
+  readFileSync: vi.fn(),
 }));
 
-jest.mock('../src/cliState', () => ({
+vi.mock('../src/cliState', () => ({
   default: {
     basePath: undefined,
   },
@@ -130,10 +133,10 @@ jest.mock('../src/cliState', () => ({
 
 describe('fetchWithProxy', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(global, 'fetch').mockImplementation();
-    jest.mocked(ProxyAgent).mockClear();
-    jest.mocked(setGlobalDispatcher).mockClear();
+    vi.clearAllMocks();
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
+    vi.mocked(ProxyAgent).mockClear();
+    vi.mocked(setGlobalDispatcher).mockClear();
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -145,7 +148,7 @@ describe('fetchWithProxy', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should add version header to all requests', async () => {
@@ -316,7 +319,7 @@ describe('fetchWithProxy', () => {
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
 
-    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+    vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
         return mockCertPath;
       }
@@ -325,21 +328,21 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    jest.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return false;
       }
       return defaultValue;
     });
-    jest.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
 
-    const mockFetch = jest.fn().mockResolvedValue(new Response());
+    const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
 
-    const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
-    const actualEncoding = jest.mocked(fs.readFileSync).mock.calls[0][1];
+    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualEncoding = vi.mocked(fs.readFileSync).mock.calls[0][1];
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
@@ -366,7 +369,7 @@ describe('fetchWithProxy', () => {
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
 
-    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+    vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
         return mockCertPath;
       }
@@ -375,16 +378,16 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    jest.mocked(fs.readFileSync).mockImplementation(() => {
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
       throw new Error('File not found');
     });
 
-    const mockFetch = jest.fn().mockResolvedValue(new Response());
+    const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
 
-    const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
@@ -407,20 +410,20 @@ describe('fetchWithProxy', () => {
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.PROMPTFOO_INSECURE_SSL = 'true';
 
-    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+    vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'HTTPS_PROXY') {
         return mockProxyUrl;
       }
       return defaultValue;
     });
-    jest.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return true;
       }
       return defaultValue;
     });
 
-    const mockFetch = jest.fn().mockResolvedValue(new Response());
+    const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
@@ -449,7 +452,7 @@ describe('fetchWithProxy', () => {
 
     cliState.basePath = mockBasePath;
 
-    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+    vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
         return mockCertPath;
       }
@@ -458,22 +461,22 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    jest.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return false;
       }
       return defaultValue;
     });
-    jest.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
 
-    const mockFetch = jest.fn().mockResolvedValue(new Response());
+    const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
 
     const expectedPath = path.normalize(path.join(mockBasePath, mockCertPath));
-    const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
-    const actualEncoding = jest.mocked(fs.readFileSync).mock.calls[0][1];
+    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualEncoding = vi.mocked(fs.readFileSync).mock.calls[0][1];
 
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(expectedPath).replace(/^\w:/, '');
@@ -540,7 +543,7 @@ describe('fetchWithProxy', () => {
     ];
 
     for (const testCase of httpTestCases) {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       allProxyVars.forEach((key) => {
         delete process.env[key];
@@ -564,7 +567,7 @@ describe('fetchWithProxy', () => {
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
-      const debugCalls = jest.mocked(logger.debug).mock.calls;
+      const debugCalls = vi.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
 
       const proxyConfigCalls = normalizedCalls.filter((msg) => msg.includes(`Using proxy:`));
@@ -577,7 +580,7 @@ describe('fetchWithProxy', () => {
     }
 
     for (const testCase of httpsTestCases) {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       allProxyVars.forEach((key) => {
         delete process.env[key];
@@ -601,7 +604,7 @@ describe('fetchWithProxy', () => {
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
-      const debugCalls = jest.mocked(logger.debug).mock.calls;
+      const debugCalls = vi.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
 
       const proxyConfigCalls = normalizedCalls.filter((msg) => msg.includes(`Using proxy:`));
@@ -633,29 +636,29 @@ describe('fetchWithProxy', () => {
 
 describe('fetchWithTimeout', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
-    jest.spyOn(global, 'fetch').mockImplementation();
+    vi.useFakeTimers();
+    vi.spyOn(global, 'fetch').mockImplementation();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('should resolve when fetch completes before timeout', async () => {
     const mockResponse = createMockResponse({ ok: true });
-    jest.mocked(global.fetch).mockImplementationOnce(() => Promise.resolve(mockResponse));
+    vi.mocked(global.fetch).mockImplementationOnce(() => Promise.resolve(mockResponse));
 
     const fetchPromise = fetchWithTimeout('https://example.com', {}, 5000);
     await expect(fetchPromise).resolves.toBe(mockResponse);
   });
 
   it('should reject when request times out', async () => {
-    jest
-      .mocked(global.fetch)
-      .mockImplementationOnce(() => new Promise((resolve) => setTimeout(resolve, 6000)));
+    vi.mocked(global.fetch).mockImplementationOnce(
+      () => new Promise((resolve) => setTimeout(resolve, 6000)),
+    );
 
     const fetchPromise = fetchWithTimeout('https://example.com', {}, 5000);
-    jest.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(5000);
 
     await expect(fetchPromise).rejects.toThrow('Request timed out after 5000 ms');
   });
@@ -708,12 +711,12 @@ describe('isRateLimited', () => {
 
 describe('handleRateLimit', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
-    jest.mocked(sleep).mockClear();
+    vi.useFakeTimers();
+    vi.mocked(sleep).mockClear();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('should handle OpenAI reset headers', async () => {
@@ -724,7 +727,7 @@ describe('handleRateLimit', () => {
     });
 
     const promise = handleRateLimit(response);
-    jest.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(5000);
     await promise;
 
     expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
@@ -754,7 +757,7 @@ describe('handleRateLimit', () => {
     });
 
     const promise = handleRateLimit(response);
-    jest.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(5000);
     await promise;
 
     expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
@@ -764,7 +767,7 @@ describe('handleRateLimit', () => {
     const response = createMockResponse();
 
     const promise = handleRateLimit(response);
-    jest.advanceTimersByTime(60000);
+    vi.advanceTimersByTime(60000);
     await promise;
 
     expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 60000ms before retry');
@@ -773,14 +776,14 @@ describe('handleRateLimit', () => {
 
 describe('fetchWithRetries', () => {
   beforeEach(() => {
-    jest.mocked(sleep).mockClear();
-    jest.spyOn(global, 'fetch').mockImplementation();
-    jest.clearAllMocks();
+    vi.mocked(sleep).mockClear();
+    vi.spyOn(global, 'fetch').mockImplementation();
+    vi.clearAllMocks();
   });
 
   it('should make exactly one attempt when retries is 0', async () => {
     const successResponse = createMockResponse();
-    jest.mocked(global.fetch).mockResolvedValueOnce(successResponse);
+    vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);
 
     await fetchWithRetries('https://example.com', {}, 1000, 0);
 
@@ -790,7 +793,7 @@ describe('fetchWithRetries', () => {
 
   it('should handle negative retry values by treating them as 0', async () => {
     const successResponse = createMockResponse();
-    jest.mocked(global.fetch).mockResolvedValueOnce(successResponse);
+    vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);
 
     await fetchWithRetries('https://example.com', {}, 1000, -1);
 
@@ -799,7 +802,7 @@ describe('fetchWithRetries', () => {
   });
 
   it('should make retries+1 total attempts', async () => {
-    jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
       'Request failed after 2 retries: Error: Network error',
@@ -810,7 +813,7 @@ describe('fetchWithRetries', () => {
   });
 
   it('should not sleep after the final attempt', async () => {
-    jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
       'Request failed after 1 retries: Error: Network error',
@@ -821,7 +824,7 @@ describe('fetchWithRetries', () => {
   });
 
   it('should handle 5XX errors when PROMPTFOO_RETRY_5XX is true', async () => {
-    jest.mocked(getEnvBool).mockImplementation((key: string) => {
+    vi.mocked(getEnvBool).mockImplementation((key: string) => {
       if (key === 'PROMPTFOO_RETRY_5XX') {
         return true;
       }
@@ -834,7 +837,7 @@ describe('fetchWithRetries', () => {
     });
     const successResponse = createMockResponse();
 
-    const mockFetch = jest
+    const mockFetch = vi
       .fn()
       .mockResolvedValueOnce(errorResponse)
       .mockResolvedValueOnce(successResponse);
@@ -855,7 +858,7 @@ describe('fetchWithRetries', () => {
     });
     const successResponse = createMockResponse();
 
-    const mockFetch = jest
+    const mockFetch = vi
       .fn()
       .mockResolvedValueOnce(rateLimitedResponse)
       .mockResolvedValueOnce(successResponse);
@@ -869,7 +872,7 @@ describe('fetchWithRetries', () => {
   });
 
   it('should respect maximum retry count', async () => {
-    const mockFetch = jest.fn().mockRejectedValue(new Error('Network error'));
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
     global.fetch = mockFetch;
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
@@ -884,7 +887,7 @@ describe('fetchWithRetries', () => {
     const error = new Error('Network error');
     (error as any).code = 'ECONNREFUSED';
     (error as any).cause = 'Connection refused';
-    jest.mocked(global.fetch).mockRejectedValue(error);
+    vi.mocked(global.fetch).mockRejectedValue(error);
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
       'Request failed after 1 retries: Error: Network error (Cause: Connection refused) (Code: ECONNREFUSED)',
@@ -895,7 +898,7 @@ describe('fetchWithRetries', () => {
   });
 
   it('should handle non-Error objects in rejection', async () => {
-    jest.mocked(global.fetch).mockRejectedValue('String error');
+    vi.mocked(global.fetch).mockRejectedValue('String error');
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
       'Request failed after 1 retries: String error',
@@ -914,7 +917,7 @@ describe('fetchWithRetries', () => {
     });
     const successResponse = createMockResponse();
 
-    const mockFetch = jest
+    const mockFetch = vi
       .fn()
       .mockResolvedValueOnce(rateLimitedResponse)
       .mockResolvedValueOnce(successResponse);
@@ -932,7 +935,7 @@ describe('fetchWithRetries', () => {
       status: 429,
       headers: new Headers({ 'Retry-After': '0' }),
     });
-    jest.mocked(global.fetch).mockResolvedValue(rateLimitedResponse);
+    vi.mocked(global.fetch).mockResolvedValue(rateLimitedResponse);
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow();
 
@@ -945,7 +948,7 @@ describe('fetchWithRetries', () => {
       statusText: 'Too Many Requests',
     });
 
-    jest.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
+    vi.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
       'Rate limited: 429 Too Many Requests',
@@ -955,10 +958,10 @@ describe('fetchWithRetries', () => {
 
 describe('fetchWithProxy with NO_PROXY', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(global, 'fetch').mockImplementation();
-    jest.mocked(ProxyAgent).mockClear();
-    jest.mocked(setGlobalDispatcher).mockClear();
+    vi.clearAllMocks();
+    vi.spyOn(global, 'fetch').mockImplementation();
+    vi.mocked(ProxyAgent).mockClear();
+    vi.mocked(setGlobalDispatcher).mockClear();
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -982,7 +985,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
     delete process.env.all_proxy;
     delete process.env.NO_PROXY;
     delete process.env.no_proxy;
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should respect NO_PROXY for localhost URLs', async () => {
@@ -1017,19 +1020,19 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('http://localhost:3000/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = noProxyList;
     await fetchWithProxy('https://example.org/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = noProxyList;
     await fetchWithProxy('https://internal.example.com/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = noProxyList;
     await fetchWithProxy('https://example.com/api');
@@ -1066,12 +1069,12 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('https://api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     await fetchWithProxy('https://subdomain.api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     await fetchWithProxy('https://example.com/v1');
     expect(ProxyAgent).toHaveBeenCalledWith(
@@ -1090,17 +1093,17 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('https://api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     await fetchWithProxy('https://subdomain.api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     await fetchWithProxy('https://abc.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     await fetchWithProxy('https://abc.example.com/v1');
     expect(ProxyAgent).toHaveBeenCalledWith(
@@ -1119,7 +1122,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('localhost:3000');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await fetchWithProxy('example.org');
     expect(ProxyAgent).not.toHaveBeenCalled();
   });
@@ -1164,7 +1167,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('http://localhost:3000');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await fetchWithProxy('https://api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
   });
@@ -1179,7 +1182,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy(urlObj.toString());
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = 'localhost,example.org';
@@ -1187,7 +1190,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy(request);
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     process.env.HTTP_PROXY = mockProxyUrl;
     process.env.NO_PROXY = 'localhost,example.org';

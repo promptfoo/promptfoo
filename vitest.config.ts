@@ -63,6 +63,7 @@ export default defineConfig({
       'test/integration/envPath.test.ts',
       'test/evaluator/trace-integration.test.ts',
       'test/scripts/**/*.test.ts',
+      'test/fetch.test.ts',
     ],
     // Exclude integration tests
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
