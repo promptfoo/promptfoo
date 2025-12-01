@@ -2,18 +2,20 @@
  * GitHub API Client Tests
  */
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as github from '@actions/github';
+import { Octokit } from '@octokit/rest';
 import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
 
 // Mock @actions/core
-jest.mock('@actions/core', () => ({
-  info: jest.fn(),
-  warning: jest.fn(),
-  error: jest.fn(),
+vi.mock('@actions/core', () => ({
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
 }));
 
 // Mock @actions/github
-jest.mock('@actions/github', () => ({
+vi.mock('@actions/github', () => ({
   context: {
     repo: {
       owner: 'test-owner',
@@ -31,14 +33,14 @@ jest.mock('@actions/github', () => ({
 }));
 
 // Mock Octokit
-jest.mock('@octokit/rest', () => {
+vi.mock('@octokit/rest', () => {
   return {
-    Octokit: jest.fn().mockImplementation(() => ({
+    Octokit: vi.fn().mockImplementation(() => ({
       pulls: {
-        createReview: jest.fn().mockResolvedValue({}),
+        createReview: vi.fn().mockResolvedValue({}),
       },
       issues: {
-        createComment: jest.fn().mockResolvedValue({}),
+        createComment: vi.fn().mockResolvedValue({}),
       },
     })),
   };
@@ -46,7 +48,7 @@ jest.mock('@octokit/rest', () => {
 
 describe('GitHub API Client', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getGitHubContext', () => {
@@ -82,13 +84,16 @@ describe('GitHub API Client', () => {
     };
 
     it('should post review comments with Octokit', async () => {
-      const { Octokit } = require('@octokit/rest');
-      const mockCreateReview = jest.fn().mockResolvedValue({});
-      Octokit.mockImplementation(() => ({
-        pulls: {
-          createReview: mockCreateReview,
+      const mockCreateReview = vi.fn().mockResolvedValue({});
+      vi.mocked(Octokit).mockImplementation(
+        function () {
+          return {
+            pulls: {
+              createReview: mockCreateReview,
+            },
+          } as unknown as Octokit;
         },
-      }));
+      );
 
       const comments = [
         {
@@ -119,13 +124,16 @@ describe('GitHub API Client', () => {
     });
 
     it('should handle single line comments when startLine equals line', async () => {
-      const { Octokit } = require('@octokit/rest');
-      const mockCreateReview = jest.fn().mockResolvedValue({});
-      Octokit.mockImplementation(() => ({
-        pulls: {
-          createReview: mockCreateReview,
+      const mockCreateReview = vi.fn().mockResolvedValue({});
+      vi.mocked(Octokit).mockImplementation(
+        function () {
+          return {
+            pulls: {
+              createReview: mockCreateReview,
+            },
+          } as unknown as Octokit;
         },
-      }));
+      );
 
       const comments = [
         {
@@ -157,13 +165,16 @@ describe('GitHub API Client', () => {
     });
 
     it('should handle line range comments when startLine differs from line', async () => {
-      const { Octokit } = require('@octokit/rest');
-      const mockCreateReview = jest.fn().mockResolvedValue({});
-      Octokit.mockImplementation(() => ({
-        pulls: {
-          createReview: mockCreateReview,
+      const mockCreateReview = vi.fn().mockResolvedValue({});
+      vi.mocked(Octokit).mockImplementation(
+        function () {
+          return {
+            pulls: {
+              createReview: mockCreateReview,
+            },
+          } as unknown as Octokit;
         },
-      }));
+      );
 
       const comments = [
         {
@@ -195,13 +206,16 @@ describe('GitHub API Client', () => {
     });
 
     it('should handle mixed single line and range comments', async () => {
-      const { Octokit } = require('@octokit/rest');
-      const mockCreateReview = jest.fn().mockResolvedValue({});
-      Octokit.mockImplementation(() => ({
-        pulls: {
-          createReview: mockCreateReview,
+      const mockCreateReview = vi.fn().mockResolvedValue({});
+      vi.mocked(Octokit).mockImplementation(
+        function () {
+          return {
+            pulls: {
+              createReview: mockCreateReview,
+            },
+          } as unknown as Octokit;
         },
-      }));
+      );
 
       const comments = [
         {
@@ -261,13 +275,16 @@ describe('GitHub API Client', () => {
     });
 
     it('should filter out comments without files', async () => {
-      const { Octokit } = require('@octokit/rest');
-      const mockCreateReview = jest.fn().mockResolvedValue({});
-      Octokit.mockImplementation(() => ({
-        pulls: {
-          createReview: mockCreateReview,
+      const mockCreateReview = vi.fn().mockResolvedValue({});
+      vi.mocked(Octokit).mockImplementation(
+        function () {
+          return {
+            pulls: {
+              createReview: mockCreateReview,
+            },
+          } as unknown as Octokit;
         },
-      }));
+      );
 
       const comments = [
         {
@@ -301,17 +318,20 @@ describe('GitHub API Client', () => {
     });
 
     it('should post summary comment on error', async () => {
-      const { Octokit } = require('@octokit/rest');
-      const mockCreateReview = jest.fn().mockRejectedValue(new Error('API error'));
-      const mockCreateComment = jest.fn().mockResolvedValue({});
-      Octokit.mockImplementation(() => ({
-        pulls: {
-          createReview: mockCreateReview,
+      const mockCreateReview = vi.fn().mockRejectedValue(new Error('API error'));
+      const mockCreateComment = vi.fn().mockResolvedValue({});
+      vi.mocked(Octokit).mockImplementation(
+        function () {
+          return {
+            pulls: {
+              createReview: mockCreateReview,
+            },
+            issues: {
+              createComment: mockCreateComment,
+            },
+          } as unknown as Octokit;
         },
-        issues: {
-          createComment: mockCreateComment,
-        },
-      }));
+      );
 
       const comments = [
         {

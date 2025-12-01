@@ -57,6 +57,7 @@ export default defineConfig({
       'test/evaluator.integration.transforms.test.ts',
       'test/code-scan-action/auth.test.ts',
       'test/code-scan-action/config.test.ts',
+      'test/code-scan-action/github.test.ts',
       'test/integration/function-provider-grading.test.ts',
       'test/integration/envPath.test.ts',
       'test/evaluator/trace-integration.test.ts',

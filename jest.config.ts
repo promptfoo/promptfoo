@@ -71,6 +71,7 @@ const config: Config = {
     '<rootDir>/test/evaluator.integration.transforms.test.ts',
     '<rootDir>/test/code-scan-action/auth.test.ts',
     '<rootDir>/test/code-scan-action/config.test.ts',
+    '<rootDir>/test/code-scan-action/github.test.ts',
     '<rootDir>/test/integration/function-provider-grading.test.ts',
     '<rootDir>/test/integration/envPath.test.ts',
     '<rootDir>/test/evaluator/trace-integration.test.ts',
