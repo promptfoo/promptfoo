@@ -154,6 +154,7 @@
         "^openai$"
       ],
       "schedule": ["every weekday"],
+      "rangeStrategy": "bump",
       "minimumReleaseAge": "0 days"
     },
     {
