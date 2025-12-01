@@ -8,6 +8,7 @@ export default defineConfig({
       'test/codeScans/**/*.test.ts',
       'test/matchers/**/*.test.ts',
       'test/database/**/*.test.ts',
+      'test/database.test.ts',
       'test/site/**/*.test.ts',
       'test/testCase/**/*.test.ts',
       'test/validators/**/*.test.ts',
