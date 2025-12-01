@@ -127,7 +127,7 @@
       "description": "Group all @types packages together",
       "matchPackagePatterns": ["^@types/"],
       "groupName": "Type definitions",
-      "schedule": ["before 6am on monday"]
+      "schedule": ["before 6am on Monday"]
     },
     {
       "description": "Group example directory updates to reduce noise",
