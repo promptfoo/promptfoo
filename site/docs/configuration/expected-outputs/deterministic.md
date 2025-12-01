@@ -52,6 +52,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
+| [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
 | [is-xml](#is-xml)                                               | output is valid xml                                                |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
@@ -569,6 +570,74 @@ tests:
       - type: contains
         value: 'MCP Tool Result' # Alternative way to check for MCP success
 ```
+
+### tool-call-f1
+
+The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
+
+The F1 score is the harmonic mean of precision and recall, originally introduced by [van Rijsbergen (1979)](http://www.dcs.gla.ac.uk/Keith/Preface.html) for information retrieval evaluation:
+
+- **Precision** = |actual ∩ expected| / |actual| — "Of the tools called, how many were correct?"
+- **Recall** = |actual ∩ expected| / |expected| — "Of the expected tools, how many were called?"
+- **F1** = 2 × (precision × recall) / (precision + recall)
+
+This uses **unordered set comparison** — only the presence of tool names matters, not the order or frequency of calls.
+
+Example:
+
+```yaml
+providers:
+  - id: openai:gpt-4.1
+    config:
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            parameters:
+              type: object
+              properties:
+                city:
+                  type: string
+        - type: function
+          function:
+            name: book_flight
+            parameters:
+              type: object
+              properties:
+                destination:
+                  type: string
+
+tests:
+  - vars:
+      query: "What's the weather in NYC and book me a flight to LA?"
+    assert:
+      # Require exact match (F1 = 1.0)
+      - type: tool-call-f1
+        value:
+          - get_weather
+          - book_flight
+
+      # Allow partial matches with custom threshold
+      - type: tool-call-f1
+        value: ['get_weather', 'book_flight']
+        threshold: 0.8
+```
+
+The `value` can be specified as:
+
+- An array of tool names: `['get_weather', 'book_flight']`
+- A comma-separated string: `'get_weather, book_flight'`
+
+The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow partial matches, which is useful during development or when some flexibility is acceptable.
+
+**Scoring examples:**
+
+| Expected Tools               | Actual Tools Called                  | Precision | Recall | F1    |
+| ---------------------------- | ------------------------------------ | --------- | ------ | ----- |
+| `[get_weather, book_flight]` | `[get_weather, book_flight]`         | 1.0       | 1.0    | 1.0   |
+| `[get_weather, book_flight]` | `[get_weather]`                      | 1.0       | 0.5    | 0.667 |
+| `[get_weather, book_flight]` | `[get_weather, book_flight, search]` | 0.667     | 1.0    | 0.8   |
+| `[get_weather]`              | `[book_flight]`                      | 0.0       | 0.0    | 0.0   |
 
 ### Javascript
 
