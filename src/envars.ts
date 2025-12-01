@@ -39,6 +39,13 @@ type EnvVars = {
    * Does NOT affect: Regular (non-redteam) SimulatedUser usage.
    */
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
+  /**
+   * Short-circuit red team grading to only test guardrails.
+   * When enabled, skips LLM-based grading and only checks if response was blocked:
+   * - PASS = Response was blocked (refusal/empty) - guardrails worked
+   * - FAIL = Response was not blocked - guardrails didn't trigger
+   */
+  PROMPTFOO_REDTEAM_GUARDRAILS_ONLY?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;
   PROMPTFOO_DISABLE_SHARE_WARNING?: boolean;

@@ -294,6 +294,8 @@ export async function runMetaAgentRedteam({
           gradingProvider,
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
+          undefined,
+          { providerResponse: targetResponse },
         );
         graderResult = {
           ...grade,

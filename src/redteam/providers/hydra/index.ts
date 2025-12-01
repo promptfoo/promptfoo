@@ -446,6 +446,9 @@ export class HydraProvider implements ApiProvider {
             test,
             targetProvider,
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+            undefined,
+            undefined,
+            { providerResponse: targetResponse },
           );
           graderResult = grade;
           storedGraderResult = grade;

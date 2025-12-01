@@ -497,6 +497,8 @@ export class CustomProvider implements ApiProvider {
               provider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
+              undefined,
+              { providerResponse: lastResponse },
             );
             graderPassed = grade.pass;
             storedGraderResult = grade;

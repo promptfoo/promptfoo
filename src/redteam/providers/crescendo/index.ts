@@ -468,12 +468,15 @@ export class CrescendoProvider implements ApiProvider {
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
               undefined,
-              tracingOptions.includeInGrading
-                ? {
-                    traceContext: response.traceContext,
-                    traceSummary: gradingTraceSummary,
-                  }
-                : undefined,
+              {
+                providerResponse: lastResponse,
+                ...(tracingOptions.includeInGrading
+                  ? {
+                      traceContext: response.traceContext,
+                      traceSummary: gradingTraceSummary,
+                    }
+                  : {}),
+              },
             );
 
             graderPassed = grade.pass;

@@ -47,6 +47,9 @@ export const handleRedteam = async ({
     test,
     provider,
     renderedValue,
+    undefined,
+    undefined,
+    { providerResponse },
   );
 
   return {
