@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { addRot13 } from '../../../src/redteam/strategies/rot13';
 
 import type { TestCase } from '../../../src/types/index';

@@ -5,7 +5,7 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: cohere:command
+  - id: cohere:command-a-03-2025
     config:
       temperature: 0.5
       prompt_truncation: AUTO

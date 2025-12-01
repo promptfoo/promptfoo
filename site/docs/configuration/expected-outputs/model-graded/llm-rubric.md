@@ -26,12 +26,12 @@ This assertion will use a language model to grade the output based on the specif
 
 Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses different models depending on which API keys are available:
 
-- **OpenAI API key**: `gpt-4.1-2025-04-14`
-- **Anthropic API key**: `claude-sonnet-4-20250514`
+- **OpenAI API key**: `gpt-5`
+- **Anthropic API key**: `claude-sonnet-4-5-20250929`
 - **Google AI Studio API key**: `gemini-2.5-pro` (GEMINI_API_KEY, GOOGLE_API_KEY, or PALM_API_KEY)
 - **Google Vertex credentials**: `gemini-2.5-pro` (service account credentials)
 - **Mistral API key**: `mistral-large-latest`
-- **GitHub token**: `openai/gpt-4.1`
+- **GitHub token**: `openai/gpt-5`
 - **Azure credentials**: Your configured Azure GPT deployment
 
 You can override this by setting the `provider` option (see below).
@@ -66,7 +66,7 @@ You can incorporate test variables into your LLM rubric. This is particularly us
 
 ```yaml
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -83,12 +83,12 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, `llm-rubric` uses `gpt-4.1-2025-04-14` for grading. You can override this in several ways:
+By default, `llm-rubric` uses `gpt-5` for grading. You can override this in several ways:
 
 1. Using the `--grader` CLI option:
 
    ```sh
-   promptfoo eval --grader openai:gpt-4.1-mini
+   promptfoo eval --grader openai:gpt-5-mini
    ```
 
 2. Using `test.options` or `defaultTest.options`:
@@ -97,7 +97,7 @@ By default, `llm-rubric` uses `gpt-4.1-2025-04-14` for grading. You can override
    defaultTest:
      // highlight-start
      options:
-       provider: openai:gpt-4.1-mini
+       provider: openai:gpt-5-mini
      // highlight-end
      assert:
        - description: Evaluate output using LLM
@@ -115,7 +115,7 @@ By default, `llm-rubric` uses `gpt-4.1-2025-04-14` for grading. You can override
          - type: llm-rubric
            value: Is written in a professional tone
            // highlight-start
-           provider: openai:gpt-4.1-mini
+           provider: openai:gpt-5-mini
            // highlight-end
    ```
 

@@ -3,9 +3,9 @@
     "declaration": true,
     "declarationMap": true,
     "esModuleInterop": true,
-    "target": "es2020",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "outDir": "dist",
     "skipLibCheck": true,
     "sourceMap": true,
@@ -27,11 +27,18 @@
     "src/types/globals.d.ts"
   ],
   "exclude": [
-    "node_modules",
     "dist",
-    "src/workers/**/*",
+    "node_modules",
     "src/app/**/*",
+    "src/workers/**/*",
     "test/app/**/*",
-    "test/site/"
+    "test/code-scan-action/**/*",
+    "test/codeScans/**/*",
+    "test/database/**/*",
+    "test/matchers/**/*",
+    "test/site/",
+    "test/testCase/**/*",
+    "test/utils/**/*",
+    "test/validators/**/*"
   ]
 }

@@ -297,7 +297,7 @@ const redTeamSidebar = [
       {
         type: 'doc',
         label: 'Agent Red Teaming',
-        id: 'red-team/agents',
+        id: 'red-team/llm-agents',
       },
       {
         type: 'doc',
@@ -313,6 +313,16 @@ const redTeamSidebar = [
         type: 'doc',
         label: 'Foundation Model Red Teaming',
         id: 'red-team/foundation-models',
+      },
+      {
+        type: 'doc',
+        label: 'LLM Supply Chain Security',
+        id: 'red-team/llm-supply-chain',
+      },
+      {
+        type: 'doc',
+        label: 'Detecting Model Drift',
+        id: 'red-team/model-drift',
       },
       {
         type: 'doc',
@@ -421,6 +431,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'code-scanning/github-action' },
         { type: 'doc', id: 'code-scanning/cli' },
+        { type: 'doc', id: 'code-scanning/vscode-extension' },
       ],
     },
     {

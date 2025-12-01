@@ -1,25 +1,40 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRemoteHealthUrl } from '../../src/redteam/remoteGeneration';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
+import { fetchWithTimeout } from '../../src/util/fetch/index';
 
-const mockedFetch = jest.mocked(jest.fn());
-global.fetch = mockedFetch;
-
-const mockCloudConfig = {
-  isEnabled: jest.fn().mockReturnValue(false),
-  getApiHost: jest.fn().mockReturnValue('https://custom.api.com'),
-};
-
-jest.mock('../../src/globalConfig/cloud', () => ({
-  CloudConfig: jest.fn().mockImplementation(() => mockCloudConfig),
+// Mock fetchWithTimeout module
+vi.mock('../../src/util/fetch/index', () => ({
+  fetchWithTimeout: vi.fn(),
 }));
+
+// Hoisted mock functions for CloudConfig
+const { mockIsEnabled, mockGetApiHost } = vi.hoisted(() => ({
+  mockIsEnabled: vi.fn().mockReturnValue(false),
+  mockGetApiHost: vi.fn().mockReturnValue('https://custom.api.com'),
+}));
+
+// Mock CloudConfig as a class
+vi.mock('../../src/globalConfig/cloud', () => {
+  return {
+    CloudConfig: class MockCloudConfig {
+      isEnabled = mockIsEnabled;
+      getApiHost = mockGetApiHost;
+    },
+  };
+});
+
+// Get the mocked fetchWithTimeout
+const mockedFetchWithTimeout = vi.mocked(fetchWithTimeout);
 
 describe('API Health Utilities', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
     delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
-    mockCloudConfig.isEnabled.mockReturnValue(false);
-    mockCloudConfig.getApiHost.mockReturnValue('https://custom.api.com');
+
+    mockIsEnabled.mockReturnValue(false);
+    mockGetApiHost.mockReturnValue('https://custom.api.com');
   });
 
   describe('getRemoteHealthUrl', () => {
@@ -34,21 +49,21 @@ describe('API Health Utilities', () => {
     });
 
     it('should use cloud config when enabled', () => {
-      mockCloudConfig.isEnabled.mockReturnValue(true);
-      mockCloudConfig.getApiHost.mockReturnValue('https://cloud.example.com');
+      mockIsEnabled.mockReturnValue(true);
+      mockGetApiHost.mockReturnValue('https://cloud.example.com');
       expect(getRemoteHealthUrl()).toBe('https://cloud.example.com/health');
     });
 
     it('should use default URL when no configuration is provided', () => {
-      mockCloudConfig.isEnabled.mockReturnValue(false);
+      mockIsEnabled.mockReturnValue(false);
       expect(getRemoteHealthUrl()).toBe('https://api.promptfoo.app/health');
     });
   });
 
   describe('checkRemoteHealth', () => {
     it('should return OK status when API is healthy', async () => {
-      mockCloudConfig.isEnabled.mockReturnValue(false);
-      mockedFetch.mockResolvedValueOnce({
+      mockIsEnabled.mockReturnValue(false);
+      mockedFetchWithTimeout.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ status: 'OK' }),
       } as Response);
@@ -59,8 +74,8 @@ describe('API Health Utilities', () => {
     });
 
     it('should include custom endpoint message when cloud config is enabled', async () => {
-      mockCloudConfig.isEnabled.mockReturnValue(true);
-      mockedFetch.mockResolvedValueOnce({
+      mockIsEnabled.mockReturnValue(true);
+      mockedFetchWithTimeout.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ status: 'OK' }),
       } as Response);
@@ -71,7 +86,7 @@ describe('API Health Utilities', () => {
     });
 
     it('should handle non-OK response', async () => {
-      mockedFetch.mockResolvedValueOnce({
+      mockedFetchWithTimeout.mockResolvedValueOnce({
         ok: false,
         status: 404,
         statusText: 'Not Found',
@@ -83,7 +98,7 @@ describe('API Health Utilities', () => {
     });
 
     it('should handle network errors', async () => {
-      mockedFetch.mockRejectedValueOnce(new Error('Network error'));
+      mockedFetchWithTimeout.mockRejectedValueOnce(new Error('Network error'));
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');
@@ -91,7 +106,7 @@ describe('API Health Utilities', () => {
     });
 
     it('should handle malformed JSON', async () => {
-      mockedFetch.mockResolvedValueOnce({
+      mockedFetchWithTimeout.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.reject(new Error('Invalid JSON')),
       } as Response);
@@ -104,7 +119,7 @@ describe('API Health Utilities', () => {
     it('should handle ECONNREFUSED errors', async () => {
       const connectionError: any = new Error('Connection refused');
       connectionError.cause = { code: 'ECONNREFUSED' };
-      mockedFetch.mockRejectedValueOnce(connectionError);
+      mockedFetchWithTimeout.mockRejectedValueOnce(connectionError);
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');
@@ -114,7 +129,7 @@ describe('API Health Utilities', () => {
     it('should handle ECONNREFUSED with nested cause structure', async () => {
       const connectionError: any = new Error('Connection error');
       connectionError['cause'] = { code: 'ECONNREFUSED' };
-      mockedFetch.mockRejectedValueOnce(connectionError);
+      mockedFetchWithTimeout.mockRejectedValueOnce(connectionError);
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');
@@ -125,7 +140,7 @@ describe('API Health Utilities', () => {
       const errorWithCause: any = new Error('Some network error');
       errorWithCause.cause = { code: 'ETIMEDOUT' };
       errorWithCause.code = 'NETWORK_ERROR';
-      mockedFetch.mockRejectedValueOnce(errorWithCause);
+      mockedFetchWithTimeout.mockRejectedValueOnce(errorWithCause);
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');
@@ -138,7 +153,7 @@ describe('API Health Utilities', () => {
     it('should handle TimeoutError gracefully', async () => {
       const timeoutError: any = new Error('Request timed out');
       timeoutError.name = 'TimeoutError';
-      mockedFetch.mockRejectedValueOnce(timeoutError);
+      mockedFetchWithTimeout.mockRejectedValueOnce(timeoutError);
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('OK');
@@ -147,7 +162,7 @@ describe('API Health Utilities', () => {
 
     it('should handle certificate errors specifically', async () => {
       const certError = new Error('unable to verify the first certificate');
-      mockedFetch.mockRejectedValueOnce(certError);
+      mockedFetchWithTimeout.mockRejectedValueOnce(certError);
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');
@@ -157,7 +172,7 @@ describe('API Health Utilities', () => {
 
     it('should handle self-signed certificate errors', async () => {
       const selfSignedError = new Error('self signed certificate in certificate chain');
-      mockedFetch.mockRejectedValueOnce(selfSignedError);
+      mockedFetchWithTimeout.mockRejectedValueOnce(selfSignedError);
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');
@@ -166,7 +181,7 @@ describe('API Health Utilities', () => {
     });
 
     it('should handle DISABLED status from API', async () => {
-      mockedFetch.mockResolvedValueOnce({
+      mockedFetchWithTimeout.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ status: 'DISABLED' }),
       } as Response);
@@ -177,7 +192,7 @@ describe('API Health Utilities', () => {
     });
 
     it('should handle unknown status from API', async () => {
-      mockedFetch.mockResolvedValueOnce({
+      mockedFetchWithTimeout.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ status: 'UNKNOWN' }),
       } as Response);
@@ -188,7 +203,7 @@ describe('API Health Utilities', () => {
     });
 
     it('should handle unknown status with custom message', async () => {
-      mockedFetch.mockResolvedValueOnce({
+      mockedFetchWithTimeout.mockResolvedValueOnce({
         ok: true,
         json: () =>
           Promise.resolve({
@@ -204,7 +219,7 @@ describe('API Health Utilities', () => {
 
     it('should handle errors without cause property', async () => {
       const simpleError = new Error('Simple network error');
-      mockedFetch.mockRejectedValueOnce(simpleError);
+      mockedFetchWithTimeout.mockRejectedValueOnce(simpleError);
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');
@@ -214,7 +229,7 @@ describe('API Health Utilities', () => {
     });
 
     it('should handle non-Error objects thrown as errors', async () => {
-      mockedFetch.mockRejectedValueOnce('String error');
+      mockedFetchWithTimeout.mockRejectedValueOnce('String error');
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');
@@ -225,7 +240,7 @@ describe('API Health Utilities', () => {
     it('should handle errors with code property but no cause', async () => {
       const errorWithCode: any = new Error('Connection error');
       errorWithCode.code = 'ERR_SOCKET_TIMEOUT';
-      mockedFetch.mockRejectedValueOnce(errorWithCode);
+      mockedFetchWithTimeout.mockRejectedValueOnce(errorWithCode);
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');
@@ -238,7 +253,7 @@ describe('API Health Utilities', () => {
       const complexError: any = new Error('Complex network failure');
       complexError.code = 'ERR_NETWORK';
       complexError.cause = 'Underlying system error';
-      mockedFetch.mockRejectedValueOnce(complexError);
+      mockedFetchWithTimeout.mockRejectedValueOnce(complexError);
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');
@@ -249,7 +264,7 @@ describe('API Health Utilities', () => {
     });
 
     it('should handle null or undefined errors gracefully', async () => {
-      mockedFetch.mockRejectedValueOnce(null);
+      mockedFetchWithTimeout.mockRejectedValueOnce(null);
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');
@@ -259,7 +274,7 @@ describe('API Health Utilities', () => {
     });
 
     it('should handle object errors that are not Error instances', async () => {
-      mockedFetch.mockRejectedValueOnce({ error: 'Custom error object', code: 500 });
+      mockedFetchWithTimeout.mockRejectedValueOnce({ error: 'Custom error object', code: 500 });
 
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('ERROR');

@@ -1,6 +1,6 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import * as fs from 'fs';
-import * as path from 'path';
 
 import {
   collectFileMetadata,
@@ -13,61 +13,100 @@ import { transform } from '../src/util/transform';
 
 import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types/index';
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
-}));
+// Use vi.hoisted to define mocks and helpers that need to be accessible in vi.mock factories
+const { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve } = vi.hoisted(
+  () => {
+    const actualPath = require('path');
+    const actualPathResolve = actualPath.resolve.bind(actualPath);
+    const mockPathResolve = vi.fn((...paths: string[]) => actualPathResolve(...paths));
+    const dynamicModuleMocks = new Map<string, any>();
+    const mockDynamicModule = (filePath: string, moduleExport: any) => {
+      const resolvedPath = actualPathResolve(filePath);
+      dynamicModuleMocks.set(resolvedPath, moduleExport);
+    };
+    return { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve };
+  },
+);
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
-}));
-
-jest.mock('node:module', () => {
-  const mockRequire: NodeJS.Require = {
-    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
-  } as unknown as NodeJS.Require;
+vi.mock('path', async () => {
+  const actual = await vi.importActual<typeof import('path')>('path');
   return {
-    createRequire: jest.fn().mockReturnValue(mockRequire),
+    ...actual,
+    resolve: (...paths: string[]) => mockPathResolve(...paths),
   };
 });
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
+}));
+
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
+}));
+
+vi.mock('node:module', () => {
+  const mockRequire: NodeJS.Require = {
+    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
+  } as unknown as NodeJS.Require;
+  return {
+    createRequire: vi.fn().mockReturnValue(mockRequire),
+  };
+});
+
+vi.mock('fs', () => ({
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  statSync: vi.fn(),
+  readdirSync: vi.fn(),
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn(),
   promises: {
-    readFile: jest.fn(),
+    readFile: vi.fn(),
   },
 }));
 
-jest.mock(
-  'pdf-parse',
-  () => ({
-    __esModule: true,
-    PDFParse: jest.fn().mockImplementation(() => ({
-      getText: jest.fn().mockResolvedValue({ text: 'Extracted PDF text' }),
-      destroy: jest.fn().mockResolvedValue(undefined),
-    })),
-  }),
-  { virtual: true },
-);
+const mockGetText = vi.fn().mockResolvedValue({ text: 'Extracted PDF text' });
+const mockDestroy = vi.fn().mockResolvedValue(undefined);
 
-jest.mock('../src/esm');
-jest.mock('../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('pdf-parse', () => ({
+  __esModule: true,
+  PDFParse: vi.fn().mockImplementation(function () {
+    return {
+      getText: mockGetText,
+      destroy: mockDestroy,
+    };
+  }),
 }));
 
-jest.mock('../src/util/transform', () => ({
-  transform: jest.fn(),
+vi.mock('../src/esm', () => ({
+  getDirectory: () => '/test/dir',
+  importModule: vi.fn(async (filePath: string, functionName?: string) => {
+    // Check if we have a dynamic mock for this path
+    const resolvedPath = actualPathResolve(filePath);
+    if (dynamicModuleMocks.has(resolvedPath)) {
+      const mod = dynamicModuleMocks.get(resolvedPath);
+      if (functionName) {
+        return mod[functionName];
+      }
+      return mod;
+    }
+    // For tests that don't set up dynamic mocks, return a simple function
+    return (varName: string) => ({ output: `Dynamic value for ${varName}` });
+  }),
+}));
+vi.mock('../src/database', () => ({
+  getDb: vi.fn(),
+}));
+
+vi.mock('../src/util/transform', () => ({
+  transform: vi.fn(),
 }));
 
 const mockApiProvider: ApiProvider = {
   id: function id() {
     return 'test-provider';
   },
-  callApi: jest.fn().mockResolvedValue({
+  callApi: vi.fn().mockResolvedValue({
     output: 'Test output',
     tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
   }),
@@ -79,21 +118,21 @@ function toPrompt(text: string): Prompt {
 
 describe('extractTextFromPDF', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should extract text from PDF successfully', async () => {
     const mockPDFText = 'Extracted PDF text';
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+    vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
 
     const result = await extractTextFromPDF('test.pdf');
     expect(result).toBe(mockPDFText);
   });
 
   it('should throw error when pdf-parse is not installed', async () => {
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
-    const mockPDFParse = jest.requireMock('pdf-parse');
-    mockPDFParse.PDFParse.mockImplementationOnce(() => {
+    vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+    const pdfParse = await import('pdf-parse');
+    vi.mocked(pdfParse.PDFParse).mockImplementationOnce(() => {
       throw new Error("Cannot find module 'pdf-parse'");
     });
 
@@ -103,12 +142,8 @@ describe('extractTextFromPDF', () => {
   });
 
   it('should handle PDF extraction errors', async () => {
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
-    const mockPDFParse = jest.requireMock('pdf-parse');
-    mockPDFParse.PDFParse.mockImplementationOnce(() => ({
-      getText: jest.fn().mockRejectedValueOnce(new Error('PDF parsing failed')),
-      destroy: jest.fn().mockResolvedValue(undefined),
-    }));
+    vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+    mockGetText.mockRejectedValueOnce(new Error('PDF parsing failed'));
 
     await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
       'Failed to extract text from PDF test.pdf: PDF parsing failed',
@@ -227,7 +262,7 @@ describe('renderPrompt', () => {
     const vars = { var1: 'file://test.txt' };
     const evaluateOptions = {};
 
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('loaded from file');
+    vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('loaded from file');
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
 
@@ -244,23 +279,16 @@ describe('renderPrompt', () => {
     };
     const evaluateOptions = {};
 
-    jest.doMock(
-      path.resolve('/path/to/testFunction.js'),
-      () => (varName: any, _prompt: any, _vars: any) => ({
-        output: `Dynamic value for ${varName}`,
-      }),
-      { virtual: true },
-    );
-    jest.doMock(
-      path.resolve('/path/to/testFunction.cjs'),
-      () => (varName: any, _prompt: any, _vars: any) => ({ output: `and ${varName}` }),
-      { virtual: true },
-    );
-    jest.doMock(
-      path.resolve('/path/to/testFunction.mjs'),
-      () => (varName: any, _prompt: any, _vars: any) => ({ output: `and ${varName}` }),
-      { virtual: true },
-    );
+    // Register dynamic module mocks
+    mockDynamicModule('/path/to/testFunction.js', (varName: any, _prompt: any, _vars: any) => ({
+      output: `Dynamic value for ${varName}`,
+    }));
+    mockDynamicModule('/path/to/testFunction.cjs', (varName: any, _prompt: any, _vars: any) => ({
+      output: `and ${varName}`,
+    }));
+    mockDynamicModule('/path/to/testFunction.mjs', (varName: any, _prompt: any, _vars: any) => ({
+      output: `and ${varName}`,
+    }));
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
     expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
@@ -274,17 +302,14 @@ describe('renderPrompt', () => {
     const evaluateOptions = {};
 
     const require = createRequire('');
-    jest.spyOn(require, 'resolve').mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
+    vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
 
-    jest.doMock(
-      path.resolve('/node_modules/@promptfoo/fake/index.js'),
-      () => ({
-        testFunction: (varName: any, _prompt: any, _vars: any) => ({
-          output: `Dynamic value for ${varName}`,
-        }),
+    // Register dynamic module mock for the package
+    mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+      testFunction: (varName: any, _prompt: any, _vars: any) => ({
+        output: `Dynamic value for ${varName}`,
       }),
-      { virtual: true },
-    );
+    });
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
     expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
@@ -295,7 +320,7 @@ describe('renderPrompt', () => {
     const vars = { var1: 'file:///path/to/testData.json' };
     const evaluateOptions = {};
 
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(JSON.stringify({ key: 'valueFromJson' }));
+    vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(JSON.stringify({ key: 'valueFromJson' }));
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
 
@@ -308,7 +333,7 @@ describe('renderPrompt', () => {
     const vars = { var1: 'file:///path/to/testData.yaml' };
     const evaluateOptions = {};
 
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('key: valueFromYaml');
+    vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('key: valueFromYaml');
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
 
@@ -564,9 +589,9 @@ describe('resolveVariables', () => {
 
 describe('runExtensionHook', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset the transform mock to return undefined by default
-    jest.mocked(transform).mockResolvedValue(undefined);
+    vi.mocked(transform).mockResolvedValue(undefined);
   });
 
   describe('beforeAll', () => {
@@ -622,7 +647,7 @@ describe('runExtensionHook', () => {
 
       it('returned context should conform to the expected schema', async () => {
         // Re-mock the transform function to return a valid context (with a new tag)
-        jest.mocked(transform).mockResolvedValue({
+        vi.mocked(transform).mockResolvedValue({
           suite: {
             providers: context.suite.providers,
             prompts: context.suite.prompts,
@@ -644,7 +669,7 @@ describe('runExtensionHook', () => {
 
       it('should handle invalid context but not throw validation error', async () => {
         // Re-mock the transform function to return a context with custom properties and valid mutable properties
-        jest.mocked(transform).mockResolvedValue({
+        vi.mocked(transform).mockResolvedValue({
           suite: {
             foo: 'bar', // This will be ignored as it's not a mutable property
             tests: [{ vars: { newVar: 'newValue' } }], // This will be used as it's mutable
@@ -695,7 +720,7 @@ describe('runExtensionHook', () => {
     describe('extensions provided', () => {
       beforeEach(() => {
         // Reset the mock to return undefined for these tests
-        jest.mocked(transform).mockResolvedValue(undefined);
+        vi.mocked(transform).mockResolvedValue(undefined);
       });
 
       it('should call transform for each extension', async () => {
@@ -714,7 +739,7 @@ describe('runExtensionHook', () => {
 
       it('returned context should conform to the expected schema', async () => {
         // Re-mock the transform function to return a valid context (with modified test)
-        jest.mocked(transform).mockResolvedValue({
+        vi.mocked(transform).mockResolvedValue({
           test: {
             vars: { var1: 'modified_value1', var2: 'modified_value2' },
             assert: [{ type: 'equals', value: 'modified_expected' }],
@@ -729,7 +754,7 @@ describe('runExtensionHook', () => {
 
       it('should handle invalid context but not throw validation error', async () => {
         // Re-mock the transform function to return an invalid context (test should be an object, not a string)
-        jest.mocked(transform).mockResolvedValue({
+        vi.mocked(transform).mockResolvedValue({
           test: 'invalid_test_value',
         });
 
@@ -743,8 +768,8 @@ describe('runExtensionHook', () => {
 
 describe('collectFileMetadata', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(path, 'resolve').mockImplementation((...paths) => {
+    vi.clearAllMocks();
+    mockPathResolve.mockImplementation((...paths: string[]) => {
       return paths[paths.length - 1];
     });
   });
@@ -864,13 +889,13 @@ describe('collectFileMetadata', () => {
 });
 describe('Image Data URL Generation', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(path, 'resolve').mockImplementation((...paths) => {
+    vi.clearAllMocks();
+    mockPathResolve.mockImplementation((...paths: string[]) => {
       return paths[paths.length - 1];
     });
 
     // Mock fs.readFileSync to return predictable base64 data for different image types
-    jest.spyOn(fs, 'readFileSync').mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+    vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
       const pathStr = filePath.toString();
       if (pathStr.includes('.jpg') || pathStr.includes('.jpeg')) {
         // JPEG magic number: /9j/
@@ -896,7 +921,7 @@ describe('Image Data URL Generation', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should generate data URL for JPEG files', async () => {
@@ -970,7 +995,7 @@ describe('Image Data URL Generation', () => {
     const prompt = toPrompt('Test prompt with image: {{image}}');
 
     // Mock a file with .jpg extension but PNG magic number
-    jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+    vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
       return Buffer.from('iVBORw0KGgoAAAANSUhEUgAA', 'base64'); // PNG magic
     });
 
@@ -983,7 +1008,7 @@ describe('Image Data URL Generation', () => {
   });
 
   it('should maintain existing behavior for video files (raw base64)', async () => {
-    jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+    vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
       return Buffer.from('test-video-content');
     });
 
@@ -998,7 +1023,7 @@ describe('Image Data URL Generation', () => {
   });
 
   it('should maintain existing behavior for audio files (raw base64)', async () => {
-    jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+    vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
       return Buffer.from('test-audio-content');
     });
 

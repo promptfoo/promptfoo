@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, render, screen, fireEvent } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import PromptsSection from './PromptsSection';
 import { useStore } from '@app/stores/evalConfig';
 
@@ -12,6 +12,12 @@ describe('PromptsSection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
   });
 
   const setupStore = (prompts: string[]) => {
@@ -241,7 +247,9 @@ describe('PromptsSection', () => {
 
     fireEvent.change(fileInput, { target: { files: [file] } });
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({

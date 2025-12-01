@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { buildRedteamHistory } from '../../../src/redteam/providers/simba';
 
 import type { Message } from '../../../src/redteam/providers/shared';
