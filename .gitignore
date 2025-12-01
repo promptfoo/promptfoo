@@ -13,7 +13,6 @@ dist
 .aider*
 .vite
 **/*.tsbuildinfo
-src/generated/
 task.md
 
 # pnpm-specific

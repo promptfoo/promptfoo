@@ -255,6 +255,16 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
+      id: 'bedrock:us.meta.llama4-maverick-17b-instruct-v1:0',
+      label: 'Bedrock: Llama 4 Maverick (17B)',
+      config: {
+        temperature: 0.7,
+        top_p: 0.9,
+        max_new_tokens: 1024,
+        region: 'us-east-1',
+      },
+    },
+    {
       id: 'bedrock:us.meta.llama3-3-70b-instruct-v1:0',
       label: 'Bedrock: Llama 3.3 (70B)',
       config: {
@@ -580,8 +590,8 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'openrouter:meta-llama/llama-3.1-405b-instruct',
-      label: 'OpenRouter: Llama 3.1 405B',
+      id: 'openrouter:meta-llama/llama-4-maverick',
+      label: 'OpenRouter: Llama 4 Maverick',
       config: {
         temperature: 0.7,
         max_tokens: 4096,
@@ -596,8 +606,8 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'openrouter:google/gemini-1.5-pro',
-      label: 'OpenRouter: Gemini 1.5 Pro',
+      id: 'openrouter:google/gemini-2.5-pro',
+      label: 'OpenRouter: Gemini 2.5 Pro',
       config: {
         temperature: 0.7,
         max_tokens: 8192,

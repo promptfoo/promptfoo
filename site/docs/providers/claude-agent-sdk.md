@@ -160,7 +160,7 @@ providers:
   - id: anthropic:claude-agent-sdk
     config:
       model: claude-opus-4-1-20250805
-      fallback_model: claude-sonnet-4-20250514
+      fallback_model: claude-sonnet-4-5-20250929
 ```
 
 Claude Agent SDK also supports a number of [model aliases](https://docs.claude.com/en/docs/claude-code/model-config#model-aliases), which can also be used in the configuration.

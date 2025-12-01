@@ -5,13 +5,13 @@ prompts:
   - '{{message}}'
 
 providers:
-  - id: openrouter:mistralai/mistral-7b-instruct
+  - id: openrouter:mistralai/mistral-small
     config:
       temperature: 0.5
-  - id: openrouter:mistralai/mixtral-8x7b-instruct
+  - id: openrouter:mistralai/mistral-medium-3.1
     config:
       temperature: 0.5
-  - id: openrouter:meta-llama/llama-3.1-8b-instruct
+  - id: openrouter:meta-llama/llama-4-maverick
     config:
       temperature: 0.5
 

@@ -2,13 +2,14 @@
  * Config Generator Tests
  */
 
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
-import { generateConfigFile } from './config';
+import { generateConfigFile } from '../../code-scan-action/src/config';
 
 describe('generateConfigFile', () => {
   afterEach(() => {
     // Clean up any generated config files
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should generate config file with minimum severity', () => {

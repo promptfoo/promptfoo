@@ -1,11 +1,14 @@
 /// <reference types="vitest" />
 
 import path from 'path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import packageJson from '../../package.json';
+import packageJson from '../../package.json' with { type: 'json' };
 
 const API_PORT = process.env.API_PORT || '15500';
 
@@ -89,8 +92,12 @@ export default defineConfig({
     // Force vitest to transform MUI packages including CSS imports
     server: {
       deps: {
-        inline: ['@mui/x-data-grid', '@mui/x-charts'],
+        inline: ['@mui/x-data-grid', '@mui/x-charts', 'node-stdlib-browser'],
       },
+    },
+    // Fix ESM directory import issue with punycode in node-stdlib-browser
+    alias: {
+      'punycode/': 'punycode',
     },
     // Suppress known MUI and React Testing Library warnings that don't indicate real problems
     onConsoleLog(log: string, type: 'stdout' | 'stderr'): false | undefined {

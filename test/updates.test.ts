@@ -22,11 +22,10 @@ vi.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
-vi.mock('../package.json', () => ({
-  default: {
-    version: '0.11.0',
-  },
-  version: '0.11.0',
+vi.mock('../src/version', () => ({
+  VERSION: '0.11.0',
+  POSTHOG_KEY: '',
+  ENGINES: { node: '>=20.0.0' },
 }));
 
 import { fetchWithTimeout } from '../src/util/fetch/index';
@@ -37,7 +36,7 @@ import {
   getModelAuditCurrentVersion,
   getModelAuditLatestVersion,
 } from '../src/updates';
-import packageJson from '../package.json';
+import { VERSION } from '../src/version';
 
 beforeEach(() => {
   vi.mocked(fetchWithTimeout).mockReset();
@@ -102,7 +101,7 @@ describe('checkForUpdates', () => {
   it('should not log an update message if the current version is up to date', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ latestVersion: packageJson.version }),
+      json: async () => ({ latestVersion: VERSION }),
     } as never);
 
     const result = await checkForUpdates();

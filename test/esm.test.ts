@@ -1,26 +1,30 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
 import { importModule } from '../src/esm';
 import logger from '../src/logger';
 
-jest.mock('../src/logger', () => ({
+// Use __dirname directly since tests run in CommonJS mode
+const testDir = __dirname;
+
+vi.mock('../src/logger', () => ({
   __esModule: true,
   default: {
-    debug: jest.fn(),
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
   },
 }));
 
 describe('ESM utilities', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('importModule', () => {
     it('imports JavaScript modules', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/testModule.js');
+      const modulePath = path.resolve(testDir, '__fixtures__/testModule.js');
 
       const result = await importModule(modulePath);
       // importModule extracts the nested default from CommonJS modules
@@ -29,12 +33,12 @@ describe('ESM utilities', () => {
       });
       expect(result.testFunction()).toBe('js default test result');
       expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Successfully required module'),
+        expect.stringContaining('Successfully imported module'),
       );
     });
 
     it('imports TypeScript modules', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/testModule.ts');
+      const modulePath = path.resolve(testDir, '__fixtures__/testModule.ts');
 
       const result = await importModule(modulePath);
       expect(result).toEqual({
@@ -48,7 +52,7 @@ describe('ESM utilities', () => {
     });
 
     it('imports CommonJS modules', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/testModule.cjs');
+      const modulePath = path.resolve(testDir, '__fixtures__/testModule.cjs');
 
       const result = await importModule(modulePath);
       // importModule extracts the nested default from CommonJS modules
@@ -59,7 +63,7 @@ describe('ESM utilities', () => {
     });
 
     it('imports ESM modules', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/testModule.mjs');
+      const modulePath = path.resolve(testDir, '__fixtures__/testModule.mjs');
 
       const result = await importModule(modulePath);
       expect(result).toEqual({
@@ -70,7 +74,7 @@ describe('ESM utilities', () => {
     });
 
     it('imports simple modules without nested defaults', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/testModuleSimple.js');
+      const modulePath = path.resolve(testDir, '__fixtures__/testModuleSimple.js');
 
       const result = await importModule(modulePath);
       expect(result).toEqual(expect.any(Function));
@@ -78,7 +82,7 @@ describe('ESM utilities', () => {
     });
 
     it('returns named function when functionName is specified', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/testModule.js');
+      const modulePath = path.resolve(testDir, '__fixtures__/testModule.js');
 
       const result = await importModule(modulePath, 'testFunction');
       expect(result).toEqual(expect.any(Function));
@@ -87,7 +91,7 @@ describe('ESM utilities', () => {
     });
 
     it('returns named function from TypeScript module', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/testModule.ts');
+      const modulePath = path.resolve(testDir, '__fixtures__/testModule.ts');
 
       const result = await importModule(modulePath, 'testFunction');
       expect(result).toEqual(expect.any(Function));
@@ -108,14 +112,11 @@ describe('ESM utilities', () => {
       const nonExistentPath = path.resolve(__dirname, '__fixtures__/nonExistent.js');
 
       await expect(importModule(nonExistentPath)).rejects.toThrow();
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('CommonJS require also failed'),
-      );
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
     });
 
     it('logs debug information during import process', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/testModule.js');
+      const modulePath = path.resolve(testDir, '__fixtures__/testModule.js');
 
       await importModule(modulePath);
 
@@ -127,23 +128,22 @@ describe('ESM utilities', () => {
       );
     });
 
-    it('falls back to CommonJS when ESM import fails', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/testModule.cjs');
+    it('imports CommonJS modules via ESM', async () => {
+      const modulePath = path.resolve(testDir, '__fixtures__/testModule.cjs');
 
       const result = await importModule(modulePath);
       expect(result).toEqual({
         testFunction: expect.any(Function),
       });
 
-      // Should try ESM first, then fall back to CommonJS
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
+      // In Vitest's ESM environment, .cjs files are imported successfully via ESM
       expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Successfully required module'),
+        expect.stringContaining('Successfully imported module'),
       );
     });
 
     it('extracts named export from ESM module', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/testModule.mjs');
+      const modulePath = path.resolve(testDir, '__fixtures__/testModule.mjs');
 
       const result = await importModule(modulePath, 'testFunction');
       expect(result).toEqual(expect.any(Function));

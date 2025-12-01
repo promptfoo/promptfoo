@@ -1,17 +1,27 @@
 # Test Suite
 
-**What this is:** Jest-based test suite for core promptfoo functionality (NOT Vitest - that's in `src/app/`).
+**What this is:** Vitest-based test suite for core promptfoo functionality.
 
-## Critical Test Requirements
-
-**ALWAYS use both flags:**
+## Running Tests
 
 ```bash
-npm test -- --coverage --randomize
+# Run all tests
+npm test
+
+# Run specific test file
+npx vitest run providers/openai
+
+# Run tests matching pattern
+npx vitest run -t "should handle errors"
+
+# Run in watch mode
+npm run test:watch
+
+# Run integration tests
+npm run test:integration
 ```
 
-- `--coverage` - Required to track test coverage
-- `--randomize` - **Critical** - Ensures tests don't depend on execution order
+## Critical Test Requirements
 
 **NEVER:**
 
@@ -19,28 +29,13 @@ npm test -- --coverage --randomize
 - Use `.only()` or `.skip()` in committed code
 - Run watch mode in CI
 
-## Running Tests
-
-```bash
-# Run all tests
-npm test -- --coverage --randomize
-
-# Run specific test file
-npx jest providers/openai --coverage --randomize
-
-# Run tests matching pattern
-npx jest -t "should handle errors"
-```
-
-Always run tests in a single pass to ensure consistent results.
-
 ## Project-Specific Testing Rules
 
 **Mock cleanup is mandatory:**
 
 ```typescript
 afterEach(() => {
-  jest.resetAllMocks(); // Prevents test pollution
+  vi.resetAllMocks(); // Prevents test pollution
 });
 ```
 
@@ -86,12 +81,14 @@ describe('OpenAI Provider', () => {
 ### Mocking
 
 ```typescript
-jest.mock('axios');
-const axiosMock = axios as jest.Mocked<typeof axios>;
+import { vi } from 'vitest';
+
+vi.mock('axios');
+const axiosMock = vi.mocked(axios);
 axiosMock.post.mockResolvedValue({ data: { result: 'success' } });
 ```
 
-- Use Jest's mocking utilities rather than complex custom mocks
+- Use Vitest's mocking utilities (`vi.mock`, `vi.fn`, `vi.spyOn`)
 - Prefer shallow mocking over deep mocking
 - Mock external dependencies but not the code being tested
 - Reset mocks between tests to prevent test pollution
@@ -107,12 +104,12 @@ Every provider needs tests covering:
 
 See `test/providers/openai.test.ts` for reference patterns.
 
-## Key Differences from Frontend Tests
+## Test Configuration
 
-- This uses **Jest** (not Vitest)
-- Run from project root: `npm test`
-- Uses `@jest/globals` imports
-- Config: `jest.config.ts` (not Vitest)
+- Config: `vitest.config.ts` (main tests) and `vitest.integration.config.ts` (integration tests)
+- Setup: `vitest.setup.ts`
+- Globals enabled: `describe`, `it`, `expect`, `beforeEach`, `afterEach` available without imports
+- For mocking utilities, import from `vitest`: `import { vi } from 'vitest'`
 
 ## Best Practices
 
