@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.119.14](https://github.com/promptfoo/promptfoo/compare/0.119.13...0.119.14) (2025-12-01)
+
+
+### Features
+
+* Add web search assertion type ([#5111](https://github.com/promptfoo/promptfoo/issues/5111)) ([11c01cc](https://github.com/promptfoo/promptfoo/commit/11c01cc637efd6867a1e99e44bc8633d324ac66a))
+* **examples:** add Strands Agents SDK example ([#6384](https://github.com/promptfoo/promptfoo/issues/6384)) ([28c3d58](https://github.com/promptfoo/promptfoo/commit/28c3d584f2f820de40a17e641aaf95809cf51e82))
+* **providers:** add AWS Bedrock Converse API provider ([#6348](https://github.com/promptfoo/promptfoo/issues/6348)) ([8ab3f96](https://github.com/promptfoo/promptfoo/commit/8ab3f96f36eb054ba833206f463014a0f3aedc92))
+* **providers:** add Claude Agent SDK plugin support ([#6377](https://github.com/promptfoo/promptfoo/issues/6377)) ([d3e67f5](https://github.com/promptfoo/promptfoo/commit/d3e67f5409af88abc1723c23c3f799cdac47de69))
+* **providers:** add comprehensive Azure model support ([#6375](https://github.com/promptfoo/promptfoo/issues/6375)) ([2e53c08](https://github.com/promptfoo/promptfoo/commit/2e53c084b6a0f95b1f1f5ec1869bcba4bb961657))
+* **providers:** add Google Cloud Model Armor support to Vertex AI ([#6365](https://github.com/promptfoo/promptfoo/issues/6365)) ([0d1641b](https://github.com/promptfoo/promptfoo/commit/0d1641bb3699dcc36e66273c7105ba0b33f0b58d))
+* **providers:** add Groq reasoning models, Responses API, and built-in tools support ([#6231](https://github.com/promptfoo/promptfoo/issues/6231)) ([7cbddd0](https://github.com/promptfoo/promptfoo/commit/7cbddd0ee2fcce983654e07550a6a673b23e2291))
+* **providers:** add missing Claude Agent SDK options ([#6389](https://github.com/promptfoo/promptfoo/issues/6389)) ([d0d227c](https://github.com/promptfoo/promptfoo/commit/d0d227cc627c048efbfe44e224d6394d2ca5311e))
+* **providers:** add OpenAI ChatKit provider ([#6406](https://github.com/promptfoo/promptfoo/issues/6406)) ([433ac65](https://github.com/promptfoo/promptfoo/commit/433ac65589bf758901ed5388fec1a5e460d27c2d))
+* **providers:** add OpenAI Codex SDK provider ([#6321](https://github.com/promptfoo/promptfoo/issues/6321)) ([cc45c0f](https://github.com/promptfoo/promptfoo/commit/cc45c0fbe16814743dba09ba897c13c3687163d1))
+* **providers:** add verbosity and isReasoningModel config to azure:responses ([#6382](https://github.com/promptfoo/promptfoo/issues/6382)) ([e99b8a8](https://github.com/promptfoo/promptfoo/commit/e99b8a84ab4dbe8d0ffd9352a5176d9aaaaf0f36))
+* **providers:** add xAI Responses API with Agent Tools support ([#6386](https://github.com/promptfoo/promptfoo/issues/6386)) ([fad0fc8](https://github.com/promptfoo/promptfoo/commit/fad0fc893dfd62579e80fce7db3d0127c3b4e6b1))
+* **redteam:** update VLGuard to use original MIT-licensed dataset ([#5809](https://github.com/promptfoo/promptfoo/issues/5809)) ([dbabbaf](https://github.com/promptfoo/promptfoo/commit/dbabbaf1a4366ca6e5881fe2b30ecfd5aec4174f))
+* Share trace data to promptfoo cloud ([ce251ae](https://github.com/promptfoo/promptfoo/commit/ce251ae5cb16d9f65cf98d89c7ba4ea91778e3c4))
+* vs code red team extension ([#6396](https://github.com/promptfoo/promptfoo/issues/6396)) ([406dc61](https://github.com/promptfoo/promptfoo/commit/406dc61c6f122e720283108aefeafbb21a6386a3))
+
+
+### Bug Fixes
+
+* **ci:** restore original tag format for GitHub releases ([#6402](https://github.com/promptfoo/promptfoo/issues/6402)) ([e49e5b8](https://github.com/promptfoo/promptfoo/commit/e49e5b80574b8f12a066ee834e160eacb3cd03f5))
+* **cli:** resolve eval command hanging by adding missing await calls ([#6422](https://github.com/promptfoo/promptfoo/issues/6422)) ([137231a](https://github.com/promptfoo/promptfoo/commit/137231a775259d37c5173606f6414851198cfcb2))
+* **deps:** replace xlsx with read-excel-file to fix high severity vulnerability ([#6357](https://github.com/promptfoo/promptfoo/issues/6357)) ([e6e2b98](https://github.com/promptfoo/promptfoo/commit/e6e2b980d71f662258e50832b4967f20de1b0585))
+* **deps:** update node-forge to 1.3.2 to fix security vulnerability ([#6395](https://github.com/promptfoo/promptfoo/issues/6395)) ([2b96ee2](https://github.com/promptfoo/promptfoo/commit/2b96ee2caa17237317a5a8c70798af4677d8a7d4))
+* **evals:** do not truncate image responses in eval ([#6391](https://github.com/promptfoo/promptfoo/issues/6391)) ([d6fb07c](https://github.com/promptfoo/promptfoo/commit/d6fb07c1c45c2c8dce9f79812ab7d1f834af0e38))
+* **mcp:** pass timeout configuration to MCP SDK calls ([#6394](https://github.com/promptfoo/promptfoo/issues/6394)) ([d05da44](https://github.com/promptfoo/promptfoo/commit/d05da44d2c33d2f7956c4b5b16a04a8304580c4b))
+* **modelaudit:** track scanner version and re-scan on version changes ([#6361](https://github.com/promptfoo/promptfoo/issues/6361)) ([f0e8065](https://github.com/promptfoo/promptfoo/commit/f0e80654b1b1a2d48f7f8ac92fdc73e2786767a5))
+* preserve all file:// references in vars context for runtime loading ([#6393](https://github.com/promptfoo/promptfoo/issues/6393)) ([55c553c](https://github.com/promptfoo/promptfoo/commit/55c553caf348ff4837bd8f0b28b0aed7374b7ff6))
+* prevent Node.js from hanging when importing promptfoo as a library ([#6351](https://github.com/promptfoo/promptfoo/issues/6351)) ([af857a3](https://github.com/promptfoo/promptfoo/commit/af857a3ed37e06d357d85c550b4fa3bf63b5d991))
+* **providers:** fix ChatKit echo behavior and concurrency issues ([#6420](https://github.com/promptfoo/promptfoo/issues/6420)) ([04df4a8](https://github.com/promptfoo/promptfoo/commit/04df4a8b730eeb82589a3ff743f95c7279a58fa3))
+* **site:** add truncation marker to blog post ([#6392](https://github.com/promptfoo/promptfoo/issues/6392)) ([900fac2](https://github.com/promptfoo/promptfoo/commit/900fac28dda24001038d4b5a979a59cefdbd9271))
+* **webui:** resolve Vitest timing issues causing test timeouts ([#6356](https://github.com/promptfoo/promptfoo/issues/6356)) ([353ab11](https://github.com/promptfoo/promptfoo/commit/353ab1183431c98ec2a625d0c8fb3e5a70cba408))
+
 ## [0.119.13](https://github.com/promptfoo/promptfoo/compare/promptfoo-v0.119.12...promptfoo-v0.119.13) (2025-11-25)
 
 ### Features
