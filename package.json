@@ -127,7 +127,7 @@
     "@swc/core": "^1.15.3",
     "@types/async": "^3.2.25",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/cache-manager": "^4.0.6",
+    "@types/cache-manager": "^5.0.0",
     "@types/cache-manager-fs-hash": "^0.0.5",
     "@types/cli-progress": "^3.11.6",
     "@types/compression": "^1.8.1",
