@@ -75,7 +75,7 @@ const config: Config = {
     '<rootDir>/test/integration/function-provider-grading.test.ts',
     '<rootDir>/test/integration/envPath.test.ts',
     '<rootDir>/test/evaluator/trace-integration.test.ts',
-    '<rootDir>/test/scripts/update-changelog-version.test.ts',
+    '<rootDir>/test/scripts',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',

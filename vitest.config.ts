@@ -61,7 +61,7 @@ export default defineConfig({
       'test/integration/function-provider-grading.test.ts',
       'test/integration/envPath.test.ts',
       'test/evaluator/trace-integration.test.ts',
-      'test/scripts/update-changelog-version.test.ts',
+      'test/scripts/**/*.test.ts',
     ],
     // Exclude integration tests
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
