@@ -58,6 +58,24 @@ const RESPONSE_EXTRACT_RETRY_DELAY_MS = 500;
 // and INIT_POLL_INTERVAL_MS (100) are hardcoded in the HTML template string
 // and in DOM evaluation functions where constants cannot be easily passed.
 
+// Common refusal patterns to detect when LLM refuses a request
+const REFUSAL_PATTERNS = [
+  /i can'?t assist/i,
+  /i'?m unable to/i,
+  /i cannot help/i,
+  /i'?m not able to/i,
+  /i won'?t be able to/i,
+  /sorry,? but i can'?t/i,
+  /i'?m sorry,? but/i,
+];
+
+/**
+ * Detect if a response text is a refusal
+ */
+function isRefusalResponse(text: string): boolean {
+  return REFUSAL_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 /**
  * Check if a URL is from OpenAI's CDN by parsing the hostname.
  * This is more secure than substring matching which could be bypassed.
@@ -116,9 +134,11 @@ function generateChatKitHTML(
   if (version) {
     validateVersion(version);
   }
-  // Default userId includes timestamp for uniqueness
-  const effectiveUserId = userId || `promptfoo-eval-${Date.now()}`;
-  validateUserId(effectiveUserId);
+  // userId is required - caller must provide it (constructor ensures this)
+  if (!userId) {
+    throw new Error('userId is required for ChatKit HTML generation');
+  }
+  validateUserId(userId);
 
   const versionClause = version ? `, version: '${version}'` : '';
 
@@ -168,7 +188,7 @@ function generateChatKitHTML(
               },
               body: JSON.stringify({
                 workflow: { id: '${workflowId}'${versionClause} },
-                user: '${effectiveUserId}'
+                user: '${userId}'
               })
             });
 
@@ -234,7 +254,19 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
               return className.includes('user') || role === 'user' || testId.includes('user');
             };
 
-            // Try assistant-specific selectors first
+            // Helper to check if element is an assistant message
+            const isAssistantMessage = (el: Element): boolean => {
+              const className = el.className?.toString().toLowerCase() || '';
+              const role = el.getAttribute('data-role') || '';
+              const testId = el.getAttribute('data-testid') || '';
+              return (
+                className.includes('assistant') ||
+                role === 'assistant' ||
+                testId.includes('assistant')
+              );
+            };
+
+            // Try assistant-specific selectors first - these are most reliable
             const assistantSelectors = [
               '[data-testid="assistant-message"]',
               '[data-role="assistant"]',
@@ -245,38 +277,58 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
               const els = document.querySelectorAll(sel);
               if (els.length > 0) {
                 const lastEl = els[els.length - 1];
-                const text = lastEl.textContent || '';
-                if (text.length > 30) {
-                  return { text, source: sel };
+                const text = lastEl.textContent?.trim() || '';
+                // Accept any non-empty assistant message (removed length requirement)
+                if (text.length > 0) {
+                  return { text, source: sel, isAssistant: true };
                 }
               }
             }
 
-            // Look for message containers and find the last non-user message
+            // Look for message containers and find messages
+            // Collect both user and assistant messages to identify the last assistant one
             const allMessages = document.querySelectorAll('[class*="message"]');
-            const nonUserMessages: string[] = [];
+            const messages: Array<{ text: string; isUser: boolean; isAssistant: boolean }> = [];
 
             allMessages.forEach((msg) => {
-              if (!isUserMessage(msg)) {
-                const text = msg.textContent || '';
-                // Skip short texts (likely labels) and avoid duplicates
-                if (text.length > 30 && !nonUserMessages.includes(text)) {
-                  nonUserMessages.push(text);
-                }
+              const text = msg.textContent?.trim() || '';
+              if (text.length > 0) {
+                messages.push({
+                  text,
+                  isUser: isUserMessage(msg),
+                  isAssistant: isAssistantMessage(msg),
+                });
               }
             });
 
-            if (nonUserMessages.length > 0) {
-              // Get the last (most recent) assistant message
-              return { text: nonUserMessages[nonUserMessages.length - 1], source: 'last-non-user' };
+            // Find the last non-user message (assistant messages)
+            for (let i = messages.length - 1; i >= 0; i--) {
+              if (!messages[i].isUser && messages[i].text.length > 0) {
+                return { text: messages[i].text, source: 'last-non-user', isAssistant: true };
+              }
             }
 
             // Try markdown content (often contains the formatted response)
             const markdown = document.querySelectorAll('.markdown, [class*="markdown"]');
             if (markdown.length > 0) {
-              const text = markdown[markdown.length - 1].textContent || '';
-              if (text.length > 30) {
-                return { text, source: 'markdown' };
+              // Find markdown that's not inside a user message
+              for (let i = markdown.length - 1; i >= 0; i--) {
+                const el = markdown[i];
+                let parent = el.parentElement;
+                let inUserArea = false;
+                while (parent && parent !== document.body) {
+                  if (isUserMessage(parent)) {
+                    inUserArea = true;
+                    break;
+                  }
+                  parent = parent.parentElement;
+                }
+                if (!inUserArea) {
+                  const text = el.textContent?.trim() || '';
+                  if (text.length > 0) {
+                    return { text, source: 'markdown', isAssistant: true };
+                  }
+                }
               }
             }
 
@@ -284,25 +336,24 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
             const responseContainers = document.querySelectorAll(
               '[class*="response"], [class*="reply"], [class*="answer"]',
             );
-            for (const container of responseContainers) {
-              const text = container.textContent || '';
-              if (text.length > 30 && !isUserMessage(container)) {
-                return { text, source: 'response-container' };
+            for (let i = responseContainers.length - 1; i >= 0; i--) {
+              const container = responseContainers[i];
+              if (!isUserMessage(container)) {
+                const text = container.textContent?.trim() || '';
+                if (text.length > 0) {
+                  return { text, source: 'response-container', isAssistant: true };
+                }
               }
             }
 
-            // Fallback: look for the longest div that's not in a user message area
-            const divs = document.querySelectorAll('div');
-            let longestText = '';
+            // Fallback: look for the last div that's not in a user message area
+            // Prefer shorter texts to avoid grabbing the entire page
+            const divs = Array.from(document.querySelectorAll('div'));
+            const candidateDivs: Array<{ text: string; el: Element }> = [];
 
-            divs.forEach((div) => {
-              const text = div.textContent || '';
-              if (
-                text.length > longestText.length &&
-                text.length > 50 &&
-                text.length < 5000 &&
-                !isUserMessage(div)
-              ) {
+            for (const div of divs) {
+              const text = div.textContent?.trim() || '';
+              if (text.length > 0 && text.length < 5000 && !isUserMessage(div)) {
                 // Check parent chain for user indicators
                 let parent = div.parentElement;
                 let inUserArea = false;
@@ -314,45 +365,72 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
                   parent = parent.parentElement;
                 }
                 if (!inUserArea) {
-                  longestText = text;
+                  candidateDivs.push({ text, el: div });
                 }
               }
-            });
+            }
 
-            if (longestText.length > 50) {
-              return { text: longestText, source: 'longest-div' };
+            // Sort by length and prefer medium-length texts (likely actual responses)
+            // Avoid very short (labels) and very long (containers with multiple messages)
+            if (candidateDivs.length > 0) {
+              // Find divs that don't contain other message-like elements
+              const leafDivs = candidateDivs.filter(
+                (d) => d.el.querySelectorAll('[class*="message"]').length === 0,
+              );
+              if (leafDivs.length > 0) {
+                // Return the last leaf div (most recent)
+                return { text: leafDivs[leafDivs.length - 1].text, source: 'leaf-div' };
+              }
+              // Otherwise return the last candidate
+              return { text: candidateDivs[candidateDivs.length - 1].text, source: 'fallback-div' };
             }
 
             // Last resort: full body text
-            return { text: document.body?.textContent || '', source: 'body' };
+            return { text: document.body?.textContent?.trim() || '', source: 'body' };
           });
 
-          if (result.text && result.text.trim().length > 20) {
+          if (result.text && result.text.length > 0) {
             // Clean up the response - remove Cloudflare scripts and other noise
-            let cleaned = result.text
-              .replace(/\(function\(\)\{.*?\}\)\(\);?/gs, '')
-              .replace(/You said:.*?(?=\n|$)/g, '')
-              .trim();
+            let cleaned = result.text.replace(/\(function\(\)\{.*?\}\)\(\);?/gs, '').trim();
 
-            // If there's a JSON classification prefix, strip it and use the rest
-            const jsonMatch = cleaned.match(/^(\{[^}]+\})\s*/);
-            if (jsonMatch) {
-              const rest = cleaned.slice(jsonMatch[0].length).trim();
-              cleaned = rest.length > 20 ? rest : cleaned;
+            // Remove "You said:" prefix and everything after it if it looks like user echo
+            // This pattern matches "You said:" followed by any text
+            const youSaidMatch = cleaned.match(/^You said:([\s\S]*)/i);
+            if (youSaidMatch) {
+              // The entire response is just echoing the user - this means we got the wrong element
+              // Return empty to trigger retry or indicate no real response
+              logger.debug('[ChatKitProvider] Detected user echo, discarding', {
+                preview: cleaned.substring(0, 100),
+              });
+              // Don't return the echo - continue to retry or return empty
+              cleaned = '';
             }
 
-            if (cleaned.length > 20) {
+            // Also check for "You said:" appearing anywhere in the text and remove it
+            cleaned = cleaned.replace(/You said:[\s\S]*/gi, '').trim();
+
+            // Don't strip JSON if it's the only response - it might be intentional
+            // Only strip if there's substantial text after the JSON
+            const jsonMatch = cleaned.match(/^(\{[^}]+\})\s+(.+)/s);
+            if (jsonMatch && jsonMatch[2].trim().length > 50) {
+              cleaned = jsonMatch[2].trim();
+            }
+
+            if (cleaned.length > 0) {
               logger.debug('[ChatKitProvider] Extracted response', {
                 source: result.source,
                 length: cleaned.length,
+                preview: cleaned.substring(0, 100),
               });
               return cleaned;
             }
 
-            // Return original if cleaning removed too much
-            if (result.text.trim().length > 20) {
-              return result.text.trim();
-            }
+            // If we got here with no cleaned text but had original text,
+            // the extraction found only user content - return empty to retry
+            logger.debug('[ChatKitProvider] No assistant content found after cleaning', {
+              originalLength: result.text.length,
+              source: result.source,
+            });
           }
         } catch (e) {
           logger.debug('[ChatKitProvider] Could not access frame', { url, error: e, attempt });
@@ -494,6 +572,17 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   private serverPort: number = 0;
   private initialized: boolean = false;
 
+  // Static userId for consistent template keys across concurrent evaluations
+  private static defaultUserId: string | null = null;
+
+  private static getDefaultUserId(): string {
+    if (!OpenAiChatKitProvider.defaultUserId) {
+      // Generate once per process to ensure template consistency
+      OpenAiChatKitProvider.defaultUserId = `promptfoo-eval-${Date.now()}`;
+    }
+    return OpenAiChatKitProvider.defaultUserId;
+  }
+
   constructor(
     workflowId: string,
     options: { config?: OpenAiChatKitOptions; id?: string; env?: EnvOverrides } = {},
@@ -508,7 +597,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     this.chatKitConfig = {
       workflowId: options.config?.workflowId || workflowId,
       version: options.config?.version,
-      userId: options.config?.userId, // Default with timestamp is applied in generateChatKitHTML
+      // Use consistent default userId to ensure template stability during concurrent execution
+      userId: options.config?.userId || OpenAiChatKitProvider.getDefaultUserId(),
       timeout: options.config?.timeout || DEFAULT_TIMEOUT_MS,
       headless: options.config?.headless ?? true,
       serverPort: options.config?.serverPort || 0,
@@ -674,6 +764,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       return this.callApiWithPool(prompt);
     }
 
+    const startTime = Date.now();
+
     try {
       await this.initialize();
 
@@ -751,14 +843,22 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         () => (window as any).__state?.responses?.length || 0,
       );
 
+      const latencyMs = Date.now() - startTime;
+      const isRefusal = isRefusalResponse(responseText);
+
       logger.debug('[ChatKitProvider] Response received', {
         threadId,
         textLength: responseText.length,
         turnNumber: finalResponseCount,
+        latencyMs,
+        isRefusal,
       });
 
       return {
         output: responseText,
+        cached: false, // ChatKit responses are never cached (browser-based)
+        latencyMs,
+        isRefusal,
         metadata: {
           threadId,
           workflowId: this.chatKitConfig.workflowId,
@@ -855,6 +955,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     pool.setTemplate(templateKey, html);
 
     let pooledPage: Awaited<ReturnType<typeof pool.acquirePage>> | null = null;
+    const startTime = Date.now();
 
     try {
       // Acquire a page from the pool for this specific template
@@ -899,13 +1000,21 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       // Get thread ID
       const threadId = await page.evaluate(() => (window as any).__state.threadId);
 
+      const latencyMs = Date.now() - startTime;
+      const isRefusal = isRefusalResponse(responseText);
+
       logger.debug('[ChatKitProvider] Pool response received', {
         threadId,
         textLength: responseText.length,
+        latencyMs,
+        isRefusal,
       });
 
       return {
         output: responseText,
+        cached: false, // ChatKit responses are never cached (browser-based)
+        latencyMs,
+        isRefusal,
         metadata: {
           threadId,
           workflowId: this.chatKitConfig.workflowId,

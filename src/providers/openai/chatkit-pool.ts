@@ -342,13 +342,15 @@ export class ChatKitBrowserPool {
    * Release a page back to the pool
    */
   async releasePage(pooledPage: PooledPage): Promise<void> {
+    const originalTemplateKey = pooledPage.templateKey;
+
     // Keep inUse=true during refresh to prevent race conditions
     // Reset the page for next use by reloading
     try {
       await this.refreshPooledPage(pooledPage);
     } catch (error) {
       logger.warn('[ChatKitPool] Failed to reset page, recreating', { error });
-      // Page is broken, remove and recreate
+      // Page is broken, remove it from the pool
       const index = this.pages.indexOf(pooledPage);
       if (index >= 0) {
         this.pages.splice(index, 1);
@@ -362,13 +364,14 @@ export class ChatKitBrowserPool {
       // Create replacement - if this fails, we just reduce pool size
       // The pool will recover by creating new pages on demand
       try {
-        const newPage = await this.createPooledPage(pooledPage.templateKey);
+        const newPage = await this.createPooledPage(originalTemplateKey);
         this.pages.push(newPage);
         pooledPage = newPage;
       } catch (createError) {
         logger.warn('[ChatKitPool] Failed to create replacement page', { error: createError });
-        // Pool size is now reduced, but will recover on next acquirePage
-        // If someone is waiting, they'll timeout via PAGE_ACQUIRE_TIMEOUT_MS
+        // Pool size is now reduced - try to serve any waiting requests by creating pages for them
+        // This prevents deadlock when all pages fail
+        await this.tryServeWaiters();
         this.scheduleIdleShutdown();
         return;
       }
@@ -384,7 +387,42 @@ export class ChatKitBrowserPool {
     } else {
       // No one waiting for this template, mark as available
       pooledPage.inUse = false;
+      // Check if we can serve waiters for other templates now that we have capacity
+      await this.tryServeWaiters();
       this.scheduleIdleShutdown();
+    }
+  }
+
+  /**
+   * Try to serve waiting requests by creating new pages if we have capacity
+   */
+  private async tryServeWaiters(): Promise<void> {
+    // Process waiters while we have capacity and waiters exist
+    while (this.waitQueue.length > 0 && this.pages.length < this.config.maxConcurrency) {
+      const waiter = this.waitQueue.shift();
+      if (!waiter) {
+        break;
+      }
+
+      try {
+        const newPage = await this.createPooledPage(waiter.templateKey);
+        newPage.inUse = true;
+        this.pages.push(newPage);
+        waiter.resolve(newPage);
+        logger.debug('[ChatKitPool] Created page for waiting request', {
+          templateKey: waiter.templateKey,
+          poolSize: this.pages.length,
+          remainingWaiters: this.waitQueue.length,
+        });
+      } catch (error) {
+        logger.warn('[ChatKitPool] Failed to create page for waiter', {
+          templateKey: waiter.templateKey,
+          error,
+        });
+        // Put waiter back at the front of the queue to retry later
+        this.waitQueue.unshift(waiter);
+        break;
+      }
     }
   }
 
