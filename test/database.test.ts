@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import Database from 'better-sqlite3';
+import { vi } from 'vitest';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -10,7 +11,7 @@ describe('database WAL mode', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
     process.env = { ...ORIGINAL_ENV };
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-dbtest-'));
     process.env.PROMPTFOO_CONFIG_DIR = tempDir;

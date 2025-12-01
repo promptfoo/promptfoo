@@ -2,11 +2,10 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    // Include all test files in the test directory
-    include: ['test/**/*.test.ts'],
-    // Exclude integration tests (run separately via vitest.integration.config.ts)
-    exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
-    // Use node environment (not jsdom) for backend tests
+    // Integration tests only - files matching *.integration.test.ts
+    include: ['**/*.integration.test.ts'],
+    exclude: ['**/node_modules/**'],
+    // Use node environment for backend tests
     environment: 'node',
     // Enable globals so we don't need to import describe/it/expect everywhere
     globals: true,

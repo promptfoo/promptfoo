@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, } from 'vitest';
 import { evaluate } from '../src/evaluator';
 import Eval from '../src/models/eval';
 
