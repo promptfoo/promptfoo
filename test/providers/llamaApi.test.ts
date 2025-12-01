@@ -22,8 +22,9 @@ const openAiMocks = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock('../../src/providers/openai/chat', () => {
+vi.mock('../../src/providers/openai/chat', async (importOriginal) => {
   return {
+    ...(await importOriginal()),
     OpenAiChatCompletionProvider: openAiMocks.OpenAiChatCompletionProvider,
   };
 });

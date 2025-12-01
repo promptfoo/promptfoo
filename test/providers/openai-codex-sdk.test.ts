@@ -1,3 +1,4 @@
+import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
 import { clearCache } from '../../src/cache';
@@ -7,10 +8,10 @@ import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
-const mockRun = jest.fn();
-const mockRunStreamed = jest.fn();
-const mockStartThread = jest.fn();
-const mockResumeThread = jest.fn();
+const mockRun = vi.fn();
+const mockRunStreamed = vi.fn();
+const mockStartThread = vi.fn();
+const mockResumeThread = vi.fn();
 
 // Mock thread instance
 const mockThread = {
@@ -20,25 +21,30 @@ const mockThread = {
 };
 
 // Mock Codex class
-const MockCodex = jest.fn().mockImplementation(() => ({
-  startThread: mockStartThread.mockReturnValue(mockThread),
-  resumeThread: mockResumeThread.mockReturnValue(mockThread),
-}));
+const MockCodex = vi.fn().mockImplementation(function () {
+  return {
+    startThread: mockStartThread.mockReturnValue(mockThread),
+    resumeThread: mockResumeThread.mockReturnValue(mockThread),
+  };
+});
 
 // Mock SDK module export
 const mockCodexSDK = {
   __esModule: true,
   Codex: MockCodex,
-  Thread: jest.fn(),
+  Thread: vi.fn(),
 };
 
 // Mock the ESM loader to return our mock SDK
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(),
-}));
+vi.mock('../../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    importModule: vi.fn(),
+  };
+});
 
 // Mock the SDK package (for type safety)
-jest.mock('@openai/codex-sdk', () => mockCodexSDK, { virtual: true });
+vi.mock('@openai/codex-sdk', () => mockCodexSDK);
 
 // Helper to create mock response matching real SDK format
 const createMockResponse = (
@@ -57,12 +63,12 @@ const createMockResponse = (
 });
 
 describe('OpenAICodexSDKProvider', () => {
-  let statSyncSpy: jest.SpyInstance;
-  let existsSyncSpy: jest.SpyInstance;
-  const mockImportModule = jest.mocked(importModule);
+  let statSyncSpy: MockInstance;
+  let existsSyncSpy: MockInstance;
+  const mockImportModule = vi.mocked(importModule);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Reset mock implementations
     mockStartThread.mockReturnValue(mockThread);
@@ -72,14 +78,14 @@ describe('OpenAICodexSDKProvider', () => {
     mockImportModule.mockResolvedValue(mockCodexSDK);
 
     // Default mocks
-    statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({
+    statSyncSpy = vi.spyOn(fs, 'statSync').mockReturnValue({
       isDirectory: () => true,
     } as fs.Stats);
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    existsSyncSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(true);
   });
 
   afterEach(async () => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
     await clearCache();
   });
 
@@ -111,7 +117,7 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     it('should warn about unknown model', () => {
-      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'unknown-model' } });
 
@@ -123,7 +129,7 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     it('should warn about unknown fallback model', () => {
-      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
 
@@ -135,7 +141,7 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     it('should not warn about known OpenAI models', () => {
-      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-4o' } });
       new OpenAICodexSDKProvider({ config: { fallback_model: 'o3-mini' } });
@@ -146,7 +152,7 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     it('should not warn about gpt-5.1-codex models', () => {
-      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-max' } });
@@ -196,7 +202,7 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should handle SDK exceptions', async () => {
-        const errorSpy = jest.spyOn(logger, 'error').mockImplementation();
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockRun.mockRejectedValue(new Error('Network error'));
 
         const provider = new OpenAICodexSDKProvider({
@@ -237,7 +243,7 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should error when working_dir does not exist', async () => {
-        statSyncSpy.mockImplementation(() => {
+        statSyncSpy.mockImplementation(function () {
           throw new Error('ENOENT: no such file or directory');
         });
 
@@ -725,7 +731,7 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should handle abort during execution', async () => {
-        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
         const abortError = new Error('AbortError');
         abortError.name = 'AbortError';
         mockRun.mockRejectedValue(abortError);

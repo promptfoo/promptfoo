@@ -36,32 +36,42 @@ const googleAuthMock = vi.hoisted(() => ({
 
 vi.mock('google-auth-library', () => googleAuthMock);
 
-vi.mock('glob', () => ({
-  globSync: vi.fn().mockReturnValue([]),
-  hasMagic: (path: string) => {
-    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
-    // This mimics glob's actual behavior where backslash paths return false
-    return /[*?[\]{}]/.test(path) && !path.includes('\\');
-  },
-}));
+vi.mock('glob', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    globSync: vi.fn().mockReturnValue([]),
 
-vi.mock('fs', () => ({
-  existsSync: vi.fn().mockImplementation((path) => {
-    if (path === 'file://system_instruction.json') {
-      return true;
-    }
-    return false;
-  }),
-  readFileSync: vi.fn().mockImplementation((path) => {
-    if (path === 'file://system_instruction.json') {
-      return 'system instruction';
-    }
-    throw new Error(`Mock file not found: ${path}`);
-  }),
-  writeFileSync: vi.fn(),
-  statSync: vi.fn(),
-  mkdirSync: vi.fn(),
-}));
+    hasMagic: (path: string) => {
+      // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+      // This mimics glob's actual behavior where backslash paths return false
+      return /[*?[\]{}]/.test(path) && !path.includes('\\');
+    },
+  };
+});
+
+vi.mock('fs', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    existsSync: vi.fn().mockImplementation(function (path) {
+      if (path === 'file://system_instruction.json') {
+        return true;
+      }
+      return false;
+    }),
+
+    readFileSync: vi.fn().mockImplementation(function (path) {
+      if (path === 'file://system_instruction.json') {
+        return 'system instruction';
+      }
+      throw new Error(`Mock file not found: ${path}`);
+    }),
+
+    writeFileSync: vi.fn(),
+    statSync: vi.fn(),
+    mkdirSync: vi.fn(),
+  };
+});
 
 describe('util', () => {
   beforeEach(() => {
