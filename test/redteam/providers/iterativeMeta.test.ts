@@ -356,7 +356,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should handle agent provider errors and continue loop (non-abort)', async () => {
       // First call errors, second succeeds
-      mockAgentProvider.callApi = jest
+      mockAgentProvider.callApi = vi
         .fn<() => Promise<ProviderResponse>>()
         .mockResolvedValueOnce({ error: 'Temporary error' })
         .mockResolvedValueOnce({

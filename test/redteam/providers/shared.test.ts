@@ -286,7 +286,7 @@ describe('shared redteam provider utilities', () => {
 
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest
+        callApi: vi
           .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
           .mockRejectedValue(abortError),
       };
@@ -301,7 +301,7 @@ describe('shared redteam provider utilities', () => {
 
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest
+        callApi: vi
           .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
           .mockRejectedValue(regularError),
       };
