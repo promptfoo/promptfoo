@@ -59,6 +59,7 @@ export default defineConfig({
       'test/code-scan-action/config.test.ts',
       'test/integration/function-provider-grading.test.ts',
       'test/integration/envPath.test.ts',
+      'test/evaluator/trace-integration.test.ts',
     ],
     // Exclude integration tests
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],

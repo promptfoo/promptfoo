@@ -73,6 +73,7 @@ const config: Config = {
     '<rootDir>/test/code-scan-action/config.test.ts',
     '<rootDir>/test/integration/function-provider-grading.test.ts',
     '<rootDir>/test/integration/envPath.test.ts',
+    '<rootDir>/test/evaluator/trace-integration.test.ts',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
