@@ -55,9 +55,12 @@ const credentialProviderSsoFactory = vi.hoisted(() => ({
   mockSSOProvider: vi.fn(),
 }));
 
-vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
-  BedrockRuntime: bedrockRuntimeFactory.BedrockRuntimeMock,
-}));
+vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    BedrockRuntime: bedrockRuntimeFactory.BedrockRuntimeMock,
+  };
+});
 
 const BedrockRuntimeMock = vi.mocked(BedrockRuntime);
 
@@ -81,10 +84,13 @@ vi.mock('proxy-agent', () => ({
   default: vi.fn(function ProxyAgentMock() {}),
 }));
 
-vi.mock('../../../src/cache', () => ({
-  getCache: vi.fn(),
-  isCacheEnabled: vi.fn(),
-}));
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getCache: vi.fn(),
+    isCacheEnabled: vi.fn(),
+  };
+});
 
 class TestBedrockProvider extends AwsBedrockGenericProvider {
   modelName = 'test-model';
@@ -721,13 +727,17 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should return SSO credential provider when profile is specified', async () => {
-      vi.mock('@aws-sdk/credential-provider-sso', () => ({
-        fromSSO: (config: any) => {
-          credentialProviderSsoFactory.mockSSOProvider();
-          expect(config).toEqual({ profile: 'test-profile' });
-          return 'sso-provider';
-        },
-      }));
+      vi.mock('@aws-sdk/credential-provider-sso', async (importOriginal) => {
+        return {
+          ...(await importOriginal()),
+
+          fromSSO: (config: any) => {
+            credentialProviderSsoFactory.mockSSOProvider();
+            expect(config).toEqual({ profile: 'test-profile' });
+            return 'sso-provider';
+          },
+        };
+      });
 
       const provider = new TestBedrockProvider({
         profile: 'test-profile',
@@ -2559,15 +2569,19 @@ describe('AwsBedrockCompletionProvider', () => {
     };
 
     vi.mocked(getCache).mockResolvedValue(mockCache as any);
-    vi.mocked(isCacheEnabled).mockReturnValue(false);
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return false;
+    });
 
     originalModelHandler = AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'];
 
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = {
-      params: vi.fn().mockImplementation((config) => ({
-        prompt: 'formatted prompt',
-        ...config,
-      })),
+      params: vi.fn().mockImplementation(function (config) {
+        return {
+          prompt: 'formatted prompt',
+          ...config,
+        };
+      }),
       output: vi.fn().mockReturnValue('processed output'),
       tokenUsage: vi.fn().mockReturnValue({
         prompt: 10,

@@ -11,9 +11,15 @@ import { loadApiProviders } from '../../src/providers/index';
 
 import type { ProviderOptionsMap } from '../../src/types/index';
 
-vi.mock('proxy-agent', () => ({
-  ProxyAgent: vi.fn().mockImplementation(() => ({})),
-}));
+vi.mock('proxy-agent', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    ProxyAgent: vi.fn().mockImplementation(function () {
+      return {};
+    }),
+  };
+});
 
 vi.mock('../../src/esm', async () => {
   const actual = await vi.importActual<typeof import('../../src/esm')>('../../src/esm');
@@ -23,20 +29,29 @@ vi.mock('../../src/esm', async () => {
   };
 });
 
-vi.mock('fs', () => ({
-  readFileSync: vi.fn(),
-  existsSync: vi.fn(),
-  mkdirSync: vi.fn(),
-  writeFileSync: vi.fn(),
-}));
+vi.mock('fs', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    readFileSync: vi.fn(),
+    existsSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    writeFileSync: vi.fn(),
+  };
+});
 
-vi.mock('glob', () => ({
-  globSync: vi.fn(),
-}));
+vi.mock('glob', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    globSync: vi.fn(),
+  };
+});
 
-vi.mock('../../src/database', () => ({
-  getDb: vi.fn(),
-}));
+vi.mock('../../src/database', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getDb: vi.fn(),
+  };
+});
 
 const mockFetch = vi.mocked(vi.fn());
 (global as typeof globalThis).fetch = mockFetch as unknown as typeof fetch;

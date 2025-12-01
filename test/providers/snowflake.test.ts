@@ -2,13 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, fetchWithCache } from '../../src/cache';
 import { SnowflakeCortexProvider } from '../../src/providers/snowflake';
 
-vi.mock('../../src/cache', () => ({
-  fetchWithCache: vi.fn(),
-  clearCache: vi.fn(),
-  enableCache: vi.fn(),
-  disableCache: vi.fn(),
-  isCacheEnabled: vi.fn(),
-}));
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+    clearCache: vi.fn(),
+    enableCache: vi.fn(),
+    disableCache: vi.fn(),
+    isCacheEnabled: vi.fn(),
+  };
+});
 
 const mockFetchWithCache = vi.mocked(fetchWithCache);
 
