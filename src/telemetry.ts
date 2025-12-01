@@ -136,25 +136,30 @@ export class Telemetry {
       } catch (error) {
         logger.debug(`PostHog capture error: ${error}`);
       }
-    }
 
-    fetchWithProxy(R_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        event: eventName,
-        environment: getEnvString('NODE_ENV', 'development'),
-        email: this.email,
-        meta: {
-          user_id: this.id,
-          ...propertiesWithMetadata,
+      // Send event to R_ENDPOINT with timeout to prevent hanging
+      fetchWithTimeout(
+        R_ENDPOINT,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            event: eventName,
+            environment: getEnvString('NODE_ENV', 'development'),
+            email: this.email,
+            meta: {
+              user_id: this.id,
+              ...propertiesWithMetadata,
+            },
+          }),
         },
-      }),
-    }).catch(() => {
-      // pass
-    });
+        TELEMETRY_TIMEOUT_MS,
+      ).catch(() => {
+        // pass
+      });
+    }
   }
 
   async shutdown(): Promise<void> {
