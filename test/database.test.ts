@@ -102,6 +102,49 @@ describe('database WAL mode', () => {
     expect(db).toBeDefined();
   });
 
+  describe('closeDbIfOpen', () => {
+    it('should close database when it is open', async () => {
+      const database = await import('../src/database');
+
+      // Open the database
+      database.getDb();
+      expect(database.isDbOpen()).toBe(true);
+
+      // Close it using closeDbIfOpen
+      database.closeDbIfOpen();
+      expect(database.isDbOpen()).toBe(false);
+    });
+
+    it('should do nothing when database is not open', async () => {
+      const database = await import('../src/database');
+
+      // Ensure database is not open
+      expect(database.isDbOpen()).toBe(false);
+
+      // closeDbIfOpen should not throw
+      expect(() => database.closeDbIfOpen()).not.toThrow();
+      expect(database.isDbOpen()).toBe(false);
+    });
+
+    it('should be safe to call multiple times', async () => {
+      const database = await import('../src/database');
+
+      // Open the database
+      database.getDb();
+      expect(database.isDbOpen()).toBe(true);
+
+      // Close multiple times - should not throw
+      database.closeDbIfOpen();
+      expect(database.isDbOpen()).toBe(false);
+
+      database.closeDbIfOpen();
+      expect(database.isDbOpen()).toBe(false);
+
+      database.closeDbIfOpen();
+      expect(database.isDbOpen()).toBe(false);
+    });
+  });
+
   it('verifies WAL checkpoint settings', async () => {
     const database = await import('../src/database');
     database.getDb();
