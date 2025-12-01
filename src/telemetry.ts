@@ -62,7 +62,6 @@ function getPostHogClient(): PostHog | null {
 const TELEMETRY_TIMEOUT_MS = 1000;
 
 export class Telemetry {
-  private telemetryDisabledRecorded = false;
   private id: string;
   private email: string | null;
 
@@ -104,22 +103,19 @@ export class Telemetry {
     return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
   }
 
-  private recordTelemetryDisabled() {
-    if (!this.telemetryDisabledRecorded) {
-      this.sendEvent('feature_used', { feature: 'telemetry disabled' });
-      this.telemetryDisabledRecorded = true;
-    }
-  }
-
   record(eventName: TelemetryEventTypes, properties: EventProperties): void {
     if (this.disabled) {
-      this.recordTelemetryDisabled();
+      return;
     } else {
       this.sendEvent(eventName, properties);
     }
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    if (this.disabled) {
+      return;
+    }
+
     const propertiesWithMetadata = {
       ...properties,
       packageVersion: VERSION,
