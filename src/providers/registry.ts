@@ -498,7 +498,7 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createDeepSeekProvider(providerPath, {
-        config: providerOptions,
+        ...providerOptions,
         env: context.env,
       });
     },
@@ -1077,7 +1077,7 @@ export const providerMap: ProviderFactory[] = [
 
       // Handle regular xai:<model> format
       return createXAIProvider(providerPath, {
-        config: providerOptions,
+        ...providerOptions,
         env: context.env,
       });
     },

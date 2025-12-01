@@ -62,9 +62,7 @@ describe('xAI Chat Provider', () => {
     it('uses region-specific API base URL when region is provided', () => {
       const provider = createXAIProvider('xai:grok-2', {
         config: {
-          config: {
-            region: 'us-west-1',
-          },
+          region: 'us-west-1',
         },
       }) as any;
       expect(provider.config.apiBaseUrl).toBe('https://us-west-1.api.x.ai/v1');
@@ -88,13 +86,11 @@ describe('xAI Chat Provider', () => {
 
     it('stores originalConfig during initialization', () => {
       const config = {
-        config: {
-          search_parameters: { mode: 'test' },
-          region: 'us-west-1',
-        },
+        search_parameters: { mode: 'test' },
+        region: 'us-west-1',
       };
       const provider = createXAIProvider('xai:grok-2', { config }) as any;
-      expect(provider.originalConfig).toEqual(config.config);
+      expect(provider.originalConfig).toEqual(config);
     });
   });
 
@@ -131,9 +127,7 @@ describe('xAI Chat Provider', () => {
     it('renders search_parameters with context variables', async () => {
       const provider = createXAIProvider('xai:grok-3-beta', {
         config: {
-          config: {
-            search_parameters: { mode: '{{mode}}', filter: '{{filter}}' },
-          },
+          search_parameters: { mode: '{{mode}}', filter: '{{filter}}' },
         },
       });
 
@@ -153,9 +147,7 @@ describe('xAI Chat Provider', () => {
     it('includes search_parameters in API body when defined', async () => {
       const provider = createXAIProvider('xai:grok-3-beta', {
         config: {
-          config: {
-            search_parameters: { mode: 'test' },
-          },
+          search_parameters: { mode: 'test' },
         },
       });
 
@@ -172,9 +164,7 @@ describe('xAI Chat Provider', () => {
       const searchParams = { mode: 'test', filter: 'all' };
       const providerWithParams = createXAIProvider('xai:grok-3-beta', {
         config: {
-          config: {
-            search_parameters: searchParams,
-          },
+          search_parameters: searchParams,
         },
       }) as any;
 
@@ -201,9 +191,7 @@ describe('xAI Chat Provider', () => {
       // Test high reasoning effort
       const provider = createXAIProvider('xai:grok-3-mini-beta', {
         config: {
-          config: {
-            reasoning_effort: 'high',
-          },
+          reasoning_effort: 'high',
         },
       }) as any;
 
@@ -213,9 +201,7 @@ describe('xAI Chat Provider', () => {
       // Test low reasoning effort
       const provider2 = createXAIProvider('xai:grok-3-mini-beta', {
         config: {
-          config: {
-            reasoning_effort: 'low',
-          },
+          reasoning_effort: 'low',
         },
       }) as any;
 
@@ -225,10 +211,8 @@ describe('xAI Chat Provider', () => {
     it('handles multiple configuration options for mini models', () => {
       const options: ProviderOptions = {
         config: {
-          config: {
-            reasoning_effort: 'high',
-            region: 'us-east-1',
-          },
+          reasoning_effort: 'high',
+          region: 'us-east-1',
           temperature: 0.5,
           max_tokens: 1000,
         } as any,
@@ -535,6 +519,8 @@ describe('xAI Chat Provider', () => {
 
       // grok-3-beta should have aliases
       const grok3 = XAI_CHAT_MODELS.find((m) => m.id === 'grok-3-beta');
+      expect(grok3).toBeDefined();
+      expect(grok3?.aliases).toContain('grok-3');
       const modelWithAliases = XAI_CHAT_MODELS.find((m) => m.aliases?.includes('grok-3'));
       expect(modelWithAliases).toBeDefined();
       expect(modelWithAliases?.aliases).toEqual(['grok-3', 'grok-3-latest']);

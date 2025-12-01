@@ -189,7 +189,9 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do not have access to `gpt-4.1-2025-04-14` or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
+By default, model-graded asserts automatically select a grading model based on available API keys. The default is `gpt-4.1-2025-04-14` if `OPENAI_API_KEY` is set. See [llm-rubric](/docs/configuration/expected-outputs/model-graded/llm-rubric#how-it-works) for the complete priority order.
+
+If you prefer a different model, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 

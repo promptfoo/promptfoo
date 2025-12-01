@@ -420,14 +420,14 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
   }
 }
 
-export const DefaultGradingProvider = new AIStudioGenericProvider('gemini-2.5-pro');
-export const DefaultGradingJsonProvider = new AIStudioGenericProvider('gemini-2.5-pro', {
+export const DefaultGradingProvider = new AIStudioChatProvider('gemini-3-pro-preview');
+export const DefaultGradingJsonProvider = new AIStudioChatProvider('gemini-3-pro-preview', {
   config: {
     generationConfig: {
       response_mime_type: 'application/json',
     },
   },
 });
-export const DefaultLlmRubricProvider = new AIStudioGenericProvider('gemini-2.5-pro');
-export const DefaultSuggestionsProvider = new AIStudioGenericProvider('gemini-2.5-pro');
-export const DefaultSynthesizeProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultLlmRubricProvider = new AIStudioChatProvider('gemini-3-pro-preview');
+export const DefaultSuggestionsProvider = new AIStudioChatProvider('gemini-3-pro-preview');
+export const DefaultSynthesizeProvider = new AIStudioChatProvider('gemini-3-pro-preview');

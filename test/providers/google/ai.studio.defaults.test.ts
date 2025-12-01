@@ -9,19 +9,19 @@ import {
 
 describe('Google AI Studio Default Providers', () => {
   it('should have correct model names', () => {
-    expect(DefaultGradingProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(DefaultGradingJsonProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(DefaultLlmRubricProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(DefaultSuggestionsProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(DefaultSynthesizeProvider.id()).toBe('google:gemini-2.5-pro');
+    expect(DefaultGradingProvider.id()).toBe('google:gemini-3-pro-preview');
+    expect(DefaultGradingJsonProvider.id()).toBe('google:gemini-3-pro-preview');
+    expect(DefaultLlmRubricProvider.id()).toBe('google:gemini-3-pro-preview');
+    expect(DefaultSuggestionsProvider.id()).toBe('google:gemini-3-pro-preview');
+    expect(DefaultSynthesizeProvider.id()).toBe('google:gemini-3-pro-preview');
   });
 
-  it('should use gemini-2.5-pro as the default model', () => {
-    expect(DefaultGradingProvider.modelName).toBe('gemini-2.5-pro');
-    expect(DefaultGradingJsonProvider.modelName).toBe('gemini-2.5-pro');
-    expect(DefaultLlmRubricProvider.modelName).toBe('gemini-2.5-pro');
-    expect(DefaultSuggestionsProvider.modelName).toBe('gemini-2.5-pro');
-    expect(DefaultSynthesizeProvider.modelName).toBe('gemini-2.5-pro');
+  it('should use gemini-3-pro-preview as the default model', () => {
+    expect(DefaultGradingProvider.modelName).toBe('gemini-3-pro-preview');
+    expect(DefaultGradingJsonProvider.modelName).toBe('gemini-3-pro-preview');
+    expect(DefaultLlmRubricProvider.modelName).toBe('gemini-3-pro-preview');
+    expect(DefaultSuggestionsProvider.modelName).toBe('gemini-3-pro-preview');
+    expect(DefaultSynthesizeProvider.modelName).toBe('gemini-3-pro-preview');
   });
 
   it('should configure JSON provider with correct response format', () => {

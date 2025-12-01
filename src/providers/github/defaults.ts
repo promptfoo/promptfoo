@@ -7,35 +7,17 @@ const githubConfig = {
   apiKeyEnvar: 'GITHUB_TOKEN',
 };
 
-export const DefaultGitHubGradingProvider = new OpenAiChatCompletionProvider('openai/gpt-4.1', {
+export const DefaultGitHubGradingProvider = new OpenAiChatCompletionProvider('openai/gpt-5.1', {
   config: githubConfig,
 });
 
-export const DefaultGitHubGradingJsonProvider = new OpenAiChatCompletionProvider('openai/gpt-4.1', {
+export const DefaultGitHubGradingJsonProvider = new OpenAiChatCompletionProvider('openai/gpt-5.1', {
   config: {
     ...githubConfig,
     response_format: { type: 'json_object' },
   },
 });
 
-export const DefaultGitHubSuggestionsProvider = new OpenAiChatCompletionProvider('openai/gpt-4.1', {
-  config: githubConfig,
-});
-
-// Fast model for quick evaluations
-export const DefaultGitHubFastProvider = new OpenAiChatCompletionProvider('openai/gpt-4.1-nano', {
-  config: githubConfig,
-});
-
-// Balanced model for general use
-export const DefaultGitHubBalancedProvider = new OpenAiChatCompletionProvider(
-  'openai/gpt-4.1-mini',
-  {
-    config: githubConfig,
-  },
-);
-
-// Reasoning model for complex evaluations
-export const DefaultGitHubReasoningProvider = new OpenAiChatCompletionProvider('openai/o3-mini', {
+export const DefaultGitHubSuggestionsProvider = new OpenAiChatCompletionProvider('openai/gpt-5.1', {
   config: githubConfig,
 });
