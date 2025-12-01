@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
@@ -205,16 +204,27 @@ export interface OpenCodeSDKConfig {
 
 /**
  * Helper to load the OpenCode SDK ESM module
- * Uses the same pattern as other providers for resolving npm packages
+ * Uses importModule utility which handles ESM loading in CommonJS environments
  */
 async function loadOpenCodeSDK(): Promise<any> {
   try {
+    // Resolve the package path, then use importModule to load it
+    // The SDK is ESM-only, so we need the importModule utility which uses dynamic-import.cjs
     const basePath =
       cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
-    const resolveFrom = path.join(basePath, 'package.json');
-    const require = createRequire(resolveFrom);
-    const opencodePath = require.resolve('@opencode-ai/sdk');
-    return importModule(opencodePath);
+
+    // The package only exports ESM, so we construct the direct path
+    // The SDK is installed in node_modules/@opencode-ai/sdk/dist/index.js
+    const modulePath = path.join(
+      basePath,
+      'node_modules',
+      '@opencode-ai',
+      'sdk',
+      'dist',
+      'index.js',
+    );
+
+    return await importModule(modulePath);
   } catch (err) {
     logger.error(`Failed to load OpenCode SDK: ${err}`);
     if ((err as any).stack) {
@@ -283,6 +293,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private providerId = 'opencode:sdk';
   private opencodeModule?: any;
   private client?: any;
+  private server?: { url: string; close(): void };
   private sessions: Map<string, string> = new Map(); // cacheKey -> sessionId
 
   constructor(
@@ -341,13 +352,23 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!this.config.persist_sessions) {
       for (const sessionId of this.sessions.values()) {
         try {
-          await this.client?.session?.delete(sessionId);
+          await this.client?.session?.delete({ path: { id: sessionId } });
         } catch (err) {
           logger.debug(`Failed to delete session ${sessionId}: ${err}`);
         }
       }
     }
     this.sessions.clear();
+
+    // Close server if we started one
+    if (this.server) {
+      try {
+        this.server.close();
+      } catch (err) {
+        logger.debug(`Failed to close OpenCode server: ${err}`);
+      }
+      this.server = undefined;
+    }
   }
 
   /**
@@ -495,30 +516,48 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return { error: 'OpenCode SDK call aborted before it started' };
     }
 
-    // Load SDK module (lazy)
-    if (!this.opencodeModule) {
-      this.opencodeModule = await loadOpenCodeSDK();
-    }
-
-    // Initialize client (lazy)
-    if (!this.client) {
-      const Opencode = (this.opencodeModule as any).default || this.opencodeModule;
-      const clientOptions: any = {
-        maxRetries: config.max_retries ?? 2,
-      };
-
-      if (config.baseUrl) {
-        clientOptions.baseURL = config.baseUrl;
-      }
-
-      if (config.log_level) {
-        clientOptions.logLevel = config.log_level;
-      }
-
-      this.client = new Opencode(clientOptions);
-    }
-
     try {
+      // Load SDK module (lazy)
+      if (!this.opencodeModule) {
+        this.opencodeModule = await loadOpenCodeSDK();
+      }
+
+      // Initialize client and server (lazy)
+      if (!this.client) {
+        const { createOpencode, createOpencodeClient } = this.opencodeModule;
+
+        if (config.baseUrl) {
+          // Connect to existing server
+          this.client = createOpencodeClient({
+            baseUrl: config.baseUrl,
+          });
+        } else {
+          // Start our own server and create client
+          const serverOptions: any = {
+            hostname: config.hostname ?? '127.0.0.1',
+            port: config.port ?? 0, // 0 = auto-select port
+            timeout: config.timeout ?? 30000,
+          };
+
+          // Pass config to server for model/provider settings
+          if (config.provider_id || config.model) {
+            serverOptions.config = {
+              provider: config.provider_id
+                ? {
+                    id: config.provider_id,
+                    model: config.model,
+                  }
+                : undefined,
+            };
+          }
+
+          const opencode = await createOpencode(serverOptions);
+          this.client = opencode.client;
+          this.server = opencode.server;
+
+          logger.debug(`OpenCode server started at ${opencode.server.url}`);
+        }
+      }
       // Get or create session
       let sessionId: string;
 
@@ -529,52 +568,70 @@ export class OpenCodeSDKProvider implements ApiProvider {
         // Reuse persisted session
         sessionId = this.sessions.get(cacheKey)!;
       } else {
-        // Create new session
-        const session = await this.client.session.create();
-        sessionId = session.id;
+        // Create new session with working directory
+        const createResult = await this.client.session.create({
+          query: { directory: workingDir },
+        });
+        sessionId = createResult.data?.id ?? createResult.id;
 
         if (config.persist_sessions && cacheKey) {
           this.sessions.set(cacheKey, sessionId);
         }
       }
 
+      // Build prompt body
+      const promptBody: any = {
+        parts: [{ type: 'text', text: prompt }],
+      };
+
+      // Add model config if specified
+      if (config.provider_id && config.model) {
+        promptBody.model = {
+          providerID: config.provider_id,
+          modelID: config.model,
+        };
+      }
+
+      // Add tools config if specified
+      const toolsConfig = this.buildToolsConfig(config);
+      if (toolsConfig) {
+        promptBody.tools = toolsConfig;
+      }
+
+      // Add agent if specified
+      if (config.agent) {
+        promptBody.agent = config.agent;
+      }
+
       // Send message and get response
-      const chatOptions: any = {};
-
-      // The OpenCode SDK handles model/provider config through server config
-      // For now, we pass the prompt and let the server handle model selection
-
-      const response = await this.client.session.chat(sessionId, {
-        content: prompt,
-        ...chatOptions,
+      const response = await this.client.session.prompt({
+        path: { id: sessionId },
+        body: promptBody,
+        query: { directory: workingDir },
       });
 
-      // Extract text from response
+      // Extract text from response parts
       let output = '';
-      if (response?.content) {
-        // Response may have multiple parts
-        if (Array.isArray(response.content)) {
-          output = response.content
-            .filter((part: any) => part.type === 'text')
-            .map((part: any) => part.text)
-            .join('\n');
-        } else if (typeof response.content === 'string') {
-          output = response.content;
+      const responseData = response?.data ?? response;
+      const parts = responseData?.parts ?? [];
+
+      for (const part of parts) {
+        if (part.type === 'text' && part.text) {
+          output += (output ? '\n' : '') + part.text;
         }
-      } else if (typeof response === 'string') {
-        output = response;
       }
 
       const raw = JSON.stringify(response);
 
-      // Extract usage if available
-      const tokenUsage: ProviderResponse['tokenUsage'] = response?.usage
+      // Extract usage from message info if available
+      const info = responseData?.info;
+      const tokenUsage: ProviderResponse['tokenUsage'] = info?.usage
         ? {
-            prompt: response.usage.input_tokens,
-            completion: response.usage.output_tokens,
+            prompt: info.usage.input_tokens,
+            completion: info.usage.output_tokens,
             total:
-              response.usage.input_tokens && response.usage.output_tokens
-                ? response.usage.input_tokens + response.usage.output_tokens
+              info.usage.input_tokens && info.usage.output_tokens
+                ? info.usage.input_tokens + info.usage.output_tokens
                 : undefined,
           }
         : undefined;
@@ -604,6 +661,20 @@ export class OpenCodeSDKProvider implements ApiProvider {
       if (isAbort) {
         logger.warn('OpenCode SDK call aborted');
         return { error: 'OpenCode SDK call aborted' };
+      }
+
+      // Check for CLI not installed error
+      if (error?.code === 'ENOENT' && error?.message?.includes('opencode')) {
+        const cliError = dedent`The OpenCode CLI is required but not installed.
+
+          The OpenCode SDK requires the 'opencode' CLI to be installed and available in your PATH.
+
+          Install it with:
+            curl -fsSL https://opencode.ai/install | bash
+
+          Or see: https://opencode.ai for other installation methods.`;
+        logger.error(cliError);
+        return { error: cliError };
       }
 
       logger.error(`Error calling OpenCode SDK: ${error}`);

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import fs from 'fs';
 
-import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
+import { clearCache, disableCache, enableCache } from '../../src/cache';
 import logger from '../../src/logger';
 import { FS_READONLY_TOOLS, OpenCodeSDKProvider } from '../../src/providers/opencode-sdk';
 
@@ -15,56 +15,57 @@ vi.mock('../../src/cliState', () => ({
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
 }));
-vi.mock('node:module', () => ({
-  createRequire: vi.fn(() => ({
-    resolve: vi.fn(() => '@opencode-ai/sdk'),
-  })),
-}));
 
 // Mock OpenCode SDK client
 const mockSessionCreate = vi.fn();
-const mockSessionChat = vi.fn();
+const mockSessionPrompt = vi.fn();
 const mockSessionDelete = vi.fn();
 const mockSessionList = vi.fn();
 
-// Create a proper mock class that can be instantiated
-class MockOpencodeClass {
-  session = {
-    create: mockSessionCreate,
-    chat: mockSessionChat,
-    delete: mockSessionDelete,
-    list: mockSessionList,
-  };
-  constructor(_options?: any) {}
-}
+// Mock server
+const mockServerClose = vi.fn();
 
-// Helper to create mock session
-const createMockSession = (id = 'test-session-123') => ({
-  id,
-  createdAt: new Date().toISOString(),
+// Mock createOpencode function that returns { client, server }
+const mockCreateOpencode = vi.fn();
+const mockCreateOpencodeClient = vi.fn();
+
+// Helper to create mock session create response
+const createMockSessionResponse = (id = 'test-session-123') => ({
+  data: {
+    id,
+    createdAt: new Date().toISOString(),
+  },
 });
 
-// Helper to create mock chat response
-const createMockChatResponse = (
-  content: string,
+// Helper to create mock prompt response (new API format)
+const createMockPromptResponse = (
+  text: string,
   usage?: { input_tokens?: number; output_tokens?: number },
 ) => ({
-  id: 'msg-123',
-  role: 'assistant',
-  content: [{ type: 'text', text: content }],
-  usage: usage
-    ? {
-        input_tokens: usage.input_tokens ?? 0,
-        output_tokens: usage.output_tokens ?? 0,
-      }
-    : undefined,
+  data: {
+    info: {
+      id: 'msg-123',
+      role: 'assistant',
+      usage: usage
+        ? {
+            input_tokens: usage.input_tokens ?? 0,
+            output_tokens: usage.output_tokens ?? 0,
+          }
+        : undefined,
+    },
+    parts: [{ type: 'text', text }],
+  },
 });
 
-// Helper to create mock chat response with string content
-const createMockStringResponse = (content: string) => ({
-  id: 'msg-123',
-  role: 'assistant',
-  content,
+// Helper to create mock prompt response with multiple parts
+const createMockMultiPartResponse = (parts: Array<{ type: string; text?: string }>) => ({
+  data: {
+    info: {
+      id: 'msg-123',
+      role: 'assistant',
+    },
+    parts,
+  },
 });
 
 describe('OpenCodeSDKProvider', () => {
@@ -76,15 +77,40 @@ describe('OpenCodeSDKProvider', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    // Setup importModule to return our mock
+    // Setup mock client
+    const mockClient = {
+      session: {
+        create: mockSessionCreate,
+        prompt: mockSessionPrompt,
+        delete: mockSessionDelete,
+        list: mockSessionList,
+      },
+    };
+
+    // Setup mock server
+    const mockServer = {
+      url: 'http://127.0.0.1:4096',
+      close: mockServerClose,
+    };
+
+    // Setup createOpencode mock
+    mockCreateOpencode.mockResolvedValue({
+      client: mockClient,
+      server: mockServer,
+    });
+
+    mockCreateOpencodeClient.mockReturnValue(mockClient);
+
+    // Setup importModule to return our mocks
     const { importModule } = await import('../../src/esm');
     vi.mocked(importModule).mockResolvedValue({
-      default: MockOpencodeClass,
+      createOpencode: mockCreateOpencode,
+      createOpencodeClient: mockCreateOpencodeClient,
     });
 
     // Default session mocks
-    mockSessionCreate.mockResolvedValue(createMockSession());
-    mockSessionChat.mockResolvedValue(createMockChatResponse('Test response'));
+    mockSessionCreate.mockResolvedValue(createMockSessionResponse());
+    mockSessionPrompt.mockResolvedValue(createMockPromptResponse('Test response'));
 
     // File system mocks
     tempDirSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue('/tmp/test-temp-dir');
@@ -176,8 +202,8 @@ describe('OpenCodeSDKProvider', () => {
   describe('callApi', () => {
     describe('basic functionality', () => {
       it('should successfully call API with simple prompt', async () => {
-        mockSessionChat.mockResolvedValue(
-          createMockChatResponse('Test response', { input_tokens: 10, output_tokens: 20 }),
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse('Test response', { input_tokens: 10, output_tokens: 20 }),
         );
 
         const provider = new OpenCodeSDKProvider({
@@ -195,32 +221,23 @@ describe('OpenCodeSDKProvider', () => {
         expect(result.error).toBeUndefined();
 
         expect(mockSessionCreate).toHaveBeenCalledTimes(1);
-        expect(mockSessionChat).toHaveBeenCalledWith('test-session-123', {
-          content: 'Test prompt',
+        expect(mockSessionPrompt).toHaveBeenCalledWith({
+          path: { id: 'test-session-123' },
+          body: expect.objectContaining({
+            parts: [{ type: 'text', text: 'Test prompt' }],
+          }),
+          query: { directory: '/tmp/test-temp-dir' },
         });
-      });
-
-      it('should handle string response content', async () => {
-        mockSessionChat.mockResolvedValue(createMockStringResponse('Simple string response'));
-
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        const result = await provider.callApi('Test prompt');
-
-        expect(result.output).toBe('Simple string response');
       });
 
       it('should handle multiple text parts in response', async () => {
-        mockSessionChat.mockResolvedValue({
-          id: 'msg-123',
-          role: 'assistant',
-          content: [
+        mockSessionPrompt.mockResolvedValue(
+          createMockMultiPartResponse([
             { type: 'text', text: 'Part 1' },
-            { type: 'tool_use', name: 'read' },
+            { type: 'tool', text: undefined },
             { type: 'text', text: 'Part 2' },
-          ],
-        });
+          ]),
+        );
 
         const provider = new OpenCodeSDKProvider({
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -232,7 +249,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('should handle SDK exceptions', async () => {
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
-        mockSessionChat.mockRejectedValue(new Error('Network error'));
+        mockSessionPrompt.mockRejectedValue(new Error('Network error'));
 
         const provider = new OpenCodeSDKProvider({
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -324,7 +341,11 @@ describe('OpenCodeSDKProvider', () => {
         await provider.callApi('Test prompt');
 
         expect(mockSessionCreate).not.toHaveBeenCalled();
-        expect(mockSessionChat).toHaveBeenCalledWith('existing-session', expect.any(Object));
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: { id: 'existing-session' },
+          }),
+        );
       });
 
       it('should reuse session when persist_sessions is true', async () => {
@@ -365,7 +386,7 @@ describe('OpenCodeSDKProvider', () => {
         const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
         const abortError = new Error('Aborted');
         abortError.name = 'AbortError';
-        mockSessionChat.mockRejectedValue(abortError);
+        mockSessionPrompt.mockRejectedValue(abortError);
 
         const provider = new OpenCodeSDKProvider({
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -390,8 +411,8 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       it('should cache responses', async () => {
-        mockSessionChat.mockResolvedValue(
-          createMockChatResponse('Cached response', { input_tokens: 5, output_tokens: 10 }),
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse('Cached response', { input_tokens: 5, output_tokens: 10 }),
         );
 
         const provider = new OpenCodeSDKProvider({
@@ -407,11 +428,11 @@ describe('OpenCodeSDKProvider', () => {
         expect(result2.output).toBe('Cached response');
 
         // Only one actual API call
-        expect(mockSessionChat).toHaveBeenCalledTimes(1);
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
       });
 
       it('should bust cache when context.bustCache is true', async () => {
-        mockSessionChat.mockResolvedValue(createMockChatResponse('Fresh response'));
+        mockSessionPrompt.mockResolvedValue(createMockPromptResponse('Fresh response'));
 
         const provider = new OpenCodeSDKProvider({
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -429,7 +450,7 @@ describe('OpenCodeSDKProvider', () => {
         await provider.callApi('Test prompt', context);
 
         // Both calls should hit the API
-        expect(mockSessionChat).toHaveBeenCalledTimes(2);
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
       });
     });
 
@@ -453,26 +474,49 @@ describe('OpenCodeSDKProvider', () => {
 
         // Prompt config should override provider config
         // (Verified by the merge in callApi)
-        expect(mockSessionChat).toHaveBeenCalled();
+        expect(mockSessionPrompt).toHaveBeenCalled();
+      });
+    });
+
+    describe('model and provider config', () => {
+      it('should pass model config to prompt body', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            provider_id: 'anthropic',
+            model: 'claude-sonnet-4-20250514',
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            body: expect.objectContaining({
+              model: {
+                providerID: 'anthropic',
+                modelID: 'claude-sonnet-4-20250514',
+              },
+            }),
+          }),
+        );
       });
     });
   });
 
   describe('cleanup', () => {
-    it('should clear sessions on cleanup', async () => {
+    it('should close server on cleanup', async () => {
       const provider = new OpenCodeSDKProvider({
         env: { ANTHROPIC_API_KEY: 'test-api-key' },
       });
 
-      // Make a call to create a session
+      // Make a call to initialize server
       await provider.callApi('Test prompt');
 
       // Cleanup
       await provider.cleanup();
 
-      // Session delete should be called for non-persistent sessions
-      // (Though in current implementation, ephemeral sessions are deleted in finally block)
-      expect(mockSessionDelete).not.toHaveBeenCalled(); // Ephemeral sessions cleaned differently
+      expect(mockServerClose).toHaveBeenCalled();
     });
   });
 
@@ -516,7 +560,24 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       await provider.callApi('Test prompt');
-      expect(mockSessionChat).toHaveBeenCalled();
+      expect(mockSessionPrompt).toHaveBeenCalled();
+    });
+  });
+
+  describe('existing server connection', () => {
+    it('should connect to existing server via baseUrl', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: { baseUrl: 'http://localhost:8080' },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      // Should use createOpencodeClient instead of createOpencode
+      expect(mockCreateOpencodeClient).toHaveBeenCalledWith({
+        baseUrl: 'http://localhost:8080',
+      });
+      expect(mockCreateOpencode).not.toHaveBeenCalled();
     });
   });
 

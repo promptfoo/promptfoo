@@ -8,7 +8,13 @@ npx promptfoo@latest init --example opencode-sdk
 
 ## Setup
 
-Install the OpenCode SDK:
+### 1. Install OpenCode CLI
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+### 2. Install OpenCode SDK
 
 ```bash
 npm install @opencode-ai/sdk

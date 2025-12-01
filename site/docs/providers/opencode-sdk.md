@@ -15,7 +15,17 @@ This provider integrates [OpenCode](https://opencode.ai/), an open-source AI cod
 
 ## Installation
 
-The OpenCode SDK provider requires the `@opencode-ai/sdk` package:
+The OpenCode SDK provider requires both the OpenCode CLI and the SDK package.
+
+### 1. Install OpenCode CLI
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+Or via other package managers - see [opencode.ai](https://opencode.ai) for options.
+
+### 2. Install SDK Package
 
 ```bash
 npm install @opencode-ai/sdk
@@ -23,7 +33,7 @@ npm install @opencode-ai/sdk
 
 :::note
 
-This is an optional dependency and only needs to be installed if you want to use the OpenCode SDK provider.
+The SDK package is an optional dependency and only needs to be installed if you want to use the OpenCode SDK provider.
 
 :::
 
