@@ -172,11 +172,5 @@ if (require.main === module) {
     } catch {
       // Silently handle dispatcher destroy errors
     }
-
-    // Force exit after a short delay to allow async cleanup to complete
-    // This prevents the process from hanging if something is keeping the event loop alive
-    setTimeout(() => {
-      process.exit(process.exitCode || 0);
-    }, 100);
   });
 }
