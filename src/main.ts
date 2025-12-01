@@ -1,13 +1,14 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { Command } from 'commander';
+import { getGlobalDispatcher } from 'undici';
 
 import { VERSION } from './version';
 import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
+import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
-import { codeScansCommand } from './codeScan/index';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
@@ -26,7 +27,8 @@ import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
-import logger, { initializeRunLogging, setLogLevel } from './logger';
+import { closeDbIfOpen } from './database/index';
+import logger, { closeLogger, initializeRunLogging, setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
@@ -158,7 +160,7 @@ async function main() {
     }
   });
 
-  program.parse();
+  await program.parseAsync();
 }
 
 // ESM replacement for require.main === module check
@@ -170,6 +172,15 @@ try {
       logger.debug('Shutting down gracefully...');
       await telemetry.shutdown();
       logger.debug('Shutdown complete');
+
+      closeLogger();
+      closeDbIfOpen();
+      try {
+        const dispatcher = getGlobalDispatcher();
+        await dispatcher.destroy();
+      } catch {
+        // Silently handle dispatcher destroy errors
+      }
     });
   }
 } catch {

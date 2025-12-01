@@ -1,10 +1,11 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { addInjections } from '../../../src/redteam/strategies/promptInjections/index';
 
 import type { TestCase } from '../../../src/types/index';
 
 describe('addInjections', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
   it('should add prompt injections and store originalText', async () => {
     const testCases: TestCase[] = [

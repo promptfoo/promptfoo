@@ -1,7 +1,15 @@
+import { vi } from 'vitest';
+
 import chalk from 'chalk';
 import { checkNodeVersion } from '../src/checkNodeVersion';
 import { ENGINES } from '../src/version';
 import logger from '../src/logger';
+
+vi.mock('../src/logger', () => ({
+  default: {
+    warn: vi.fn(),
+  },
+}));
 
 const setNodeVersion = (version: string) => {
   Object.defineProperty(process, 'version', {
@@ -16,6 +24,7 @@ describe('checkNodeVersion', () => {
 
   afterEach(() => {
     setNodeVersion(originalProcessVersion);
+    vi.clearAllMocks();
   });
 
   it('should handle version strings correctly and throw if required version is not met', () => {

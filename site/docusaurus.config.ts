@@ -81,6 +81,7 @@ const config: Config = {
           showLastUpdateTime: true,
           exclude: [
             '**/CLAUDE.md', // Exclude Claude Code context files
+            '**/AGENTS.md', // Exclude AI agent instruction files
           ],
         },
         blog: {
@@ -143,6 +144,11 @@ const config: Config = {
               to: '/mcp/',
               label: 'MCP Proxy',
               description: 'Secure proxy for Model Context Protocol communications',
+            },
+            {
+              to: '/code-scanning/',
+              label: 'Code Scanning',
+              description: 'Find LLM vulnerabilities in your IDE and CI/CD',
             },
             {
               to: '/docs/getting-started/',

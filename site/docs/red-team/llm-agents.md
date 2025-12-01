@@ -1,4 +1,5 @@
 ---
+slug: agents
 sidebar_position: 10001
 description: Red team LLM agent security by testing privilege escalation, context poisoning, and memory manipulation to protect AI systems from unauthorized access and data breaches
 ---
@@ -480,21 +481,6 @@ redteam:
 ```
 
 By testing individual components, you can identify which parts of your agent architecture are most vulnerable and develop targeted security measures.
-
-## What's next?
-
-Promptfoo is a free open-source red teaming tool for LLM agents. If you'd like to learn more about how to set up a red team, check out the [red teaming](/docs/red-team/) introduction.
-
-### Related Documentation
-
-- **[Red Team Strategies](/docs/red-team/strategies/)** - Learn about different attack strategies like prompt injection, jailbreaking, and crescendo attacks
-- **[Red Team Plugins](/docs/red-team/plugins/)** - Explore the full catalog of security testing plugins available
-- **[Custom Graders](/docs/configuration/expected-outputs/)** - Configure custom evaluation criteria for your agent tests
-- **[OWASP LLM Top 10](/docs/red-team/owasp-llm-top-10/)** - Understand the top security risks for LLM applications
-- **[Getting Started Guide](/docs/red-team/quickstart/)** - Quick tutorial to begin red teaming your agents
-- **[Python Provider](/docs/providers/python/)** - Create custom Python-based test providers
-- **[Custom API Provider](/docs/providers/custom-api/)** - Build JavaScript/TypeScript providers for testing
-  y measures.
 
 ## What's next?
 
