@@ -510,6 +510,8 @@ describe('Python file references', { timeout: 15000 }, () => {
     });
 
     it('should FAIL when score=0 and no threshold', async () => {
+      vi.mocked(runPythonCode).mockResolvedValueOnce(0);
+
       const assertion: Assertion = {
         type: 'python',
         value: '0',
@@ -544,6 +546,8 @@ describe('Python file references', { timeout: 15000 }, () => {
     });
 
     it('should FAIL when score=0 and threshold=0.1', async () => {
+      vi.mocked(runPythonCode).mockResolvedValueOnce(0);
+
       const assertion: Assertion = {
         type: 'python',
         value: '0',
