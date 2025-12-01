@@ -16,22 +16,145 @@
     "code-scan-action/package.json",
     "examples/**/package.json"
   ],
+  "separateMajorMinor": true,
   "packageRules": [
     {
-      "description": "SDK packages: daily updates including patch, no waiting period",
-      "matchPackageNames": [
-        "@anthropic-ai/sdk",
-        "@aws-sdk/client-bedrock-runtime",
-        "@azure/identity",
-        "@azure/openai-assistants",
-        "cloudflare",
-        "groq-sdk",
-        "openai",
-        "replicate"
+      "description": "Group @inquirer packages together",
+      "matchPackagePatterns": ["^@inquirer/"],
+      "groupName": "@inquirer packages"
+    },
+    {
+      "description": "Group AWS SDK packages together",
+      "matchPackagePatterns": ["^@aws-sdk/", "^@smithy/"],
+      "groupName": "AWS SDK packages"
+    },
+    {
+      "description": "Group @adaline provider packages together",
+      "matchPackagePatterns": ["^@adaline/"],
+      "groupName": "@adaline packages"
+    },
+    {
+      "description": "Group Azure packages together",
+      "matchPackagePatterns": ["^@azure/"],
+      "groupName": "Azure packages"
+    },
+    {
+      "description": "Group Anthropic packages together",
+      "matchPackagePatterns": ["^@anthropic-ai/"],
+      "groupName": "Anthropic packages"
+    },
+    {
+      "description": "Group OpenAI packages together",
+      "matchPackagePatterns": ["^@openai/", "^openai$"],
+      "groupName": "OpenAI packages"
+    },
+    {
+      "description": "Group MUI packages together",
+      "matchPackagePatterns": ["^@mui/", "^@emotion/"],
+      "groupName": "MUI packages"
+    },
+    {
+      "description": "Group Docusaurus packages together",
+      "matchPackagePatterns": ["^@docusaurus/"],
+      "groupName": "Docusaurus packages"
+    },
+    {
+      "description": "Group testing library packages together",
+      "matchPackagePatterns": ["^@testing-library/"],
+      "groupName": "Testing library packages"
+    },
+    {
+      "description": "Group TanStack packages together",
+      "matchPackagePatterns": ["^@tanstack/"],
+      "groupName": "TanStack packages"
+    },
+    {
+      "description": "Group IBM packages together",
+      "matchPackagePatterns": ["^@ibm-cloud/", "^@ibm-generative-ai/", "^ibm-cloud-sdk-core$"],
+      "groupName": "IBM packages"
+    },
+    {
+      "description": "Group Biome platform binaries",
+      "matchPackagePatterns": ["^@biomejs/"],
+      "groupName": "Biome"
+    },
+    {
+      "description": "Group SWC platform binaries",
+      "matchPackagePatterns": ["^@swc/"],
+      "groupName": "SWC"
+    },
+    {
+      "description": "Group GitHub Actions packages together",
+      "matchPackagePatterns": ["^@actions/"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Group Octokit packages together",
+      "matchPackagePatterns": ["^@octokit/"],
+      "groupName": "Octokit"
+    },
+    {
+      "description": "Group OpenTelemetry packages together",
+      "matchPackagePatterns": ["^@opentelemetry/"],
+      "groupName": "OpenTelemetry"
+    },
+    {
+      "description": "Group Vitest packages together",
+      "matchPackagePatterns": ["^vitest$", "^@vitest/"],
+      "groupName": "Vitest"
+    },
+    {
+      "description": "Keep React packages in sync",
+      "matchPackageNames": ["react", "react-dom", "@types/react", "@types/react-dom"],
+      "groupName": "React"
+    },
+    {
+      "description": "Keep socket.io packages in sync",
+      "matchPackageNames": ["socket.io", "socket.io-client"],
+      "groupName": "socket.io"
+    },
+    {
+      "description": "Keep Drizzle packages in sync",
+      "matchPackageNames": ["drizzle-orm", "drizzle-kit"],
+      "groupName": "Drizzle ORM"
+    },
+    {
+      "description": "Keep Playwright packages in sync",
+      "matchPackagePatterns": ["^@playwright/", "^playwright$", "^playwright-"],
+      "groupName": "Playwright"
+    },
+    {
+      "description": "Group all @types packages together",
+      "matchPackagePatterns": ["^@types/"],
+      "groupName": "Type definitions",
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "Group example directory updates to reduce noise",
+      "matchPaths": ["examples/**/package.json"],
+      "groupName": "Example dependencies",
+      "schedule": ["before 6am on the first day of the month"]
+    },
+    {
+      "description": "LLM provider packages: frequent updates, minimal stabilization",
+      "matchPackagePatterns": [
+        "^@anthropic-ai/",
+        "^@aws-sdk/client-bedrock",
+        "^@aws-sdk/client-sagemaker",
+        "^@azure/ai-",
+        "^@azure/openai",
+        "^@openai/",
+        "^openai$",
+        "^@adaline/",
+        "^@ibm-cloud/watsonx",
+        "^@ibm-generative-ai/",
+        "^@modelcontextprotocol/",
+        "^@fal-ai/",
+        "^langfuse$",
+        "^google-auth-library$"
       ],
       "schedule": ["every weekday"],
-      "rangeStrategy": "bump",
-      "minimumReleaseAge": "0 days"
+      "minimumReleaseAge": "1 day"
     },
     {
       "description": "Runtime npm deps: wait 5 days before updates",
