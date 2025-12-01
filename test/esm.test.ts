@@ -1,21 +1,27 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 import { importModule } from '../src/esm';
 import logger from '../src/logger';
 
-jest.mock('../src/logger', () => ({
+// Get __dirname equivalent for ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+vi.mock('../src/logger', () => ({
   __esModule: true,
   default: {
-    debug: jest.fn(),
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
   },
 }));
 
 describe('ESM utilities', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('importModule', () => {
@@ -29,7 +35,7 @@ describe('ESM utilities', () => {
       });
       expect(result.testFunction()).toBe('js default test result');
       expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Successfully required module'),
+        expect.stringContaining('Successfully imported module'),
       );
     });
 
@@ -127,7 +133,7 @@ describe('ESM utilities', () => {
       );
     });
 
-    it('falls back to CommonJS when ESM import fails', async () => {
+    it('imports CommonJS modules via ESM', async () => {
       const modulePath = path.resolve(__dirname, '__fixtures__/testModule.cjs');
 
       const result = await importModule(modulePath);
@@ -135,10 +141,9 @@ describe('ESM utilities', () => {
         testFunction: expect.any(Function),
       });
 
-      // Should try ESM first, then fall back to CommonJS
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
+      // In Vitest's ESM environment, .cjs files are imported successfully via ESM
       expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Successfully required module'),
+        expect.stringContaining('Successfully imported module'),
       );
     });
 

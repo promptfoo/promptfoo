@@ -46,6 +46,7 @@ export default defineConfig({
       'test/updates.test.ts',
       'test/table.test.ts',
       'test/globalConfig.test.ts',
+      'test/esm.test.ts',
     ],
     // Exclude integration tests
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],

@@ -60,6 +60,7 @@ const config: Config = {
     '<rootDir>/test/updates.test.ts',
     '<rootDir>/test/table.test.ts',
     '<rootDir>/test/globalConfig.test.ts',
+    '<rootDir>/test/esm.test.ts',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
