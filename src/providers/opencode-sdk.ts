@@ -107,6 +107,18 @@ export interface OpenCodeSDKConfig {
   apiKey?: string;
 
   /**
+   * LLM provider ID (e.g., 'anthropic', 'openai', 'google', 'ollama')
+   * Used for model selection and API key resolution
+   */
+  provider_id?: string;
+
+  /**
+   * Model ID to use (e.g., 'claude-sonnet-4-20250514', 'gpt-4o')
+   * Combined with provider_id to specify the exact model
+   */
+  model?: string;
+
+  /**
    * Base URL for connecting to an existing OpenCode server
    * If not specified, the provider will start its own server
    */
@@ -135,16 +147,6 @@ export interface OpenCodeSDKConfig {
    * If not specified, uses a temporary directory
    */
   working_dir?: string;
-
-  /**
-   * LLM provider ID (e.g., 'anthropic', 'openai', 'google', 'ollama')
-   */
-  provider_id?: string;
-
-  /**
-   * Model to use (e.g., 'claude-sonnet-4-20250514', 'gpt-4o')
-   */
-  model?: string;
 
   /**
    * Tool configuration - enable/disable specific tools
@@ -423,8 +425,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
   ): string {
     const keyData = {
       prompt,
-      provider_id: config.provider_id,
-      model: config.model,
       tools: this.buildToolsConfig(config),
       permission: config.permission,
       agent: config.agent,
@@ -532,6 +532,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
             baseUrl: config.baseUrl,
           });
         } else {
+          // Ensure ~/.opencode/bin is in PATH for the SDK to find the opencode CLI
+          const homeDir = os.homedir();
+          const opencodeBinPath = path.join(homeDir, '.opencode', 'bin');
+          if (!process.env.PATH?.includes(opencodeBinPath)) {
+            process.env.PATH = `${opencodeBinPath}:${process.env.PATH}`;
+            logger.debug(`Added ${opencodeBinPath} to PATH for OpenCode CLI`);
+          }
+
           // Start our own server and create client
           const serverOptions: any = {
             hostname: config.hostname ?? '127.0.0.1',
@@ -539,17 +547,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
             timeout: config.timeout ?? 30000,
           };
 
-          // Pass config to server for model/provider settings
-          if (config.provider_id || config.model) {
-            serverOptions.config = {
-              provider: config.provider_id
-                ? {
-                    id: config.provider_id,
-                    model: config.model,
-                  }
-                : undefined,
-            };
-          }
+          // Note: Model selection uses OpenCode's configured default model.
+          // Per-prompt model selection is not supported by the SDK.
 
           const opencode = await createOpencode(serverOptions);
           this.client = opencode.client;
@@ -568,27 +567,31 @@ export class OpenCodeSDKProvider implements ApiProvider {
         // Reuse persisted session
         sessionId = this.sessions.get(cacheKey)!;
       } else {
-        // Create new session with working directory
+        // Create new session
+        // The SDK session.create() accepts { body: { title } }
         const createResult = await this.client.session.create({
-          query: { directory: workingDir },
+          body: { title: `promptfoo-${Date.now()}` },
         });
-        sessionId = createResult.data?.id ?? createResult.id;
+        // Response structure: { id, title, version, time }
+        sessionId = createResult?.data?.id ?? createResult?.id ?? createResult;
 
         if (config.persist_sessions && cacheKey) {
           this.sessions.set(cacheKey, sessionId);
         }
       }
 
-      // Build prompt body
+      // Build prompt body for session.prompt()
+      // SDK expects: { path: { id }, body: { parts, model?, tools?, agent?, system? }, query?: { directory? } }
       const promptBody: any = {
         parts: [{ type: 'text', text: prompt }],
       };
 
       // Add model config if specified
-      if (config.provider_id && config.model) {
+      // SDK expects model: { providerID, modelID }
+      if (config.provider_id || config.model) {
         promptBody.model = {
-          providerID: config.provider_id,
-          modelID: config.model,
+          providerID: config.provider_id ?? '',
+          modelID: config.model ?? '',
         };
       }
 
@@ -603,18 +606,32 @@ export class OpenCodeSDKProvider implements ApiProvider {
         promptBody.agent = config.agent;
       }
 
-      // Send message and get response
-      const response = await this.client.session.prompt({
+      // Build the full options object for session.prompt()
+      const promptOptions: any = {
         path: { id: sessionId },
         body: promptBody,
-        query: { directory: workingDir },
-      });
+      };
 
-      // Extract text from response parts
-      let output = '';
+      // Add working directory query param only if user specified a working_dir
+      // (not for auto-created temp directories, as it affects API behavior)
+      if (config.working_dir) {
+        promptOptions.query = { directory: workingDir };
+      }
+
+      // Send message using session.prompt() and get response
+      // SDK: session.prompt(options) -> { info: AssistantMessage, parts: Part[] }
+      logger.debug(`OpenCode SDK prompt options:`, { path: promptOptions.path, body: promptBody });
+      const response = await this.client.session.prompt(promptOptions);
+
+      logger.debug(`OpenCode SDK response received`);
+
+      // The response is { data: { info: AssistantMessage, parts: Part[] } }
       const responseData = response?.data ?? response;
+      const assistantMessage = responseData?.info ?? responseData;
       const parts = responseData?.parts ?? [];
 
+      // Extract text output from parts
+      let output = '';
       for (const part of parts) {
         if (part.type === 'text' && part.text) {
           output += (output ? '\n' : '') + part.text;
@@ -623,22 +640,24 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
       const raw = JSON.stringify(response);
 
-      // Extract usage from message info if available
-      const info = responseData?.info;
-      const tokenUsage: ProviderResponse['tokenUsage'] = info?.usage
+      // Extract token usage from AssistantMessage.tokens
+      // SDK structure: { input, output, reasoning, cache }
+      const tokens = assistantMessage?.tokens;
+      const tokenUsage: ProviderResponse['tokenUsage'] = tokens
         ? {
-            prompt: info.usage.input_tokens,
-            completion: info.usage.output_tokens,
-            total:
-              info.usage.input_tokens && info.usage.output_tokens
-                ? info.usage.input_tokens + info.usage.output_tokens
-                : undefined,
+            prompt: tokens.input ?? 0,
+            completion: tokens.output ?? 0,
+            total: (tokens.input ?? 0) + (tokens.output ?? 0),
           }
         : undefined;
+
+      // Extract cost from AssistantMessage
+      const cost = assistantMessage?.cost ?? 0;
 
       const providerResponse: ProviderResponse = {
         output,
         tokenUsage,
+        cost,
         raw,
         sessionId,
       };

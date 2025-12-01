@@ -10,8 +10,10 @@ This provider integrates [OpenCode](https://opencode.ai/), an open-source AI cod
 
 ## Provider IDs
 
-- `opencode:sdk` (full name)
-- `opencode` (alias)
+- `opencode:sdk` - Uses OpenCode's configured model
+- `opencode` - Same as `opencode:sdk`
+
+The model is configured via the OpenCode CLI or `~/.opencode/config.yaml`.
 
 ## Installation
 
@@ -57,7 +59,7 @@ OpenCode supports 75+ providers - see [Supported Providers](#supported-providers
 
 ### Basic Usage
 
-By default, OpenCode SDK runs in a temporary directory with no tools enabled:
+Use `opencode:sdk` to access OpenCode's configured model:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -67,7 +69,26 @@ prompts:
   - 'Write a Python function that validates email addresses'
 ```
 
-When your test cases finish, the temporary directory is deleted.
+Configure your model via the OpenCode CLI: `opencode config set model openai/gpt-4o`
+
+By default, OpenCode SDK runs in a temporary directory with no tools enabled. When your test cases finish, the temporary directory is deleted.
+
+### With Inline Model Configuration
+
+Specify the provider and model directly in your config:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: anthropic
+      model: claude-sonnet-4-20250514
+
+prompts:
+  - 'Write a Python function that validates email addresses'
+```
+
+This overrides the model configured via the OpenCode CLI for this specific eval.
 
 ### With Working Directory
 
@@ -115,26 +136,26 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 
 ## Supported Parameters
 
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `apiKey` | string | API key for the LLM provider | Environment variable |
-| `baseUrl` | string | URL for existing OpenCode server | Auto-start server |
-| `hostname` | string | Server hostname when starting new server | `127.0.0.1` |
-| `port` | number | Server port when starting new server | `4096` |
-| `timeout` | number | Server startup timeout (ms) | `30000` |
-| `working_dir` | string | Directory for file operations | Temporary directory |
-| `provider_id` | string | LLM provider (anthropic, openai, google, etc.) | Auto-detect |
-| `model` | string | Model to use | Provider default |
-| `tools` | object | Tool configuration | Read-only with working_dir |
-| `permission` | object | Permission configuration for tools | Default permissions |
-| `agent` | string | Built-in agent to use (build, plan) | Default agent |
-| `custom_agent` | object | Custom agent configuration | None |
-| `session_id` | string | Resume existing session | Create new session |
-| `persist_sessions` | boolean | Keep sessions between calls | `false` |
-| `mcp` | object | MCP server configuration | None |
-| `max_retries` | number | Maximum retries for API calls | `2` |
-| `log_level` | string | SDK log level | `warn` |
-| `enable_streaming` | boolean | Enable streaming responses | `false` |
+| Parameter          | Type    | Description                                    | Default                    |
+| ------------------ | ------- | ---------------------------------------------- | -------------------------- |
+| `apiKey`           | string  | API key for the LLM provider                   | Environment variable       |
+| `baseUrl`          | string  | URL for existing OpenCode server               | Auto-start server          |
+| `hostname`         | string  | Server hostname when starting new server       | `127.0.0.1`                |
+| `port`             | number  | Server port when starting new server           | `4096`                     |
+| `timeout`          | number  | Server startup timeout (ms)                    | `30000`                    |
+| `working_dir`      | string  | Directory for file operations                  | Temporary directory        |
+| `provider_id`      | string  | LLM provider (anthropic, openai, google, etc.) | Auto-detect                |
+| `model`            | string  | Model to use                                   | Provider default           |
+| `tools`            | object  | Tool configuration                             | Read-only with working_dir |
+| `permission`       | object  | Permission configuration for tools             | Default permissions        |
+| `agent`            | string  | Built-in agent to use (build, plan)            | Default agent              |
+| `custom_agent`     | object  | Custom agent configuration                     | None                       |
+| `session_id`       | string  | Resume existing session                        | Create new session         |
+| `persist_sessions` | boolean | Keep sessions between calls                    | `false`                    |
+| `mcp`              | object  | MCP server configuration                       | None                       |
+| `max_retries`      | number  | Maximum retries for API calls                  | `2`                        |
+| `log_level`        | string  | SDK log level                                  | `warn`                     |
+| `enable_streaming` | boolean | Enable streaming responses                     | `false`                    |
 
 ## Supported Providers
 
@@ -162,14 +183,17 @@ OpenCode supports 75+ LLM providers through [Models.dev](https://models.dev/):
 - LM Studio
 - llama.cpp
 
-Configure the provider:
+Configure your preferred model using the OpenCode CLI:
 
-```yaml
-providers:
-  - id: opencode:sdk
-    config:
-      provider_id: anthropic
-      model: claude-sonnet-4-20250514
+```bash
+# Set your default model
+opencode config set model anthropic/claude-sonnet-4-20250514
+
+# Or for OpenAI
+opencode config set model openai/gpt-4o
+
+# Or for local models
+opencode config set model ollama/llama3
 ```
 
 ## Tools and Permissions
@@ -180,12 +204,12 @@ With no `working_dir` specified, OpenCode runs in a temp directory with no tools
 
 With `working_dir` specified, these read-only tools are enabled by default:
 
-| Tool | Purpose |
-|------|---------|
-| `read` | Read file contents |
+| Tool   | Purpose                         |
+| ------ | ------------------------------- |
+| `read` | Read file contents              |
 | `grep` | Search file contents with regex |
-| `glob` | Find files by pattern |
-| `list` | List directory contents |
+| `glob` | Find files by pattern           |
+| `list` | List directory contents         |
 
 ### Tool Configuration
 
@@ -356,13 +380,13 @@ evaluateOptions:
 
 ## Comparison with Other Agentic Providers
 
-| Feature | OpenCode SDK | Claude Agent SDK | Codex SDK |
-|---------|--------------|------------------|-----------|
-| Provider flexibility | 75+ providers | Anthropic only | OpenAI only |
-| Architecture | Client-server | Direct API | Thread-based |
-| Local models | Ollama, LM Studio | No | No |
-| Tool ecosystem | Native + MCP | Native + MCP | Native |
-| Working dir isolation | Yes | Yes | Git required |
+| Feature               | OpenCode SDK      | Claude Agent SDK | Codex SDK    |
+| --------------------- | ----------------- | ---------------- | ------------ |
+| Provider flexibility  | 75+ providers     | Anthropic only   | OpenAI only  |
+| Architecture          | Client-server     | Direct API       | Thread-based |
+| Local models          | Ollama, LM Studio | No               | No           |
+| Tool ecosystem        | Native + MCP      | Native + MCP     | Native       |
+| Working dir isolation | Yes               | Yes              | Git required |
 
 Choose based on your use case:
 

@@ -19,6 +19,7 @@ vi.mock('../../src/esm', () => ({
 // Mock OpenCode SDK client
 const mockSessionCreate = vi.fn();
 const mockSessionPrompt = vi.fn();
+const mockSessionMessages = vi.fn();
 const mockSessionDelete = vi.fn();
 const mockSessionList = vi.fn();
 
@@ -30,39 +31,41 @@ const mockCreateOpencode = vi.fn();
 const mockCreateOpencodeClient = vi.fn();
 
 // Helper to create mock session create response
+// SDK returns: { id, title, version, time }
 const createMockSessionResponse = (id = 'test-session-123') => ({
-  data: {
-    id,
-    createdAt: new Date().toISOString(),
-  },
+  id,
+  title: `promptfoo-${Date.now()}`,
+  version: 1,
+  time: new Date().toISOString(),
 });
 
-// Helper to create mock prompt response (new API format)
+// Helper to create mock prompt response
+// SDK session.prompt() returns: { info: AssistantMessage, parts: Part[] }
 const createMockPromptResponse = (
-  text: string,
-  usage?: { input_tokens?: number; output_tokens?: number },
+  parts: Array<{ type: string; text?: string }>,
+  tokens?: { input?: number; output?: number; reasoning?: number; cache?: number },
+  cost?: number,
 ) => ({
   data: {
     info: {
       id: 'msg-123',
+      sessionID: 'test-session-123',
       role: 'assistant',
-      usage: usage
+      parentID: 'user-msg-123',
+      modelID: 'claude-sonnet-4-20250514',
+      providerID: 'anthropic',
+      mode: 'default',
+      path: { cwd: '/test', root: '/test' },
+      tokens: tokens
         ? {
-            input_tokens: usage.input_tokens ?? 0,
-            output_tokens: usage.output_tokens ?? 0,
+            input: tokens.input ?? 0,
+            output: tokens.output ?? 0,
+            reasoning: tokens.reasoning ?? 0,
+            cache: tokens.cache ?? 0,
           }
         : undefined,
-    },
-    parts: [{ type: 'text', text }],
-  },
-});
-
-// Helper to create mock prompt response with multiple parts
-const createMockMultiPartResponse = (parts: Array<{ type: string; text?: string }>) => ({
-  data: {
-    info: {
-      id: 'msg-123',
-      role: 'assistant',
+      cost: cost ?? 0,
+      time: { created: Date.now() },
     },
     parts,
   },
@@ -72,16 +75,17 @@ describe('OpenCodeSDKProvider', () => {
   let tempDirSpy: MockInstance;
   let statSyncSpy: MockInstance;
   let rmSyncSpy: MockInstance;
-  let readdirSyncSpy: MockInstance;
+  let _readdirSyncSpy: MockInstance;
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    // Setup mock client
+    // Setup mock client with session.prompt()
     const mockClient = {
       session: {
         create: mockSessionCreate,
         prompt: mockSessionPrompt,
+        messages: mockSessionMessages,
         delete: mockSessionDelete,
         list: mockSessionList,
       },
@@ -110,7 +114,13 @@ describe('OpenCodeSDKProvider', () => {
 
     // Default session mocks
     mockSessionCreate.mockResolvedValue(createMockSessionResponse());
-    mockSessionPrompt.mockResolvedValue(createMockPromptResponse('Test response'));
+    mockSessionPrompt.mockResolvedValue(
+      createMockPromptResponse(
+        [{ type: 'text', text: 'Test response' }],
+        { input: 10, output: 20 },
+        0.001,
+      ),
+    );
 
     // File system mocks
     tempDirSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue('/tmp/test-temp-dir');
@@ -119,7 +129,7 @@ describe('OpenCodeSDKProvider', () => {
       mtimeMs: 1234567890,
     } as fs.Stats);
     rmSyncSpy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {});
-    readdirSyncSpy = vi.spyOn(fs, 'readdirSync').mockReturnValue([]);
+    _readdirSyncSpy = vi.spyOn(fs, 'readdirSync').mockReturnValue([]);
   });
 
   afterEach(async () => {
@@ -203,7 +213,11 @@ describe('OpenCodeSDKProvider', () => {
     describe('basic functionality', () => {
       it('should successfully call API with simple prompt', async () => {
         mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponse('Test response', { input_tokens: 10, output_tokens: 20 }),
+          createMockPromptResponse(
+            [{ type: 'text', text: 'Test response' }],
+            { input: 10, output: 20 },
+            0.001,
+          ),
         );
 
         const provider = new OpenCodeSDKProvider({
@@ -217,22 +231,32 @@ describe('OpenCodeSDKProvider', () => {
           completion: 20,
           total: 30,
         });
+        expect(result.cost).toBe(0.001);
         expect(result.sessionId).toBe('test-session-123');
         expect(result.error).toBeUndefined();
 
+        // Verify session.create was called with body.title
         expect(mockSessionCreate).toHaveBeenCalledTimes(1);
-        expect(mockSessionPrompt).toHaveBeenCalledWith({
-          path: { id: 'test-session-123' },
+        expect(mockSessionCreate).toHaveBeenCalledWith({
           body: expect.objectContaining({
-            parts: [{ type: 'text', text: 'Test prompt' }],
+            title: expect.stringMatching(/^promptfoo-\d+$/),
           }),
-          query: { directory: '/tmp/test-temp-dir' },
         });
+
+        // Verify session.prompt was called with { path: { id }, body: { parts } }
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: { id: 'test-session-123' },
+            body: expect.objectContaining({
+              parts: [{ type: 'text', text: 'Test prompt' }],
+            }),
+          }),
+        );
       });
 
       it('should handle multiple text parts in response', async () => {
         mockSessionPrompt.mockResolvedValue(
-          createMockMultiPartResponse([
+          createMockPromptResponse([
             { type: 'text', text: 'Part 1' },
             { type: 'tool', text: undefined },
             { type: 'text', text: 'Part 2' },
@@ -260,6 +284,17 @@ describe('OpenCodeSDKProvider', () => {
         expect(errorSpy).toHaveBeenCalled();
 
         errorSpy.mockRestore();
+      });
+
+      it('should handle empty parts in response', async () => {
+        mockSessionPrompt.mockResolvedValue(createMockPromptResponse([], { input: 5, output: 10 }));
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('');
       });
     });
 
@@ -341,6 +376,7 @@ describe('OpenCodeSDKProvider', () => {
         await provider.callApi('Test prompt');
 
         expect(mockSessionCreate).not.toHaveBeenCalled();
+        // session.prompt is called with the provided session ID
         expect(mockSessionPrompt).toHaveBeenCalledWith(
           expect.objectContaining({
             path: { id: 'existing-session' },
@@ -412,7 +448,11 @@ describe('OpenCodeSDKProvider', () => {
 
       it('should cache responses', async () => {
         mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponse('Cached response', { input_tokens: 5, output_tokens: 10 }),
+          createMockPromptResponse(
+            [{ type: 'text', text: 'Cached response' }],
+            { input: 5, output: 10 },
+            0.0005,
+          ),
         );
 
         const provider = new OpenCodeSDKProvider({
@@ -432,7 +472,9 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       it('should bust cache when context.bustCache is true', async () => {
-        mockSessionPrompt.mockResolvedValue(createMockPromptResponse('Fresh response'));
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'Fresh response' }]),
+        );
 
         const provider = new OpenCodeSDKProvider({
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -473,8 +515,16 @@ describe('OpenCodeSDKProvider', () => {
         await provider.callApi('Test prompt', context);
 
         // Prompt config should override provider config
-        // (Verified by the merge in callApi)
-        expect(mockSessionPrompt).toHaveBeenCalled();
+        // The merged config should use 'prompt-model'
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            body: expect.objectContaining({
+              model: expect.objectContaining({
+                modelID: 'prompt-model',
+              }),
+            }),
+          }),
+        );
       });
     });
 
@@ -490,13 +540,33 @@ describe('OpenCodeSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
+        // SDK expects model: { providerID, modelID } in the body
         expect(mockSessionPrompt).toHaveBeenCalledWith(
           expect.objectContaining({
+            path: { id: 'test-session-123' },
             body: expect.objectContaining({
               model: {
                 providerID: 'anthropic',
                 modelID: 'claude-sonnet-4-20250514',
               },
+            }),
+          }),
+        );
+      });
+
+      it('should work without model config', async () => {
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        // Should still call prompt without model config
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: { id: 'test-session-123' },
+            body: expect.objectContaining({
+              parts: [{ type: 'text', text: 'Test prompt' }],
             }),
           }),
         );
@@ -544,6 +614,23 @@ describe('OpenCodeSDKProvider', () => {
 
       // No temp dir should be created
       expect(tempDirSpy).not.toHaveBeenCalled();
+
+      // Verify tools config includes read-only tools
+      expect(mockSessionPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            tools: expect.objectContaining({
+              read: true,
+              grep: true,
+              glob: true,
+              list: true,
+              bash: false,
+              write: false,
+              edit: false,
+            }),
+          }),
+        }),
+      );
     });
 
     it('should use explicit tools config when provided', async () => {
@@ -560,7 +647,18 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       await provider.callApi('Test prompt');
-      expect(mockSessionPrompt).toHaveBeenCalled();
+
+      expect(mockSessionPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            tools: {
+              read: true,
+              write: true,
+              bash: true,
+            },
+          }),
+        }),
+      );
     });
   });
 

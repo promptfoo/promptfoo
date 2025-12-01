@@ -200,15 +200,20 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
-      providerPath.startsWith('opencode:sdk') || providerPath === 'opencode',
+      providerPath.startsWith('opencode:') || providerPath === 'opencode',
     create: async (
-      _providerPath: string,
+      providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
       const { OpenCodeSDKProvider } = await import('./opencode-sdk');
+
+      // opencode:sdk or opencode - uses OpenCode's configured default model
+      // Model selection is configured via OpenCode CLI: opencode config set model <provider/model>
       return new OpenCodeSDKProvider({
         ...providerOptions,
+        id: providerPath,
+        config: providerOptions.config,
         env: context.env,
       });
     },

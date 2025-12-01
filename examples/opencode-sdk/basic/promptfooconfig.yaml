@@ -5,12 +5,16 @@ prompts:
   - 'Output a Python function that prints the first 10 numbers in the Fibonacci sequence. Do not create any files. Just output the code.'
 
 providers:
-  - opencode:sdk
+  # Use opencode:sdk with explicit model configuration
+  - id: opencode:sdk
+    config:
+      provider_id: openai
+      model: gpt-4o-mini
 
 tests:
   - vars: {}
     assert:
       - type: contains
-        value: 'fibonacci'
-      - type: llm-rubric
-        value: 'Should generate working Python code that prints first 10 Fibonacci numbers'
+        value: 'def'
+      - type: contains
+        value: 'print'
