@@ -3,7 +3,7 @@
  */
 
 import * as github from '@actions/github';
-import { getGitHubContext, postReviewComments } from './github';
+import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
 
 // Mock @actions/core
 jest.mock('@actions/core', () => ({

@@ -3,7 +3,7 @@
  */
 
 import * as fs from 'fs';
-import { generateConfigFile } from './config';
+import { generateConfigFile } from '../../code-scan-action/src/config';
 
 describe('generateConfigFile', () => {
   afterEach(() => {

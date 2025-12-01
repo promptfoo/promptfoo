@@ -3,7 +3,7 @@
  */
 
 import * as core from '@actions/core';
-import { getGitHubOIDCToken } from './auth';
+import { getGitHubOIDCToken } from '../../code-scan-action/src/auth';
 
 // Mock @actions/core
 jest.mock('@actions/core', () => ({
