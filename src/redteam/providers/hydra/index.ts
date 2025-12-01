@@ -87,7 +87,7 @@ export class HydraProvider implements ApiProvider {
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
 
     if (this.stateful && this.maxBacktracks > 0) {
-      logger.warn('[Hydra] Backtracking disabled in stateful mode');
+      logger.debug('[Hydra] Backtracking disabled in stateful mode');
     }
 
     // Hydra strategy requires cloud

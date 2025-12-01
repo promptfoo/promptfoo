@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InsuranceNetworkMisinformationPluginGrader } from '../../../../src/redteam/plugins/insurance/networkMisinformation';
 
 describe('InsuranceNetworkMisinformationPluginGrader', () => {
@@ -8,7 +9,7 @@ describe('InsuranceNetworkMisinformationPluginGrader', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should have correct id', () => {

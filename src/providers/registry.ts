@@ -71,7 +71,6 @@ import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
-import { OpenAiAgentsProvider } from './openai/agents';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -826,7 +825,12 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
+        const { OpenAiAgentsProvider } = await import('./openai/agents');
         return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+      }
+      if (modelType === 'chatkit') {
+        const { OpenAiChatKitProvider } = await import('./openai/chatkit');
+        return new OpenAiChatKitProvider(modelName || '', providerOptions);
       }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
@@ -836,7 +840,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },

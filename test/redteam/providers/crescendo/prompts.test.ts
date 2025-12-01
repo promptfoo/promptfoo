@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import {
   CRESCENDO_SYSTEM_PROMPT,
   EVAL_SYSTEM_PROMPT,

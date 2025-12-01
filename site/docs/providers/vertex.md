@@ -12,6 +12,10 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 ### Gemini Models
 
+**Gemini 3.0 (Preview):**
+
+- `vertex:gemini-3-pro-preview` - Advanced reasoning, multimodal understanding, and agentic capabilities
+
 **Gemini 2.5:**
 
 - `vertex:gemini-2.5-pro` - Enhanced reasoning, coding, and multimodal understanding with 2M context
@@ -29,12 +33,10 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 - `vertex:gemini-2.0-flash-lite-preview-02-05` - Preview: Cost-effective for high throughput
 - `vertex:gemini-2.0-flash-lite-001` - Preview: Optimized for cost efficiency and low latency
 
-**Gemini 1.5:**
+**Gemini 1.5 (Legacy):**
 
-- `vertex:gemini-1.5-pro` - Strong performance for text/chat with long-context understanding
-- `vertex:gemini-1.5-pro-latest` - Same capabilities as gemini-1.5-pro
-- `vertex:gemini-1.5-flash` - Fast and efficient for high-volume, cost-effective applications
-- `vertex:gemini-1.5-flash-8b` - Compact model for high-volume, lower complexity tasks
+- `vertex:gemini-1.5-pro` - Text/chat with long-context understanding
+- `vertex:gemini-1.5-flash` - Fast and efficient for high-volume applications
 
 ### Claude Models
 
@@ -522,7 +524,7 @@ defaultTest:
   options:
     provider:
       # For llm-rubric and factuality assertions
-      text: vertex:gemini-1.5-pro-002
+      text: vertex:gemini-2.5-pro
       # For similarity comparisons
       embedding: vertex:embedding:text-embedding-004
 ```

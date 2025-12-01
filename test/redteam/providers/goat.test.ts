@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import type { Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
@@ -11,22 +12,27 @@ import type {
 
 // Mock the graders module at the top level
 const mockGrader = {
-  getResult: jest.fn(),
+  getResult: vi.fn(),
 };
 
-const mockGetGraderById = jest.fn().mockReturnValue(mockGrader);
+const mockGetGraderById = vi.fn().mockReturnValue(mockGrader);
 
-jest.mock('../../../src/redteam/graders', () => ({
-  getGraderById: mockGetGraderById,
-}));
+vi.mock('../../../src/redteam/graders', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getGraderById: mockGetGraderById,
+  };
+});
 
-jest.mock('../../../src/util/server', () => ({
-  checkServerFeatureSupport: jest.fn(() => Promise.resolve(false)),
-}));
+vi.mock('../../../src/util/server', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    checkServerFeatureSupport: vi.fn(() => Promise.resolve(false)),
+  };
+});
 
 describe('RedteamGoatProvider', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockFetch: jest.Mock<any>;
+  let mockFetch: Mock;
 
   // Helper function to create a mock target provider
   const createMockTargetProvider = (
@@ -36,7 +42,7 @@ describe('RedteamGoatProvider', () => {
   ) => {
     const targetProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn() as any,
+      callApi: vi.fn() as any,
     };
 
     (targetProvider.callApi as any).mockResolvedValue({
@@ -61,20 +67,23 @@ describe('RedteamGoatProvider', () => {
   });
 
   beforeEach(() => {
-    mockFetch = jest.fn().mockImplementation(async () => ({
-      json: async () => ({
-        message: { role: 'assistant', content: 'test response' },
-      }),
-      ok: true,
-    }));
+    mockFetch = vi.fn().mockImplementation(async function () {
+      return {
+        json: async () => ({
+          message: { role: 'assistant', content: 'test response' },
+        }),
+
+        ok: true,
+      };
+    });
     global.fetch = mockFetch as unknown as typeof fetch;
 
     // Reset mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should initialize with required config', () => {
@@ -157,7 +166,7 @@ describe('RedteamGoatProvider', () => {
 
     const targetProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn() as any,
+      callApi: vi.fn() as any,
     };
 
     (targetProvider.callApi as any).mockResolvedValue({
@@ -241,7 +250,7 @@ describe('RedteamGoatProvider', () => {
     const objectResponse = { foo: 'bar', baz: 123 };
     const targetProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn() as any,
+      callApi: vi.fn() as any,
     };
 
     (targetProvider.callApi as any).mockResolvedValue({
@@ -273,7 +282,7 @@ describe('RedteamGoatProvider', () => {
 
     const targetProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn() as any,
+      callApi: vi.fn() as any,
     };
 
     (targetProvider.callApi as any).mockResolvedValue({
@@ -307,7 +316,7 @@ describe('RedteamGoatProvider', () => {
 
     const targetProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn() as any,
+      callApi: vi.fn() as any,
     };
 
     (targetProvider.callApi as any).mockResolvedValue({
@@ -333,7 +342,7 @@ describe('RedteamGoatProvider', () => {
   describe('continueAfterSuccess functionality', () => {
     beforeEach(() => {
       // Reset mocks before each test
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should stop on first successful attack when continueAfterSuccess is false (default)', async () => {
@@ -387,7 +396,7 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest.fn() as any,
+        callApi: vi.fn() as any,
       };
 
       (targetProvider.callApi as any)
@@ -463,7 +472,7 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest.fn() as any,
+        callApi: vi.fn() as any,
       };
 
       (targetProvider.callApi as any).mockResolvedValue({
@@ -525,7 +534,7 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest.fn() as any,
+        callApi: vi.fn() as any,
       };
 
       (targetProvider.callApi as any)
@@ -572,25 +581,23 @@ describe('RedteamGoatProvider', () => {
 
     // Mock grader to capture the additionalRubric parameter
     let capturedAdditionalRubric: string | undefined;
-    (mockGrader.getResult as any).mockImplementation(
-      async (
-        _prompt: string,
-        _output: string,
-        _test: any,
-        _provider: any,
-        _value: any,
-        additionalRubric?: string,
-      ) => {
-        capturedAdditionalRubric = additionalRubric;
-        return {
-          grade: {
-            pass: false,
-            score: 0,
-            reason: 'Test jailbreak detected',
-          },
-        };
-      },
-    );
+    (mockGrader.getResult as any).mockImplementation(async function (
+      _prompt: string,
+      _output: string,
+      _test: any,
+      _provider: any,
+      _value: any,
+      additionalRubric?: string,
+    ) {
+      capturedAdditionalRubric = additionalRubric;
+      return {
+        grade: {
+          pass: false,
+          score: 0,
+          reason: 'Test jailbreak detected',
+        },
+      };
+    });
 
     const testConfig = {
       vars: {},
@@ -875,12 +882,15 @@ describe('RedteamGoatProvider', () => {
       });
 
     // Mock remote generation API for second turn
-    mockFetch.mockImplementationOnce(async () => ({
-      json: async () => ({
-        message: { role: 'assistant', content: 'attack prompt' },
-      }),
-      ok: true,
-    }));
+    mockFetch.mockImplementationOnce(async function () {
+      return {
+        json: async () => ({
+          message: { role: 'assistant', content: 'attack prompt' },
+        }),
+
+        ok: true,
+      };
+    });
 
     const testConfig = {
       vars: {},
@@ -911,9 +921,9 @@ describe('RedteamGoatProvider', () => {
   });
 
   describe('Token Counting', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       // Reset TokenUsageTracker between tests to ensure clean state
-      const { TokenUsageTracker } = require('../../../src/util/tokenUsage');
+      const { TokenUsageTracker } = await import('../../../src/util/tokenUsage');
       TokenUsageTracker.getInstance().resetAllUsage();
     });
 
@@ -949,7 +959,7 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest.fn() as any,
+        callApi: vi.fn() as any,
       };
 
       // Mock target provider for multiple calls with different token usage
@@ -989,7 +999,7 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest.fn() as any,
+        callApi: vi.fn() as any,
       };
 
       (targetProvider.callApi as any)
@@ -1028,7 +1038,7 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest.fn() as any,
+        callApi: vi.fn() as any,
       };
 
       (targetProvider.callApi as any)
@@ -1062,7 +1072,7 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest.fn() as any,
+        callApi: vi.fn() as any,
       };
 
       (targetProvider.callApi as any)
@@ -1096,7 +1106,7 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest.fn() as any,
+        callApi: vi.fn() as any,
       };
 
       // First call (normal attack), second call (next attack)
@@ -1153,7 +1163,7 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest.fn() as any,
+        callApi: vi.fn() as any,
       };
 
       (targetProvider.callApi as any).mockResolvedValue({

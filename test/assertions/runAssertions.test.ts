@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
@@ -11,63 +12,82 @@ import type {
   ProviderResponse,
 } from '../../src/types/index';
 
-jest.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+vi.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('node:module', () => {
+vi.mock('node:module', () => {
   const mockRequire: NodeJS.Require = {
-    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
+    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
   } as unknown as NodeJS.Require;
   return {
-    createRequire: jest.fn().mockReturnValue(mockRequire),
+    createRequire: vi.fn().mockReturnValue(mockRequire),
   };
 });
 
-jest.mock('../../src/util/fetch', () => {
-  const actual = jest.requireActual('../../src/util/fetch');
+vi.mock('../../src/util/fetch', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../src/util/fetch')>('../../src/util/fetch');
   return {
     ...actual,
-    fetchWithRetries: jest.fn(actual.fetchWithRetries),
+    fetchWithRetries: vi.fn(actual.fetchWithRetries),
   };
 });
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
+vi.mock('fs', () => ({
+  readFileSync: vi.fn(),
+  existsSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
   promises: {
-    readFile: jest.fn(),
+    readFile: vi.fn(),
   },
 }));
 
-jest.mock('../../src/esm');
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('../../src/esm', () => ({
+  getDirectory: () => '/test/dir',
+  importModule: vi.fn((_filePath: string, functionName?: string) => {
+    return Promise.resolve(functionName ? {} : undefined);
+  }),
 }));
-jest.mock('path', () => ({
-  ...jest.requireActual('path'),
-  resolve: jest.fn(jest.requireActual('path').resolve),
-  extname: jest.fn(jest.requireActual('path').extname),
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(),
 }));
+vi.mock('path', async () => {
+  const actual = await vi.importActual<typeof import('path')>('path');
+  const mocked = {
+    ...actual,
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
+  };
+});
 
-jest.mock('../../src/cliState', () => ({
+vi.mock('../../src/cliState', () => ({
+  default: {
+    basePath: '/base/path',
+  },
   basePath: '/base/path',
 }));
-jest.mock('../../src/matchers', () => {
-  const actual = jest.requireActual('../../src/matchers');
+vi.mock('../../src/matchers', async () => {
+  const actual = await vi.importActual<typeof import('../../src/matchers')>('../../src/matchers');
   return {
     ...actual,
-    matchesContextRelevance: jest
+    matchesContextRelevance: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
-    matchesContextFaithfulness: jest
+    matchesContextFaithfulness: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
   };
@@ -86,11 +106,11 @@ describe('runAssertions', () => {
   };
 
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should pass when all assertions pass', async () => {
@@ -404,10 +424,10 @@ describe('runAssertions', () => {
       ],
     };
 
-    const callApiSpy = jest.spyOn(DefaultGradingJsonProvider, 'callApi').mockResolvedValue({
+    const callApiSpy = vi.spyOn(DefaultGradingJsonProvider, 'callApi').mockResolvedValue({
       output: JSON.stringify({ pass: true, score: 1.0, reason: 'I love you' }),
     });
-    const callModerationApiSpy = jest
+    const callModerationApiSpy = vi
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue({ flags: [] });
 

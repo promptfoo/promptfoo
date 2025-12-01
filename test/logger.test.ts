@@ -737,6 +737,108 @@ describe('logger', () => {
     });
   });
 
+  describe('closeLogger', () => {
+    // Save original transports state and restore after each test
+    let originalTransports: any[];
+
+    beforeEach(() => {
+      originalTransports = [...mockLogger.transports];
+    });
+
+    afterEach(() => {
+      // Restore transports to original state
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(...originalTransports);
+    });
+
+    it('should close all file transports', async () => {
+      // Create mock file transports with close methods
+      const mockFileTransport1 = {
+        close: vi.fn(),
+        filename: '/mock/path/debug.log',
+      };
+      const mockFileTransport2 = {
+        close: vi.fn(),
+        filename: '/mock/path/error.log',
+      };
+
+      // Make transports appear as File instances
+      Object.setPrototypeOf(mockFileTransport1, winstonMock.transports.File.prototype);
+      Object.setPrototypeOf(mockFileTransport2, winstonMock.transports.File.prototype);
+
+      // Set up transports array with file transports
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockFileTransport1 as any, mockFileTransport2 as any);
+
+      logger.closeLogger();
+
+      expect(mockFileTransport1.close).toHaveBeenCalled();
+      expect(mockFileTransport2.close).toHaveBeenCalled();
+      expect(mockLogger.remove).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle transports without close method', async () => {
+      const mockTransportWithoutClose = {
+        filename: '/mock/path/test.log',
+        // No close method
+      };
+
+      Object.setPrototypeOf(mockTransportWithoutClose, winstonMock.transports.File.prototype);
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockTransportWithoutClose as any);
+
+      // Should not throw
+      expect(() => logger.closeLogger()).not.toThrow();
+      expect(mockLogger.remove).toHaveBeenCalledWith(mockTransportWithoutClose);
+    });
+
+    it('should skip non-file transports', async () => {
+      const mockConsoleTransport = {
+        close: vi.fn(),
+      };
+      // Don't set File prototype - this is a console transport
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockConsoleTransport as any);
+
+      logger.closeLogger();
+
+      // Console transport should not be closed
+      expect(mockConsoleTransport.close).not.toHaveBeenCalled();
+      expect(mockLogger.remove).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors gracefully', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const mockFailingTransport = {
+        close: vi.fn().mockImplementation(() => {
+          throw new Error('Close failed');
+        }),
+        filename: '/mock/path/fail.log',
+      };
+
+      Object.setPrototypeOf(mockFailingTransport, winstonMock.transports.File.prototype);
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockFailingTransport as any);
+
+      // Should not throw even when close fails
+      expect(() => logger.closeLogger()).not.toThrow();
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should handle empty transports array', async () => {
+      mockLogger.transports.length = 0;
+
+      // Should not throw
+      expect(() => logger.closeLogger()).not.toThrow();
+      expect(mockLogger.remove).not.toHaveBeenCalled();
+    });
+  });
+
   describe('logRequestResponse', () => {
     let mockResponse: Partial<Response>;
     let consoleSpy: MockInstance;

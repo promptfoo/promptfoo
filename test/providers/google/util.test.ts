@@ -1,7 +1,17 @@
 import * as fs from 'fs';
 
-import { GoogleAuth } from 'google-auth-library';
 import * as nunjucks from 'nunjucks';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 import logger from '../../../src/logger';
 import {
   geminiFormatAndSystemInstructions,
@@ -14,40 +24,66 @@ import {
 
 import type { Tool } from '../../../src/providers/google/types';
 
-jest.mock('google-auth-library');
-
-jest.mock('glob', () => ({
-  globSync: jest.fn().mockReturnValue([]),
-  hasMagic: (path: string) => {
-    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
-    // This mimics glob's actual behavior where backslash paths return false
-    return /[*?[\]{}]/.test(path) && !path.includes('\\');
-  },
+const googleAuthMock = vi.hoisted(() => ({
+  GoogleAuth: vi.fn(function () {
+    return {
+      getClient: vi.fn(),
+      fromJSON: vi.fn(),
+      getProjectId: vi.fn(),
+    };
+  }),
 }));
 
-jest.mock('fs', () => ({
-  existsSync: jest.fn().mockImplementation((path) => {
-    if (path === 'file://system_instruction.json') {
-      return true;
-    }
-    return false;
-  }),
-  readFileSync: jest.fn().mockImplementation((path) => {
-    if (path === 'file://system_instruction.json') {
-      return 'system instruction';
-    }
-    throw new Error(`Mock file not found: ${path}`);
-  }),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-}));
+vi.mock('google-auth-library', () => googleAuthMock);
+
+vi.mock('glob', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    globSync: vi.fn().mockReturnValue([]),
+
+    hasMagic: (path: string) => {
+      // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+      // This mimics glob's actual behavior where backslash paths return false
+      return /[*?[\]{}]/.test(path) && !path.includes('\\');
+    },
+  };
+});
+
+vi.mock('fs', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    existsSync: vi.fn().mockImplementation(function (path) {
+      if (path === 'file://system_instruction.json') {
+        return true;
+      }
+      return false;
+    }),
+
+    readFileSync: vi.fn().mockImplementation(function (path) {
+      if (path === 'file://system_instruction.json') {
+        return 'system instruction';
+      }
+      throw new Error(`Mock file not found: ${path}`);
+    }),
+
+    writeFileSync: vi.fn(),
+    statSync: vi.fn(),
+    mkdirSync: vi.fn(),
+  };
+});
 
 describe('util', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
-    // Reset the GoogleAuth mock to default behavior
-    jest.mocked(GoogleAuth).mockClear();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
+    googleAuthMock.GoogleAuth.mockImplementation(function () {
+      return {
+        getClient: vi.fn(),
+        fromJSON: vi.fn(),
+        getProjectId: vi.fn(),
+      };
+    });
   });
 
   describe('parseStringObject', () => {
@@ -614,7 +650,7 @@ describe('util', () => {
     });
 
     it('should log a warning and return the input for unknown formats', () => {
-      const loggerSpy = jest.spyOn(logger, 'warn');
+      const loggerSpy = vi.spyOn(logger, 'warn');
       const input = { unknownFormat: 'test' };
       const result = maybeCoerceToGeminiFormat(input);
       expect(result).toEqual({
@@ -828,27 +864,23 @@ describe('util', () => {
   describe('getGoogleClient', () => {
     beforeEach(() => {
       // Reset modules before each test to clear cachedAuth
-      jest.resetModules();
-      // Re-mock google-auth-library after module reset
-      jest.doMock('google-auth-library', () => ({
-        GoogleAuth: jest.fn(),
-      }));
-    });
-
-    afterEach(() => {
-      jest.dontMock('google-auth-library');
+      vi.resetModules();
+      vi.clearAllMocks();
+      vi.doMock('google-auth-library', () => googleAuthMock);
     });
 
     it('should create and return Google client', async () => {
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
       const mockAuth = {
-        getClient: jest.fn().mockResolvedValue(mockClient),
-        getProjectId: jest.fn().mockResolvedValue(mockProjectId),
+        getClient: vi.fn().mockResolvedValue(mockClient),
+        getProjectId: vi.fn().mockResolvedValue(mockProjectId),
       };
 
       const googleAuthLib = await import('google-auth-library');
-      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
+      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+        return mockAuth as any;
+      });
 
       // Import getGoogleClient after mocking
       const { getGoogleClient } = await import('../../../src/providers/google/util');
@@ -864,46 +896,43 @@ describe('util', () => {
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
       const mockAuth = {
-        getClient: jest.fn().mockResolvedValue(mockClient),
-        getProjectId: jest.fn().mockResolvedValue(mockProjectId),
+        getClient: vi.fn().mockResolvedValue(mockClient),
+        getProjectId: vi.fn().mockResolvedValue(mockProjectId),
       };
 
       const googleAuthLib = await import('google-auth-library');
-      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
+      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+        return mockAuth as any;
+      });
 
       // Import getGoogleClient after mocking
       const { getGoogleClient } = await import('../../../src/providers/google/util');
 
       await getGoogleClient();
-      const googleAuthCalls = jest.mocked(googleAuthLib.GoogleAuth).mock.calls.length;
+      const googleAuthCalls = vi.mocked(googleAuthLib.GoogleAuth).mock.calls.length;
 
       await getGoogleClient();
-      expect(jest.mocked(googleAuthLib.GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
+      expect(vi.mocked(googleAuthLib.GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
     });
   });
 
   describe('hasGoogleDefaultCredentials', () => {
     beforeEach(() => {
       // Reset modules before each test to clear cachedAuth
-      jest.resetModules();
-      // Re-mock google-auth-library after module reset
-      jest.doMock('google-auth-library', () => ({
-        GoogleAuth: jest.fn(),
-      }));
-    });
-
-    afterEach(() => {
-      jest.dontMock('google-auth-library');
+      vi.resetModules();
+      vi.doMock('google-auth-library', () => googleAuthMock);
     });
 
     it('should return true when credentials are available', async () => {
       const mockAuth = {
-        getClient: jest.fn().mockResolvedValue({}),
-        getProjectId: jest.fn().mockResolvedValue('test-project'),
+        getClient: vi.fn().mockResolvedValue({}),
+        getProjectId: vi.fn().mockResolvedValue('test-project'),
       };
 
       const googleAuthLib = await import('google-auth-library');
-      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
+      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+        return mockAuth as any;
+      });
 
       // Import hasGoogleDefaultCredentials after mocking
       const { hasGoogleDefaultCredentials } = await import('../../../src/providers/google/util');
@@ -950,8 +979,8 @@ describe('util', () => {
         ']';
       const context_vars = {};
 
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(tools);
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(tools);
       const result = loadFile(config_var, context_vars);
       expect(result).toEqual(JSON.parse(tools));
       expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'));
@@ -1018,8 +1047,8 @@ describe('util', () => {
     it('should handle filepath system messages in variables', async () => {
       const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
       const system_instruction = JSON.stringify({ parts: [{ text: 'system instruction' }] });
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(system_instruction);
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(system_instruction);
 
       const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
@@ -1878,20 +1907,18 @@ describe('util', () => {
 
     beforeEach(async () => {
       // Reset modules to clear cached auth
-      jest.resetModules();
+      vi.resetModules();
+      vi.doMock('google-auth-library', () => googleAuthMock);
 
       // Re-mock google-auth-library after module reset
       const mockAuth = {
-        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
-        getProjectId: jest.fn().mockResolvedValue(mockProjectId),
+        getClient: vi.fn().mockResolvedValue({ name: 'mockClient' }),
+        getProjectId: vi.fn().mockResolvedValue(mockProjectId),
       };
-      jest.doMock('google-auth-library', () => ({
-        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
-      }));
-    });
-
-    afterEach(() => {
-      jest.dontMock('google-auth-library');
+      const googleAuthLib = await import('google-auth-library');
+      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+        return mockAuth as any;
+      });
     });
 
     it('should prioritize explicit config over environment variables', async () => {
@@ -1923,21 +1950,12 @@ describe('util', () => {
       delete process.env.GOOGLE_PROJECT_ID;
 
       try {
-        let result: string = '';
-        await jest.isolateModulesAsync(async () => {
-          jest.doMock('google-auth-library', () => ({
-            GoogleAuth: jest.fn().mockImplementation(() => ({
-              getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
-              getProjectId: jest.fn().mockResolvedValue(mockProjectId),
-            })),
-          }));
-          const { resolveProjectId } = await import('../../../src/providers/google/util');
+        const { resolveProjectId } = await import('../../../src/providers/google/util');
 
-          const config = {};
-          const env = {};
+        const config = {};
+        const env = {};
 
-          result = await resolveProjectId(config, env);
-        });
+        const result = await resolveProjectId(config, env);
         expect(result).toBe(mockProjectId);
       } finally {
         // Restore environment variables
@@ -1952,19 +1970,20 @@ describe('util', () => {
 
     it('should handle Google Auth Library getProjectId failure gracefully', async () => {
       // Reset modules to clear cached auth
-      jest.resetModules();
+      vi.resetModules();
 
       // Mock Google Auth Library where getProjectId throws an error
       const mockAuth = {
-        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
-        fromJSON: jest.fn().mockResolvedValue({ name: 'mockCredentialClient' }),
-        getProjectId: jest
+        getClient: vi.fn().mockResolvedValue({ name: 'mockClient' }),
+        fromJSON: vi.fn().mockResolvedValue({ name: 'mockCredentialClient' }),
+        getProjectId: vi
           .fn()
           .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
       };
-      jest.doMock('google-auth-library', () => ({
-        GoogleAuth: jest.fn().mockImplementation(() => mockAuth),
-      }));
+      const googleAuthLib = await import('google-auth-library');
+      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+        return mockAuth;
+      });
 
       const { resolveProjectId } = await import('../../../src/providers/google/util');
 
@@ -1993,27 +2012,26 @@ describe('util', () => {
       try {
         let result: string = '';
         const mockAuth = {
-          getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
-          getProjectId: jest
+          getClient: vi.fn().mockResolvedValue({ name: 'mockClient' }),
+          getProjectId: vi
             .fn()
             .mockRejectedValue(
               new Error('Unable to detect a Project Id in the current environment'),
             ),
         };
 
-        await jest.isolateModulesAsync(async () => {
-          jest.doMock('google-auth-library', () => ({
-            GoogleAuth: jest.fn().mockImplementation(() => mockAuth),
-          }));
-
-          const { resolveProjectId } = await import('../../../src/providers/google/util');
-
-          // Test that when no projectId is available anywhere, we get empty string
-          const config = {};
-          const env = {};
-
-          result = await resolveProjectId(config, env);
+        const googleAuthLib = await import('google-auth-library');
+        vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+          return mockAuth;
         });
+
+        const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+        // Test that when no projectId is available anywhere, we get empty string
+        const config = {};
+        const env = {};
+
+        result = await resolveProjectId(config, env);
 
         expect(result).toBe('');
         // Verify that getProjectId was called but failed gracefully

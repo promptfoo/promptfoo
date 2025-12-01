@@ -45,7 +45,7 @@ This scenario tests natural language attacks through a trusted application or mo
 description: 'MCP server security testing via thin client'
 
 targets:
-  - id: openai:gpt-4
+  - id: openai:gpt-5
     config:
       mcp:
         enabled: true
@@ -133,7 +133,7 @@ We've also open-sourced an example [rogue MCP server](https://github.com/promptf
 description: 'MCP security testing'
 
 targets:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     config:
       mcp:
         enabled: true

@@ -1,7 +1,8 @@
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import type { CallApiContextParams } from '../../src/types/index';
 import * as pythonUtils from '../../src/python/pythonUtils';

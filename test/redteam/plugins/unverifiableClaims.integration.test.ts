@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { UnverifiableClaimsGrader } from '../../../src/redteam/plugins/unverifiableClaims';
 
 describe('UnverifiableClaimsGrader Integration Tests', () => {

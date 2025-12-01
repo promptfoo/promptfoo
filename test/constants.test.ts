@@ -1,4 +1,4 @@
-import { jest } from '@jest/globals';
+import { vi } from 'vitest';
 import {
   CLOUD_PROVIDER_PREFIX,
   DEFAULT_API_BASE_URL,
@@ -13,9 +13,15 @@ import {
 import { REDTEAM_DEFAULTS } from '../src/redteam/constants';
 
 describe('constants', () => {
+  const originalEnv = process.env;
+
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env = {};
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
   });
 
   it('should export VERSION from package.json', () => {

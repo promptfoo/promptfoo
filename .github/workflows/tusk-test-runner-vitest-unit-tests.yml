@@ -1,4 +1,4 @@
-name: Tusk Test Runner - Jest unit tests (test directory)
+name: Tusk Test Runner - Vitest unit tests (test directory)
 
 # Required for Tusk
 permissions:
@@ -68,15 +68,15 @@ jobs:
           # Please adapt the secret name accordingly if you have named it differently.
           authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
 
-          testFramework: 'jest'
+          testFramework: 'vitest'
 
           testFileRegex: '^test/.*\.test\.(js|ts|tsx)$'
 
           lintScript: 'npx @biomejs/biome check --write {{file}}'
 
-          testScript: 'npx jest {{file}} --silent'
+          testScript: 'npx vitest run {{file}} --reporter=verbose'
 
-          coverageScript: 'npx jest {{testFilePaths}} --coverage --coverageDirectory=coverage --coverageReporters=json-summary --coverageReporters=json --silent'
+          coverageScript: 'npx vitest run {{testFilePaths}} --coverage --coverage.reporter=json-summary --coverage.reporter=json'
 
           # Required for test parallelization where available, do not remove.
           runnerIndex: ${{ matrix.runnerIndex }}
