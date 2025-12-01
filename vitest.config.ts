@@ -54,6 +54,7 @@ export default defineConfig({
       'test/evaluatorHelpers-skiprender.test.ts',
       'test/evaluator.progress.test.ts',
       'test/evaluatorHelpers.langfuse.test.ts',
+      'test/evaluator.integration.transforms.test.ts',
     ],
     // Exclude integration tests
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
