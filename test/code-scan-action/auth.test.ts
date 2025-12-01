@@ -2,22 +2,22 @@
  * GitHub OIDC Authentication Tests
  */
 
-import * as core from '@actions/core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getGitHubOIDCToken } from '../../code-scan-action/src/auth';
 
 // Mock @actions/core
-jest.mock('@actions/core', () => ({
-  getIDToken: jest.fn(),
+vi.mock('@actions/core', () => ({
+  getIDToken: vi.fn(),
 }));
 
 describe('getGitHubOIDCToken', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should return OIDC token for given audience', async () => {
-    const { getIDToken } = require('@actions/core');
-    getIDToken.mockResolvedValue('mock-oidc-token');
+    const { getIDToken } = await import('@actions/core');
+    vi.mocked(getIDToken).mockResolvedValue('mock-oidc-token');
 
     const token = await getGitHubOIDCToken('https://scanner.example.com');
 
@@ -26,8 +26,8 @@ describe('getGitHubOIDCToken', () => {
   });
 
   it('should throw error when getIDToken fails', async () => {
-    const { getIDToken } = require('@actions/core');
-    getIDToken.mockRejectedValue(new Error('OIDC not configured'));
+    const { getIDToken } = await import('@actions/core');
+    vi.mocked(getIDToken).mockRejectedValue(new Error('OIDC not configured'));
 
     await expect(getGitHubOIDCToken('https://scanner.example.com')).rejects.toThrow(
       'Failed to get GitHub OIDC token: OIDC not configured',

@@ -69,6 +69,8 @@ const config: Config = {
     '<rootDir>/test/evaluator.progress.test.ts',
     '<rootDir>/test/evaluatorHelpers.langfuse.test.ts',
     '<rootDir>/test/evaluator.integration.transforms.test.ts',
+    '<rootDir>/test/code-scan-action/auth.test.ts',
+    '<rootDir>/test/integration/function-provider-grading.test.ts',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',

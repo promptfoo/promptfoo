@@ -55,6 +55,8 @@ export default defineConfig({
       'test/evaluator.progress.test.ts',
       'test/evaluatorHelpers.langfuse.test.ts',
       'test/evaluator.integration.transforms.test.ts',
+      'test/code-scan-action/auth.test.ts',
+      'test/integration/function-provider-grading.test.ts',
     ],
     // Exclude integration tests
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
