@@ -154,7 +154,7 @@
         "^openai$"
       ],
       "schedule": ["every weekday"],
-      "minimumReleaseAge": "1 day"
+      "minimumReleaseAge": "0 days"
     },
     {
       "description": "Runtime npm deps: wait 5 days before updates",
