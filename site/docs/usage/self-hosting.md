@@ -213,6 +213,7 @@ persistentVolumeClaims:
 service:
   type: LoadBalancer # Expose via LoadBalancer (adjust based on your cluster/needs)
 
+
 # Optional: Configure ingress if you have an ingress controller
 # ingress:
 #   enabled: true
