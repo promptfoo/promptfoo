@@ -65,15 +65,10 @@ vi.mock('fs', () => ({
   },
 }));
 
-vi.mock(
-  'pdf-parse',
-  () => ({
-    __esModule: true,
-    default: vi
-      .fn()
-      .mockImplementation((_buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
-  }),
-);
+vi.mock('pdf-parse', () => ({
+  __esModule: true,
+  default: vi.fn().mockImplementation((_buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
+}));
 
 vi.mock('../src/esm', () => ({
   getDirectory: () => '/test/dir',
@@ -278,20 +273,15 @@ describe('renderPrompt', () => {
     const evaluateOptions = {};
 
     // Register dynamic module mocks
-    mockDynamicModule(
-      '/path/to/testFunction.js',
-      (varName: any, _prompt: any, _vars: any) => ({
-        output: `Dynamic value for ${varName}`,
-      }),
-    );
-    mockDynamicModule(
-      '/path/to/testFunction.cjs',
-      (varName: any, _prompt: any, _vars: any) => ({ output: `and ${varName}` }),
-    );
-    mockDynamicModule(
-      '/path/to/testFunction.mjs',
-      (varName: any, _prompt: any, _vars: any) => ({ output: `and ${varName}` }),
-    );
+    mockDynamicModule('/path/to/testFunction.js', (varName: any, _prompt: any, _vars: any) => ({
+      output: `Dynamic value for ${varName}`,
+    }));
+    mockDynamicModule('/path/to/testFunction.cjs', (varName: any, _prompt: any, _vars: any) => ({
+      output: `and ${varName}`,
+    }));
+    mockDynamicModule('/path/to/testFunction.mjs', (varName: any, _prompt: any, _vars: any) => ({
+      output: `and ${varName}`,
+    }));
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
     expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');

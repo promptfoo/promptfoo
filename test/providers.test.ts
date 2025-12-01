@@ -612,12 +612,10 @@ describe('loadApiProvider', () => {
       },
       callApi: async (input: string) => ({ output: input }),
     };
-    vi.mocked(PythonProvider).mockImplementation(
-      function (this: any) {
-        Object.assign(this, mockProvider);
-        return this;
-      } as any,
-    );
+    vi.mocked(PythonProvider).mockImplementation(function (this: any) {
+      Object.assign(this, mockProvider);
+      return this;
+    } as any);
 
     const provider = await loadApiProvider('python:script.py', {
       basePath: '/custom/path',

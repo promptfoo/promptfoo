@@ -432,7 +432,9 @@ describe('Telemetry', () => {
       }));
 
       vi.doMock('../src/globalConfig/globalConfig', () => ({
-        readGlobalConfig: vi.fn().mockReturnValue({ id: 'test-user-id', account: { email: 'test@example.com' } }),
+        readGlobalConfig: vi
+          .fn()
+          .mockReturnValue({ id: 'test-user-id', account: { email: 'test@example.com' } }),
         writeGlobalConfig: vi.fn(),
       }));
 

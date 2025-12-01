@@ -241,10 +241,9 @@ vi.mock('../src/util/time', async () => {
 });
 
 vi.mock('../src/util/fileExtensions', async () => {
-  const actual =
-    await vi.importActual<typeof import('../src/util/fileExtensions')>(
-      '../src/util/fileExtensions',
-    );
+  const actual = await vi.importActual<typeof import('../src/util/fileExtensions')>(
+    '../src/util/fileExtensions',
+  );
   return {
     ...actual,
     isImageFile: vi
@@ -257,10 +256,9 @@ vi.mock('../src/util/fileExtensions', async () => {
 });
 
 vi.mock('../src/util/functions/loadFunction', async () => {
-  const actual =
-    await vi.importActual<typeof import('../src/util/functions/loadFunction')>(
-      '../src/util/functions/loadFunction',
-    );
+  const actual = await vi.importActual<typeof import('../src/util/functions/loadFunction')>(
+    '../src/util/functions/loadFunction',
+  );
   return {
     ...actual,
     loadFunction: vi.fn().mockImplementation((options) => {

@@ -21,7 +21,9 @@ const {
     changelog?: string;
   };
   isEmptySection: (content: string) => boolean;
-  extractUnreleasedContent: (changelog: string) => { content: string; match: RegExpMatchArray } | null;
+  extractUnreleasedContent: (
+    changelog: string,
+  ) => { content: string; match: RegExpMatchArray } | null;
   buildUpdatedChangelog: (
     changelog: string,
     version: string,

@@ -85,15 +85,13 @@ describe('GitHub API Client', () => {
 
     it('should post review comments with Octokit', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(
-        function () {
-          return {
-            pulls: {
-              createReview: mockCreateReview,
-            },
-          } as unknown as Octokit;
-        },
-      );
+      vi.mocked(Octokit).mockImplementation(function () {
+        return {
+          pulls: {
+            createReview: mockCreateReview,
+          },
+        } as unknown as Octokit;
+      });
 
       const comments = [
         {
@@ -125,15 +123,13 @@ describe('GitHub API Client', () => {
 
     it('should handle single line comments when startLine equals line', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(
-        function () {
-          return {
-            pulls: {
-              createReview: mockCreateReview,
-            },
-          } as unknown as Octokit;
-        },
-      );
+      vi.mocked(Octokit).mockImplementation(function () {
+        return {
+          pulls: {
+            createReview: mockCreateReview,
+          },
+        } as unknown as Octokit;
+      });
 
       const comments = [
         {
@@ -166,15 +162,13 @@ describe('GitHub API Client', () => {
 
     it('should handle line range comments when startLine differs from line', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(
-        function () {
-          return {
-            pulls: {
-              createReview: mockCreateReview,
-            },
-          } as unknown as Octokit;
-        },
-      );
+      vi.mocked(Octokit).mockImplementation(function () {
+        return {
+          pulls: {
+            createReview: mockCreateReview,
+          },
+        } as unknown as Octokit;
+      });
 
       const comments = [
         {
@@ -207,15 +201,13 @@ describe('GitHub API Client', () => {
 
     it('should handle mixed single line and range comments', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(
-        function () {
-          return {
-            pulls: {
-              createReview: mockCreateReview,
-            },
-          } as unknown as Octokit;
-        },
-      );
+      vi.mocked(Octokit).mockImplementation(function () {
+        return {
+          pulls: {
+            createReview: mockCreateReview,
+          },
+        } as unknown as Octokit;
+      });
 
       const comments = [
         {
@@ -276,15 +268,13 @@ describe('GitHub API Client', () => {
 
     it('should filter out comments without files', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(
-        function () {
-          return {
-            pulls: {
-              createReview: mockCreateReview,
-            },
-          } as unknown as Octokit;
-        },
-      );
+      vi.mocked(Octokit).mockImplementation(function () {
+        return {
+          pulls: {
+            createReview: mockCreateReview,
+          },
+        } as unknown as Octokit;
+      });
 
       const comments = [
         {
@@ -320,18 +310,16 @@ describe('GitHub API Client', () => {
     it('should post summary comment on error', async () => {
       const mockCreateReview = vi.fn().mockRejectedValue(new Error('API error'));
       const mockCreateComment = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(
-        function () {
-          return {
-            pulls: {
-              createReview: mockCreateReview,
-            },
-            issues: {
-              createComment: mockCreateComment,
-            },
-          } as unknown as Octokit;
-        },
-      );
+      vi.mocked(Octokit).mockImplementation(function () {
+        return {
+          pulls: {
+            createReview: mockCreateReview,
+          },
+          issues: {
+            createComment: mockCreateComment,
+          },
+        } as unknown as Octokit;
+      });
 
       const comments = [
         {

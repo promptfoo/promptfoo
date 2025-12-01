@@ -42,7 +42,6 @@ vi.mock('../src/cache', () => {
   };
 });
 
-
 // Hoist the AWS SDK mock functions so they're available during module loading
 const mockSend = vi.hoisted(() =>
   vi.fn().mockImplementation(async (command: any) => {

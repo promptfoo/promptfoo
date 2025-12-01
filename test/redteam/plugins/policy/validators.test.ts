@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { validate as isUUID } from 'uuid';
-import { isValidInlinePolicyId, isValidPolicyId, isValidReusablePolicyId } from '../../../../src/redteam/plugins/policy/validators';
+import {
+  isValidInlinePolicyId,
+  isValidPolicyId,
+  isValidReusablePolicyId,
+} from '../../../../src/redteam/plugins/policy/validators';
 
 // Mock dependencies
 vi.mock('uuid', () => ({

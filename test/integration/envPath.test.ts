@@ -1,4 +1,13 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockedFunction,
+} from 'vitest';
 import fs from 'fs';
 import * as path from 'path';
 import { doEval } from '../../src/commands/eval';
