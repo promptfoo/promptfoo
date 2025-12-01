@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
@@ -118,7 +119,7 @@ vi.mock('../src/envars', () => {
   };
 });
 
-vi.mock('fs', () => ({
+vi.mock('node:fs', () => ({
   default: {
     readFileSync: vi.fn(),
   },
@@ -712,7 +713,7 @@ describe('fetchWithTimeout', () => {
   it('should combine options.signal with timeout signal using AbortSignal.any', async () => {
     const userAbortController = new AbortController();
     const mockResponse = createMockResponse({ ok: true });
-    jest.mocked(global.fetch).mockImplementationOnce(() => Promise.resolve(mockResponse));
+    vi.mocked(global.fetch).mockImplementationOnce(() => Promise.resolve(mockResponse));
 
     const fetchPromise = fetchWithTimeout(
       'https://example.com',
@@ -1027,7 +1028,7 @@ describe('fetchWithRetries', () => {
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
 
-      jest.mocked(global.fetch).mockRejectedValue(abortError);
+      vi.mocked(global.fetch).mockRejectedValue(abortError);
 
       await expect(fetchWithRetries('https://example.com', {}, 1000, 3)).rejects.toThrow(
         'The operation was aborted',
@@ -1041,7 +1042,7 @@ describe('fetchWithRetries', () => {
     it('should pass signal through options to underlying fetch', async () => {
       const abortController = new AbortController();
       const successResponse = createMockResponse();
-      jest.mocked(global.fetch).mockResolvedValueOnce(successResponse);
+      vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);
 
       await fetchWithRetries('https://example.com', { signal: abortController.signal }, 1000, 0);
 
@@ -1058,7 +1059,7 @@ describe('fetchWithRetries', () => {
       abortError.name = 'AbortError';
 
       // First call throws AbortError
-      jest.mocked(global.fetch).mockRejectedValueOnce(abortError);
+      vi.mocked(global.fetch).mockRejectedValueOnce(abortError);
 
       await expect(fetchWithRetries('https://example.com', {}, 1000, 5)).rejects.toThrow(
         'The operation was aborted',

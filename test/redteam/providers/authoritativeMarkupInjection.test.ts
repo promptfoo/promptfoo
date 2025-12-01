@@ -1,35 +1,36 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import type { Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockFetchWithProxy = jest.fn<any>();
+const mockFetchWithProxy = vi.fn<any>();
 
-jest.mock('../../../src/util/fetch/index', () => ({
+vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetchWithProxy(...args),
 }));
 
-jest.mock('../../../src/evaluatorHelpers', () => ({
+vi.mock('../../../src/evaluatorHelpers', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  renderPrompt: jest
+  renderPrompt: vi
     .fn()
     .mockImplementation((_prompt: any, vars: any) => vars.input || 'rendered prompt'),
 }));
 
-jest.mock('../../../src/globalConfig/accounts', () => ({
-  getUserEmail: jest.fn().mockReturnValue('test@example.com'),
+vi.mock('../../../src/globalConfig/accounts', () => ({
+  getUserEmail: vi.fn().mockReturnValue('test@example.com'),
 }));
 
-jest.mock('../../../src/redteam/remoteGeneration', () => ({
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test.api/generate'),
-  neverGenerateRemote: jest.fn().mockReturnValue(false),
+vi.mock('../../../src/redteam/remoteGeneration', () => ({
+  getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.api/generate'),
+  neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
 describe('AuthoritativeMarkupInjectionProvider - Abort Signal Handling', () => {
   let AuthoritativeMarkupInjectionProvider: typeof import('../../../src/redteam/providers/authoritativeMarkupInjection').default;
   let mockTargetProvider: ApiProvider;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockCallApi: jest.Mock<any>;
+  let mockCallApi: Mock<any>;
 
   const createMockContext = (targetProvider: ApiProvider): CallApiContextParams => ({
     originalProvider: targetProvider,
@@ -38,13 +39,13 @@ describe('AuthoritativeMarkupInjectionProvider - Abort Signal Handling', () => {
   });
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Dynamic import after mocks are set up
     const module = await import('../../../src/redteam/providers/authoritativeMarkupInjection');
     AuthoritativeMarkupInjectionProvider = module.default;
 
-    mockCallApi = jest.fn();
+    mockCallApi = vi.fn();
     mockCallApi.mockResolvedValue({
       output: 'target response',
     });
@@ -64,7 +65,7 @@ describe('AuthoritativeMarkupInjectionProvider - Abort Signal Handling', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should pass abortSignal to fetchWithProxy', async () => {

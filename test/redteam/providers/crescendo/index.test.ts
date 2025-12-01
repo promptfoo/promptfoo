@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import type { Message } from '../../../../src/redteam/providers/shared';
@@ -130,7 +131,9 @@ describe('CrescendoProvider', () => {
     });
 
     // Set up redteamProviderManager mock
-    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (
+      options: any,
+    ) {
       // When the provider is already an object (not a string), return it for jsonOnly requests
       // For non-jsonOnly requests (scoring), return the scoring provider
       if (options.provider && typeof options.provider === 'object') {
@@ -1751,41 +1754,45 @@ describe('CrescendoProvider - Abort Signal Handling', () => {
   let mockTargetProvider: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockRedTeamProvider = {
       id: () => 'mock-redteam',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
       delay: 0,
     };
     mockScoringProvider = {
       id: () => 'mock-scoring',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
       delay: 0,
     };
     mockTargetProvider = {
       id: () => 'mock-target',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
     };
 
-    jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async (options) => {
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (
+      options: any,
+    ) {
       if (options.provider && typeof options.provider === 'object') {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
     });
 
-    jest.mocked(checkServerFeatureSupport).mockResolvedValue(true);
-    jest.mocked(getGraderById).mockReturnValue({
-      getResult: jest.fn(async () => ({
-        grade: { pass: true },
-      })),
-    } as any);
-    jest.mocked(tryUnblocking).mockResolvedValue({ success: false });
+    vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: { pass: true },
+        })),
+      } as any;
+    });
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should re-throw AbortError and not swallow it in catch block', async () => {
@@ -2037,7 +2044,9 @@ describe('CrescendoProvider - Chat Template Support', () => {
       stateful: false, // Key: test with stateful=false to trigger the bug
     });
 
-    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (
+      options: any,
+    ) {
       if (options.provider && typeof options.provider === 'object') {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }

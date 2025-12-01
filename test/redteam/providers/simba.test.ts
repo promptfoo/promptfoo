@@ -866,7 +866,7 @@ describe('SimbaProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'target-provider',
-        callApi: jest.fn<ApiProvider['callApi']>(),
+        callApi: vi.fn<ApiProvider['callApi']>(),
       };
 
       const context: CallApiContextParams = {
@@ -898,7 +898,7 @@ describe('SimbaProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'target-provider',
-        callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
           output: 'response',
           tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
         }),
@@ -947,7 +947,7 @@ describe('SimbaProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'target-provider',
-        callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
           output: 'response',
           tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
         }),
@@ -996,7 +996,7 @@ describe('SimbaProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'target-provider',
-        callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
           output: 'response',
           tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
         }),
@@ -1046,7 +1046,7 @@ describe('SimbaProvider', () => {
 
       const targetProvider: ApiProvider = {
         id: () => 'target-provider',
-        callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
           output: 'response',
           tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
         }),

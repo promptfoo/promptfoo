@@ -318,13 +318,13 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('Abort Signal Handling', () => {
-    let mockRedteamProvider: jest.Mocked<ApiProvider>;
+    let mockRedteamProvider: Mocked<ApiProvider>;
 
     beforeEach(() => {
       mockRedteamProvider = {
-        id: jest.fn().mockReturnValue('mock-provider'),
-        callApi: jest.fn(),
-      } as unknown as jest.Mocked<ApiProvider>;
+        id: vi.fn().mockReturnValue('mock-provider'),
+        callApi: vi.fn(),
+      } as unknown as Mocked<ApiProvider>;
     });
 
     it('should re-throw AbortError from evaluateResponse and not swallow it', async () => {

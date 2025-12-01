@@ -152,7 +152,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
       status: 200,
       statusText: 'OK',
     });
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     await provider.callApi('test prompt', undefined, { abortSignal: abortController.signal });
 
@@ -167,7 +167,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   it('should re-throw AbortError and not swallow it', async () => {
     const abortError = new Error('The operation was aborted');
     abortError.name = 'AbortError';
-    jest.mocked(fetchWithRetries).mockRejectedValue(abortError);
+    vi.mocked(fetchWithRetries).mockRejectedValue(abortError);
 
     await expect(provider.callApi('test prompt')).rejects.toThrow('The operation was aborted');
   });
@@ -290,20 +290,20 @@ describe('PromptfooChatCompletionProvider', () => {
         statusText: 'OK',
       },
     );
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     await provider.callApi('test prompt', undefined, { abortSignal: abortController.signal });
 
     // Verify the signal was passed in the options object
     expect(fetchWithRetries).toHaveBeenCalled();
-    const callArgs = jest.mocked(fetchWithRetries).mock.calls[0];
+    const callArgs = vi.mocked(fetchWithRetries).mock.calls[0];
     expect(callArgs[1]).toHaveProperty('signal', abortController.signal);
   });
 
   it('should re-throw AbortError and not swallow it', async () => {
     const abortError = new Error('The operation was aborted');
     abortError.name = 'AbortError';
-    jest.mocked(fetchWithRetries).mockRejectedValue(abortError);
+    vi.mocked(fetchWithRetries).mockRejectedValue(abortError);
 
     await expect(provider.callApi('test prompt')).rejects.toThrow('The operation was aborted');
   });
@@ -516,7 +516,7 @@ describe('PromptfooSimulatedUserProvider', () => {
         statusText: 'OK',
       },
     );
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     await provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]), undefined, {
       abortSignal: abortController.signal,
@@ -524,14 +524,14 @@ describe('PromptfooSimulatedUserProvider', () => {
 
     // Verify the signal was passed in the options object
     expect(fetchWithRetries).toHaveBeenCalled();
-    const callArgs = jest.mocked(fetchWithRetries).mock.calls[0];
+    const callArgs = vi.mocked(fetchWithRetries).mock.calls[0];
     expect(callArgs[1]).toHaveProperty('signal', abortController.signal);
   });
 
   it('should re-throw AbortError and not swallow it', async () => {
     const abortError = new Error('The operation was aborted');
     abortError.name = 'AbortError';
-    jest.mocked(fetchWithRetries).mockRejectedValue(abortError);
+    vi.mocked(fetchWithRetries).mockRejectedValue(abortError);
 
     await expect(
       provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }])),
