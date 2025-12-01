@@ -91,10 +91,6 @@ export default function UpdateBanner() {
     };
   }, []);
 
-  const handleCopyCommand = async () => {
-    const command = versionInfo?.updateCommands?.primary;
-
-    if (command) {
   useEffect(() => {
     if (copied) {
       const timer = setTimeout(() => setCopied(false), 2000);
