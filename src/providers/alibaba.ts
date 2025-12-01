@@ -58,12 +58,20 @@ const KNOWN_MODELS = new Set([
   'qwen3-vl-plus',
   'qwen3-vl-plus-2025-09-23',
 
+  // Qwen3-VL-Flash
+  'qwen3-vl-flash',
+  'qwen3-vl-flash-2025-10-15',
+
   // Qwen-VL-OCR
   'qwen-vl-ocr',
 
   // Qwen3-ASR
   'qwen3-asr-flash',
   'qwen3-asr-flash-2025-09-08',
+
+  // Qwen3-ASR-Realtime
+  'qwen3-asr-flash-realtime',
+  'qwen3-asr-flash-realtime-2025-10-27',
 
   // Qwen-Math
   'qwen-math-plus',
@@ -127,6 +135,10 @@ const KNOWN_MODELS = new Set([
   'qwen3-vl-30b-a3b-instruct',
   'qwen3-vl-235b-a22b-thinking',
   'qwen3-vl-235b-a22b-instruct',
+  'qwen3-vl-32b-thinking',
+  'qwen3-vl-32b-instruct',
+  'qwen3-vl-8b-thinking',
+  'qwen3-vl-8b-instruct',
 
   // Qwen2.5-Math
   'qwen2.5-math-72b-instruct',
@@ -158,6 +170,7 @@ const KNOWN_MODELS = new Set([
 
   // Embedding models
   'text-embedding-v3',
+  'text-embedding-v4',
 ]);
 
 const API_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';

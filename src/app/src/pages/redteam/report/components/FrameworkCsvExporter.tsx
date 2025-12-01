@@ -2,12 +2,12 @@ import DownloadIcon from '@mui/icons-material/Download';
 import Button from '@mui/material/Button';
 import {
   ALIASED_PLUGIN_MAPPINGS,
-  FRAMEWORK_COMPLIANCE_IDS,
   FRAMEWORK_NAMES,
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
   Severity,
+  type FrameworkComplianceId,
 } from '@promptfoo/redteam/constants';
 import {
   type CategoryStats,
@@ -21,9 +21,14 @@ import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 interface CSVExporterProps {
   categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
+  frameworksToShow: readonly FrameworkComplianceId[];
 }
 
-const CSVExporter = ({ categoryStats, pluginPassRateThreshold }: CSVExporterProps) => {
+const CSVExporter = ({
+  categoryStats,
+  pluginPassRateThreshold,
+  frameworksToShow,
+}: CSVExporterProps) => {
   // Function to export framework compliance data to CSV
   const exportToCSV = () => {
     // Collect data for all frameworks
@@ -41,8 +46,8 @@ const CSVExporter = ({ categoryStats, pluginPassRateThreshold }: CSVExporterProp
       ],
     ];
 
-    // Add data rows
-    FRAMEWORK_COMPLIANCE_IDS.forEach((frameworkId) => {
+    // Add data rows for configured frameworks
+    frameworksToShow.forEach((frameworkId) => {
       const framework = FRAMEWORK_NAMES[frameworkId];
 
       if (frameworkId === 'owasp:api' || frameworkId === 'owasp:llm') {

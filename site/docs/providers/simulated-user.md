@@ -62,19 +62,11 @@ For each turn:
 | `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                          |
 | `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats). |
 
-## Starting from a Specific Conversation State
+## Initial Messages
 
-By default, simulated user conversations start from scratch. However, you can provide initial conversation history to test scenarios that occur mid-conversation.
+Start conversations from a specific state by providing initial conversation history. Useful for testing mid-conversation scenarios, reproducing bugs, or avoiding unnecessary simulated turns.
 
-This is useful for:
-
-- **Testing specific states** - Skip to the payment stage without simulating the entire booking flow
-- **Regression testing** - Reproduce bugs that occur deep in conversations
-- **Cost/performance optimization** - Avoid generating unnecessary turns when testing specific interactions
-
-### Using `vars.initialMessages`
-
-Define initial messages per test for maximum flexibility:
+Use variables to template messages and avoid duplication:
 
 ```yaml
 defaultTest:
@@ -82,152 +74,46 @@ defaultTest:
     id: 'promptfoo:simulated-user'
     config:
       maxTurns: 3
-
-tests:
-  - vars:
-      instructions: You've selected a flight and want to pay with travel certificates
       initialMessages:
         - role: user
-          content: I need a flight from New York to Seattle on May 20th
+          content: I've selected my flight and I'm ready to book
         - role: assistant
-          content: I found a direct flight for $325. Would you like to book it?
+          content: Great! How would you like to pay?
         - role: user
-          content: Yes, that works for me
-```
-
-### Using `config.initialMessages`
-
-Define shared initial messages at the provider level when multiple tests start from the same state:
-
-```yaml
-tests:
-  - provider:
-      id: 'promptfoo:simulated-user'
-      config:
-        maxTurns: 3
-        initialMessages:
-          - role: user
-            content: I've selected my flight and I'm ready to book
-          - role: assistant
-            content: Great! How would you like to pay?
-    vars:
-      instructions: Ask to use travel certificates
-
-  - provider:
-      id: 'promptfoo:simulated-user'
-      config:
-        maxTurns: 3
-        initialMessages:
-          - role: user
-            content: I've selected my flight and I'm ready to book
-          - role: assistant
-            content: Great! How would you like to pay?
-    vars:
-      instructions: Ask about adding extra baggage
-```
-
-### Hybrid Approach
-
-Set default initial messages and override when needed:
-
-```yaml
-defaultTest:
-  provider:
-    id: 'promptfoo:simulated-user'
-    config:
-      maxTurns: 5
-      initialMessages:
-        - role: user
-          content: I need help with my booking
-        - role: assistant
-          content: I'd be happy to help! What do you need?
+          content: I want to pay via {{payment_method}} # Variable
 
 tests:
   - vars:
-      instructions: Ask to change flight date # Uses default initialMessages
+      payment_method: credit card # Replaces {{payment_method}}
+      instructions: Complete payment with credit card
 
   - vars:
-      instructions: Request refund for canceled flight
-      initialMessages: # Overrides default
-        - role: user
-          content: My flight was canceled
-        - role: assistant
-          content: I'm sorry to hear that. Let me help you
+      payment_method: PayPal # Replaces {{payment_method}}
+      instructions: Complete payment with PayPal
 ```
 
-**Note:** `vars.initialMessages` takes precedence over `config.initialMessages`.
+Initial messages support Nunjucks templating in both `role` and `content` fields. Define them in `config.initialMessages` (shared) or `vars.initialMessages` (per-test, takes precedence).
 
 ### Loading from Files
 
-For longer conversation histories, you can load initial messages from external files using `file://`. Supported formats include JSON and YAML:
+Load longer conversation histories from JSON or YAML files:
 
 ```yaml
 tests:
   - vars:
+      initialMessages: file://./conversation-history.json
       instructions: You've selected a flight and want to pay with travel certificates
-      initialMessages: file://./conversation-history.json # or .yaml/.yml
 ```
-
-#### JSON Format
-
-**File:** `conversation-history.json`
 
 ```json
 [
-  {
-    "role": "user",
-    "content": "I need a flight from New York to Seattle on May 20th"
-  },
-  {
-    "role": "assistant",
-    "content": "I'd be happy to help! May I have your user ID?"
-  },
-  {
-    "role": "user",
-    "content": "It's mia_li_3668"
-  },
-  {
-    "role": "assistant",
-    "content": "Thank you! I found a direct economy flight for $325. Would you like to book this?"
-  },
-  {
-    "role": "user",
-    "content": "Yes, that works for me"
-  }
+  { "role": "user", "content": "I need a flight from NYC to Seattle" },
+  { "role": "assistant", "content": "I found a direct flight for $325" },
+  { "role": "user", "content": "Yes, that works for me" }
 ]
 ```
 
-#### YAML Format
-
-**File:** `conversation-history.yaml`
-
-```yaml
-- role: user
-  content: I need a flight from New York to Seattle on May 20th
-- role: assistant
-  content: I'd be happy to help! May I have your user ID?
-- role: user
-  content: It's mia_li_3668
-- role: assistant
-  content: Thank you! I found a direct economy flight for $325. Would you like to book this?
-- role: user
-  content: Yes, that works for me
-```
-
-#### File Loading Summary
-
-This works for both `vars.initialMessages` and `config.initialMessages`:
-
-```yaml
-tests:
-  - provider:
-      id: 'promptfoo:simulated-user'
-      config:
-        maxTurns: 3
-        initialMessages: file://./shared-conversation-state.json
-    vars:
-      instructions: Ask to use travel certificates
-```
+File-based messages also support variable templating.
 
 :::info How maxTurns Works with Initial Messages
 
@@ -252,7 +138,7 @@ prompts:
   - You are a helpful customer service agent. Answer questions politely and try to resolve issues.
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-5-mini
 
 defaultTest:
   provider:
@@ -271,7 +157,7 @@ For complex scenarios with function calling, you can define structured APIs with
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     config:
       tools:
         - file://functions/search_flights.json

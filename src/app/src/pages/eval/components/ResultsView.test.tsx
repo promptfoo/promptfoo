@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -37,6 +37,13 @@ vi.mock('./store', () => {
     useTableStore: mockUseTableStore,
   };
 });
+
+vi.mock('./FilterModeProvider', () => ({
+  useFilterMode: () => ({
+    filterMode: 'all',
+    setFilterMode: vi.fn(),
+  }),
+}));
 
 vi.mock('./ShareModal', () => ({
   default: vi.fn(({ open }) => (open ? <div data-testid="share-modal">Share Modal</div> : null)),
@@ -147,6 +154,14 @@ const renderWithRouter = (component: React.ReactElement) => {
   return render(<MemoryRouter>{component}</MemoryRouter>);
 };
 
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useSearchParams: vi.fn().mockReturnValue([new URLSearchParams('filterMode=failures'), vi.fn()]),
+  };
+});
+
 describe('ResultsView Share Button', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
@@ -200,8 +215,6 @@ describe('ResultsView Share Button', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
 
@@ -359,8 +372,6 @@ describe('ResultsView Copy Eval', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
 
@@ -453,8 +464,6 @@ describe('ResultsView Copy Menu Item', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
 
@@ -480,6 +489,162 @@ describe('ResultsView Copy Menu Item', () => {
 
       expect(screen.getByTestId('confirm-eval-name-dialog')).toBeInTheDocument();
       expect(screen.getByText('Item Count: 15')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('ResultsView', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+  });
+
+  it('should render without error when a plugin filter with operator not_equals has a null value', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 1,
+        values: {
+          filter1: {
+            id: 'filter1',
+            type: 'plugin',
+            operator: 'not_equals',
+            value: null,
+            field: 'plugin_name',
+            logicOperator: 'and',
+            sortIndex: 0,
+          },
+        },
+      },
+      removeFilter: vi.fn(),
+    });
+
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
+
+    expect(screen.getByText('Results Table')).toBeInTheDocument();
+  });
+});
+
+describe('ResultsView Plugin Filter - Not Equals', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 1,
+        values: {
+          pluginFilter: {
+            id: 'pluginFilter',
+            type: 'plugin',
+            operator: 'not_equals',
+            value: 'MyPlugin',
+            logicOperator: 'and',
+            sortIndex: 0,
+          },
+        },
+      },
+      removeFilter: vi.fn(),
+    });
+  });
+
+  it('should display a chip with label "Plugin != [name]" when a plugin filter with operator "not_equals" is applied and the filter value is set', async () => {
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Plugin != MyPlugin')).toBeInTheDocument();
     });
   });
 });
@@ -560,20 +725,20 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
   });
   it('renders ResultsCharts when conditions are met and charts are shown by default', async () => {
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
 
     expect(screen.getByTestId('results-charts')).toBeInTheDocument();
 
@@ -627,21 +792,21 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
 
     expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
-  it('does not render ResultsCharts when table data is in a loading state', () => {
+  it('does not render ResultsCharts when table data is in a loading state', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -667,17 +832,17 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
 
     expect(screen.queryByTestId('results-charts')).toBeNull();
   });
@@ -736,17 +901,17 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
 
     expect(screen.queryByText('Show Charts')).toBeNull();
 
@@ -795,8 +960,6 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
   it('should not render ResultsCharts if there is only one prompt', async () => {
@@ -831,17 +994,17 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
 
     const showChartsButton = screen.queryByText('Show Charts');
     expect(showChartsButton).toBeNull();
@@ -887,17 +1050,17 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
 
     const showChartsButton = screen.queryByText('Show Charts');
     expect(showChartsButton).toBeNull();
@@ -943,17 +1106,17 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
 
     const showChartsButton = screen.queryByText('Show Charts');
     expect(showChartsButton).toBeNull();
@@ -1026,18 +1189,18 @@ describe('ResultsView with extreme score values', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
-  it('renders ResultsCharts when there are multiple prompts and extreme score values with variance', () => {
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
+  it('renders ResultsCharts when there are multiple prompts and extreme score values with variance', async () => {
+    await act(async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+    });
 
     const resultsCharts = screen.getByTestId('results-charts');
     expect(resultsCharts).toBeInTheDocument();
@@ -1097,8 +1260,6 @@ describe('ResultsView - Size Warning in Copy Dialog', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
 
@@ -1182,8 +1343,6 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
 
     renderWithRouter(
@@ -1270,8 +1429,6 @@ describe('ResultsView Size Warning', () => {
         values: {},
       },
       removeFilter: vi.fn(),
-      filterMode: 'all',
-      setFilterMode: vi.fn(),
     });
   });
 
@@ -1299,5 +1456,113 @@ describe('ResultsView Size Warning', () => {
     });
 
     expect(screen.getByTestId('size-warning')).toHaveTextContent('Size Warning: 15000 results');
+  });
+});
+
+describe('ResultsView Chart Visibility on Init from URL', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          {
+            description: 'Test Description',
+            outputs: [
+              {
+                score: 0.8,
+              },
+              {
+                score: 0.6,
+              },
+            ],
+          },
+          {
+            description: 'Test Description',
+            outputs: [
+              {
+                score: 0.7,
+              },
+              {
+                score: 0.9,
+              },
+            ],
+          },
+        ],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+    });
+  });
+
+  it('should not render ResultsCharts when viewport is small, even with filter params in URL', async () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(500);
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+  });
+
+  it('should render ResultsCharts when viewport is large and filter params are in URL', async () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
 });

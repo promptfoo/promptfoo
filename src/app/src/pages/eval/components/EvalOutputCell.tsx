@@ -3,6 +3,18 @@ import React, { useMemo } from 'react';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import useCloudConfig from '@app/hooks/useCloudConfig';
+import {
+  Check,
+  ContentCopy,
+  Edit,
+  Link,
+  Numbers,
+  Search,
+  Star,
+  ThumbDown,
+  ThumbUp,
+} from '@mui/icons-material';
+import IconButton from '@mui/material/IconButton';
 import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
@@ -27,6 +39,15 @@ function scoreToString(score: number | null) {
   return `(${score.toFixed(2)})`;
 }
 
+/**
+ * Detects if the provider is an image generation provider.
+ * Image providers follow the pattern like 'openai:image:dall-e-3'.
+ * Used to skip truncation for image content since truncating `![alt](url)` breaks rendering.
+ */
+export function isImageProvider(provider: string | undefined): boolean {
+  return provider?.includes(':image:') ?? false;
+}
+
 const tooltipSlotProps: TooltipProps['slotProps'] = {
   popper: { disablePortal: true },
 };
@@ -37,7 +58,7 @@ export interface EvalOutputCellProps {
   rowIndex: number;
   promptIndex: number;
   showStats: boolean;
-  onRating: (isPass?: boolean, score?: number, comment?: string) => void;
+  onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
   isRedteam?: boolean;
@@ -293,10 +314,11 @@ function EvalOutputCell({
 
   const handleRating = React.useCallback(
     (isPass: boolean) => {
-      setActiveRating(isPass);
-      onRating(isPass, undefined, output.gradingResult?.comment);
+      const newRating = activeRating === isPass ? null : isPass;
+      setActiveRating(newRating);
+      onRating(newRating, undefined, output.gradingResult?.comment);
     },
-    [onRating, output.gradingResult?.comment],
+    [activeRating, onRating, output.gradingResult?.comment],
   );
 
   const handleSetScore = React.useCallback(() => {
@@ -585,36 +607,43 @@ function EvalOutputCell({
       {shiftKeyPressed && (
         <>
           <Tooltip title={'Copy output to clipboard'} slotProps={tooltipSlotProps}>
-            <button className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
-              {copied ? '✅' : '📋'}
-            </button>
+            <IconButton
+              className="action"
+              size="small"
+              onClick={handleCopy}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
+            </IconButton>
           </Tooltip>
           <Tooltip title={'Toggle test highlight'} slotProps={tooltipSlotProps}>
-            <button
+            <IconButton
               className="action"
+              size="small"
               onClick={handleToggleHighlight}
               onMouseDown={(e) => e.preventDefault()}
             >
-              🌟
-            </button>
+              <Star fontSize="small" />
+            </IconButton>
           </Tooltip>
           <Tooltip title={'Share output'} slotProps={tooltipSlotProps}>
-            <button
+            <IconButton
               className="action"
+              size="small"
               onClick={handleRowShareLink}
               onMouseDown={(e) => e.preventDefault()}
             >
-              {linked ? '✅' : '🔗'}
-            </button>
+              {linked ? <Check fontSize="small" /> : <Link fontSize="small" />}
+            </IconButton>
           </Tooltip>
         </>
       )}
       {output.prompt && (
         <>
           <Tooltip title={'View output and test details'} slotProps={tooltipSlotProps}>
-            <button className="action" onClick={handlePromptOpen}>
-              🔎
-            </button>
+            <IconButton className="action" size="small" onClick={handlePromptOpen}>
+              <Search fontSize="small" />
+            </IconButton>
           </Tooltip>
           {openPrompt && (
             <EvalOutputPromptDialog
@@ -640,30 +669,38 @@ function EvalOutputCell({
         </>
       )}
       <Tooltip title={'Mark test passed (score 1.0)'} slotProps={tooltipSlotProps}>
-        <button
+        <IconButton
           className={`action ${activeRating === true ? 'active' : ''}`}
+          size="small"
           onClick={() => handleRating(true)}
+          color={activeRating === true ? 'success' : 'default'}
+          aria-pressed={activeRating === true}
+          aria-label="Mark test passed"
         >
-          👍
-        </button>
+          <ThumbUp fontSize="small" />
+        </IconButton>
       </Tooltip>
       <Tooltip title={'Mark test failed (score 0.0)'} slotProps={tooltipSlotProps}>
-        <button
+        <IconButton
           className={`action ${activeRating === false ? 'active' : ''}`}
+          size="small"
           onClick={() => handleRating(false)}
+          color={activeRating === false ? 'error' : 'default'}
+          aria-pressed={activeRating === false}
+          aria-label="Mark test failed"
         >
-          👎
-        </button>
+          <ThumbDown fontSize="small" />
+        </IconButton>
       </Tooltip>
       <Tooltip title={'Set test score'} slotProps={tooltipSlotProps}>
-        <button className="action" onClick={handleSetScore}>
-          🔢
-        </button>
+        <IconButton className="action" size="small" onClick={handleSetScore}>
+          <Numbers fontSize="small" />
+        </IconButton>
       </Tooltip>
       <Tooltip title={'Edit comment'} slotProps={tooltipSlotProps}>
-        <button className="action" onClick={handleCommentOpen}>
-          ✏️
-        </button>
+        <IconButton className="action" size="small" onClick={handleCommentOpen}>
+          <Edit fontSize="small" />
+        </IconButton>
       </Tooltip>
     </div>
   );
@@ -694,7 +731,10 @@ function EvalOutputCell({
         </div>
       )}
       <div style={contentStyle}>
-        <TruncatedText text={node || text} maxLength={maxTextLength} />
+        <TruncatedText
+          text={node || text}
+          maxLength={renderMarkdown && isImageProvider(output.provider) ? 0 : maxTextLength}
+        />
       </div>
       {comment}
       {detail}

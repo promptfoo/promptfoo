@@ -145,6 +145,9 @@ describe('FiltersForm', () => {
       metadataKeys: [],
       metadataKeysLoading: false,
       metadataKeysError: null,
+      metadataValues: {},
+      metadataValuesLoading: {},
+      metadataValuesError: {},
       removeAllFilters: mockRemoveAllFilters,
       addFilter: mockAddFilter,
       updateFilter: mockUpdateFilter,
@@ -360,6 +363,9 @@ describe('FiltersForm', () => {
       metadataKeys: [longMetadataKey],
       metadataKeysLoading: false,
       metadataKeysError: null,
+      metadataValues: {},
+      metadataValuesLoading: {},
+      metadataValuesError: {},
       updateFilter: mockUpdateFilter,
       removeFilter: mockRemoveFilter,
       updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -473,7 +479,6 @@ describe('FiltersForm', () => {
 
     expect(filterRowContainer).toHaveStyle('overflow: hidden');
   });
-
   it('should render without errors when anchorEl is null', () => {
     mockedUseTableStore.mockReturnValue({
       filters: {
@@ -784,6 +789,9 @@ describe('FiltersForm', () => {
         metadataKeys: [],
         metadataKeysLoading: false,
         metadataKeysError: null,
+        metadataValues: {},
+        metadataValuesLoading: {},
+        metadataValuesError: {},
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -864,7 +872,6 @@ describe('FiltersForm', () => {
         ?.querySelector('.MuiCircularProgress-root');
       expect(circularProgress).toBeInTheDocument();
     });
-
     it("Filter should render a TextField with error indication and 'Failed to load available keys' helper text when value.type is 'metadata', metadataKeysLoading is false, metadataKeys is empty, and metadataKeysError is true", () => {
       const initialFilter: ResultsFilter = {
         id: 'filter-1',
@@ -1234,7 +1241,6 @@ describe('FiltersForm', () => {
       expect(mockedUseTableStore.mock.results[0].value.filters.values[filter1Id]).toBeDefined();
       expect(mockedUseTableStore.mock.results[0].value.filters.values[filter2Id]).toBeDefined();
     });
-
     it('should reset operator to equals when changing filter type to policy', async () => {
       const initialFilter: ResultsFilter = {
         id: 'filter-1',
@@ -1259,6 +1265,9 @@ describe('FiltersForm', () => {
           },
           appliedCount: 0,
         },
+        metadataValues: {},
+        metadataValuesLoading: {},
+        metadataValuesError: {},
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -1574,6 +1583,9 @@ describe('FiltersForm', () => {
         },
         appliedCount: 0,
       },
+      metadataValues: {},
+      metadataValuesLoading: {},
+      metadataValuesError: {},
       updateFilter: mockUpdateFilter,
       removeFilter: mockRemoveFilter,
       updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -1602,7 +1614,6 @@ describe('FiltersForm', () => {
       );
     }
   });
-
   it('should maintain proper layout on extremely narrow viewport widths without causing horizontal overflow', () => {
     mockedUseTableStore.mockReturnValue({
       filters: {
@@ -1626,6 +1637,9 @@ describe('FiltersForm', () => {
         },
         appliedCount: 1,
       },
+      metadataValues: {},
+      metadataValuesLoading: {},
+      metadataValuesError: {},
       addFilter: mockAddFilter,
       updateFilter: mockUpdateFilter,
       removeFilter: mockRemoveFilter,
@@ -1686,6 +1700,9 @@ describe('FiltersForm', () => {
         metadataKeys: ['testField'],
         metadataKeysLoading: false,
         metadataKeysError: false,
+        metadataValues: {},
+        metadataValuesLoading: {},
+        metadataValuesError: {},
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -1798,6 +1815,9 @@ describe('FiltersForm', () => {
         metadataKeys: ['testField'],
         metadataKeysLoading: false,
         metadataKeysError: false,
+        metadataValues: {},
+        metadataValuesLoading: {},
+        metadataValuesError: {},
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -1844,6 +1864,9 @@ describe('FiltersForm', () => {
         metadataKeys: ['testField'],
         metadataKeysLoading: false,
         metadataKeysError: false,
+        metadataValues: {},
+        metadataValuesLoading: {},
+        metadataValuesError: {},
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -1901,6 +1924,9 @@ describe('FiltersForm', () => {
         metadataKeys: ['testField'],
         metadataKeysLoading: false,
         metadataKeysError: false,
+        metadataValues: {},
+        metadataValuesLoading: {},
+        metadataValuesError: {},
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -1917,7 +1943,7 @@ describe('FiltersForm', () => {
       );
 
       // Should show value input for equals operator
-      const valueInput = screen.getByRole('textbox', { name: /Value/i });
+      const valueInput = screen.getByRole('combobox', { name: /Value/i });
       expect(valueInput).toBeInTheDocument();
     });
 
@@ -1947,6 +1973,9 @@ describe('FiltersForm', () => {
         metadataKeys: ['testField'],
         metadataKeysLoading: false,
         metadataKeysError: false,
+        metadataValues: {},
+        metadataValuesLoading: {},
+        metadataValuesError: {},
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -1980,7 +2009,6 @@ describe('FiltersForm', () => {
       const operatorDropdown = screen.getByRole('combobox', { name: /Operator/i });
       expect(operatorDropdown).toBeVisible();
     });
-
     it('should maintain exists operator and hide value input when changing metadata field', async () => {
       const initialFilter: ResultsFilter = {
         id: 'filter-1',
@@ -2007,6 +2035,9 @@ describe('FiltersForm', () => {
         metadataKeys: ['field1', 'field2'],
         metadataKeysLoading: false,
         metadataKeysError: false,
+        metadataValues: {},
+        metadataValuesLoading: {},
+        metadataValuesError: {},
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -2079,6 +2110,9 @@ describe('FiltersForm', () => {
         metadataKeys: ['testField'],
         metadataKeysLoading: false,
         metadataKeysError: false,
+        metadataValues: {},
+        metadataValuesLoading: {},
+        metadataValuesError: {},
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -2107,6 +2141,524 @@ describe('FiltersForm', () => {
         operator: 'exists',
         value: '',
       });
+    });
+  });
+
+  it('should update the filter operator from equals to not_equals when multiple plugin filters are present', async () => {
+    const initialFilters: Record<string, ResultsFilter> = {
+      'filter-1': {
+        id: 'filter-1',
+        type: 'plugin',
+        operator: 'equals',
+        value: 'plugin1',
+        sortIndex: 0,
+        logicOperator: 'and',
+      },
+      'filter-2': {
+        id: 'filter-2',
+        type: 'plugin',
+        operator: 'equals',
+        value: 'plugin2',
+        sortIndex: 1,
+        logicOperator: 'and',
+      },
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: initialFilters,
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: ['plugin1', 'plugin2'],
+          strategy: [],
+          severity: [],
+          policy: [],
+        },
+        appliedCount: 2,
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const operatorDropdown = screen.getAllByRole('combobox', { name: /Operator/i })[1];
+    expect(operatorDropdown).toBeInTheDocument();
+
+    await userEvent.click(operatorDropdown);
+
+    const notEqualsOption = screen.getByRole('option', { name: 'Not Equals' });
+    expect(notEqualsOption).toBeInTheDocument();
+
+    await userEvent.click(notEqualsOption);
+
+    expect(mockUpdateFilter).toHaveBeenCalledTimes(1);
+    expect(mockUpdateFilter).toHaveBeenCalledWith({
+      ...initialFilters['filter-2'],
+      operator: 'not_equals',
+    });
+  });
+
+  it('should update the filter operator to "equals" when changing from "not_equals" for a plugin filter', async () => {
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'plugin',
+      operator: 'not_equals',
+      value: 'plugin1',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: ['plugin1', 'plugin2'],
+          strategy: [],
+          severity: [],
+          policy: [],
+        },
+        appliedCount: 0,
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const operatorDropdown = screen.getByRole('combobox', { name: /Operator/i });
+    await userEvent.click(operatorDropdown);
+
+    const equalsOption = screen.getByRole('option', { name: 'Equals' });
+    await userEvent.click(equalsOption);
+
+    expect(mockUpdateFilter).toHaveBeenCalledTimes(1);
+    expect(mockUpdateFilter).toHaveBeenCalledWith({
+      ...initialFilter,
+      operator: 'equals',
+    });
+  });
+
+  it('should not display "Not Equals" in the operator dropdown for non-plugin filter types', async () => {
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+          policy: [],
+        },
+        appliedCount: 0,
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const operatorDropdown = screen.getByRole('combobox', { name: /Operator/i });
+    await userEvent.click(operatorDropdown);
+
+    const notEqualsOption = screen.queryByRole('option', { name: 'Not Equals' });
+    expect(notEqualsOption).not.toBeInTheDocument();
+  });
+
+  it('should allow creating two plugin filters with the same plugin value but different operators (equals and not_equals) without disabling the value in the second filter', async () => {
+    const pluginValue = 'testPlugin';
+    const filter1Id = 'filter1';
+    const filter2Id = 'filter2';
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: {
+          [filter1Id]: {
+            id: filter1Id,
+            type: 'plugin',
+            operator: 'equals',
+            value: pluginValue,
+            sortIndex: 0,
+            logicOperator: 'and',
+          },
+          [filter2Id]: {
+            id: filter2Id,
+            type: 'plugin',
+            operator: 'not_equals',
+            value: pluginValue,
+            sortIndex: 1,
+            logicOperator: 'and',
+          },
+        },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [pluginValue],
+          strategy: [],
+          severity: [],
+          policy: [],
+        },
+        appliedCount: 2,
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
+      addFilter: mockAddFilter,
+      removeFilter: mockRemoveFilter,
+      updateFilter: mockUpdateFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const dropdowns = screen.getAllByRole('combobox');
+    const pluginValueDropdowns = dropdowns.filter((dropdown) => {
+      return dropdown.getAttribute('aria-labelledby')?.includes('value-select-label');
+    });
+
+    expect(pluginValueDropdowns).toHaveLength(2);
+
+    const filter1Dropdown = pluginValueDropdowns[0];
+    const filter2Dropdown = pluginValueDropdowns[1];
+
+    expect(filter1Dropdown).toBeInTheDocument();
+    expect(filter2Dropdown).toBeInTheDocument();
+
+    await userEvent.click(filter2Dropdown);
+
+    const pluginOption = screen.getByRole('option', { name: pluginValue });
+    expect(pluginOption).toBeInTheDocument();
+    expect(pluginOption).not.toHaveAttribute('disabled');
+  });
+  it("should only display 'equals' and 'not_equals' operators in the operator dropdown when filter type is 'plugin'", async () => {
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'plugin',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: ['plugin1', 'plugin2'],
+          strategy: [],
+          severity: [],
+          policy: [],
+        },
+        appliedCount: 0,
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const operatorDropdown = screen.getByRole('combobox', { name: /Operator/i });
+    expect(operatorDropdown).toBeInTheDocument();
+
+    await userEvent.click(operatorDropdown);
+
+    const equalsOption = screen.getByRole('option', { name: 'Equals' });
+    expect(equalsOption).toBeInTheDocument();
+
+    const notEqualsOption = screen.getByRole('option', { name: 'Not Equals' });
+    expect(notEqualsOption).toBeInTheDocument();
+
+    const containsOption = screen.queryByRole('option', { name: 'Contains' });
+    expect(containsOption).toBeNull();
+
+    const existsOption = screen.queryByRole('option', { name: 'Exists' });
+    expect(existsOption).toBeNull();
+  });
+
+  it('should display "Plugin != [name]" when a plugin filter with "not_equals" operator is applied', () => {
+    const pluginName = 'test-plugin';
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'plugin',
+      operator: 'not_equals',
+      value: pluginName,
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [pluginName],
+          strategy: [],
+          severity: [],
+          policy: [],
+        },
+        appliedCount: 1,
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const fieldDropdown = screen.getByRole('combobox', { name: /Field/i });
+    expect(fieldDropdown).toHaveTextContent('Plugin');
+
+    const operatorDropdown = screen.getByRole('combobox', { name: /Operator/i });
+    expect(operatorDropdown).toHaveTextContent('Not Equals');
+
+    const pluginDropdown = screen.getByRole('combobox', { name: /Plugin/i });
+    expect(pluginDropdown).toBeInTheDocument();
+    expect(pluginDropdown).toHaveTextContent(pluginName);
+  });
+
+  it("Filter should render a value dropdown with all filters.options.plugin values as selectable options when value.type is 'plugin' and value.operator is 'not_equals'", () => {
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'plugin',
+      operator: 'not_equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    const pluginOptions = ['plugin1', 'plugin2', 'plugin3'];
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: pluginOptions,
+          strategy: [],
+          severity: [],
+          policy: [],
+        },
+        appliedCount: 0,
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const pluginValueDropdown = screen.getByRole('combobox', { name: /Plugin/i });
+    expect(pluginValueDropdown).toBeInTheDocument();
+  });
+
+  it("Filter should call updateFilter with the selected plugin value and operator 'not_equals' when a plugin value is selected in the value dropdown for a plugin filter", async () => {
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'plugin',
+      operator: 'not_equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    const pluginOptions = ['plugin1', 'plugin2', 'plugin3'];
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: pluginOptions,
+          strategy: [],
+          severity: [],
+          policy: [],
+        },
+        appliedCount: 0,
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const pluginValueDropdown = screen.getByRole('combobox', { name: /Plugin/i });
+    await userEvent.click(pluginValueDropdown);
+
+    const plugin1Option = await screen.getByRole('option', { name: 'plugin1' });
+    await userEvent.click(plugin1Option);
+
+    expect(mockUpdateFilter).toHaveBeenCalledTimes(1);
+    expect(mockUpdateFilter).toHaveBeenCalledWith({
+      id: 'filter-1',
+      type: 'plugin',
+      operator: 'not_equals',
+      value: 'plugin1',
+      sortIndex: 0,
+      logicOperator: 'and',
+    });
+  });
+
+  it('should reset operator to "equals" when changing filter type to "plugin" if the previous operator was not "equals" or "not_equals"', async () => {
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'contains',
+      value: 'test',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: ['plugin1', 'plugin2'],
+          strategy: [],
+          severity: [],
+          policy: [],
+        },
+        appliedCount: 0,
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const filterTypeDropdown = screen.getByRole('combobox', { name: /Field/i });
+    await userEvent.click(filterTypeDropdown);
+
+    const pluginOption = await screen.findByRole('option', { name: 'Plugin' });
+    await userEvent.click(pluginOption);
+
+    expect(mockUpdateFilter).toHaveBeenCalledTimes(1);
+    expect(mockUpdateFilter).toHaveBeenCalledWith({
+      ...initialFilter,
+      type: 'plugin',
+      operator: 'equals',
+      value: '',
+      field: undefined,
     });
   });
 });

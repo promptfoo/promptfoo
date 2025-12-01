@@ -36,14 +36,18 @@ describe('FrameworkCompliance', () => {
     });
   });
 
-  const renderFrameworkCompliance = (categoryStats = {}, pluginPassRateThreshold = 0.9) => {
+  const renderFrameworkCompliance = (
+    categoryStats: any = {},
+    pluginPassRateThreshold = 0.9,
+    config?: any,
+  ) => {
     mockUseReportStore.mockReturnValue({
       pluginPassRateThreshold,
       setPluginPassRateThreshold: vi.fn(),
     });
 
     return renderWithProviders(
-      <FrameworkCompliance evalId="test-eval-id" categoryStats={categoryStats} />,
+      <FrameworkCompliance evalId="test-eval-id" categoryStats={categoryStats} config={config} />,
     );
   };
 
@@ -116,7 +120,7 @@ describe('FrameworkCompliance', () => {
         categoryStats: categoryStats,
         pluginPassRateThreshold: pluginPassRateThreshold,
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
@@ -158,5 +162,64 @@ describe('FrameworkCompliance', () => {
     if (expectedFailedText) {
       expect(screen.getByText(expectedFailedText)).toBeInTheDocument();
     }
+  });
+
+  it('should filter frameworks based on config', () => {
+    const categoryStats = {
+      bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['owasp:llm', 'owasp:api'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    // Should only render FrameworkCards for the configured frameworks
+    const frameworkCardCalls = mockFrameworkCard.mock.calls;
+    const renderedFrameworks = frameworkCardCalls.map((call) => call[0].framework);
+
+    // Should only include configured frameworks
+    expect(renderedFrameworks.filter((f) => f === 'owasp:llm' || f === 'owasp:api').length).toBe(
+      renderedFrameworks.length,
+    );
+
+    // Should not include other frameworks
+    expect(renderedFrameworks.includes('mitre:atlas')).toBe(false);
+    expect(renderedFrameworks.includes('nist:ai:measure')).toBe(false);
+  });
+
+  it('should show all frameworks when no config.redteam.frameworks is provided', () => {
+    const categoryStats = {
+      bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, undefined);
+
+    // Should render FrameworkCards for all frameworks (8 total)
+    const frameworkCardCalls = mockFrameworkCard.mock.calls;
+    expect(frameworkCardCalls.length).toBe(8); // All FRAMEWORK_COMPLIANCE_IDS
+  });
+
+  it('should pass frameworksToShow to CSVExporter', () => {
+    const categoryStats = {
+      bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['owasp:llm'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    // CSVExporter should receive the filtered frameworks
+    expect(mockCSVExporter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        frameworksToShow: ['owasp:llm'],
+      }),
+      undefined,
+    );
   });
 });

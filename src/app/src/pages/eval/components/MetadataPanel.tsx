@@ -17,6 +17,7 @@ import {
   determinePolicyTypeFromId,
   makeCustomPolicyCloudUrl,
 } from '@promptfoo/redteam/plugins/policy/utils';
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import { ellipsize } from '../../../../../util/text';
 
@@ -35,8 +36,6 @@ export interface ExpandedMetadataState {
     lastClickTime: number;
   };
 }
-
-const HIDDEN_KEYS = ['citations', '_promptfooFileMetadata'];
 
 interface MetadataPanelProps {
   metadata?: Record<string, any>;
@@ -62,7 +61,7 @@ export function MetadataPanel({
   }
 
   const metadataEntries = Object.entries(metadata)
-    .filter((d) => !HIDDEN_KEYS.includes(d[0]))
+    .filter((d) => !HIDDEN_METADATA_KEYS.includes(d[0]))
     .sort((a, b) => a[0].localeCompare(b[0]));
 
   if (metadataEntries.length === 0) {
@@ -70,17 +69,17 @@ export function MetadataPanel({
   }
 
   return (
-    <TableContainer component={Paper} variant="outlined">
-      <Table size="small">
+    <TableContainer component={Paper} variant="outlined" sx={{ overflow: 'auto' }}>
+      <Table size="small" sx={{ tableLayout: 'fixed' }}>
         <TableHead>
           <TableRow>
-            <TableCell>
+            <TableCell sx={{ width: '25%' }}>
               <strong>Key</strong>
             </TableCell>
-            <TableCell>
+            <TableCell sx={{ width: 'calc(75% - 80px)' }}>
               <strong>Value</strong>
             </TableCell>
-            <TableCell width={80} />
+            <TableCell sx={{ width: 80 }} />
           </TableRow>
         </TableHead>
         <TableBody>
@@ -95,7 +94,14 @@ export function MetadataPanel({
 
               if (policyId) {
                 cell = (
-                  <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}>
+                  <TableCell
+                    sx={{
+                      whiteSpace: 'pre-wrap',
+                      cursor: 'default',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
+                    }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span>{value}</span>
                       {determinePolicyTypeFromId(policyId) === 'reusable' &&
@@ -116,7 +122,14 @@ export function MetadataPanel({
                 );
               } else {
                 cell = (
-                  <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}>
+                  <TableCell
+                    sx={{
+                      whiteSpace: 'pre-wrap',
+                      cursor: 'default',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
+                    }}
+                  >
                     {value}
                   </TableCell>
                 );
@@ -125,7 +138,14 @@ export function MetadataPanel({
             // Is URL?
             else if (typeof value === 'string' && isValidUrl(value)) {
               cell = (
-                <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}>
+                <TableCell
+                  sx={{
+                    whiteSpace: 'pre-wrap',
+                    cursor: 'pointer',
+                    wordBreak: 'break-all',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
                   <Link href={value} target="_blank" rel="noopener noreferrer">
                     {value}
                   </Link>
@@ -135,7 +155,12 @@ export function MetadataPanel({
               const truncatedValue = ellipsize(stringValue, 300);
               cell = (
                 <TableCell
-                  style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}
+                  sx={{
+                    whiteSpace: 'pre-wrap',
+                    cursor: 'default',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
+                  }}
                   onClick={() => onMetadataClick(key)}
                 >
                   {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
@@ -145,7 +170,9 @@ export function MetadataPanel({
 
             return (
               <TableRow key={key}>
-                <TableCell>{key}</TableCell>
+                <TableCell sx={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                  {key}
+                </TableCell>
                 {cell}
 
                 <TableCell>

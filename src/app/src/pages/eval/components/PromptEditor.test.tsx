@@ -58,7 +58,7 @@ describe('PromptEditor', () => {
       expect.objectContaining({
         content: defaultProps.prompt,
       }),
-      {},
+      undefined,
     );
 
     expect(screen.getByRole('button', { name: /edit & replay/i })).toBeInTheDocument();

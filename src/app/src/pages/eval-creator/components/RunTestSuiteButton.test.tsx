@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import userEvent from '@testing-library/user-event';
@@ -25,6 +25,12 @@ describe('RunTestSuiteButton', () => {
   beforeEach(() => {
     useStore.getState().reset();
     vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
   });
 
   it('should be disabled when there are no prompts or tests', () => {
@@ -79,11 +85,15 @@ describe('RunTestSuiteButton', () => {
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).not.toBeDisabled();
 
+    // Click the button with fake timers active to control the interval
     await act(async () => {
-      userEvent.click(button);
+      fireEvent.click(button);
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Advance timers to trigger the polling interval (1000ms in the component)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
 
     expect(mockAlert).toHaveBeenCalledWith(`An error occurred: HTTP error! status: 500`);
 
@@ -92,24 +102,33 @@ describe('RunTestSuiteButton', () => {
 
   it('should revert to non-running state and display an error message when the initial API call fails', async () => {
     const errorMessage = 'Failed to submit test suite';
-    (callApi as ReturnType<typeof vi.fn>).mockRejectedValue(new Error(errorMessage));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    // Mock callApi to reject with an error
+    vi.mocked(callApi).mockRejectedValue(new Error(errorMessage));
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
       tests: [{ vars: { foo: 'bar' } }],
     });
 
-    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
     renderWithTheme(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
-    fireEvent.click(button);
 
+    // Use real timers for the click and wait for async operations
+    vi.useRealTimers();
+    await userEvent.click(button);
+
+    // Wait for the alert to be called
     await waitFor(() => {
       expect(alertMock).toHaveBeenCalledWith(`An error occurred: ${errorMessage}`);
-      expect(screen.getByRole('button', { name: 'Run Eval' })).toBeInTheDocument();
     });
 
+    expect(screen.getByRole('button', { name: 'Run Eval' })).toBeInTheDocument();
+
     alertMock.mockRestore();
+    consoleErrorSpy.mockRestore();
+    vi.useFakeTimers();
   });
 });

@@ -16,15 +16,15 @@ sidebar_label: OpenAI Agents
 
 # OpenAI Agents
 
-Test multi-turn agentic workflows built with the [@openai/agents](https://github.com/openai/openai-agents-js) SDK. This provider lets you evaluate agents that use tools, hand off between specialists, and handle complex multi-step tasks.
+Test multi-turn agentic workflows built with the [@openai/agents](https://github.com/openai/openai-agents-js) SDK. Evaluate agents that use tools, hand off between specialists, and handle multi-step tasks.
 
 ## Prerequisites
 
-- OpenAI Agents SDK installed: `npm install @openai/agents`
-- OpenAI API key: Set `OPENAI_API_KEY` environment variable
+- Install SDK: `npm install @openai/agents`
+- Set `OPENAI_API_KEY` environment variable
 - Agent definition (inline or in a TypeScript/JavaScript file)
 
-## Basic Configuration
+## Basic Usage
 
 ```yaml
 providers:
@@ -34,160 +34,68 @@ providers:
         name: Customer Support Agent
         model: gpt-5-mini
         instructions: You are a helpful customer support agent.
+      maxTurns: 10
 ```
 
-## Full Configuration Options
+## Configuration Options
 
-All available configuration options:
+| Parameter       | Description                                               | Default |
+| --------------- | --------------------------------------------------------- | ------- |
+| `agent`         | Agent definition (inline object or `file://path`)         | -       |
+| `tools`         | Tool definitions (inline array or `file://path`)          | -       |
+| `handoffs`      | Agent handoff definitions (inline array or `file://path`) | -       |
+| `maxTurns`      | Maximum conversation turns                                | 10      |
+| `model`         | Override model specified in agent definition              | -       |
+| `modelSettings` | Model parameters (temperature, topP, maxTokens)           | -       |
+| `tracing`       | Enable OpenTelemetry OTLP tracing                         | false   |
+
+## File-Based Configuration
+
+Load agent and tools from external files:
 
 ```yaml
 providers:
-  - id: openai:agents:support-agent
+  - openai:agents:support-agent
     config:
-      # Agent Definition (required)
-      # Inline agent definition
-      agent:
-        name: Support Agent
-        model: gpt-5-mini
-        instructions: |
-          You are a customer support agent. Help users with their questions.
-          Use tools when needed to look up information.
-        temperature: 0.7
-
-      # Or load from file
       agent: file://./agents/support-agent.ts
-
-      # Tools Configuration
-      # Inline tools array
-      tools:
-        - name: lookup_order
-          description: Look up order status by order ID
-          parameters:
-            type: object
-            properties:
-              order_id:
-                type: string
-                description: The order ID to look up
-            required: [order_id]
-          execute: |
-            async function(args) {
-              return { status: 'shipped', tracking: 'ABC123' };
-            }
-
-      # Or load from file
       tools: file://./tools/support-tools.ts
-
-      # Handoffs Configuration
-      # Allows agent to transfer to specialized agents
-      handoffs:
-        - agent:
-            name: Billing Agent
-            model: gpt-5-mini
-            instructions: Handle billing and payment questions.
-          description: Transfer to billing specialist for payment issues
-
-      # Or load from file
-      handoffs: file://./handoffs/support-handoffs.ts
-
-      # Execution Options
-      maxTurns: 10  # Maximum conversation turns (default: 10)
-      model: gpt-5  # Override the model specified in agent definition
-
-      # Model Settings
-      modelSettings:
-        temperature: 0.7
-        topP: 0.9
-        maxTokens: 2000
-
-      # Tracing (OpenTelemetry)
-      tracing: true  # Enable OTLP tracing
+      maxTurns: 15
+      tracing: true
 ```
 
-## Features
-
-### Multi-Turn Conversations
-
-Agents handle multi-turn workflows automatically:
-
-```yaml
-tests:
-  - description: Multi-step research task
-    vars:
-      query: Research the latest AI models and create a comparison table
-    assert:
-      - type: contains
-        value: comparison
-      - type: javascript
-        value: output.includes('GPT') && output.includes('Claude')
-```
-
-### Tools and Function Calling
-
-Define tools for your agents:
-
-**Inline Tool Definition:**
-
-```yaml
-providers:
-  - openai:agents:calculator
-    config:
-      agent:
-        name: Calculator Agent
-        model: gpt-5-mini
-        instructions: Use the calculator tool to perform math operations.
-      tools:
-        - name: calculate
-          description: Perform mathematical calculations
-          parameters:
-            type: object
-            properties:
-              expression:
-                type: string
-                description: Math expression to evaluate
-            required: [expression]
-          execute: |
-            async function(args) {
-              return { result: eval(args.expression) };
-            }
-```
-
-**File-Based Tools:**
-
-Create `tools/calculator-tools.ts`:
+**Example agent file (`agents/support-agent.ts`):**
 
 ```typescript
-export default [
-  {
-    name: 'calculate',
-    description: 'Perform mathematical calculations',
-    parameters: {
-      type: 'object',
-      properties: {
-        expression: {
-          type: 'string',
-          description: 'Math expression to evaluate',
-        },
-      },
-      required: ['expression'],
-    },
-    execute: async (args: { expression: string }) => {
-      return { result: eval(args.expression) };
-    },
+import { Agent } from '@openai/agents';
+
+export default new Agent({
+  name: 'Support Agent',
+  model: 'gpt-5-mini',
+  instructions: 'You are a helpful customer support agent.',
+});
+```
+
+**Example tools file (`tools/support-tools.ts`):**
+
+```typescript
+import { tool } from '@openai/agents';
+import { z } from 'zod';
+
+export const lookupOrder = tool({
+  name: 'lookup_order',
+  description: 'Look up order status by order ID',
+  parameters: z.object({
+    order_id: z.string().describe('The order ID'),
+  }),
+  execute: async ({ order_id }) => {
+    return { status: 'shipped', tracking: 'ABC123' };
   },
-];
+});
+
+export default [lookupOrder];
 ```
 
-Then reference it in your config:
-
-```yaml
-providers:
-  - openai:agents:calculator
-    config:
-      agent: file://./agents/calculator-agent.ts
-      tools: file://./tools/calculator-tools.ts
-```
-
-### Agent Handoffs
+## Agent Handoffs
 
 Transfer conversations between specialized agents:
 
@@ -198,130 +106,69 @@ providers:
       agent:
         name: Triage Agent
         model: gpt-5-mini
-        instructions: |
-          You are a triage agent. Route technical questions to the tech agent,
-          billing questions to the billing agent.
+        instructions: Route questions to the appropriate specialist.
       handoffs:
         - agent:
             name: Technical Support
             model: gpt-5-mini
             instructions: Handle technical troubleshooting.
-          description: Transfer to technical support for technical issues
-        - agent:
-            name: Billing Support
-            model: gpt-5-mini
-            instructions: Handle billing and payment questions.
-          description: Transfer to billing for payment issues
-
-tests:
-  - vars:
-      query: I can't log into my account
-    assert:
-      - type: llm-rubric
-        value: Response addresses technical login issues
+          description: Transfer for technical issues
 ```
 
-### File-Based Agent Definitions
+## Tracing
 
-Keep agent definitions in separate files:
-
-**agents/research-agent.ts:**
-
-```typescript
-import { Agent } from '@openai/agents';
-
-const agent: Agent<any, any> = {
-  name: 'Research Agent',
-  model: 'gpt-5',
-  instructions: `You are a research agent. Your task is to:
-1. Break down research questions into sub-questions
-2. Use search tools to gather information
-3. Synthesize findings into a comprehensive response`,
-  temperature: 0.7,
-};
-
-export default agent;
-```
-
-**promptfooconfig.yaml:**
-
-```yaml
-providers:
-  - openai:agents:researcher
-    config:
-      agent: file://./agents/research-agent.ts
-      tools: file://./tools/search-tools.ts
-      maxTurns: 15
-```
-
-### Context Variables
-
-Pass dynamic context to agents:
-
-```yaml
-tests:
-  - vars:
-      user_query: What's my account balance?
-      city: New York
-      temperature: 20
-    providers:
-      - openai:agents:weather
-        config:
-          agent:
-            name: Weather Agent
-            model: gpt-5-mini
-            instructions: |
-              Provide weather information for the user's location.
-              Use context.city and context.temperature.
-```
-
-Context variables are accessible in the agent's execution environment.
-
-### OpenTelemetry Tracing
-
-Enable tracing for debugging:
+Enable OpenTelemetry tracing to debug agent execution:
 
 ```yaml
 providers:
   - openai:agents:my-agent
     config:
       agent: file://./agents/my-agent.ts
-      tracing: true  # Export traces via OTLP
+      tracing: true # Exports to http://localhost:4318
 ```
 
-Or enable globally via environment variable:
+Or enable globally:
 
 ```bash
 export PROMPTFOO_TRACING_ENABLED=true
 npx promptfoo eval
 ```
 
-Traces are exported to your OTLP endpoint (default: `http://localhost:4318`) and include:
+Traces include agent execution spans, tool invocations, model calls, handoff events, and token usage.
 
-- Agent execution spans
-- Tool invocations
-- Model calls
-- Handoff events
-- Token usage
+## Example: D&D Dungeon Master
 
-### Model Overrides
-
-Override the model specified in the agent definition:
+Full working example with D&D mechanics, dice rolling, and character management:
 
 ```yaml
+description: D&D Adventure with AI Dungeon Master
+
+prompts:
+  - '{{query}}'
+
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:dungeon-master
     config:
-      agent:
-        name: My Agent
-        model: gpt-5-mini
-        instructions: You are a helpful assistant.
-      model: gpt-5  # Override to use gpt-5 instead
+      agent: file://./agents/dungeon-master-agent.ts
+      tools: file://./tools/game-tools.ts
+      maxTurns: 20
+      tracing: true
+
+tests:
+  - description: Dragon combat with attack roll
+    vars:
+      query: 'I draw my longsword and attack the red dragon!'
+    assert:
+      - type: llm-rubric
+        value: Response includes dice rolls for attack and damage
+
+  - description: Check character stats
+    vars:
+      query: 'What are my character stats and current HP?'
+    assert:
+      - type: contains-any
+        value: ['Thorin', 'Fighter', 'level 5']
 ```
-
-## Example: Customer Support Agent
-
-Full example with tools and handoffs:
 
 :::tip
 
@@ -329,111 +176,14 @@ Try the interactive example: `npx promptfoo@latest init --example openai-agents-
 
 :::
 
-**agents/support-agent.ts:**
-
-```typescript
-import { Agent } from '@openai/agents';
-
-export default {
-  name: 'Customer Support Agent',
-  model: 'gpt-5-mini',
-  instructions: `You are a customer support agent. Help customers with:
-- Order status lookups
-- Account questions
-- Technical issues
-
-Use tools to look up information. Transfer to specialized agents when needed.`,
-} as Agent<any, any>;
-```
-
-**tools/support-tools.ts:**
-
-```typescript
-export default [
-  {
-    name: 'lookup_order',
-    description: 'Look up order status by order ID',
-    parameters: {
-      type: 'object',
-      properties: {
-        order_id: { type: 'string', description: 'Order ID' },
-      },
-      required: ['order_id'],
-    },
-    execute: async ({ order_id }: { order_id: string }) => {
-      // In production, this would call your API
-      return {
-        status: 'shipped',
-        tracking: 'TRACK123',
-        expected_delivery: '2024-03-15',
-      };
-    },
-  },
-];
-```
-
-**handoffs/support-handoffs.ts:**
-
-```typescript
-import { Agent } from '@openai/agents';
-
-export default [
-  {
-    agent: {
-      name: 'Billing Specialist',
-      model: 'gpt-5-mini',
-      instructions: 'Handle billing, payments, refunds, and invoices.',
-    } as Agent<any, any>,
-    description: 'Transfer to billing specialist for payment questions',
-  },
-];
-```
-
-**promptfooconfig.yaml:**
-
-```yaml
-description: Customer Support Agent Tests
-
-providers:
-  - id: openai:agents:support
-    config:
-      agent: file://./agents/support-agent.ts
-      tools: file://./tools/support-tools.ts
-      handoffs: file://./handoffs/support-handoffs.ts
-      maxTurns: 10
-      tracing: true
-
-tests:
-  - description: Order status lookup
-    vars:
-      query: What's the status of order 12345?
-    assert:
-      - type: contains
-        value: shipped
-      - type: contains
-        value: TRACK123
-
-  - description: Billing question handoff
-    vars:
-      query: I was charged twice, can I get a refund?
-    assert:
-      - type: llm-rubric
-        value: Agent transferred to billing specialist
-
-  - description: Technical support
-    vars:
-      query: I can't log into my account
-    assert:
-      - type: llm-rubric
-        value: Agent provided troubleshooting steps
-```
-
 ## Environment Variables
 
-- `OPENAI_API_KEY`: OpenAI API key (required)
-- `PROMPTFOO_TRACING_ENABLED`: Enable tracing globally
-- `OPENAI_BASE_URL`: Custom OpenAI API base URL
-- `OPENAI_ORGANIZATION`: OpenAI organization ID
+| Variable                    | Description                |
+| --------------------------- | -------------------------- |
+| `OPENAI_API_KEY`            | OpenAI API key (required)  |
+| `PROMPTFOO_TRACING_ENABLED` | Enable tracing globally    |
+| `OPENAI_BASE_URL`           | Custom OpenAI API base URL |
+| `OPENAI_ORGANIZATION`       | OpenAI organization ID     |
 
 ## Limitations
 

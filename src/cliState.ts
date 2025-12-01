@@ -18,6 +18,9 @@ interface CliState {
 
   // error log file
   errorLogFile?: string;
+
+  // Final callback to be called after all output is flushed
+  postActionCallback?: () => Promise<void>;
 }
 
 const state: CliState = {};

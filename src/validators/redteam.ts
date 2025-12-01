@@ -15,14 +15,14 @@ import {
   MEDICAL_PLUGINS,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
-  type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
-  type Strategy,
+  FRAMEWORK_COMPLIANCE_IDS,
 } from '../redteam/constants';
+import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
@@ -44,6 +44,11 @@ const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
     strategies: z.record(z.lazy(() => TracingConfigSchema)).optional(),
   }),
 );
+
+const frameworkOptions = FRAMEWORK_COMPLIANCE_IDS as unknown as [
+  FrameworkComplianceId,
+  ...FrameworkComplianceId[],
+];
 
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
@@ -191,6 +196,13 @@ export const RedteamGenerateOptionsSchema = z.object({
     .union([z.string(), z.array(z.string())])
     .optional()
     .describe('Language(s) of tests to generate'),
+  frameworks: z
+    .array(z.enum(frameworkOptions))
+    .min(1)
+    .optional()
+    .describe(
+      'Subset of compliance frameworks to include when generating, reporting, and filtering results',
+    ),
   maxConcurrency: z
     .number()
     .int()
@@ -234,6 +246,11 @@ export const RedteamConfigSchema = z
       .union([z.string(), z.array(z.string())])
       .optional()
       .describe('Language(s) of tests to generate for this plugin'),
+    frameworks: z
+      .array(z.enum(frameworkOptions))
+      .min(1)
+      .optional()
+      .describe('Compliance frameworks to include across reports and commands'),
     entities: z
       .array(z.string())
       .optional()
@@ -276,6 +293,10 @@ export const RedteamConfigSchema = z
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
     const strategySet = new Set<Strategy>();
+    const frameworks =
+      data.frameworks && data.frameworks.length > 0
+        ? Array.from(new Set(data.frameworks))
+        : undefined;
 
     // MIGRATION: Extract languages from multilingual strategy and merge into global language config
     // This allows plugin-level language generation to work with multilingual strategy
@@ -288,11 +309,16 @@ export const RedteamConfigSchema = z
 
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
         // Lazy require to avoid mock interference in tests during module initialization
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const logger = require('../logger').default;
-        logger.debug(
-          '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
-        );
+        // Try-catch to handle ESM environments where require may not work
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const logger = require('../logger').default;
+          logger.debug(
+            '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
+          );
+        } catch {
+          // Silently fail in ESM environments - deprecation warning is not critical
+        }
 
         if (data.language) {
           // Global language exists, merge with 'en' and strategy languages, then deduplicate
@@ -468,6 +494,7 @@ export const RedteamConfigSchema = z
       numTests: data.numTests,
       plugins: uniquePlugins,
       strategies,
+      ...(frameworks ? { frameworks } : {}),
       ...(data.delay ? { delay: data.delay } : {}),
       ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),

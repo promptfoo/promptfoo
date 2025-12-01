@@ -33,6 +33,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
+  ferpa: 'Tests for compliance with Family Educational Rights and Privacy Act',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
@@ -76,14 +77,23 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   imitation: 'Tests handling of unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
   'insurance:coverage-discrimination':
-    'Tests for discriminatory coverage decisions based on protected characteristics (age, disability, race, etc.) in violation of ADA, Section 1557, and GINA',
-  'insurance:network-misinformation':
-    'Tests for inaccurate provider network information that could expose members to surprise bills and balance billing',
+    'Tests for discriminatory coverage decisions based on protected characteristics (age, disability, race, etc.)',
+  'insurance:network-misinformation': 'Tests for inaccurate provider network information',
   'insurance:phi-disclosure':
     'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations',
+  'ecommerce:pci-dss':
+    'Tests for exposure of payment card data including credit card numbers, CVVs, and bank account details in violation of PCI DSS requirements',
+  'ecommerce:compliance-bypass':
+    'Tests for attempts to bypass security rules, terms of service, or compliance policies in e-commerce systems',
+  'ecommerce:order-fraud':
+    'Tests for detection of fraudulent order patterns, unauthorized transactions, or payment manipulation attempts',
+  'ecommerce:price-manipulation':
+    'Tests for price manipulation through discount abuse, inventory exploits, or unauthorized price modifications',
   intent: 'Tests for manipulation of system behavior via specific prompts',
   jailbreak: 'Single-shot optimization of safety bypass techniques',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
+  'jailbreak:hydra':
+    'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
   'jailbreak:meta':
     'Meta-agent that builds its own attack taxonomy and learns from full attack history',
@@ -175,6 +185,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   pharmacy: 'Pharmacy AI safety testing across pharmaceutical vulnerabilities',
   insurance: 'Insurance AI safety testing across healthcare coverage vulnerabilities',
   financial: 'Financial AI safety testing across financial services vulnerabilities',
+  ecommerce:
+    'E-commerce AI safety testing across payment security and transaction integrity vulnerabilities',
 };
 
 // These names are displayed in risk cards and in the table
@@ -207,6 +219,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'divergent-repetition': 'Divergent Repetition',
   donotanswer: 'Do Not Answer Dataset',
   'excessive-agency': 'Excessive Agency',
+  ferpa: 'FERPA Compliance',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   layer: 'Strategy Layer',
@@ -243,6 +256,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   pharmacy: 'Pharmacy Safety Suite',
   insurance: 'Insurance Safety Suite',
   financial: 'Financial Safety Suite',
+  ecommerce: 'E-commerce Safety Suite',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'IP Violations',
@@ -278,9 +292,14 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'insurance:coverage-discrimination': 'Coverage Discrimination',
   'insurance:network-misinformation': 'Network Misinformation',
   'insurance:phi-disclosure': 'PHI Disclosure',
+  'ecommerce:pci-dss': 'PCI DSS Compliance',
+  'ecommerce:compliance-bypass': 'Compliance Bypass',
+  'ecommerce:order-fraud': 'Order Fraud',
+  'ecommerce:price-manipulation': 'Price Manipulation',
   intent: 'Intent',
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
+  'jailbreak:hydra': 'Hydra Multi-turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
   'jailbreak:meta': 'Meta-Agent Strategic Jailbreak',
   'jailbreak:tree': 'Tree-Based Attack Search',
@@ -342,10 +361,10 @@ export const severityDisplayNames: Record<Severity, string> = {
 };
 
 export const severityRiskScores: Record<Severity, number> = {
-  [Severity.Critical]: 8.0,
-  [Severity.High]: 6.0,
+  [Severity.Critical]: 9.0,
+  [Severity.High]: 7.0,
   [Severity.Medium]: 4.0,
-  [Severity.Low]: 2.0,
+  [Severity.Low]: 0.0,
 };
 
 /*
@@ -360,6 +379,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   bfla: Severity.High,
   bola: Severity.High,
   cca: Severity.High,
+  ferpa: Severity.Medium,
   'financial:calculation-error': Severity.Low,
   'financial:compliance-violation': Severity.Medium,
   'financial:confidential-disclosure': Severity.High,
@@ -405,6 +425,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   pharmacy: Severity.High,
   insurance: Severity.High,
   financial: Severity.High,
+  ecommerce: Severity.High,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
@@ -437,6 +458,10 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'insurance:coverage-discrimination': Severity.Critical,
   'insurance:network-misinformation': Severity.High,
   'insurance:phi-disclosure': Severity.Critical,
+  'ecommerce:pci-dss': Severity.Critical,
+  'ecommerce:compliance-bypass': Severity.High,
+  'ecommerce:order-fraud': Severity.High,
+  'ecommerce:price-manipulation': Severity.High,
   intent: Severity.High,
   overreliance: Severity.Low,
   'pharmacy:controlled-substance-compliance': Severity.High,
@@ -508,6 +533,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   'Compliance & Legal': [
     'contracts',
     'coppa',
+    'ferpa',
     'harmful:chemical-biological-weapons',
     'harmful:copyright-violations',
     'harmful:cybercrime:malicious-code',
@@ -562,6 +588,10 @@ export const riskCategories: Record<string, Plugin[]> = {
   ],
 
   'Domain-Specific Risks': [
+    'ecommerce:pci-dss',
+    'ecommerce:compliance-bypass',
+    'ecommerce:order-fraud',
+    'ecommerce:price-manipulation',
     'financial:calculation-error',
     'financial:compliance-violation',
     'financial:confidential-disclosure',
@@ -637,6 +667,7 @@ export const categoryAliases: Record<Plugin, string> = {
   donotanswer: 'DoNotAnswer',
   'debug-access': 'DebugAccess',
   default: 'Default',
+  ferpa: 'FERPACompliance',
   mcp: 'MCP',
   'medical:anchoring-bias': 'MedicalAnchoringBias',
   'medical:hallucination': 'Medical Hallucination',
@@ -644,6 +675,10 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:off-label-use': 'MedicalOffLabelUse',
   'medical:prioritization-error': 'MedicalPrioritizationError',
   'medical:sycophancy': 'MedicalSycophancy',
+  'ecommerce:compliance-bypass': 'EcommerceComplianceBypass',
+  'ecommerce:order-fraud': 'EcommerceOrderFraud',
+  'ecommerce:pci-dss': 'EcommercePciDss',
+  'ecommerce:price-manipulation': 'EcommercePriceManipulation',
   'financial:calculation-error': 'FinancialCalculationError',
   'financial:compliance-violation': 'FinancialComplianceViolation',
   'financial:confidential-disclosure': 'FinancialConfidentialDisclosure',
@@ -677,6 +712,7 @@ export const categoryAliases: Record<Plugin, string> = {
   pharmacy: 'Pharmacy Safety',
   insurance: 'Insurance Safety',
   financial: 'Financial Safety',
+  ecommerce: 'E-commerce Safety',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -770,6 +806,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
+  ferpa: 'Tests for Family Educational Rights and Privacy Act compliance',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:
@@ -790,6 +827,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Comprehensive insurance AI safety testing for healthcare coverage vulnerabilities including coverage discrimination, network misinformation, and PHI disclosure',
   financial:
     'Comprehensive financial AI safety testing for financial services vulnerabilities including calculation errors, compliance violations, hallucination, and data leakage',
+  ecommerce:
+    'Comprehensive e-commerce AI safety testing for payment security and transaction integrity vulnerabilities including PCI DSS compliance, fraud detection, and price manipulation',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -824,6 +863,14 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for inaccurate provider network information including wrong network status, terminated contracts, ghost networks, and outdated provider data that could expose members to surprise medical bills and balance billing',
   'insurance:phi-disclosure':
     'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations including cross-member PHI leakage, inadequate authentication, and disclosure to unauthorized third parties',
+  'ecommerce:pci-dss':
+    'Tests for exposure of payment card data including credit card numbers, CVVs, expiration dates, cardholder names, bank account details, and payment tokens in violation of PCI DSS requirements for secure payment processing',
+  'ecommerce:compliance-bypass':
+    'Tests for attempts to bypass security rules, terms of service, age restrictions, geographic limitations, or compliance policies in e-commerce systems',
+  'ecommerce:order-fraud':
+    'Tests for detection of fraudulent order patterns, unauthorized transactions, account takeover attempts, or payment manipulation in e-commerce checkout and order processing',
+  'ecommerce:price-manipulation':
+    'Tests for price manipulation through discount code abuse, inventory exploits, cart manipulation, unauthorized price modifications, or coupon stacking vulnerabilities',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',
@@ -925,6 +972,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   image: 'Tests detection and handling of image-based malicious payloads',
   jailbreak: 'Optimizes single-turn attacks to bypass security controls',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
+  'jailbreak:hydra':
+    'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
   'jailbreak:meta':
     'Agent that dynamically builds an attack taxonomy and learns from attack history',
@@ -965,8 +1014,9 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   image: 'Image',
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Composite Jailbreaks',
+  'jailbreak:hydra': 'Hydra Multi-Turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
-  'jailbreak:meta': 'Meta-Agent',
+  'jailbreak:meta': 'Meta Agent',
   'jailbreak:tree': 'Tree-based Optimization',
   layer: 'Layer',
   leetspeak: 'Leetspeak Encoding',

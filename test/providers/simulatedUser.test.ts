@@ -1,23 +1,31 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
 import * as timeUtils from '../../src/util/time';
 
 import type { ApiProvider } from '../../src/types/index';
 
-jest.mock('../../src/util/time', () => ({
-  sleep: jest.fn().mockResolvedValue(undefined),
-}));
+vi.mock('../../src/util/time', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    sleep: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
-jest.mock('../../src/util/fetch/index.ts');
+vi.mock('../../src/util/fetch/index.ts');
 
 // Mock PromptfooSimulatedUserProvider
-const mockUserProviderCallApi = jest.fn().mockResolvedValue({ output: 'user response' });
-jest.mock('../../src/providers/promptfoo', () => {
+const mockUserProviderCallApi = vi.fn().mockResolvedValue({ output: 'user response' });
+vi.mock('../../src/providers/promptfoo', async (importOriginal) => {
   return {
-    PromptfooSimulatedUserProvider: jest.fn().mockImplementation(() => ({
-      callApi: mockUserProviderCallApi,
-      id: jest.fn().mockReturnValue('mock-user-provider'),
-      options: {},
-    })),
+    ...(await importOriginal()),
+
+    PromptfooSimulatedUserProvider: vi.fn().mockImplementation(function () {
+      return {
+        callApi: mockUserProviderCallApi,
+        id: vi.fn().mockReturnValue('mock-user-provider'),
+        options: {},
+      };
+    }),
   };
 });
 
@@ -31,10 +39,12 @@ describe('SimulatedUser', () => {
 
     originalProvider = {
       id: () => 'test-agent',
-      callApi: jest.fn().mockImplementation(async () => ({
-        output: 'agent response',
-        tokenUsage: { numRequests: 1 },
-      })),
+      callApi: vi.fn().mockImplementation(async function () {
+        return {
+          output: 'agent response',
+          tokenUsage: { numRequests: 1 },
+        };
+      }),
     };
 
     simulatedUser = new SimulatedUser({
@@ -45,7 +55,7 @@ describe('SimulatedUser', () => {
       },
     });
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('id()', () => {
@@ -106,11 +116,13 @@ describe('SimulatedUser', () => {
     it('should stop conversation when ###STOP### is received', async () => {
       // Set up an initial message exchange to have some conversation history
       // First call is regular exchange
-      const mockedCallApi = jest.mocked(originalProvider.callApi);
-      mockedCallApi.mockImplementationOnce(async () => ({
-        output: 'initial agent response',
-        tokenUsage: { numRequests: 1 },
-      }));
+      const mockedCallApi = vi.mocked(originalProvider.callApi);
+      mockedCallApi.mockImplementationOnce(async function () {
+        return {
+          output: 'initial agent response',
+          tokenUsage: { numRequests: 1 },
+        };
+      });
 
       // Second call returns stop command
       mockUserProviderCallApi
@@ -190,11 +202,13 @@ describe('SimulatedUser', () => {
     it('should include sessionId from agentResponse in metadata', async () => {
       const providerWithSessionId = {
         id: () => 'test-agent',
-        callApi: jest.fn().mockImplementation(async () => ({
-          output: 'agent response',
-          sessionId: 'test-session-123',
-          tokenUsage: { numRequests: 1 },
-        })),
+        callApi: vi.fn().mockImplementation(async function () {
+          return {
+            output: 'agent response',
+            sessionId: 'test-session-123',
+            tokenUsage: { numRequests: 1 },
+          };
+        }),
       };
 
       const result = await simulatedUser.callApi('test prompt', {
@@ -221,11 +235,13 @@ describe('SimulatedUser', () => {
     it('should prioritize agentResponse.sessionId over context.vars.sessionId', async () => {
       const providerWithSessionId = {
         id: () => 'test-agent',
-        callApi: jest.fn().mockImplementation(async () => ({
-          output: 'agent response',
-          sessionId: 'response-session-priority',
-          tokenUsage: { numRequests: 1 },
-        })),
+        callApi: vi.fn().mockImplementation(async function () {
+          return {
+            output: 'agent response',
+            sessionId: 'response-session-priority',
+            tokenUsage: { numRequests: 1 },
+          };
+        }),
       };
 
       const result = await simulatedUser.callApi('test prompt', {
@@ -280,7 +296,7 @@ describe('SimulatedUser', () => {
 
       await simulatedUser.callApi('test prompt', testContext);
 
-      const callApiCalls = jest.mocked(originalProvider.callApi).mock.calls;
+      const callApiCalls = vi.mocked(originalProvider.callApi).mock.calls;
       expect(callApiCalls.length).toBeGreaterThan(0);
 
       const firstCall = callApiCalls[0];
@@ -293,18 +309,22 @@ describe('SimulatedUser', () => {
     it('should include system prompt on first turn only for stateful providers', async () => {
       const providerWithSessionId = {
         id: () => 'test-agent',
-        callApi: jest
+        callApi: vi
           .fn()
-          .mockImplementationOnce(async () => ({
-            output: 'first response',
-            sessionId: 'session-123',
-            tokenUsage: { numRequests: 1 },
-          }))
-          .mockImplementationOnce(async () => ({
-            output: 'second response',
-            sessionId: 'session-123',
-            tokenUsage: { numRequests: 1 },
-          })),
+          .mockImplementationOnce(async function () {
+            return {
+              output: 'first response',
+              sessionId: 'session-123',
+              tokenUsage: { numRequests: 1 },
+            };
+          })
+          .mockImplementationOnce(async function () {
+            return {
+              output: 'second response',
+              sessionId: 'session-123',
+              tokenUsage: { numRequests: 1 },
+            };
+          }),
       };
 
       const statefulUser = new SimulatedUser({
@@ -325,7 +345,7 @@ describe('SimulatedUser', () => {
 
       await statefulUser.callApi('test prompt', testContext);
 
-      const callApiCalls = jest.mocked(providerWithSessionId.callApi).mock.calls;
+      const callApiCalls = vi.mocked(providerWithSessionId.callApi).mock.calls;
       expect(callApiCalls.length).toBe(2);
 
       // First turn: should send system + user (no sessionId yet)
@@ -611,7 +631,7 @@ describe('SimulatedUser', () => {
       expect(originalProvider.callApi).toHaveBeenCalled();
 
       // The first call to the agent should include all 3 initial messages
-      const firstAgentCall = jest.mocked(originalProvider.callApi).mock.calls[0];
+      const firstAgentCall = vi.mocked(originalProvider.callApi).mock.calls[0];
       const firstAgentPrompt = JSON.parse(firstAgentCall[0] as string);
 
       // Should contain system prompt + all 3 initial messages
@@ -669,6 +689,397 @@ describe('SimulatedUser', () => {
       // Should proceed without initial messages when file fails to load
       expect(result.output).toBeDefined();
       expect(result.tokenUsage?.numRequests).toBe(2); // Standard 2 turns
+    });
+  });
+
+  describe('variable templating in initialMessages', () => {
+    it('should template variables in message content', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'I want to pay via {{payment_method}}' },
+        {
+          role: 'assistant' as const,
+          content: 'Okay, please provide your {{payment_method}} credentials',
+        },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          payment_method: 'credit card',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('I want to pay via credit card');
+      expect(result.output).toContain('Okay, please provide your credit card credentials');
+      expect(result.output).not.toContain('{{payment_method}}');
+    });
+
+    it('should template multiple variables in single message', async () => {
+      const initialMessages = [
+        {
+          role: 'user' as const,
+          content: 'I need a flight from {{origin}} to {{destination}} on {{date}}',
+        },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          origin: 'New York',
+          destination: 'Seattle',
+          date: 'March 15th',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('I need a flight from New York to Seattle on March 15th');
+      expect(result.output).not.toContain('{{origin}}');
+      expect(result.output).not.toContain('{{destination}}');
+      expect(result.output).not.toContain('{{date}}');
+    });
+
+    it('should template variables in role field', async () => {
+      const initialMessages = [
+        { role: '{{role_type}}', content: 'Hello there' },
+        { role: 'assistant' as const, content: 'Hi! How can I help?' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          role_type: 'user',
+          initialMessages: initialMessages as any,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Hello there');
+      expect(result.output).toContain('Hi! How can I help?');
+    });
+
+    it('should work with variables in config.initialMessages', async () => {
+      const configInitialMessages = [
+        { role: 'user' as const, content: 'My user ID is {{user_id}}' },
+        { role: 'assistant' as const, content: 'Thanks, {{user_id}} is registered' },
+      ];
+
+      const userWithTemplatedConfig = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          initialMessages: configInitialMessages,
+        },
+      });
+
+      const result = await userWithTemplatedConfig.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          user_id: 'user_12345',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('My user ID is user_12345');
+      expect(result.output).toContain('Thanks, user_12345 is registered');
+      expect(result.output).not.toContain('{{user_id}}');
+    });
+
+    it('should template variables from file-based initialMessages', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          city_origin: 'Boston',
+          city_destination: 'Miami',
+          initialMessages: 'file://./test/fixtures/initialMessagesWithVars.json',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('I want to fly from Boston to Miami');
+      expect(result.output).not.toContain('{{city_origin}}');
+      expect(result.output).not.toContain('{{city_destination}}');
+    });
+
+    it('should handle empty variable values', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Hello {{name}}' },
+        { role: 'assistant' as const, content: 'Hi there!' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          name: '', // Empty value
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Hello '); // Variable replaced with empty string
+    });
+
+    it('should work with Nunjucks expressions', async () => {
+      const initialMessages = [
+        {
+          role: 'user' as const,
+          content: 'Total cost: ${{ price | float * 1.1 | round(2) }}',
+        },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          price: '100',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Total cost: $110');
+    });
+
+    it('should template variables in file-based initialMessages with JSON', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          origin: 'NYC',
+          destination: 'LAX',
+          date: 'Dec 25',
+          initialMessages: 'file://./test/fixtures/vars-messages.json',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Origin: NYC');
+      expect(result.output).toContain('Destination: LAX');
+      expect(result.output).toContain('Date: Dec 25');
+      expect(result.output).not.toContain('{{origin}}');
+      expect(result.output).not.toContain('{{destination}}');
+      expect(result.output).not.toContain('{{date}}');
+    });
+
+    it('should handle invalid Nunjucks syntax gracefully', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Invalid template {% if broken %}' },
+        { role: 'assistant' as const, content: 'Valid response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Should fall back to original template on error
+      expect(result.output).toContain('Invalid template {% if broken %}');
+      expect(result.output).toContain('Valid response');
+    });
+
+    it('should handle undefined variables in templates', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Hello {{undefined_variable}}' },
+        { role: 'assistant' as const, content: 'Response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Nunjucks renders undefined variables as empty string by default
+      expect(result.output).toContain('Hello ');
+      expect(result.output).toContain('Response');
+    });
+
+    it('should handle template rendering errors in role field', async () => {
+      const initialMessages = [
+        { role: '{% invalid syntax %}' as any, content: 'Hello' },
+        { role: 'assistant' as const, content: 'Response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Invalid role should be logged and message skipped
+      // Only the valid assistant message should remain
+      expect(result.output).toContain('Response');
+      expect(result.output).not.toContain('Hello');
+    });
+
+    it('should handle template rendering errors in content field', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: '{% unclosed tag' },
+        { role: 'assistant' as const, content: 'Valid message' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Should fall back to original template
+      expect(result.output).toContain('{% unclosed tag');
+      expect(result.output).toContain('Valid message');
+    });
+
+    it('should handle complex Nunjucks errors gracefully', async () => {
+      const initialMessages = [
+        {
+          role: 'user' as const,
+          content: '{{ 1 / 0 }}',
+        },
+        { role: 'assistant' as const, content: 'Response' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Should continue with conversation even if template fails
+      expect(result.output).toContain('Response');
+    });
+  });
+
+  describe('error handling', () => {
+    it('should return error when agent provider returns error in main loop', async () => {
+      const errorProvider = {
+        id: () => 'error-agent',
+        callApi: vi.fn().mockResolvedValue({
+          error: 'Model not found: invalid-model',
+          output: undefined,
+        }),
+      };
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: errorProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('Model not found: invalid-model');
+      expect(result.tokenUsage).toBeDefined();
+    });
+
+    it('should return error when agent provider returns error with initial messages ending in user', async () => {
+      const errorProvider = {
+        id: () => 'error-agent',
+        callApi: vi.fn().mockResolvedValue({
+          error: 'API rate limit exceeded',
+          output: undefined,
+        }),
+      };
+
+      const initialMessages = [{ role: 'user' as const, content: 'Hello' }];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: errorProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('API rate limit exceeded');
+      expect(result.tokenUsage).toBeDefined();
+    });
+
+    it('should return error on first turn failure and not continue conversation', async () => {
+      const errorProvider = {
+        id: () => 'error-agent',
+        callApi: vi.fn().mockResolvedValue({
+          error: 'Connection timeout',
+          output: undefined,
+        }),
+      };
+
+      const userWithMultipleTurns = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 5,
+        },
+      });
+
+      const result = await userWithMultipleTurns.callApi('test prompt', {
+        originalProvider: errorProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('Connection timeout');
+      // Should only call once before returning error
+      expect(errorProvider.callApi).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return error on second turn when first succeeds but second fails', async () => {
+      const partialErrorProvider = {
+        id: () => 'partial-error-agent',
+        callApi: vi
+          .fn()
+          .mockResolvedValueOnce({
+            output: 'first response',
+            tokenUsage: { numRequests: 1 },
+          })
+          .mockResolvedValueOnce({
+            error: 'Rate limit exceeded',
+            output: undefined,
+          }),
+      };
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: partialErrorProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('Rate limit exceeded');
+      expect(partialErrorProvider.callApi).toHaveBeenCalledTimes(2);
     });
   });
 });

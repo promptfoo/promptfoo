@@ -12,7 +12,13 @@ interface CachedData {
 }
 
 function formatStarCount(count: number): string {
-  return count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count.toString();
+  if (count < 1000) {
+    return count.toString();
+  }
+
+  const formatted = (count / 1000).toFixed(1);
+  const trimmed = formatted.endsWith('.0') ? formatted.slice(0, -2) : formatted;
+  return `${trimmed}k`;
 }
 
 function getCachedStars(): string | null {
@@ -38,8 +44,8 @@ function setCachedStars(stars: string): void {
   }
 }
 
-export default function GitHubStars(): JSX.Element {
-  const [stars, setStars] = useState<string>(() => getCachedStars() || '8.6k');
+export default function GitHubStars(): React.ReactElement {
+  const [stars, setStars] = useState<string>(() => getCachedStars() || '9k');
 
   useEffect(() => {
     // Skip fetch if we have cached data

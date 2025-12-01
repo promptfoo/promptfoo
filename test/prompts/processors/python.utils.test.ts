@@ -1,4 +1,5 @@
 import { PythonShell } from 'python-shell';
+import { describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import {
   pythonPromptFunction,
@@ -6,11 +7,19 @@ import {
 } from '../../../src/prompts/processors/python';
 import { runPython } from '../../../src/python/pythonUtils';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
-jest.mock('fs');
-jest.mock('python-shell');
-jest.mock('../../../src/python/pythonUtils');
+vi.mock('fs');
+vi.mock('python-shell');
+vi.mock('../../../src/python/pythonUtils');
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+  },
+}));
 
 describe('pythonPromptFunction', () => {
   interface PythonContext {
@@ -26,11 +35,11 @@ describe('pythonPromptFunction', () => {
       provider: {
         id: () => 'providerId',
         label: 'providerLabel',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       } as ApiProvider,
     } as PythonContext;
 
-    const mockRunPython = jest.mocked(runPython);
+    const mockRunPython = vi.mocked(runPython);
     mockRunPython.mockResolvedValue('mocked result');
 
     await expect(pythonPromptFunction(filePath, functionName, context)).resolves.toBe(
@@ -54,8 +63,8 @@ describe('pythonPromptFunction', () => {
       vars: { key: 'value' },
       provider: { id: () => 'providerId', label: 'providerLabel' } as ApiProvider,
     } as PythonContext;
-    const mockPythonShellRun = jest.mocked(PythonShell.run);
-    const mockLoggerDebug = jest.mocked(logger.debug);
+    const mockPythonShellRun = vi.mocked(PythonShell.run);
+    const mockLoggerDebug = vi.mocked(logger.debug);
     mockPythonShellRun.mockImplementation(() => {
       return Promise.resolve(['mocked result']);
     });

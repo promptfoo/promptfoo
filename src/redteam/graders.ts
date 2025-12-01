@@ -14,7 +14,12 @@ import { CoppaGrader } from './plugins/compliance/coppa';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
+import { EcommerceComplianceBypassGrader } from './plugins/ecommerce/ecommerceComplianceBypass';
+import { EcommerceOrderFraudGrader } from './plugins/ecommerce/ecommerceOrderFraud';
+import { EcommercePciDssGrader } from './plugins/ecommerce/ecommercePciDss';
+import { EcommercePriceManipulationGrader } from './plugins/ecommerce/ecommercePriceManipulation';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
+import { FerpaGrader } from './plugins/compliance/ferpa';
 import { FinancialCalculationErrorPluginGrader } from './plugins/financial/financialCalculationError';
 import { FinancialComplianceViolationPluginGrader } from './plugins/financial/financialComplianceViolation';
 import { FinancialConfidentialDisclosurePluginGrader } from './plugins/financial/financialConfidentialDisclosure';
@@ -72,7 +77,7 @@ import { PharmacyDrugInteractionPluginGrader } from './plugins/pharmacy/drugInte
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
 import { PlinyGrader } from './plugins/pliny';
-import { PolicyViolationGrader } from './plugins/policy';
+import { PolicyViolationGrader } from './plugins/policy/index';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
@@ -109,7 +114,12 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
+  'promptfoo:redteam:ecommerce:compliance-bypass': new EcommerceComplianceBypassGrader(),
+  'promptfoo:redteam:ecommerce:order-fraud': new EcommerceOrderFraudGrader(),
+  'promptfoo:redteam:ecommerce:pci-dss': new EcommercePciDssGrader(),
+  'promptfoo:redteam:ecommerce:price-manipulation': new EcommercePriceManipulationGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:ferpa': new FerpaGrader(),
   'promptfoo:redteam:financial:calculation-error': new FinancialCalculationErrorPluginGrader(),
   'promptfoo:redteam:financial:compliance-violation':
     new FinancialComplianceViolationPluginGrader(),

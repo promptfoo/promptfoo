@@ -78,6 +78,24 @@ export class SimulatedUser implements ApiProvider {
   }
 
   /**
+   * Safely renders a Nunjucks template string, falling back to the original value on error.
+   */
+  private renderTemplate(template: unknown, vars: Record<string, any> | undefined): unknown {
+    if (typeof template !== 'string') {
+      return template;
+    }
+
+    try {
+      return getNunjucksEngine().renderString(template, vars || {});
+    } catch (err) {
+      logger.warn(
+        `[SimulatedUser] Failed to render template: ${template.substring(0, 100)}. Error: ${err instanceof Error ? err.message : err}`,
+      );
+      return template;
+    }
+  }
+
+  /**
    * Validates and filters an array of messages, logging warnings for invalid entries.
    */
   private validateMessages(messages: any[]): Message[] {
@@ -103,9 +121,9 @@ export class SimulatedUser implements ApiProvider {
       return [];
     }
 
-    // If it's already an array, validate and return it
+    // If it's already an array, return it (validation happens after templating)
     if (Array.isArray(initialMessages)) {
-      return this.validateMessages(initialMessages);
+      return initialMessages;
     }
 
     // If it's a string, handle different cases
@@ -119,7 +137,7 @@ export class SimulatedUser implements ApiProvider {
         try {
           const resolved = maybeLoadConfigFromExternalFile(initialMessages);
           if (Array.isArray(resolved)) {
-            return this.validateMessages(resolved);
+            return resolved;
           }
           logger.warn(
             `[SimulatedUser] Expected array of messages from file, got: ${typeof resolved}. Value: ${JSON.stringify(resolved).substring(0, 200)}`,
@@ -137,7 +155,7 @@ export class SimulatedUser implements ApiProvider {
         try {
           const parsed = JSON.parse(initialMessages);
           if (Array.isArray(parsed)) {
-            return this.validateMessages(parsed);
+            return parsed;
           }
           logger.warn(
             `[SimulatedUser] Parsed JSON but got ${typeof parsed} instead of array. Value: ${initialMessages.substring(0, 200)}`,
@@ -250,13 +268,19 @@ export class SimulatedUser implements ApiProvider {
     // vars.initialMessages takes precedence over config.initialMessages
     // Both can be arrays or file:// paths
     const varsInitialMessages = context?.vars?.initialMessages as Message[] | string | undefined;
-    const initialMessages = this.resolveInitialMessages(
+    const resolvedMessages = this.resolveInitialMessages(
       varsInitialMessages || this.configInitialMessages,
     );
-    const messages: Message[] = [...initialMessages];
 
-    if (initialMessages.length > 0) {
-      logger.debug(`[SimulatedUser] Starting with ${initialMessages.length} initial messages`);
+    // Template both role and content fields with context variables, then validate
+    const templatedMessages = resolvedMessages.map((msg) => ({
+      role: this.renderTemplate(msg.role, context?.vars),
+      content: this.renderTemplate(msg.content, context?.vars),
+    }));
+    const messages: Message[] = this.validateMessages(templatedMessages);
+
+    if (messages.length > 0) {
+      logger.debug(`[SimulatedUser] Starting with ${messages.length} initial messages`);
     }
 
     const maxTurns = this.maxTurns;
@@ -272,6 +296,15 @@ export class SimulatedUser implements ApiProvider {
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
       agentResponse = await this.sendMessageToAgent(messages, context.originalProvider, context);
+
+      // Check for errors from agent response
+      if (agentResponse.error) {
+        return {
+          error: agentResponse.error,
+          tokenUsage,
+        };
+      }
+
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
@@ -309,6 +342,14 @@ export class SimulatedUser implements ApiProvider {
         context.originalProvider,
         context,
       );
+
+      // Check for errors from agent response
+      if (agentResponse.error) {
+        return {
+          error: agentResponse.error,
+          tokenUsage,
+        };
+      }
 
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
 

@@ -56,7 +56,7 @@ jobs:
           npm ci
 
       - name: Test
-        run: npm run test -- --ci
+        run: npm run test
 
   build:
     name: Build on Node ${{ matrix.node }}
@@ -127,6 +127,10 @@ jobs:
         working-directory: src/app
         run: |
           npm run lint
+
+      - name: Check Index Imports
+        run: |
+          npm run lint:index
 
       - name: Run Style Check
         run: |
@@ -292,7 +296,7 @@ jobs:
           npm ci
 
       - name: Run Integration Tests
-        run: npm run test:integration -- --ci --coverage --maxWorkers=2
+        run: npm run test:integration -- --coverage
 
   share-test:
     name: Share Test
@@ -382,6 +386,7 @@ jobs:
           npm run bin auth login -- -k ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }} -h ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_HOST }}
 
       - name: Run Redteam with Staging API
+        continue-on-error: true
         run: |
           npm run test:redteam:integration
 

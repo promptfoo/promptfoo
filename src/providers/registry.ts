@@ -1,20 +1,23 @@
+import dedent from 'dedent';
 import path from 'path';
 
-import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
-import SimbaProvider from '../redteam/providers/simba';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
-import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
-import RedteamCustomProvider from '../redteam/providers/custom';
+import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo/index';
+import RedteamCustomProvider from '../redteam/providers/custom/index';
 import RedteamGoatProvider from '../redteam/providers/goat';
+import { HydraProvider as RedteamHydraProvider } from '../redteam/providers/hydra/index';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
+import SimbaProvider from '../redteam/providers/simba';
+import type { LoadApiProviderContext } from '../types/index';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -29,6 +32,7 @@ import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
+import { AwsBedrockConverseProvider } from './bedrock/converse';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -44,7 +48,7 @@ import { AIStudioChatProvider } from './google/ai.studio';
 import { GoogleImageProvider } from './google/image';
 import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
-import { GroqProvider } from './groq';
+import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
 import {
@@ -67,7 +71,6 @@ import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
-import { OpenAiAgentsProvider } from './openai/agents';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -101,9 +104,7 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
-
-import type { LoadApiProviderContext } from '../types/index';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+import { createXAIResponsesProvider } from './xai/responses';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -317,6 +318,11 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+
+      // Handle Converse API
+      if (modelType === 'converse') {
+        return new AwsBedrockConverseProvider(modelName, providerOptions);
+      }
 
       // Handle nova-sonic model
       if (modelType === 'nova-sonic' || modelType.includes('amazon.nova-sonic')) {
@@ -592,7 +598,26 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      // Handle groq:responses:<model> format for Responses API
+      if (providerPath.startsWith('groq:responses:')) {
+        const modelName = providerPath.slice('groq:responses:'.length);
+        if (!modelName) {
+          throw new Error(
+            `Invalid groq:responses provider path: "${providerPath}". ` +
+              'Use format groq:responses:<model> (e.g., groq:responses:llama-3.3-70b-versatile)',
+          );
+        }
+        return new GroqResponsesProvider(modelName, providerOptions);
+      }
+
+      // Handle groq:<model> format for Chat Completions API
+      const modelName = providerPath.slice('groq:'.length);
+      if (!modelName) {
+        throw new Error(
+          `Invalid groq provider path: "${providerPath}". ` +
+            'Use format groq:<model> (e.g., groq:llama-3.3-70b-versatile)',
+        );
+      }
       return new GroqProvider(modelName, providerOptions);
     },
   },
@@ -744,13 +769,21 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
       // Load OpenAI module
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
+      // Codex SDK providers (openai:codex-sdk or openai:codex)
+      if (modelType === 'codex-sdk' || modelType === 'codex') {
+        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
+        return new OpenAICodexSDKProvider({
+          ...providerOptions,
+          env: context.env,
+        });
+      }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
       }
@@ -772,6 +805,13 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'responses') {
         return new OpenAiResponsesProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
       }
+      if (modelType === 'transcription') {
+        const { OpenAiTranscriptionProvider } = await import('./openai/transcription');
+        return new OpenAiTranscriptionProvider(
+          modelName || 'gpt-4o-transcribe-diarize',
+          providerOptions,
+        );
+      }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);
       }
@@ -785,7 +825,12 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
+        const { OpenAiAgentsProvider } = await import('./openai/agents');
         return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+      }
+      if (modelType === 'chatkit') {
+        const { OpenAiChatKitProvider } = await import('./openai/chatkit');
+        return new OpenAiChatKitProvider(modelName || '', providerOptions);
       }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
@@ -795,7 +840,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>, openai:agents:<agent name>`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
@@ -1017,6 +1062,14 @@ export const providerMap: ProviderFactory[] = [
       // Handle xai:image:<model> format
       if (modelType === 'image') {
         return createXAIImageProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
+      // Handle xai:responses:<model> format for Agent Tools API
+      if (modelType === 'responses') {
+        return createXAIResponsesProvider(providerPath, {
           ...providerOptions,
           env: context.env,
         });
@@ -1274,6 +1327,16 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new RedteamIterativeMetaProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:hydra',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new RedteamHydraProvider(providerOptions.config);
     },
   },
   {

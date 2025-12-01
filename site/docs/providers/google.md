@@ -143,7 +143,7 @@ Compare different Gemini models:
 providers:
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
-  - google:gemini-1.5-flash
+  - google:gemini-2.5-flash
 
 prompts:
   - 'Explain {{concept}} in simple terms'
@@ -280,30 +280,31 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 
 ### Chat and Multimodal Models
 
-- `google:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
-- `google:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
-- `google:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
-- `google:gemini-2.5-flash-preview-09-2025` - Newest Gemini 2.5 Flash preview release featuring enhanced quality improvements
-- `google:gemini-2.5-flash-lite-preview-09-2025` - Latest Flash Lite preview release with further cost and latency optimizations
+- `google:gemini-3-pro-preview` - Gemini 3.0 Pro preview with advanced reasoning, multimodal understanding, and agentic capabilities
+- `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
+- `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
+- `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
+- `google:gemini-2.5-flash-preview-09-2025` - Gemini 2.5 Flash preview with quality improvements
+- `google:gemini-2.5-flash-lite-preview-09-2025` - Gemini 2.5 Flash Lite preview with cost and latency optimizations
 - `google:gemini-flash-latest` - Alias for `google:gemini-2.5-flash-preview-09-2025`
 - `google:gemini-flash-lite-latest` - Alias for `google:gemini-2.5-flash-lite-preview-09-2025`
-- `google:gemini-2.5-pro-preview-06-05` - Previous Gemini 2.5 Pro preview with enhanced reasoning, coding, and multimodal understanding
-- `google:gemini-2.5-pro-preview-05-06` - Previous Gemini 2.5 Pro preview with advanced thinking capabilities
+- `google:gemini-2.5-pro-preview-06-05` - Gemini 2.5 Pro preview (June 2025 release)
+- `google:gemini-2.5-pro-preview-05-06` - Gemini 2.5 Pro preview (May 2025 release)
 - `google:gemini-2.0-pro` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-exp` - Experimental multimodal model with next generation features
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-lite` - Cost-efficient version of 2.0 Flash with 1M token context
 - `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
-- `google:gemini-1.5-flash` - Fast and versatile multimodal model
-- `google:gemini-1.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
-- `google:gemini-1.5-pro` - Best performing model for complex reasoning tasks
+- `google:gemini-1.5-flash` - Gemini 1.5 Flash multimodal model
+- `google:gemini-1.5-flash-8b` - Small Gemini 1.5 model optimized for high-volume, lower complexity tasks
+- `google:gemini-1.5-pro` - Gemini 1.5 Pro model for complex reasoning tasks
 - `google:gemini-pro` - General purpose text and chat
 - `google:gemini-pro-vision` - Multimodal understanding (text + vision)
 
 ### Embedding Models
 
-- `google:embedding:text-embedding-004` - Latest text embedding model (Recommended)
-- `google:embedding:embedding-001` - Legacy embedding model
+- `google:embedding:text-embedding-004` - Google text embedding model
+- `google:embedding:embedding-001` - Google embedding model
 
 ### Image Generation Models
 
@@ -368,7 +369,7 @@ The provider supports various configuration options that can be used to customiz
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       temperature: 0.7 # Controls randomness (0.0 to 1.0)
       maxOutputTokens: 2048 # Maximum length of response
@@ -398,7 +399,7 @@ You can also specify a response schema for structured output:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       generationConfig:
         response_mime_type: application/json
@@ -471,7 +472,7 @@ providers:
       temperature: 0.7
 
   # For older Gemini versions - preserve 'assistant' role
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       useAssistantRole: true # Preserves 'assistant' role without mapping
       temperature: 0.7
@@ -481,9 +482,25 @@ For more details on capabilities and configuration options, see the [Gemini API 
 
 ## Model Examples
 
+### Gemini 3 Pro Preview
+
+Gemini 3.0 Pro with advanced reasoning and agentic capabilities:
+
+```yaml
+providers:
+  - id: google:gemini-3-pro-preview
+    config:
+      temperature: 0.7
+      maxOutputTokens: 4096
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: HIGH # Enhanced extended thinking for complex reasoning
+          # thinkingBudget: 4096 # Alternative: Use budget instead of level
+```
+
 ### Gemini 2.5 Pro
 
-Latest stable model for complex reasoning, coding, and multimodal understanding:
+Gemini 2.5 Pro model for complex reasoning, coding, and multimodal understanding:
 
 ```yaml
 providers:
@@ -500,7 +517,7 @@ providers:
 
 ### Gemini 2.5 Flash
 
-Latest stable Flash model with enhanced reasoning and thinking capabilities:
+Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities:
 
 ```yaml
 providers:
@@ -517,7 +534,7 @@ providers:
 
 ### Gemini 2.5 Flash-Lite
 
-Most cost-efficient and fastest 2.5 model for high-volume, latency-sensitive tasks:
+Cost-efficient and fast model for high-volume, latency-sensitive tasks:
 
 ```yaml
 providers:
@@ -604,7 +621,7 @@ Enable your model to interact with external systems through defined functions:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       tools:
         function_declarations:
@@ -635,7 +652,7 @@ You can constrain the model to output structured JSON responses in two ways:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       generationConfig:
         response_mime_type: 'application/json'
@@ -657,7 +674,7 @@ providers:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       # Can be inline schema or file path
       responseSchema: 'file://path/to/schema.json'

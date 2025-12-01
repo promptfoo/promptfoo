@@ -81,6 +81,7 @@ const config: Config = {
           showLastUpdateTime: true,
           exclude: [
             '**/CLAUDE.md', // Exclude Claude Code context files
+            '**/AGENTS.md', // Exclude AI agent instruction files
           ],
         },
         blog: {
@@ -94,13 +95,7 @@ const config: Config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        gtag:
-          process.env.NODE_ENV === 'development'
-            ? undefined
-            : {
-                trackingID: 'G-3TS8QLZQ93',
-                anonymizeIP: true,
-              },
+        // gtag disabled in preset - added as standalone plugin below for production only
       } satisfies Preset.Options,
     ],
   ],
@@ -120,95 +115,130 @@ const config: Config = {
       },
       items: [
         {
-          type: 'dropdown',
+          type: 'custom-navMenuCard',
           label: 'Products',
           position: 'left',
           items: [
             {
               to: '/red-teaming/',
               label: 'Red Teaming',
+              description: 'Proactively identify and fix vulnerabilities in your AI applications',
             },
             {
               to: '/guardrails/',
               label: 'Guardrails',
+              description: 'Real-time protection against jailbreaks and adversarial attacks',
             },
             {
               to: '/model-security/',
               label: 'Model Security',
+              description: 'Comprehensive security testing and monitoring for AI models',
             },
             {
               to: '/mcp/',
               label: 'MCP Proxy',
+              description: 'Secure proxy for Model Context Protocol communications',
+            },
+            {
+              to: '/code-scanning/',
+              label: 'Code Scanning',
+              description: 'Find LLM vulnerabilities in your IDE and CI/CD',
             },
             {
               to: '/docs/getting-started/',
               label: 'Evaluations',
+              description: 'Test and evaluate your prompts, models, and RAG pipelines',
             },
           ],
         },
+        /*
         {
-          type: 'dropdown',
+          type: 'custom-navMenuCard',
+          label: 'Solutions',
+          position: 'left',
+          items: [
+            {
+              to: '/solutions/',
+              label: 'Overview',
+              description: 'Comprehensive AI security solutions',
+            },
+            {
+              type: 'section-header',
+              label: 'By Role',
+            },
+            {
+              to: '/solutions/security-leaders/',
+              label: 'Security Leaders',
+              description: 'AI security governance and compliance',
+            },
+            {
+              to: '/solutions/developers/',
+              label: 'Developers',
+              description: 'Secure AI development tools',
+            },
+            {
+              to: '/solutions/ai-teams/',
+              label: 'AI Product Teams',
+              description: 'End-to-end AI security testing',
+            },
+            {
+              type: 'section-header',
+              label: 'By Industry',
+            },
+            {
+              to: '/solutions/healthcare/',
+              label: 'Healthcare',
+              description: 'HIPAA-compliant AI security',
+            },
+            {
+              to: '/solutions/finance/',
+              label: 'Finance',
+              description: 'Financial services AI protection',
+            },
+            {
+              to: '/solutions/insurance/',
+              label: 'Insurance',
+              description: 'Insurance industry AI security',
+            },
+          ],
+        },
+        */
+        {
+          type: 'custom-navMenuCard',
           label: 'Company',
           position: 'left',
           items: [
             {
               href: '/about/',
               label: 'About',
+              description: 'Learn about our mission and team',
             },
             {
               href: '/blog/',
               label: 'Blog',
-            },
-            {
-              to: '/docs/releases/',
-              label: 'Release Notes',
+              description: 'Latest insights on AI security and testing',
             },
             {
               href: '/press/',
               label: 'Press',
-            },
-            {
-              href: '/contact/',
-              label: 'Contact',
+              description: 'Media coverage and press releases',
             },
             {
               href: '/careers/',
               label: 'Careers',
+              description: 'Join our growing team',
             },
           ],
         },
-        {
-          type: 'dropdown',
-          label: 'Resources',
-          position: 'left',
-          items: [
-            {
-              href: '/docs/intro/',
-              label: 'Docs',
-            },
-            {
-              to: '/docs/api-reference/',
-              label: 'API Reference',
-            },
-            {
-              to: 'https://www.promptfoo.dev/models/',
-              label: 'Foundation Model Reports',
-            },
-            {
-              to: 'https://www.promptfoo.dev/lm-security-db/',
-              label: 'Language Model Security DB',
-            },
-            {
-              href: 'https://github.com/promptfoo/promptfoo',
-              label: 'GitHub',
-            },
-            {
-              href: 'https://discord.gg/promptfoo',
-              label: 'Discord',
-            },
-          ],
-        },
+        { to: '/docs/intro/', label: 'Docs', position: 'left' },
         { to: '/pricing/', label: 'Pricing', position: 'left' },
+        {
+          to: '/contact/',
+          position: 'right',
+          'aria-label': 'Book a Demo',
+          label: 'Book a Demo',
+          className: 'header-book-demo-link',
+        },
         {
           to: 'https://promptfoo.app',
           position: 'right',
@@ -259,13 +289,17 @@ const config: Config = {
             },
             {
               label: 'Status',
-              href: 'https://status.promptfoo.dev',
+              href: 'https://status.promptfoo.app/',
             },
           ],
         },
         {
           title: 'Resources',
           items: [
+            {
+              label: 'API Reference',
+              to: '/docs/api-reference/',
+            },
             {
               label: 'LLM Red Teaming',
               to: '/docs/red-team',
@@ -405,6 +439,18 @@ const config: Config = {
   plugins: [
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
+    // Only load gtag in production to avoid "window.gtag is not a function" errors in dev
+    ...(process.env.NODE_ENV === 'development'
+      ? []
+      : [
+          [
+            '@docusaurus/plugin-google-gtag',
+            {
+              trackingID: ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171'],
+              anonymizeIP: true,
+            },
+          ],
+        ]),
     [
       '@docusaurus/plugin-client-redirects',
       {

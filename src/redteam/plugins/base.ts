@@ -427,7 +427,7 @@ export abstract class RedteamGraderBase {
       prompt,
       entities: test.metadata?.entities ?? [],
       tools: provider?.config?.tools
-        ? maybeLoadToolsFromExternalFile(provider.config.tools)
+        ? await maybeLoadToolsFromExternalFile(provider.config.tools)
         : undefined,
       testVars: test.vars ?? {},
       // Spread all gradingContext properties to make them accessible in rubrics
@@ -443,7 +443,12 @@ export abstract class RedteamGraderBase {
       timestamp: new Date().toISOString(),
     };
     // Plugin-specific grading guidance takes priority over general rubric
-    const gradingGuidance = test.metadata?.pluginConfig?.gradingGuidance;
+    // Support both graderGuidance (preferred) and gradingGuidance (deprecated alias for backward compatibility)
+    // Note: gradingGuidance is intentionally omitted from the PluginConfig type to discourage new usage,
+    // but is still supported at runtime via type assertion to maintain backward compatibility
+    const gradingGuidance =
+      test.metadata?.pluginConfig?.graderGuidance ||
+      (test.metadata?.pluginConfig as any)?.gradingGuidance;
     let gradingGuidanceString = '';
     if (gradingGuidance) {
       gradingGuidanceString =

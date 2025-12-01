@@ -270,6 +270,12 @@ export default function Review({
 
     config.strategies.forEach((strategy) => {
       const id = getStrategyId(strategy);
+
+      // Skip 'basic' strategy if it has enabled: false
+      if (id === 'basic' && typeof strategy === 'object' && strategy.config?.enabled === false) {
+        return;
+      }
+
       const label = strategyDisplayNames[id as keyof typeof strategyDisplayNames] || id;
       summary.set(label, (summary.get(label) || 0) + 1);
     });
@@ -556,12 +562,29 @@ export default function Review({
                           ([_id, displayName]) => displayName === label,
                         )?.[0] || label;
 
-                      const newStrategies = config.strategies.filter((strategy) => {
-                        const id = getStrategyId(strategy);
-                        return id !== strategyId;
-                      });
-
-                      updateConfig('strategies', newStrategies);
+                      // Special handling for 'basic' strategy - set enabled: false instead of removing
+                      if (strategyId === 'basic') {
+                        const newStrategies = config.strategies.map((strategy) => {
+                          const id = getStrategyId(strategy);
+                          if (id === 'basic') {
+                            return {
+                              id: 'basic',
+                              config: {
+                                ...(typeof strategy === 'object' ? strategy.config : {}),
+                                enabled: false,
+                              },
+                            };
+                          }
+                          return strategy;
+                        });
+                        updateConfig('strategies', newStrategies);
+                      } else {
+                        const newStrategies = config.strategies.filter((strategy) => {
+                          const id = getStrategyId(strategy);
+                          return id !== strategyId;
+                        });
+                        updateConfig('strategies', newStrategies);
+                      }
                     }}
                   />
                 ))}

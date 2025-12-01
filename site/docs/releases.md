@@ -10,6 +10,113 @@ keywords: [Promptfoo releases, changelog, updates, features, monthly summaries]
 
 Full release history for Promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
 
+## October 2025 Release Highlights {#october-2025}
+
+This month we shipped **jailbreak:meta and Simba red team strategies**, **remediation reports**, and **Postman/cURL import for HTTP targets**.
+
+### Evals {#october-2025-evals}
+
+#### Providers {#october-2025-providers}
+
+##### New Providers
+
+- **[OpenAI Agents SDK](/docs/providers/openai/)** - Agents, tools, handoffs, and OTLP tracing
+- **[Claude Agent SDK](/docs/providers/anthropic/)** - Anthropic agent framework
+- **[Azure AI Foundry Agents](/docs/providers/azure/#azure-ai-foundry-agents)** - Azure AI agent framework
+- **[Ruby](/docs/providers/ruby/)** - Execute Ruby scripts as providers
+- **[Snowflake Cortex](/docs/providers/snowflake/)** - Snowflake LLM provider
+- **[Slack](/docs/providers/slack/)** - Test Slack bots
+
+##### New Model Support
+
+- **[Claude Haiku 4.5](/docs/providers/anthropic/)**
+
+##### Provider Updates
+
+- **[Python provider](/docs/providers/python/)** - Persistent worker pools for 10-100x performance improvement
+- **[WebSocket provider](/docs/providers/websocket/)** - Stream multiple responses
+- **[Ollama](/docs/providers/ollama/)** - Function calling and tool support
+
+#### UI & Developer Experience
+
+- **Chat Playground redesign** - New layout and response visualization
+- **Metric filtering with operators** - Filter eval results using `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, and `is_defined` operators
+- **Keyboard navigation** - Navigate eval results table with arrow keys and Enter
+- **Cached response latency** - Latency measurements preserved when responses are cached
+- **File-based logging** - Logs written to files instead of CLI streaming
+
+#### Export & Integration
+
+- **SARIF export** - Export vulnerability reports in SARIF format
+- **CSV exports** - Added Strategy ID, Plugin ID, and Session IDs to CSV exports
+
+#### Configuration
+
+- **[MCP server configuration](/docs/providers/mcp/)** - Model Context Protocol server setup
+
+#### Model Audit
+
+- **Revision tracking and deduplication** - Track HuggingFace Git SHAs and content hashes
+- **Batch existence checks** - Check if multiple models have already been scanned
+
+### Red Teaming {#october-2025-redteam}
+
+#### Remediation Reports
+
+[Remediation reports](/docs/red-team/) include:
+
+- **Executive summary** - Overview of scan findings
+- **Prioritized action items** - Recommendations ranked by severity and impact
+- **System prompt suggestions** - Suggested prompt improvements
+- **Guardrail recommendations** - Suggested guardrails
+
+Access from any vulnerability report by clicking "View Remediation Report".
+
+#### Red Team Strategies
+
+##### jailbreak:meta
+
+**[jailbreak:meta](/docs/red-team/strategies/meta/)** uses multiple AI agents to generate attacks. This single-shot strategy is up to 50% more effective than some multi-turn attacks.
+
+##### Simba
+
+**[Simba](/docs/red-team/strategies/simba/)** is a multi-turn attack strategy for agent systems:
+
+- **Reconnaissance phase** - Discovers target capabilities, then escalates attacks
+- **Goal-directed attacks** - Target specific objectives like accessing confidential information or achieving admin privileges
+- **Tool interaction** - Tests systems with multiple tools or external system access
+
+#### Scan Template Enhancements
+
+- **Probe and runtime estimates** - Display estimated probe count and runtime in scan templates
+- **Sample attack previews** - Preview generated test cases when selecting plugins
+
+#### HTTP Target Configuration
+
+- **Postman/cURL import** - Auto-populate target connection details from curl commands or Postman request/response files
+- **Connection testing** - Test HTTP connections and transforms in the setup UI
+- **Request transforms** - Request transforms have parity with response transforms
+
+#### Grading Guidance
+
+Plugin-specific grading rules:
+
+- **Plugin-level customization** - Add grading guidance for individual plugins
+- **Custom intent support** - Grading guidance for custom intent plugins
+- **Atomic saves** - Guidance and examples saved together
+
+#### New Plugins
+
+- **[Wordplay](/docs/red-team/plugins/wordplay/)** - Tests if systems can be tricked into generating profanity through wordplay like riddles and rhyming games
+- **[COPPA](/docs/red-team/plugins/coppa/)** - Tests if AI systems collect personal information from children without parental consent or age verification
+- **[GDPR preset](/docs/red-team/gdpr/)** - GDPR and data privacy compliance testing
+
+#### Other Strategies
+
+- **[Authoritative Markup Injection](/docs/red-team/strategies/authoritative-markup-injection/)** - Tests vulnerability to malicious instructions embedded in markup
+
+---
+
 ## September 2025 Release Highlights {#september-2025}
 
 This month we shipped **reusable custom policies**, **risk scoring**, **8 new AI providers**, and **comprehensive enterprise features** for security teams.

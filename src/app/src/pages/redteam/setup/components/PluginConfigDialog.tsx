@@ -344,9 +344,9 @@ export default function PluginConfigDialog({
             multiline
             rows={4}
             placeholder="e.g., For this financial app, discussing fund names is required and should pass."
-            value={localConfig.gradingGuidance || ''}
+            value={localConfig.graderGuidance || ''}
             onChange={(e) =>
-              setLocalConfig((prev) => ({ ...prev, gradingGuidance: e.target.value }))
+              setLocalConfig((prev) => ({ ...prev, graderGuidance: e.target.value }))
             }
           />
         </Box>
@@ -358,9 +358,9 @@ export default function PluginConfigDialog({
     if (plugin && localConfig) {
       const configToSave = { ...localConfig };
 
-      // Remove empty gradingGuidance
-      if (!configToSave.gradingGuidance || configToSave.gradingGuidance.trim() === '') {
-        delete configToSave.gradingGuidance;
+      // Remove empty graderGuidance
+      if (!configToSave.graderGuidance || configToSave.graderGuidance.trim() === '') {
+        delete configToSave.graderGuidance;
       }
 
       if (JSON.stringify(config) !== JSON.stringify(configToSave)) {

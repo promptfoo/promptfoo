@@ -1,5 +1,26 @@
 import type { MCPConfig } from '../mcp/types';
 
+/**
+ * Model Armor configuration for Vertex AI integration.
+ * Model Armor screens prompts and responses for safety, security, and compliance.
+ * @see https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
+ */
+export interface ModelArmorConfig {
+  /**
+   * Full resource path to the Model Armor template for screening prompts.
+   * Format: projects/{project}/locations/{location}/templates/{template_id}
+   * @example "projects/my-project/locations/us-central1/templates/strict-safety"
+   */
+  promptTemplate?: string;
+
+  /**
+   * Full resource path to the Model Armor template for screening responses.
+   * Format: projects/{project}/locations/{location}/templates/{template_id}
+   * @example "projects/my-project/locations/us-central1/templates/strict-safety"
+   */
+  responseTemplate?: string;
+}
+
 interface Blob {
   mimeType: string;
   data: string; // base64-encoded string
@@ -176,6 +197,7 @@ export interface CompletionOptions {
     // Thinking configuration
     thinkingConfig?: {
       thinkingBudget?: number;
+      thinkingLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
     };
   };
 
@@ -226,6 +248,13 @@ export interface CompletionOptions {
    * If false (default), maps 'assistant' to 'model' (for newer Gemini versions).
    */
   useAssistantRole?: boolean;
+
+  /**
+   * Model Armor configuration for screening prompts and responses.
+   * Only applicable for Vertex AI provider.
+   * @see https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
+   */
+  modelArmor?: ModelArmorConfig;
 }
 
 // Claude API interfaces

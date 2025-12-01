@@ -23,16 +23,20 @@ export default function DefaultTestVariables() {
   // Local state for the form
   const [variables, setVariables] = useState<Variable[]>([]);
   const isUpdatingFromLocal = useRef(false);
+  const idCounterRef = useRef(0);
 
   // Initialize local state from global config, but not when we're the source of the change
   useEffect(() => {
     if (!isUpdatingFromLocal.current) {
       const configVars = config.defaultTest?.vars || {};
-      const variableList = Object.entries(configVars).map(([name, value], index) => ({
-        id: `var-${Date.now()}-${index}`,
-        name,
-        value: String(value),
-      }));
+      const variableList = Object.entries(configVars).map(([name, value]) => {
+        const id = `var-${Date.now()}-${idCounterRef.current++}`;
+        return {
+          id,
+          name,
+          value: String(value),
+        };
+      });
       setVariables(variableList);
     }
     isUpdatingFromLocal.current = false;
@@ -75,7 +79,7 @@ export default function DefaultTestVariables() {
 
   const addVariable = () => {
     const newVariable: Variable = {
-      id: `var-${Date.now()}`,
+      id: `var-${Date.now()}-${idCounterRef.current++}`,
       name: 'newVar',
       value: '',
     };

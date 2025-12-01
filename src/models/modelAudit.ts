@@ -156,7 +156,7 @@ export default class ModelAudit {
       scannerVersion: params.scannerVersion || null,
     };
     const db = getDb();
-    await db.insert(modelAuditsTable).values(data).run();
+    db.insert(modelAuditsTable).values(data).run();
 
     logger.debug(`Created model audit ${id} for ${params.modelPath}`);
 
@@ -353,7 +353,7 @@ export default class ModelAudit {
     }
 
     const db = getDb();
-    await db.delete(modelAuditsTable).where(eq(modelAuditsTable.id, this.id)).run();
+    db.delete(modelAuditsTable).where(eq(modelAuditsTable.id, this.id)).run();
 
     this.persisted = false;
   }

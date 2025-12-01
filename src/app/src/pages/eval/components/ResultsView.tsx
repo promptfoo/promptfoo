@@ -15,8 +15,13 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
@@ -29,6 +34,7 @@ import Stack from '@mui/material/Stack';
 import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import invariant from '@promptfoo/util/invariant';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -42,6 +48,7 @@ import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
+import { useFilterMode } from './FilterModeProvider';
 import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
 import FiltersButton from './ResultsFilters/FiltersButton';
@@ -183,9 +190,9 @@ export default function ResultsView({
     highlightedResultsCount,
     filters,
     removeFilter,
-    filterMode,
-    setFilterMode,
   } = useTableStore();
+
+  const { filterMode, setFilterMode } = useFilterMode();
 
   const {
     setInComparisonMode,
@@ -341,6 +348,8 @@ export default function ResultsView({
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
   const [editNameDialogOpen, setEditNameDialogOpen] = React.useState(false);
   const [copyDialogOpen, setCopyDialogOpen] = React.useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const allColumns = React.useMemo(
     () => [
@@ -455,20 +464,81 @@ export default function ResultsView({
     [evalId, showToast],
   );
 
-  const handleDeleteEvalClick = async () => {
-    if (window.confirm('Are you sure you want to delete this evaluation?')) {
-      try {
-        const response = await callApi(`/eval/${evalId}`, {
-          method: 'DELETE',
-        });
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        navigate('/');
-      } catch (error) {
-        console.error('Failed to delete evaluation:', error);
-        alert('Failed to delete evaluation');
+  /**
+   * Determines the next eval to navigate to after deleting the current one
+   * @returns The eval ID to navigate to, or null to go home
+   */
+  const getNextEvalAfterDelete = (): string | null => {
+    if (!evalId || recentEvals.length === 0) {
+      return null;
+    }
+
+    const currentIndex = recentEvals.findIndex((e) => e.evalId === evalId);
+
+    // If current eval not in list or only one eval, go home
+    if (currentIndex === -1 || recentEvals.length === 1) {
+      return null;
+    }
+
+    // Try next eval first
+    if (currentIndex < recentEvals.length - 1) {
+      return recentEvals[currentIndex + 1].evalId;
+    }
+
+    // If this is the last eval, go to previous
+    if (currentIndex > 0) {
+      return recentEvals[currentIndex - 1].evalId;
+    }
+
+    return null;
+  };
+
+  const handleDeleteEvalClick = () => {
+    handleMenuClose();
+
+    if (!evalId) {
+      showToast('Cannot delete: Eval ID not found', 'error');
+      return;
+    }
+
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!evalId) {
+      return;
+    }
+
+    setIsDeleting(true);
+
+    try {
+      const response = await callApi(`/eval/${evalId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete eval');
       }
+
+      showToast('Eval deleted', 'success');
+
+      // Navigate to next eval or home
+      const nextEvalId = getNextEvalAfterDelete();
+      if (nextEvalId) {
+        onRecentEvalSelected(nextEvalId);
+      } else {
+        navigate('/', { replace: true });
+      }
+    } catch (error) {
+      console.error('Failed to delete eval:', error);
+      showToast(
+        `Failed to delete eval: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
     }
   };
 
@@ -727,7 +797,10 @@ export default function ResultsView({
                         const displayName =
                           displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
                           filter.value;
-                        label = `Plugin: ${displayName}`;
+                        label =
+                          filter.operator === 'not_equals'
+                            ? `Plugin != ${displayName}`
+                            : `Plugin: ${displayName}`;
                       } else if (filter.type === 'strategy') {
                         const displayName =
                           displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
@@ -743,9 +816,14 @@ export default function ResultsView({
                         // This should match the display format used in the dropdown
                         const policyName = filters.policyIdToNameMap?.[filter.value];
                         label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
-                      } else {
-                        // metadata type
-                        label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                      }
+                      // Metadata:
+                      else {
+                        if (filter.operator === 'exists') {
+                          label = `Metadata: ${filter.field}`;
+                        } else {
+                          label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                        }
                       }
 
                       return (
@@ -947,6 +1025,70 @@ export default function ResultsView({
         itemLabel="results"
       />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => !isDeleting && setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <DeleteIcon color="error" />
+          Delete eval?
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            This action cannot be undone.
+          </Alert>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            You are about to permanently delete:
+          </Typography>
+          <Box
+            sx={{
+              mt: 2,
+              p: 2,
+              bgcolor: 'action.hover',
+              borderRadius: 1,
+              border: 1,
+              borderColor: 'divider',
+            }}
+          >
+            <Typography variant="body1" fontWeight="medium" gutterBottom>
+              {config?.description || evalId || 'Unnamed eval'}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                {totalResultsCount.toLocaleString()} result{totalResultsCount !== 1 ? 's' : ''}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                •
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {head.prompts.length} prompt{head.prompts.length !== 1 ? 's' : ''}
+              </Typography>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            onClick={() => setDeleteDialogOpen(false)}
+            disabled={isDeleting}
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color="error"
+            variant="contained"
+            disabled={isDeleting}
+            startIcon={isDeleting ? <CircularProgress size={16} /> : <DeleteIcon />}
+          >
+            {isDeleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

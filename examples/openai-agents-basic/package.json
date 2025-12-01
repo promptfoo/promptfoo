@@ -2,14 +2,14 @@
   "name": "@promptfoo/openai-agents-basic-example",
   "version": "1.0.0",
   "private": true,
-  "description": "Basic example of using OpenAI Agents SDK with promptfoo",
+  "description": "D&D adventure game with OpenAI Agents SDK - dungeon master with dice rolling and character management",
   "type": "module",
   "scripts": {
     "eval": "promptfoo eval",
     "view": "promptfoo view"
   },
   "dependencies": {
-    "@openai/agents": "^0.1.11",
-    "zod": "^3.25.40"
+    "@openai/agents": "^0.3.3",
+    "zod": "^3.25.76"
   }
 }

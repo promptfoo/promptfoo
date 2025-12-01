@@ -178,13 +178,13 @@ function calculateStrategyRiskScore(
 }
 
 function scoreToLevel(score: number): RiskScore['level'] {
-  if (score >= 7.5) {
+  if (score >= 9.0) {
     return 'critical';
   }
-  if (score >= 5) {
+  if (score >= 7.0) {
     return 'high';
   }
-  if (score >= 2.5) {
+  if (score >= 4.0) {
     return 'medium';
   }
   return 'low';

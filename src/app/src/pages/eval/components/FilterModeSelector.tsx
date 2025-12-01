@@ -11,7 +11,7 @@ interface FilterModeSelectorProps {
   showDifferentOption?: boolean;
 }
 
-const BASE_OPTIONS = [
+const BASE_OPTIONS: { value: EvalResultsFilterMode; label: string }[] = [
   { value: 'all', label: 'Show all results' },
   { value: 'failures', label: 'Show failures only' },
   { value: 'passes', label: 'Show passes only' },
@@ -28,6 +28,7 @@ export const FilterModeSelector = ({
   const options = showDifferentOption
     ? BASE_OPTIONS
     : BASE_OPTIONS.filter((o) => o.value !== 'different');
+
   return (
     <FormControl sx={{ minWidth: 180 }} size="small">
       <InputLabel id="filter-mode-label">Display</InputLabel>

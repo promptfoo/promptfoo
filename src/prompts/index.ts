@@ -1,3 +1,4 @@
+import { stat } from 'fs/promises';
 import { globSync } from 'glob';
 import logger from '../logger';
 import { parsePathOrGlob } from '../util/index';
@@ -5,6 +6,7 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
 import { processCsvPrompts } from './processors/csv';
+import { processExecutableFile } from './processors/executable';
 import { processJsFile } from './processors/javascript';
 import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
@@ -27,6 +29,7 @@ import type {
 } from '../types/index';
 
 export * from './grading';
+export { DEFAULT_WEB_SEARCH_PROMPT } from './grading';
 
 /**
  * Reads and maps provider prompts based on the configuration and parsed prompts.
@@ -105,6 +108,13 @@ async function processPrompt(
     return [prompt as Prompt];
   }
 
+  // Handle exec: prefix for executable prompts
+  if (prompt.raw.startsWith('exec:')) {
+    const execSpec = prompt.raw.substring(5); // Remove 'exec:' prefix
+    const { filePath, functionName } = parsePathOrGlob(basePath, execSpec);
+    return await processExecutableFile(filePath, prompt, functionName);
+  }
+
   if (!maybeFilePath(prompt.raw)) {
     return processString(prompt);
   }
@@ -175,6 +185,23 @@ async function processPrompt(
   if (extension && ['.yml', '.yaml'].includes(extension)) {
     return processYamlFile(filePath, prompt);
   }
+  // Handle common executable extensions
+  if (
+    extension &&
+    ['.sh', '.bash', '.exe', '.bat', '.cmd', '.ps1', '.rb', '.pl'].includes(extension)
+  ) {
+    return await processExecutableFile(filePath, prompt, functionName);
+  }
+  // If no extension matched but file exists and is executable, treat it as an executable
+  try {
+    const stats = await stat(filePath);
+    if (stats.isFile() && (stats.mode & 0o111) !== 0) {
+      // File is executable
+      return await processExecutableFile(filePath, prompt, functionName);
+    }
+  } catch (_e) {
+    // File doesn't exist or can't be accessed, fall through
+  }
   return [];
 }
 
@@ -232,6 +259,7 @@ export async function processPrompts(
   ).flat();
 }
 
+// G-Eval prompts
 export const GEVAL_PROMPT_STEPS = `
 Given an evaluation criteria which outlines how you should judge some text, generate 3-4 concise evaluation steps for any text based on the criteria below.
 

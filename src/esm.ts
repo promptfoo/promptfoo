@@ -15,11 +15,9 @@ const { dynamicImport } = require('./dynamic-import.cjs') as {
 //import { fileURLToPath } from 'url';
 
 export function getDirectory(): string {
-  /*
-  // @ts-ignore: Jest chokes on this
-  const __filename = fileURLToPath(import.meta.url);
-  return path.dirname(__filename);
- */
+  // Note: import.meta.url approach is commented out due to CommonJS compatibility
+  // const __filename = fileURLToPath(import.meta.url);
+  // return path.dirname(__filename);
   return __dirname;
 }
 

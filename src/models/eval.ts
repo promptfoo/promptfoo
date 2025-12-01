@@ -19,7 +19,9 @@ import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
+import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -34,6 +36,7 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
+import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
@@ -43,15 +46,26 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageU
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
 
-import type { EvalResultsFilterMode } from '../types/index';
-import { calculateAttackSuccessRate } from '../redteam/metrics';
+import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
+/**
+ * Database query result type interfaces
+ * These types ensure type safety for raw SQL queries that don't use Drizzle's query builder
+ */
+
+/** Result from COUNT queries using db.get() - count may be null if query fails */
 interface FilteredCountRow {
   count: number | null;
 }
 
+/** Result from queries selecting test_idx column */
 interface TestIndexRow {
   test_idx: number;
+}
+
+/** Result from queries selecting distinct metadata or variable keys */
+interface MetadataKeyResult {
+  key: string;
 }
 
 /**
@@ -86,6 +100,19 @@ export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
+/** Result from queries extracting variable keys with eval IDs */
+export interface VarKeyWithEvalIdResult {
+  key: string;
+  eval_id: string;
+}
+
+/** Result from queries extracting variable keys */
+export interface VarKeyResult {
+  key: string;
+}
+
+const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
@@ -93,8 +120,7 @@ export class EvalQueries {
       `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
 FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string; eval_id: string }[] = await db.all(query);
+    const results = await db.all<VarKeyWithEvalIdResult>(query);
     const vars = results.reduce((acc: Record<string, string[]>, r) => {
       acc[r.eval_id] = acc[r.eval_id] || [];
       acc[r.eval_id].push(r.key);
@@ -109,8 +135,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
       `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
     FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string }[] = await db.all(query);
+    const results = await db.all<VarKeyResult>(query);
     const vars = results.map((r) => r.key);
 
     return vars;
@@ -119,7 +144,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
   static async setVars(evalId: string, vars: string[]) {
     const db = getDb();
     try {
-      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+      db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
     } catch (e) {
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
     }
@@ -129,10 +154,6 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
     evalId: string,
     comparisonEvalIds: string[] = [],
   ): Promise<string[]> {
-    interface MetadataKeyResult {
-      key: string;
-    }
-
     const db = getDb();
     try {
       // Combine primary eval ID with comparison eval IDs
@@ -151,12 +172,56 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
         ORDER BY j.key
         LIMIT 1000
       `;
-      const results: MetadataKeyResult[] = await db.all(query);
+      const results = await db.all<MetadataKeyResult>(query);
       return results.map((r) => r.key);
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
       logger.error(
         `Error fetching metadata keys for eval ${evalId} and comparisons [${comparisonEvalIds.join(', ')}]: ${error}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Queries all unique metadata values for a given metadata key.
+   * @param evalId - The ID of the eval to get the metadata values from.
+   * @param key - The key of the metadata to get the values from.
+   * @returns An array of unique metadata values.
+   */
+  static getMetadataValuesFromEval(evalId: string, key: string): string[] {
+    const db = getDb();
+    const trimmedKey = key.trim();
+    if (!trimmedKey) {
+      return [];
+    }
+
+    try {
+      const escapedKey = escapeJsonPathKey(trimmedKey);
+      const jsonPath = `$."${escapedKey}"`;
+
+      const query = sql`
+        SELECT DISTINCT
+          json_extract(${evalResultsTable.metadata}, ${jsonPath}) AS value
+        FROM ${evalResultsTable}
+        WHERE ${evalResultsTable.evalId} = ${evalId}
+          AND ${evalResultsTable.metadata} IS NOT NULL
+          AND ${evalResultsTable.metadata} != '{}'
+          AND json_valid(${evalResultsTable.metadata})
+          AND json_extract(${evalResultsTable.metadata}, ${jsonPath}) IS NOT NULL
+        ORDER BY value
+        LIMIT 1000
+      `;
+
+      const rows = db.all<{ value: string }>(query);
+      const values = rows
+        .map(({ value }) => String(value).trim())
+        .filter((value) => Boolean(value && value.length > 0));
+
+      return Array.from(new Set(values));
+    } catch (error) {
+      logger.error(
+        `Error fetching metadata values for eval ${evalId} and key ${trimmedKey}: ${error instanceof Error ? error.message : String(error)}`,
       );
       return [];
     }
@@ -446,7 +511,7 @@ export default class Eval {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
   }
 
@@ -504,18 +569,20 @@ export default class Eval {
   }
 
   /**
-   * Private helper method to build filter conditions and query for test indices
+   * CRITICAL: Builds the WHERE SQL clause for filtering results.
+   * This is the single source of truth for all filtering logic.
+   * Used by both queryTestIndices() (pagination) and getFilteredMetrics().
+   *
+   * Any changes to filter logic MUST be made here to ensure consistency
+   * between displayed rows and calculated metrics.
+   *
+   * @returns SQL WHERE clause string (without "WHERE" keyword)
    */
-  private async queryTestIndices(opts: {
-    offset?: number;
-    limit?: number;
+  private buildFilterWhereSql(opts: {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
-  }): Promise<{ testIndices: number[]; filteredCount: number }> {
-    const db = getDb();
-    const offset = opts.offset ?? 0;
-    const limit = opts.limit ?? 50;
+  }): string {
     const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
     // Build filter conditions
@@ -599,17 +666,24 @@ export default class Eval {
             // Use a single json_extract call with LENGTH(TRIM()) for better performance
             condition = `LENGTH(TRIM(COALESCE(json_extract(metadata, '$."${escapedField}"'), ''))) > 0`;
           }
-        } else if (type === 'plugin' && operator === 'equals') {
+        } else if (type === 'plugin') {
           const sanitizedValue = sanitizeValue(value);
-          // Is the value a category? e.g. `harmful` or `bias`
-          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
           const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
 
-          // Plugin ID is stored in metadata.pluginId
-          if (isCategory) {
-            condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
-          } else {
-            condition = `${pluginIdPath} = '${sanitizedValue}'`;
+          if (operator === 'equals') {
+            // Plugin ID is stored in metadata.pluginId
+            if (isCategory) {
+              condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
+            } else {
+              condition = `${pluginIdPath} = '${sanitizedValue}'`;
+            }
+          } else if (operator === 'not_equals') {
+            if (isCategory) {
+              condition = `(${pluginIdPath} IS NULL OR (${pluginIdPath} != '${sanitizedValue}' AND ${pluginIdPath} NOT LIKE '${sanitizedValue}:%'))`;
+            } else {
+              condition = `(${pluginIdPath} IS NULL OR ${pluginIdPath} != '${sanitizedValue}')`;
+            }
           }
         } else if (type === 'strategy' && operator === 'equals') {
           const sanitizedValue = sanitizeValue(value);
@@ -694,7 +768,29 @@ export default class Eval {
       conditions.push(`(${searchConditions.join(' OR ')})`);
     }
 
-    const whereSql = conditions.join(' AND ');
+    return conditions.join(' AND ');
+  }
+
+  /**
+   * Private helper method to build filter conditions and query for test indices
+   */
+  private async queryTestIndices(opts: {
+    offset?: number;
+    limit?: number;
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<{ testIndices: number[]; filteredCount: number }> {
+    const db = getDb();
+    const offset = opts.offset ?? 0;
+    const limit = opts.limit ?? 50;
+
+    // CRITICAL: Use single source of truth for WHERE clause
+    const whereSql = this.buildFilterWhereSql({
+      filterMode: opts.filterMode,
+      searchQuery: opts.searchQuery,
+      filters: opts.filters,
+    });
 
     // Get filtered count
     const filteredCountQuery = sql.raw(
@@ -719,6 +815,31 @@ export default class Eval {
     const testIndices = rows.map((row) => row.test_idx);
 
     return { testIndices, filteredCount };
+  }
+
+  /**
+   * CRITICAL: Calculates metrics for filtered results.
+   * Uses the SAME WHERE clause as queryTestIndices() to ensure consistency.
+   *
+   * This method is called from the API route when filters are active to provide
+   * metrics that accurately reflect the filtered dataset.
+   *
+   * @returns Array of PromptMetrics, one per prompt
+   */
+  async getFilteredMetrics(opts: {
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<import('../types').PromptMetrics[]> {
+    // CRITICAL: Use the SAME WHERE clause as queryTestIndices
+    const whereSql = this.buildFilterWhereSql(opts);
+
+    return calculateFilteredMetrics({
+      evalId: this.id,
+      numPrompts: this.prompts.length,
+      whereSql,
+      whereParams: [], // SQLite uses string interpolation in this codebase
+    });
   }
 
   async getTablePage(opts: {
@@ -830,7 +951,7 @@ export default class Eval {
     this.prompts = prompts;
     if (this.persisted) {
       const db = getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
     }
   }
 
@@ -916,7 +1037,53 @@ export default class Eval {
     };
   }
 
+  async getTraces(): Promise<TraceData[]> {
+    try {
+      const traceStore = getTraceStore();
+      const tracesData = await traceStore.getTracesByEvaluation(this.id);
+
+      // Transform trace data to match the expected schema
+      return tracesData.map((trace: TraceData) => ({
+        traceId: trace.traceId,
+        evaluationId: trace.evaluationId,
+        testCaseId: trace.testCaseId,
+        metadata: trace.metadata,
+        spans: (trace.spans || []).map((span: any) => {
+          // Calculate duration
+          const durationMs =
+            span.endTime && span.startTime ? (span.endTime - span.startTime) / 1000000 : undefined;
+
+          // Map status code
+          const statusCode =
+            span.statusCode === 1 ? 'ok' : span.statusCode === 2 ? 'error' : 'unset';
+
+          return {
+            spanId: span.spanId,
+            parentSpanId: span.parentSpanId,
+            name: span.name,
+            kind: span.kind || 'unspecified',
+            startTime: span.startTime,
+            endTime: span.endTime,
+            durationMs,
+            attributes: span.attributes || {},
+            status: {
+              code: statusCode,
+              message: span.statusMessage,
+            },
+            depth: 0, // Will be calculated on the server side when storing
+            events: span.events || [],
+          };
+        }),
+      }));
+    } catch (error) {
+      logger.debug(`Failed to fetch traces for eval ${this.id}: ${error}`);
+      return [];
+    }
+  }
+
   async toResultsFile(): Promise<ResultsFile> {
+    const traces = await this.getTraces();
+
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
@@ -925,6 +1092,7 @@ export default class Eval {
       author: this.author || null,
       prompts: this.getPrompts(),
       datasetId: this.datasetId || null,
+      ...(traces.length > 0 && { traces }),
     };
 
     return results;

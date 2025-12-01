@@ -15,7 +15,7 @@ import type {
   Prompt,
   RedteamFileConfig,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -272,6 +272,7 @@ export async function runRedteamConversation({
       },
       filters,
       targetProvider,
+      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     const iterationStart = Date.now();

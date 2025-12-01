@@ -1,14 +1,15 @@
-# openai-agents-basic (Interactive Text Adventure with AI Dungeon Master)
+# openai-agents-basic (D&D Adventure with AI Dungeon Master)
 
-This example demonstrates how to use the OpenAI Agents SDK with promptfoo to create an interactive text adventure game powered by an AI Dungeon Master.
+This example demonstrates how to use the OpenAI Agents SDK with promptfoo to create an interactive D&D adventure game powered by an AI Dungeon Master.
 
 ## What This Example Shows
 
-- **Multi-turn Adventures**: Agent manages ongoing narrative across multiple turns
-- **Multiple Tools**: Agent uses `roll_dice`, `check_inventory`, and `describe_scene` tools
-- **Dynamic Storytelling**: Agent responds creatively to player actions
+- **Multi-turn D&D Adventures**: Agent manages ongoing campaigns across multiple turns
+- **Rich Tool Usage**: Agent uses `roll_dice`, `check_inventory`, `describe_scene`, and `check_character_stats` tools
+- **D&D 5e Mechanics**: Proper attack rolls, saving throws, ability checks, and combat
+- **Dynamic Storytelling**: Agent responds creatively to player actions with atmospheric narration
 - **File-based Configuration**: Agent and tools organized in separate TypeScript files
-- **Comprehensive Testing**: Test cases verify narrative quality, tool usage, and edge cases
+- **Comprehensive Testing**: Test cases verify narrative quality, dice mechanics, and edge cases
 
 ## Prerequisites
 
@@ -67,12 +68,12 @@ Modify `promptfooconfig.yaml` to add your own scenarios:
 
 ```yaml
 tests:
-  - description: Custom adventure scenario
+  - description: Negotiate with the dragon
     vars:
-      query: 'I investigate the mysterious glowing runes'
+      query: 'I try to convince the dragon to let us pass peacefully'
     assert:
       - type: llm-rubric
-        value: Response describes runes and presents meaningful choices
+        value: Response involves charisma check and dragon's reaction based on roll
 ```
 
 ## Project Structure
@@ -80,136 +81,158 @@ tests:
 ```
 openai-agents-basic/
 ├── agents/
-│   └── weather-agent.ts      # Dungeon Master agent definition
+│   └── dungeon-master-agent.ts    # D&D Dungeon Master agent
 ├── tools/
-│   └── weather-tools.ts      # Game mechanic tools (dice, inventory, scenes)
-├── promptfooconfig.yaml      # Test scenarios
+│   └── game-tools.ts              # D&D game mechanics (dice, inventory, stats, scenes)
+├── promptfooconfig.yaml           # Test scenarios
 ├── package.json
 └── README.md
 ```
 
 ## How It Works
 
-### Dungeon Master Agent (`agents/weather-agent.ts`)
+### Dungeon Master Agent (`agents/dungeon-master-agent.ts`)
 
-The DM agent orchestrates the adventure:
+The DM agent orchestrates D&D adventures using proper game mechanics:
 
 ```typescript
 export default new Agent({
   name: 'Dungeon Master',
-  instructions: `You are an enthusiastic Dungeon Master...
-  - Use roll_dice for combat and skill checks
-  - Use check_inventory to see what items players have
-  - Use describe_scene to paint vivid pictures
-  - Be creative and keep the adventure engaging`,
+  instructions: `You are an enthusiastic Dungeon Master running an epic fantasy D&D adventure.
+
+  Your role:
+  - Guide players through thrilling quests, combat encounters, and mysteries
+  - Use roll_dice for attack rolls, saving throws, ability checks, and damage (D&D 5e rules)
+  - Use check_inventory to see what items, equipment, and gold players have
+  - Use check_character_stats to view player abilities, HP, AC, and level
+  - Use describe_scene to paint vivid, atmospheric pictures of locations`,
   model: 'gpt-4o-mini',
-  tools: dmTools,
+  tools: gameTools,
 });
 ```
 
-### Game Tools (`tools/weather-tools.ts`)
+### Game Tools (`tools/game-tools.ts`)
 
-Three core tools power the game mechanics:
+Four core tools power the D&D mechanics:
 
-**1. roll_dice** - Simulates dice rolls for combat and skill checks:
+**1. roll_dice** - Simulates D&D dice rolls with modifiers and critical hit detection:
 
 ```typescript
 export const rollDice = tool({
   name: 'roll_dice',
-  description: 'Roll dice for combat, skill checks, and other game mechanics',
+  description: 'Roll dice for D&D mechanics: attack rolls, damage, saving throws, ability checks',
   parameters: z.object({
-    sides: z.number().describe('Number of sides (e.g., 6 for d6, 20 for d20)'),
-    count: z.number().default(1).describe('Number of dice to roll'),
+    sides: z.number(),
+    count: z.number().default(1),
+    modifier: z.number().default(0),
+    purpose: z.string().default(''),
   }),
-  execute: async ({ sides, count }) => {
-    // Returns rolls array and total
+  execute: async ({ sides, count, modifier, purpose }) => {
+    // Returns rolls, total, notation, and detects natural 20/1 for crits
   },
 });
 ```
 
-**2. check_inventory** - Manages player items and resources:
+**2. check_inventory** - Manages equipped weapons, armor, and carried items:
 
 ```typescript
 export const checkInventory = tool({
   name: 'check_inventory',
-  description: 'Check what items the player has',
+  description: 'Check what items, equipment, and gold the player character has',
   parameters: z.object({
-    playerId: z.string(),
+    playerId: z.string().default('player1'),
   }),
   execute: async ({ playerId }) => {
-    // Returns items, gold, and equipment
+    // Returns equipped weapon, armor, inventory items, and currency
   },
 });
 ```
 
-**3. describe_scene** - Generates atmospheric descriptions:
+**3. describe_scene** - Generates atmospheric D&D location descriptions:
 
 ```typescript
 export const describeScene = tool({
   name: 'describe_scene',
-  description: 'Generate detailed descriptions of locations',
+  description: 'Generate vivid descriptions of D&D locations, encounters, and environments',
   parameters: z.object({
-    location: z.string().describe('Type of location (dungeon, forest, tavern)'),
-    mood: z.string().describe('Atmosphere (ominous, peaceful, exciting)'),
+    location: z.string(),
+    mood: z.string(),
   }),
   execute: async ({ location, mood }) => {
-    // Returns vivid scene description
+    // Returns immersive scene description with possible actions
+  },
+});
+```
+
+**4. check_character_stats** - Displays full D&D 5e character sheet:
+
+```typescript
+export const checkCharacterStats = tool({
+  name: 'check_character_stats',
+  description: 'View player character stats, abilities, HP, AC, and other D&D 5e attributes',
+  parameters: z.object({
+    playerId: z.string().default('player1'),
+  }),
+  execute: async ({ playerId }) => {
+    // Returns complete character: ability scores, HP, AC, skills, features
   },
 });
 ```
 
 ### Test Scenarios (`promptfooconfig.yaml`)
 
-The config includes engaging test cases:
+The config includes engaging D&D test cases:
 
 ```yaml
 tests:
-  - description: Dragon combat encounter
+  - description: Dragon combat with attack roll
     vars:
-      query: 'I draw my sword and charge at the dragon!'
+      query: 'I draw my longsword and attack the red dragon!'
     assert:
       - type: llm-rubric
-        value: Response includes dice roll and describes combat outcome
+        value: Response includes dice rolls for attack and damage, describes combat outcome
 
-  - description: Attempt ridiculous action
+  - description: Ridiculous player action
     vars:
-      query: 'I try to befriend the chest by singing to it'
+      query: 'I attempt to seduce the ancient dragon using interpretive dance'
     assert:
       - type: llm-rubric
-        value: DM responds with humor while keeping adventure engaging
+        value: DM responds with humor and wit while keeping the game engaging
 ```
 
 ## Customizing Your Adventure
 
 ### Add New Tools
 
-Extend the game with new mechanics:
+Extend the game with new D&D mechanics:
 
 ```typescript
 export const castSpell = tool({
   name: 'cast_spell',
-  description: 'Cast a magical spell',
+  description: 'Cast a D&D spell',
   parameters: z.object({
     spell: z.string(),
     target: z.string(),
+    spellLevel: z.number(),
   }),
-  execute: async ({ spell, target }) => {
-    // Spell implementation
+  execute: async ({ spell, target, spellLevel }) => {
+    // Spell implementation with saving throws
   },
 });
 
-export default [rollDice, checkInventory, describeScene, castSpell];
+export default [rollDice, checkInventory, describeScene, checkCharacterStats, castSpell];
 ```
 
 ### Customize the Dungeon Master
 
-Modify `agents/weather-agent.ts` to change DM personality:
+Modify `agents/dungeon-master-agent.ts` to change DM personality:
 
 ```typescript
-instructions: `You are a dramatic Dungeon Master inspired by high fantasy epics.
-- Describe everything with cinematic flair
-- Include plot twists and unexpected turns
-- Reference classic fantasy tropes with a twist`,
+instructions: `You are a dramatic Dungeon Master inspired by classic fantasy epics.
+- Describe everything with cinematic flair and dramatic tension
+- Include plot twists and moral dilemmas
+- Reference classic D&D adventures with unique twists
+- Make combat visceral and choices consequential`,
 ```
 
 ### Create Adventure Scenarios
@@ -217,78 +240,104 @@ instructions: `You are a dramatic Dungeon Master inspired by high fantasy epics.
 Add complex multi-step scenarios:
 
 ```yaml
-- description: Multi-step dungeon puzzle
+- description: Multi-step puzzle challenge
   vars:
     query: 'I examine the ancient mechanism blocking the door'
   assert:
     - type: llm-rubric
-      value: Response describes puzzle clearly and hints at solution
+      value: Response describes puzzle mechanics clearly with hints toward solution
     - type: javascript
-      value: output.length > 100 # Ensures detailed description
+      value: output.length > 150 # Ensures detailed description
 ```
 
 ## Tracing and Debugging
 
-Tracing is enabled to monitor agent decisions:
+Tracing is enabled in the configuration to capture agent execution details:
 
 ```yaml
 config:
-  tracing: true # Exports to http://localhost:4318
+  tracing: true # Attempts to export traces via OTLP to http://localhost:4318
 ```
 
-View traces to see:
+The agent will attempt to export OpenTelemetry traces showing:
 
-- Which tools the DM used
-- Dice roll results
-- Decision-making flow
-- Token usage per turn
+- Which tools the DM used (roll_dice, check_inventory, etc.)
+- Dice roll results (including natural 20s and 1s)
+- Decision-making flow across multiple turns
+- Token usage per interaction
 
-Compatible with Jaeger, Zipkin, or Grafana Tempo.
+### Viewing Traces
+
+To view traces, you'll need an OTLP-compatible collector running on `http://localhost:4318`. Popular options:
+
+**Quick Setup with Jaeger:**
+
+```bash
+docker run -d --name jaeger \
+  -p 16686:16686 \
+  -p 4318:4318 \
+  jaegertracing/all-in-one:latest
+```
+
+Then visit `http://localhost:16686` to view traces.
+
+**Note:** If no trace collector is running, the agent will log warnings but continue working normally. Tracing failures don't affect evaluation results.
 
 ## Example Interactions
 
 **Combat Scenario:**
 
 ```
-Player: "I attack the goblin with my rusty sword!"
-DM: *rolls 1d20* You rolled a 16! Your blade strikes true,
-    dealing *rolls 1d6* 4 damage. The goblin staggers back...
+Player: "I attack the goblin with my longsword!"
+DM: *rolls 1d20+5* You rolled a 18 total! Your blade strikes true.
+    *rolls 1d8+4* You deal 9 slashing damage. The goblin staggers back,
+    clutching its wounded side...
 ```
 
-**Inventory Check:**
+**Natural 20:**
 
 ```
-Player: "What do I have?"
-DM: You rummage through your pack:
-    - Rusty Sword (1d6 damage)
-    - Health Potion (3 uses, restores 2d4+2 HP)
-    - Mysterious Map
-    - Torch (5 uses)
-    You also have 47 gold pieces.
+Player: "I attack the dragon!"
+DM: *rolls 1d20+5* Natural 20! Critical hit! Your longsword finds a gap
+    in the dragon's scales. *rolls 2d8+4* You deal a devastating 16 damage!
+```
+
+**Character Stats Check:**
+
+```
+Player: "What are my current stats?"
+DM: You're Thorin Ironforge, a Level 5 Mountain Dwarf Fighter:
+    - HP: 42/47
+    - AC: 18 (Chain Mail)
+    - STR: 16 (+3), DEX: 12 (+1), CON: 16 (+3)
+    - Special: Second Wind, Action Surge, Darkvision
 ```
 
 **Scene Description:**
 
 ```
-Player: "I enter the dungeon"
-DM: *describes ominous dungeon scene* The stone corridor stretches
-    into darkness. Water drips from the ceiling, and the air smells
-    of decay. You hear distant echoes of something moving in the shadows.
+Player: "I enter the ancient crypt"
+DM: *describes ominous crypt* Rows of stone sarcophagi line the walls,
+    some with their lids askew. The air is thick and stale. Strange scratch
+    marks mar the inside of several coffins. Your torch reveals fresh
+    footprints in the dust - heading deeper into the crypt.
 
     What do you do?
 ```
 
 ## Next Steps
 
-- Add more tools: casting spells, crafting items, trading
-- Implement persistent inventory across sessions
-- Create branching storylines with handoffs to specialized agents
-- Integrate with image generation for scene visualization
-- Add multiplayer support with team-based adventures
-- Connect to real game databases for persistent worlds
+- Add spell casting tools for wizard/cleric characters
+- Implement rest mechanics (short rest, long rest)
+- Create branching storylines with NPC handoffs
+- Add encounter builders for balanced combat
+- Integrate with D&D Beyond API for real character data
+- Support multiplayer with party-based adventures
+- Add condition tracking (poisoned, frightened, etc.)
 
 ## Learn More
 
 - [OpenAI Agents SDK Documentation](https://github.com/openai/openai-agents-js)
 - [Promptfoo Documentation](https://promptfoo.dev)
 - [Promptfoo OpenAI Agents Provider](https://promptfoo.dev/docs/providers/openai-agents)
+- [D&D 5e System Reference](https://www.dndbeyond.com/sources/basic-rules)

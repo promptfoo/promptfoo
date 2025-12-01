@@ -22,6 +22,7 @@ import type {
   EvaluateTestSuiteWithEvaluateOptions,
   GradingResult,
   Job,
+  PromptMetrics,
   ResultsFile,
 } from '../../index';
 
@@ -311,14 +312,56 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     return;
   }
 
+  // Calculate filtered metrics when filters are active
+  let filteredMetrics: PromptMetrics[] | null = null;
+  const hasActiveFilters = filterMode !== 'all' || searchText !== '' || filters.length > 0;
+
+  if (hasActiveFilters) {
+    try {
+      filteredMetrics = await eval_.getFilteredMetrics({
+        filterMode,
+        searchQuery: searchText,
+        filters: filters as string[],
+      });
+      logger.debug('[GET /:id/table] Calculated filtered metrics', {
+        evalId: id,
+        filterMode,
+        numPrompts: filteredMetrics.length,
+      });
+
+      // Validate that filteredMetrics array length matches prompts array length
+      // Note: Use table.head.prompts (base eval) not returnTable.head.prompts (includes comparison evals)
+      const expectedLength = table.head.prompts.length;
+      if (filteredMetrics.length !== expectedLength) {
+        logger.error(
+          '[GET /:id/table] Filtered metrics array length mismatch - setting to null to prevent frontend errors',
+          {
+            evalId: id,
+            expectedLength,
+            actualLength: filteredMetrics.length,
+            filterMode,
+            searchText,
+            filtersCount: filters.length,
+          },
+        );
+        filteredMetrics = null;
+      }
+    } catch (error) {
+      logger.error('[GET /:id/table] Failed to calculate filtered metrics', { error, evalId: id });
+      // Don't fail the request, just return null for filteredMetrics
+    }
+  }
+
   // Default response for table view
   res.json({
     table: returnTable,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
+    filteredMetrics,
     config: eval_.config,
     author: eval_.author || null,
     version: eval_.version(),
+    id,
   } as EvalTableDTO);
 });
 
@@ -362,6 +405,34 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
       `Error fetching metadata keys for eval ${id}: ${error instanceof Error ? error.message : String(error)}`,
     );
     res.status(500).json({ error: 'Failed to fetch metadata keys' });
+  }
+});
+
+evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = ApiSchemas.Eval.MetadataValues.Params.parse(req.params);
+    const { key } = ApiSchemas.Eval.MetadataValues.Query.parse(req.query);
+
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    const values = EvalQueries.getMetadataValuesFromEval(id, key);
+    const response = ApiSchemas.Eval.MetadataValues.Response.parse({ values });
+    res.json(response);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+      return;
+    }
+
+    const { id } = req.params;
+    logger.error(
+      `Error fetching metadata values for eval ${id}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    res.status(500).json({ error: 'Failed to fetch metadata values' });
   }
 });
 
@@ -584,7 +655,17 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
   try {
     await deleteEval(id);
     res.json({ message: 'Eval deleted successfully' });
-  } catch {
+  } catch (error) {
+    logger.error('[DELETE /eval/:id] Failed to delete eval', {
+      evalId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    if (error instanceof Error && error.message === `Eval with ID ${id} not found`) {
+      res.status(404).json({ error: 'Evaluation not found' });
+      return;
+    }
+
     res.status(500).json({ error: 'Failed to delete eval' });
   }
 });

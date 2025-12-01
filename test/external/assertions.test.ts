@@ -1,3 +1,4 @@
+import { vi, describe, it, expect } from 'vitest';
 import { handleConversationRelevance } from '../../src/external/assertions/deepeval';
 import type { AssertionParams, AtomicTestCase, ApiProvider } from '../../src/types/index';
 
@@ -15,12 +16,15 @@ const createMockProvider = (output: string, reason?: string): ApiProvider => ({
 });
 
 // Mock getAndCheckProvider
-jest.mock('../../src/matchers', () => ({
-  ...jest.requireActual('../../src/matchers'),
-  getAndCheckProvider: jest.fn().mockImplementation((type, provider) => {
-    return provider;
-  }),
-}));
+vi.mock('../../src/matchers', async () => {
+  const actual = await vi.importActual('../../src/matchers');
+  return {
+    ...actual,
+    getAndCheckProvider: vi.fn().mockImplementation((_type, provider) => {
+      return provider;
+    }),
+  };
+});
 
 const defaultParams = {
   baseType: 'conversation-relevance' as const,
