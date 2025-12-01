@@ -79,6 +79,8 @@ npm run local -- eval -c config.yaml --no-cache
 
 **View results in web UI:** First check if a server is already running on port 3000, then ask the user before starting. Use `npm run dev` to start server + frontend on localhost:3000.
 
+**Cache:** Located at `~/.cache/promptfoo`. **NEVER delete or clear the cache without explicit permission.** Use `--no-cache` flag instead.
+
 **Database:** Located at `~/.promptfoo/promptfoo.db` (SQLite). You may read from it but **NEVER delete it**.
 
 ## Git Safety (CRITICAL)
