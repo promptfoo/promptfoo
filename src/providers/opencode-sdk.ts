@@ -446,6 +446,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
   ): string {
     const keyData = {
       prompt,
+      provider_id: config.provider_id,
+      model: config.model,
       tools: this.buildToolsConfig(config),
       permission: config.permission,
       agent: config.agent,
