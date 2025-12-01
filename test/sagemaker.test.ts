@@ -121,10 +121,10 @@ const MockSageMakerRuntimeClient = vi.hoisted(
 const MockInvokeEndpointCommand = vi.hoisted(
   () =>
     class MockInvokeEndpointCommand {
-      EndpointName: string;
-      Body: Uint8Array;
-      ContentType: string;
-      Accept: string;
+      EndpointName!: string;
+      Body!: Uint8Array;
+      ContentType!: string;
+      Accept!: string;
       constructor(params: any) {
         Object.assign(this, params);
       }

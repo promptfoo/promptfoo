@@ -25,7 +25,7 @@ describe('select-best context propagation', () => {
 
     const originalProvider: ApiProvider = {
       id: () => 'original-provider',
-      callApi: vi.fn(),
+      callApi: vi.fn().mockResolvedValue({ output: '', tokenUsage: {} }),
     };
 
     const test: AtomicTestCase = {

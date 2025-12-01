@@ -637,7 +637,7 @@ describe('fetchWithProxy', () => {
 describe('fetchWithTimeout', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.spyOn(global, 'fetch').mockImplementation();
+    vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
   });
 
   afterEach(() => {
@@ -777,7 +777,7 @@ describe('handleRateLimit', () => {
 describe('fetchWithRetries', () => {
   beforeEach(() => {
     vi.mocked(sleep).mockClear();
-    vi.spyOn(global, 'fetch').mockImplementation();
+    vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
     vi.clearAllMocks();
   });
 
@@ -959,7 +959,7 @@ describe('fetchWithRetries', () => {
 describe('fetchWithProxy with NO_PROXY', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(global, 'fetch').mockImplementation();
+    vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
     vi.mocked(ProxyAgent).mockClear();
     vi.mocked(setGlobalDispatcher).mockClear();
     delete process.env.HTTPS_PROXY;

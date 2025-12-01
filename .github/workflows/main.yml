@@ -296,7 +296,7 @@ jobs:
           npm ci
 
       - name: Run Integration Tests
-        run: npm run test:integration -- --coverage --poolOptions.threads.maxThreads=2
+        run: npm run test:integration -- --coverage
 
   share-test:
     name: Share Test
