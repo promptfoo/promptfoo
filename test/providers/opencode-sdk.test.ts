@@ -334,7 +334,7 @@ describe('OpenCodeSDKProvider', () => {
         });
 
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          'Working directory /nonexistent does not exist',
+          /Working directory \/nonexistent .* does not exist/,
         );
       });
 
@@ -350,7 +350,7 @@ describe('OpenCodeSDKProvider', () => {
         });
 
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          'Working directory /some/file.txt is not a directory',
+          /Working directory \/some\/file.txt .* is not a directory/,
         );
       });
     });

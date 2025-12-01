@@ -57,7 +57,7 @@ providers:
     label: opencode-sdk
     config:
       provider_id: anthropic
-      model: claude-sonnet-4-20250514
+      model: claude-sonnet-4-5-20250929
       working_dir: examples/agentic-sdk-comparison/test-codebase
 
   # Plain LLM for baseline (no file access)

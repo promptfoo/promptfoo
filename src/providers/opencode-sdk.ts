@@ -451,18 +451,23 @@ export class OpenCodeSDKProvider implements ApiProvider {
     let workingDir: string | undefined;
 
     if (config.working_dir) {
-      workingDir = config.working_dir;
+      // Resolve relative paths to absolute paths
+      workingDir = path.isAbsolute(config.working_dir)
+        ? config.working_dir
+        : path.resolve(process.cwd(), config.working_dir);
       // Validate working directory
       let stats: fs.Stats;
       try {
         stats = fs.statSync(workingDir);
       } catch (err: any) {
         throw new Error(
-          `Working directory ${config.working_dir} does not exist or isn't accessible: ${err.message}`,
+          `Working directory ${config.working_dir} (resolved to ${workingDir}) does not exist or isn't accessible: ${err.message}`,
         );
       }
       if (!stats.isDirectory()) {
-        throw new Error(`Working directory ${config.working_dir} is not a directory`);
+        throw new Error(
+          `Working directory ${config.working_dir} (resolved to ${workingDir}) is not a directory`,
+        );
       }
     } else {
       isTempDir = true;
@@ -620,7 +625,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
       // Send message using session.prompt() and get response
       // SDK: session.prompt(options) -> { info: AssistantMessage, parts: Part[] }
-      logger.debug(`OpenCode SDK prompt options:`, { path: promptOptions.path, body: promptBody });
+      logger.debug(`OpenCode SDK prompt options:`, {
+        path: promptOptions.path,
+        body: promptBody,
+        query: promptOptions.query,
+      });
       const response = await this.client.session.prompt(promptOptions);
 
       logger.debug(`OpenCode SDK response received`);
