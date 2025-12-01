@@ -58,24 +58,6 @@ const RESPONSE_EXTRACT_RETRY_DELAY_MS = 500;
 // and INIT_POLL_INTERVAL_MS (100) are hardcoded in the HTML template string
 // and in DOM evaluation functions where constants cannot be easily passed.
 
-// Common refusal patterns to detect when LLM refuses a request
-const REFUSAL_PATTERNS = [
-  /i can'?t assist/i,
-  /i'?m unable to/i,
-  /i cannot help/i,
-  /i'?m not able to/i,
-  /i won'?t be able to/i,
-  /sorry,? but i can'?t/i,
-  /i'?m sorry,? but/i,
-];
-
-/**
- * Detect if a response text is a refusal
- */
-function isRefusalResponse(text: string): boolean {
-  return REFUSAL_PATTERNS.some((pattern) => pattern.test(text));
-}
-
 /**
  * Check if a URL is from OpenAI's CDN by parsing the hostname.
  * This is more secure than substring matching which could be bypassed.
@@ -844,21 +826,18 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       );
 
       const latencyMs = Date.now() - startTime;
-      const isRefusal = isRefusalResponse(responseText);
 
       logger.debug('[ChatKitProvider] Response received', {
         threadId,
         textLength: responseText.length,
         turnNumber: finalResponseCount,
         latencyMs,
-        isRefusal,
       });
 
       return {
         output: responseText,
         cached: false, // ChatKit responses are never cached (browser-based)
         latencyMs,
-        isRefusal,
         // Use sessionId for consistency with HTTP provider's stateful handling
         sessionId: threadId,
         // Token usage not available from ChatKit, but track request count
@@ -1004,20 +983,17 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       const threadId = await page.evaluate(() => (window as any).__state.threadId);
 
       const latencyMs = Date.now() - startTime;
-      const isRefusal = isRefusalResponse(responseText);
 
       logger.debug('[ChatKitProvider] Pool response received', {
         threadId,
         textLength: responseText.length,
         latencyMs,
-        isRefusal,
       });
 
       return {
         output: responseText,
         cached: false, // ChatKit responses are never cached (browser-based)
         latencyMs,
-        isRefusal,
         // Use sessionId for consistency with HTTP provider's stateful handling
         sessionId: threadId,
         // Token usage not available from ChatKit, but track request count
