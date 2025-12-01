@@ -95,10 +95,20 @@ export default function UpdateBanner() {
     const command = versionInfo?.updateCommands?.primary;
 
     if (command) {
+  useEffect(() => {
+    if (copied) {
+      const timer = setTimeout(() => setCopied(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [copied]);
+
+  const handleCopyCommand = async () => {
+    const command = versionInfo?.updateCommands?.primary;
+
+    if (command) {
       const onSuccess = () => {
         setCopySnackbarOpen(true);
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
       };
 
       try {
