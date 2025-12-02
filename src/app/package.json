@@ -45,7 +45,7 @@
     "fuzzysearch": "^1.0.3",
     "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.1",
-    "jsdom": "^27.0.0",
+    "jsdom": "^26.1.0",
     "posthog-js": "^1.298.0",
     "prismjs": "^1.30.0",
     "react": "19.2.0",
