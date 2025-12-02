@@ -40,8 +40,8 @@ Here's a complete example showing how to use factuality checks:
 prompts:
   - 'What is the capital of {{state}}?'
 providers:
-  - openai:gpt-4.1
-  - anthropic:claude-3-7-sonnet-20250219
+  - openai:gpt-5
+  - anthropic:claude-sonnet-4-5-20250929
 tests:
   - vars:
       state: California
@@ -77,7 +77,7 @@ Like other model-graded assertions, you can override the default grader:
 1. Using the CLI:
 
    ```sh
-   promptfoo eval --grader openai:gpt-4.1-mini
+   promptfoo eval --grader openai:gpt-5-mini
    ```
 
 2. Using test options:
@@ -85,7 +85,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: anthropic:claude-3-7-sonnet-20250219
+       provider: anthropic:claude-sonnet-4-5-20250929
    ```
 
 3. Using assertion-level override:
@@ -94,7 +94,7 @@ Like other model-graded assertions, you can override the default grader:
    assert:
      - type: factuality
        value: Sacramento is the capital of California
-       provider: openai:gpt-4.1-mini
+       provider: openai:gpt-5-mini
    ```
 
 ## Customizing the Prompt

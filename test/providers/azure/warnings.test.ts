@@ -1,3 +1,5 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import logger from '../../../src/logger';
 import { maybeEmitAzureOpenAiWarning } from '../../../src/providers/azure/warnings';
 
@@ -5,7 +7,7 @@ import type { TestCase, TestSuite } from '../../../src/types/index';
 
 describe('maybeEmitAzureOpenAiWarning', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should return false when no Azure providers are present', () => {
@@ -49,7 +51,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
   });
 
   it('should return true and emit warning when Azure provider is used with model-graded assertions', () => {
-    const warnSpy = jest.spyOn(logger, 'warn');
+    const warnSpy = vi.spyOn(logger, 'warn');
 
     const testSuite: TestSuite = {
       prompts: [],

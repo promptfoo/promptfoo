@@ -1,18 +1,20 @@
+import { vi } from 'vitest';
+
 export const mockDbInstance = {
-  insert: jest.fn().mockReturnThis(),
-  values: jest.fn().mockResolvedValue(undefined),
-  select: jest.fn().mockReturnThis(),
-  from: jest.fn().mockReturnThis(),
-  where: jest.fn().mockReturnThis(),
-  limit: jest.fn().mockResolvedValue([]),
-  delete: jest.fn().mockReturnThis(),
-  update: jest.fn().mockReturnThis(),
-  set: jest.fn().mockReturnThis(),
+  insert: vi.fn().mockReturnThis(),
+  values: vi.fn().mockResolvedValue(undefined),
+  select: vi.fn().mockReturnThis(),
+  from: vi.fn().mockReturnThis(),
+  where: vi.fn().mockReturnThis(),
+  limit: vi.fn().mockResolvedValue([]),
+  delete: vi.fn().mockReturnThis(),
+  update: vi.fn().mockReturnThis(),
+  set: vi.fn().mockReturnThis(),
 };
 
-const mockRelations = jest.fn();
+const mockRelations = vi.fn();
 
-const mockSqliteTable = jest.fn().mockImplementation((tableName, schema) => {
+const mockSqliteTable = vi.fn().mockImplementation((tableName, schema) => {
   // You can customize this mock based on your testing needs
   return { tableName, schema };
 });
@@ -48,4 +50,4 @@ export const spansTable = mockSqliteTable('spans', {
   /* schema definition */
 });
 
-export const getDb = jest.fn(() => mockDbInstance);
+export const getDb = vi.fn(() => mockDbInstance);

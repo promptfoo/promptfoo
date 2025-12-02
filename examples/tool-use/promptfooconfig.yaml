@@ -41,7 +41,7 @@ providers:
             required:
               - location
             additionalProperties: false
-  - id: openai:chat:gpt-4.1-mini
+  - id: openai:chat:gpt-5-mini
     config:
       tools:
         - type: function
@@ -61,10 +61,11 @@ providers:
                     - fahrenheit
               required:
                 - location
-  - id: openai:chat:gpt-4.1-mini
+  - id: openai:chat:gpt-5-mini
+    label: External Tools
     config:
       tools: file://external_tools.yaml
-  - id: groq:llama-3.3-70b-versatile
+  - id: groq:llama-4-scout-17b-16e-instruct
     config:
       tools:
         - type: function

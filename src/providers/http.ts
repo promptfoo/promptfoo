@@ -1,17 +1,25 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
+import httpZ from 'http-z';
 import https from 'https';
 import path from 'path';
-
-import httpZ from 'http-z';
 import { Agent } from 'undici';
 import { z } from 'zod';
+
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+  ProviderResponse,
+  TokenUsage,
+} from '../types/index';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { renderVarsInObject } from '../util/index';
@@ -27,14 +35,6 @@ import {
   type TransformResponseContext,
 } from './httpTransforms';
 import { REQUEST_TIMEOUT_MS } from './shared';
-
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderOptions,
-  ProviderResponse,
-  TokenUsage,
-} from '../types/index';
 
 /**
  * Escapes string values in variables for safe JSON template substitution.
@@ -1515,7 +1515,11 @@ export class HttpProvider implements ApiProvider {
     );
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const vars = {
       ...(context?.vars || {}),
       prompt,
@@ -1543,7 +1547,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     if (this.config.request) {
-      return this.callApiWithRawRequest(vars, context);
+      return this.callApiWithRawRequest(vars, context, options);
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
@@ -1619,6 +1623,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
+      ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(method !== 'GET' &&
         renderedConfig.body != null && {
           body: contentTypeIsJson(headers)
@@ -1728,6 +1733,7 @@ export class HttpProvider implements ApiProvider {
   private async callApiWithRawRequest(
     vars: Record<string, any>,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
 
@@ -1779,6 +1785,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
+      ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(parsedRequest.body?.text && { body: parsedRequest.body.text.trim() }),
     };
 

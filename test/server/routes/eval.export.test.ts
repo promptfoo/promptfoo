@@ -1,18 +1,24 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { Mock, MockedFunction, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Request, Response } from 'express';
 
 import type { CompletedPrompt } from '../../../src/types/index';
 
 // Mock dependencies first
-jest.mock('../../../src/database', () => ({
-  getDb: jest.fn(),
-}));
+vi.mock('../../../src/database', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getDb: vi.fn(),
+  };
+});
 
-jest.mock('../../../src/models/eval');
-jest.mock('../../../src/server/utils/evalTableUtils');
-jest.mock('../../../src/server/utils/downloadHelpers', () => ({
-  setDownloadHeaders: jest.fn(),
-}));
+vi.mock('../../../src/models/eval');
+vi.mock('../../../src/server/utils/evalTableUtils');
+vi.mock('../../../src/server/utils/downloadHelpers', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    setDownloadHeaders: vi.fn(),
+  };
+});
 
 // Import after mocking
 import Eval from '../../../src/models/eval';
@@ -20,22 +26,19 @@ import { evalTableToCsv, evalTableToJson } from '../../../src/server/utils/evalT
 import { setDownloadHeaders } from '../../../src/server/utils/downloadHelpers';
 
 // Setup mocked functions
-const mockedEvalFindById = jest.fn() as jest.MockedFunction<typeof Eval.findById>;
-const mockedGenerateCsvData = jest.fn() as jest.MockedFunction<typeof evalTableToCsv>;
-const mockedGenerateJsonData = jest.fn() as jest.MockedFunction<typeof evalTableToJson>;
+const mockedEvalFindById = vi.fn() as MockedFunction<typeof Eval.findById>;
+const mockedEvalTableToCsv = evalTableToCsv as MockedFunction<typeof evalTableToCsv>;
+const mockedEvalTableToJson = evalTableToJson as MockedFunction<typeof evalTableToJson>;
 
 // Override the mocked modules
 (Eval as any).findById = mockedEvalFindById;
-const evalTableUtils = require('../../../src/server/utils/evalTableUtils');
-evalTableUtils.generateCsvData = mockedGenerateCsvData;
-evalTableUtils.generateJsonData = mockedGenerateJsonData;
 
 describe('evalRouter - GET /:id/table with export formats', () => {
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
-  let jsonMock: jest.Mock;
-  let sendMock: jest.Mock;
-  let statusMock: jest.Mock;
+  let jsonMock: Mock;
+  let sendMock: Mock;
+  let statusMock: Mock;
 
   const mockTable = {
     head: {
@@ -91,17 +94,17 @@ describe('evalRouter - GET /:id/table with export formats', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
-    jsonMock = jest.fn();
-    sendMock = jest.fn();
-    statusMock = jest.fn().mockReturnThis();
+    jsonMock = vi.fn();
+    sendMock = vi.fn();
+    statusMock = vi.fn().mockReturnThis();
 
     mockRes = {
       json: jsonMock,
       send: sendMock,
       status: statusMock,
-      setHeader: jest.fn(),
+      setHeader: vi.fn(),
     } as Partial<Response>;
 
     mockReq = {
@@ -110,25 +113,25 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     } as Partial<Request>;
 
     // Setup Eval mock
-    const getTablePageMock = jest.fn() as any;
+    const getTablePageMock = vi.fn() as any;
     getTablePageMock.mockResolvedValue(mockTable);
     const mockEval = {
       config: mockConfig,
       author: 'test-author',
-      version: jest.fn().mockReturnValue('1.0.0'),
+      version: vi.fn().mockReturnValue('1.0.0'),
       getTablePage: getTablePageMock,
     } as unknown as Eval;
     mockedEvalFindById.mockResolvedValue(mockEval);
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should return CSV when format=csv is specified', async () => {
     mockReq.query = { format: 'csv' };
     const mockCsvData = 'var1,var2,[openai] prompt1\nvalue1,value2,[PASS] output text';
-    mockedGenerateCsvData.mockReturnValue(mockCsvData);
+    mockedEvalTableToCsv.mockReturnValue(mockCsvData);
 
     // Simulate the route handler (simplified version)
     const eval_ = await Eval.findById(mockReq.params!.id);
@@ -140,20 +143,20 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filters: [],
     });
 
-    const csvData = mockedGenerateCsvData(table, {
+    const csvData = mockedEvalTableToCsv(table, {
       isRedteam: !!eval_!.config?.redteam,
     });
     setDownloadHeaders(mockRes as Response, 'test-eval-id-results.csv', 'text/csv');
     (mockRes as Response).send(csvData);
 
-    expect(mockedGenerateCsvData).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), expect.anything());
     expect(sendMock).toHaveBeenCalledWith(mockCsvData);
   });
 
   it('should return JSON when format=json is specified', async () => {
     mockReq.query = { format: 'json' };
     const mockJsonData = { table: mockTable };
-    mockedGenerateJsonData.mockReturnValue(mockJsonData);
+    mockedEvalTableToJson.mockReturnValue(mockJsonData);
 
     // Simulate the route handler (simplified version)
     const eval_ = await Eval.findById(mockReq.params!.id);
@@ -165,11 +168,11 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filters: [],
     });
 
-    const jsonData = mockedGenerateJsonData(table);
+    const jsonData = mockedEvalTableToJson(table);
     setDownloadHeaders(mockRes as Response, 'test-eval-id-results.json', 'application/json');
     (mockRes as Response).json(jsonData);
 
-    expect(mockedGenerateJsonData).toHaveBeenCalledWith(expect.anything());
+    expect(mockedEvalTableToJson).toHaveBeenCalledWith(expect.anything());
     expect(jsonMock).toHaveBeenCalledWith(mockJsonData);
   });
 
@@ -181,7 +184,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       'var1,var2,[openai] prompt1,[openai] prompt1 - Grader Reason,[openai] prompt1 - Comment,Messages,RedteamHistory\n' +
       'value1,value2,[PASS] output text,Test passed,Good response,"[{\\"role\\":\\"user\\",\\"content\\":\\"test\\"},{\\"role\\":\\"assistant\\",\\"content\\":\\"response\\"}]","[\\"attempt1\\",\\"attempt2\\"]"';
 
-    mockedGenerateCsvData.mockReturnValue(expectedCsvWithRedteam);
+    mockedEvalTableToCsv.mockReturnValue(expectedCsvWithRedteam);
 
     const eval_ = await Eval.findById(mockReq.params!.id);
     const table = await eval_!.getTablePage({
@@ -192,11 +195,11 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filters: [],
     });
 
-    const csvData = mockedGenerateCsvData(table, {
+    const csvData = mockedEvalTableToCsv(table, {
       isRedteam: !!eval_!.config?.redteam,
     });
 
-    expect(mockedGenerateCsvData).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), expect.anything());
     expect(csvData).toContain('Messages');
     expect(csvData).toContain('RedteamHistory');
   });
@@ -239,19 +242,19 @@ describe('evalRouter - GET /:id/table with export formats', () => {
   it('should handle CSV export for non-redteam evaluations', async () => {
     // Setup eval without redteam config
     const nonRedteamConfig = { someConfig: 'value' };
-    const getTablePageMockNoRedteam = jest.fn() as any;
+    const getTablePageMockNoRedteam = vi.fn() as any;
     getTablePageMockNoRedteam.mockResolvedValue(mockTable);
     const mockEvalNoRedteam = {
       config: nonRedteamConfig,
       author: 'test-author',
-      version: jest.fn().mockReturnValue('1.0.0'),
+      version: vi.fn().mockReturnValue('1.0.0'),
       getTablePage: getTablePageMockNoRedteam,
     } as unknown as Eval;
     mockedEvalFindById.mockResolvedValue(mockEvalNoRedteam);
 
     mockReq.query = { format: 'csv' };
     const mockCsvData = 'var1,var2,[openai] prompt1\nvalue1,value2,[PASS] output text';
-    mockedGenerateCsvData.mockReturnValue(mockCsvData);
+    mockedEvalTableToCsv.mockReturnValue(mockCsvData);
 
     const eval_ = await Eval.findById(mockReq.params!.id);
     const table = await eval_!.getTablePage({
@@ -262,11 +265,11 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filters: [],
     });
 
-    const csvData = mockedGenerateCsvData(table, {
+    const csvData = mockedEvalTableToCsv(table, {
       isRedteam: !!eval_!.config?.redteam,
     });
 
-    expect(mockedGenerateCsvData).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), expect.anything());
     // Should not contain red team columns
     expect(csvData).not.toContain('Messages');
     expect(csvData).not.toContain('RedteamHistory');
@@ -322,7 +325,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       ],
     };
 
-    const getTablePageMockWithTypes = jest.fn() as any;
+    const getTablePageMockWithTypes = vi.fn() as any;
     getTablePageMockWithTypes.mockResolvedValue({
       ...tableWithMultipleRedteamTypes,
       id: 'test-eval-id',
@@ -330,7 +333,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     const mockEvalWithTypes = {
       config: mockConfig,
       author: 'test-author',
-      version: jest.fn().mockReturnValue('1.0.0'),
+      version: vi.fn().mockReturnValue('1.0.0'),
       getTablePage: getTablePageMockWithTypes,
     } as unknown as Eval;
     mockedEvalFindById.mockResolvedValue(mockEvalWithTypes);
@@ -346,9 +349,9 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filters: [],
     });
 
-    mockedGenerateCsvData(table, { isRedteam: !!eval_!.config?.redteam });
+    mockedEvalTableToCsv(table, { isRedteam: !!eval_!.config?.redteam });
 
-    expect(mockedGenerateCsvData).toHaveBeenCalledWith(expect.anything(), {
+    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), {
       isRedteam: true,
     });
   });
@@ -425,19 +428,19 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filteredCount: 0,
     };
 
-    const getTablePageMockEmpty = jest.fn() as any;
+    const getTablePageMockEmpty = vi.fn() as any;
     getTablePageMockEmpty.mockResolvedValue({ ...emptyTable, id: 'test-eval-id' });
     const mockEvalEmpty = {
       config: mockConfig,
       author: 'test-author',
-      version: jest.fn().mockReturnValue('1.0.0'),
+      version: vi.fn().mockReturnValue('1.0.0'),
       getTablePage: getTablePageMockEmpty,
     } as unknown as Eval;
     mockedEvalFindById.mockResolvedValue(mockEvalEmpty);
 
     mockReq.query = { format: 'csv' };
     const mockCsvData = 'var1,[openai] test\n';
-    mockedGenerateCsvData.mockReturnValue(mockCsvData);
+    mockedEvalTableToCsv.mockReturnValue(mockCsvData);
 
     const eval_ = await Eval.findById(mockReq.params!.id);
     const table = await eval_!.getTablePage({
@@ -448,7 +451,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filters: [],
     });
 
-    const csvData = mockedGenerateCsvData(table, {
+    const csvData = mockedEvalTableToCsv(table, {
       isRedteam: !!eval_!.config?.redteam,
     });
     setDownloadHeaders(mockRes as Response, 'test-eval-id-results.csv', 'text/csv');
@@ -478,12 +481,12 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       ],
     };
 
-    const getTablePageMockSpecial = jest.fn() as any;
+    const getTablePageMockSpecial = vi.fn() as any;
     getTablePageMockSpecial.mockResolvedValue({ ...tableWithSpecialChars, id: 'test-eval-id' });
     const mockEvalSpecial = {
       config: mockConfig,
       author: 'test-author',
-      version: jest.fn().mockReturnValue('1.0.0'),
+      version: vi.fn().mockReturnValue('1.0.0'),
       getTablePage: getTablePageMockSpecial,
     } as unknown as Eval;
     mockedEvalFindById.mockResolvedValue(mockEvalSpecial);
@@ -499,9 +502,9 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filters: [],
     });
 
-    mockedGenerateCsvData(table, { isRedteam: !!eval_!.config?.redteam });
+    mockedEvalTableToCsv(table, { isRedteam: !!eval_!.config?.redteam });
 
-    expect(mockedGenerateCsvData).toHaveBeenCalledWith(expect.anything(), {
+    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), {
       isRedteam: true,
     });
   });
@@ -530,18 +533,18 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filteredCount: 10000,
     };
 
-    const getTablePageMockLarge = jest.fn() as any;
+    const getTablePageMockLarge = vi.fn() as any;
     getTablePageMockLarge.mockResolvedValue({ ...largeTable, id: 'test-eval-id' });
     const mockEvalLarge = {
       config: mockConfig,
       author: 'test-author',
-      version: jest.fn().mockReturnValue('1.0.0'),
+      version: vi.fn().mockReturnValue('1.0.0'),
       getTablePage: getTablePageMockLarge,
     } as unknown as Eval;
     mockedEvalFindById.mockResolvedValue(mockEvalLarge);
 
     mockReq.query = { format: 'csv' };
-    mockedGenerateCsvData.mockReturnValue('large csv data');
+    mockedEvalTableToCsv.mockReturnValue('large csv data');
 
     const eval_ = await Eval.findById(mockReq.params!.id);
     const table = await eval_!.getTablePage({
@@ -552,9 +555,9 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filters: [],
     });
 
-    mockedGenerateCsvData(table, { isRedteam: !!eval_!.config?.redteam });
+    mockedEvalTableToCsv(table, { isRedteam: !!eval_!.config?.redteam });
 
-    expect(mockedGenerateCsvData).toHaveBeenCalledWith(expect.anything(), {
+    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), {
       isRedteam: true,
     });
   });
@@ -562,7 +565,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
   it('should set correct content-type headers for different formats', async () => {
     // Test CSV
     mockReq.query = { format: 'csv' };
-    mockedGenerateCsvData.mockReturnValue('csv data');
+    mockedEvalTableToCsv.mockReturnValue('csv data');
 
     const eval_ = await Eval.findById(mockReq.params!.id);
     const table = await eval_!.getTablePage({
@@ -573,23 +576,23 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filters: [],
     });
 
-    const csvData = mockedGenerateCsvData(table, {
+    const csvData = mockedEvalTableToCsv(table, {
       isRedteam: !!eval_!.config?.redteam,
     });
 
     // Verify CSV generation
-    expect(mockedGenerateCsvData).toHaveBeenCalled();
+    expect(mockedEvalTableToCsv).toHaveBeenCalled();
     expect(csvData).toBe('csv data');
 
     // Test JSON
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockReq.query = { format: 'json' };
-    mockedGenerateJsonData.mockReturnValue({ data: 'json' });
+    mockedEvalTableToJson.mockReturnValue({ data: 'json' });
 
-    const jsonData = mockedGenerateJsonData(table);
+    const jsonData = mockedEvalTableToJson(table);
 
     // Verify JSON generation
-    expect(mockedGenerateJsonData).toHaveBeenCalled();
+    expect(mockedEvalTableToJson).toHaveBeenCalled();
     expect(jsonData).toEqual({ data: 'json' });
   });
 });
