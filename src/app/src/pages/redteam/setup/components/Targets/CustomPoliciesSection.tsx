@@ -421,12 +421,10 @@ export const CustomPoliciesSection = () => {
         ...suggestedPolicies.map((p) => p.text || ''),
       ];
 
-      // Send the request:
+      // Send the request to `/redteam/:taskId`:
       const response = await callApi('/redteam/custom-policy-generation-task', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           applicationDefinition: config.applicationDefinition,
           existingPolicies,
@@ -440,7 +438,7 @@ export const CustomPoliciesSection = () => {
         task: string;
         // TODO: Where will this be defined?
         details?: string;
-      }
+      };
 
       // Handle potential errors:
       if (!response.ok || data.error) {
