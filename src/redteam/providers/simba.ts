@@ -24,14 +24,15 @@ import { strategyDisplayNames } from '../constants';
 import { buildRemoteUrl } from '../remoteGeneration';
 import { createIterationContext, Message } from './shared';
 
-enum Phases {
-  Reconnaissance = 'reconnaissance',
-  Probing = 'probing',
-  Attacking = 'attacking',
-  AttackPlanning = 'attack-planning',
-  Completed = 'completed',
-  Failed = 'failed',
-}
+const Phases = {
+  Reconnaissance: 'reconnaissance',
+  Probing: 'probing',
+  Attacking: 'attacking',
+  AttackPlanning: 'attack-planning',
+  Completed: 'completed',
+  Failed: 'failed',
+} as const;
+type Phases = (typeof Phases)[keyof typeof Phases];
 
 const PhaseLabels: Record<Phases, string> = {
   [Phases.Reconnaissance]: 'Reconnaissance',
@@ -213,6 +214,7 @@ export default class SimbaProvider implements ApiProvider {
     endpoint: string,
     body: any,
     method: 'POST' | 'GET' = 'POST',
+    abortSignal?: AbortSignal,
   ): Promise<any> {
     const url =
       buildRemoteUrl('/api/v1/simba', 'https://api.promptfoo.app/api/v1/simba') + endpoint;
@@ -225,6 +227,7 @@ export default class SimbaProvider implements ApiProvider {
           'Content-Type': 'application/json',
         },
         body: body ? JSON.stringify(body) : undefined,
+        signal: abortSignal,
       },
       REQUEST_TIMEOUT_MS,
       3,
@@ -243,7 +246,7 @@ export default class SimbaProvider implements ApiProvider {
     return response.json();
   }
 
-  private async startSession(): Promise<string> {
+  private async startSession(abortSignal?: AbortSignal): Promise<string> {
     const email = (await getUserEmail()) || 'demo@promptfoo.dev';
 
     const startRequest: SimbaStartRequest = {
@@ -261,17 +264,26 @@ export default class SimbaProvider implements ApiProvider {
       email,
     };
 
-    const response: SimbaStartResponse = await this.callSimbaApi('/start', startRequest);
+    const response: SimbaStartResponse = await this.callSimbaApi(
+      '/start',
+      startRequest,
+      'POST',
+      abortSignal,
+    );
     logger.debug(`${LOGGER_PREFIX} Started session with ID: ${response.sessionId}`);
 
     return response.sessionId;
   }
 
-  private async getFinalOutput(sessionId: string): Promise<SimbaFinalResponse[]> {
+  private async getFinalOutput(
+    sessionId: string,
+    abortSignal?: AbortSignal,
+  ): Promise<SimbaFinalResponse[]> {
     const response: SimbaFinalResponse[] = await this.callSimbaApi(
       `/sessions/${sessionId}?format=attackPlans`,
       undefined,
       'GET',
+      abortSignal,
     );
 
     return response;
@@ -410,7 +422,7 @@ export default class SimbaProvider implements ApiProvider {
       }
 
       if (!this.sessionId) {
-        this.sessionId = await this.startSession();
+        this.sessionId = await this.startSession(options?.abortSignal);
       }
       const conversations: Record<string, Conversation> = {};
       logger.info(`${LOGGER_PREFIX} Starting session with ID: ${this.sessionId}`);
@@ -424,7 +436,7 @@ export default class SimbaProvider implements ApiProvider {
       const email = (await getUserEmail()) || 'demo@promptfoo.dev';
       let responses: Record<string, string> = {};
 
-      let currentPhase = Phases.Reconnaissance;
+      let currentPhase: Phases = Phases.Reconnaissance;
 
       // Calculate max iterations based on config with a high buffer to account for
       // reconnaissance, probing, and attack planning phases
@@ -459,6 +471,8 @@ export default class SimbaProvider implements ApiProvider {
         const batchResponse: SimbaBatchResponse = await this.callSimbaApi(
           `/sessions/${this.sessionId}/next`,
           nextRequest,
+          'POST',
+          options?.abortSignal,
         );
 
         const latestPhase: Phases =
@@ -512,7 +526,7 @@ export default class SimbaProvider implements ApiProvider {
         responses = nextResponses;
       }
 
-      const finalOutput = await this.getFinalOutput(this.sessionId);
+      const finalOutput = await this.getFinalOutput(this.sessionId, options?.abortSignal);
       const evaluateResults: EvaluateResult[] = [];
 
       for (let index = 0; index < finalOutput.length; index += 1) {
@@ -522,6 +536,11 @@ export default class SimbaProvider implements ApiProvider {
 
       return evaluateResults;
     } catch (error) {
+      // Re-throw abort errors to properly cancel the operation
+      if (error instanceof Error && error.name === 'AbortError') {
+        logger.debug(`${LOGGER_PREFIX} Operation aborted`);
+        throw error;
+      }
       logger.error(`${LOGGER_PREFIX} Critical error exiting run loop`, { error });
       return [
         {

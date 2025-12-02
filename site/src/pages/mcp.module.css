@@ -1013,10 +1013,18 @@ section {
   justify-content: center;
 }
 
+/* Legacy v11 font icon styles - kept for backwards compatibility */
 :global(.swiper-button-next:after),
 :global(.swiper-button-prev:after) {
   font-size: 18px;
   font-weight: bold;
+}
+
+/* Swiper v12+ SVG icon sizing - constrain to ~45% of button */
+:global(.swiper-button-next) svg,
+:global(.swiper-button-prev) svg {
+  width: 45%;
+  height: 45%;
 }
 
 :global(.swiper-pagination-bullet-active) {
