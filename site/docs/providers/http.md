@@ -991,6 +991,87 @@ providers:
 - The TLS configuration is applied to all HTTPS requests made by this provider
   :::
 
+## Authentication
+
+The HTTP provider supports OAuth 2.0 and Basic authentication methods.
+
+### OAuth 2.0
+
+OAuth 2.0 authentication supports both **Client Credentials** and **Username/Password** (Resource Owner Password Credentials) grant types.
+
+#### Client Credentials Grant
+
+Use this grant type for server-to-server authentication:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/chat'
+      method: 'POST'
+      body:
+        prompt: '{{prompt}}'
+      auth:
+        type: oauth
+        grantType: client_credentials
+        tokenUrl: 'https://auth.example.com/oauth/token'
+        clientId: 'your-client-id'
+        clientSecret: 'your-client-secret'
+        scopes:
+          - read
+          - write
+```
+
+#### Username/Password Grant
+
+Use this grant type when authenticating with user credentials:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/chat'
+      method: 'POST'
+      body:
+        prompt: '{{prompt}}'
+      auth:
+        type: oauth
+        grantType: password
+        tokenUrl: 'https://auth.example.com/oauth/token'
+        clientId: 'your-client-id'
+        clientSecret: 'your-client-secret'
+        username: 'user@example.com'
+        password: 'your-password'
+        scopes:
+          - read
+```
+
+The provider will automatically:
+
+- Request an access token from the specified `tokenUrl`
+- Cache the token and refresh it when it expires (with a 60-second buffer)
+- Add the token to requests as an `Authorization: Bearer <token>` header
+
+### Basic Authentication
+
+For APIs that use HTTP Basic authentication:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/chat'
+      method: 'POST'
+      body:
+        prompt: '{{prompt}}'
+      auth:
+        type: basic
+        username: 'your-username'
+        password: 'your-password'
+```
+
+The provider will automatically encode credentials and add them as an `Authorization: Basic <credentials>` header.
+
 ## Session management
 
 ### Server-side session management

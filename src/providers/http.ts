@@ -746,7 +746,7 @@ const TlsCertificateSchema = z
     },
   );
 
-const OAuthSchema = z.object({
+const OAuthClientCredentialsSchema = z.object({
   type: z.literal('oauth'),
   grantType: z.literal('client_credentials'),
   clientId: z.string(),
@@ -755,13 +755,24 @@ const OAuthSchema = z.object({
   scopes: z.array(z.string()).optional(),
 });
 
+const OAuthPasswordSchema = z.object({
+  type: z.literal('oauth'),
+  grantType: z.literal('password'),
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
+  tokenUrl: z.string(),
+  scopes: z.array(z.string()).optional(),
+  username: z.string(),
+  password: z.string(),
+});
+
 const BasicAuthSchema = z.object({
   type: z.literal('basic'),
   username: z.string(),
   password: z.string(),
 });
 
-const AuthSchema = z.discriminatedUnion('type', [OAuthSchema, BasicAuthSchema]);
+const AuthSchema = z.union([OAuthClientCredentialsSchema, OAuthPasswordSchema, BasicAuthSchema]);
 
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
@@ -1444,9 +1455,23 @@ export class HttpProvider implements ApiProvider {
     try {
       // Prepare the token request body
       const tokenRequestBody = new URLSearchParams();
-      tokenRequestBody.append('grant_type', 'client_credentials');
-      tokenRequestBody.append('client_id', oauthConfig.clientId);
-      tokenRequestBody.append('client_secret', oauthConfig.clientSecret);
+      tokenRequestBody.append('grant_type', oauthConfig.grantType);
+      if (oauthConfig.clientId) {
+        tokenRequestBody.append('client_id', oauthConfig.clientId);
+      }
+      if (oauthConfig.clientSecret) {
+        tokenRequestBody.append('client_secret', oauthConfig.clientSecret);
+      }
+
+      // Add username and password for password grant type
+      if (oauthConfig.grantType === 'password') {
+        if (!oauthConfig.username || !oauthConfig.password) {
+          throw new Error('Username and password are required for password grant type');
+        }
+        tokenRequestBody.append('username', oauthConfig.username);
+        tokenRequestBody.append('password', oauthConfig.password);
+      }
+
       if (oauthConfig.scopes && oauthConfig.scopes.length > 0) {
         tokenRequestBody.append('scope', oauthConfig.scopes.join(' '));
       }

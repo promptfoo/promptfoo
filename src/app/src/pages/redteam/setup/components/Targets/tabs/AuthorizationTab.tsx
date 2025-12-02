@@ -28,7 +28,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
       // Clear all auth config
       updateCustomTarget('auth', undefined);
     } else if (newType === 'oauth') {
-      // Clear existing auth and set up OAuth structure
+      // Clear existing auth and set up OAuth structure with client_credentials as default
       updateCustomTarget('auth', {
         type: 'oauth',
         grantType: 'client_credentials',
@@ -47,6 +47,26 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
     }
   };
 
+  const handleOAuthGrantTypeChange = (newGrantType: 'client_credentials' | 'password') => {
+    const currentAuth = selectedTarget.config.auth || {};
+    if (newGrantType === 'password') {
+      // Add username and password fields for password grant
+      updateCustomTarget('auth', {
+        ...currentAuth,
+        grantType: 'password',
+        username: currentAuth.username || '',
+        password: currentAuth.password || '',
+      });
+    } else {
+      // Remove username and password fields for client_credentials grant
+      const { username: _username, password: _password, ...restAuth } = currentAuth as any;
+      updateCustomTarget('auth', {
+        ...restAuth,
+        grantType: 'client_credentials',
+      });
+    }
+  };
+
   const updateAuthField = (field: string, value: any) => {
     const currentAuth = selectedTarget.config.auth || {};
     updateCustomTarget('auth', {
@@ -54,21 +74,21 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
       [field]: value,
     });
   };
-
+  console.log(getAuthType() ?? '');
   return (
     <>
       <FormControl fullWidth margin="normal">
         <InputLabel id="auth-type-label">Authentication Type</InputLabel>
         <Select
           labelId="auth-type-label"
-          value={getAuthType() ?? ''}
+          value={getAuthType() ?? 'no_auth'}
           onChange={(e) => {
             const value = e.target.value;
-            handleAuthTypeChange(value === '' ? undefined : value);
+            handleAuthTypeChange(value === '' || value === 'no_auth' ? undefined : value);
           }}
           label="Authentication Type"
         >
-          <MenuItem value="">No Auth</MenuItem>
+          <MenuItem value="no_auth">No Auth</MenuItem>
           <MenuItem value="oauth">OAuth 2.0</MenuItem>
           <MenuItem value="basic">Basic</MenuItem>
         </Select>
@@ -80,6 +100,22 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
           <Typography variant="subtitle1" gutterBottom>
             OAuth 2.0 Configuration
           </Typography>
+
+          <FormControl fullWidth margin="normal">
+            <InputLabel id="oauth-grant-type-label">Grant Type</InputLabel>
+            <Select
+              labelId="oauth-grant-type-label"
+              value={selectedTarget.config.auth?.grantType || 'client_credentials'}
+              onChange={(e) =>
+                handleOAuthGrantTypeChange(e.target.value as 'client_credentials' | 'password')
+              }
+              label="Grant Type"
+            >
+              <MenuItem value="client_credentials">Client Credentials</MenuItem>
+              <MenuItem value="password">Username & Password</MenuItem>
+            </Select>
+          </FormControl>
+
           <TextField
             fullWidth
             label="Token URL"
@@ -95,7 +131,12 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
             value={selectedTarget.config.auth?.clientId || ''}
             onChange={(e) => updateAuthField('clientId', e.target.value)}
             margin="normal"
-            required
+            required={selectedTarget.config.auth?.grantType !== 'password'}
+            helperText={
+              selectedTarget.config.auth?.grantType === 'password'
+                ? 'Optional for password grant'
+                : undefined
+            }
           />
           <TextField
             fullWidth
@@ -104,8 +145,37 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
             value={selectedTarget.config.auth?.clientSecret || ''}
             onChange={(e) => updateAuthField('clientSecret', e.target.value)}
             margin="normal"
-            required
+            required={selectedTarget.config.auth?.grantType !== 'password'}
+            helperText={
+              selectedTarget.config.auth?.grantType === 'password'
+                ? 'Optional for password grant'
+                : undefined
+            }
           />
+
+          {/* Show username/password fields only for password grant type */}
+          {selectedTarget.config.auth?.grantType === 'password' && (
+            <>
+              <TextField
+                fullWidth
+                label="Username"
+                value={selectedTarget.config.auth?.username || ''}
+                onChange={(e) => updateAuthField('username', e.target.value)}
+                margin="normal"
+                required
+              />
+              <TextField
+                fullWidth
+                label="Password"
+                type="password"
+                value={selectedTarget.config.auth?.password || ''}
+                onChange={(e) => updateAuthField('password', e.target.value)}
+                margin="normal"
+                required
+              />
+            </>
+          )}
+
           <TextField
             fullWidth
             label="Scopes (comma-separated)"
@@ -123,7 +193,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
             }}
             margin="normal"
             placeholder="read, write, admin"
-            helperText="Enter scopes separated by commas"
+            helperText="Enter scopes separated by commas (optional)"
           />
         </Box>
       )}
