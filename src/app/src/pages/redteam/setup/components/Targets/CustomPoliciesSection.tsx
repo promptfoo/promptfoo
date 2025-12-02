@@ -436,8 +436,7 @@ export const CustomPoliciesSection = () => {
         result: PolicyObject[];
         error: string | null;
         task: string;
-        // TODO: Where will this be defined?
-        details?: string;
+        details?: string; // Optionally set in `logAndSendError`
       };
 
       // Handle potential errors:
