@@ -1,5 +1,6 @@
 import * as os from 'os';
 import * as path from 'path';
+import fs from 'fs';
 
 import { getEnvString } from '../../envars';
 
@@ -11,7 +12,6 @@ const isNodeEnvironment =
 
 export function getConfigDirectoryPath(createIfNotExists: boolean = false): string {
   const p = configDirectoryPath || path.join(os.homedir(), '.promptfoo');
-  const fs = require('fs');
 
   // Only perform filesystem operations in Node.js environment
   if (createIfNotExists && isNodeEnvironment) {
