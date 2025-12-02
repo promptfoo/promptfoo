@@ -4,6 +4,7 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -13,10 +14,10 @@ import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
 
 interface PluginConfigDialogProps {
@@ -95,8 +96,6 @@ export default function PluginConfigDialog({
       return null;
     }
 
-    let specificConfig;
-
     switch (plugin) {
       case 'policy':
         // Show read-only list of all configured policies
@@ -106,44 +105,41 @@ export default function PluginConfigDialog({
         );
 
         if (policyPlugins.length === 0) {
-          specificConfig = (
+          return (
             <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
               No custom policies configured. Add policies in the Custom Policies section.
             </Typography>
           );
-        } else {
-          specificConfig = (
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 2 }}>
-                Configured Custom Policies ({policyPlugins.length})
-              </Typography>
-              {policyPlugins.map((policyPlugin, index) => (
-                <Paper
-                  key={index}
-                  variant="outlined"
-                  sx={{ p: 2, mb: 2, backgroundColor: 'grey.50' }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ mb: 1, display: 'block' }}
-                  >
-                    Policy {index + 1}
-                  </Typography>
-                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
-                    {typeof policyPlugin.config.policy === 'string'
-                      ? policyPlugin.config.policy
-                      : policyPlugin.config.policy?.text || 'No policy text'}
-                  </Typography>
-                </Paper>
-              ))}
-              <Typography variant="caption" color="text.secondary">
-                To edit or add policies, use the Custom Policies section in Available Plugins.
-              </Typography>
-            </Box>
-          );
         }
-        break;
+
+        return (
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+              Configured Custom Policies ({policyPlugins.length})
+            </Typography>
+            {policyPlugins.map((policyPlugin, index) => (
+              <Paper
+                key={index}
+                variant="outlined"
+                sx={{ p: 2, mb: 2, backgroundColor: 'grey.50' }}
+              >
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mb: 1, display: 'block' }}
+                >
+                  Policy {index + 1}
+                </Typography>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                  {policyPlugin.config.policy || 'No policy text'}
+                </Typography>
+              </Paper>
+            ))}
+            <Typography variant="caption" color="text.secondary">
+              To edit or add policies, use the Custom Policies section in Available Plugins.
+            </Typography>
+          </Box>
+        );
       case 'intent':
         // Show read-only list of all configured custom intents
         const intentPlugin = redTeamConfig.plugins.find(
@@ -152,12 +148,11 @@ export default function PluginConfigDialog({
         );
 
         if (!intentPlugin?.config?.intent) {
-          specificConfig = (
+          return (
             <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
               No custom intents configured. Add intents in the Custom Prompts section.
             </Typography>
           );
-          break;
         }
 
         const intents = intentPlugin.config.intent;
@@ -166,15 +161,14 @@ export default function PluginConfigDialog({
           .filter((intent: any) => typeof intent === 'string' && intent.trim());
 
         if (flatIntents.length === 0) {
-          specificConfig = (
+          return (
             <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
               No custom intents configured. Add intents in the Custom Prompts section.
             </Typography>
           );
-          break;
         }
 
-        specificConfig = (
+        return (
           <Box>
             <Typography variant="subtitle2" sx={{ mb: 2 }}>
               Configured Custom Intents ({flatIntents.length})
@@ -202,10 +196,9 @@ export default function PluginConfigDialog({
             </Typography>
           </Box>
         );
-        break;
       case 'prompt-extraction':
         const key = 'systemPrompt';
-        specificConfig = (
+        return (
           <Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               The Prompt Extraction plugin tests whether an attacker can extract your system prompt
@@ -224,7 +217,6 @@ export default function PluginConfigDialog({
             />
           </Box>
         );
-        break;
       case 'bfla':
       case 'bola':
       case 'ssrf':
@@ -250,7 +242,7 @@ export default function PluginConfigDialog({
 
         // Ensure we always have at least one item
         const currentArray = (localConfig[arrayKey] as string[]) || [''];
-        specificConfig = (
+        return (
           <Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               {getExplanation()}
@@ -285,9 +277,8 @@ export default function PluginConfigDialog({
             </Button>
           </Box>
         );
-        break;
       case 'indirect-prompt-injection':
-        specificConfig = (
+        return (
           <Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Indirect Prompt Injection tests whether untrusted content can influence your AI
@@ -311,60 +302,42 @@ export default function PluginConfigDialog({
             </Typography>
           </Box>
         );
-        break;
+      case 'openai-guardrails':
+        return (
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              OpenAI Guardrails tests your model against jailbreak attempts from OpenAI's official
+              evaluation dataset, including role-playing attacks, system manipulation, and
+              obfuscation techniques.
+            </Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={localConfig.includeSafe || false}
+                  onChange={(e) =>
+                    setLocalConfig({ ...localConfig, includeSafe: e.target.checked })
+                  }
+                />
+              }
+              label="Include safe prompts to test for over-blocking"
+              sx={{ my: 2 }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              When enabled, tests will include a 50/50 split of safe and jailbreak prompts. Safe
+              prompts test whether your guardrails are too strict and incorrectly block legitimate
+              requests (over-blocking/false positives).
+            </Typography>
+          </Box>
+        );
       default:
-        specificConfig = null;
+        return null;
     }
-
-    return (
-      <>
-        {specificConfig}
-
-        {/* Grading Guidance - available for all plugins */}
-        {specificConfig && <Box sx={{ my: 3 }} />}
-        <Box sx={{ mb: 3 }}>
-          <FormControlLabel
-            htmlFor="plugin-grading-guidance-input"
-            label={
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Grading Guidance (Optional)
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Plugin-specific rules that take priority over general grading criteria
-                </Typography>
-              </Box>
-            }
-            control={<Box />}
-            sx={{ alignItems: 'flex-start', ml: 0, mb: 2 }}
-          />
-          <TextField
-            id="plugin-grading-guidance-input"
-            fullWidth
-            multiline
-            rows={4}
-            placeholder="e.g., For this financial app, discussing fund names is required and should pass."
-            value={localConfig.graderGuidance || ''}
-            onChange={(e) =>
-              setLocalConfig((prev) => ({ ...prev, graderGuidance: e.target.value }))
-            }
-          />
-        </Box>
-      </>
-    );
   };
 
   const handleSave = () => {
     if (plugin && localConfig) {
-      const configToSave = { ...localConfig };
-
-      // Remove empty graderGuidance
-      if (!configToSave.graderGuidance || configToSave.graderGuidance.trim() === '') {
-        delete configToSave.graderGuidance;
-      }
-
-      if (JSON.stringify(config) !== JSON.stringify(configToSave)) {
-        onSave(plugin, configToSave);
+      if (JSON.stringify(config) !== JSON.stringify(localConfig)) {
+        onSave(plugin, localConfig);
       }
       onClose();
     }
