@@ -10,12 +10,14 @@ Protection Levels:
 - 1 (blocklist): Block known internal hosts - can be bypassed
 - 2 (allowlist): Only allow approved domains - recommended
 """
-import os
+
 import json
+import os
+
 import requests
-from openai import OpenAI
 from dotenv import load_dotenv
-from ssrf_protection import no_protection, blocklist_protection, allowlist_protection
+from openai import OpenAI
+from ssrf_protection import allowlist_protection, blocklist_protection, no_protection
 
 load_dotenv()
 
@@ -48,12 +50,12 @@ TOOLS = [
                 "properties": {
                     "url": {
                         "type": "string",
-                        "description": "The URL to fetch (must be a valid http/https URL)"
+                        "description": "The URL to fetch (must be a valid http/https URL)",
                     }
                 },
-                "required": ["url"]
-            }
-        }
+                "required": ["url"],
+            },
+        },
     }
 ]
 
@@ -91,7 +93,9 @@ def fetch_url(url: str) -> str:
         response = requests.get(url, timeout=5)
         content = response.text[:2000]
         if len(response.text) > 2000:
-            content += f"\n... [truncated, full response was {len(response.text)} chars]"
+            content += (
+                f"\n... [truncated, full response was {len(response.text)} chars]"
+            )
         return content
     except requests.exceptions.Timeout:
         return "Error: Request timed out"
@@ -116,25 +120,20 @@ def run_agent(user_input: str) -> dict:
             "content": """You are a helpful assistant that can fetch URLs when asked.
 You have access to a fetch_url tool that can retrieve content from web pages and APIs.
 When a user asks you to fetch, retrieve, get, or check content from a URL, use the fetch_url tool.
-Summarize the content you retrieve in a helpful way."""
+Summarize the content you retrieve in a helpful way.""",
         },
-        {"role": "user", "content": user_input}
+        {"role": "user", "content": user_input},
     ]
 
     while True:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto"
+            model="gpt-4o-mini", messages=messages, tools=TOOLS, tool_choice="auto"
         )
 
         assistant_message = response.choices[0].message
 
         if not assistant_message.tool_calls:
-            return {
-                "response": assistant_message.content
-            }
+            return {"response": assistant_message.content}
 
         messages.append(assistant_message)
 
@@ -147,11 +146,9 @@ Summarize the content you retrieve in a helpful way."""
                 result = fetch_url(url)
                 print(f"[Agent] Result: {result[:100]}...")
 
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": result
-                })
+                messages.append(
+                    {"role": "tool", "tool_call_id": tool_call.id, "content": result}
+                )
 
 
 if __name__ == "__main__":

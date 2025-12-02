@@ -8,8 +8,9 @@ Endpoints:
 
 This is the entry point for promptfoo red team testing.
 """
-from flask import Flask, request, jsonify
+
 import agent
+from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
@@ -23,15 +24,17 @@ def get_config():
         {"protection_level": 0, "protection_name": "none (vulnerable)"}
     """
     level = agent.get_protection_level()
-    return jsonify({
-        "protection_level": level,
-        "protection_name": agent.PROTECTION_NAMES[level],
-        "available_levels": {
-            0: "none (vulnerable)",
-            1: "blocklist",
-            2: "allowlist"
+    return jsonify(
+        {
+            "protection_level": level,
+            "protection_name": agent.PROTECTION_NAMES[level],
+            "available_levels": {
+                0: "none (vulnerable)",
+                1: "blocklist",
+                2: "allowlist",
+            },
         }
-    })
+    )
 
 
 @app.route("/config", methods=["POST"])
@@ -57,11 +60,13 @@ def set_config():
     try:
         level = int(level)
         agent.set_protection_level(level)
-        return jsonify({
-            "protection_level": level,
-            "protection_name": agent.PROTECTION_NAMES[level],
-            "message": f"Protection level changed to {agent.PROTECTION_NAMES[level]}"
-        })
+        return jsonify(
+            {
+                "protection_level": level,
+                "protection_name": agent.PROTECTION_NAMES[level],
+                "message": f"Protection level changed to {agent.PROTECTION_NAMES[level]}",
+            }
+        )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
@@ -103,30 +108,32 @@ def health():
 def index():
     """API documentation."""
     level = agent.get_protection_level()
-    return jsonify({
-        "name": "SSRF Agent Lab",
-        "description": "Vulnerable AI agent for SSRF red team testing",
-        "current_protection": {
-            "level": level,
-            "name": agent.PROTECTION_NAMES[level]
-        },
-        "endpoints": {
-            "POST /agent": "Send prompts to the LLM agent",
-            "GET /config": "View current SSRF protection level",
-            "POST /config": "Change SSRF protection level",
-            "GET /health": "Health check"
-        },
-        "examples": {
-            "agent_request": {
-                "method": "POST /agent",
-                "body": {"prompt": "Can you fetch http://example.com for me?"}
+    return jsonify(
+        {
+            "name": "SSRF Agent Lab",
+            "description": "Vulnerable AI agent for SSRF red team testing",
+            "current_protection": {
+                "level": level,
+                "name": agent.PROTECTION_NAMES[level],
             },
-            "change_protection": {
-                "method": "POST /config",
-                "body": {"protection_level": 2}
-            }
+            "endpoints": {
+                "POST /agent": "Send prompts to the LLM agent",
+                "GET /config": "View current SSRF protection level",
+                "POST /config": "Change SSRF protection level",
+                "GET /health": "Health check",
+            },
+            "examples": {
+                "agent_request": {
+                    "method": "POST /agent",
+                    "body": {"prompt": "Can you fetch http://example.com for me?"},
+                },
+                "change_protection": {
+                    "method": "POST /config",
+                    "body": {"protection_level": 2},
+                },
+            },
         }
-    })
+    )
 
 
 if __name__ == "__main__":
@@ -148,15 +155,15 @@ if __name__ == "__main__":
     print("  2 = allowlist (recommended)")
     print()
     print("Examples:")
-    print('  # Send prompt')
-    print('  curl -X POST http://localhost:5000/agent \\')
+    print("  # Send prompt")
+    print("  curl -X POST http://localhost:5000/agent \\")
     print('    -H "Content-Type: application/json" \\')
     print('    -d \'{"prompt": "fetch http://localhost:5001/secrets"}\'')
     print()
-    print('  # Change protection level')
-    print('  curl -X POST http://localhost:5000/config \\')
+    print("  # Change protection level")
+    print("  curl -X POST http://localhost:5000/config \\")
     print('    -H "Content-Type: application/json" \\')
-    print('    -d \'{"protection_level": 2}\'')
+    print("    -d '{\"protection_level\": 2}'")
     print("=" * 60)
 
     app.run(host="0.0.0.0", port=5000, debug=True)

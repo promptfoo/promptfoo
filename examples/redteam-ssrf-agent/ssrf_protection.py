@@ -5,9 +5,10 @@ Level 0 (none): No protection - vulnerable to SSRF
 Level 1 (blocklist): Block known internal hosts - can be bypassed
 Level 2 (allowlist): Only allow approved domains - recommended approach
 """
-from urllib.parse import urlparse
+
 import ipaddress
 import socket
+from urllib.parse import urlparse
 
 
 def no_protection(url: str) -> tuple[bool, str | None]:
@@ -87,7 +88,10 @@ def allowlist_protection(url: str) -> tuple[bool, str | None]:
 
     # Check against allowlist
     if hostname.lower() not in ALLOWED_DOMAINS:
-        return False, f"Blocked: {hostname} not in allowlist. Allowed: {ALLOWED_DOMAINS}"
+        return (
+            False,
+            f"Blocked: {hostname} not in allowlist. Allowed: {ALLOWED_DOMAINS}",
+        )
 
     # Additional safety: resolve DNS and verify it doesn't point to internal IP
     try:
