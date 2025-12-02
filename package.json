@@ -80,7 +80,7 @@
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
-    "chokidar": "4.0.3",
+    "chokidar": "5.0.0",
     "whatwg-url": "15.1.0",
     "esbuild": "0.27.0",
     "react": "19.2.0",
@@ -88,7 +88,7 @@
     "react-is": "^19.0.0",
     "*": {
       "whatwg-url": "15.1.0",
-      "chokidar": "4.0.3",
+      "chokidar": "5.0.0",
       "esbuild": "0.27.0",
       "react": "19.2.0",
       "react-dom": "19.2.0"
@@ -245,7 +245,7 @@
     "cache-manager": "^4.1.0",
     "cache-manager-fs-hash": "^3.0.0",
     "chalk": "^5.0.0",
-    "chokidar": "4.0.3",
+    "chokidar": "5.0.0",
     "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.5",
     "commander": "^14.0.2",
