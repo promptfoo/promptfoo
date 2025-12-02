@@ -34,12 +34,12 @@ redteam:
 
 ### Configuration Options
 
-| Option              | Type                                        | Default                         | Description                                                  |
-| ------------------- | ------------------------------------------- | ------------------------------- | ------------------------------------------------------------ |
-| `targetUrls`        | `string[]`                                  | `['https://promptfoo.dev/...']` | URLs to include in test prompts for more realistic scenarios |
-| `ssrfFailThreshold` | `'low' \| 'medium' \| 'high' \| 'critical'` | `'low'`                         | Minimum severity level that causes a test to fail            |
+| Option              | Type       | Default | Description                                                            |
+| ------------------- | ---------- | ------- | ---------------------------------------------------------------------- |
+| `targetUrls`        | `string[]` | -       | URLs to include in test prompts for more realistic scenarios           |
+| `ssrfFailThreshold` | `string`   | `low`   | Minimum severity to fail: `low`, `medium`, `high`, or `critical`       |
 
-The `targetUrls` are used to make the test prompts more specific and realistic. By default, the plugin uses a target URL on the promptfoo.dev host, but it's recommended to replace this with your own internal URL.
+The `targetUrls` are used to make the test prompts more specific and realistic. By default, the plugin uses a generic promptfoo.dev URL, but you should replace this with URLs relevant to your internal infrastructure.
 
 ## Severity Tiers
 
