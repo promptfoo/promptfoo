@@ -28,23 +28,23 @@ vi.mock('../src/util/fetch/index', () => ({
   fetchWithRetries: vi.fn(),
 }));
 
-// Mock cache-manager-fs-hash to prevent Windows lockfile errors
-vi.mock('cache-manager-fs-hash', () => ({
-  default: 'mocked-fs-store',
+// Mock cacheMigration
+vi.mock('../src/cacheMigration', () => ({
+  shouldRunMigration: vi.fn().mockReturnValue(false), // Don't run migration by default in tests
+  runMigration: vi.fn().mockReturnValue({
+    success: true,
+    stats: { successCount: 0, skippedExpired: 0, failureCount: 0, errors: [] },
+  }),
 }));
 
 const mockFetchWithRetries = vi.mocked(fetchWithRetries);
 
-// Mock cache-manager
-vi.mock('cache-manager', () => {
-  const cachingMock = vi.fn().mockImplementation(({ store }) => {
+// Mock cache-manager v7
+vi.mock('cache-manager', () => ({
+  createCache: vi.fn().mockImplementation(({ stores }) => {
     const cache = new Map();
-    // Handle both string 'memory' and any other value (including modules) as fs-hash
-    const storeName = store === 'memory' ? 'memory' : 'fs-hash';
     return {
-      store: {
-        name: storeName,
-      },
+      stores: stores || [],
       get: vi.fn().mockImplementation((key) => cache.get(key)),
       set: vi.fn().mockImplementation((key, value) => {
         cache.set(key, value);
@@ -54,7 +54,7 @@ vi.mock('cache-manager', () => {
         cache.delete(key);
         return Promise.resolve();
       }),
-      reset: vi.fn().mockImplementation(() => {
+      clear: vi.fn().mockImplementation(() => {
         cache.clear();
         return Promise.resolve();
       }),
@@ -67,11 +67,29 @@ vi.mock('cache-manager', () => {
         cache.set(key, value);
         return value;
       }),
-    };
-  });
+      // Add required Cache interface methods
+      mget: vi.fn(),
+      mset: vi.fn(),
+      mdel: vi.fn(),
+      reset: vi.fn(),
+      ttl: vi.fn(),
+      on: vi.fn(),
+      removeAllListeners: vi.fn(),
+    } as any;
+  }),
+}));
+
+// Mock keyv and keyv-file with proper class constructors
+vi.mock('keyv', () => {
   return {
-    default: { caching: cachingMock },
-    caching: cachingMock,
+    Keyv: class MockKeyv {},
+  };
+});
+
+vi.mock('keyv-file', () => {
+  return {
+    __esModule: true,
+    default: class MockKeyvFile {},
   };
 });
 
@@ -118,14 +136,16 @@ describe('cache configuration', () => {
     process.env.NODE_ENV = 'test';
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    expect(cache.store).toHaveProperty('name', 'memory');
+    // In test environment, stores array should be empty (memory cache)
+    expect(cache.stores).toEqual([]);
   });
 
   it('should use disk cache in non-test environment', async () => {
     process.env.NODE_ENV = 'production';
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    expect(cache.store).toHaveProperty('name', 'fs-hash');
+    // In production, stores array should have at least one store (disk cache)
+    expect(cache.stores.length).toBeGreaterThan(0);
   });
 
   it('should respect custom cache path', async () => {
@@ -144,7 +164,8 @@ describe('cache configuration', () => {
 
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    expect(cache.store).toHaveProperty('name', 'fs-hash');
+    // Should have disk cache store
+    expect(cache.stores.length).toBeGreaterThan(0);
   });
 
   it('should handle cache directory creation when it exists', async () => {
