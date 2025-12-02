@@ -9,7 +9,7 @@ import path from 'node:path';
 
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';

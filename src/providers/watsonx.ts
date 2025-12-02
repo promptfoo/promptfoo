@@ -207,7 +207,7 @@ export class WatsonXProvider implements ApiProvider {
   constructor(modelName: string, options: ProviderOptions) {
     const validationResult = ConfigSchema.safeParse(options.config);
     if (!validationResult.success) {
-      const errors = validationResult.error.errors.map((e) => e.message).join(', ');
+      const errors = validationResult.error.issues.map((e: any) => e.message).join(', ');
       throw new Error(`WatsonXProvider requires a valid config. Issues: ${errors}`);
     }
 
@@ -375,10 +375,10 @@ export class WatsonXProvider implements ApiProvider {
 
       if (!parsedResponse.success) {
         logger.error(
-          `Watsonx: Invalid response structure for response: ${JSON.stringify(apiResponse.result)}, errors: ${JSON.stringify(parsedResponse.error.errors)}`,
+          `Watsonx: Invalid response structure for response: ${JSON.stringify(apiResponse.result)}, errors: ${JSON.stringify(parsedResponse.error.issues)}`,
         );
         throw new Error(
-          `Invalid API response structure: ${JSON.stringify(parsedResponse.error.errors)}`,
+          `Invalid API response structure: ${JSON.stringify(parsedResponse.error.issues)}`,
         );
       }
 

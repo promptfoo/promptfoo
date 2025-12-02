@@ -7,7 +7,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
@@ -20,6 +20,8 @@ import { loadApiProviders } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
+  CommandLineOptionsSchema,
+  EvaluateOptionsSchema,
   type Prompt,
   type ProviderOptions,
   type RedteamPluginObject,
@@ -27,9 +29,11 @@ import {
   type Scenario,
   type TestCase,
   type TestSuite,
+  TestSuiteConfigSchema,
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
+import { ProvidersSchema } from '../../validators/providers';
 import { readFilters } from '../../util/index';
 import { promptfooCommand } from '../promptfooCommand';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -167,9 +171,13 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     // Validator requires `prompts`, but prompts is not actually required for redteam.
-    const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
-      .innerType()
-      .extend({ prompts: UnifiedConfigSchema.innerType().innerType().shape.prompts.optional() });
+    const UnifiedConfigSchemaWithoutPrompts = TestSuiteConfigSchema.extend({
+      evaluateOptions: EvaluateOptionsSchema.optional(),
+      commandLineOptions: CommandLineOptionsSchema.partial().optional(),
+      providers: ProvidersSchema.optional(),
+      targets: ProvidersSchema.optional(),
+      prompts: TestSuiteConfigSchema.shape.prompts.optional(),
+    });
     const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
     if (!validationResult.success) {
       logger.warn(

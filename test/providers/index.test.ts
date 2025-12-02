@@ -46,6 +46,74 @@ import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeT
 
 import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
+// Mock all @adaline packages to prevent Zod v3/v4 conflicts
+vi.mock('@adaline/anthropic', () => ({
+  Anthropic: class {
+    embeddingModel = vi.fn().mockReturnValue({});
+    chatModel = vi.fn().mockReturnValue({});
+  },
+}));
+
+vi.mock('@adaline/azure', () => ({
+  Azure: class {
+    embeddingModel = vi.fn().mockReturnValue({});
+    chatModel = vi.fn().mockReturnValue({});
+  },
+}));
+
+vi.mock('@adaline/google', () => ({
+  Google: class {
+    chatModel = vi.fn().mockReturnValue({});
+  },
+}));
+
+vi.mock('@adaline/groq', () => ({
+  Groq: class {
+    chatModel = vi.fn().mockReturnValue({});
+  },
+}));
+
+vi.mock('@adaline/open-router', () => ({
+  OpenRouter: class {
+    chatModel = vi.fn().mockReturnValue({});
+  },
+}));
+
+vi.mock('@adaline/openai', () => ({
+  OpenAI: class {
+    embeddingModel = vi.fn().mockReturnValue({});
+    chatModel = vi.fn().mockReturnValue({
+      transformModelRequest: vi.fn().mockReturnValue({
+        config: {},
+        messages: [],
+        tools: [],
+      }),
+    });
+  },
+}));
+
+vi.mock('@adaline/together-ai', () => ({
+  TogetherAI: class {
+    chatModel = vi.fn().mockReturnValue({});
+  },
+}));
+
+vi.mock('@adaline/vertex', () => ({
+  Vertex: class {
+    embeddingModel = vi.fn().mockReturnValue({});
+    chatModel = vi.fn().mockReturnValue({});
+  },
+}));
+
+vi.mock('@adaline/gateway', () => ({
+  Gateway: vi.fn(function () {
+    return {
+      getEmbeddings: vi.fn(),
+      completeChat: vi.fn(),
+    };
+  }),
+}));
+
 vi.mock('proxy-agent', async (importOriginal) => {
   return {
     ...(await importOriginal()),

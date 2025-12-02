@@ -96,6 +96,7 @@ describe('index.ts exports', () => {
     'ConversationMessageSchema',
     'DerivedMetricSchema',
     'EvalResultsFilterMode',
+    'EvaluateOptionsSchema', // Added when fixing Zod v4 .innerType() usage
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',

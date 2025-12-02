@@ -747,29 +747,27 @@ const TlsCertificateSchema = z
   );
 
 export const HttpProviderConfigSchema = z.object({
-  body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
-  headers: z.record(z.string()).optional(),
+  body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
-  queryParams: z.record(z.string()).optional(),
+  queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
   useHttps: z
     .boolean()
     .optional()
     .describe('Use HTTPS for the request. This only works with the raw request option'),
-  sessionParser: z.union([z.string(), z.function()]).optional(),
+  sessionParser: z.union([z.string(), z.custom<Function>()]).optional(),
   sessionSource: z.enum(['client', 'server']).optional(),
   stateful: z.boolean().optional(),
-  transformRequest: z.union([z.string(), z.function()]).optional(),
-  transformResponse: z.union([z.string(), z.function()]).optional(),
+  transformRequest: z.union([z.string(), z.custom<Function>()]).optional(),
+  transformResponse: z.union([z.string(), z.custom<Function>()]).optional(),
   url: z.string().optional(),
-  validateStatus: z
-    .union([z.string(), z.function().returns(z.boolean()).args(z.number())])
-    .optional(),
+  validateStatus: z.union([z.string(), z.custom<(status: number) => boolean>()]).optional(),
   /**
    * @deprecated use transformResponse instead
    */
-  responseParser: z.union([z.string(), z.function()]).optional(),
+  responseParser: z.union([z.string(), z.custom<Function>()]).optional(),
   // Token estimation configuration
   tokenEstimation: TokenEstimationConfigSchema.optional(),
   // Digital Signature Authentication with support for multiple certificate types
@@ -1584,7 +1582,7 @@ export class HttpProvider implements ApiProvider {
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [
               key,
-              getNunjucksEngine().renderString(value, vars),
+              getNunjucksEngine().renderString(String(value), vars),
             ]),
           )
         : undefined,
@@ -1603,13 +1601,15 @@ export class HttpProvider implements ApiProvider {
         const urlObj = new URL(url);
         // Add each query parameter to the URL object
         Object.entries(renderedConfig.queryParams).forEach(([key, value]) => {
-          urlObj.searchParams.append(key, value);
+          urlObj.searchParams.append(key, String(value));
         });
         url = urlObj.toString();
       } catch (err) {
         // Fallback for potentially malformed URLs
         logger.warn(`[HTTP Provider]: Failed to construct URL object: ${String(err)}`);
-        const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
+        const queryString = new URLSearchParams(
+          renderedConfig.queryParams as Record<string, string>,
+        ).toString();
         url = `${url}${url.includes('?') ? '&' : '?'}${queryString}`;
       }
     }

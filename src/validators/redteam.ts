@@ -41,7 +41,12 @@ const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
     retryDelayMs: z.number().int().nonnegative().optional(),
     spanFilter: z.array(z.string()).optional(),
     sanitizeAttributes: z.boolean().optional(),
-    strategies: z.record(z.lazy(() => TracingConfigSchema)).optional(),
+    strategies: z
+      .record(
+        z.string(),
+        z.lazy(() => TracingConfigSchema),
+      )
+      .optional(),
   }),
 );
 
@@ -62,8 +67,8 @@ export const RedteamPluginObjectSchema = z.object({
       z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
         if (!pluginOptions.includes(val)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.invalid_enum_value,
-            options: pluginOptions,
+            code: z.ZodIssueCode.invalid_value,
+            values: pluginOptions,
             received: val,
             message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
           });
@@ -85,7 +90,7 @@ export const RedteamPluginObjectSchema = z.object({
     .positive()
     .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
-  config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
+  config: z.record(z.string(), z.unknown()).optional().describe('Plugin-specific configuration'),
   severity: z.nativeEnum(Severity).optional().describe('Severity level for this plugin'),
 });
 
@@ -98,8 +103,8 @@ export const RedteamPluginSchema = z.union([
       z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
         if (!pluginOptions.includes(val)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.invalid_enum_value,
-            options: pluginOptions,
+            code: z.ZodIssueCode.invalid_value,
+            values: pluginOptions,
             received: val,
             message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
           });
@@ -126,8 +131,8 @@ export const strategyIdSchema = z.union([
     }
     if (!ALL_STRATEGIES.includes(val as Strategy)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.invalid_enum_value,
-        options: [...ALL_STRATEGIES] as [string, ...string[]],
+        code: z.ZodIssueCode.invalid_value,
+        values: [...ALL_STRATEGIES],
         received: val,
         message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
       });
@@ -161,7 +166,10 @@ export const RedteamStrategySchema = z.union([
   strategyIdSchema,
   z.object({
     id: strategyIdSchema,
-    config: z.record(z.unknown()).optional().describe('Strategy-specific configuration'),
+    config: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Strategy-specific configuration'),
   }),
 ]);
 
@@ -181,7 +189,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   cache: z.boolean().describe('Whether to use caching'),
   config: z.string().optional().describe('Path to the configuration file'),
   target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
-  defaultConfig: z.record(z.unknown()).describe('Default configuration object'),
+  defaultConfig: z.record(z.string(), z.unknown()).describe('Default configuration object'),
   defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
   delay: z
     .number()

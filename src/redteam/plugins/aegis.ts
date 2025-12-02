@@ -20,7 +20,7 @@ interface AegisVars {
   text: string;
   text_type?: string;
   labels_0?: string;
-  [key: string]: any;
+  [key: string | symbol]: any;
 }
 
 interface AegisRecord {

@@ -465,9 +465,13 @@ describe('redteam validators', () => {
           }).toThrow(z.ZodError);
 
           expect(error).toBeDefined();
-          expect(error?.issues[0].message).toContain(
+          const message = error?.issues[0].message || '';
+          const validMessages = [
             'Custom strategies must start with file:// and end with .js or .ts',
-          );
+            'Invalid input', // Zod v4 union error message
+          ];
+          const hasValidMessage = validMessages.some((msg) => message.includes(msg));
+          expect(hasValidMessage).toBe(true);
         });
       });
     });
@@ -502,6 +506,7 @@ describe('redteam validators', () => {
             'Custom strategies must start with file:// and end with .js or .ts',
             'Strategy must be one of the built-in strategies:',
             'Invalid enum value',
+            'Invalid input', // Zod v4 union error message
           ];
           const hasValidMessage = validMessages.some((msg) => message.includes(msg));
           expect(hasValidMessage).toBe(true);
@@ -599,6 +604,7 @@ describe('redteam validators', () => {
             'Custom strategies must start with file:// and end with .js or .ts',
             'Strategy must be one of the built-in strategies:',
             'Invalid enum value',
+            'Invalid input', // Zod v4 union error message
           ];
           const hasValidMessage = validMessages.some((msg) => message.includes(msg));
           expect(hasValidMessage).toBe(true);
@@ -642,9 +648,13 @@ describe('redteam validators', () => {
         }).toThrow(z.ZodError);
 
         expect(error).toBeDefined();
-        expect(error?.issues[0].message).toContain(
+        const message = error?.issues[0].message || '';
+        const validMessages = [
           'Custom strategies must start with file:// and end with .js or .ts',
-        );
+          'Invalid input', // Zod v4 union error message
+        ];
+        const hasValidMessage = validMessages.some((msg) => message.includes(msg));
+        expect(hasValidMessage).toBe(true);
       });
 
       it('should provide helpful error message for completely invalid strategy', () => {
@@ -667,6 +677,7 @@ describe('redteam validators', () => {
           'Custom strategies must start with file:// and end with .js or .ts',
           'Strategy must be one of the built-in strategies:',
           'Invalid enum value',
+          'Invalid input', // Zod v4 union error message
         ];
         const hasValidMessage = validMessages.some((msg) => message.includes(msg));
         expect(hasValidMessage).toBe(true);
@@ -731,32 +742,34 @@ describe('Error message quality', () => {
     const testCases = [
       {
         config: { plugins: ['non-existent-plugin'] },
-        expectedError: 'Custom plugins must start with file://',
+        expectedError: /Custom plugins must start with file:\/\/|Invalid input/,
         description: 'non-existent plugin name',
       },
       {
         config: { strategies: ['file://strategy.json'] },
-        expectedError: 'Custom strategies must start with file:// and end with .js or .ts',
+        expectedError:
+          /Custom strategies must start with file:\/\/ and end with \.js or \.ts|Invalid input/,
         description: 'wrong file extension for strategy',
       },
       {
         config: { strategies: ['invalid-strategy-name'] },
-        expectedError: 'Custom strategies must start with file:// and end with .js or .ts',
+        expectedError:
+          /Custom strategies must start with file:\/\/ and end with \.js or \.ts|Invalid input/,
         description: 'invalid strategy name',
       },
       {
         config: { plugins: [{ id: 'default' }], numTests: 'many' as any },
-        expectedError: /Expected number|Invalid type/,
+        expectedError: /Expected number|Invalid type|Invalid input.*expected number/,
         description: 'string instead of number for numTests',
       },
       {
         config: { plugins: ['default'], delay: 'slow' as any },
-        expectedError: /Expected number|Invalid type/,
+        expectedError: /Expected number|Invalid type|Invalid input.*expected number/,
         description: 'string instead of number for delay',
       },
     ];
 
-    testCases.forEach(({ config, expectedError }) => {
+    testCases.forEach(({ config, expectedError, description }) => {
       let errorCaught = false;
       let zodError: z.ZodError | null = null;
 

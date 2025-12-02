@@ -65,7 +65,7 @@ export const PluginConfigSchema = z.object({
   prompt: z.string().optional(),
   purpose: z.string().optional(),
   // TODO: should be z.record(Modifier, z.unknown())
-  modifiers: z.record(z.unknown()).optional(),
+  modifiers: z.record(z.string(), z.unknown()).optional(),
   // BOLA
   targetIdentifiers: z.array(z.string()).optional(),
   // BFLA

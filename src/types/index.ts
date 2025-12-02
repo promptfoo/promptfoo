@@ -70,7 +70,7 @@ export const CommandLineOptionsSchema = z.object({
   filterProviders: z.string().optional(),
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
-  var: z.record(z.string()).optional(),
+  var: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
   promptPrefix: z.string().optional(),
@@ -164,7 +164,7 @@ export interface RunEvalOptions {
   abortSignal?: AbortSignal;
 }
 
-const EvaluateOptionsSchema = z.object({
+export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),
   delay: z.number().optional(),
   eventSource: z.string().optional(),
@@ -177,16 +177,15 @@ const EvaluateOptionsSchema = z.object({
   interactiveProviders: z.boolean().optional(),
   maxConcurrency: z.number().optional(),
   progressCallback: z
-    .function(
-      z.tuple([
-        z.number(),
-        z.number(),
-        z.number(),
-        z.custom<RunEvalOptions>(),
-        z.custom<PromptMetrics>(),
-      ]),
-      z.void(),
-    )
+    .custom<
+      (
+        progress: number,
+        total: number,
+        index: number,
+        evalOptions: RunEvalOptions,
+        metrics: PromptMetrics,
+      ) => void
+    >()
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
@@ -571,7 +570,7 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;
-  vars: Record<string, string | object>;
+  vars: Vars;
   test: AtomicTestCase;
   logProbs: number[] | undefined;
   config?: Record<string, any>;
@@ -628,6 +627,7 @@ const ProviderPromptMapSchema = z.record(
 const MetadataSchema = z.record(z.string(), z.any());
 
 export const VarsSchema = z.record(
+  z.string(),
   z.union([
     z.string(),
     z.number(),
@@ -638,7 +638,8 @@ export const VarsSchema = z.record(
   ]),
 );
 
-export type Vars = z.infer<typeof VarsSchema>;
+// Using a more permissive type to maintain compatibility with Zod 4 inference
+export type Vars = Record<string, any>;
 
 export type ScoringFunction = (
   namedScores: Record<string, number>,
@@ -717,7 +718,7 @@ export const TestCaseSchema = z.object({
     .optional(),
 });
 
-export type TestCase = z.infer<typeof TestCaseSchema>;
+export type TestCase = Omit<z.infer<typeof TestCaseSchema>, 'vars'> & { vars?: Vars };
 
 export type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
@@ -753,7 +754,7 @@ export type Scenario = z.infer<typeof ScenarioSchema>;
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
-  vars: z.record(z.union([z.string(), z.object({})])).optional(),
+  vars: z.record(z.string(), z.union([z.string(), z.object({})])).optional(),
 }).strict();
 
 export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;
@@ -811,10 +812,7 @@ export const DerivedMetricSchema = z.object({
   // The function to calculate the metric - either a mathematical expression or a function that takes the scores and returns a number
   value: z.union([
     z.string(),
-    z
-      .function()
-      .args(z.record(z.string(), z.number()), z.custom<RunEvalOptions>())
-      .returns(z.number()),
+    z.custom<(scores: Record<string, number>, context: RunEvalOptions) => number>(),
   ]),
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
@@ -930,7 +928,7 @@ export const TestSuiteSchema = z.object({
         .object({
           enabled: z.boolean(),
           endpoint: z.string(),
-          headers: z.record(z.string()).optional(),
+          headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
     })
@@ -1074,7 +1072,7 @@ export const TestSuiteConfigSchema = z.object({
         .object({
           enabled: z.boolean().default(false),
           endpoint: z.string(),
-          headers: z.record(z.string()).optional(),
+          headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
     })
