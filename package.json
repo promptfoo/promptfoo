@@ -95,6 +95,9 @@
     },
     "gaxios": "^7.0.0",
     "https-proxy-agent": "^7.0.0",
+    "@anthropic-ai/claude-agent-sdk": {
+      "zod": "^4.0.0"
+    },
     "mongoose": {
       "gcp-metadata": "^8.1.2"
     },
