@@ -30,7 +30,7 @@ import {
   readResult,
 } from '../util/database';
 import invariant from '../util/invariant';
-import { BrowserBehavior, openBrowser } from '../util/server';
+import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
@@ -312,7 +312,7 @@ export async function startServer(
       logger.info(`Server running at ${url} and monitoring for new evals.`);
       openBrowser(browserBehavior, port).catch((error) => {
         logger.error(
-          `Failed to handle browser behavior (${BrowserBehavior[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
+          `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
         );
       });
     })
