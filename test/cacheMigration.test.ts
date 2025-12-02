@@ -201,7 +201,8 @@ describe('Cache Migration from v4 to v7', () => {
       expect(result.stats.successCount).toBe(1);
 
       const newCache = readNewCacheFile();
-      expect(newCache.cache[0][1].expire).toBeUndefined();
+      // When expireTime is invalid, the expires field should be undefined (no expiration)
+      expect(newCache.cache[0][1].expires).toBeUndefined();
     });
 
     it('should create and keep backup when valid entries are migrated', () => {

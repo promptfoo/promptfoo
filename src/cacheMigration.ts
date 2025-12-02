@@ -12,7 +12,8 @@ import logger from './logger';
  *
  * New format (keyv-file):
  * - Single JSON file
- * - Structure: {cache: [[key, {value, expire}], ...], lastExpire: number}
+ * - Structure: {cache: [[key, {value, expires}], ...], lastExpire: number}
+ * - Note: Keyv uses 'expires' (not 'expire') for TTL timestamp in milliseconds
  */
 
 interface OldCacheEntry {
@@ -21,9 +22,14 @@ interface OldCacheEntry {
   val: string;
 }
 
+/**
+ * Keyv cache entry format.
+ * - value: The cached value (stored as-is from the old cache, typically a JSON string)
+ * - expires: Optional TTL timestamp in milliseconds (undefined = no expiration)
+ */
 interface NewCacheEntry {
-  value: any;
-  expires?: number; // Keyv uses 'expires' field for TTL
+  value: string;
+  expires?: number;
 }
 
 interface MigrationStats {
@@ -115,11 +121,35 @@ function checkDiskSpace(cachePath: string): boolean {
   }
 }
 
+/** Maximum number of attempts to acquire the migration lock */
+const MAX_LOCK_ATTEMPTS = 3;
+
 /**
- * Acquire a migration lock to prevent concurrent migrations
- * Returns file descriptor if lock acquired, null if another process holds the lock
+ * Check if a process with the given PID exists.
+ * Uses signal 0 which doesn't actually send a signal but checks process existence.
+ * Note: On Windows, this may throw different error types but the catch block handles it.
  */
-function acquireMigrationLock(cachePath: string): number | null {
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err: any) {
+    // ESRCH = No such process (Unix), EPERM = Permission denied but process exists
+    return err.code === 'EPERM';
+  }
+}
+
+/**
+ * Acquire a migration lock to prevent concurrent migrations.
+ * Returns file descriptor if lock acquired, null if another process holds the lock.
+ * Uses atomic file creation with 'wx' flag and includes stale lock detection.
+ */
+function acquireMigrationLock(cachePath: string, attempt: number = 1): number | null {
+  if (attempt > MAX_LOCK_ATTEMPTS) {
+    logger.warn(`[Cache Migration] Failed to acquire lock after ${MAX_LOCK_ATTEMPTS} attempts`);
+    return null;
+  }
+
   const lockFile = path.join(cachePath, '.migration.lock');
 
   try {
@@ -145,24 +175,22 @@ function acquireMigrationLock(cachePath: string): number | null {
         const pid = parseInt(content, 10);
 
         if (!isNaN(pid)) {
-          // Check if process exists
-          try {
-            process.kill(pid, 0); // Signal 0 just checks if process exists
+          if (isProcessRunning(pid)) {
             logger.info(`[Cache Migration] Another migration is in progress (PID: ${pid})`);
             return null; // Process exists, lock is valid
-          } catch {
-            // Process doesn't exist, lock is stale
-            logger.warn(`[Cache Migration] Removing stale lock file (PID: ${pid} not found)`);
-            try {
-              fs.unlinkSync(lockFile);
-              // Retry acquiring lock
-              return acquireMigrationLock(cachePath);
-            } catch (unlinkErr) {
-              logger.error(
-                `[Cache Migration] Failed to remove stale lock: ${(unlinkErr as Error).message}`,
-              );
-              return null;
-            }
+          }
+
+          // Process doesn't exist, lock is stale
+          logger.warn(`[Cache Migration] Removing stale lock file (PID: ${pid} not found)`);
+          try {
+            fs.unlinkSync(lockFile);
+            // Retry acquiring lock with incremented attempt counter
+            return acquireMigrationLock(cachePath, attempt + 1);
+          } catch (unlinkErr) {
+            logger.error(
+              `[Cache Migration] Failed to remove stale lock: ${(unlinkErr as Error).message}`,
+            );
+            return null;
           }
         }
       } catch (readErr) {
@@ -334,8 +362,46 @@ function readOldCacheEntries(cachePath: string): {
 }
 
 /**
- * Write entries in keyv-file format using atomic write operation
- * Writes to a temp file first, then renames atomically to prevent corruption
+ * Validate that a cache file can be read and has the expected structure.
+ * Returns the number of entries if valid, throws if invalid.
+ */
+function validateCacheFile(cachePath: string, expectedEntryCount: number): void {
+  if (!fs.existsSync(cachePath)) {
+    throw new Error(`Cache file does not exist after write: ${cachePath}`);
+  }
+
+  const content = fs.readFileSync(cachePath, 'utf-8');
+  let parsed: { cache?: unknown; lastExpire?: number };
+
+  try {
+    parsed = JSON.parse(content);
+  } catch (err) {
+    throw new Error(`Cache file is not valid JSON: ${(err as Error).message}`);
+  }
+
+  if (!Array.isArray(parsed.cache)) {
+    throw new Error('Cache file has invalid structure: missing or invalid "cache" array');
+  }
+
+  if (typeof parsed.lastExpire !== 'number') {
+    throw new Error('Cache file has invalid structure: missing or invalid "lastExpire" field');
+  }
+
+  if (parsed.cache.length !== expectedEntryCount) {
+    throw new Error(
+      `Cache file entry count mismatch: expected ${expectedEntryCount}, got ${parsed.cache.length}`,
+    );
+  }
+
+  logger.debug(
+    `[Cache Migration] Validated cache file: ${cachePath} (${expectedEntryCount} entries)`,
+  );
+}
+
+/**
+ * Write entries in keyv-file format using atomic write operation.
+ * Writes to a temp file first, then renames atomically to prevent corruption.
+ * Validates the written file before returning.
  */
 function writeNewCacheFile(entries: Map<string, NewCacheEntry>, newCachePath: string): void {
   const cache: Array<[string, NewCacheEntry]> = Array.from(entries.entries());
@@ -370,6 +436,9 @@ function writeNewCacheFile(entries: Map<string, NewCacheEntry>, newCachePath: st
     fs.renameSync(tempFile, newCachePath);
 
     logger.debug(`[Cache Migration] Atomically wrote cache file: ${newCachePath}`);
+
+    // Validate the written file to ensure data integrity
+    validateCacheFile(newCachePath, entries.size);
   } catch (err) {
     // Clean up temporary file on error
     try {

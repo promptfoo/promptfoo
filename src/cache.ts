@@ -19,6 +19,17 @@ let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 const cacheType =
   getEnvString('PROMPTFOO_CACHE_TYPE') || (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
 
+/** Default cache TTL: 14 days in seconds */
+const DEFAULT_CACHE_TTL_SECONDS = 60 * 60 * 24 * 14;
+
+/**
+ * Get the cache TTL in milliseconds.
+ * Reads from PROMPTFOO_CACHE_TTL environment variable (in seconds) or uses default.
+ */
+function getCacheTtlMs(): number {
+  return getEnvInt('PROMPTFOO_CACHE_TTL', DEFAULT_CACHE_TTL_SECONDS) * 1000;
+}
+
 export function getCache() {
   if (!cacheInstance) {
     let cachePath = '';
@@ -76,7 +87,7 @@ export function getCache() {
 
           const keyv = new Keyv({
             store,
-            ttl: getEnvInt('PROMPTFOO_CACHE_TTL', 60 * 60 * 24 * 14) * 1000, // Convert to ms
+            ttl: getCacheTtlMs(),
           });
 
           stores.push(keyv);
@@ -93,7 +104,7 @@ export function getCache() {
     // Initialize cache (disk if stores array has items, memory otherwise)
     cacheInstance = createCache({
       stores,
-      ttl: getEnvInt('PROMPTFOO_CACHE_TTL', 60 * 60 * 24 * 14) * 1000, // Convert to ms
+      ttl: getCacheTtlMs(),
       refreshThreshold: 0, // Disable background refresh
     });
   }
