@@ -333,7 +333,7 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
  * 
  * This route is defined last such that it acts as a catch-all for tasks.
  * 
- * TODO: Prepend a /tasks prefix to route i.e. /task/:taskId to avoid conflicts w/ other routes.
+ * TODO(out of scope for #6461): Prepend a /tasks prefix to route i.e. /task/:taskId to avoid conflicts w/ other routes.
  * 
  * @param taskId - The ID of the task to invoke. Note that IDs must be defined in
  * Cloud's task registry (See server/src/routes/task.ts).
