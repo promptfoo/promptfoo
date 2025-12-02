@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
 import { Command } from 'commander';
 import { getGlobalDispatcher } from 'undici';
 
@@ -81,6 +82,7 @@ export function addCommonOptionsRecursively(command: Command) {
 }
 
 async function main() {
+  console.log("Initializing run logging for main promptfoo cli entrypoint.")
   initializeRunLogging();
 
   // Set PROMPTFOO_DISABLE_UPDATE=true in CI to prevent hanging on network requests
@@ -92,6 +94,7 @@ async function main() {
   await runDbMigrations();
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+  logger.debug('Default config loaded.');
 
   const program = new Command('promptfoo');
   program
@@ -158,30 +161,49 @@ async function main() {
     if (cliState.postActionCallback) {
       await cliState.postActionCallback();
     }
+    logger.debug('Program postAction hook done.');
   });
 
   await program.parseAsync();
+  logger.debug('Program successfully parsed args [async].');
+}
+
+const shutdownGracefully = async () => {
+  logger.debug('Shutting down gracefully...');
+  await telemetry.shutdown();
+
+  closeLogger();
+  closeDbIfOpen();
+  try {
+    const dispatcher = getGlobalDispatcher();
+    await dispatcher.destroy();
+  } catch {
+    // Silently handle dispatcher destroy errors
+  }
+
+  logger.debug('Shutdown complete');
+
+  // Give Node.js 100ms to naturally exit if all handles are closed
+  // If there are lingering handles (file watchers, connections, etc), force exit
+  // Using .unref() allows natural exit if everything cleans up properly
+  setTimeout(() => {
+    logger.debug('Force exiting after cleanup timeout');
+    process.exit(process.exitCode || 0);
+  }, 100).unref();
 }
 
 // ESM replacement for require.main === module check
 // Check if this module is being run directly (not imported)
 try {
-  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] || '')) {
+  // Resolve symlinks in process.argv[1] to handle npm global bin symlinks
+  const mainModulePath = process.argv[1] ? realpathSync(process.argv[1]) : '';
+  if (resolve(fileURLToPath(import.meta.url)) === resolve(mainModulePath)) {
     checkNodeVersion();
-    main().finally(async () => {
-      logger.debug('Shutting down gracefully...');
-      await telemetry.shutdown();
-      logger.debug('Shutdown complete');
-
-      closeLogger();
-      closeDbIfOpen();
-      try {
-        const dispatcher = getGlobalDispatcher();
-        await dispatcher.destroy();
-      } catch {
-        // Silently handle dispatcher destroy errors
-      }
-    });
+    try {
+      await main();
+    } finally {
+      await shutdownGracefully();
+    }
   }
 } catch {
   // In CJS builds, this will fail silently - CJS entry point is handled differently

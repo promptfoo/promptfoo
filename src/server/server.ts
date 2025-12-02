@@ -289,7 +289,7 @@ export async function startServer(
 
   await runDbMigrations();
 
-  setupSignalWatcher(async () => {
+  const watcher = setupSignalWatcher(async () => {
     const latestEval = await Eval.latest();
     const results = await latestEval?.getResultsCount();
 
@@ -306,17 +306,44 @@ export async function startServer(
     socket.emit('init', await Eval.latest());
   });
 
-  httpServer
-    .listen(port, () => {
-      const url = `http://localhost:${port}`;
-      logger.info(`Server running at ${url} and monitoring for new evals.`);
-      openBrowser(browserBehavior, port).catch((error) => {
-        logger.error(
-          `Failed to handle browser behavior (${BrowserBehavior[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
-        );
+  logger.info(`Starting server`);
+  
+  // Return a Promise that only resolves when the server shuts down
+  // This keeps the view command running until SIGINT/SIGTERM
+  return new Promise<void>((resolve, reject) => {
+    httpServer
+      .listen(port, () => {
+        const url = `http://localhost:${port}`;
+        logger.info(`Server running at ${url} and monitoring for new evals.`);
+        openBrowser(browserBehavior, port).catch((error) => {
+          logger.error(
+            `Failed to handle browser behavior (${BrowserBehavior[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
+          );
+        });
+        // Don't resolve - server runs until shutdown signal
+      })
+      .on('error', (error: NodeJS.ErrnoException) => {
+        handleServerError(error, port); // This does process.exit(1)
+        reject(error);
       });
-    })
-    .on('error', (error: NodeJS.ErrnoException) => {
-      handleServerError(error, port);
-    });
+
+    // Register shutdown handlers to gracefully close the server
+    const shutdown = () => {
+      logger.info('Shutting down server...');
+      
+      // Close the file watcher first to stop monitoring
+      if (watcher && typeof watcher.close === 'function') {
+        watcher.close();
+      }
+      
+      // Close the HTTP server
+      httpServer.close(() => {
+        logger.info('Server closed');
+        resolve(); // Now we can resolve and let cleanup happen
+      });
+    };
+    
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+  });
 }
