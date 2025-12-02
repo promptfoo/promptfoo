@@ -398,6 +398,10 @@ export const CustomPoliciesSection = () => {
     setConfirmDeleteOpen(false);
   };
 
+  /**
+   * Generates custom policies for an application given its definition and a sample of existing
+   * policies. Generation occurs remotely in Promptfoo Cloud.
+   */
   const handleGeneratePolicies = useCallback(async () => {
     if (!config.applicationDefinition?.purpose) {
       return;
@@ -417,7 +421,8 @@ export const CustomPoliciesSection = () => {
         ...suggestedPolicies.map((p) => p.text || ''),
       ];
 
-      const response = await callApi('/redteam/generate-custom-policy', {
+      // Send the request:
+      const response = await callApi('/redteam/custom-policy-generation-task', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -428,11 +433,22 @@ export const CustomPoliciesSection = () => {
         }),
       });
 
-      if (!response.ok) {
+      // Parse the request body prior to handling success/error cases.
+      const data = (await response.json()) as {
+        result: PolicyObject[];
+        error: string | null;
+        task: string;
+        // TODO: Where will this be defined?
+        details?: string;
+      }
+
+      // Handle potential errors:
+      if (!response.ok || data.error) {
+        // Set a base error message to use as a fallback if a specific, server-defined message is
+        // not available.
         let errorMessage = 'Failed to generate policies';
         try {
-          const error = await response.json();
-          errorMessage = error.details ?? error.error ?? errorMessage;
+          errorMessage = data.details ?? data.error ?? errorMessage;
         } catch {
           // If response is not JSON, use status text
           errorMessage = `Failed to generate policies: ${response.statusText || response.status}`;
@@ -440,27 +456,18 @@ export const CustomPoliciesSection = () => {
         throw new Error(errorMessage);
       }
 
-      const data = await response.json();
-      const generatedPolicies: Array<{ name: string; text: string }> = data.policies || [];
+      // Otherwise, handle success:
+      const generatedPolicies: PolicyObject[] = data.result ?? [];
 
       if (generatedPolicies.length === 0) {
         toast.showToast(
           'No policies were generated. Try adjusting your application definition.',
           'warning',
         );
-        setSuggestedPolicies([]);
-        return;
       }
 
-      // Map to PolicyObject with generated IDs
-      const policyObjects: PolicyObject[] = generatedPolicies.map((p) => ({
-        id: makeInlinePolicyId(p.text),
-        text: p.text,
-        name: p.name,
-      }));
-
       // Store as suggested policies instead of directly adding them
-      setSuggestedPolicies(policyObjects);
+      setSuggestedPolicies(generatedPolicies);
     } catch (error) {
       console.error('Error generating policies:', error);
       let errorMessage = 'Failed to generate policies';

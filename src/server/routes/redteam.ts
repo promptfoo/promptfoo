@@ -18,9 +18,7 @@ import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { evalJobs } from './eval';
-import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import type { Request, Response } from 'express';
-import dedent from 'dedent';
 import { z } from 'zod';
 import {
   ConversationMessageSchema,
@@ -330,108 +328,21 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   res.json({ message: 'Job cancelled' });
 });
 
-redteamRouter.post(
-  '/generate-custom-policy',
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { applicationDefinition, existingPolicies } = req.body;
-
-      // Check if OpenAI API key is available before attempting to generate policies
-      // This feature requires an OpenAI API key and has no remote generation fallback
-      if (!process.env.OPENAI_API_KEY) {
-        res.status(400).json({
-          error: 'OpenAI API key required',
-          details: 'Set the OPENAI_API_KEY environment variable to use custom policy generation',
-        });
-        return;
-      }
-
-      const provider = new OpenAiChatCompletionProvider('gpt-5-mini-2025-08-07', {
-        config: {
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'policies',
-              strict: true,
-              schema: {
-                type: 'object',
-                properties: {
-                  policies: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        name: { type: 'string' },
-                        text: { type: 'string' },
-                      },
-                      required: ['name', 'text'],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-                required: ['policies'],
-                additionalProperties: false,
-              },
-            },
-          },
-          temperature: 0.7,
-        },
-      });
-
-      const systemPrompt = dedent`
-      You are an expert at defining red teaming policies for AI applications.
-      Your goal is to suggest custom policies (validators) that should be enforced based on the application definition.
-      Return a JSON object with a "policies" array, where each policy has a "name" and "text".
-      The "text" should be a clear, specific instruction for what the AI should not do or should check for.
-      Do not suggest policies that are already in the existing list.
-    `;
-
-      const userPrompt = dedent`
-      Application Definition:
-      ${JSON.stringify(applicationDefinition, null, 2)}
-
-      Existing Policies:
-      ${JSON.stringify(existingPolicies, null, 2)}
-
-      Suggest 3-5 new, unique, and relevant policies.`;
-
-      const response = await provider.callApi(
-        JSON.stringify([
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ]),
-      );
-
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
-      let policies = [];
-      try {
-        const output =
-          typeof response.output === 'string' ? JSON.parse(response.output) : response.output;
-        policies = output.policies || [];
-      } catch (e) {
-        logger.error(`Failed to parse generated policies: ${e}`);
-      }
-
-      res.json({ policies });
-    } catch (error) {
-      logger.error(`Error generating policies: ${error}`);
-      res.status(500).json({
-        error: 'Failed to generate policies',
-        details: error instanceof Error ? error.message : String(error),
-      });
-    }
-  },
-);
-
-// NOTE: This comes last, so the other routes take precedence
-redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> => {
-  const { task } = req.params;
+/**
+ * Proxies requests to Promptfoo Cloud to invoke tasks.
+ * 
+ * This route is defined last such that it acts as a catch-all for tasks.
+ * 
+ * TODO: Prepend a /tasks prefix to route i.e. /task/:taskId to avoid conflicts w/ other routes.
+ * 
+ * @param taskId - The ID of the task to invoke. Note that IDs must be defined in
+ * Cloud's task registry (See server/src/routes/task.ts).
+ */
+redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void> => {
+  const { taskId } = req.params;
   const cloudFunctionUrl = getRemoteGenerationUrl();
   logger.debug(
-    `Received ${task} task request: ${JSON.stringify({
+    `Received ${taskId} task request: ${JSON.stringify({
       method: req.method,
       url: req.url,
       body: req.body,
@@ -446,7 +357,7 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        task,
+        task: taskId,
         ...req.body,
       }),
     });
@@ -460,8 +371,8 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
     logger.debug(`Received response from cloud function: ${JSON.stringify(data)}`);
     res.json(data);
   } catch (error) {
-    logger.error(`Error in ${task} task: ${error}`);
-    res.status(500).json({ error: `Failed to process ${task} task` });
+    logger.error(`Error in ${taskId} task: ${error}`);
+    res.status(500).json({ error: `Failed to process ${taskId} task` });
   }
 });
 
