@@ -1,4 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  Mocked,
+  MockedFunction,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { strategyDisplayNames } from '../../../src/redteam/constants/metadata';
 import {
   type ApiProvider,
@@ -9,101 +19,116 @@ import {
 
 import type * as TokenUsageUtilsModule from '../../../src/util/tokenUsageUtils';
 
-const mockGetUserEmail = jest.fn();
-const mockGetUserId = jest.fn().mockReturnValue('test-user');
-jest.mock('../../../src/globalConfig/accounts', () => ({
-  getUserEmail: mockGetUserEmail,
-  getUserId: mockGetUserId,
-}));
+const mockGetUserEmail = vi.hoisted(() => vi.fn());
+const mockGetUserId = vi.fn().mockReturnValue('test-user');
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getUserEmail: mockGetUserEmail,
+    getUserId: mockGetUserId,
+  };
+});
 
-const mockFetchWithRetries = jest.fn<(...args: any[]) => Promise<any>>();
-jest.mock('../../../src/util/fetch', () => ({
-  fetchWithRetries: mockFetchWithRetries,
-}));
+const mockFetchWithRetries = vi.hoisted(() => vi.fn<(...args: any[]) => Promise<any>>());
+vi.mock('../../../src/util/fetch', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithRetries: mockFetchWithRetries,
+  };
+});
 
-const mockBuildRemoteUrl = jest.fn();
-jest.mock('../../../src/redteam/remoteGeneration', () => ({
-  buildRemoteUrl: mockBuildRemoteUrl,
-}));
+const mockBuildRemoteUrl = vi.hoisted(() => vi.fn());
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    buildRemoteUrl: mockBuildRemoteUrl,
+  };
+});
 
 const mockLogger = {
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
 };
-const mockLogRequestResponse = jest.fn();
+const mockLogRequestResponse = vi.hoisted(() => vi.fn());
 
-jest.mock('../../../src/logger', () => ({
+vi.mock('../../../src/logger', () => ({
   __esModule: true,
   default: mockLogger,
   logRequestResponse: mockLogRequestResponse,
 }));
 
-jest.mock('../../../src/util/tokenUsageUtils', () => {
-  const actual = jest.requireActual(
+vi.mock('../../../src/util/tokenUsageUtils', async () => {
+  const actual = (await vi.importActual(
     '../../../src/util/tokenUsageUtils',
-  ) as typeof import('../../../src/util/tokenUsageUtils');
+  )) as typeof import('../../../src/util/tokenUsageUtils');
   return {
     __esModule: true,
     ...actual,
-    accumulateResponseTokenUsage: jest.fn(actual.accumulateResponseTokenUsage),
-    createEmptyTokenUsage: jest.fn(actual.createEmptyTokenUsage),
+    accumulateResponseTokenUsage: vi.fn(actual.accumulateResponseTokenUsage),
+    createEmptyTokenUsage: vi.fn(actual.createEmptyTokenUsage),
   };
 });
 
-jest.mock('../../../src/redteam/providers/shared', () => {
-  const actual = jest.requireActual(
+vi.mock('../../../src/redteam/providers/shared', async () => {
+  const actual = (await vi.importActual(
     '../../../src/redteam/providers/shared',
-  ) as typeof import('../../../src/redteam/providers/shared');
+  )) as typeof import('../../../src/redteam/providers/shared');
   return {
     __esModule: true,
     ...actual,
-    createIterationContext: jest.fn(actual.createIterationContext),
+    createIterationContext: vi.fn(actual.createIterationContext),
   };
 });
 
-const tokenUsageUtils = jest.requireMock('../../../src/util/tokenUsageUtils') as jest.Mocked<
-  typeof TokenUsageUtilsModule
->;
-
-const actualTokenUsageUtils = jest.requireActual(
-  '../../../src/util/tokenUsageUtils',
-) as typeof import('../../../src/util/tokenUsageUtils');
-
-const { default: SimbaProvider } =
-  require('../../../src/redteam/providers/simba') as typeof import('../../../src/redteam/providers/simba');
-const sharedModule =
-  require('../../../src/redteam/providers/shared') as typeof import('../../../src/redteam/providers/shared');
-const actualSharedModule = jest.requireActual(
-  '../../../src/redteam/providers/shared',
-) as typeof import('../../../src/redteam/providers/shared');
+// Module imports - these are dynamically imported after mocks are set up
+let tokenUsageUtils: Mocked<typeof TokenUsageUtilsModule>;
+let actualTokenUsageUtils: typeof import('../../../src/util/tokenUsageUtils');
+let SimbaProvider: typeof import('../../../src/redteam/providers/simba').default;
+let sharedModule: typeof import('../../../src/redteam/providers/shared');
+let actualSharedModule: typeof import('../../../src/redteam/providers/shared');
 
 describe('SimbaProvider', () => {
-  const accumulateResponseTokenUsageMock =
-    tokenUsageUtils.accumulateResponseTokenUsage as jest.MockedFunction<
-      typeof actualTokenUsageUtils.accumulateResponseTokenUsage
-    >;
+  let accumulateResponseTokenUsageMock: MockedFunction<
+    typeof import('../../../src/util/tokenUsageUtils').accumulateResponseTokenUsage
+  >;
 
-  let consoleErrorSpy: ReturnType<typeof jest.spyOn> | undefined;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn> | undefined;
+
+  beforeAll(async () => {
+    tokenUsageUtils = (await import('../../../src/util/tokenUsageUtils')) as Mocked<
+      typeof TokenUsageUtilsModule
+    >;
+    actualTokenUsageUtils = await vi.importActual('../../../src/util/tokenUsageUtils');
+    const simbaModule = await import('../../../src/redteam/providers/simba');
+    SimbaProvider = simbaModule.default;
+    sharedModule = await import('../../../src/redteam/providers/shared');
+    actualSharedModule = await vi.importActual('../../../src/redteam/providers/shared');
+
+    accumulateResponseTokenUsageMock =
+      tokenUsageUtils.accumulateResponseTokenUsage as MockedFunction<
+        typeof actualTokenUsageUtils.accumulateResponseTokenUsage
+      >;
+  });
 
   const createMockResponse = (body: unknown, overrides: Record<string, unknown> = {}) =>
     ({
       ok: true,
       status: 200,
       statusText: 'OK',
-      json: jest.fn<() => Promise<unknown>>().mockResolvedValue(body),
+      json: vi.fn<() => Promise<unknown>>().mockResolvedValue(body),
       ...overrides,
     }) as any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockFetchWithRetries.mockReset();
     mockGetUserEmail.mockReset();
     mockGetUserId.mockReset();
     mockGetUserId.mockReturnValue('test-user');
     mockBuildRemoteUrl.mockReset();
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(function () {});
     mockBuildRemoteUrl.mockReturnValue('https://mocked-base');
   });
 
@@ -150,7 +175,7 @@ describe('SimbaProvider', () => {
 
     const targetProvider: ApiProvider = {
       id: () => 'target-provider',
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue(targetResponse),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue(targetResponse),
     };
 
     const operation = {
@@ -197,7 +222,7 @@ describe('SimbaProvider', () => {
       createMockResponse(finalOutputs),
     ];
 
-    mockFetchWithRetries.mockImplementation(async () => {
+    mockFetchWithRetries.mockImplementation(async function () {
       const next = fetchQueue.shift();
       if (!next) {
         throw new Error('Unexpected fetch call');
@@ -282,7 +307,7 @@ describe('SimbaProvider', () => {
 
     expect(targetProvider.callApi).toHaveBeenCalledTimes(1);
     const [callPrompt, callContext, callOptions] = (
-      targetProvider.callApi as jest.MockedFunction<ApiProvider['callApi']>
+      targetProvider.callApi as MockedFunction<ApiProvider['callApi']>
     ).mock.calls[0];
     expect(callPrompt).toBe(
       JSON.stringify([
@@ -304,20 +329,22 @@ describe('SimbaProvider', () => {
   it('handles client-side session IDs across multiple conversations', async () => {
     mockGetUserEmail.mockReturnValue('user@example.com');
 
-    const createIterationContextMock = sharedModule.createIterationContext as jest.MockedFunction<
+    const createIterationContextMock = sharedModule.createIterationContext as MockedFunction<
       typeof actualSharedModule.createIterationContext
     >;
-    createIterationContextMock.mockImplementation(
-      async ({ context, originalVars, iterationNumber }) => {
-        if (!context) {
-          return undefined;
-        }
-        return {
-          ...context,
-          vars: { ...originalVars, clientSessionId: `client-${iterationNumber}` },
-        };
-      },
-    );
+    createIterationContextMock.mockImplementation(async function ({
+      context,
+      originalVars,
+      iterationNumber,
+    }) {
+      if (!context) {
+        return undefined;
+      }
+      return {
+        ...context,
+        vars: { ...originalVars, clientSessionId: `client-${iterationNumber}` },
+      };
+    });
 
     const provider = new SimbaProvider({ injectVar: 'prompt' });
 
@@ -329,10 +356,12 @@ describe('SimbaProvider', () => {
     ];
     const targetProvider: ApiProvider = {
       id: () => 'target-provider',
-      callApi: jest.fn<ApiProvider['callApi']>().mockImplementation(async () => ({
-        output: targetResponses.shift() ?? 'default target answer',
-        tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
-      })),
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function () {
+        return {
+          output: targetResponses.shift() ?? 'default target answer',
+          tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
+        };
+      }),
     };
 
     const firstOperation = {
@@ -429,7 +458,7 @@ describe('SimbaProvider', () => {
       createMockResponse(finalOutputs),
     ];
 
-    mockFetchWithRetries.mockImplementation(async () => {
+    mockFetchWithRetries.mockImplementation(async function () {
       const next = fetchQueue.shift();
       if (!next) {
         throw new Error('Unexpected fetch call');
@@ -460,7 +489,7 @@ describe('SimbaProvider', () => {
     }
 
     expect(targetProvider.callApi).toHaveBeenCalledTimes(4);
-    const mockCallApi = targetProvider.callApi as jest.MockedFunction<ApiProvider['callApi']>;
+    const mockCallApi = targetProvider.callApi as MockedFunction<ApiProvider['callApi']>;
     const firstCall = mockCallApi.mock.calls[0];
     const secondCall = mockCallApi.mock.calls[1];
     const thirdCall = mockCallApi.mock.calls[2];
@@ -517,7 +546,7 @@ describe('SimbaProvider', () => {
 
     const targetProvider: ApiProvider = {
       id: () => 'target-provider',
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: 'unused',
         tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
       }),
@@ -555,7 +584,7 @@ describe('SimbaProvider', () => {
       createMockResponse(finalOutputs),
     ];
 
-    mockFetchWithRetries.mockImplementation(async () => {
+    mockFetchWithRetries.mockImplementation(async function () {
       const next = fetchQueue.shift();
       if (!next) {
         throw new Error('Unexpected fetch call');
@@ -611,7 +640,7 @@ describe('SimbaProvider', () => {
 
     const targetProvider: ApiProvider = {
       id: () => 'target-provider',
-      callApi: jest.fn<ApiProvider['callApi']>().mockImplementation(async (prompt, ctx) => {
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function (prompt, ctx) {
         callSnapshots.push({
           prompt,
           context: ctx
@@ -730,7 +759,7 @@ describe('SimbaProvider', () => {
       createMockResponse(finalOutputs),
     ];
 
-    mockFetchWithRetries.mockImplementation(async () => {
+    mockFetchWithRetries.mockImplementation(async function () {
       const next = fetchQueue.shift();
       if (!next) {
         throw new Error('Unexpected fetch call');
@@ -748,7 +777,7 @@ describe('SimbaProvider', () => {
     const results = await provider.runSimba({ prompt: 'base prompt', context });
 
     expect(targetProvider.callApi).toHaveBeenCalledTimes(4);
-    const mockCallApi = targetProvider.callApi as jest.MockedFunction<ApiProvider['callApi']>;
+    const mockCallApi = targetProvider.callApi as MockedFunction<ApiProvider['callApi']>;
     expect(mockCallApi.mock.calls[0][1]).toBe(mockCallApi.mock.calls[1][1]);
     expect(mockCallApi.mock.calls[2][1]).toBe(mockCallApi.mock.calls[3][1]);
 
@@ -805,7 +834,7 @@ describe('SimbaProvider', () => {
 
     const targetProvider: ApiProvider = {
       id: () => 'target-provider',
-      callApi: jest.fn<ApiProvider['callApi']>(),
+      callApi: vi.fn<ApiProvider['callApi']>(),
     };
 
     const context: CallApiContextParams = {

@@ -105,7 +105,7 @@ prompts:
   - file:<path to application files>/prompt-template/tone-detection.ts:toneEvaluationInstructions
 
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 
 tests:
   - description: 'Simple tone detection test'

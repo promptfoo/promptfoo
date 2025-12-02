@@ -20,7 +20,9 @@ describe('AzureEmbeddingProvider', () => {
     (provider as any).authHeaders = {
       'api-key': 'test-key',
     };
-    vi.spyOn(provider as any, 'ensureInitialized').mockImplementation(() => Promise.resolve());
+    vi.spyOn(provider as any, 'ensureInitialized').mockImplementation(function () {
+      return Promise.resolve();
+    });
 
     vi.mocked(fetchWithCache).mockReset();
   });

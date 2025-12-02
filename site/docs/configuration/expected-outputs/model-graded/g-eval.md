@@ -33,7 +33,7 @@ assert:
 
 ## How it works
 
-G-Eval uses GPT-4o (by default) to evaluate outputs based on your specified criteria. The evaluation process:
+G-Eval uses `gpt-4.1-2025-04-14` by default to evaluate outputs based on your specified criteria. The evaluation process:
 
 1. Takes your evaluation criteria
 2. Uses chain-of-thought prompting to analyze the output
@@ -43,13 +43,13 @@ The assertion passes if the score meets or exceeds the threshold (default 0.7).
 
 ## Customizing the evaluator
 
-Like other model-graded assertions, you can override the default GPT-4o evaluator:
+Like other model-graded assertions, you can override the default evaluator:
 
 ```yaml
 assert:
   - type: g-eval
     value: 'Ensure response is factually accurate'
-    provider: openai:gpt-4.1-mini
+    provider: openai:gpt-5-mini
 ```
 
 Or globally via test options:
@@ -57,7 +57,7 @@ Or globally via test options:
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-4.1-mini
+    provider: openai:gpt-5-mini
 ```
 
 ## Example
@@ -70,7 +70,7 @@ prompts:
     Write a technical explanation of {{topic}} 
     suitable for a beginner audience.
 providers:
-  - openai:gpt-4
+  - openai:gpt-5
 tests:
   - vars:
       topic: 'quantum computing'

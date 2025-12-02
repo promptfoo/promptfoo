@@ -8,6 +8,7 @@ import Snackbar from '@mui/material/Snackbar';
 import CloseIcon from '@mui/icons-material/Close';
 import UpdateIcon from '@mui/icons-material/Update';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { styled } from '@mui/material/styles';
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
@@ -51,6 +52,7 @@ const UpdateActions = styled(Box)({
 export default function UpdateBanner() {
   const { versionInfo, loading, error, dismissed, dismiss } = useVersionCheck();
   const [copySnackbarOpen, setCopySnackbarOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const bannerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -89,13 +91,25 @@ export default function UpdateBanner() {
     };
   }, []);
 
+  useEffect(() => {
+    if (copied) {
+      const timer = setTimeout(() => setCopied(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [copied]);
+
   const handleCopyCommand = async () => {
     const command = versionInfo?.updateCommands?.primary;
 
     if (command) {
+      const onSuccess = () => {
+        setCopySnackbarOpen(true);
+        setCopied(true);
+      };
+
       try {
         await navigator.clipboard.writeText(command);
-        setCopySnackbarOpen(true);
+        onSuccess();
       } catch (error) {
         // Fallback for browsers that don't support clipboard API or when it fails
         console.error('Failed to copy to clipboard:', error);
@@ -108,7 +122,7 @@ export default function UpdateBanner() {
         textarea.select();
         try {
           document.execCommand('copy');
-          setCopySnackbarOpen(true);
+          onSuccess();
         } catch (fallbackError) {
           console.error('Fallback copy also failed:', fallbackError);
           // Show the command in an alert as last resort
@@ -172,7 +186,13 @@ export default function UpdateBanner() {
               <Button
                 size="small"
                 variant="outlined"
-                startIcon={<ContentCopyIcon sx={{ fontSize: '0.875rem' }} />}
+                startIcon={
+                  copied ? (
+                    <CheckIcon sx={{ fontSize: '0.875rem' }} />
+                  ) : (
+                    <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
+                  )
+                }
                 onClick={handleCopyCommand}
                 sx={{ textTransform: 'none' }}
                 title={versionInfo.updateCommands.primary}

@@ -1,3 +1,4 @@
+import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import path from 'path';
@@ -9,94 +10,128 @@ import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { loadDefaultConfig } from '../../src/util/config/default';
 import FakeDataFactory from '../factories/data/fakeDataFactory';
 
-jest.mock('../../src/redteam/commands/generate');
-jest.mock('../../src/commands/eval', () => ({
-  doEval: jest.fn().mockResolvedValue({
-    table: [],
-    version: 3,
-    createdAt: new Date().toISOString(),
-    results: {
+vi.mock('../../src/redteam/commands/generate');
+vi.mock('../../src/commands/eval', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    doEval: vi.fn().mockResolvedValue({
       table: [],
-      summary: {
-        version: 3,
-        stats: {
-          successes: 0,
-          failures: 0,
-          tokenUsage: {},
+      version: 3,
+      createdAt: new Date().toISOString(),
+      results: {
+        table: [],
+        summary: {
+          version: 3,
+          stats: {
+            successes: 0,
+            failures: 0,
+            tokenUsage: {},
+          },
         },
       },
-    },
-  }),
-}));
-jest.mock('../../src/util/apiHealth');
-jest.mock('../../src/util/config/default');
-jest.mock('../../src/logger', () => ({
+    }),
+  };
+});
+vi.mock('../../src/util/apiHealth');
+vi.mock('../../src/util/config/default');
+vi.mock('../../src/logger', () => ({
   __esModule: true,
   default: {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
-  setLogCallback: jest.fn(),
-  setLogLevel: jest.fn(),
+  setLogCallback: vi.fn(),
+  setLogLevel: vi.fn(),
 }));
-jest.mock('../../src/globalConfig/accounts', () => ({
-  getUserEmail: jest.fn(() => 'test@example.com'),
-  setUserEmail: jest.fn(),
-  getAuthor: jest.fn(() => 'test@example.com'),
-  promptForEmailUnverified: jest.fn().mockResolvedValue(undefined),
-  checkEmailStatusAndMaybeExit: jest.fn().mockResolvedValue(undefined),
+vi.mock('../../src/globalConfig/accounts', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getUserEmail: vi.fn(() => 'test@example.com'),
+    setUserEmail: vi.fn(),
+    getAuthor: vi.fn(() => 'test@example.com'),
+    promptForEmailUnverified: vi.fn().mockResolvedValue(undefined),
+    checkEmailStatusAndMaybeExit: vi.fn().mockResolvedValue(undefined),
+  };
+});
+vi.mock('../../src/telemetry', () => ({
+  default: {
+    record: vi.fn().mockResolvedValue(undefined),
+    send: vi.fn().mockResolvedValue(undefined),
+    saveConsent: vi.fn().mockResolvedValue(undefined),
+  },
 }));
-jest.mock('../../src/telemetry', () => ({
-  record: jest.fn().mockResolvedValue(undefined),
-  send: jest.fn().mockResolvedValue(undefined),
-  saveConsent: jest.fn().mockResolvedValue(undefined),
-}));
-jest.mock('../../src/share', () => ({
-  createShareableUrl: jest.fn().mockResolvedValue('http://example.com'),
-}));
-jest.mock('../../src/util', () => ({
-  setupEnv: jest.fn(),
-}));
+vi.mock('../../src/share', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    createShareableUrl: vi.fn().mockResolvedValue('http://example.com'),
+  };
+});
+vi.mock('../../src/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    setupEnv: vi.fn(),
+  };
+});
 
-jest.mock('../../src/util/promptfooCommand', () => ({
-  promptfooCommand: jest.fn().mockImplementation((cmd) => {
-    if (cmd === '') {
-      return 'promptfoo';
-    }
-    return `promptfoo ${cmd}`;
-  }),
-  detectInstaller: jest.fn().mockReturnValue('unknown'),
-  isRunningUnderNpx: jest.fn().mockReturnValue(false),
-}));
-jest.mock('fs');
-jest.mock('js-yaml');
-jest.mock('os');
+vi.mock('../../src/util/promptfooCommand', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    promptfooCommand: vi.fn().mockImplementation(function (cmd) {
+      if (cmd === '') {
+        return 'promptfoo';
+      }
+      return `promptfoo ${cmd}`;
+    }),
+
+    detectInstaller: vi.fn().mockReturnValue('unknown'),
+    isRunningUnderNpx: vi.fn().mockReturnValue(false),
+  };
+});
+vi.mock('../../src/util/config/manage', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/dir'),
+  };
+});
+vi.mock('fs');
+vi.mock('js-yaml');
+vi.mock('os');
 
 describe('doRedteamRun', () => {
   const mockDate = new Date('2023-01-01T00:00:00.000Z');
-  let dateNowSpy: jest.SpyInstance;
+  let dateNowSpy: MockInstance;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
 
-    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(mockDate.getTime());
-    jest.mocked(checkRemoteHealth).mockResolvedValue({ status: 'OK', message: 'Healthy' });
-    jest.mocked(loadDefaultConfig).mockResolvedValue({
+    dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(mockDate.getTime());
+    vi.mocked(checkRemoteHealth).mockResolvedValue({ status: 'OK', message: 'Healthy' });
+    vi.mocked(loadDefaultConfig).mockResolvedValue({
       defaultConfig: {},
       defaultConfigPath: 'promptfooconfig.yaml',
     });
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(os.tmpdir).mockReturnValue('/tmp');
-    jest.mocked(fs.mkdirSync).mockImplementation(() => '');
-    jest.mocked(fs.writeFileSync).mockImplementation(() => {});
-    jest.mocked(yaml.dump).mockReturnValue('mocked-yaml-content');
-    jest.mocked(doGenerateRedteam).mockResolvedValue({});
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(os.tmpdir).mockImplementation(function () {
+      return '/tmp';
+    });
+    vi.mocked(fs.mkdirSync).mockImplementation(function () {
+      return '';
+    });
+    vi.mocked(fs.writeFileSync).mockImplementation(function () {});
+    vi.mocked(yaml.dump).mockImplementation(function () {
+      return 'mocked-yaml-content';
+    });
+    vi.mocked(doGenerateRedteam).mockResolvedValue({});
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     dateNowSpy.mockRestore();
   });
 
@@ -277,7 +312,7 @@ describe('doRedteamRun', () => {
 
     it('should log debug information when processing liveRedteamConfig', async () => {
       // Get the mocked logger
-      const mockLogger = jest.requireMock('../../src/logger').default;
+      const mockLogger = (await import('../../src/logger')).default;
 
       await doRedteamRun({
         liveRedteamConfig: mockConfig,

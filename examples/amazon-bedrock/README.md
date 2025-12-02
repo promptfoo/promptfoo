@@ -99,7 +99,7 @@ For this example, you'll need to:
 
 ```yaml
 providers:
-  - id: bedrock:kb:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:kb:us.anthropic.claude-sonnet-4-5-20250929-v1:0
     config:
       region: 'us-east-2' # Change to your region
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID' # Replace with your KB ID

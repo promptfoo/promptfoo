@@ -1,7 +1,8 @@
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { validate as isUUID } from 'uuid';
-import { sha256 } from '../../../util/createHash';
-import { PolicyObjectSchema } from '../../types';
-import { POLICY_METRIC_PREFIX } from './constants';
+import { sha256 } from '../../../../src/util/createHash';
+import { PolicyObjectSchema } from '../../../../src/redteam/types';
+import { POLICY_METRIC_PREFIX } from '../../../../src/redteam/plugins/policy/constants';
 import {
   deserializePolicyIdFromMetric,
   determinePolicyTypeFromId,
@@ -10,20 +11,24 @@ import {
   isValidPolicyObject,
   makeCustomPolicyCloudUrl,
   makeInlinePolicyId,
-} from './utils';
+} from '../../../../src/redteam/plugins/policy/utils';
 import { v4 as uuidv4 } from 'uuid';
 
 // Mock dependencies
-jest.mock('uuid', () => ({
-  validate: jest.fn(),
-  v4: jest.fn(),
+vi.mock('uuid', () => ({
+  validate: vi.fn(),
+  v4: vi.fn(),
 }));
 
-jest.mock('../../../util/createHash', () => ({
-  sha256: jest.fn(),
+vi.mock('../../../../src/util/createHash', () => ({
+  sha256: vi.fn(),
 }));
 
 describe('Policy Utils', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('isPolicyMetric', () => {
     it('should return true for metrics that start with POLICY_METRIC_PREFIX', () => {
       expect(isPolicyMetric(`${POLICY_METRIC_PREFIX}:test`)).toBe(true);
@@ -47,7 +52,7 @@ describe('Policy Utils', () => {
 
     it('should deserialize a policy ID and remove strategy suffix', () => {
       const mockUuid = '550e8400-e29b-41d4-a716-446655440000';
-      (uuidv4 as jest.Mock).mockReturnValue(mockUuid);
+      (uuidv4 as Mock).mockReturnValue(mockUuid);
 
       const result = deserializePolicyIdFromMetric(`${POLICY_METRIC_PREFIX}:${mockUuid}/jailbreak`);
       expect(result).toBe(mockUuid);
@@ -55,7 +60,7 @@ describe('Policy Utils', () => {
 
     it('should handle multiple strategy suffixes', () => {
       const mockUuid = '550e8400-e29b-41d4-a716-446655440000';
-      (uuidv4 as jest.Mock).mockReturnValue(mockUuid);
+      (uuidv4 as Mock).mockReturnValue(mockUuid);
 
       const result = deserializePolicyIdFromMetric(
         `${POLICY_METRIC_PREFIX}:${mockUuid}/jailbreak/extra`,
@@ -143,20 +148,20 @@ describe('Policy Utils', () => {
 
   describe('determinePolicyTypeFromId', () => {
     it('should return "reusable" for valid UUIDs', () => {
-      (isUUID as jest.Mock).mockReturnValue(true);
+      (isUUID as Mock).mockReturnValue(true);
       expect(determinePolicyTypeFromId('550e8400-e29b-41d4-a716-446655440000')).toBe('reusable');
       expect(isUUID).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440000');
     });
 
     it('should return "inline" for non-UUID strings', () => {
-      (isUUID as jest.Mock).mockReturnValue(false);
+      (isUUID as Mock).mockReturnValue(false);
       expect(determinePolicyTypeFromId('hash123456')).toBe('inline');
       expect(determinePolicyTypeFromId('not-a-uuid')).toBe('inline');
       expect(determinePolicyTypeFromId('')).toBe('inline');
     });
 
     it('should handle edge cases', () => {
-      (isUUID as jest.Mock).mockReturnValue(false);
+      (isUUID as Mock).mockReturnValue(false);
       expect(determinePolicyTypeFromId('123')).toBe('inline');
       expect(determinePolicyTypeFromId('550e8400')).toBe('inline');
     });
@@ -164,7 +169,7 @@ describe('Policy Utils', () => {
 
   describe('isValidPolicyObject', () => {
     // Mock the PolicyObjectSchema.safeParse method
-    const mockSafeParse = jest.spyOn(PolicyObjectSchema, 'safeParse');
+    const mockSafeParse = vi.spyOn(PolicyObjectSchema, 'safeParse');
 
     it('should return true for valid PolicyObject', () => {
       mockSafeParse.mockReturnValueOnce({ success: true, data: {} as any });
@@ -207,7 +212,7 @@ describe('Policy Utils', () => {
 
   describe('makeInlinePolicyId', () => {
     it('should create a 12-character ID from policy text', () => {
-      (sha256 as jest.Mock).mockReturnValue('abcdef1234567890abcdef1234567890');
+      (sha256 as Mock).mockReturnValue('abcdef1234567890abcdef1234567890');
       const result = makeInlinePolicyId('This is my policy text');
 
       expect(result).toBe('abcdef123456');
@@ -216,7 +221,7 @@ describe('Policy Utils', () => {
     });
 
     it('should create consistent IDs for the same text', () => {
-      (sha256 as jest.Mock).mockReturnValue('1234567890abcdef1234567890abcdef');
+      (sha256 as Mock).mockReturnValue('1234567890abcdef1234567890abcdef');
       const text = 'Same policy text';
       const id1 = makeInlinePolicyId(text);
       const id2 = makeInlinePolicyId(text);
@@ -226,7 +231,7 @@ describe('Policy Utils', () => {
     });
 
     it('should create different IDs for different text', () => {
-      (sha256 as jest.Mock)
+      (sha256 as Mock)
         .mockReturnValueOnce('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
         .mockReturnValueOnce('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
 
@@ -239,7 +244,7 @@ describe('Policy Utils', () => {
     });
 
     it('should handle empty strings', () => {
-      (sha256 as jest.Mock).mockReturnValue('emptyhashabcd1234567890abcdef');
+      (sha256 as Mock).mockReturnValue('emptyhashabcd1234567890abcdef');
       const result = makeInlinePolicyId('');
 
       expect(result).toBe('emptyhashabc');
@@ -247,7 +252,7 @@ describe('Policy Utils', () => {
     });
 
     it('should handle special characters and multiline text', () => {
-      (sha256 as jest.Mock).mockReturnValue('specialhash1234567890abcdef');
+      (sha256 as Mock).mockReturnValue('specialhash1234567890abcdef');
       const text = `Line 1
 Line 2
 Special chars: !@#$%^&*()
@@ -259,7 +264,7 @@ Unicode: 你好 🎉`;
     });
 
     it('should always return 12 characters even if hash is shorter', () => {
-      (sha256 as jest.Mock).mockReturnValue('short');
+      (sha256 as Mock).mockReturnValue('short');
       const result = makeInlinePolicyId('Short hash text');
 
       expect(result).toBe('short');
