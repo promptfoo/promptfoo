@@ -4,6 +4,25 @@ import path from 'path';
 import logger from './logger';
 
 /**
+ * Migration sunset date: After this date, skip migration entirely.
+ * Users who haven't upgraded by then will start with a fresh cache.
+ *
+ * Set to 2 months after initial release (December 2025).
+ * After this date, this entire migration module can be removed.
+ *
+ * TODO(2026-02-01): Remove this migration code after sunset date.
+ */
+const MIGRATION_SUNSET_DATE = new Date('2026-02-01T00:00:00Z');
+
+/**
+ * Check if migration has been sunset (date has passed).
+ * After sunset, we skip migration entirely - users get a fresh cache.
+ */
+function isMigrationSunset(): boolean {
+  return Date.now() >= MIGRATION_SUNSET_DATE.getTime();
+}
+
+/**
  * Cache migration from cache-manager v4 (cache-manager-fs-hash) to v7 (keyv-file)
  *
  * Old format (cache-manager-fs-hash):
@@ -489,8 +508,9 @@ function markMigrationComplete(cacheBasePath: string, stats: MigrationStats): vo
 }
 
 /**
- * Check if migration has already been completed
- * Validates that marker exists AND migration state is consistent
+ * Check if migration has already been completed.
+ * Uses fast-path: if marker exists AND new cache file exists, skip directory scan.
+ * Only validates old cache format when inconsistency is suspected.
  */
 function isMigrationComplete(cacheBasePath: string, newCacheFile?: string): boolean {
   const markerPath = path.join(cacheBasePath, '.cache-migrated');
@@ -499,12 +519,18 @@ function isMigrationComplete(cacheBasePath: string, newCacheFile?: string): bool
     return false;
   }
 
-  // Marker exists - validate state is consistent
-  if (newCacheFile) {
-    const hasOldCache = hasOldCacheFormat(cacheBasePath);
-    const hasNewCache = fs.existsSync(newCacheFile);
+  // Fast path: if marker exists AND new cache file exists, migration is complete
+  // No need to scan for old cache format (expensive operation)
+  if (newCacheFile && fs.existsSync(newCacheFile)) {
+    return true;
+  }
 
-    if (hasOldCache && !hasNewCache) {
+  // Slow path: marker exists but new cache file doesn't - check if this is a problem
+  if (newCacheFile) {
+    // Only now check for old cache format (this is the expensive operation)
+    const hasOldCache = hasOldCacheFormat(cacheBasePath);
+
+    if (hasOldCache) {
       // Marker exists but migration is incomplete or corrupted
       logger.warn(
         '[Cache Migration] Marker file exists but migration appears incomplete. ' +
@@ -519,6 +545,7 @@ function isMigrationComplete(cacheBasePath: string, newCacheFile?: string): bool
     }
   }
 
+  // Marker exists, no new cache file specified or no old cache found - consider complete
   return true;
 }
 
@@ -746,8 +773,23 @@ export function runMigration(cachePath: string, newCacheFilePath: string): Migra
 }
 
 /**
- * Check if migration should be run
+ * Check if migration should be run.
+ * Returns false if:
+ * - Migration is already complete (marker + new cache file exist)
+ * - Migration has been sunset (date passed)
+ * - No old cache format exists
  */
 export function shouldRunMigration(cachePath: string, newCacheFile?: string): boolean {
-  return !isMigrationComplete(cachePath, newCacheFile) && hasOldCacheFormat(cachePath);
+  // Fast path: check sunset date first (no I/O needed)
+  if (isMigrationSunset()) {
+    return false;
+  }
+
+  // Check if already complete (uses fast-path when possible)
+  if (isMigrationComplete(cachePath, newCacheFile)) {
+    return false;
+  }
+
+  // Finally, check if old cache format exists
+  return hasOldCacheFormat(cachePath);
 }
