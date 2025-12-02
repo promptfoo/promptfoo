@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs';
-import { defineConfig } from 'tsup';
+import { defineConfig } from 'tsdown';
 
 // Read package.json for version constants
 const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
@@ -22,6 +22,8 @@ export default defineConfig([
     splitting: false,
     shims: true,
     sourcemap: true,
+    clean: false,
+    fixedExtension: false, // Use .js extension for ESM since package.json has type: module
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
@@ -41,13 +43,14 @@ export default defineConfig([
     clean: true,
     shims: true, // Provides __dirname, __filename shims automatically
     sourcemap: true,
+    fixedExtension: false, // Use .js extension for ESM since package.json has type: module
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
       'process.env.BUILD_FORMAT': '"esm"',
     },
-    banner: {
-      js: '#!/usr/bin/env node',
+    outputOptions: {
+      banner: '#!/usr/bin/env node',
     },
     external: [
       // Externalize all bare module imports so Node resolves CJS deps natively
@@ -71,6 +74,8 @@ export default defineConfig([
     treeshake: true,
     sourcemap: true,
     shims: true, // Ensure library ESM build has shims
+    clean: false,
+    fixedExtension: false, // Use .js extension for ESM since package.json has type: module
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
@@ -88,20 +93,12 @@ export default defineConfig([
     target: 'node20',
     outDir: 'dist/src',
     sourcemap: true,
+    clean: false,
+    fixedExtension: true, // Use .cjs extension for CJS output
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"cjs"',
       'process.env.BUILD_FORMAT': '"cjs"',
-    },
-    logOverride: {
-      'empty-import-meta': 'silent', // Silence import.meta warnings in CJS builds
-    },
-    esbuildOptions: (options) => {
-      options.logOverride = { 'empty-import-meta': 'silent' };
-      return options;
-    },
-    outExtension() {
-      return { '.js': '.cjs' };
     },
     external: [
       // Externalize all bare module imports so Node resolves CJS deps natively
