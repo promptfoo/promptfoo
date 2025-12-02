@@ -48,8 +48,14 @@ export class CustomPlugin extends RedteamPluginBase {
     return this.definition.id || `promptfoo:redteam:custom`;
   }
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, filePath: string) {
-    super(provider, purpose, injectVar);
+  constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    filePath: string,
+    inputs?: Record<string, string>,
+  ) {
+    super(provider, purpose, injectVar, {}, inputs);
     this.definition = loadCustomPluginDefinition(filePath);
   }
 

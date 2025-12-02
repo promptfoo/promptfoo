@@ -32,8 +32,14 @@ export class PolicyPlugin extends RedteamPluginBase {
    */
   private name?: PolicyObject['name'];
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
-    super(provider, purpose, injectVar, config);
+  constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    config: PluginConfig,
+    inputs?: Record<string, string>,
+  ) {
+    super(provider, purpose, injectVar, config, inputs);
     invariant(config.policy, 'A "policy" property is required for the policy plugin.');
 
     if (isValidPolicyObject(config.policy)) {

@@ -277,9 +277,15 @@ export class BeavertailsPlugin extends RedteamPluginBase {
   static readonly canGenerateRemote = false;
   protected pluginConfig?: BeaverTailsPluginConfig;
 
-  constructor(provider: any, purpose: string, injectVar: string, config?: BeaverTailsPluginConfig) {
+  constructor(
+    provider: any,
+    purpose: string,
+    injectVar: string,
+    config?: BeaverTailsPluginConfig,
+    inputs?: Record<string, string>,
+  ) {
     const normalizedConfig = normalizePluginConfig(config);
-    super(provider, purpose, injectVar, normalizedConfig);
+    super(provider, purpose, injectVar, normalizedConfig, inputs);
     this.pluginConfig = normalizedConfig;
     this.validateConfig(config);
   }
