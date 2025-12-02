@@ -86,7 +86,7 @@ describe('Script value resolution', () => {
       await runAssertion({
         assertion: {
           type: 'llm-rubric',
-          value: 'file://rubric-generator.js:knownValue',
+          value: 'file://rubric-generator.cjs:knownValue',
         },
         test: { vars: {}, options: { provider: { id: 'echo' } } },
         providerResponse: baseProviderResponse,
@@ -136,7 +136,7 @@ describe('Script value resolution', () => {
       await runAssertion({
         assertion: {
           type: 'llm-rubric',
-          value: 'file://rubric-generator.js:rubricObject',
+          value: 'file://rubric-generator.cjs:rubricObject',
         },
         test: { vars: {}, options: { provider: { id: 'echo' } } },
         providerResponse: baseProviderResponse,
@@ -161,7 +161,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion({
         assertion: {
           type: 'contains',
-          value: 'file://rubric-generator.js:knownValue',
+          value: 'file://rubric-generator.cjs:knownValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -179,7 +179,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion({
         assertion: {
           type: 'contains',
-          value: 'file://rubric-generator.js:knownValue',
+          value: 'file://rubric-generator.cjs:knownValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -200,7 +200,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion({
         assertion: {
           type: 'contains',
-          value: 'file://rubric-generator.js:numericValue',
+          value: 'file://rubric-generator.cjs:numericValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -220,7 +220,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion({
         assertion: {
           type: 'equals',
-          value: 'file://rubric-generator.js:knownValue',
+          value: 'file://rubric-generator.cjs:knownValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -238,7 +238,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion({
         assertion: {
           type: 'equals',
-          value: 'file://rubric-generator.js:knownValue',
+          value: 'file://rubric-generator.cjs:knownValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -258,7 +258,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion({
         assertion: {
           type: 'regex',
-          value: 'file://rubric-generator.js:getPattern',
+          value: 'file://rubric-generator.cjs:getPattern',
         },
         test: { vars: { pattern: '\\d+' } },
         providerResponse: {
@@ -279,7 +279,7 @@ describe('Script value resolution', () => {
         runAssertion({
           assertion: {
             type: 'equals',
-            value: 'file://rubric-generator.js:functionValue',
+            value: 'file://rubric-generator.cjs:functionValue',
           },
           test: { vars: {} },
           providerResponse: baseProviderResponse,
@@ -294,7 +294,7 @@ describe('Script value resolution', () => {
         runAssertion({
           assertion: {
             type: 'contains',
-            value: 'file://rubric-generator.js:booleanValue',
+            value: 'file://rubric-generator.cjs:booleanValue',
           },
           test: { vars: {} },
           providerResponse: baseProviderResponse,
@@ -309,7 +309,7 @@ describe('Script value resolution', () => {
         runAssertion({
           assertion: {
             type: 'llm-rubric',
-            value: 'file://rubric-generator.js:gradingResultValue',
+            value: 'file://rubric-generator.cjs:gradingResultValue',
           },
           test: { vars: {}, options: { provider: { id: 'echo' } } },
           providerResponse: baseProviderResponse,
@@ -327,7 +327,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion({
         assertion: {
           type: 'javascript',
-          value: 'file://rubric-generator.js:gradingFunction',
+          value: 'file://rubric-generator.cjs:gradingFunction',
         },
         test: { vars: {} },
         providerResponse: {
@@ -346,7 +346,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion({
         assertion: {
           type: 'javascript',
-          value: 'file://rubric-generator.js:gradingFunction',
+          value: 'file://rubric-generator.cjs:gradingFunction',
         },
         test: { vars: {} },
         providerResponse: {
@@ -384,7 +384,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion({
         assertion: {
           type: 'equals',
-          value: 'file://rubric-generator.js:emptyValue',
+          value: 'file://rubric-generator.cjs:emptyValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -402,7 +402,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion({
         assertion: {
           type: 'contains-all',
-          value: 'file://rubric-generator.js:referenceArray',
+          value: 'file://rubric-generator.cjs:referenceArray',
         },
         test: { vars: {} },
         providerResponse: {

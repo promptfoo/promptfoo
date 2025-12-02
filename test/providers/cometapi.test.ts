@@ -10,15 +10,24 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
-vi.mock('../../src/providers/openai/chat', () => ({
-  OpenAiChatCompletionProvider: vi.fn(),
-}));
-vi.mock('../../src/providers/openai/completion', () => ({
-  OpenAiCompletionProvider: vi.fn(),
-}));
-vi.mock('../../src/providers/openai/embedding', () => ({
-  OpenAiEmbeddingProvider: vi.fn(),
-}));
+vi.mock('../../src/providers/openai/chat', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiChatCompletionProvider: vi.fn(),
+  };
+});
+vi.mock('../../src/providers/openai/completion', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiCompletionProvider: vi.fn(),
+  };
+});
+vi.mock('../../src/providers/openai/embedding', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiEmbeddingProvider: vi.fn(),
+  };
+});
 vi.mock('../../src/cache');
 
 describe('createCometApiProvider', () => {

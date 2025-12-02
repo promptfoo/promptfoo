@@ -54,6 +54,13 @@ const DOM_SETTLE_DELAY_MS = 2000;
 const APPROVAL_PROCESS_DELAY_MS = 500;
 const APPROVAL_CLICK_DELAY_MS = 1000;
 const RESPONSE_EXTRACT_RETRY_DELAY_MS = 500;
+// Time to wait after last content change to ensure workflow is fully complete
+// Multi-step workflows may have agents that run sequentially, each updating the DOM
+// MCP tool calls (like Dropbox searches) can take 30+ seconds
+const CONTENT_STABILIZATION_MS = 10000; // Wait 10 seconds after last content change
+const CONTENT_POLL_MS = 500; // Poll for content changes every 500ms
+const MIN_WORKFLOW_WAIT_MS = 30000; // Minimum 30 seconds for multi-step workflows with MCP tools
+const SHORT_RESPONSE_THRESHOLD = 100; // Responses under this length might be intermediate (e.g., JSON classification)
 // Note: MIN_RESPONSE_LENGTH (20), MIN_MESSAGE_LENGTH (30), MAX_INIT_ATTEMPTS (100),
 // and INIT_POLL_INTERVAL_MS (100) are hardcoded in the HTML template string
 // and in DOM evaluation functions where constants cannot be easily passed.
@@ -116,9 +123,11 @@ function generateChatKitHTML(
   if (version) {
     validateVersion(version);
   }
-  // Default userId includes timestamp for uniqueness
-  const effectiveUserId = userId || `promptfoo-eval-${Date.now()}`;
-  validateUserId(effectiveUserId);
+  // userId is required - caller must provide it (constructor ensures this)
+  if (!userId) {
+    throw new Error('userId is required for ChatKit HTML generation');
+  }
+  validateUserId(userId);
 
   const versionClause = version ? `, version: '${version}'` : '';
 
@@ -134,7 +143,7 @@ function generateChatKitHTML(
   <script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js"></script>
 
   <script>
-    window.__state = { ready: false, responses: [], threadId: null, error: null };
+    window.__state = { ready: false, responses: [], threadId: null, error: null, responding: false };
 
     async function init() {
       const chatkit = document.getElementById('chatkit');
@@ -168,7 +177,7 @@ function generateChatKitHTML(
               },
               body: JSON.stringify({
                 workflow: { id: '${workflowId}'${versionClause} },
-                user: '${effectiveUserId}'
+                user: '${userId}'
               })
             });
 
@@ -198,7 +207,12 @@ function generateChatKitHTML(
         window.__state.threadId = e.detail.threadId;
       });
 
+      chatkit.addEventListener('chatkit.response.start', () => {
+        window.__state.responding = true;
+      });
+
       chatkit.addEventListener('chatkit.response.end', () => {
+        window.__state.responding = false;
         window.__state.responses.push({ timestamp: Date.now() });
       });
 
@@ -234,8 +248,21 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
               return className.includes('user') || role === 'user' || testId.includes('user');
             };
 
-            // Try assistant-specific selectors first
+            // Helper to check if element is an assistant message
+            const isAssistantMessage = (el: Element): boolean => {
+              const className = el.className?.toString().toLowerCase() || '';
+              const role = el.getAttribute('data-role') || '';
+              const testId = el.getAttribute('data-testid') || '';
+              return (
+                className.includes('assistant') ||
+                role === 'assistant' ||
+                testId.includes('assistant')
+              );
+            };
+
+            // Try assistant-specific selectors first - these are most reliable
             const assistantSelectors = [
+              '[data-thread-item="assistant-message"]', // ChatKit specific
               '[data-testid="assistant-message"]',
               '[data-role="assistant"]',
               '[class*="assistant"]:not([class*="user"])',
@@ -245,38 +272,58 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
               const els = document.querySelectorAll(sel);
               if (els.length > 0) {
                 const lastEl = els[els.length - 1];
-                const text = lastEl.textContent || '';
-                if (text.length > 30) {
-                  return { text, source: sel };
+                const text = lastEl.textContent?.trim() || '';
+                // Accept any non-empty assistant message (removed length requirement)
+                if (text.length > 0) {
+                  return { text, source: sel, isAssistant: true };
                 }
               }
             }
 
-            // Look for message containers and find the last non-user message
+            // Look for message containers and find messages
+            // Collect both user and assistant messages to identify the last assistant one
             const allMessages = document.querySelectorAll('[class*="message"]');
-            const nonUserMessages: string[] = [];
+            const messages: Array<{ text: string; isUser: boolean; isAssistant: boolean }> = [];
 
             allMessages.forEach((msg) => {
-              if (!isUserMessage(msg)) {
-                const text = msg.textContent || '';
-                // Skip short texts (likely labels) and avoid duplicates
-                if (text.length > 30 && !nonUserMessages.includes(text)) {
-                  nonUserMessages.push(text);
-                }
+              const text = msg.textContent?.trim() || '';
+              if (text.length > 0) {
+                messages.push({
+                  text,
+                  isUser: isUserMessage(msg),
+                  isAssistant: isAssistantMessage(msg),
+                });
               }
             });
 
-            if (nonUserMessages.length > 0) {
-              // Get the last (most recent) assistant message
-              return { text: nonUserMessages[nonUserMessages.length - 1], source: 'last-non-user' };
+            // Find the last non-user message (assistant messages)
+            for (let i = messages.length - 1; i >= 0; i--) {
+              if (!messages[i].isUser && messages[i].text.length > 0) {
+                return { text: messages[i].text, source: 'last-non-user', isAssistant: true };
+              }
             }
 
             // Try markdown content (often contains the formatted response)
             const markdown = document.querySelectorAll('.markdown, [class*="markdown"]');
             if (markdown.length > 0) {
-              const text = markdown[markdown.length - 1].textContent || '';
-              if (text.length > 30) {
-                return { text, source: 'markdown' };
+              // Find markdown that's not inside a user message
+              for (let i = markdown.length - 1; i >= 0; i--) {
+                const el = markdown[i];
+                let parent = el.parentElement;
+                let inUserArea = false;
+                while (parent && parent !== document.body) {
+                  if (isUserMessage(parent)) {
+                    inUserArea = true;
+                    break;
+                  }
+                  parent = parent.parentElement;
+                }
+                if (!inUserArea) {
+                  const text = el.textContent?.trim() || '';
+                  if (text.length > 0) {
+                    return { text, source: 'markdown', isAssistant: true };
+                  }
+                }
               }
             }
 
@@ -284,25 +331,24 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
             const responseContainers = document.querySelectorAll(
               '[class*="response"], [class*="reply"], [class*="answer"]',
             );
-            for (const container of responseContainers) {
-              const text = container.textContent || '';
-              if (text.length > 30 && !isUserMessage(container)) {
-                return { text, source: 'response-container' };
+            for (let i = responseContainers.length - 1; i >= 0; i--) {
+              const container = responseContainers[i];
+              if (!isUserMessage(container)) {
+                const text = container.textContent?.trim() || '';
+                if (text.length > 0) {
+                  return { text, source: 'response-container', isAssistant: true };
+                }
               }
             }
 
-            // Fallback: look for the longest div that's not in a user message area
-            const divs = document.querySelectorAll('div');
-            let longestText = '';
+            // Fallback: look for the last div that's not in a user message area
+            // Prefer shorter texts to avoid grabbing the entire page
+            const divs = Array.from(document.querySelectorAll('div'));
+            const candidateDivs: Array<{ text: string; el: Element }> = [];
 
-            divs.forEach((div) => {
-              const text = div.textContent || '';
-              if (
-                text.length > longestText.length &&
-                text.length > 50 &&
-                text.length < 5000 &&
-                !isUserMessage(div)
-              ) {
+            for (const div of divs) {
+              const text = div.textContent?.trim() || '';
+              if (text.length > 0 && text.length < 5000 && !isUserMessage(div)) {
                 // Check parent chain for user indicators
                 let parent = div.parentElement;
                 let inUserArea = false;
@@ -314,45 +360,88 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
                   parent = parent.parentElement;
                 }
                 if (!inUserArea) {
-                  longestText = text;
+                  candidateDivs.push({ text, el: div });
                 }
               }
-            });
+            }
 
-            if (longestText.length > 50) {
-              return { text: longestText, source: 'longest-div' };
+            // Sort by length and prefer medium-length texts (likely actual responses)
+            // Avoid very short (labels) and very long (containers with multiple messages)
+            if (candidateDivs.length > 0) {
+              // Find divs that don't contain other message-like elements
+              const leafDivs = candidateDivs.filter(
+                (d) => d.el.querySelectorAll('[class*="message"]').length === 0,
+              );
+              if (leafDivs.length > 0) {
+                // Return the last leaf div (most recent)
+                return { text: leafDivs[leafDivs.length - 1].text, source: 'leaf-div' };
+              }
+              // Otherwise return the last candidate
+              return { text: candidateDivs[candidateDivs.length - 1].text, source: 'fallback-div' };
             }
 
             // Last resort: full body text
-            return { text: document.body?.textContent || '', source: 'body' };
+            return { text: document.body?.textContent?.trim() || '', source: 'body' };
           });
 
-          if (result.text && result.text.trim().length > 20) {
+          if (result.text && result.text.length > 0) {
             // Clean up the response - remove Cloudflare scripts and other noise
-            let cleaned = result.text
-              .replace(/\(function\(\)\{.*?\}\)\(\);?/gs, '')
-              .replace(/You said:.*?(?=\n|$)/g, '')
-              .trim();
+            let cleaned = result.text.replace(/\(function\(\)\{.*?\}\)\(\);?/gs, '').trim();
 
-            // If there's a JSON classification prefix, strip it and use the rest
-            const jsonMatch = cleaned.match(/^(\{[^}]+\})\s*/);
-            if (jsonMatch) {
-              const rest = cleaned.slice(jsonMatch[0].length).trim();
-              cleaned = rest.length > 20 ? rest : cleaned;
+            // Skip if this looks like just approval button text
+            if (cleaned === 'ApproveReject' || cleaned === 'Approve' || cleaned === 'Reject') {
+              logger.debug('[ChatKitProvider] Skipping approval button text', { text: cleaned });
+              continue;
             }
 
-            if (cleaned.length > 20) {
+            // Remove approval UI text from the response (only the approval block, not standalone words)
+            // The approval UI typically appears as: "Approval required\nDoes this work for you?\nApprove\nReject"
+            cleaned = cleaned
+              .replace(/\n?Approval required\n?Does this work for you\?\n?Approve\n?Reject$/gi, '')
+              .replace(
+                /\n?Approval required[\s\n]+Does this work for you\?[\s\n]+Approve[\s\n]+Reject$/gi,
+                '',
+              )
+              .trim();
+
+            // Remove "You said:" prefix and everything after it if it looks like user echo
+            // This pattern matches "You said:" followed by any text
+            const youSaidMatch = cleaned.match(/^You said:([\s\S]*)/i);
+            if (youSaidMatch) {
+              // The entire response is just echoing the user - this means we got the wrong element
+              // Return empty to trigger retry or indicate no real response
+              logger.debug('[ChatKitProvider] Detected user echo, discarding', {
+                preview: cleaned.substring(0, 100),
+              });
+              // Don't return the echo - continue to retry or return empty
+              cleaned = '';
+            }
+
+            // Also check for "You said:" appearing anywhere in the text and remove it
+            cleaned = cleaned.replace(/You said:[\s\S]*/gi, '').trim();
+
+            // Don't strip JSON if it's the only response - it might be intentional
+            // Only strip if there's substantial text after the JSON
+            const jsonMatch = cleaned.match(/^(\{[^}]+\})\s+(.+)/s);
+            if (jsonMatch && jsonMatch[2].trim().length > 50) {
+              cleaned = jsonMatch[2].trim();
+            }
+
+            if (cleaned.length > 0) {
               logger.debug('[ChatKitProvider] Extracted response', {
                 source: result.source,
                 length: cleaned.length,
+                preview: cleaned.substring(0, 100),
               });
               return cleaned;
             }
 
-            // Return original if cleaning removed too much
-            if (result.text.trim().length > 20) {
-              return result.text.trim();
-            }
+            // If we got here with no cleaned text but had original text,
+            // the extraction found only user content - return empty to retry
+            logger.debug('[ChatKitProvider] No assistant content found after cleaning', {
+              originalLength: result.text.length,
+              source: result.source,
+            });
           }
         } catch (e) {
           logger.debug('[ChatKitProvider] Could not access frame', { url, error: e, attempt });
@@ -367,6 +456,116 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
   }
 
   return '';
+}
+
+/**
+ * Get the current visible text content from the ChatKit iframe.
+ * Returns the text content or null if iframe not accessible.
+ */
+async function getIframeContent(page: Page): Promise<string | null> {
+  const frames = page.frames();
+  for (const frame of frames) {
+    const url = frame.url();
+    if (isOpenAICdnUrl(url)) {
+      try {
+        const content = await frame.evaluate(() => {
+          return document.body?.innerText || '';
+        });
+        return content;
+      } catch {
+        // Frame not accessible
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Wait for iframe content to stabilize by polling for changes.
+ * Multi-step workflows may have agents that run sequentially, each updating the DOM.
+ * This function waits until:
+ * 1. Content hasn't changed for CONTENT_STABILIZATION_MS
+ * 2. At least MIN_WORKFLOW_WAIT_MS has elapsed since first response
+ * 3. Not currently in 'responding' state
+ */
+async function waitForContentStabilization(
+  page: Page,
+  timeout: number,
+  startTime: number,
+): Promise<void> {
+  let lastContent = '';
+  let lastChangeTime = Date.now();
+  const pollStartTime = Date.now();
+
+  logger.debug('[ChatKitProvider] Starting content stabilization polling');
+
+  while (Date.now() - pollStartTime < timeout) {
+    // Check if we're still responding
+    const state = await page.evaluate(() => (window as any).__state);
+
+    // Get current iframe content
+    const currentContent = (await getIframeContent(page)) || '';
+
+    // Check if content has changed
+    if (currentContent !== lastContent) {
+      logger.debug('[ChatKitProvider] Content changed', {
+        previousLength: lastContent.length,
+        newLength: currentContent.length,
+        preview: currentContent.substring(Math.max(0, currentContent.length - 200)),
+      });
+      lastContent = currentContent;
+      lastChangeTime = Date.now();
+    }
+
+    const timeSinceStart = Date.now() - startTime;
+    const timeSinceLastChange = Date.now() - lastChangeTime;
+
+    // Extract just the assistant response part for length checking
+    // The full content includes "You said: ... The assistant said: ..."
+    const assistantMatch = currentContent.match(/The assistant said:\s*\n*([\s\S]*)/i);
+    const assistantResponse = assistantMatch ? assistantMatch[1].trim() : currentContent;
+    if (!assistantMatch && currentContent.length > 0) {
+      logger.debug(
+        '[ChatKitProvider] Assistant pattern not found, using full content for length check',
+        {
+          contentLength: currentContent.length,
+        },
+      );
+    }
+    const isShortResponse = assistantResponse.length < SHORT_RESPONSE_THRESHOLD;
+
+    // For short responses (possibly intermediate like JSON classification),
+    // wait longer to see if more content appears
+    const effectiveStabilizationMs = isShortResponse
+      ? CONTENT_STABILIZATION_MS * 2
+      : CONTENT_STABILIZATION_MS;
+    const effectiveMinWaitMs = isShortResponse ? MIN_WORKFLOW_WAIT_MS * 2 : MIN_WORKFLOW_WAIT_MS;
+
+    // Check stabilization conditions:
+    // 1. Not currently responding
+    // 2. Content hasn't changed for stabilization period
+    // 3. At least minimum wait time since workflow started
+    if (
+      !state.responding &&
+      timeSinceLastChange >= effectiveStabilizationMs &&
+      timeSinceStart >= effectiveMinWaitMs
+    ) {
+      logger.debug('[ChatKitProvider] Content stabilized', {
+        timeSinceStart,
+        timeSinceLastChange,
+        contentLength: currentContent.length,
+        assistantResponseLength: assistantResponse.length,
+        isShortResponse,
+        responseCount: state.responses?.length,
+      });
+      return;
+    }
+
+    // Wait before next poll
+    await page.waitForTimeout(CONTENT_POLL_MS);
+  }
+
+  logger.debug('[ChatKitProvider] Content stabilization timeout reached');
 }
 
 /**
@@ -494,6 +693,17 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   private serverPort: number = 0;
   private initialized: boolean = false;
 
+  // Static userId for consistent template keys across concurrent evaluations
+  private static defaultUserId: string | null = null;
+
+  private static getDefaultUserId(): string {
+    if (!OpenAiChatKitProvider.defaultUserId) {
+      // Generate once per process to ensure template consistency
+      OpenAiChatKitProvider.defaultUserId = `promptfoo-eval-${Date.now()}`;
+    }
+    return OpenAiChatKitProvider.defaultUserId;
+  }
+
   constructor(
     workflowId: string,
     options: { config?: OpenAiChatKitOptions; id?: string; env?: EnvOverrides } = {},
@@ -508,7 +718,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     this.chatKitConfig = {
       workflowId: options.config?.workflowId || workflowId,
       version: options.config?.version,
-      userId: options.config?.userId, // Default with timestamp is applied in generateChatKitHTML
+      // Use consistent default userId to ensure template stability during concurrent execution
+      userId: options.config?.userId || OpenAiChatKitProvider.getDefaultUserId(),
       timeout: options.config?.timeout || DEFAULT_TIMEOUT_MS,
       headless: options.config?.headless ?? true,
       serverPort: options.config?.serverPort || 0,
@@ -674,6 +885,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       return this.callApiWithPool(prompt);
     }
 
+    const startTime = Date.now();
+
     try {
       await this.initialize();
 
@@ -717,16 +930,26 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       );
 
       // Wait for response - in stateful mode, wait for a NEW response
+      // Multi-step workflows may update DOM content multiple times as different
+      // agents run (classification -> domain agent -> summarizer)
       logger.debug('[ChatKitProvider] Waiting for response');
       const expectedResponseCount = responseCount + 1;
+
+      // First, wait for at least one response to start
       await this.page.waitForFunction(
         (expected) => (window as any).__state?.responses?.length >= expected,
         expectedResponseCount,
         { timeout: this.chatKitConfig.timeout },
       );
 
-      // Allow DOM to settle - ChatKit iframe needs time to render the response
-      await this.page.waitForTimeout(DOM_SETTLE_DELAY_MS);
+      // Wait for workflow to stabilize by polling actual DOM content
+      // Multi-step workflows (classification -> domain agent) may continue
+      // updating DOM content after the first response.end event
+      await waitForContentStabilization(
+        this.page,
+        this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
+        startTime,
+      );
 
       // Handle any approval steps in the workflow
       const approvalsHandled = await processApprovals(
@@ -740,7 +963,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         logger.debug('[ChatKitProvider] Processed approvals', { count: approvalsHandled });
       }
 
-      // Extract response from iframe
+      // Extract response from iframe DOM
       const responseText = await extractResponseFromFrame(this.page);
 
       // Get thread ID
@@ -751,16 +974,24 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         () => (window as any).__state?.responses?.length || 0,
       );
 
+      const latencyMs = Date.now() - startTime;
+
       logger.debug('[ChatKitProvider] Response received', {
         threadId,
         textLength: responseText.length,
         turnNumber: finalResponseCount,
+        latencyMs,
       });
 
       return {
         output: responseText,
+        cached: false, // ChatKit responses are never cached (browser-based)
+        latencyMs,
+        // Use sessionId for consistency with HTTP provider's stateful handling
+        sessionId: threadId,
+        // Token usage not available from ChatKit, but track request count
+        tokenUsage: { numRequests: 1 },
         metadata: {
-          threadId,
           workflowId: this.chatKitConfig.workflowId,
           version: this.chatKitConfig.version,
           stateful: this.chatKitConfig.stateful,
@@ -855,6 +1086,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     pool.setTemplate(templateKey, html);
 
     let pooledPage: Awaited<ReturnType<typeof pool.acquirePage>> | null = null;
+    const startTime = Date.now();
 
     try {
       // Acquire a page from the pool for this specific template
@@ -873,13 +1105,19 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         });
       }, prompt);
 
-      // Wait for response
+      // Wait for at least one response to start
       await page.waitForFunction(() => (window as any).__state?.responses?.length > 0, {
         timeout: this.chatKitConfig.timeout,
       });
 
-      // Allow DOM to settle
-      await page.waitForTimeout(DOM_SETTLE_DELAY_MS);
+      // Wait for workflow to stabilize by polling actual DOM content
+      // Multi-step workflows (classification -> domain agent) may continue
+      // updating DOM content after the first response.end event
+      await waitForContentStabilization(
+        page,
+        this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
+        startTime,
+      );
 
       // Handle any approval steps in the workflow
       const approvalsHandled = await processApprovals(
@@ -893,21 +1131,29 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         logger.debug('[ChatKitProvider] Pool processed approvals', { count: approvalsHandled });
       }
 
-      // Extract response from iframe
+      // Extract response from iframe DOM
       const responseText = await extractResponseFromFrame(page);
 
       // Get thread ID
       const threadId = await page.evaluate(() => (window as any).__state.threadId);
 
+      const latencyMs = Date.now() - startTime;
+
       logger.debug('[ChatKitProvider] Pool response received', {
         threadId,
         textLength: responseText.length,
+        latencyMs,
       });
 
       return {
         output: responseText,
+        cached: false, // ChatKit responses are never cached (browser-based)
+        latencyMs,
+        // Use sessionId for consistency with HTTP provider's stateful handling
+        sessionId: threadId,
+        // Token usage not available from ChatKit, but track request count
+        tokenUsage: { numRequests: 1 },
         metadata: {
-          threadId,
           workflowId: this.chatKitConfig.workflowId,
           version: this.chatKitConfig.version,
           poolMode: true,

@@ -7,7 +7,7 @@ import { PromptfooModelProvider } from '../../src/providers/promptfooModel';
 describe('PromptfooModelProvider', () => {
   let mockFetch: Mock;
   let mockCloudConfig: ReturnType<typeof vi.spyOn>;
-  const mockLogger = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+  const mockLogger = vi.spyOn(logger, 'debug').mockImplementation(function () {});
 
   beforeEach(() => {
     mockFetch = vi.fn();

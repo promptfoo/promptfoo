@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { EchoProvider } from '../../src/providers/echo';
 
 describe('EchoProvider', () => {

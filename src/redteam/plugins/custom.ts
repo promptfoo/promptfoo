@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
+import { fromError } from 'zod-validation-error/v3';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';

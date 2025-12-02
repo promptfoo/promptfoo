@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InsuranceCoverageDiscriminationPluginGrader } from '../../../../src/redteam/plugins/insurance/coverageDiscrimination';
 
 describe('InsuranceCoverageDiscriminationPluginGrader', () => {
@@ -8,7 +9,7 @@ describe('InsuranceCoverageDiscriminationPluginGrader', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should have correct id', () => {

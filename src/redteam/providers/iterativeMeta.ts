@@ -164,13 +164,17 @@ export async function runMetaAgentRedteam({
     };
 
     // Get strategic decision from cloud
-    const agentResp = await agentProvider.callApi(JSON.stringify(cloudRequest), {
-      prompt: {
-        raw: JSON.stringify(cloudRequest),
-        label: 'meta-agent',
+    const agentResp = await agentProvider.callApi(
+      JSON.stringify(cloudRequest),
+      {
+        prompt: {
+          raw: JSON.stringify(cloudRequest),
+          label: 'meta-agent',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
 
     // Don't track agent provider calls globally (internal meta-coordination, not user-facing probes)
     // Only accumulate tokens for this test's total

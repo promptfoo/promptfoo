@@ -206,8 +206,8 @@ export class Telemetry {
 
 const telemetry = new Telemetry();
 
-// Use Symbol.for to ensure the same symbol across module reloads (e.g., in Jest tests).
-// This prevents MaxListenersExceededWarning when tests use jest.resetModules().
+// Use Symbol.for to ensure the same symbol across module reloads (e.g., in tests).
+// This prevents MaxListenersExceededWarning when tests use vi.resetModules().
 const TELEMETRY_INSTANCE_KEY = Symbol.for('promptfoo.telemetry.instance');
 const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
 

@@ -7,7 +7,7 @@ import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { validate as uuidValidate } from 'uuid';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
+import { fromError } from 'zod-validation-error/v3';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, VERSION } from '../../constants';
@@ -32,7 +32,7 @@ import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
-import { synthesize } from '../';
+import { synthesize } from '../index';
 import {
   ADDITIONAL_STRATEGIES,
   DEFAULT_STRATEGIES,

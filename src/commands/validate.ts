@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { validate as isUUID } from 'uuid';
-import { fromError } from 'zod-validation-error';
+import { fromError } from 'zod-validation-error/v3';
 import { disableCache } from '../cache';
 import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';

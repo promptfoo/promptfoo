@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
 
-vi.mock('proxy-agent', () => ({
-  ProxyAgent: vi.fn().mockImplementation(() => ({})),
-}));
+vi.mock('proxy-agent', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    ProxyAgent: vi.fn().mockImplementation(function () {
+      return {};
+    }),
+  };
+});
 
 describe('AnthropicGenericProvider', () => {
   describe('constructor', () => {

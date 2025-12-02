@@ -1,18 +1,18 @@
 import crypto from 'crypto';
+import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
-
-import dedent from 'dedent';
 import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
   afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
   type MockInstance,
+  vi,
 } from 'vitest';
+
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -33,7 +33,7 @@ import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../.
 import { sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
 
 // Mock console.warn to prevent test noise
-const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(function () {});
 
 vi.mock('../../src/cache', async () => {
   const actual = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
@@ -63,18 +63,22 @@ vi.mock('../../src/util/file', async () => {
   };
 });
 
-vi.mock('../../src/esm', () => ({
-  importModule: vi.fn(async (_modulePath: string, functionName?: string) => {
-    const mockModule = {
-      default: vi.fn((data) => data.defaultField),
-      parseResponse: vi.fn((data) => data.specificField),
-    };
-    if (functionName) {
-      return mockModule[functionName as keyof typeof mockModule];
-    }
-    return mockModule;
-  }),
-}));
+vi.mock('../../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    importModule: vi.fn(async (_modulePath: string, functionName?: string) => {
+      const mockModule = {
+        default: vi.fn((data) => data.defaultField),
+        parseResponse: vi.fn((data) => data.specificField),
+      };
+      if (functionName) {
+        return mockModule[functionName as keyof typeof mockModule];
+      }
+      return mockModule;
+    }),
+  };
+});
 
 vi.mock('../../src/cliState', async () => {
   const actual = await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
@@ -86,9 +90,12 @@ vi.mock('../../src/cliState', async () => {
   };
 });
 
-// Mock jks-js module for JKS tests
+// Mock jks-js module for JKS tests - don't use importOriginal as the native module may fail to load
 vi.mock('jks-js', () => ({
   toPem: vi.fn(),
+  default: {
+    toPem: vi.fn(),
+  },
 }));
 
 afterAll(() => {
@@ -101,8 +108,12 @@ beforeEach(() => {
   vi.mocked(maybeLoadFromExternalFile).mockReset();
   vi.mocked(maybeLoadConfigFromExternalFile).mockReset();
   vi.mocked(fetchWithCache).mockResolvedValue(undefined as any);
-  vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => input);
-  vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((input) => input);
+  vi.mocked(maybeLoadFromExternalFile).mockImplementation(function (input: unknown) {
+    return input;
+  });
+  vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function (input: unknown) {
+    return input;
+  });
 });
 
 afterEach(() => {
@@ -468,7 +479,9 @@ describe('HttpProvider', () => {
         GET /api/data HTTP/1.1
         Host: example.com
       `;
-      vi.mocked(maybeLoadFromExternalFile).mockReturnValueOnce(fileContent);
+      vi.mocked(maybeLoadFromExternalFile).mockImplementationOnce(function () {
+        return fileContent;
+      });
 
       const provider = new HttpProvider('https', {
         config: {
@@ -2917,7 +2930,7 @@ describe('error handling', () => {
   });
 
   it('should throw session parsing errors', async () => {
-    const sessionParser = vi.fn().mockImplementation(() => {
+    const sessionParser = vi.fn().mockImplementation(function () {
       throw new Error('Session parsing failed');
     });
     const provider = new HttpProvider('http://test.com', {
@@ -4161,7 +4174,7 @@ describe('RSA signature authentication', () => {
   it('should throw error when neither config password nor environment variable is provided for JKS', async () => {
     // Get the mocked JKS module
     const jksMock = vi.mocked(await import('jks-js'));
-    jksMock.toPem.mockImplementation(() => {
+    jksMock.toPem.mockImplementation(function () {
       throw new Error('Should not be called');
     });
 
@@ -4441,10 +4454,12 @@ describe('Body file resolution', () => {
       { id: '2', amount: '250.75', date: '2025-06-02' },
     ];
 
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
-      query: '{{prompt}}',
-      date: '2025-06-03T22:01:13.797Z',
-      transactions: mockTransactions,
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
+      return {
+        query: '{{prompt}}',
+        date: '2025-06-03T22:01:13.797Z',
+        transactions: mockTransactions,
+      };
     });
 
     const provider = new HttpProvider('http://test.com', {
@@ -4488,15 +4503,17 @@ describe('Body file resolution', () => {
       { name: 'Jane', email: 'jane@example.com' },
     ];
 
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
-      query: '{{prompt}}',
-      data: {
-        transactions: mockTransactions,
-        settings: mockConfig,
-        nested: {
-          users: mockUsers,
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
+      return {
+        query: '{{prompt}}',
+        data: {
+          transactions: mockTransactions,
+          settings: mockConfig,
+          nested: {
+            users: mockUsers,
+          },
         },
-      },
+      };
     });
 
     const provider = new HttpProvider('http://test.com', {
@@ -4536,13 +4553,15 @@ describe('Body file resolution', () => {
     };
     const mockUsers = [{ name: 'John', email: 'john@example.com' }];
 
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue([
-      'regular string',
-      mockConfig,
-      {
-        inside_array: mockUsers,
-      },
-    ]);
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
+      return [
+        'regular string',
+        mockConfig,
+        {
+          inside_array: mockUsers,
+        },
+      ];
+    });
 
     const provider = new HttpProvider('http://test.com', {
       config: {
@@ -4578,7 +4597,9 @@ describe('Body file resolution', () => {
       },
     };
 
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(originalBody);
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
+      return originalBody;
+    });
 
     const provider = new HttpProvider('http://test.com', {
       config: {
@@ -4595,7 +4616,9 @@ describe('Body file resolution', () => {
   it('should work with string body containing file:// reference', () => {
     const mockContent = 'This is the content from the file';
 
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(mockContent);
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
+      return mockContent;
+    });
 
     const provider = new HttpProvider('http://test.com', {
       config: {
@@ -4615,9 +4638,11 @@ describe('Body file resolution', () => {
       { id: '2', amount: '250.75' },
     ];
 
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
-      query: '{{prompt}}',
-      transactions: mockTransactions,
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
+      return {
+        query: '{{prompt}}',
+        transactions: mockTransactions,
+      };
     });
 
     const provider = new HttpProvider('http://test.com', {
@@ -4693,7 +4718,9 @@ describe('Body file resolution', () => {
       arrayWithFiles: ['string', { fromFile: true }, ['nested', 'array']],
     };
 
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(mockData);
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
+      return mockData;
+    });
 
     const provider = new HttpProvider('http://test.com', {
       config: {
@@ -4763,8 +4790,10 @@ describe('HttpProvider - Sanitization', () => {
 
   it('should sanitize Authorization header in debug logs', async () => {
     // Mock the file resolution to return a simple body to avoid conflicts
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
-      simple: 'test-value',
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
+      return {
+        simple: 'test-value',
+      };
     });
 
     const provider = new HttpProvider(testUrl, {
@@ -4797,8 +4826,10 @@ describe('HttpProvider - Sanitization', () => {
 
   it('should sanitize multiple credential fields', async () => {
     // Simplified test without signature auth to avoid certificate issues
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
-      simple: 'test-value',
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
+      return {
+        simple: 'test-value',
+      };
     });
 
     const provider = new HttpProvider(testUrl, {
@@ -4833,8 +4864,10 @@ describe('HttpProvider - Sanitization', () => {
   });
 
   it('should preserve non-sensitive fields', async () => {
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
-      simple: 'test-value',
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
+      return {
+        simple: 'test-value',
+      };
     });
 
     const provider = new HttpProvider(testUrl, {
@@ -5142,6 +5175,108 @@ describe('HttpProvider - Sanitization', () => {
       expect(sanitizeUrl(null as any)).toBeNull();
       expect(sanitizeUrl(undefined as any)).toBeUndefined();
     });
+  });
+});
+
+describe('HttpProvider - Abort Signal Handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should pass abortSignal to fetchWithCache', async () => {
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+
+    const abortController = new AbortController();
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt', undefined, { abortSignal: abortController.signal });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: abortController.signal }),
+      expect.any(Number),
+      expect.any(String),
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should pass abortSignal to fetchWithCache in raw request mode', async () => {
+    const rawRequest = dedent`
+      POST /api HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "{{ prompt }}"}
+    `;
+
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        request: rawRequest,
+      },
+    });
+
+    const abortController = new AbortController();
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt', undefined, { abortSignal: abortController.signal });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: abortController.signal }),
+      expect.any(Number),
+      expect.any(String),
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should work without abortSignal (backwards compatibility)', async () => {
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    // Call without options parameter
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.not.objectContaining({ signal: expect.anything() }),
+      expect.any(Number),
+      expect.any(String),
+      undefined,
+      undefined,
+    );
   });
 });
 

@@ -430,6 +430,37 @@ export async function logRequestResponse(options: {
   }
 }
 
+/**
+ * Close all file transports and cleanup logger resources
+ * Should be called during graceful shutdown to prevent event loop hanging
+ */
+export function closeLogger(): void {
+  try {
+    // Close all file transports
+    const fileTransports = winstonLogger.transports.filter(
+      (transport) => transport instanceof winston.transports.File,
+    );
+
+    for (const transport of fileTransports) {
+      const filename = (transport as any).filename;
+      if (filename) {
+        logger.debug(`Closing log file: ${filename}`);
+      }
+      if (typeof transport.close === 'function') {
+        transport.close();
+      }
+      winstonLogger.remove(transport);
+    }
+
+    if (fileTransports.length > 0) {
+      logger.debug('Logger cleanup complete');
+    }
+  } catch (error) {
+    // Can't use logger here since we're shutting it down
+    console.error(`Error closing logger: ${error}`);
+  }
+}
+
 // Initialize source maps if debug is enabled at startup
 if (getEnvString('LOG_LEVEL', 'info') === 'debug') {
   initializeSourceMapSupport();
