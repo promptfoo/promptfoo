@@ -22,7 +22,7 @@ export function viewCommand(program: Command) {
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(
-      async function (
+      async (
         directory: string | undefined,
         cmdObj: {
           port: number;
@@ -32,7 +32,7 @@ export function viewCommand(program: Command) {
           envPath?: string;
           filterDescription?: string;
         } & Command,
-      ) {
+      ) => {
         setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {
           name: 'view',

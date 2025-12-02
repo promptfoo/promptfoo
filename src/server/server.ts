@@ -9,7 +9,7 @@ import path from 'node:path';
 
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
-import { fromError } from 'zod-validation-error';
+import { fromError } from 'zod-validation-error/v3';
 import { getDefaultPort, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
@@ -30,7 +30,7 @@ import {
   readResult,
 } from '../util/database';
 import invariant from '../util/invariant';
-import { BrowserBehavior, openBrowser } from '../util/server';
+import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
@@ -307,7 +307,7 @@ export async function startServer(
   });
 
   logger.info(`Starting server`);
-  
+
   // Return a Promise that only resolves when the server shuts down
   // This keeps the view command running until SIGINT/SIGTERM
   return new Promise<void>((resolve, reject) => {
@@ -317,7 +317,7 @@ export async function startServer(
         logger.info(`Server running at ${url} and monitoring for new evals.`);
         openBrowser(browserBehavior, port).catch((error) => {
           logger.error(
-            `Failed to handle browser behavior (${BrowserBehavior[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
+            `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
           );
         });
         // Don't resolve - server runs until shutdown signal
@@ -328,21 +328,31 @@ export async function startServer(
       });
 
     // Register shutdown handlers to gracefully close the server
+    let isShuttingDown = false;
     const shutdown = () => {
+      if (isShuttingDown) {
+        return;
+      }
+      isShuttingDown = true;
+
       logger.info('Shutting down server...');
-      
+
+      // Remove signal handlers to prevent multiple calls
+      process.off('SIGINT', shutdown);
+      process.off('SIGTERM', shutdown);
+
       // Close the file watcher first to stop monitoring
       if (watcher && typeof watcher.close === 'function') {
         watcher.close();
       }
-      
+
       // Close the HTTP server
       httpServer.close(() => {
         logger.info('Server closed');
         resolve(); // Now we can resolve and let cleanup happen
       });
     };
-    
+
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
   });
