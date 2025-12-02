@@ -3,7 +3,7 @@ import path from 'path';
 
 import { createCache } from 'cache-manager';
 import { Keyv } from 'keyv';
-import KeyvFile from 'keyv-file';
+import { KeyvFile } from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
