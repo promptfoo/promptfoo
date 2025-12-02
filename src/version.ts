@@ -19,6 +19,9 @@ declare const __PROMPTFOO_ENGINES_NODE__: string | undefined;
 /**
  * Reads package.json at runtime for Node.js development/test environments.
  * Returns null in browser environments to allow fallback to defaults.
+ *
+ * Note: This function uses eval to dynamically load Node.js modules to avoid
+ * bundler issues when this file is included in browser builds.
  */
 function readPackageJsonSync(): { version: string; engines: { node: string } } | null {
   // Skip in browser environments
@@ -27,12 +30,14 @@ function readPackageJsonSync(): { version: string; engines: { node: string } } |
   }
 
   try {
-    // Dynamic require to avoid bundler issues - this code path is only
-    // executed in Node.js when the build-time constants are not defined
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // Use eval to prevent bundler from trying to resolve Node.js modules
+    // This will only execute in Node.js environments where require exists
     const fs = require('fs');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require('path');
+    const url = require('url');
+
+    // Get __dirname equivalent in ESM
+    const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
     // Try multiple possible locations for package.json
     const possiblePaths = [
@@ -55,7 +60,7 @@ function readPackageJsonSync(): { version: string; engines: { node: string } } |
       }
     }
   } catch {
-    // Node.js APIs not available or failed
+    // Node.js APIs not available or failed (e.g., in browser build or pure ESM)
   }
 
   return null;
