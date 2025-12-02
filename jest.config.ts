@@ -32,6 +32,8 @@ const config: Config = {
     '<rootDir>/test/external',
     '<rootDir>/test/progress',
     '<rootDir>/test/types',
+    // SSRF plugin test uses Vitest
+    '<rootDir>/test/redteam/plugins/ssrf.test.ts',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',

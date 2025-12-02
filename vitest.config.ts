@@ -18,6 +18,8 @@ export default defineConfig({
       'test/external/**/*.test.ts',
       'test/progress/**/*.test.ts',
       'test/types/**/*.test.ts',
+      // SSRF plugin test uses Vitest
+      'test/redteam/plugins/ssrf.test.ts',
     ],
     // Exclude integration tests
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
