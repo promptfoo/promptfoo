@@ -20,6 +20,7 @@ import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
+  SeveritySchema,
   FRAMEWORK_COMPLIANCE_IDS,
 } from '../redteam/constants';
 import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
@@ -86,7 +87,7 @@ export const RedteamPluginObjectSchema = z.object({
     .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
   config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
-  severity: z.nativeEnum(Severity).optional().describe('Severity level for this plugin'),
+  severity: SeveritySchema.optional().describe('Severity level for this plugin'),
 });
 
 /**

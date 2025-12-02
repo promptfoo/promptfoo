@@ -6,13 +6,23 @@ import logger from '../logger';
 import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
 import { promptYesNo } from './readline';
 
-export enum BrowserBehavior {
-  ASK = 0,
-  OPEN = 1,
-  SKIP = 2,
-  OPEN_TO_REPORT = 3,
-  OPEN_TO_REDTEAM_CREATE = 4,
-}
+export const BrowserBehavior = {
+  ASK: 0,
+  OPEN: 1,
+  SKIP: 2,
+  OPEN_TO_REPORT: 3,
+  OPEN_TO_REDTEAM_CREATE: 4,
+} as const;
+export type BrowserBehavior = (typeof BrowserBehavior)[keyof typeof BrowserBehavior];
+
+// Reverse lookup for BrowserBehavior names
+export const BrowserBehaviorNames: Record<BrowserBehavior, string> = {
+  [BrowserBehavior.ASK]: 'ASK',
+  [BrowserBehavior.OPEN]: 'OPEN',
+  [BrowserBehavior.SKIP]: 'SKIP',
+  [BrowserBehavior.OPEN_TO_REPORT]: 'OPEN_TO_REPORT',
+  [BrowserBehavior.OPEN_TO_REDTEAM_CREATE]: 'OPEN_TO_REDTEAM_CREATE',
+};
 
 // Cache for feature detection results to avoid repeated version checks
 const featureCache = new Map<string, boolean>();

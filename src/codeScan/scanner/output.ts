@@ -102,7 +102,7 @@ export function displayScanResults(
 
     // 4. Detailed findings (only show issues with valid severity)
     if (severityCounts.total > 0) {
-      const validSeverities = [
+      const validSeverities: CodeScanSeverity[] = [
         CodeScanSeverity.CRITICAL,
         CodeScanSeverity.HIGH,
         CodeScanSeverity.MEDIUM,

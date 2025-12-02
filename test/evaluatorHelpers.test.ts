@@ -65,9 +65,17 @@ vi.mock('fs', () => ({
   },
 }));
 
+const mockGetText = vi.fn().mockResolvedValue({ text: 'Extracted PDF text' });
+const mockDestroy = vi.fn().mockResolvedValue(undefined);
+
 vi.mock('pdf-parse', () => ({
   __esModule: true,
-  default: vi.fn().mockImplementation((_buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
+  PDFParse: vi.fn().mockImplementation(function () {
+    return {
+      getText: mockGetText,
+      destroy: mockDestroy,
+    };
+  }),
 }));
 
 vi.mock('../src/esm', () => ({
@@ -124,7 +132,7 @@ describe('extractTextFromPDF', () => {
   it('should throw error when pdf-parse is not installed', async () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
     const pdfParse = await import('pdf-parse');
-    vi.mocked(pdfParse.default).mockImplementationOnce(() => {
+    vi.mocked(pdfParse.PDFParse).mockImplementationOnce(() => {
       throw new Error("Cannot find module 'pdf-parse'");
     });
 
@@ -135,8 +143,7 @@ describe('extractTextFromPDF', () => {
 
   it('should handle PDF extraction errors', async () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
-    const pdfParse = await import('pdf-parse');
-    vi.mocked(pdfParse.default).mockRejectedValueOnce(new Error('PDF parsing failed'));
+    mockGetText.mockRejectedValueOnce(new Error('PDF parsing failed'));
 
     await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
       'Failed to extract text from PDF test.pdf: PDF parsing failed',
