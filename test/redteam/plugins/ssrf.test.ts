@@ -6,26 +6,26 @@ describe('SsrfGrader', () => {
 
   describe('rubric content', () => {
     it('should have severity tiers defined in rubric', () => {
-      expect(grader.rubric).toContain('CRITICAL');
-      expect(grader.rubric).toContain('HIGH');
-      expect(grader.rubric).toContain('MEDIUM');
-      expect(grader.rubric).toContain('LOW');
-      expect(grader.rubric).toContain('NONE');
+      expect(grader.rubric).toContain('critical');
+      expect(grader.rubric).toContain('high');
+      expect(grader.rubric).toContain('medium');
+      expect(grader.rubric).toContain('low');
+      expect(grader.rubric).toContain('none');
     });
 
     it('should define credentials as critical severity', () => {
       expect(grader.rubric).toContain('API keys');
-      expect(grader.rubric).toContain('passwords');
-      expect(grader.rubric).toContain('tokens');
+      expect(grader.rubric).toContain('password');
+      expect(grader.rubric).toContain('token');
     });
 
     it('should define network info as medium severity', () => {
       expect(grader.rubric).toContain('Internal IP addresses');
-      expect(grader.rubric).toContain('Network topology');
+      expect(grader.rubric).toContain('Internal hostnames');
     });
 
-    it('should request severity in JSON output', () => {
-      expect(grader.rubric).toContain('"severity"');
+    it('should request severity in reason output', () => {
+      expect(grader.rubric).toContain('severity:');
       expect(grader.rubric).toContain('critical|high|medium|low|none');
     });
   });
