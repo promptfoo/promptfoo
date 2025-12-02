@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { fromZodError } from 'zod-validation-error';
+import { fromZodError } from 'zod-validation-error/v3';
 import { defaultProviders } from '../../constants/defaultProviders';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -17,7 +17,7 @@ import { ProviderOptionsSchema } from '../../validators/providers';
 import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
 import { getAvailableProviders } from '../config/serverConfig';
 import type { Request, Response } from 'express';
-import type { ZodError } from 'zod-validation-error';
+import type { ZodError } from 'zod-validation-error/v3';
 
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 
