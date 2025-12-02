@@ -1,8 +1,9 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../src/cache';
 import guardrails, { type AdaptiveRequest } from '../src/guardrails';
 
-jest.mock('../src/cache', () => ({
-  fetchWithCache: jest.fn(),
+vi.mock('../src/cache', () => ({
+  fetchWithCache: vi.fn(),
 }));
 
 describe('guardrails', () => {
@@ -27,8 +28,8 @@ describe('guardrails', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
+    vi.clearAllMocks();
+    vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
   });
 
   describe('guard', () => {
@@ -57,13 +58,13 @@ describe('guardrails', () => {
 
     it('should handle API errors', async () => {
       const errorMessage = 'API Error';
-      jest.mocked(fetchWithCache).mockRejectedValue(new Error(errorMessage));
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error(errorMessage));
 
       await expect(guardrails.guard('test input')).rejects.toThrow(errorMessage);
     });
 
     it('should handle empty API response', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: null,
         cached: false,
         status: 200,
@@ -106,7 +107,7 @@ describe('guardrails', () => {
     };
 
     beforeEach(() => {
-      jest.mocked(fetchWithCache).mockResolvedValue(mockPiiResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockPiiResponse);
     });
 
     it('should make a request to the pii endpoint', async () => {
@@ -135,7 +136,7 @@ describe('guardrails', () => {
 
     it('should handle API errors', async () => {
       const errorMessage = 'API Error';
-      jest.mocked(fetchWithCache).mockRejectedValue(new Error(errorMessage));
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error(errorMessage));
 
       await expect(guardrails.pii('test input')).rejects.toThrow(errorMessage);
     });
@@ -165,7 +166,7 @@ describe('guardrails', () => {
     };
 
     beforeEach(() => {
-      jest.mocked(fetchWithCache).mockResolvedValue(mockHarmResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockHarmResponse);
     });
 
     it('should make a request to the harm endpoint', async () => {
@@ -195,7 +196,7 @@ describe('guardrails', () => {
 
     it('should handle API errors', async () => {
       const errorMessage = 'API Error';
-      jest.mocked(fetchWithCache).mockRejectedValue(new Error(errorMessage));
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error(errorMessage));
 
       await expect(guardrails.harm('test input')).rejects.toThrow(errorMessage);
     });
@@ -214,7 +215,7 @@ describe('guardrails', () => {
     });
 
     it('should have correct PII result structure with payload', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: {
           model: 'test-model',
           results: [
@@ -283,7 +284,7 @@ describe('guardrails', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const request: AdaptiveRequest = {
         prompt: 'test input',
@@ -320,7 +321,7 @@ describe('guardrails', () => {
         status: 200,
         statusText: 'OK',
       };
-      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const request: AdaptiveRequest = {
         prompt: 'test input',

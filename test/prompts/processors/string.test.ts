@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { processString } from '../../../src/prompts/processors/string';
 
 import type { Prompt } from '../../../src/types/index';

@@ -10,7 +10,7 @@ prompts:
     Answer:
 
 providers:
-  - anthropic:messages:claude-3-7-sonnet-20250219
+  - anthropic:messages:claude-sonnet-4-5-20250929
   # Uncomment to add more providers
   # - bedrock:us.meta.llama3-2-1b-instruct-v1:0
   # - openai:gpt-4.1-mini
@@ -19,7 +19,7 @@ providers:
 defaultTest:
   options:
     # Uncomment one to change the grading provider.
-    # provider: anthropic:messages:claude-3-7-sonnet-20250219
+    # provider: anthropic:messages:claude-sonnet-4-5-20250929
     # provider: bedrock:us.meta.llama3-2-1b-instruct-v1:0
     # provider: openai:gpt-4.1-mini
     # provider: google:gemini-2.0-flash

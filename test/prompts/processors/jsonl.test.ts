@@ -1,14 +1,15 @@
 import * as fs from 'fs';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processJsonlFile } from '../../../src/prompts/processors/jsonl';
 
-jest.mock('fs');
+vi.mock('fs');
 
 describe('processJsonlFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockReadFileSync = vi.mocked(fs.readFileSync);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should process a valid JSONL file without a label', () => {

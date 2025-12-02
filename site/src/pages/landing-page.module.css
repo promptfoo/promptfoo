@@ -16,7 +16,7 @@ section {
       rgba(255, 255, 255, 0) 100%
     ),
     /* Accent gradients - using darker reds with lower opacity */
-      radial-gradient(ellipse at 25% 20%, rgba(179, 46, 46, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 25% 20%, rgba(179, 46, 46, 0.06) 0%, transparent 50%),
     radial-gradient(ellipse at 75% 40%, rgba(203, 52, 52, 0.04) 0%, transparent 45%),
     radial-gradient(ellipse at 15% 70%, rgba(179, 46, 46, 0.05) 0%, transparent 55%),
     radial-gradient(ellipse at 85% 85%, rgba(203, 52, 52, 0.03) 0%, transparent 50%),
@@ -39,7 +39,7 @@ section {
       rgba(16, 25, 28, 0) 100%
     ),
     /* Accent gradients for dark theme - more subtle */
-      radial-gradient(ellipse at 25% 20%, rgba(179, 46, 46, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 25% 20%, rgba(179, 46, 46, 0.08) 0%, transparent 50%),
     radial-gradient(ellipse at 75% 40%, rgba(203, 52, 52, 0.06) 0%, transparent 45%),
     radial-gradient(ellipse at 15% 70%, rgba(179, 46, 46, 0.05) 0%, transparent 55%),
     radial-gradient(ellipse at 85% 85%, rgba(203, 52, 52, 0.04) 0%, transparent 50%),
@@ -919,6 +919,15 @@ section {
   .features {
     flex-direction: column;
   }
+
+  .securityFlowContainer {
+    flex-direction: column;
+  }
+
+  .securityFlowArrow {
+    transform: rotate(90deg);
+    padding: 0.5rem 0;
+  }
 }
 
 .processFlow {
@@ -1165,10 +1174,18 @@ section {
   justify-content: center;
 }
 
+/* Legacy v11 font icon styles - kept for backwards compatibility */
 :global(.swiper-button-next:after),
 :global(.swiper-button-prev:after) {
   font-size: 18px;
   font-weight: bold;
+}
+
+/* Swiper v12+ SVG icon sizing - constrain to ~45% of button */
+:global(.swiper-button-next) svg,
+:global(.swiper-button-prev) svg {
+  width: 45%;
+  height: 45%;
 }
 
 :global(.swiper-pagination-bullet-active) {
@@ -1879,5 +1896,279 @@ section {
   .finalCTAButtons .button {
     width: 100%;
     max-width: 300px;
+  }
+}
+
+/* ========================================
+   SHOWCASE SIDE-BY-SIDE LAYOUT
+   For feature screenshots with text
+   ======================================== */
+
+.showcaseRow {
+  display: flex;
+  align-items: center;
+  gap: 4rem;
+  margin-top: 4rem;
+}
+
+.showcaseRowReverse {
+  flex-direction: row-reverse;
+}
+
+.showcaseText {
+  flex: 1 1 42%;
+  min-width: 0;
+}
+
+.showcaseText h3 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: #333;
+  line-height: 1.3;
+}
+
+[data-theme='dark'] .showcaseText h3 {
+  color: #f5f5f5;
+}
+
+.showcaseText p {
+  font-size: 1.125rem;
+  line-height: 1.7;
+  color: var(--pf-dark-base);
+  opacity: 0.85;
+  margin: 0;
+}
+
+[data-theme='dark'] .showcaseText p {
+  color: #e0e0e0;
+}
+
+.showcaseImage {
+  flex: 1 1 58%;
+  min-width: 0;
+}
+
+.showcaseImage img {
+  width: 100%;
+  border-radius: 12px;
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='dark'] .showcaseImage img {
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 968px) {
+  .showcaseRow {
+    flex-direction: column;
+    gap: 2rem;
+    margin-top: 3rem;
+  }
+
+  .showcaseRowReverse {
+    flex-direction: column;
+  }
+
+  .showcaseText,
+  .showcaseImage {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .showcaseText {
+    text-align: center;
+  }
+
+  .showcaseText h3 {
+    font-size: 1.5rem;
+  }
+}
+
+/* ========================================
+   VULNERABILITY SECTION
+   Security dashboard style with severity badges
+   ======================================== */
+
+.vulnerabilitySection {
+  padding: var(--section-spacing-xl) 0;
+  background: transparent;
+  position: relative;
+}
+
+.vulnEyebrow {
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pf-red-dark);
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+[data-theme='dark'] .vulnEyebrow {
+  color: var(--pf-red-light);
+}
+
+.vulnTitle {
+  font-size: 2.75rem;
+  font-weight: 800;
+  text-align: center;
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+[data-theme='dark'] .vulnTitle {
+  color: #f5f5f5;
+}
+
+.vulnSubtitle {
+  font-size: 1.25rem;
+  line-height: 1.6;
+  text-align: center;
+  color: var(--pf-dark-base);
+  opacity: 0.85;
+  max-width: 600px;
+  margin: 0 auto 3rem;
+}
+
+[data-theme='dark'] .vulnSubtitle {
+  color: #e0e0e0;
+}
+
+.vulnGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.vulnCard {
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.vulnCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .vulnCard {
+  background: rgba(46, 60, 70, 0.8);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'] .vulnCard:hover {
+  background: rgba(46, 60, 70, 0.95);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.vulnSeverity {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+
+.vulnSeverity.critical {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border-left: 3px solid #dc2626;
+}
+
+.vulnSeverity.high {
+  background: rgba(234, 88, 12, 0.1);
+  color: #ea580c;
+  border-left: 3px solid #ea580c;
+}
+
+.vulnSeverity.medium {
+  background: rgba(202, 138, 4, 0.1);
+  color: #b45309;
+  border-left: 3px solid #ca8a04;
+}
+
+[data-theme='dark'] .vulnSeverity.critical {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border-left-color: #ef4444;
+}
+
+[data-theme='dark'] .vulnSeverity.high {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+  border-left-color: #f97316;
+}
+
+[data-theme='dark'] .vulnSeverity.medium {
+  background: rgba(234, 179, 8, 0.2);
+  color: #facc15;
+  border-left-color: #eab308;
+}
+
+.vulnName {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+[data-theme='dark'] .vulnName {
+  color: #f1f5f9;
+}
+
+.vulnDescription {
+  font-size: 0.925rem;
+  line-height: 1.5;
+  color: #64748b;
+  margin: 0;
+}
+
+[data-theme='dark'] .vulnDescription {
+  color: #94a3b8;
+}
+
+/* Mobile responsive */
+@media (max-width: 968px) {
+  .vulnGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .vulnTitle {
+    font-size: 2rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .vulnGrid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .vulnCard {
+    padding: 1.25rem;
+  }
+
+  .vulnTitle {
+    font-size: 1.75rem;
+  }
+
+  .vulnSubtitle {
+    font-size: 1.1rem;
   }
 }
