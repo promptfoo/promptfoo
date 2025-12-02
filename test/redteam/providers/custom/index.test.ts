@@ -1149,4 +1149,128 @@ describe('CustomProvider', () => {
     expect(capturedSystemPrompt).toContain('language: Spanish');
     expect(capturedSystemPrompt).toContain('Rewrite ALL prompts to fully comply');
   });
+
+  describe('Abort Signal Handling', () => {
+    it('should pass options to red team provider callApi', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      const testProvider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+      });
+
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          value: true,
+          metadata: 100,
+          rationale: 'Success',
+        }),
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      await testProvider.callApi('test prompt', context, options);
+
+      // Red team provider should be called with options
+      expect(mockRedTeamProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should pass options to scoring provider callApi', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      const testProvider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+      });
+
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          value: false,
+          metadata: 50,
+          rationale: 'Not a refusal',
+        }),
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      await testProvider.callApi('test prompt', context, options);
+
+      // Scoring provider should be called with options
+      expect(mockScoringProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should re-throw AbortError and not swallow it', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      const testProvider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        maxTurns: 3,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+
+      // Mock red team provider to throw AbortError
+      mockRedTeamProvider.callApi.mockRejectedValue(abortError);
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      await expect(testProvider.callApi('test prompt', context)).rejects.toThrow(
+        'The operation was aborted',
+      );
+    });
+  });
 });

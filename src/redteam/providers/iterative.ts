@@ -212,13 +212,17 @@ export async function runRedteamConversation({
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
-    const redteamResp = await redteamProvider.callApi(redteamBody, {
-      prompt: {
-        raw: redteamBody,
-        label: 'history',
+    const redteamResp = await redteamProvider.callApi(
+      redteamBody,
+      {
+        prompt: {
+          raw: redteamBody,
+          label: 'history',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
     TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
@@ -243,6 +247,10 @@ export async function runRedteamConversation({
         improvement = parsed.improvement;
         newInjectVar = parsed.prompt;
       } catch (err) {
+        // Re-throw abort errors to properly cancel the operation
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw err;
+        }
         logger.info(`[Iterative] ${i + 1}/${numIterations} - Failed to parse response`, {
           error: err,
           response: redteamResp,
@@ -407,13 +415,17 @@ export async function runRedteamConversation({
         `,
       },
     ]);
-    const judgeResp = await gradingProvider.callApi(judgeBody, {
-      prompt: {
-        raw: judgeBody,
-        label: 'judge',
+    const judgeResp = await gradingProvider.callApi(
+      judgeBody,
+      {
+        prompt: {
+          raw: judgeBody,
+          label: 'judge',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
 
     TokenUsageTracker.getInstance().trackUsage(gradingProvider.id(), judgeResp.tokenUsage);
     if (gradingProvider.delay) {
@@ -523,6 +535,10 @@ export async function runRedteamConversation({
         // We'll break after the token usage tracking and previousOutputs.push
       }
     } catch (err) {
+      // Re-throw abort errors to properly cancel the operation
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       logger.info('[Iterative] Failed to parse judge response, likely refusal', {
         error: err,
         response: judgeResp,
