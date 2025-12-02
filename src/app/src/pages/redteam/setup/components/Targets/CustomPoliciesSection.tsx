@@ -432,24 +432,29 @@ export const CustomPoliciesSection = () => {
       });
 
       // Parse the request body prior to handling success/error cases.
-      const data = (await response.json()) as {
-        result: PolicyObject[];
-        error: string | null;
-        task: string;
-        details?: string; // Optionally set in `logAndSendError`
-      };
+      let data;
+      try {
+        data = (await response.json()) as {
+          result: PolicyObject[];
+          error: string | null;
+          task: string;
+          details?: string; // Optionally set in `logAndSendError`
+        };
+      } catch (error) {
+        // Handle JSON parsing errors
+        toast.showToast(
+          `Failed to generate policies: ${error instanceof Error ? error.message : String(error)}`,
+          'error',
+        );
+        return;
+      }
 
       // Handle potential errors:
       if (!response.ok || data.error) {
-        // Set a base error message to use as a fallback if a specific, server-defined message is
-        // not available.
-        let errorMessage = 'Failed to generate policies';
-        try {
-          errorMessage = data.details ?? data.error ?? errorMessage;
-        } catch {
-          // If response is not JSON, use status text
-          errorMessage = `Failed to generate policies: ${response.statusText || response.status}`;
-        }
+        const errorMessage =
+          data?.details ??
+          data?.error ??
+          `Failed to generate policies: ${response.statusText || response.status}`;
         throw new Error(errorMessage);
       }
 
