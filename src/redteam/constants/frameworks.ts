@@ -240,12 +240,12 @@ export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
   },
   'owasp:agentic:t04': {
     // T4: Resource Overload
-    plugins: ['divergent-repetition', 'reasoning-dos'],
+    plugins: ['reasoning-dos'],
     strategies: [],
   },
   'owasp:agentic:t05': {
     // T5: Cascading Hallucination Attacks
-    plugins: ['hallucination', 'harmful:misinformation-disinformation'],
+    plugins: ['hallucination', 'harmful:misinformation-disinformation', 'divergent-repetition'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
   'owasp:agentic:t06': {
