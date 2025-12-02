@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import { type FrameworkComplianceId, type Plugin, Severity } from './constants';
+import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
 // Modifiers are used to modify the behavior of the plugin.
@@ -60,7 +60,7 @@ export const PluginConfigSchema = z.object({
     )
     .optional(),
   graderGuidance: z.string().optional(),
-  severity: z.nativeEnum(Severity).optional(),
+  severity: SeveritySchema.optional(),
   language: z.union([z.string(), z.array(z.string())]).optional(),
   prompt: z.string().optional(),
   purpose: z.string().optional(),
