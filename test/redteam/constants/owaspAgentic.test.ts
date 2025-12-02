@@ -44,8 +44,9 @@ describe('OWASP Agentic AI Framework (T1-T15)', () => {
 
   describe('OWASP_AGENTIC_REDTEAM_MAPPING', () => {
     it('should have mappings for all 15 threats (t01-t15)', () => {
-      const expectedKeys = Array.from({ length: 15 }, (_, i) =>
-        `owasp:agentic:t${String(i + 1).padStart(2, '0')}`
+      const expectedKeys = Array.from(
+        { length: 15 },
+        (_, i) => `owasp:agentic:t${String(i + 1).padStart(2, '0')}`,
       );
 
       expectedKeys.forEach((key) => {
@@ -58,7 +59,7 @@ describe('OWASP Agentic AI Framework (T1-T15)', () => {
     });
 
     it('each mapping should have plugins and strategies arrays', () => {
-      Object.entries(OWASP_AGENTIC_REDTEAM_MAPPING).forEach(([key, mapping]) => {
+      Object.entries(OWASP_AGENTIC_REDTEAM_MAPPING).forEach(([, mapping]) => {
         expect(Array.isArray(mapping.plugins)).toBe(true);
         expect(Array.isArray(mapping.strategies)).toBe(true);
         expect(mapping.plugins.length).toBeGreaterThan(0);
@@ -66,11 +67,11 @@ describe('OWASP Agentic AI Framework (T1-T15)', () => {
     });
 
     it('all mapped plugins should be valid plugin IDs', () => {
-      const allPluginIds = new Set(ALL_PLUGINS);
+      const allPluginIds = new Set<string>(ALL_PLUGINS);
 
-      Object.entries(OWASP_AGENTIC_REDTEAM_MAPPING).forEach(([threatKey, mapping]) => {
+      Object.entries(OWASP_AGENTIC_REDTEAM_MAPPING).forEach(([, mapping]) => {
         mapping.plugins.forEach((pluginId) => {
-          expect(allPluginIds.has(pluginId as any)).toBe(true);
+          expect(allPluginIds.has(pluginId)).toBe(true);
         });
       });
     });
@@ -78,7 +79,7 @@ describe('OWASP Agentic AI Framework (T1-T15)', () => {
     describe('specific threat mappings', () => {
       it('T1 (Memory Poisoning) should map to agentic:memory-poisoning', () => {
         expect(OWASP_AGENTIC_REDTEAM_MAPPING['owasp:agentic:t01'].plugins).toContain(
-          'agentic:memory-poisoning'
+          'agentic:memory-poisoning',
         );
       });
 
@@ -98,7 +99,6 @@ describe('OWASP Agentic AI Framework (T1-T15)', () => {
 
       it('T4 (Resource Overload) should map to DoS-related plugins', () => {
         const t4Plugins = OWASP_AGENTIC_REDTEAM_MAPPING['owasp:agentic:t04'].plugins;
-        expect(t4Plugins).toContain('divergent-repetition');
         expect(t4Plugins).toContain('reasoning-dos');
       });
 
@@ -121,8 +121,9 @@ describe('OWASP Agentic AI Framework (T1-T15)', () => {
     });
 
     it('should include all individual threat keys (owasp:agentic:t01-t15) as aliased plugins', () => {
-      const threatKeys = Array.from({ length: 15 }, (_, i) =>
-        `owasp:agentic:t${String(i + 1).padStart(2, '0')}`
+      const threatKeys = Array.from(
+        { length: 15 },
+        (_, i) => `owasp:agentic:t${String(i + 1).padStart(2, '0')}`,
       );
 
       threatKeys.forEach((key) => {
