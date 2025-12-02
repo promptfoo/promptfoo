@@ -1,11 +1,19 @@
 ---
-sidebar_label: Custom Python
-description: 'Create custom Python scripts for advanced model integrations, evaluations, and complex testing logic with full flexibility'
+title: Python Provider
+sidebar_label: Python Provider
+sidebar_position: 50
+description: 'Create custom Python scripts for advanced model integrations, evals, and complex testing logic'
 ---
 
 # Python Provider
 
 The Python provider enables you to create custom evaluation logic using Python scripts. This allows you to integrate Promptfoo with any Python-based model, API, or custom logic.
+
+:::tip Python Overview
+
+For an overview of all Python integrations (providers, assertions, test generators, prompts), see the [Python integration guide](/docs/integrations/python).
+
+:::
 
 **Common use cases:**
 

@@ -1,16 +1,17 @@
+import { vi } from 'vitest';
 import { handleAnswerRelevance } from '../../src/assertions/answerRelevance';
 import { matchesAnswerRelevance } from '../../src/matchers';
 import invariant from '../../src/util/invariant';
 
 import type { AssertionValueFunctionContext } from '../../src/types/index';
 
-jest.mock('../../src/matchers');
-jest.mock('../../src/util/invariant');
+vi.mock('../../src/matchers');
+vi.mock('../../src/util/invariant');
 
 describe('handleAnswerRelevance', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(invariant).mockImplementation((condition, message) => {
+    vi.resetAllMocks();
+    vi.mocked(invariant).mockImplementation((condition, message) => {
       if (!condition) {
         throw new Error(typeof message === 'function' ? message() : message);
       }
@@ -18,7 +19,7 @@ describe('handleAnswerRelevance', () => {
   });
 
   it('should call matchesAnswerRelevance with correct parameters', async () => {
-    const mockMatchesAnswerRelevance = jest.mocked(matchesAnswerRelevance);
+    const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
     mockMatchesAnswerRelevance.mockResolvedValue({
       pass: true,
       score: 0.8,
@@ -65,7 +66,7 @@ describe('handleAnswerRelevance', () => {
   });
 
   it('should use query from vars if available', async () => {
-    const mockMatchesAnswerRelevance = jest.mocked(matchesAnswerRelevance);
+    const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
     mockMatchesAnswerRelevance.mockResolvedValue({
       pass: true,
       score: 0.8,
@@ -162,7 +163,7 @@ describe('handleAnswerRelevance', () => {
   });
 
   it('should use default threshold of 0 if not specified', async () => {
-    const mockMatchesAnswerRelevance = jest.mocked(matchesAnswerRelevance);
+    const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
     mockMatchesAnswerRelevance.mockResolvedValue({
       pass: true,
       score: 0.8,

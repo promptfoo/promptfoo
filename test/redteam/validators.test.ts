@@ -1,3 +1,15 @@
+import { describe, expect, it, vi } from 'vitest';
+
+// Mock logger for tests that need it
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 import {
   type BasePlugin,
   COLLECTIONS,
@@ -539,7 +551,7 @@ describe('redteamConfigSchema', () => {
   });
 
   it('should accept a provider object with callApi function', () => {
-    const mockCallApi = jest.fn();
+    const mockCallApi = vi.fn();
     const input = {
       provider: {
         id: () => 'custom-provider',

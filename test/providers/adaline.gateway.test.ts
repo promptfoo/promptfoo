@@ -1,3 +1,6 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mocked } from 'vitest';
+
 import { Gateway } from '@adaline/gateway';
 import { getCache } from '../../src/cache';
 import {
@@ -6,24 +9,63 @@ import {
   AdalineGatewayEmbeddingProvider,
 } from '../../src/providers/adaline.gateway';
 
-jest.mock('@adaline/gateway', () => ({
-  Gateway: jest.fn().mockImplementation(() => ({
-    getEmbeddings: jest.fn(),
-    completeChat: jest.fn(),
-  })),
-}));
-jest.mock('../../src/cache');
-jest.mock('../../src/providers/google/util');
+vi.mock('@adaline/gateway', async (importOriginal) => {
+  const GatewayMock = vi.fn(function () {
+    return {
+      getEmbeddings: vi.fn(),
+      completeChat: vi.fn(),
+    } as unknown as Gateway;
+  });
+
+  class GatewayOpenAI {
+    embeddingModel = vi.fn().mockReturnValue({});
+    chatModel = vi.fn().mockReturnValue({});
+  }
+
+  class GatewayVertex {
+    embeddingModel = vi.fn().mockReturnValue({});
+    chatModel = vi.fn().mockReturnValue({});
+  }
+
+  class GatewayAnthropic {
+    embeddingModel = vi.fn().mockReturnValue({});
+  }
+
+  return {
+    ...(await importOriginal()),
+    Gateway: GatewayMock,
+    GatewayAnthropic,
+    GatewayOpenAI,
+    GatewayVertex,
+  };
+});
+vi.mock('../../src/cache', async () => {
+  const actual = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
+  return {
+    ...actual,
+    getCache: vi.fn(),
+  };
+});
+vi.mock('../../src/providers/google/util');
+
+beforeEach(() => {
+  process.env.OPENAI_API_KEY = 'test-key';
+});
+
+afterEach(() => {
+  delete process.env.OPENAI_API_KEY;
+  vi.clearAllMocks();
+});
 
 describe('AdalineGatewayCachePlugin', () => {
   let cache: AdalineGatewayCachePlugin<any>;
 
   beforeEach(() => {
     const mockCache = {
-      get: jest.fn(),
-      set: jest.fn(),
+      get: vi.fn(),
+      set: vi.fn(),
     };
-    jest.mocked(getCache).mockResolvedValue(mockCache as never);
+    vi.mocked(getCache).mockResolvedValue(mockCache as never);
     cache = new AdalineGatewayCachePlugin();
   });
 
@@ -54,10 +96,10 @@ describe('AdalineGatewayCachePlugin', () => {
 
 describe('AdalineGatewayEmbeddingProvider', () => {
   let provider: AdalineGatewayEmbeddingProvider;
-  let mockGateway: jest.Mocked<Gateway>;
+  let mockGateway: Mocked<Gateway>;
 
   beforeEach(() => {
-    mockGateway = new Gateway() as jest.Mocked<Gateway>;
+    mockGateway = new Gateway() as Mocked<Gateway>;
     provider = new AdalineGatewayEmbeddingProvider('openai', 'text-embedding-ada-002');
     provider.gateway = mockGateway;
   });
@@ -114,10 +156,10 @@ describe('AdalineGatewayEmbeddingProvider', () => {
 
 describe('AdalineGatewayChatProvider', () => {
   let provider: AdalineGatewayChatProvider;
-  let mockGateway: jest.Mocked<Gateway>;
+  let mockGateway: Mocked<Gateway>;
 
   beforeEach(() => {
-    mockGateway = new Gateway() as jest.Mocked<Gateway>;
+    mockGateway = new Gateway() as Mocked<Gateway>;
     provider = new AdalineGatewayChatProvider('openai', 'gpt-4');
     provider.gateway = mockGateway;
   });

@@ -87,7 +87,7 @@ export class HydraProvider implements ApiProvider {
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
 
     if (this.stateful && this.maxBacktracks > 0) {
-      logger.warn('[Hydra] Backtracking disabled in stateful mode');
+      logger.debug('[Hydra] Backtracking disabled in stateful mode');
     }
 
     // Hydra strategy requires cloud
@@ -239,13 +239,17 @@ export class HydraProvider implements ApiProvider {
       };
 
       // Get next message from cloud
-      const agentResp = await this.agentProvider.callApi(JSON.stringify(cloudRequest), {
-        prompt: {
-          raw: JSON.stringify(cloudRequest),
-          label: 'hydra-agent',
+      const agentResp = await this.agentProvider.callApi(
+        JSON.stringify(cloudRequest),
+        {
+          prompt: {
+            raw: JSON.stringify(cloudRequest),
+            label: 'hydra-agent',
+          },
+          vars: {},
         },
-        vars: {},
-      });
+        options,
+      );
 
       accumulateResponseTokenUsage(totalTokenUsage, agentResp);
 
@@ -494,13 +498,17 @@ export class HydraProvider implements ApiProvider {
           },
         };
 
-        await this.agentProvider.callApi(JSON.stringify(learningRequest), {
-          prompt: {
-            raw: JSON.stringify(learningRequest),
-            label: 'hydra-learning-update',
+        await this.agentProvider.callApi(
+          JSON.stringify(learningRequest),
+          {
+            prompt: {
+              raw: JSON.stringify(learningRequest),
+              label: 'hydra-learning-update',
+            },
+            vars: {},
           },
-          vars: {},
-        });
+          options,
+        );
 
         logger.debug('[Hydra] Scan learnings updated', { scanId, testRunId });
       } catch (error) {

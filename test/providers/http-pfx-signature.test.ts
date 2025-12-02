@@ -1,15 +1,32 @@
-import fs from 'fs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import crypto from 'crypto';
 import { generateSignature } from '../../src/providers/http';
 
-jest.mock('fs');
+// Hoisted mock for fs.promises.stat
+const mockStat = vi.hoisted(() => vi.fn());
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      promises: {
+        ...actual.promises,
+        stat: mockStat,
+      },
+    },
+    promises: {
+      ...actual.promises,
+      stat: mockStat,
+    },
+  };
+});
 
 describe('PFX signature paths (generateSignature)', () => {
   beforeEach(() => {
-    jest.resetModules();
-    jest.clearAllMocks();
-    // Ensure fs.promises exists when fs is mocked
-    (fs as any).promises = (fs as any).promises || {};
+    vi.resetModules();
+    vi.clearAllMocks();
   });
 
   it('throws when PFX password is missing', async () => {
@@ -27,9 +44,9 @@ describe('PFX signature paths (generateSignature)', () => {
   });
 
   it('throws when PFX file path does not exist', async () => {
-    (fs.promises as any).stat = jest.fn().mockRejectedValue(new Error('ENOENT'));
+    mockStat.mockRejectedValue(new Error('ENOENT'));
 
-    jest.doMock('pem', () => ({
+    vi.doMock('pem', () => ({
       __esModule: true,
       default: {
         readPkcs12: (_path: string, _opts: any, cb: any) => cb(new Error('ENOENT'), null),
@@ -51,7 +68,7 @@ describe('PFX signature paths (generateSignature)', () => {
   });
 
   it('throws when PFX content has wrong password', async () => {
-    jest.doMock('pem', () => ({
+    vi.doMock('pem', () => ({
       __esModule: true,
       default: {
         readPkcs12: (_buf: Buffer, _opts: any, cb: any) => cb(new Error('invalid password'), null),
@@ -73,7 +90,7 @@ describe('PFX signature paths (generateSignature)', () => {
   });
 
   it('succeeds when PFX content yields a key', async () => {
-    jest.doMock('pem', () => ({
+    vi.doMock('pem', () => ({
       __esModule: true,
       default: {
         readPkcs12: (_buf: Buffer, _opts: any, cb: any) =>
@@ -85,10 +102,10 @@ describe('PFX signature paths (generateSignature)', () => {
     }));
 
     // Mock crypto signing
-    const update = jest.fn();
-    const end = jest.fn();
-    const sign = jest.fn().mockReturnValue(Buffer.from('sig'));
-    jest.spyOn(crypto, 'createSign').mockReturnValue({ update, end, sign } as any);
+    const update = vi.fn();
+    const end = vi.fn();
+    const sign = vi.fn().mockReturnValue(Buffer.from('sig'));
+    vi.spyOn(crypto, 'createSign').mockReturnValue({ update, end, sign } as any);
 
     const signatureAuth = {
       type: 'pfx' as const,

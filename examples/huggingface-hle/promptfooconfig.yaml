@@ -5,7 +5,7 @@ prompts:
   - file://prompt.py:create_hle_prompt
 
 providers:
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-5-20250929
     config:
       thinking:
         type: enabled

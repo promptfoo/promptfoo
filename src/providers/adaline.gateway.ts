@@ -19,7 +19,7 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { calculateAzureCost } from './azure/util';
 import { AIStudioChatProvider } from './google/ai.studio';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
-import { GroqProvider } from './groq';
+import { GroqProvider } from './groq/index';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { calculateOpenAICost } from './openai/util';

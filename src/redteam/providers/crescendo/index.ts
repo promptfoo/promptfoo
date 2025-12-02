@@ -1,28 +1,14 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, isValidJson } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../../remoteGeneration';
-import { getSessionId, isBasicRefusal } from '../../util';
-import { getGoalRubric } from '../prompts';
 import {
-  getLastMessageContent,
-  getTargetResponse,
-  isValidChatMessageArray,
-  messagesToRedteamHistory,
-  redteamProviderManager,
-  type TargetResponse,
-  tryUnblocking,
-} from '../shared';
-import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
-
+  extractTraceIdFromTraceparent,
+  fetchTraceContext,
+  type TraceContextData,
+} from '../../../tracing/traceContext';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -35,19 +21,33 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types/index';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject, isValidJson } from '../../../util/json';
+import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
+import { TokenUsageTracker } from '../../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
+import { getSessionId, isBasicRefusal } from '../../util';
+import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
 import {
-  extractTraceIdFromTraceparent,
-  fetchTraceContext,
-  type TraceContextData,
-} from '../../../tracing/traceContext';
+  getLastMessageContent,
+  getTargetResponse,
+  isValidChatMessageArray,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  type TargetResponse,
+  tryUnblocking,
+} from '../shared';
 import { formatTraceForMetadata, formatTraceSummary } from '../traceFormatting';
 import {
-  resolveTracingOptions,
   type RawTracingConfig,
   type RedteamTracingOptions,
+  resolveTracingOptions,
 } from '../tracingOptions';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -337,6 +337,7 @@ export class CrescendoProvider implements ApiProvider {
           lastFeedback,
           objectiveScore,
           tracingOptions,
+          options,
         );
 
         if (!attackPrompt) {
@@ -416,6 +417,7 @@ export class CrescendoProvider implements ApiProvider {
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse.output,
+          options,
         );
         logger.debug(
           `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -507,7 +509,7 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
-        const evalScore = await this.getEvalScore(lastResponse.output);
+        const evalScore = await this.getEvalScore(lastResponse.output, options);
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
         objectiveScore = {
@@ -522,6 +524,11 @@ export class CrescendoProvider implements ApiProvider {
         }
         logger.debug(`[Crescendo] Continuing to round ${roundNum + 1}`);
       } catch (error) {
+        // Re-throw abort errors to properly cancel the operation
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.debug('[Crescendo] Operation aborted');
+          throw error;
+        }
         logger.error(`[Crescendo] Error Running crescendo step`, { error });
       }
     }
@@ -583,6 +590,7 @@ export class CrescendoProvider implements ApiProvider {
     lastFeedback: string,
     objectiveScore: { value: number; rationale: string } | undefined,
     tracingOptions: RedteamTracingOptions,
+    options?: CallApiOptionsParams,
   ): Promise<{ generatedQuestion: string | undefined }> {
     logger.debug(
       `[Crescendo] getAttackPrompt called: round=${roundNum}, evalFlag=${evalFlag}, objectiveScore=${JSON.stringify(
@@ -628,13 +636,17 @@ export class CrescendoProvider implements ApiProvider {
     logger.debug(`Sending to red teaming chat:`);
     this.logChatHistory(this.redTeamingChatConversationId);
     const redTeamingChat = await this.getRedTeamProvider();
-    const response = await redTeamingChat.callApi(JSON.stringify(redTeamingHistory), {
-      prompt: {
-        raw: JSON.stringify(redTeamingHistory),
-        label: 'history',
+    const response = await redTeamingChat.callApi(
+      JSON.stringify(redTeamingHistory),
+      {
+        prompt: {
+          raw: JSON.stringify(redTeamingHistory),
+          label: 'history',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
 
     TokenUsageTracker.getInstance().trackUsage(redTeamingChat.id(), response.tokenUsage);
 
@@ -822,6 +834,7 @@ export class CrescendoProvider implements ApiProvider {
   private async getRefusalScore(
     attackPrompt: string,
     lastResponse: string,
+    options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
     logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
     // Short-circuit refusal grading for standard refusal prefixes
@@ -848,13 +861,17 @@ export class CrescendoProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await scoringProvider.callApi(refusalBody, {
-      prompt: {
-        raw: refusalBody,
-        label: 'refusal',
+    const refusalResponse = await scoringProvider.callApi(
+      refusalBody,
+      {
+        prompt: {
+          raw: refusalBody,
+          label: 'refusal',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
       await sleep(scoringProvider.delay);
@@ -884,7 +901,7 @@ export class CrescendoProvider implements ApiProvider {
     return [parsed.value, parsed.rationale];
   }
 
-  private async getEvalScore(lastResponse: string): Promise<any> {
+  private async getEvalScore(lastResponse: string, options?: CallApiOptionsParams): Promise<any> {
     logger.debug(
       `[Crescendo] Getting eval score for response: ${lastResponse.substring(0, 100)}...`,
     );
@@ -903,13 +920,17 @@ export class CrescendoProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const evalResponse = await scoringProvider.callApi(evalBody, {
-      prompt: {
-        raw: evalBody,
-        label: 'eval',
+    const evalResponse = await scoringProvider.callApi(
+      evalBody,
+      {
+        prompt: {
+          raw: evalBody,
+          label: 'eval',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
     TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), evalResponse.tokenUsage);
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);

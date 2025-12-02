@@ -1,0 +1,14 @@
+# Strands Agents SDK Example - Python Dependencies
+#
+# Strands Agents SDK by AWS:
+# - GitHub: https://github.com/strands-agents/sdk-python
+# - Documentation: https://strandsagents.com/
+# - PyPI: https://pypi.org/project/strands-agents/
+
+# Strands Agents SDK with OpenAI model support
+# https://strandsagents.com/latest/user-guide/concepts/model-providers/openai/
+strands-agents[openai]>=1.0.0,<2.0.0
+
+# Pydantic for data validation (required by Strands)
+# https://docs.pydantic.dev/
+pydantic>=2.0.0

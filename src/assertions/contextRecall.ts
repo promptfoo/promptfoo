@@ -35,7 +35,7 @@ export const handleContextRecall = async ({
   const result = await matchesContextRecall(
     context, // context parameter (used as {{context}} in prompt)
     renderedValue, // ground truth parameter (used as {{groundTruth}} in prompt)
-    assertion.threshold ?? 0,
+    (assertion.threshold as number) ?? 0,
     test.options,
     test.vars,
     providerCallContext,

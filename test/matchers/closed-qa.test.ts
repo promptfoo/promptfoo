@@ -1,3 +1,4 @@
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { matchesClosedQa } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
@@ -5,18 +6,18 @@ import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesClosedQa', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: 'foo \n \n bar\n Y Y \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass when the closed QA check passes', async () => {
@@ -25,7 +26,7 @@ describe('matchesClosedQa', () => {
     const output = 'Sample output';
     const grading = {};
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
       output: 'foo \n \n bar\n Y Y \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
@@ -51,7 +52,7 @@ describe('matchesClosedQa', () => {
     const output = 'Sample output';
     const grading = {};
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
       output: 'foo bar N \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
@@ -77,7 +78,7 @@ describe('matchesClosedQa', () => {
     const output = 'Sample output';
     const grading = {};
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
       throw new Error('An error occurred');
     });
 
@@ -93,7 +94,7 @@ describe('matchesClosedQa', () => {
     const grading = {};
 
     let isJson = false;
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation((prompt) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation((prompt) => {
       try {
         JSON.parse(prompt);
         isJson = true;
@@ -130,7 +131,7 @@ describe('matchesClosedQa', () => {
       provider: DefaultGradingProvider,
     };
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: 'Y',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
@@ -165,7 +166,7 @@ Answer: {{completion}}
 
 Does the answer meet the criteria? Answer Y or N.`;
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output: 'Y',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });

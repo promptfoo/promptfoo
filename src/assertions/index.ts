@@ -23,6 +23,7 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
@@ -72,10 +73,10 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
-import { handleRuby } from './ruby';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
+import { handleRuby } from './ruby';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
@@ -84,6 +85,7 @@ import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
+import { handleSearchRubric } from './searchRubric';
 import { handleIsXml } from './xml';
 
 import type {
@@ -105,6 +107,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'llm-rubric',
   'model-graded-closedqa',
   'model-graded-factuality',
+  'search-rubric',
 ]);
 
 const ASSERTION_HANDLERS: Record<
@@ -149,7 +152,7 @@ const ASSERTION_HANDLERS: Record<
   'llm-rubric': handleLlmRubric,
   meteor: async (params: AssertionParams) => {
     try {
-      const { handleMeteorAssertion } = await import('./meteor');
+      const { handleMeteorAssertion } = await import('./meteor.js');
       return handleMeteorAssertion(params);
     } catch (error) {
       if (
@@ -178,6 +181,7 @@ const ASSERTION_HANDLERS: Record<
   regex: handleRegex,
   ruby: handleRuby,
   'rouge-n': handleRougeScore,
+  'search-rubric': handleSearchRubric,
   similar: handleSimilar,
   'similar:cosine': handleSimilar,
   'similar:dot': handleSimilar,
@@ -256,12 +260,14 @@ export async function runAssertion({
   // Add trace data if traceId is available
   if (traceId) {
     try {
-      const { getTraceStore } = await import('../tracing/store');
       const traceStore = getTraceStore();
       const traceData = await traceStore.getTrace(traceId);
       if (traceData) {
         context.trace = {
           traceId: traceData.traceId,
+          evaluationId: traceData.evaluationId,
+          testCaseId: traceData.testCaseId,
+          metadata: traceData.metadata,
           spans: traceData.spans || [],
         };
       }
@@ -309,7 +315,7 @@ export async function runAssertion({
         }
       } else if (filePath.endsWith('.rb')) {
         try {
-          const { runRuby } = await import('../ruby/rubyUtils');
+          const { runRuby } = await import('../ruby/rubyUtils.js');
           const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
             output,
             context,
