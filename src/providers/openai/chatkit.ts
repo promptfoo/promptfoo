@@ -54,6 +54,13 @@ const DOM_SETTLE_DELAY_MS = 2000;
 const APPROVAL_PROCESS_DELAY_MS = 500;
 const APPROVAL_CLICK_DELAY_MS = 1000;
 const RESPONSE_EXTRACT_RETRY_DELAY_MS = 500;
+// Time to wait after last content change to ensure workflow is fully complete
+// Multi-step workflows may have agents that run sequentially, each updating the DOM
+// MCP tool calls (like Dropbox searches) can take 30+ seconds
+const CONTENT_STABILIZATION_MS = 10000; // Wait 10 seconds after last content change
+const CONTENT_POLL_MS = 500; // Poll for content changes every 500ms
+const MIN_WORKFLOW_WAIT_MS = 30000; // Minimum 30 seconds for multi-step workflows with MCP tools
+const SHORT_RESPONSE_THRESHOLD = 100; // Responses under this length might be intermediate (e.g., JSON classification)
 // Note: MIN_RESPONSE_LENGTH (20), MIN_MESSAGE_LENGTH (30), MAX_INIT_ATTEMPTS (100),
 // and INIT_POLL_INTERVAL_MS (100) are hardcoded in the HTML template string
 // and in DOM evaluation functions where constants cannot be easily passed.
@@ -136,7 +143,7 @@ function generateChatKitHTML(
   <script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js"></script>
 
   <script>
-    window.__state = { ready: false, responses: [], threadId: null, error: null };
+    window.__state = { ready: false, responses: [], threadId: null, error: null, responding: false };
 
     async function init() {
       const chatkit = document.getElementById('chatkit');
@@ -200,7 +207,12 @@ function generateChatKitHTML(
         window.__state.threadId = e.detail.threadId;
       });
 
+      chatkit.addEventListener('chatkit.response.start', () => {
+        window.__state.responding = true;
+      });
+
       chatkit.addEventListener('chatkit.response.end', () => {
+        window.__state.responding = false;
         window.__state.responses.push({ timestamp: Date.now() });
       });
 
@@ -250,6 +262,7 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
 
             // Try assistant-specific selectors first - these are most reliable
             const assistantSelectors = [
+              '[data-thread-item="assistant-message"]', // ChatKit specific
               '[data-testid="assistant-message"]',
               '[data-role="assistant"]',
               '[class*="assistant"]:not([class*="user"])',
@@ -375,6 +388,22 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
             // Clean up the response - remove Cloudflare scripts and other noise
             let cleaned = result.text.replace(/\(function\(\)\{.*?\}\)\(\);?/gs, '').trim();
 
+            // Skip if this looks like just approval button text
+            if (cleaned === 'ApproveReject' || cleaned === 'Approve' || cleaned === 'Reject') {
+              logger.debug('[ChatKitProvider] Skipping approval button text', { text: cleaned });
+              continue;
+            }
+
+            // Remove approval UI text from the response (only the approval block, not standalone words)
+            // The approval UI typically appears as: "Approval required\nDoes this work for you?\nApprove\nReject"
+            cleaned = cleaned
+              .replace(/\n?Approval required\n?Does this work for you\?\n?Approve\n?Reject$/gi, '')
+              .replace(
+                /\n?Approval required[\s\n]+Does this work for you\?[\s\n]+Approve[\s\n]+Reject$/gi,
+                '',
+              )
+              .trim();
+
             // Remove "You said:" prefix and everything after it if it looks like user echo
             // This pattern matches "You said:" followed by any text
             const youSaidMatch = cleaned.match(/^You said:([\s\S]*)/i);
@@ -427,6 +456,116 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
   }
 
   return '';
+}
+
+/**
+ * Get the current visible text content from the ChatKit iframe.
+ * Returns the text content or null if iframe not accessible.
+ */
+async function getIframeContent(page: Page): Promise<string | null> {
+  const frames = page.frames();
+  for (const frame of frames) {
+    const url = frame.url();
+    if (isOpenAICdnUrl(url)) {
+      try {
+        const content = await frame.evaluate(() => {
+          return document.body?.innerText || '';
+        });
+        return content;
+      } catch {
+        // Frame not accessible
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Wait for iframe content to stabilize by polling for changes.
+ * Multi-step workflows may have agents that run sequentially, each updating the DOM.
+ * This function waits until:
+ * 1. Content hasn't changed for CONTENT_STABILIZATION_MS
+ * 2. At least MIN_WORKFLOW_WAIT_MS has elapsed since first response
+ * 3. Not currently in 'responding' state
+ */
+async function waitForContentStabilization(
+  page: Page,
+  timeout: number,
+  startTime: number,
+): Promise<void> {
+  let lastContent = '';
+  let lastChangeTime = Date.now();
+  const pollStartTime = Date.now();
+
+  logger.debug('[ChatKitProvider] Starting content stabilization polling');
+
+  while (Date.now() - pollStartTime < timeout) {
+    // Check if we're still responding
+    const state = await page.evaluate(() => (window as any).__state);
+
+    // Get current iframe content
+    const currentContent = (await getIframeContent(page)) || '';
+
+    // Check if content has changed
+    if (currentContent !== lastContent) {
+      logger.debug('[ChatKitProvider] Content changed', {
+        previousLength: lastContent.length,
+        newLength: currentContent.length,
+        preview: currentContent.substring(Math.max(0, currentContent.length - 200)),
+      });
+      lastContent = currentContent;
+      lastChangeTime = Date.now();
+    }
+
+    const timeSinceStart = Date.now() - startTime;
+    const timeSinceLastChange = Date.now() - lastChangeTime;
+
+    // Extract just the assistant response part for length checking
+    // The full content includes "You said: ... The assistant said: ..."
+    const assistantMatch = currentContent.match(/The assistant said:\s*\n*([\s\S]*)/i);
+    const assistantResponse = assistantMatch ? assistantMatch[1].trim() : currentContent;
+    if (!assistantMatch && currentContent.length > 0) {
+      logger.debug(
+        '[ChatKitProvider] Assistant pattern not found, using full content for length check',
+        {
+          contentLength: currentContent.length,
+        },
+      );
+    }
+    const isShortResponse = assistantResponse.length < SHORT_RESPONSE_THRESHOLD;
+
+    // For short responses (possibly intermediate like JSON classification),
+    // wait longer to see if more content appears
+    const effectiveStabilizationMs = isShortResponse
+      ? CONTENT_STABILIZATION_MS * 2
+      : CONTENT_STABILIZATION_MS;
+    const effectiveMinWaitMs = isShortResponse ? MIN_WORKFLOW_WAIT_MS * 2 : MIN_WORKFLOW_WAIT_MS;
+
+    // Check stabilization conditions:
+    // 1. Not currently responding
+    // 2. Content hasn't changed for stabilization period
+    // 3. At least minimum wait time since workflow started
+    if (
+      !state.responding &&
+      timeSinceLastChange >= effectiveStabilizationMs &&
+      timeSinceStart >= effectiveMinWaitMs
+    ) {
+      logger.debug('[ChatKitProvider] Content stabilized', {
+        timeSinceStart,
+        timeSinceLastChange,
+        contentLength: currentContent.length,
+        assistantResponseLength: assistantResponse.length,
+        isShortResponse,
+        responseCount: state.responses?.length,
+      });
+      return;
+    }
+
+    // Wait before next poll
+    await page.waitForTimeout(CONTENT_POLL_MS);
+  }
+
+  logger.debug('[ChatKitProvider] Content stabilization timeout reached');
 }
 
 /**
@@ -791,16 +930,26 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       );
 
       // Wait for response - in stateful mode, wait for a NEW response
+      // Multi-step workflows may update DOM content multiple times as different
+      // agents run (classification -> domain agent -> summarizer)
       logger.debug('[ChatKitProvider] Waiting for response');
       const expectedResponseCount = responseCount + 1;
+
+      // First, wait for at least one response to start
       await this.page.waitForFunction(
         (expected) => (window as any).__state?.responses?.length >= expected,
         expectedResponseCount,
         { timeout: this.chatKitConfig.timeout },
       );
 
-      // Allow DOM to settle - ChatKit iframe needs time to render the response
-      await this.page.waitForTimeout(DOM_SETTLE_DELAY_MS);
+      // Wait for workflow to stabilize by polling actual DOM content
+      // Multi-step workflows (classification -> domain agent) may continue
+      // updating DOM content after the first response.end event
+      await waitForContentStabilization(
+        this.page,
+        this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
+        startTime,
+      );
 
       // Handle any approval steps in the workflow
       const approvalsHandled = await processApprovals(
@@ -814,7 +963,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         logger.debug('[ChatKitProvider] Processed approvals', { count: approvalsHandled });
       }
 
-      // Extract response from iframe
+      // Extract response from iframe DOM
       const responseText = await extractResponseFromFrame(this.page);
 
       // Get thread ID
@@ -956,13 +1105,19 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         });
       }, prompt);
 
-      // Wait for response
+      // Wait for at least one response to start
       await page.waitForFunction(() => (window as any).__state?.responses?.length > 0, {
         timeout: this.chatKitConfig.timeout,
       });
 
-      // Allow DOM to settle
-      await page.waitForTimeout(DOM_SETTLE_DELAY_MS);
+      // Wait for workflow to stabilize by polling actual DOM content
+      // Multi-step workflows (classification -> domain agent) may continue
+      // updating DOM content after the first response.end event
+      await waitForContentStabilization(
+        page,
+        this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
+        startTime,
+      );
 
       // Handle any approval steps in the workflow
       const approvalsHandled = await processApprovals(
@@ -976,7 +1131,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         logger.debug('[ChatKitProvider] Pool processed approvals', { count: approvalsHandled });
       }
 
-      // Extract response from iframe
+      // Extract response from iframe DOM
       const responseText = await extractResponseFromFrame(page);
 
       // Get thread ID

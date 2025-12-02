@@ -1,4 +1,5 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
@@ -1130,6 +1131,83 @@ describe('RedteamGoatProvider', () => {
       expect(result.tokenUsage?.prompt).toBe(75); // 30 + 45
       expect(result.tokenUsage?.completion).toBe(50); // 20 + 30
       expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+  });
+
+  describe('Abort Signal Handling', () => {
+    it('should re-throw AbortError from fetchWithProxy and not swallow it', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 3,
+      });
+
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // Mock fetch to throw AbortError
+      mockFetch.mockRejectedValueOnce(abortError);
+
+      const targetProvider = createMockTargetProvider();
+      const context = createMockContext(targetProvider);
+
+      await expect(provider.callApi('test prompt', context)).rejects.toThrow(
+        'The operation was aborted',
+      );
+    });
+
+    it('should pass options with abortSignal to target provider callApi', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn() as any,
+      };
+
+      (targetProvider.callApi as any).mockResolvedValue({
+        output: 'target response',
+        tokenUsage: {},
+      });
+
+      const context = createMockContext(targetProvider);
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      await provider.callApi('test prompt', context, options);
+
+      // Verify that callApi was called with the options
+      expect(targetProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should swallow non-AbortError exceptions and continue the loop', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+      });
+
+      const regularError = new Error('Network error');
+      // First turn fails with non-AbortError, second turn succeeds
+      mockFetch.mockRejectedValueOnce(regularError).mockImplementationOnce(async () => ({
+        json: async () => ({
+          message: { role: 'assistant', content: 'test response' },
+        }),
+        ok: true,
+      }));
+
+      const targetProvider = createMockTargetProvider();
+      const context = createMockContext(targetProvider);
+
+      // Should NOT throw - should continue to next turn
+      const result = await provider.callApi('test prompt', context);
+
+      // Should complete without throwing
+      expect(result.metadata?.stopReason).toBe('Max turns reached');
     });
   });
 

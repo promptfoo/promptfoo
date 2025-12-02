@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
+import { fromError } from 'zod-validation-error/v3';
 import { getEnvBool } from '../../envars';
 import {
   checkEmailStatus,

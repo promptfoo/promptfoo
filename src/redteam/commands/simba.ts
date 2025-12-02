@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { z } from 'zod';
-import { fromZodError } from 'zod-validation-error';
+import { fromZodError } from 'zod-validation-error/v3';
 import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import logger from '../../logger';
 import { TestSuite, UnifiedConfig } from '../../types/index';
