@@ -1249,3 +1249,6 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     }
   }
 }
+
+// Export for testing
+export { cleanAssistantResponse };
