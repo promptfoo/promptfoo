@@ -110,6 +110,43 @@ function validateUserId(userId: string): void {
 }
 
 /**
+ * Clean up assistant response text by removing noise and artifacts.
+ * This includes Cloudflare scripts, approval UI text, user echo, and JSON classification prefixes.
+ */
+function cleanAssistantResponse(text: string): string {
+  if (!text) {
+    return '';
+  }
+
+  // Remove Cloudflare scripts and other noise
+  let cleaned = text.replace(/\(function\(\)\{.*?\}\)\(\);?/gs, '').trim();
+
+  // Remove approval UI text from the response
+  // The approval UI typically appears as: "Approval required\nDoes this work for you?\nApprove\nReject"
+  cleaned = cleaned
+    .replace(/\n?Approval required\n?Does this work for you\?\n?Approve\n?Reject$/gi, '')
+    .replace(/\n?Approval required[\s\n]+Does this work for you\?[\s\n]+Approve[\s\n]+Reject$/gi, '')
+    .trim();
+
+  // Remove "You said:" prefix and everything after it if it looks like user echo
+  if (/^You said:/i.test(cleaned)) {
+    cleaned = '';
+  } else {
+    // Also check for "You said:" appearing anywhere in the text and remove it
+    cleaned = cleaned.replace(/You said:[\s\S]*/gi, '').trim();
+  }
+
+  // Don't strip JSON if it's the only response - it might be intentional
+  // Only strip if there's substantial text after the JSON
+  const jsonMatch = cleaned.match(/^(\{[^}]+\})\s+(.+)/s);
+  if (jsonMatch && jsonMatch[2].trim().length > 50) {
+    cleaned = jsonMatch[2].trim();
+  }
+
+  return cleaned;
+}
+
+/**
  * Generate the HTML page that hosts the ChatKit component
  */
 function generateChatKitHTML(
@@ -385,47 +422,15 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
           });
 
           if (result.text && result.text.length > 0) {
-            // Clean up the response - remove Cloudflare scripts and other noise
-            let cleaned = result.text.replace(/\(function\(\)\{.*?\}\)\(\);?/gs, '').trim();
-
             // Skip if this looks like just approval button text
-            if (cleaned === 'ApproveReject' || cleaned === 'Approve' || cleaned === 'Reject') {
-              logger.debug('[ChatKitProvider] Skipping approval button text', { text: cleaned });
+            const trimmed = result.text.trim();
+            if (trimmed === 'ApproveReject' || trimmed === 'Approve' || trimmed === 'Reject') {
+              logger.debug('[ChatKitProvider] Skipping approval button text', { text: trimmed });
               continue;
             }
 
-            // Remove approval UI text from the response (only the approval block, not standalone words)
-            // The approval UI typically appears as: "Approval required\nDoes this work for you?\nApprove\nReject"
-            cleaned = cleaned
-              .replace(/\n?Approval required\n?Does this work for you\?\n?Approve\n?Reject$/gi, '')
-              .replace(
-                /\n?Approval required[\s\n]+Does this work for you\?[\s\n]+Approve[\s\n]+Reject$/gi,
-                '',
-              )
-              .trim();
-
-            // Remove "You said:" prefix and everything after it if it looks like user echo
-            // This pattern matches "You said:" followed by any text
-            const youSaidMatch = cleaned.match(/^You said:([\s\S]*)/i);
-            if (youSaidMatch) {
-              // The entire response is just echoing the user - this means we got the wrong element
-              // Return empty to trigger retry or indicate no real response
-              logger.debug('[ChatKitProvider] Detected user echo, discarding', {
-                preview: cleaned.substring(0, 100),
-              });
-              // Don't return the echo - continue to retry or return empty
-              cleaned = '';
-            }
-
-            // Also check for "You said:" appearing anywhere in the text and remove it
-            cleaned = cleaned.replace(/You said:[\s\S]*/gi, '').trim();
-
-            // Don't strip JSON if it's the only response - it might be intentional
-            // Only strip if there's substantial text after the JSON
-            const jsonMatch = cleaned.match(/^(\{[^}]+\})\s+(.+)/s);
-            if (jsonMatch && jsonMatch[2].trim().length > 50) {
-              cleaned = jsonMatch[2].trim();
-            }
+            // Apply shared cleanup logic
+            const cleaned = cleanAssistantResponse(result.text);
 
             if (cleaned.length > 0) {
               logger.debug('[ChatKitProvider] Extracted response', {
@@ -488,14 +493,23 @@ async function getIframeContent(page: Page): Promise<string | null> {
  * 2. At least MIN_WORKFLOW_WAIT_MS has elapsed since first response
  * 3. Not currently in 'responding' state
  */
+/**
+ * Result from content stabilization including the captured assistant response
+ */
+interface StabilizationResult {
+  assistantResponse: string;
+  fullContent: string;
+}
+
 async function waitForContentStabilization(
   page: Page,
   timeout: number,
   startTime: number,
-): Promise<void> {
+): Promise<StabilizationResult> {
   let lastContent = '';
   let lastChangeTime = Date.now();
   const pollStartTime = Date.now();
+  let capturedAssistantResponse = '';
 
   logger.debug('[ChatKitProvider] Starting content stabilization polling');
 
@@ -532,6 +546,9 @@ async function waitForContentStabilization(
         },
       );
     }
+    // Always capture the latest assistant response for potential fallback use
+    capturedAssistantResponse = assistantResponse;
+
     const isShortResponse = assistantResponse.length < SHORT_RESPONSE_THRESHOLD;
 
     // For short responses (possibly intermediate like JSON classification),
@@ -558,7 +575,7 @@ async function waitForContentStabilization(
         isShortResponse,
         responseCount: state.responses?.length,
       });
-      return;
+      return { assistantResponse: capturedAssistantResponse, fullContent: currentContent };
     }
 
     // Wait before next poll
@@ -566,6 +583,7 @@ async function waitForContentStabilization(
   }
 
   logger.debug('[ChatKitProvider] Content stabilization timeout reached');
+  return { assistantResponse: capturedAssistantResponse, fullContent: lastContent };
 }
 
 /**
@@ -945,7 +963,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       // Wait for workflow to stabilize by polling actual DOM content
       // Multi-step workflows (classification -> domain agent) may continue
       // updating DOM content after the first response.end event
-      await waitForContentStabilization(
+      // Capture the content during stabilization as a fallback for extraction
+      const stabilizationResult = await waitForContentStabilization(
         this.page,
         this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
         startTime,
@@ -964,7 +983,15 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       }
 
       // Extract response from iframe DOM
-      const responseText = await extractResponseFromFrame(this.page);
+      // Try DOM extraction first, fall back to captured content from stabilization
+      let responseText = await extractResponseFromFrame(this.page);
+      if (!responseText && stabilizationResult.assistantResponse) {
+        logger.debug('[ChatKitProvider] Using fallback content from stabilization', {
+          fallbackLength: stabilizationResult.assistantResponse.length,
+        });
+        // Apply the same cleanup logic used for DOM extraction
+        responseText = cleanAssistantResponse(stabilizationResult.assistantResponse);
+      }
 
       // Get thread ID
       const threadId = await this.page.evaluate(() => (window as any).__state.threadId);
@@ -1113,7 +1140,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       // Wait for workflow to stabilize by polling actual DOM content
       // Multi-step workflows (classification -> domain agent) may continue
       // updating DOM content after the first response.end event
-      await waitForContentStabilization(
+      // Capture the content during stabilization as a fallback for extraction
+      const stabilizationResult = await waitForContentStabilization(
         page,
         this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
         startTime,
@@ -1132,7 +1160,15 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       }
 
       // Extract response from iframe DOM
-      const responseText = await extractResponseFromFrame(page);
+      // Try DOM extraction first, fall back to captured content from stabilization
+      let responseText = await extractResponseFromFrame(page);
+      if (!responseText && stabilizationResult.assistantResponse) {
+        logger.debug('[ChatKitProvider] Pool using fallback content from stabilization', {
+          fallbackLength: stabilizationResult.assistantResponse.length,
+        });
+        // Apply the same cleanup logic used for DOM extraction
+        responseText = cleanAssistantResponse(stabilizationResult.assistantResponse);
+      }
 
       // Get thread ID
       const threadId = await page.evaluate(() => (window as any).__state.threadId);
