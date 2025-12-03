@@ -59,7 +59,7 @@ const RESPONSE_EXTRACT_RETRY_DELAY_MS = 500;
 // MCP tool calls (like Dropbox searches) can take 30+ seconds
 const CONTENT_STABILIZATION_MS = 10000; // Wait 10 seconds after last content change
 const CONTENT_POLL_MS = 500; // Poll for content changes every 500ms
-const MIN_WORKFLOW_WAIT_MS = 30000; // Minimum 30 seconds for multi-step workflows with MCP tools
+const MIN_WORKFLOW_WAIT_MS = 60000; // Minimum 60 seconds for multi-step workflows with MCP tools
 const SHORT_RESPONSE_THRESHOLD = 100; // Responses under this length might be intermediate (e.g., JSON classification)
 // Note: MIN_RESPONSE_LENGTH (20), MIN_MESSAGE_LENGTH (30), MAX_INIT_ATTEMPTS (100),
 // and INIT_POLL_INTERVAL_MS (100) are hardcoded in the HTML template string
@@ -125,7 +125,10 @@ function cleanAssistantResponse(text: string): string {
   // The approval UI typically appears as: "Approval required\nDoes this work for you?\nApprove\nReject"
   cleaned = cleaned
     .replace(/\n?Approval required\n?Does this work for you\?\n?Approve\n?Reject$/gi, '')
-    .replace(/\n?Approval required[\s\n]+Does this work for you\?[\s\n]+Approve[\s\n]+Reject$/gi, '')
+    .replace(
+      /\n?Approval required[\s\n]+Does this work for you\?[\s\n]+Approve[\s\n]+Reject$/gi,
+      '',
+    )
     .trim();
 
   // Remove "You said:" prefix and everything after it if it looks like user echo
@@ -469,6 +472,10 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
  */
 async function getIframeContent(page: Page): Promise<string | null> {
   const frames = page.frames();
+  logger.debug('[ChatKitProvider] Checking frames', {
+    frameCount: frames.length,
+    frameUrls: frames.map((f) => f.url()),
+  });
   for (const frame of frames) {
     const url = frame.url();
     if (isOpenAICdnUrl(url)) {
@@ -516,6 +523,19 @@ async function waitForContentStabilization(
   while (Date.now() - pollStartTime < timeout) {
     // Check if we're still responding
     const state = await page.evaluate(() => (window as any).__state);
+
+    // Log state periodically for debugging
+    const pollElapsed = Date.now() - pollStartTime;
+    if (pollElapsed % 5000 < CONTENT_POLL_MS) {
+      // Log every ~5 seconds
+      logger.debug('[ChatKitProvider] Polling state', {
+        pollElapsedMs: pollElapsed,
+        responding: state.responding,
+        responseCount: state.responses?.length,
+        error: state.error,
+        threadId: state.threadId,
+      });
+    }
 
     // Get current iframe content
     const currentContent = (await getIframeContent(page)) || '';
@@ -830,6 +850,17 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     });
 
     this.page = await this.context.newPage();
+
+    // Capture console logs for debugging
+    this.page.on('console', (msg) => {
+      const type = msg.type();
+      if (type === 'error' || type === 'warning') {
+        logger.debug('[ChatKitProvider] Browser console', {
+          type,
+          text: msg.text(),
+        });
+      }
+    });
 
     // Navigate to our HTML page
     await this.page.goto(`http://localhost:${this.serverPort}`, {
