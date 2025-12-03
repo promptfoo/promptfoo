@@ -7,11 +7,11 @@ description: Automatically scan pull requests for LLM security vulnerabilities w
 
 # GitHub Action
 
-Automatically scan pull requests for LLM security vulnerabilities using the [promptfoo Code Scan Action](https://github.com/promptfoo/code-scan-action).
+Automatically scan pull requests for LLM security vulnerabilities with promptfoo's code scanning GitHub action.
 
-After scanning, the action posts findings with severity levels and suggested fixes as PR review comments.
+The scanner analyzes code changes for prompt injection, PII exposure, excessive agency, and other LLM-specific risks. After scanning, findings are posted with severity levels and suggested fixes as PR review comments.
 
-![Code Scan Action results on PR](../assets/code-scanner-example.png)
+![Code Scan Action results on PR](/img/docs/code-scanning/github.png)
 
 ## Quick Start
 
