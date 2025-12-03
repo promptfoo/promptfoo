@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 
 import {
   createBrowserRouter,
@@ -12,23 +12,22 @@ import {
 import PageShell from './components/PageShell';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
-import DatasetsPage from './pages/datasets/page';
 import EvalPage from './pages/eval/page';
 import EvalCreatorPage from './pages/eval-creator/page';
 import EvalsIndexPage from './pages/evals/page';
-import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';
-import LoginPage from './pages/login';
-import ModelAuditPage from './pages/model-audit/page';
 import NotFoundPage from './pages/NotFoundPage';
-import PromptsPage from './pages/prompts/page';
-import ReportPage from './pages/redteam/report/page';
-import RedteamSetupPage from './pages/redteam/setup/page';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { preloadCriticalPages } from '@app/utils/preload';
 
-// Note: Component preloading is handled in Navigation component via hover events
-// These static imports ensure pages are included in the build
+// Critical pages - loaded immediately with main bundle
+// Non-critical pages - lazy loaded
+const DatasetsPage = lazy(() => import('./pages/datasets/page'));
+const HistoryPage = lazy(() => import('./pages/history/page'));
+const LoginPage = lazy(() => import('./pages/login'));
+const ModelAuditPage = lazy(() => import('./pages/model-audit/page'));
+const PromptsPage = lazy(() => import('./pages/prompts/page'));
+const ReportPage = lazy(() => import('./pages/redteam/report/page'));
+const RedteamSetupPage = lazy(() => import('./pages/redteam/setup/page'));
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
@@ -41,6 +40,14 @@ function TelemetryTracker() {
   }, [location.pathname, recordEvent]);
 
   return <Outlet />;
+}
+
+function LazyPageLoader() {
+  return (
+    <Suspense fallback={<PageShell />}>
+      <Outlet />
+    </Suspense>
+  );
 }
 
 const router = createBrowserRouter(
@@ -60,26 +67,26 @@ const router = createBrowserRouter(
               />
             }
           />
-          <Route path="/datasets" element={<DatasetsPage />} />
+          {/* Critical pages - loaded immediately */}
           <Route path="/eval" element={<EvalPage />} />
           <Route path="/evals" element={<EvalsIndexPage />} />
           <Route path="/eval/:evalId" element={<EvalPage />} />
-
-          {/* Redirect legacy /progress route to /history (since v0.104.5) */}
-          <Route path="/progress" element={<Navigate to="/history" replace />} />
-          <Route path="/history" element={<HistoryPage />} />
-
-          <Route path="/prompts" element={<PromptsPage />} />
-          <Route path="/model-audit" element={<ModelAuditPage />} />
-          <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
-          <Route path="/redteam/setup" element={<RedteamSetupPage />} />
-
-          {/* Redirect legacy /report route to /reports (since v0.118.2) */}
-          <Route path="/report" element={<Navigate to="/reports" replace />} />
-          <Route path="/reports" element={<ReportPage />} />
           <Route path="/setup" element={<EvalCreatorPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="*" element={<NotFoundPage />} />
+
+          {/* Non-critical pages - lazy loaded */}
+          <Route element={<LazyPageLoader />}>
+            <Route path="/datasets" element={<DatasetsPage />} />
+            <Route path="/progress" element={<Navigate to="/history" replace />} />
+            <Route path="/history" element={<HistoryPage />} />
+            <Route path="/prompts" element={<PromptsPage />} />
+            <Route path="/model-audit" element={<ModelAuditPage />} />
+            <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
+            <Route path="/redteam/setup" element={<RedteamSetupPage />} />
+            <Route path="/report" element={<Navigate to="/reports" replace />} />
+            <Route path="/reports" element={<ReportPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
         </Route>
       </Route>
     </>,
@@ -90,11 +97,6 @@ const router = createBrowserRouter(
 const queryClient = new QueryClient();
 
 function App() {
-  // Start preloading critical pages immediately when app mounts
-  useEffect(() => {
-    preloadCriticalPages().catch(console.warn);
-  }, []);
-
   return (
     <ToastProvider>
       <QueryClientProvider client={queryClient}>
