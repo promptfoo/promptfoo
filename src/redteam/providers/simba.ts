@@ -24,14 +24,15 @@ import { strategyDisplayNames } from '../constants';
 import { buildRemoteUrl } from '../remoteGeneration';
 import { createIterationContext, Message } from './shared';
 
-enum Phases {
-  Reconnaissance = 'reconnaissance',
-  Probing = 'probing',
-  Attacking = 'attacking',
-  AttackPlanning = 'attack-planning',
-  Completed = 'completed',
-  Failed = 'failed',
-}
+const Phases = {
+  Reconnaissance: 'reconnaissance',
+  Probing: 'probing',
+  Attacking: 'attacking',
+  AttackPlanning: 'attack-planning',
+  Completed: 'completed',
+  Failed: 'failed',
+} as const;
+type Phases = (typeof Phases)[keyof typeof Phases];
 
 const PhaseLabels: Record<Phases, string> = {
   [Phases.Reconnaissance]: 'Reconnaissance',
@@ -435,7 +436,7 @@ export default class SimbaProvider implements ApiProvider {
       const email = (await getUserEmail()) || 'demo@promptfoo.dev';
       let responses: Record<string, string> = {};
 
-      let currentPhase = Phases.Reconnaissance;
+      let currentPhase: Phases = Phases.Reconnaissance;
 
       // Calculate max iterations based on config with a high buffer to account for
       // reconnaissance, probing, and attack planning phases
