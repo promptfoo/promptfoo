@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 
 import z from 'zod';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
