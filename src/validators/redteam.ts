@@ -310,15 +310,15 @@ export const RedteamConfigSchema = z
 
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
         // Lazy require to avoid mock interference in tests during module initialization
-        // Try-catch to handle ESM environments where require may not work
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          // Use eval to prevent bundler issues in browser builds
+          // eslint-disable-next-line no-eval
           const logger = require('../logger').default;
           logger.debug(
             '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
           );
         } catch {
-          // Silently fail in ESM environments - deprecation warning is not critical
+          // Silently fail if require fails - deprecation warning is not critical
         }
 
         if (data.language) {

@@ -83,15 +83,15 @@
     "chokidar": "5.0.0",
     "whatwg-url": "15.1.0",
     "esbuild": "0.27.0",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
     "react-is": "^19.0.0",
     "*": {
       "whatwg-url": "15.1.0",
       "chokidar": "5.0.0",
       "esbuild": "0.27.0",
-      "react": "19.2.0",
-      "react-dom": "19.2.0"
+      "react": "19.2.1",
+      "react-dom": "19.2.1"
     },
     "gaxios": "^7.0.0",
     "https-proxy-agent": "^7.0.0",
@@ -114,7 +114,7 @@
     "@adaline/together-ai": "1.6.0",
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.9.0",
-    "@anthropic-ai/claude-agent-sdk": "^0.1.56",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.57",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.943.0",
     "@aws-sdk/client-bedrock-runtime": "^3.943.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.943.0",
@@ -184,7 +184,7 @@
     "@adaline/together-ai": "1.6.0",
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.9.0",
-    "@anthropic-ai/claude-agent-sdk": "^0.1.56",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.57",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.943.0",
     "@aws-sdk/client-bedrock-runtime": "^3.943.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.943.0",
@@ -201,7 +201,7 @@
     "@fal-ai/client": "^1.7.2",
     "@ibm-cloud/watsonx-ai": "^1.7.4",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
-    "@openai/codex-sdk": "^0.63.0",
+    "@openai/codex-sdk": "^0.64.0",
     "@playwright/browser-chromium": "^1.57.0",
     "@rollup/rollup-linux-x64-gnu": "^4.53.3",
     "@slack/web-api": "^7.12.0",
@@ -298,7 +298,7 @@
     "winston": "^3.18.3",
     "ws": "^8.18.3",
     "zod": "^3.25.76",
-    "zod-validation-error": "^5.0.0"
+    "zod-validation-error": "^3.5.4"
   },
   "madge": {
     "detectiveOptions": {
