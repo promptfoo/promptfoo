@@ -2,7 +2,7 @@
  * Version and build-time constants.
  *
  * This module uses compile-time injection:
- * - At build time (tsup): Constants are injected via `define` and inlined
+ * - At build time (tsdown): Constants are injected via `define` and inlined
  * - In development/test (Node.js): Reads from package.json at runtime
  * - In browser builds: Falls back to defaults (frontend has its own mechanism)
  *
@@ -10,7 +10,9 @@
  * import.meta.env.VITE_PROMPTFOO_VERSION defined in vite.config.ts
  */
 
-// Build-time constants injected by tsup's `define` option.
+import { createRequire } from 'node:module';
+
+// Build-time constants injected by tsdown's `define` option.
 // In development/test environments, these remain undefined.
 declare const __PROMPTFOO_VERSION__: string | undefined;
 declare const __PROMPTFOO_POSTHOG_KEY__: string | undefined;
@@ -19,9 +21,6 @@ declare const __PROMPTFOO_ENGINES_NODE__: string | undefined;
 /**
  * Reads package.json at runtime for Node.js development/test environments.
  * Returns null in browser environments to allow fallback to defaults.
- *
- * Note: This function uses eval to dynamically load Node.js modules to avoid
- * bundler issues when this file is included in browser builds.
  */
 function readPackageJsonSync(): { version: string; engines: { node: string } } | null {
   // Skip in browser environments
@@ -30,8 +29,8 @@ function readPackageJsonSync(): { version: string; engines: { node: string } } |
   }
 
   try {
-    // Use eval to prevent bundler from trying to resolve Node.js modules
-    // This will only execute in Node.js environments where require exists
+    // In ESM, require is not available. Use createRequire to get a require function.
+    const require = createRequire(import.meta.url);
     const fs = require('fs');
     const path = require('path');
     const url = require('url');
