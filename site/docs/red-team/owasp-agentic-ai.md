@@ -18,23 +18,23 @@ Unlike traditional LLM applications, agentic systems introduce unique security c
 
 The framework defines 15 threat categories (T1-T15):
 
-| ID  | Threat Name                              | Category                |
-| --- | ---------------------------------------- | ----------------------- |
-| T1  | Memory Poisoning                         | Memory-Based            |
-| T2  | Tool Misuse                              | Tool & Execution        |
-| T3  | Privilege Compromise                     | Tool & Execution        |
-| T4  | Resource Overload                        | Tool & Execution        |
-| T5  | Cascading Hallucination Attacks          | Memory-Based            |
-| T6  | Intent Breaking & Goal Manipulation      | Agency & Reasoning      |
-| T7  | Misaligned & Deceptive Behaviors         | Agency & Reasoning      |
-| T8  | Repudiation & Untraceability             | Agency & Reasoning      |
-| T9  | Identity Spoofing & Impersonation        | Authentication          |
-| T10 | Overwhelming Human in the Loop           | Human Interaction       |
-| T11 | Unexpected RCE and Code Attacks          | Tool & Execution        |
-| T12 | Agent Communication Poisoning            | Multi-Agent             |
-| T13 | Rogue Agents in Multi-Agent Systems      | Multi-Agent             |
-| T14 | Human Attacks on Multi-Agent Systems     | Multi-Agent             |
-| T15 | Human Manipulation                       | Human Interaction       |
+| ID  | Threat Name                          | Category           |
+| --- | ------------------------------------ | ------------------ |
+| T1  | Memory Poisoning                     | Memory-Based       |
+| T2  | Tool Misuse                          | Tool & Execution   |
+| T3  | Privilege Compromise                 | Tool & Execution   |
+| T4  | Resource Overload                    | Tool & Execution   |
+| T5  | Cascading Hallucination Attacks      | Memory-Based       |
+| T6  | Intent Breaking & Goal Manipulation  | Agency & Reasoning |
+| T7  | Misaligned & Deceptive Behaviors     | Agency & Reasoning |
+| T8  | Repudiation & Untraceability         | Agency & Reasoning |
+| T9  | Identity Spoofing & Impersonation    | Authentication     |
+| T10 | Overwhelming Human in the Loop       | Human Interaction  |
+| T11 | Unexpected RCE and Code Attacks      | Tool & Execution   |
+| T12 | Agent Communication Poisoning        | Multi-Agent        |
+| T13 | Rogue Agents in Multi-Agent Systems  | Multi-Agent        |
+| T14 | Human Attacks on Multi-Agent Systems | Multi-Agent        |
+| T15 | Human Manipulation                   | Human Interaction  |
 
 ## Scanning for OWASP Agentic AI Threats
 
@@ -507,16 +507,16 @@ redteam:
 
 The OWASP Agentic AI threats extend and complement the OWASP LLM Top 10:
 
-| Agentic Threat               | Related LLM Top 10                        |
-| ---------------------------- | ----------------------------------------- |
-| T1: Memory Poisoning         | LLM04: Data and Model Poisoning           |
-| T2: Tool Misuse              | LLM06: Excessive Agency                   |
-| T3: Privilege Compromise     | LLM06: Excessive Agency                   |
-| T4: Resource Overload        | LLM10: Unbounded Consumption              |
-| T5: Cascading Hallucination  | LLM09: Misinformation                     |
-| T6: Goal Manipulation        | LLM01: Prompt Injection                   |
-| T11: RCE and Code Attacks    | LLM01, LLM05: Insecure Output Handling    |
-| T12: Communication Poisoning | LLM04: Data and Model Poisoning           |
+| Agentic Threat               | Related LLM Top 10                     |
+| ---------------------------- | -------------------------------------- |
+| T1: Memory Poisoning         | LLM04: Data and Model Poisoning        |
+| T2: Tool Misuse              | LLM06: Excessive Agency                |
+| T3: Privilege Compromise     | LLM06: Excessive Agency                |
+| T4: Resource Overload        | LLM10: Unbounded Consumption           |
+| T5: Cascading Hallucination  | LLM09: Misinformation                  |
+| T6: Goal Manipulation        | LLM01: Prompt Injection                |
+| T11: RCE and Code Attacks    | LLM01, LLM05: Insecure Output Handling |
+| T12: Communication Poisoning | LLM04: Data and Model Poisoning        |
 
 Test both frameworks together for comprehensive coverage:
 
