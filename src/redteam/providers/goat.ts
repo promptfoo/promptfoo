@@ -470,9 +470,12 @@ export default class GoatProvider implements ApiProvider {
           logger.debug('[GOAT] Operation aborted');
           throw error;
         }
-        logger.error(`[GOAT] Error in GOAT turn ${turn}`, {
-          error: (error as Error).message || error,
-        });
+        logger.error(
+          `[GOAT] An error occurred in GOAT turn ${turn}.  The test will continue to the next turn in the conversation.`,
+          {
+            error: (error as Error).message || error,
+          },
+        );
       }
     }
 
