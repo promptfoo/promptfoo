@@ -1,37 +1,11 @@
-import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
 import { realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { getGlobalDispatcher } from 'undici';
 
 import { VERSION } from './version';
 import { checkNodeVersion } from './checkNodeVersion';
-
-/**
- * Checks if the current module is the main entry point.
- * Handles npm global bin symlinks by resolving real paths.
- *
- * @param importMetaUrl - The import.meta.url of the module
- * @param processArgv1 - The process.argv[1] value (path to executed script)
- * @returns true if this module is being run directly
- */
-export function isMainModule(importMetaUrl: string, processArgv1: string | undefined): boolean {
-  if (!processArgv1) {
-    return false;
-  }
-
-  try {
-    // Resolve symlinks for both paths to handle:
-    // 1. npm global bin symlinks (process.argv[1] points to symlink)
-    // 2. macOS /var -> /private/var symlinks
-    const currentModulePath = realpathSync(fileURLToPath(importMetaUrl));
-    const mainModulePath = realpathSync(resolve(processArgv1));
-    return currentModulePath === mainModulePath;
-  } catch {
-    // realpathSync throws if path doesn't exist
-    return false;
-  }
-}
 import cliState from './cliState';
 import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
@@ -70,6 +44,32 @@ import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
 import { setupEnv } from './util/index';
+
+/**
+ * Checks if the current module is the main entry point.
+ * Handles npm global bin symlinks by resolving real paths.
+ *
+ * @param importMetaUrl - The import.meta.url of the module
+ * @param processArgv1 - The process.argv[1] value (path to executed script)
+ * @returns true if this module is being run directly
+ */
+export function isMainModule(importMetaUrl: string, processArgv1: string | undefined): boolean {
+  if (!processArgv1) {
+    return false;
+  }
+
+  try {
+    // Resolve symlinks for both paths to handle:
+    // 1. npm global bin symlinks (process.argv[1] points to symlink)
+    // 2. macOS /var -> /private/var symlinks
+    const currentModulePath = realpathSync(fileURLToPath(importMetaUrl));
+    const mainModulePath = realpathSync(resolve(processArgv1));
+    return currentModulePath === mainModulePath;
+  } catch {
+    // realpathSync throws if path doesn't exist
+    return false;
+  }
+}
 
 /**
  * Adds verbose and env-file options to all commands recursively
@@ -226,9 +226,23 @@ try {
 
 if (isMain) {
   checkNodeVersion();
+  let mainError: unknown;
   try {
     await main();
+  } catch (error) {
+    mainError = error;
   } finally {
-    await shutdownGracefully();
+    try {
+      await shutdownGracefully();
+    } catch (shutdownError) {
+      // Log shutdown error but preserve the original main error if it exists
+      logger.error(
+        `Shutdown error: ${shutdownError instanceof Error ? shutdownError.message : shutdownError}`,
+      );
+    }
+  }
+  // Re-throw the original error after cleanup is complete
+  if (mainError) {
+    throw mainError;
   }
 }

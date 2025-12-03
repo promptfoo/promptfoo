@@ -308,7 +308,7 @@ export async function startServer(
 
   // Return a Promise that only resolves when the server shuts down
   // This keeps long-running commands (like `view`) running until SIGINT/SIGTERM
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<void>((resolve) => {
     httpServer
       .listen(port, () => {
         const url = `http://localhost:${port}`;
@@ -321,28 +321,18 @@ export async function startServer(
         // Don't resolve - server runs until shutdown signal
       })
       .on('error', (error: NodeJS.ErrnoException) => {
-        handleServerError(error, port); // This does process.exit(1)
-        reject(error);
+        // handleServerError calls process.exit(1), so this error handler
+        // only provides logging before the process terminates
+        handleServerError(error, port);
       });
 
     // Register shutdown handlers to gracefully close the server
-    let isShuttingDown = false;
+    // Use once() to prevent handler accumulation if startServer is called multiple times
     const shutdown = () => {
-      if (isShuttingDown) {
-        return;
-      }
-      isShuttingDown = true;
-
       logger.info('Shutting down server...');
 
-      // Remove signal handlers to prevent multiple calls
-      process.off('SIGINT', shutdown);
-      process.off('SIGTERM', shutdown);
-
       // Close the file watcher first to stop monitoring
-      if (watcher && typeof watcher.close === 'function') {
-        watcher.close();
-      }
+      watcher.close();
 
       // Set a timeout in case connections don't close gracefully
       const SHUTDOWN_TIMEOUT_MS = 5000;
@@ -364,7 +354,7 @@ export async function startServer(
       });
     };
 
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
   });
 }

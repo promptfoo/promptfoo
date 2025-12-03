@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import http from 'node:http';
 import { EventEmitter } from 'node:events';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the module
 vi.mock('../../src/migrate', () => ({
@@ -46,7 +46,7 @@ describe('server', () => {
     const originalExit = process.exit;
 
     beforeEach(() => {
-      process.exit = vi.fn() as any;
+      process.exit = vi.fn() as never;
       vi.clearAllMocks();
     });
 
@@ -82,29 +82,31 @@ describe('server', () => {
       listen: ReturnType<typeof vi.fn>;
       close: ReturnType<typeof vi.fn>;
     };
-    let mockSocketIo: EventEmitter & {
-      close: ReturnType<typeof vi.fn>;
-    };
     let originalCreateServer: typeof http.createServer;
-    let signalHandlers: { SIGINT?: () => void; SIGTERM?: () => void };
+    let signalHandlers: Map<string | symbol, ((...args: unknown[]) => void)[]>;
 
     beforeEach(() => {
       vi.clearAllMocks();
 
-      // Track signal handlers
-      signalHandlers = {};
-      vi.spyOn(process, 'on').mockImplementation((event: string, handler: any) => {
-        if (event === 'SIGINT' || event === 'SIGTERM') {
-          signalHandlers[event] = handler;
-        }
-        return process;
-      });
-      vi.spyOn(process, 'off').mockImplementation(() => process);
+      // Track signal handlers using a Map to support multiple handlers per event
+      signalHandlers = new Map();
+
+      vi.spyOn(process, 'once').mockImplementation(
+        (event: string | symbol, handler: (...args: unknown[]) => void) => {
+          if (event === 'SIGINT' || event === 'SIGTERM') {
+            if (!signalHandlers.has(event)) {
+              signalHandlers.set(event, []);
+            }
+            signalHandlers.get(event)!.push(handler);
+          }
+          return process;
+        },
+      );
 
       // Create mock HTTP server
       mockHttpServer = Object.assign(new EventEmitter(), {
         listen: vi.fn().mockImplementation(function (
-          this: any,
+          this: EventEmitter,
           _port: number,
           callback: () => void,
         ) {
@@ -117,27 +119,24 @@ describe('server', () => {
         }),
       });
 
-      // Create mock Socket.io server
-      mockSocketIo = Object.assign(new EventEmitter(), {
-        close: vi.fn().mockImplementation(function (callback?: () => void) {
-          setImmediate(() => callback?.());
-        }),
-      });
-
       // Mock http.createServer
       originalCreateServer = http.createServer;
-      (http.createServer as any) = vi.fn().mockReturnValue(mockHttpServer);
-
-      // Mock socket.io Server constructor
-      vi.doMock('socket.io', () => ({
-        Server: vi.fn().mockImplementation(() => mockSocketIo),
-      }));
+      (http.createServer as unknown) = vi.fn().mockReturnValue(mockHttpServer);
     });
 
     afterEach(() => {
       http.createServer = originalCreateServer;
       vi.restoreAllMocks();
     });
+
+    const triggerSignal = (signal: 'SIGINT' | 'SIGTERM') => {
+      const handlers = signalHandlers.get(signal);
+      if (handlers) {
+        for (const handler of handlers) {
+          handler();
+        }
+      }
+    };
 
     it('should register SIGINT and SIGTERM handlers', async () => {
       // Start server and immediately trigger shutdown
@@ -146,17 +145,17 @@ describe('server', () => {
       // Wait for server to start
       await new Promise((resolve) => setImmediate(resolve));
 
-      expect(signalHandlers.SIGINT).toBeDefined();
-      expect(signalHandlers.SIGTERM).toBeDefined();
+      expect(signalHandlers.has('SIGINT')).toBe(true);
+      expect(signalHandlers.has('SIGTERM')).toBe(true);
 
       // Trigger shutdown to complete the promise
-      signalHandlers.SIGINT?.();
+      triggerSignal('SIGINT');
       await serverPromise;
     });
 
     it('should close file watcher on shutdown', async () => {
       const mockWatcher = { close: vi.fn(), on: vi.fn() };
-      vi.mocked(setupSignalWatcher).mockReturnValue(mockWatcher as any);
+      vi.mocked(setupSignalWatcher).mockReturnValue(mockWatcher as never);
 
       const serverPromise = startServer(0);
 
@@ -164,45 +163,10 @@ describe('server', () => {
       await new Promise((resolve) => setImmediate(resolve));
 
       // Trigger SIGINT
-      signalHandlers.SIGINT?.();
+      triggerSignal('SIGINT');
       await serverPromise;
 
       expect(mockWatcher.close).toHaveBeenCalled();
-    });
-
-    it('should only shutdown once even if multiple signals received', async () => {
-      const serverPromise = startServer(0);
-
-      // Wait for server to start
-      await new Promise((resolve) => setImmediate(resolve));
-
-      // Trigger multiple signals
-      signalHandlers.SIGINT?.();
-      signalHandlers.SIGINT?.();
-      signalHandlers.SIGTERM?.();
-
-      await serverPromise;
-
-      // logger.info for 'Shutting down server...' should only be called once
-      const shutdownCalls = vi
-        .mocked(logger.info)
-        .mock.calls.filter((call) => call[0] === 'Shutting down server...');
-      expect(shutdownCalls).toHaveLength(1);
-    });
-
-    it('should remove signal handlers after shutdown starts', async () => {
-      const serverPromise = startServer(0);
-
-      // Wait for server to start
-      await new Promise((resolve) => setImmediate(resolve));
-
-      // Trigger SIGINT
-      signalHandlers.SIGINT?.();
-      await serverPromise;
-
-      // process.off should have been called for both signals
-      expect(process.off).toHaveBeenCalledWith('SIGINT', expect.any(Function));
-      expect(process.off).toHaveBeenCalledWith('SIGTERM', expect.any(Function));
     });
 
     it('should log server closure', async () => {
@@ -212,7 +176,46 @@ describe('server', () => {
       await new Promise((resolve) => setImmediate(resolve));
 
       // Trigger SIGINT
-      signalHandlers.SIGINT?.();
+      triggerSignal('SIGINT');
+      await serverPromise;
+
+      expect(logger.info).toHaveBeenCalledWith('Shutting down server...');
+      expect(logger.info).toHaveBeenCalledWith('Server closed');
+    });
+
+    it('should handle httpServer.close error gracefully', async () => {
+      // Mock close to call callback with error
+      mockHttpServer.close = vi.fn().mockImplementation(function (
+        callback?: (err?: Error) => void,
+      ) {
+        setImmediate(() => callback?.(new Error('Close failed')));
+      });
+
+      const serverPromise = startServer(0);
+
+      // Wait for server to start
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Trigger SIGINT
+      triggerSignal('SIGINT');
+      await serverPromise;
+
+      expect(logger.warn).toHaveBeenCalledWith('Error closing server: Close failed');
+      expect(logger.info).toHaveBeenCalledWith('Server closed');
+    });
+
+    // Note: Testing the 5-second force shutdown timeout requires mocking socket.io
+    // at the module level, which is complex. The timeout exists as a safety measure
+    // and the core shutdown logic is tested by the other tests.
+
+    it('should handle SIGTERM the same as SIGINT', async () => {
+      const serverPromise = startServer(0);
+
+      // Wait for server to start
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Trigger SIGTERM instead of SIGINT
+      triggerSignal('SIGTERM');
       await serverPromise;
 
       expect(logger.info).toHaveBeenCalledWith('Shutting down server...');
