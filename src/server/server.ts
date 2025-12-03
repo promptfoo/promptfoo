@@ -289,7 +289,7 @@ export async function startServer(
 
   await runDbMigrations();
 
-  setupSignalWatcher(async () => {
+  const watcher = setupSignalWatcher(async () => {
     const latestEval = await Eval.latest();
     const results = await latestEval?.getResultsCount();
 
@@ -306,17 +306,55 @@ export async function startServer(
     socket.emit('init', await Eval.latest());
   });
 
-  httpServer
-    .listen(port, () => {
-      const url = `http://localhost:${port}`;
-      logger.info(`Server running at ${url} and monitoring for new evals.`);
-      openBrowser(browserBehavior, port).catch((error) => {
-        logger.error(
-          `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
-        );
+  // Return a Promise that only resolves when the server shuts down
+  // This keeps long-running commands (like `view`) running until SIGINT/SIGTERM
+  return new Promise<void>((resolve) => {
+    httpServer
+      .listen(port, () => {
+        const url = `http://localhost:${port}`;
+        logger.info(`Server running at ${url} and monitoring for new evals.`);
+        openBrowser(browserBehavior, port).catch((error) => {
+          logger.error(
+            `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
+          );
+        });
+        // Don't resolve - server runs until shutdown signal
+      })
+      .on('error', (error: NodeJS.ErrnoException) => {
+        // handleServerError calls process.exit(1), so this error handler
+        // only provides logging before the process terminates
+        handleServerError(error, port);
       });
-    })
-    .on('error', (error: NodeJS.ErrnoException) => {
-      handleServerError(error, port);
-    });
+
+    // Register shutdown handlers to gracefully close the server
+    // Use once() to prevent handler accumulation if startServer is called multiple times
+    const shutdown = () => {
+      logger.info('Shutting down server...');
+
+      // Close the file watcher first to stop monitoring
+      watcher.close();
+
+      // Set a timeout in case connections don't close gracefully
+      const SHUTDOWN_TIMEOUT_MS = 5000;
+      const forceCloseTimeout = setTimeout(() => {
+        logger.warn('Server close timeout - forcing shutdown');
+        resolve();
+      }, SHUTDOWN_TIMEOUT_MS);
+
+      // Close Socket.io connections first, then the HTTP server
+      io.close(() => {
+        httpServer.close((err) => {
+          clearTimeout(forceCloseTimeout);
+          if (err) {
+            logger.warn(`Error closing server: ${err.message}`);
+          }
+          logger.info('Server closed');
+          resolve();
+        });
+      });
+    };
+
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+  });
 }
