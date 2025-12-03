@@ -20,6 +20,9 @@ import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
+import type { ButtonProps } from '@mui/material/Button';
+import type { LinkProps } from 'react-router-dom';
+import './Navigation.css';
 
 // Preload functions for navigation hover
 const preloadPage = (path: string) => {
@@ -47,9 +50,6 @@ const preloadPage = (path: string) => {
       return Promise.resolve();
   }
 };
-import type { ButtonProps } from '@mui/material/Button';
-import type { LinkProps } from 'react-router-dom';
-import './Navigation.css';
 
 // Create a properly typed ref component for MUI compatibility
 function RouterLink({ ref, ...props }: LinkProps & { ref?: React.Ref<HTMLAnchorElement> }) {
