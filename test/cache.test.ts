@@ -89,6 +89,7 @@ vi.mock('keyv', () => {
 vi.mock('keyv-file', () => {
   return {
     __esModule: true,
+    KeyvFile: class MockKeyvFile {},
     default: class MockKeyvFile {},
   };
 });

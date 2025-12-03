@@ -1,25 +1,17 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
-import httpZ from 'http-z';
 import https from 'https';
 import path from 'path';
+
+import httpZ from 'http-z';
 import { Agent } from 'undici';
 import { z } from 'zod';
-
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderOptions,
-  ProviderResponse,
-  TokenUsage,
-} from '../types/index';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { renderVarsInObject } from '../util/index';
@@ -35,6 +27,15 @@ import {
   type TransformResponseContext,
 } from './httpTransforms';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+  ProviderResponse,
+  TokenUsage,
+} from '../types/index';
 
 /**
  * Escapes string values in variables for safe JSON template substitution.
@@ -922,11 +923,25 @@ export function processJsonBody(
         }
         return result;
       } else if (typeof obj === 'string') {
-        try {
-          return JSON.parse(obj);
-        } catch {
-          return obj;
+        // Only parse strings that are clearly JSON objects or arrays
+        // This preserves strings that would parse to primitives (numbers, booleans, null)
+        const trimmed = obj.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(obj);
+            // Only return parsed value if it's an object or array
+            // This prevents primitive values (numbers, booleans, null) from being converted
+            if (typeof parsed === 'object' && parsed !== null) {
+              return parsed;
+            }
+            // If it parsed to a primitive, keep the original string
+            return obj;
+          } catch {
+            return obj;
+          }
         }
+        // Not a JSON object/array, return as-is
+        return obj;
       }
       return obj;
     };
@@ -935,6 +950,8 @@ export function processJsonBody(
   }
 
   // If it's a string, attempt to parse as JSON
+  // For top-level strings, we parse JSON primitives (for backward compatibility)
+  // For nested string values in objects, we only parse objects/arrays (see processNestedValues)
   if (typeof rendered === 'string') {
     try {
       return JSON.parse(rendered);

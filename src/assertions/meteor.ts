@@ -19,6 +19,7 @@ function ensureNaturalPackage() {
   }
 
   try {
+    // Dynamic import for Node.js - bundler will handle this gracefully
     const natural = require('natural');
     PorterStemmer = natural.PorterStemmer;
     WordNet = natural.WordNet;
