@@ -1,8 +1,12 @@
 import React, { useMemo } from 'react';
 
-import { useShiftKey } from '@app/hooks/useShiftKey';
-import { useEvalOperations } from '@app/hooks/useEvalOperations';
+import { diffJson, diffSentences, diffWords } from 'diff';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
 import useCloudConfig from '@app/hooks/useCloudConfig';
+import { useEvalOperations } from '@app/hooks/useEvalOperations';
+import { useShiftKey } from '@app/hooks/useShiftKey';
 import {
   Check,
   ContentCopy,
@@ -17,9 +21,7 @@ import {
 import IconButton from '@mui/material/IconButton';
 import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
-import { diffJson, diffSentences, diffWords } from 'diff';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
@@ -167,6 +169,11 @@ function EvalOutputCell({
   const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
+
+  // Extract response audio from the last turn of redteamHistory for display in the cell
+  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
+  const lastTurn = redteamHistory?.[redteamHistory.length - 1];
+  const responseAudio = lastTurn?.outputAudio as { data?: string; format?: string } | undefined;
 
   // Extract failure reasons from component results
   if (output.gradingResult?.componentResults) {
@@ -728,6 +735,22 @@ function EvalOutputCell({
         <div className="prompt">
           <span className="pill">Prompt</span>
           {output.prompt}
+        </div>
+      )}
+      {/* Show response audio from redteam history if available (target's audio response) */}
+      {responseAudio?.data && (
+        <div className="response-audio" style={{ marginBottom: '8px' }}>
+          <audio
+            controls
+            style={{ width: '100%', height: '32px' }}
+            data-testid="response-audio-player"
+          >
+            <source
+              src={`data:audio/${responseAudio.format || 'wav'};base64,${responseAudio.data}`}
+              type={`audio/${responseAudio.format || 'wav'}`}
+            />
+            Your browser does not support the audio element.
+          </audio>
         </div>
       )}
       <div style={contentStyle}>

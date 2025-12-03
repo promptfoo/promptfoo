@@ -342,6 +342,89 @@ describe('EvalOutputCell', () => {
     expect(screen.queryByText(/transcript/i)).not.toBeInTheDocument();
   });
 
+  it('renders response audio from redteamHistory last turn', () => {
+    const propsWithRedteamHistory: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {
+          redteamHistory: [
+            {
+              prompt: 'Attack prompt 1',
+              output: 'Target response 1',
+            },
+            {
+              prompt: 'Attack prompt 2',
+              output: 'Target response 2',
+              outputAudio: {
+                data: 'base64responseaudio',
+                format: 'mp3',
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithRedteamHistory} />);
+
+    const responseAudioElement = screen.getByTestId('response-audio-player');
+    expect(responseAudioElement).toBeInTheDocument();
+
+    const sourceElement = responseAudioElement.querySelector('source');
+    expect(sourceElement).toHaveAttribute('src', 'data:audio/mp3;base64,base64responseaudio');
+  });
+
+  it('renders response audio from redteamTreeHistory when redteamHistory is not present', () => {
+    const propsWithTreeHistory: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {
+          redteamTreeHistory: [
+            {
+              prompt: 'Tree attack prompt',
+              output: 'Tree response',
+              outputAudio: {
+                data: 'base64treeaudio',
+                format: 'wav',
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithTreeHistory} />);
+
+    const responseAudioElement = screen.getByTestId('response-audio-player');
+    expect(responseAudioElement).toBeInTheDocument();
+
+    const sourceElement = responseAudioElement.querySelector('source');
+    expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64treeaudio');
+  });
+
+  it('does not render response audio when redteamHistory has no audio in last turn', () => {
+    const propsWithNoAudio: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {
+          redteamHistory: [
+            {
+              prompt: 'Attack prompt',
+              output: 'Target response without audio',
+            },
+          ],
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithNoAudio} />);
+
+    expect(screen.queryByTestId('response-audio-player')).not.toBeInTheDocument();
+  });
+
   it('uses default wav format when format is not specified', () => {
     const propsWithAudioNoFormat: MockEvalOutputCellProps = {
       ...defaultProps,
