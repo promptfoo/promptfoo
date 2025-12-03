@@ -306,10 +306,8 @@ export async function startServer(
     socket.emit('init', await Eval.latest());
   });
 
-  logger.info(`Starting server`);
-
   // Return a Promise that only resolves when the server shuts down
-  // This keeps the view command running until SIGINT/SIGTERM
+  // This keeps long-running commands (like `view`) running until SIGINT/SIGTERM
   return new Promise<void>((resolve, reject) => {
     httpServer
       .listen(port, () => {
@@ -346,10 +344,23 @@ export async function startServer(
         watcher.close();
       }
 
-      // Close the HTTP server
-      httpServer.close(() => {
-        logger.info('Server closed');
-        resolve(); // Now we can resolve and let cleanup happen
+      // Set a timeout in case connections don't close gracefully
+      const SHUTDOWN_TIMEOUT_MS = 5000;
+      const forceCloseTimeout = setTimeout(() => {
+        logger.warn('Server close timeout - forcing shutdown');
+        resolve();
+      }, SHUTDOWN_TIMEOUT_MS);
+
+      // Close Socket.io connections first, then the HTTP server
+      io.close(() => {
+        httpServer.close((err) => {
+          clearTimeout(forceCloseTimeout);
+          if (err) {
+            logger.warn(`Error closing server: ${err.message}`);
+          }
+          logger.info('Server closed');
+          resolve();
+        });
       });
     };
 
