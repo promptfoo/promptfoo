@@ -298,7 +298,7 @@
     "winston": "^3.18.3",
     "ws": "^8.18.3",
     "zod": "^3.25.76",
-    "zod-validation-error": "^3.5.4"
+    "zod-validation-error": "^5.0.0"
   },
   "madge": {
     "detectiveOptions": {
