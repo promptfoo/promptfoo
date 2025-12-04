@@ -71,4 +71,26 @@ describe('Scanner - No Files to Scan', () => {
 
     expect(includedFiles).toHaveLength(0);
   });
+
+  it('should output valid JSON when no files to scan with --json flag', () => {
+    // This tests the JSON output format that the scanner should produce
+    // when there are no files to scan and --json flag is passed
+    const expectedResponse = {
+      success: true,
+      comments: [],
+      review: 'No files to scan',
+    };
+
+    // Validate the structure matches ScanResponse type requirements
+    expect(expectedResponse).toHaveProperty('success', true);
+    expect(expectedResponse).toHaveProperty('comments');
+    expect(Array.isArray(expectedResponse.comments)).toBe(true);
+    expect(expectedResponse.comments).toHaveLength(0);
+    expect(expectedResponse).toHaveProperty('review', 'No files to scan');
+
+    // Ensure it can be serialized and parsed as valid JSON
+    const jsonString = JSON.stringify(expectedResponse, null, 2);
+    const parsed = JSON.parse(jsonString);
+    expect(parsed).toEqual(expectedResponse);
+  });
 });

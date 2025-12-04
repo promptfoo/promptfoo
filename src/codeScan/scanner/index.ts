@@ -207,7 +207,11 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     // Check if there are no files to scan
     if (includedFiles.length === 0) {
       const msg = 'No files to scan';
-      if (showSpinner && spinner) {
+
+      // In JSON mode, output a proper JSON response for programmatic consumption
+      if (options.json) {
+        console.log(JSON.stringify({ success: true, comments: [], review: msg }, null, 2));
+      } else if (showSpinner && spinner) {
         spinner.succeed(msg);
       } else {
         logger.info(msg);
