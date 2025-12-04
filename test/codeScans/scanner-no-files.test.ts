@@ -4,7 +4,8 @@
  * Tests that processDiff handles cases where no files are found to scan
  */
 
-import type { FileRecord } from '../../src/types/codeScan';
+import { vi, beforeEach, afterEach } from 'vitest';
+import type { FileRecord, ScanResponse } from '../../src/types/codeScan';
 
 describe('Scanner - No Files to Scan', () => {
   it('should filter out files with skipReason when determining includedFiles', () => {
@@ -71,26 +72,102 @@ describe('Scanner - No Files to Scan', () => {
 
     expect(includedFiles).toHaveLength(0);
   });
+});
 
-  it('should output valid JSON when no files to scan with --json flag', () => {
-    // This tests the JSON output format that the scanner should produce
-    // when there are no files to scan and --json flag is passed
-    const expectedResponse = {
+describe('Scanner JSON Output', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should output valid JSON when no files to scan with --json flag', async () => {
+    // Set up mocks before importing executeScan
+    vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
+      processDiff: vi.fn().mockResolvedValue([]),
+    }));
+
+    vi.doMock('../../src/codeScan/git/diff', () => ({
+      validateOnBranch: vi.fn().mockResolvedValue('main'),
+    }));
+
+    vi.doMock('../../src/codeScan/config/loader', () => ({
+      loadConfigOrDefault: vi.fn().mockResolvedValue({
+        minimumSeverity: 'medium',
+        diffsOnly: true,
+      }),
+      mergeConfigWithOptions: vi.fn().mockImplementation((config, options) => ({
+        ...config,
+        diffsOnly: options.diffsOnly ?? config.diffsOnly,
+      })),
+      resolveGuidance: vi.fn().mockResolvedValue(undefined),
+      resolveApiHost: vi.fn().mockReturnValue('https://api.example.com'),
+    }));
+
+    vi.doMock('simple-git', () => ({
+      default: vi.fn(() => ({
+        branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
+        revparse: vi.fn().mockResolvedValue('abc123'),
+      })),
+    }));
+
+    vi.doMock('../../src/codeScan/scanner/socket', () => ({
+      createSocketConnection: vi.fn().mockResolvedValue({
+        emit: vi.fn(),
+        on: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    }));
+
+    vi.doMock('../../src/codeScan/util/auth', () => ({
+      resolveAuthCredentials: vi.fn().mockResolvedValue({ apiKey: 'test-key' }),
+    }));
+
+    vi.doMock('../../src/cliState', () => ({
+      default: {
+        postActionCallback: null,
+      },
+    }));
+
+    vi.doMock('../../src/logger', () => ({
+      default: {
+        info: vi.fn(),
+        debug: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+      },
+      getLogLevel: vi.fn().mockReturnValue('info'),
+    }));
+
+    vi.doMock('../../src/codeScan/scanner/cleanup', () => ({
+      registerCleanupHandlers: vi.fn(),
+    }));
+
+    vi.doMock('../../src/codeScan/scanner/output', () => ({
+      createSpinner: vi.fn().mockReturnValue(undefined),
+      displayScanResults: vi.fn(),
+    }));
+
+    // Import after mocks are set up
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await executeScan('/test/repo', { json: true, diffsOnly: true });
+
+    expect(consoleLogSpy).toHaveBeenCalled();
+
+    const output = consoleLogSpy.mock.calls[0][0];
+    const parsed: ScanResponse = JSON.parse(output);
+
+    expect(parsed).toEqual({
       success: true,
       comments: [],
       review: 'No files to scan',
-    };
+    });
 
-    // Validate the structure matches ScanResponse type requirements
-    expect(expectedResponse).toHaveProperty('success', true);
-    expect(expectedResponse).toHaveProperty('comments');
-    expect(Array.isArray(expectedResponse.comments)).toBe(true);
-    expect(expectedResponse.comments).toHaveLength(0);
-    expect(expectedResponse).toHaveProperty('review', 'No files to scan');
-
-    // Ensure it can be serialized and parsed as valid JSON
-    const jsonString = JSON.stringify(expectedResponse, null, 2);
-    const parsed = JSON.parse(jsonString);
-    expect(parsed).toEqual(expectedResponse);
+    consoleLogSpy.mockRestore();
   });
 });
