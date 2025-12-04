@@ -14,6 +14,15 @@ process.env.PROMPTFOO_CACHE_TYPE = 'memory';
 process.env.IS_TESTING = 'true';
 process.env.PROMPTFOO_CONFIG_DIR = TEST_CONFIG_DIR;
 
+// Set mock API keys to prevent authentication errors during tests
+// These are dummy values that allow provider instantiation without real credentials
+process.env.ANTHROPIC_API_KEY = 'test-anthropic-api-key';
+process.env.AZURE_OPENAI_API_HOST = 'test.openai.azure.com';
+process.env.AZURE_OPENAI_API_KEY = 'test-azure-api-key';
+process.env.AZURE_API_KEY = 'test-azure-api-key';
+process.env.HF_API_TOKEN = 'test-hf-token';
+process.env.OPENAI_API_KEY = 'test-openai-api-key';
+
 // Clean up any remote generation URL
 delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
 
