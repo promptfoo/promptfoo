@@ -76,9 +76,7 @@ def format_image_prompt(context: PromptFunctionContext) -> list[dict[str, typing
                 ],
             },
         ]
-    if (
-        provider_id.startswith("google:gemini")
-    ):
+    if provider_id.startswith("google:gemini"):
         image_data, media_type = get_image_base64(context["vars"]["image_url"])
         return [
             {
