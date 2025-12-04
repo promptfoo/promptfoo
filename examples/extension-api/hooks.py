@@ -71,11 +71,6 @@ def extension_hook(hook_name: str, context: dict) -> Optional[dict]:
         )
 
         # Add an additional default assertion to the suite:
-        # Ensure defaultTest and assert exist before appending
-        if "defaultTest" not in context["suite"]:
-            context["suite"]["defaultTest"] = {}
-        if "assert" not in context["suite"]["defaultTest"]:
-            context["suite"]["defaultTest"]["assert"] = []
         context["suite"]["defaultTest"]["assert"].append({"type": "is-json"})
 
         return context
