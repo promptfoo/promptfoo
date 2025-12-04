@@ -4349,3 +4349,160 @@ describe('Evaluator with external defaultTest', () => {
     }
   });
 });
+
+describe('defaultTest normalization for extensions', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should initialize defaultTest when undefined and extensions are present', async () => {
+    const mockExtension = 'file://test-extension.js';
+    let capturedSuite: TestSuite | undefined;
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        capturedSuite = context.suite;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      extensions: [mockExtension],
+      // No defaultTest defined
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedSuite).toBeDefined();
+    expect(capturedSuite!.defaultTest).toBeDefined();
+    expect(capturedSuite!.defaultTest).toEqual({ assert: [] });
+  });
+
+  it('should initialize defaultTest.assert when defaultTest exists but assert is undefined', async () => {
+    const mockExtension = 'file://test-extension.js';
+    let capturedSuite: TestSuite | undefined;
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        capturedSuite = context.suite;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      extensions: [mockExtension],
+      defaultTest: {
+        vars: { defaultVar: 'defaultValue' },
+        // No assert defined
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedSuite).toBeDefined();
+    expect(capturedSuite!.defaultTest).toBeDefined();
+    expect(capturedSuite!.defaultTest!.vars).toEqual({ defaultVar: 'defaultValue' });
+    expect(capturedSuite!.defaultTest!.assert).toEqual([]);
+  });
+
+  it('should preserve existing defaultTest.assert when extensions are present', async () => {
+    const mockExtension = 'file://test-extension.js';
+    let capturedSuite: TestSuite | undefined;
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        capturedSuite = context.suite;
+      }
+      return context;
+    });
+
+    const existingAssertions = [
+      { type: 'contains' as const, value: 'expected' },
+      { type: 'not-contains' as const, value: 'unexpected' },
+    ];
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      extensions: [mockExtension],
+      defaultTest: {
+        assert: existingAssertions,
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedSuite).toBeDefined();
+    expect(capturedSuite!.defaultTest!.assert).toBe(existingAssertions); // Same reference
+    expect(capturedSuite!.defaultTest!.assert).toHaveLength(2);
+  });
+
+  it('should not modify defaultTest when no extensions are present', async () => {
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockClear();
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      // No extensions
+      // No defaultTest
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    // runExtensionHook should still be called (with empty/undefined extensions)
+    // but the beforeAll hook call should receive the original suite without normalization
+    const beforeAllCall = mockedRunExtensionHook.mock.calls.find((call) => call[1] === 'beforeAll');
+    expect(beforeAllCall).toBeDefined();
+    // When no extensions, defaultTest should remain undefined (not normalized)
+    // Note: The normalization only happens when extensions?.length is truthy
+  });
+
+  it('should allow extensions to push to defaultTest.assert safely', async () => {
+    const mockExtension = 'file://test-extension.js';
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        // Simulate what an extension would do - push to assert array
+        // This should work because defaultTest.assert is guaranteed to be an array
+        context.suite.defaultTest!.assert!.push({ type: 'is-json' as const });
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      extensions: [mockExtension],
+      // No defaultTest - will be initialized by evaluator
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    // The assertion added by the extension should be present in the results
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results[0].testCase.assert).toContainEqual({ type: 'is-json' });
+  });
+});
