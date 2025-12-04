@@ -1,7 +1,8 @@
 import crypto from 'crypto';
-import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
+
+import dedent from 'dedent';
 import {
   afterAll,
   afterEach,
@@ -12,7 +13,6 @@ import {
   type MockInstance,
   vi,
 } from 'vitest';
-
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -946,6 +946,61 @@ describe('HttpProvider', () => {
 
         // Should return the boolean value
         expect(result).toBe(true);
+      });
+
+      it('should preserve numeric strings as strings in object bodies', () => {
+        // This simulates the case where YAML has session: '1234'
+        // The string should remain a string, not be converted to a number
+        const body = {
+          messages: '{{prompt}}',
+          session: '1234',
+        };
+        const vars = { prompt: 'test prompt' };
+        const result = processJsonBody(body, vars);
+
+        // session should remain a string, not be converted to number
+        expect(result).toEqual({
+          messages: 'test prompt',
+          session: '1234', // Should be string, not number
+        });
+        expect(typeof (result as Record<string, any>).session).toBe('string');
+      });
+
+      it('should preserve boolean-like strings as strings', () => {
+        const body = {
+          flag: 'true',
+          enabled: 'false',
+        };
+        const vars = {};
+        const result = processJsonBody(body, vars);
+
+        // Should remain strings, not be converted to booleans
+        expect(result).toEqual({
+          flag: 'true',
+          enabled: 'false',
+        });
+        expect(typeof (result as Record<string, any>).flag).toBe('string');
+        expect(typeof (result as Record<string, any>).enabled).toBe('string');
+      });
+
+      it('should still parse JSON objects and arrays', () => {
+        // JSON objects and arrays should still be parsed
+        const body = {
+          config: '{"key": "value"}',
+          items: '["a", "b"]',
+          session: '1234', // Should stay as string
+        };
+        const vars = {};
+        const result = processJsonBody(body, vars);
+
+        expect(result).toEqual({
+          config: { key: 'value' }, // Parsed to object
+          items: ['a', 'b'], // Parsed to array
+          session: '1234', // Remains as string
+        });
+        expect(typeof (result as Record<string, any>).config).toBe('object');
+        expect(Array.isArray((result as Record<string, any>).items)).toBe(true);
+        expect(typeof (result as Record<string, any>).session).toBe('string');
       });
 
       it('should handle complex nested JSON with control characters', () => {
