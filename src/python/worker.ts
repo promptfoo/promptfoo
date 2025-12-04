@@ -11,14 +11,6 @@ import { validatePythonPath } from './pythonUtils';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Get the directory containing Python wrapper scripts
-// Handles both development (src/python/) and production (dist/src/python/) paths
-function getPythonScriptDir(): string {
-  // If we're already in a 'python' directory (development), use it as-is
-  // Otherwise, append 'python' subdirectory (production dist build)
-  return path.basename(__dirname) === 'python' ? __dirname : path.join(__dirname, 'python');
-}
-
 export class PythonWorker {
   private process: PythonShell | null = null;
   private ready: boolean = false;
@@ -45,7 +37,7 @@ export class PythonWorker {
   }
 
   private async startWorker(): Promise<void> {
-    const wrapperPath = path.join(getPythonScriptDir(), 'persistent_wrapper.py');
+    const wrapperPath = path.join(__dirname, 'persistent_wrapper.py');
 
     // Validate and resolve Python path using smart detection (tries python3, then python)
     const resolvedPythonPath = await validatePythonPath(
