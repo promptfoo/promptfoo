@@ -76,6 +76,23 @@ def format_image_prompt(context: PromptFunctionContext) -> list[dict[str, typing
                 ],
             },
         ]
+    if (
+        provider_id.startswith("google:gemini")
+    ):
+        image_data, media_type = get_image_base64(context["vars"]["image_url"])
+        return [
+            {
+                "parts": [
+                    {
+                        "inline_data": {
+                            "mime_type": media_type,
+                            "data": image_data,
+                        }
+                    },
+                    {"text": system_prompt},
+                ]
+            }
+        ]
     # label might not exist
     if context["provider"].get("label") == "custom label for gpt-4.1":
         return [
