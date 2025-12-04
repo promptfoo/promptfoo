@@ -36,8 +36,7 @@ function GitHubActionHeader() {
         <div className={styles.heroContent}>
           <h1 className={styles.heroTitle}>Security scanning for LLM apps</h1>
           <p className={styles.heroSubtitle}>
-            Find AI-based vulnerabilities in pull requests before you
-            merge.
+            Find AI-based vulnerabilities in pull requests before you merge.
           </p>
           <div className={styles.heroButtons}>
             <Link
@@ -102,7 +101,8 @@ function VulnerabilityTypesSection() {
         <div className={styles.vulnEyebrow}>LLM-specific vulnerabilities</div>
         <h2 className={styles.vulnTitle}>Catch issues that other review tools miss</h2>
         <p className={styles.vulnSubtitle}>
-          Our scanner is laser-focused on the kinds of vulnerabilities that apps built on LLMs and agents are uniquely susceptible to.
+          Our scanner is laser-focused on the kinds of vulnerabilities that apps built on LLMs and
+          agents are uniquely susceptible to.
         </p>
         <div className={styles.vulnGrid}>
           {vulnerabilities.map((vuln) => (
@@ -126,9 +126,7 @@ function BenefitsSection() {
       <div className="container">
         <div className={styles.sectionEyebrow}>Built for developers</div>
         <h2 className={styles.sectionTitle}>Real security that fits your workflow</h2>
-        <p className={styles.sectionSubtitle}>
-          Flag dangerous code without adding friction.
-        </p>
+        <p className={styles.sectionSubtitle}>Flag dangerous code without adding friction.</p>
         <div className={styles.benefitsList}>
           <div className={styles.benefitItem}>
             <BiotechIcon className={styles.benefitIcon} />
@@ -136,8 +134,8 @@ function BenefitsSection() {
               <h3>Deep tracing</h3>
               <p>
                 Beyond the PR itself, the scanner agentically traces LLM inputs, outputs, and
-                capability changes deep into the larger repository to identify subtle yet critical issues
-                that human reviewers can struggle to catch.
+                capability changes deep into the larger repository to identify subtle yet critical
+                issues that human reviewers can struggle to catch.
               </p>
             </div>
           </div>
@@ -146,9 +144,9 @@ function BenefitsSection() {
             <div className={styles.benefitContent}>
               <h3>No noise</h3>
               <p>
-                Despite the comprehensive approach, it has a high bar for reporting, avoiding
-                false positives and alert fatigue. Maintainers can configure severity levels and
-                provide custom instructions to tailor sensitivity to their needs.
+                Despite the comprehensive approach, it has a high bar for reporting, avoiding false
+                positives and alert fatigue. Maintainers can configure severity levels and provide
+                custom instructions to tailor sensitivity to their needs.
               </p>
             </div>
           </div>
@@ -157,7 +155,8 @@ function BenefitsSection() {
             <div className={styles.benefitContent}>
               <h3>Fix suggestions</h3>
               <p>
-                Every finding includes a suggested remediation, as well as a prompt that can be passed straight to an AI coding agent to further investigate and address the issue. 
+                Every finding includes a suggested remediation, as well as a prompt that can be
+                passed straight to an AI coding agent to further investigate and address the issue.
               </p>
             </div>
           </div>
@@ -172,9 +171,7 @@ function CallToActionSection() {
     <section className={styles.finalCTA}>
       <div className="container">
         <h2 className={styles.finalCTATitle}>Start scanning PRs right now</h2>
-        <p className={styles.finalCTASubtitle}>
-          No account, credit card, or API keys required.
-        </p>
+        <p className={styles.finalCTASubtitle}>No account, credit card, or API keys required.</p>
         <div className={styles.finalCTAButtons}>
           <Link
             className={clsx('button button--primary button--lg', styles.buttonPrimary)}

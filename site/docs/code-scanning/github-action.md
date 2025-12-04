@@ -14,6 +14,7 @@ The scanner analyzes code changes for prompt injection, PII exposure, excessive 
 <img src="/img/docs/code-scanning/github.png" alt="Code Scan Action results on PR" style={{borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)'}} />
 <br/>
 <br/>
+
 ## Quick Start
 
 The easiest way to get started is by installing the Promptfoo Scanner GitHub App:
