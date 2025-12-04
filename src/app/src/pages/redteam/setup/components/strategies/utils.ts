@@ -96,6 +96,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   retry: 1,
   rot13: 1,
   video: 1,
+  voice: 1,
 };
 
 export function getEstimatedProbes(config: Config) {

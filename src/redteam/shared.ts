@@ -11,6 +11,7 @@ import { loadDefaultConfig } from '../util/config/default';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
+import { runNativeAudioPipeline } from './nativeAudio/pipeline';
 
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
@@ -90,6 +91,43 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   if (!redteamConfig || !fs.existsSync(redteamPath)) {
     logger.info('No test cases generated. Skipping scan.');
     return;
+  }
+
+  // If native-audio strategy is present, run the realtime audio harness to generate transcripts
+  // and convert them into synthetic test cases that are graded as text.
+  try {
+    const loadedConfig = yaml.load(fs.readFileSync(redteamPath, 'utf8')) as any;
+    const strategies: Array<{ id: string } | string> = loadedConfig?.redteam?.strategies || [];
+    const hasVoice = strategies.some((s: any) =>
+      typeof s === 'string' ? s === 'voice' : s?.id === 'voice',
+    );
+
+    if (hasVoice) {
+      const tests = Array.isArray(loadedConfig.tests) ? loadedConfig.tests : [];
+      const injectVar = loadedConfig?.redteam?.injectVar || 'prompt';
+      const { tests: nativeTests, artifactsDir } = await runNativeAudioPipeline({
+        tests,
+        injectVar,
+        voice: loadedConfig?.redteam?.voice || {},
+      });
+
+      loadedConfig.tests = nativeTests;
+      loadedConfig.metadata = {
+        ...(loadedConfig.metadata || {}),
+        voiceRunDir: artifactsDir,
+      };
+      fs.writeFileSync(redteamPath, yaml.dump(loadedConfig));
+      logger.info('Updated redteam.yaml with voice transcript tests', {
+        artifactsDir,
+        testCount: nativeTests.length,
+      });
+    }
+  } catch (error) {
+    logger.error({
+      message: '[voice] Failed to generate voice tests',
+      error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+    });
+    throw error;
   }
 
   // Run evaluation

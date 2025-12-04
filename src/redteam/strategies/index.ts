@@ -239,6 +239,10 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'voice',
+    action: async (testCases) => testCases,
+  },
+  {
     id: 'video',
     action: async (testCases, injectVar) => {
       logger.debug(`Adding video encoding to ${testCases.length} test cases`);

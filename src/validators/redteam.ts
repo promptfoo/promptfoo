@@ -165,6 +165,18 @@ export const RedteamStrategySchema = z.union([
   }),
 ]);
 
+const VoiceConfigSchema = z.object({
+  targetProvider: z.string().optional(),
+  attackerProvider: z.string().optional(),
+  attackerKind: z.enum(['tts', 'provider']).optional(),
+  turnCount: z.number().int().positive().optional(),
+  targetPrompt: z.string().optional(),
+  attackerPromptPath: z.string().optional(),
+  pluginExamplesPath: z.string().optional(),
+  outputRoot: z.string().optional(),
+  speechProvider: z.enum(['local-liquid', 'openai', 'dry-run']).optional(),
+});
+
 /**
  * Schema for `promptfoo redteam generate` command options
  */
@@ -289,6 +301,7 @@ export const RedteamConfigSchema = z
     tracing: TracingConfigSchema.optional().describe(
       'Tracing defaults applied to all strategies unless overridden',
     ),
+    voice: VoiceConfigSchema.optional().describe('Configuration for the voice redteam strategy'),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();

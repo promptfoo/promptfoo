@@ -17,6 +17,7 @@ export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 export const DEFAULT_MULTI_TURN_MAX_TURNS = 5;
 
 export const MULTI_TURN_STRATEGIES = [
+  'voice',
   'crescendo',
   'goat',
   'jailbreak:hydra',
@@ -41,7 +42,7 @@ export const isCustomStrategy = (strategyId: string): boolean => {
   return strategyId === 'custom' || strategyId.startsWith('custom:');
 };
 
-export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
+export const MULTI_MODAL_STRATEGIES = ['audio', 'voice', 'image', 'video'] as const;
 export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
@@ -73,6 +74,7 @@ export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
   'audio',
+  'voice',
   'authoritative-markup-injection',
   'base64',
   'best-of-n',
@@ -159,6 +161,7 @@ export const ENCODING_STRATEGIES = new Set([
   'binary',
   'octal',
   'audio',
+  'voice',
   'image',
   'video',
 ]);
@@ -173,7 +176,13 @@ export function isEncodingStrategy(strategyId: string | undefined): boolean {
 /**
  * Strategies that should not have language configuration applied to them.
  */
-export const LANGUAGE_DISALLOWED_STRATEGIES = new Set(['audio', 'video', 'image', 'math-prompt']);
+export const LANGUAGE_DISALLOWED_STRATEGIES = new Set([
+  'audio',
+  'voice',
+  'video',
+  'image',
+  'math-prompt',
+]);
 
 /**
  * Determines if a strategy should not use language configuration

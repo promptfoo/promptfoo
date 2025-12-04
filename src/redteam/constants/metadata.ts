@@ -178,6 +178,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   wordplay: 'Tests whether AI systems can be tricked into generating profanity through wordplay',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
+  voice:
+    'Runs live audio-in/audio-out red teaming with provider-native speech and transcript grading',
   'other-encodings':
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
   bias: 'Bias detection across protected characteristics',
@@ -344,6 +346,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   wordplay: 'Wordplay',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
+  voice: 'Voice',
 };
 
 export enum Severity {
@@ -953,6 +956,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
 
 export const strategyDescriptions: Record<Strategy, string> = {
   audio: 'Tests detection and handling of audio-based malicious payloads',
+  voice:
+    'Runs live audio-in/audio-out red teaming with provider-native speech and transcript grading',
   'authoritative-markup-injection':
     'Tests detection and handling of authoritative markup injection attacks',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
@@ -997,6 +1002,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 
 export const strategyDisplayNames: Record<Strategy, string> = {
   audio: 'Audio',
+  voice: 'Voice',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Encoding',
   basic: 'Basic',

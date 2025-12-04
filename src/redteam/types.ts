@@ -195,6 +195,17 @@ export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
   severity?: Record<Plugin, Severity>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  voice?: {
+    targetProvider?: string;
+    attackerProvider?: string;
+    attackerKind?: 'tts' | 'provider';
+    turnCount?: number;
+    targetPrompt?: string;
+    attackerPromptPath?: string;
+    pluginExamplesPath?: string;
+    outputRoot?: string;
+    speechProvider?: 'local-liquid' | 'openai' | 'dry-run';
+  };
 }
 
 export interface SynthesizeOptions extends CommonOptions {
