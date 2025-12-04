@@ -132,7 +132,7 @@ export async function importModule(modulePath: string, functionName?: string) {
             `  2. Convert to ESM syntax (import/export)\n` +
             `  3. Ensure the file has valid JavaScript syntax`,
         );
-        combinedError.cause = { esmError: err, cjsError: cjsErr };
+        (combinedError as any).cause = { esmError: err, cjsError: cjsErr };
         throw combinedError;
       }
     } else {
