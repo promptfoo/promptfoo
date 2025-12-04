@@ -81,6 +81,19 @@
 /drizzle/ @mldangelo @will-holley @faizanminhas          # Database migrations (mirrors models)
 
 # ============================================================================
+# MODEL AUDIT (specialized domain - overrides broader patterns)
+# ============================================================================
+
+/src/commands/modelScan.ts           @yash2998chhabria   # Model scan CLI command
+/src/server/routes/modelAudit.ts     @yash2998chhabria   # Model audit API route
+/src/util/modelAuditCliParser.ts     @yash2998chhabria   # CLI parser utility
+/src/types/modelAudit.ts             @yash2998chhabria   # Model audit types
+/src/app/src/pages/model-audit/      @yash2998chhabria   # Model audit UI
+/test/commands/modelScan.test.ts     @yash2998chhabria   # CLI tests
+/test/utils/modelAuditCliParser.test.ts @yash2998chhabria # Parser tests
+/site/docs/model-audit/              @yash2998chhabria   # Model audit docs
+
+# ============================================================================
 # AI AGENT INSTRUCTIONS (override all other patterns)
 # ============================================================================
 # These patterns match files anywhere in the repo and must come last
