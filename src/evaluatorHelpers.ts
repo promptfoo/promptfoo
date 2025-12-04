@@ -556,12 +556,11 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
 
   // For beforeAll hooks, ensure defaultTest has a usable structure before calling extensions.
   // This prevents extensions from needing to add defensive checks when modifying defaultTest.
+  // Note: By this point, defaultTest file:// references have already been resolved in config/load.ts,
+  // so defaultTest will be either undefined or a TestCase object, never a string.
   if (hookName === 'beforeAll') {
     const beforeAllContext = context as BeforeAllExtensionHookContext;
-    if (
-      !beforeAllContext.suite.defaultTest ||
-      typeof beforeAllContext.suite.defaultTest === 'string'
-    ) {
+    if (!beforeAllContext.suite.defaultTest) {
       beforeAllContext.suite.defaultTest = {};
     }
     if (!beforeAllContext.suite.defaultTest.assert) {

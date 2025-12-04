@@ -712,33 +712,6 @@ describe('runExtensionHook', () => {
         );
       });
 
-      it('should initialize defaultTest when it is a string (file://)', async () => {
-        const contextWithStringDefaultTest = {
-          suite: {
-            providers: [mockApiProvider],
-            prompts: [toPrompt('Test prompt')],
-            tests: [],
-            defaultTest: 'file://some/path.yaml',
-          } as unknown as TestSuite,
-        };
-
-        await runExtensionHook(['ext1'], 'beforeAll', contextWithStringDefaultTest);
-
-        // The context passed to transform should have defaultTest initialized as object
-        expect(transform).toHaveBeenCalledWith(
-          'ext1',
-          'beforeAll',
-          expect.objectContaining({
-            suite: expect.objectContaining({
-              defaultTest: expect.objectContaining({
-                assert: [],
-              }),
-            }),
-          }),
-          false,
-        );
-      });
-
       it('should initialize assert array when defaultTest exists but assert is undefined', async () => {
         const contextWithDefaultTestNoAssert = {
           suite: {
