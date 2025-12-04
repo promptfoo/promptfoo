@@ -40,12 +40,12 @@ describe('ESM utilities', () => {
         devDir,
         subdir,
       }) => {
-        const devPath = `/project/src/${devDir}`;
+        const devPath = path.join('/project', 'src', devDir);
         const result = getWrapperDir(type, devPath);
 
         if (type === 'golang') {
           // Golang files are in src/providers/, but wrapper is in src/golang/
-          expect(result).toBe(`/project/src/${subdir}`);
+          expect(result).toBe(path.join('/project', 'src', subdir));
         } else {
           // Python/Ruby files are in src/python/ or src/ruby/, wrapper is in same dir
           expect(result).toBe(devPath);
@@ -58,34 +58,34 @@ describe('ESM utilities', () => {
         type,
         subdir,
       }) => {
-        const prodPath = '/project/dist/src';
+        const prodPath = path.join('/project', 'dist', 'src');
         const result = getWrapperDir(type, prodPath);
 
         // In production, all wrappers are in subdirectories of dist/src/
-        expect(result).toBe(`/project/dist/src/${subdir}`);
+        expect(result).toBe(path.join('/project', 'dist', 'src', subdir));
       });
     });
 
     it('caches results for subsequent calls', () => {
-      const testPath = '/project/dist/src';
+      const testPath = path.join('/project', 'dist', 'src');
 
       const result1 = getWrapperDir('python', testPath);
-      const result2 = getWrapperDir('python', '/different/path'); // Different path, should use cache
+      const result2 = getWrapperDir('python', path.join('/different', 'path')); // Different path, should use cache
 
       expect(result1).toBe(result2); // Both should return cached value
-      expect(result1).toBe('/project/dist/src/python');
+      expect(result1).toBe(path.join('/project', 'dist', 'src', 'python'));
     });
 
     it('caches separately for each wrapper type', () => {
-      const testPath = '/project/dist/src';
+      const testPath = path.join('/project', 'dist', 'src');
 
       const pythonResult = getWrapperDir('python', testPath);
       const rubyResult = getWrapperDir('ruby', testPath);
       const golangResult = getWrapperDir('golang', testPath);
 
-      expect(pythonResult).toBe('/project/dist/src/python');
-      expect(rubyResult).toBe('/project/dist/src/ruby');
-      expect(golangResult).toBe('/project/dist/src/golang');
+      expect(pythonResult).toBe(path.join('/project', 'dist', 'src', 'python'));
+      expect(rubyResult).toBe(path.join('/project', 'dist', 'src', 'ruby'));
+      expect(golangResult).toBe(path.join('/project', 'dist', 'src', 'golang'));
     });
   });
 
