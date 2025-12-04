@@ -27,6 +27,13 @@ async function extensionHook(hookName, context) {
     });
 
     // Add an additional default assertion to the suite:
+    // Ensure defaultTest and assert exist before pushing
+    if (!context.suite.defaultTest) {
+      context.suite.defaultTest = {};
+    }
+    if (!context.suite.defaultTest.assert) {
+      context.suite.defaultTest.assert = [];
+    }
     context.suite.defaultTest.assert.push({ type: 'is-json' });
 
     return context;
