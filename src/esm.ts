@@ -1,6 +1,8 @@
-import { createRequire } from 'node:module';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import vm from 'node:vm';
+import { createRequire } from 'node:module';
 
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
@@ -93,21 +95,20 @@ export async function importModule(modulePath: string, functionName?: string) {
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
 
-    // Fall back to CommonJS loading for .js files that use CJS syntax
+    // Fall back to vm-based CJS execution for .js files that use CJS syntax
+    // Note: createRequire() doesn't work for .js files in "type": "module" packages
+    // because Node.js still treats them as ESM based on package.json.
+    // We use Node's vm module to execute the code with proper CJS globals.
     if (modulePath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
       logger.debug(
-        `ESM import failed for ${modulePath}, attempting CommonJS fallback: ${errorMessage}`,
+        `ESM import failed for ${modulePath}, attempting vm-based CJS fallback: ${errorMessage}`,
       );
 
       try {
-        // Use createRequire to load the module as CommonJS
-        const require = createRequire(import.meta.url);
         const resolvedPath = safeResolve(modulePath);
-        const importedModule = require(resolvedPath);
-
-        const mod = importedModule?.default || importedModule;
+        const mod = loadCjsModule(resolvedPath);
         logger.debug(
-          `Successfully loaded module via CommonJS fallback: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
+          `Successfully loaded module via CJS fallback: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
         );
 
         if (functionName) {
@@ -118,7 +119,7 @@ export async function importModule(modulePath: string, functionName?: string) {
       } catch (cjsErr) {
         // If CJS fallback also fails, log both errors and throw
         logger.error(`ESM import failed for ${modulePath}: ${errorMessage}`);
-        logger.error(`CommonJS fallback also failed: ${cjsErr}`);
+        logger.error(`CJS fallback also failed: ${cjsErr}`);
         throw err;
       }
     } else {
@@ -148,4 +149,48 @@ export function isCjsInEsmError(message: string): boolean {
     'ERR_REQUIRE_ESM', // Node error for requiring ESM
   ];
   return cjsPatterns.some((pattern) => message.includes(pattern));
+}
+
+/**
+ * Loads a CommonJS module by executing it in a vm context with proper CJS globals.
+ * This bypasses Node.js's module type detection which is based on package.json "type" field.
+ */
+function loadCjsModule(modulePath: string): any {
+  const code = fs.readFileSync(modulePath, 'utf-8');
+  const dirname = path.dirname(modulePath);
+  const filename = modulePath;
+
+  // Create a require function scoped to the module's directory
+  const moduleRequire = createRequire(pathToFileURL(modulePath).href);
+
+  // Create module and exports objects
+  const moduleObj: { exports: any } = { exports: {} };
+
+  // Create a context with CJS globals
+  const context = vm.createContext({
+    module: moduleObj,
+    exports: moduleObj.exports,
+    require: moduleRequire,
+    __dirname: dirname,
+    __filename: filename,
+    // Include common globals
+    console,
+    process,
+    Buffer,
+    setTimeout,
+    setInterval,
+    setImmediate,
+    clearTimeout,
+    clearInterval,
+    clearImmediate,
+    URL,
+    URLSearchParams,
+    TextEncoder,
+    TextDecoder,
+  });
+
+  // Execute the code in the context
+  vm.runInContext(code, context, { filename: modulePath });
+
+  return moduleObj.exports;
 }
