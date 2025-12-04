@@ -1,38 +1,18 @@
-﻿import fs from 'fs';
+import { execFile } from 'child_process';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Lazy initialization to avoid module-level side effects in Jest
-let currentDir: string | undefined;
-function getCurrentDir(): string {
-  if (!currentDir) {
-    currentDir = __dirname;
-  }
-  return currentDir;
-}
-
-// Get the directory containing Python wrapper scripts
-// Handles both development (src/python/) and production (dist/src/python/) paths
-function getPythonScriptDir(): string {
-  const dir = getCurrentDir();
-  // If we're already in a 'python' directory (development), use it as-is
-  // Otherwise, append 'python' subdirectory (production dist build)
-  return path.basename(dir) === 'python' ? dir : path.join(dir, 'python');
-}
-
-import { PythonShell } from 'python-shell';
-import { getEnvBool, getEnvString } from '../envars';
-import logger from '../logger';
-import { safeJsonStringify } from '../util/json';
-import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execFileAsync = promisify(execFile);
+import { PythonShell } from 'python-shell';
 import type { Options as PythonShellOptions } from 'python-shell';
+
+import { getEnvBool, getEnvString } from '../envars';
+import { getDirectory, getWrapperDir } from '../esm';
+import logger from '../logger';
+import { safeJsonStringify } from '../util/json';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Gets an integer value from an environment variable.
@@ -319,7 +299,7 @@ export async function runPython(
     env: process.env,
     mode: 'binary',
     pythonPath,
-    scriptPath: getPythonScriptDir(),
+    scriptPath: getWrapperDir('python', getDirectory()),
     // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
     ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
   };

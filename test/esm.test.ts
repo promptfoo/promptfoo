@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
-import { importModule } from '../src/esm';
+import { importModule, getWrapperDir, clearWrapperDirCache } from '../src/esm';
+import type { WrapperType } from '../src/esm';
 import logger from '../src/logger';
 
 // Use __dirname directly since tests run in CommonJS mode
@@ -20,6 +21,72 @@ vi.mock('../src/logger', () => ({
 describe('ESM utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    clearWrapperDirCache();
+  });
+
+  describe('getWrapperDir', () => {
+    const testCases: { type: WrapperType; devDir: string; subdir: string }[] = [
+      { type: 'python', devDir: 'python', subdir: 'python' },
+      { type: 'ruby', devDir: 'ruby', subdir: 'ruby' },
+      { type: 'golang', devDir: 'providers', subdir: 'golang' },
+    ];
+
+    describe('development paths', () => {
+      it.each(testCases)('returns correct path for $type when in development directory', ({
+        type,
+        devDir,
+        subdir,
+      }) => {
+        const devPath = `/project/src/${devDir}`;
+        const result = getWrapperDir(type, devPath);
+
+        if (type === 'golang') {
+          // Golang files are in src/providers/, but wrapper is in src/golang/
+          expect(result).toBe(`/project/src/${subdir}`);
+        } else {
+          // Python/Ruby files are in src/python/ or src/ruby/, wrapper is in same dir
+          expect(result).toBe(devPath);
+        }
+      });
+    });
+
+    describe('production paths', () => {
+      it.each(testCases)('returns correct path for $type when in production directory', ({
+        type,
+        subdir,
+      }) => {
+        const prodPath = '/project/dist/src';
+        const result = getWrapperDir(type, prodPath);
+
+        // In production, all wrappers are in subdirectories of dist/src/
+        expect(result).toBe(`/project/dist/src/${subdir}`);
+      });
+    });
+
+    it('caches results for subsequent calls', () => {
+      const testPath = '/project/dist/src';
+
+      const result1 = getWrapperDir('python', testPath);
+      const result2 = getWrapperDir('python', '/different/path'); // Different path, should use cache
+
+      expect(result1).toBe(result2); // Both should return cached value
+      expect(result1).toBe('/project/dist/src/python');
+    });
+
+    it('caches separately for each wrapper type', () => {
+      const testPath = '/project/dist/src';
+
+      const pythonResult = getWrapperDir('python', testPath);
+      const rubyResult = getWrapperDir('ruby', testPath);
+      const golangResult = getWrapperDir('golang', testPath);
+
+      expect(pythonResult).toBe('/project/dist/src/python');
+      expect(rubyResult).toBe('/project/dist/src/ruby');
+      expect(golangResult).toBe('/project/dist/src/golang');
+    });
   });
 
   describe('importModule', () => {

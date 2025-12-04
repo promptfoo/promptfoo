@@ -132,3 +132,78 @@ function isCjsInEsmError(message: string): boolean {
   ];
   return cjsPatterns.some((pattern) => message.includes(pattern));
 }
+
+/**
+ * Wrapper script directory types supported by promptfoo.
+ */
+export type WrapperType = 'python' | 'ruby' | 'golang';
+
+/**
+ * Configuration for each wrapper type specifying how to resolve its directory.
+ */
+const WRAPPER_CONFIG: Record<WrapperType, { devDir: string; subdir: string }> = {
+  python: { devDir: 'python', subdir: 'python' },
+  ruby: { devDir: 'ruby', subdir: 'ruby' },
+  golang: { devDir: 'providers', subdir: 'golang' },
+};
+
+/**
+ * Cache for resolved wrapper directories to avoid repeated path computations.
+ */
+const wrapperDirCache: Partial<Record<WrapperType, string>> = {};
+
+/**
+ * Get the directory containing wrapper scripts for a given language.
+ *
+ * Handles the difference between development and production paths:
+ * - Development: Source files are in their respective directories (src/python/, src/ruby/, src/providers/)
+ * - Production: Everything is bundled to dist/src/, wrapper files are in subdirectories (dist/src/python/, etc.)
+ *
+ * @param type - The wrapper type ('python', 'ruby', or 'golang')
+ * @param callerDir - The directory of the calling module (from getDirectory())
+ * @returns The resolved wrapper directory path
+ *
+ * @example
+ * // In src/python/pythonUtils.ts (development)
+ * getWrapperDir('python', getDirectory()) // Returns: /path/to/src/python
+ *
+ * // In dist/src/main.js (production)
+ * getWrapperDir('python', getDirectory()) // Returns: /path/to/dist/src/python
+ */
+export function getWrapperDir(type: WrapperType, callerDir: string): string {
+  // Check cache first
+  if (wrapperDirCache[type]) {
+    return wrapperDirCache[type];
+  }
+
+  const config = WRAPPER_CONFIG[type];
+  const dirName = path.basename(callerDir);
+
+  let result: string;
+  if (dirName === config.devDir) {
+    // In development: we're in the source directory
+    // For python/ruby: already in the right place (src/python, src/ruby)
+    // For golang: need to go up to src/ then into golang/
+    if (type === 'golang') {
+      result = path.join(path.dirname(callerDir), config.subdir);
+    } else {
+      result = callerDir;
+    }
+  } else {
+    // In production: append the subdirectory
+    result = path.join(callerDir, config.subdir);
+  }
+
+  wrapperDirCache[type] = result;
+  return result;
+}
+
+/**
+ * Clear the wrapper directory cache. Useful for testing.
+ * @internal
+ */
+export function clearWrapperDirCache(): void {
+  for (const key of Object.keys(wrapperDirCache) as WrapperType[]) {
+    delete wrapperDirCache[key];
+  }
+}
