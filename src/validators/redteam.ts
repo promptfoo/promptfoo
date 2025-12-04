@@ -9,6 +9,7 @@ import {
   DEFAULT_STRATEGIES,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
+  FRAMEWORK_COMPLIANCE_IDS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   INSURANCE_PLUGINS,
@@ -21,13 +22,12 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   SeveritySchema,
-  FRAMEWORK_COMPLIANCE_IDS,
 } from '../redteam/constants';
-import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
+import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 
 const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
@@ -309,17 +309,17 @@ export const RedteamConfigSchema = z
       const strategyLanguages = multilingualStrategy.config?.languages;
 
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
-        // Lazy require to avoid mock interference in tests during module initialization
-        try {
-          // Use eval to prevent bundler issues in browser builds
-          // eslint-disable-next-line no-eval
-          const logger = require('../logger').default;
-          logger.debug(
-            '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
-          );
-        } catch {
-          // Silently fail if require fails - deprecation warning is not critical
-        }
+        // Fire-and-forget async import to avoid circular dependency at module load time
+        (async () => {
+          try {
+            const { default: logger } = await import('../logger');
+            logger.debug(
+              '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
+            );
+          } catch {
+            // Silently fail if import fails - deprecation warning is not critical
+          }
+        })();
 
         if (data.language) {
           // Global language exists, merge with 'en' and strategy languages, then deduplicate
