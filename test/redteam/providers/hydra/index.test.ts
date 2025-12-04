@@ -891,6 +891,9 @@ describe('HydraProvider', () => {
         expect.anything(),
         mockTargetProvider,
         undefined,
+        undefined,
+        undefined,
+        { providerResponse: expect.anything() },
       );
     });
 
