@@ -91,7 +91,6 @@
 /src/app/src/pages/model-audit/      @yash2998chhabria   # Model audit UI
 /test/commands/modelScan.test.ts     @yash2998chhabria   # CLI tests
 /test/utils/modelAuditCliParser.test.ts @yash2998chhabria # Parser tests
-/site/docs/model-audit/              @yash2998chhabria   # Model audit docs
 
 # ============================================================================
 # AI AGENT INSTRUCTIONS (override all other patterns)
