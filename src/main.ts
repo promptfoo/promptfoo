@@ -173,7 +173,11 @@ try {
       await telemetry.shutdown();
       logger.debug('Shutdown complete');
 
-      closeLogger();
+      // Log final messages BEFORE closing logger
+      logger.debug('Closing logger file transports');
+
+      // Now close logger silently (no more logging after this point)
+      await closeLogger();
       closeDbIfOpen();
       try {
         const dispatcher = getGlobalDispatcher();

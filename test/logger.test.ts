@@ -752,13 +752,11 @@ describe('logger', () => {
     });
 
     it('should close all file transports', async () => {
-      // Create mock file transports with close methods
+      // Create mock file transports
       const mockFileTransport1 = {
-        close: vi.fn(),
         filename: '/mock/path/debug.log',
       };
       const mockFileTransport2 = {
-        close: vi.fn(),
         filename: '/mock/path/error.log',
       };
 
@@ -770,11 +768,12 @@ describe('logger', () => {
       mockLogger.transports.length = 0;
       mockLogger.transports.push(mockFileTransport1 as any, mockFileTransport2 as any);
 
-      logger.closeLogger();
+      await logger.closeLogger();
 
-      expect(mockFileTransport1.close).toHaveBeenCalled();
-      expect(mockFileTransport2.close).toHaveBeenCalled();
+      // New implementation removes transports but doesn't explicitly close them
       expect(mockLogger.remove).toHaveBeenCalledTimes(2);
+      expect(mockLogger.remove).toHaveBeenCalledWith(mockFileTransport1);
+      expect(mockLogger.remove).toHaveBeenCalledWith(mockFileTransport2);
     });
 
     it('should handle transports without close method', async () => {
@@ -789,7 +788,7 @@ describe('logger', () => {
       mockLogger.transports.push(mockTransportWithoutClose as any);
 
       // Should not throw
-      expect(() => logger.closeLogger()).not.toThrow();
+      await expect(logger.closeLogger()).resolves.not.toThrow();
       expect(mockLogger.remove).toHaveBeenCalledWith(mockTransportWithoutClose);
     });
 
@@ -802,10 +801,9 @@ describe('logger', () => {
       mockLogger.transports.length = 0;
       mockLogger.transports.push(mockConsoleTransport as any);
 
-      logger.closeLogger();
+      await logger.closeLogger();
 
-      // Console transport should not be closed
-      expect(mockConsoleTransport.close).not.toHaveBeenCalled();
+      // Console transport should not be removed
       expect(mockLogger.remove).not.toHaveBeenCalled();
     });
 
@@ -813,19 +811,22 @@ describe('logger', () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const mockFailingTransport = {
-        close: vi.fn().mockImplementation(() => {
-          throw new Error('Close failed');
-        }),
         filename: '/mock/path/fail.log',
       };
 
       Object.setPrototypeOf(mockFailingTransport, winstonMock.transports.File.prototype);
 
+      // Make remove throw an error
+      mockLogger.remove.mockImplementation(() => {
+        throw new Error('Remove failed');
+      });
+
       mockLogger.transports.length = 0;
       mockLogger.transports.push(mockFailingTransport as any);
 
-      // Should not throw even when close fails
-      expect(() => logger.closeLogger()).not.toThrow();
+      // Should not throw even when remove fails
+      await expect(logger.closeLogger()).resolves.not.toThrow();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Error closing logger'));
 
       consoleErrorSpy.mockRestore();
     });
@@ -834,8 +835,39 @@ describe('logger', () => {
       mockLogger.transports.length = 0;
 
       // Should not throw
-      expect(() => logger.closeLogger()).not.toThrow();
+      await expect(logger.closeLogger()).resolves.not.toThrow();
       expect(mockLogger.remove).not.toHaveBeenCalled();
+    });
+
+    it('should set shutdown flag when closing', async () => {
+      mockLogger.transports.length = 0;
+
+      // Reset shutdown flag
+      logger.setLoggerShuttingDown(false);
+
+      await logger.closeLogger();
+
+      // Shutdown flag should be set
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+
+      // Reset for other tests
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should prevent logging after shutdown flag is set', async () => {
+      const debugSpy = vi.spyOn(mockLogger, 'debug');
+
+      // Set shutdown flag
+      logger.setLoggerShuttingDown(true);
+
+      // Try to log using default export
+      logger.default.debug('This should not be logged');
+
+      // Logger should not have been called (shutdown flag prevents it)
+      expect(debugSpy).not.toHaveBeenCalled();
+
+      // Reset flag for other tests
+      logger.setLoggerShuttingDown(false);
     });
   });
 
