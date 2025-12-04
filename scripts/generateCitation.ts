@@ -113,4 +113,7 @@ export const updateCitation = async (): Promise<void> => {
   console.log('CITATION.cff file has been updated.');
 };
 
-updateCitation().catch(console.error);
+updateCitation().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
