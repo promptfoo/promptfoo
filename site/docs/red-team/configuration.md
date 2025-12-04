@@ -574,7 +574,19 @@ strategies:
 
 The `purpose` field provides context to guide the generation of adversarial inputs.
 
-The purpose should be descriptive, as it will be used as the basis for generated adversarial tests and grading. For example:
+The purpose should be descriptive, as it will be used as the basis for generated adversarial tests and grading.
+
+:::tip Auto-generate purpose from source code
+
+The [`recon`](/docs/red-team/recon/) command can automatically analyze your codebase and generate a complete purpose field along with plugin recommendations:
+
+```sh
+promptfoo redteam recon --dir ./my-llm-app
+```
+
+:::
+
+For example:
 
 ```yaml
 redteam:
