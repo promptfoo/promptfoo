@@ -100,8 +100,12 @@ function IntegrationOptionsSection() {
               <li>Easy GitHub integration</li>
             </ul>
             <div className={styles.capabilityDetails}>
-              <Link to="/contact/" className="button button--primary button--sm">
-                Request Access
+              <Link
+                to="/code-scanning/github-action/"
+                className="button button--primary button--sm"
+                target="_blank"
+              >
+                Learn More
               </Link>
             </div>
           </div>
