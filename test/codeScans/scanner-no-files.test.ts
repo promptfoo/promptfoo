@@ -152,22 +152,31 @@ describe('Scanner JSON Output', () => {
 
     // Import after mocks are set up
     const { executeScan } = await import('../../src/codeScan/scanner/index');
-
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const logger = (await import('../../src/logger')).default;
 
     await executeScan('/test/repo', { json: true, diffsOnly: true });
 
-    expect(consoleLogSpy).toHaveBeenCalled();
+    // logger.info should have been called with JSON output
+    expect(logger.info).toHaveBeenCalled();
 
-    const output = consoleLogSpy.mock.calls[0][0];
-    const parsed: ScanResponse = JSON.parse(output);
+    // Find the call that contains JSON (the last info call should be the JSON output)
+    const infoCalls = (logger.info as any).mock.calls;
+    const jsonCall = infoCalls.find((call: string[]) => {
+      try {
+        JSON.parse(call[0]);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+
+    expect(jsonCall).toBeDefined();
+    const parsed: ScanResponse = JSON.parse(jsonCall[0]);
 
     expect(parsed).toEqual({
       success: true,
       comments: [],
       review: 'No files to scan',
     });
-
-    consoleLogSpy.mockRestore();
   });
 });

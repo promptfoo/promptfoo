@@ -211,7 +211,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       // In JSON mode, output a proper JSON response for programmatic consumption
       if (options.json) {
         const response: ScanResponse = { success: true, comments: [], review: msg };
-        console.log(JSON.stringify(response, null, 2));
+        logger.info(JSON.stringify(response, null, 2));
       } else if (showSpinner && spinner) {
         spinner.succeed(msg);
       } else {
