@@ -1089,6 +1089,144 @@ describe('RedteamIterativeProvider', () => {
     });
   });
 
+  describe('Abort Signal Handling', () => {
+    it('should re-throw AbortError from redteam provider parse failure and not swallow it', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // Mock redteam provider to return a response that causes parse to throw AbortError
+      mockRedteamProvider.callApi.mockImplementationOnce(async () => {
+        throw abortError;
+      });
+
+      await expect(
+        runRedteamConversation({
+          context: { prompt: { raw: '', label: '' }, vars: {} },
+          filters: undefined,
+          injectVar: 'test',
+          numIterations: 1,
+          options: {},
+          prompt: { raw: 'test', label: 'test' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: mockTargetProvider,
+          vars: { test: 'goal' },
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        }),
+      ).rejects.toThrow('The operation was aborted');
+    });
+
+    it('should re-throw AbortError from judge response parse failure', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // First call is redteam provider (success), second call is judge (throws)
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            improvement: 'test improvement',
+            prompt: 'test prompt',
+          }),
+        })
+        .mockImplementationOnce(async () => {
+          throw abortError;
+        });
+
+      await expect(
+        runRedteamConversation({
+          context: { prompt: { raw: '', label: '' }, vars: {} },
+          filters: undefined,
+          injectVar: 'test',
+          numIterations: 1,
+          options: {},
+          prompt: { raw: 'test', label: 'test' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: mockTargetProvider,
+          vars: { test: 'goal' },
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        }),
+      ).rejects.toThrow('The operation was aborted');
+    });
+
+    it('should pass options to gradingProvider.callApi', async () => {
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            improvement: 'test',
+            prompt: 'test',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        });
+
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options,
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      // Verify options were passed to callApi
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should swallow non-AbortError parse exceptions and continue loop', async () => {
+      // First redteam call returns unparseable output, second succeeds
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'this is not valid JSON',
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            improvement: 'test',
+            prompt: 'test',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 2,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      // Should complete without throwing
+      expect(result.metadata.stopReason).toBe('Max iterations reached');
+    });
+  });
+
   describe('sessionId handling', () => {
     beforeEach(() => {
       // Clear the mock to use the target provider directly for sessionId tests

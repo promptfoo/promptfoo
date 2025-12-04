@@ -243,13 +243,17 @@ export default class GoatProvider implements ApiProvider {
             traceSummary: previousTraceSummary,
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-          response = await fetchWithProxy(getRemoteGenerationUrl(), {
-            body,
-            headers: {
-              'Content-Type': 'application/json',
+          response = await fetchWithProxy(
+            getRemoteGenerationUrl(),
+            {
+              body,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              method: 'POST',
             },
-            method: 'POST',
-          });
+            options?.abortSignal,
+          );
           const data = (await response.json()) as ExtractAttackFailureResponse;
 
           if (!data.message) {
@@ -279,13 +283,17 @@ export default class GoatProvider implements ApiProvider {
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-        response = await fetchWithProxy(getRemoteGenerationUrl(), {
-          body,
-          headers: {
-            'Content-Type': 'application/json',
+        response = await fetchWithProxy(
+          getRemoteGenerationUrl(),
+          {
+            body,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            method: 'POST',
           },
-          method: 'POST',
-        });
+          options?.abortSignal,
+        );
         const data = await response.json();
         if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
           logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
@@ -457,6 +465,11 @@ export default class GoatProvider implements ApiProvider {
           }
         }
       } catch (error) {
+        // Re-throw abort errors to properly cancel the operation
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.debug('[GOAT] Operation aborted');
+          throw error;
+        }
         logger.error(`[GOAT] Error in GOAT turn ${turn}`, { error });
       }
     }

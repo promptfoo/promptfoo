@@ -31,6 +31,7 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
   TokenUsage,
@@ -772,7 +773,25 @@ const BasicAuthSchema = z.object({
   password: z.string(),
 });
 
-const AuthSchema = z.union([OAuthClientCredentialsSchema, OAuthPasswordSchema, BasicAuthSchema]);
+const BearerAuthSchema = z.object({
+  type: z.literal('bearer'),
+  token: z.string(),
+});
+
+const ApiKeyAuthSchema = z.object({
+  type: z.literal('api_key'),
+  value: z.string(),
+  placement: z.enum(['header', 'query']),
+  keyName: z.string(),
+});
+
+const AuthSchema = z.union([
+  OAuthClientCredentialsSchema,
+  OAuthPasswordSchema,
+  BasicAuthSchema,
+  BearerAuthSchema,
+  ApiKeyAuthSchema,
+]);
 
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
@@ -951,11 +970,25 @@ export function processJsonBody(
         }
         return result;
       } else if (typeof obj === 'string') {
-        try {
-          return JSON.parse(obj);
-        } catch {
-          return obj;
+        // Only parse strings that are clearly JSON objects or arrays
+        // This preserves strings that would parse to primitives (numbers, booleans, null)
+        const trimmed = obj.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(obj);
+            // Only return parsed value if it's an object or array
+            // This prevents primitive values (numbers, booleans, null) from being converted
+            if (typeof parsed === 'object' && parsed !== null) {
+              return parsed;
+            }
+            // If it parsed to a primitive, keep the original string
+            return obj;
+          } catch {
+            return obj;
+          }
         }
+        // Not a JSON object/array, return as-is
+        return obj;
       }
       return obj;
     };
@@ -964,6 +997,8 @@ export function processJsonBody(
   }
 
   // If it's a string, attempt to parse as JSON
+  // For top-level strings, we parse JSON primitives (for backward compatibility)
+  // For nested string values in objects, we only parse objects/arrays (see processNestedValues)
   if (typeof rendered === 'string') {
     try {
       return JSON.parse(rendered);
@@ -1695,6 +1730,11 @@ export class HttpProvider implements ApiProvider {
       allHeaders.authorization = `Bearer ${this.lastToken}`;
     }
 
+    // Add Bearer token if configured
+    if (this.config.auth?.type === 'bearer') {
+      allHeaders.authorization = `Bearer ${this.config.auth.token}`;
+    }
+
     // Add Basic Auth credentials if configured
     if (this.config.auth?.type === 'basic') {
       const credentials = Buffer.from(
@@ -1703,10 +1743,19 @@ export class HttpProvider implements ApiProvider {
       allHeaders.authorization = `Basic ${credentials}`;
     }
 
+    // Add API Key to header if configured
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'header') {
+      allHeaders[this.config.auth.keyName.toLowerCase()] = this.config.auth.value;
+    }
+
     return allHeaders;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const vars = {
       ...(context?.vars || {}),
       prompt,
@@ -1739,7 +1788,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     if (this.config.request) {
-      return this.callApiWithRawRequest(vars, context);
+      return this.callApiWithRawRequest(vars, context, options);
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
@@ -1772,14 +1821,23 @@ export class HttpProvider implements ApiProvider {
         this.config.body,
         vars,
       ),
-      queryParams: this.config.queryParams
-        ? Object.fromEntries(
-            Object.entries(this.config.queryParams).map(([key, value]) => [
-              key,
-              getNunjucksEngine().renderString(value, vars),
-            ]),
-          )
-        : undefined,
+      queryParams: (() => {
+        const baseQueryParams = this.config.queryParams
+          ? Object.fromEntries(
+              Object.entries(this.config.queryParams).map(([key, value]) => [
+                key,
+                getNunjucksEngine().renderString(value, vars),
+              ]),
+            )
+          : {};
+
+        // Add API Key to query params if configured
+        if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
+          baseQueryParams[this.config.auth.keyName] = this.config.auth.value;
+        }
+
+        return Object.keys(baseQueryParams).length > 0 ? baseQueryParams : undefined;
+      })(),
       transformResponse: this.config.transformResponse || this.config.responseParser,
     };
 
@@ -1815,6 +1873,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
+      ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(method !== 'GET' &&
         renderedConfig.body != null && {
           body: contentTypeIsJson(headers)
@@ -1924,6 +1983,7 @@ export class HttpProvider implements ApiProvider {
   private async callApiWithRawRequest(
     vars: Record<string, any>,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
 
@@ -1946,7 +2006,7 @@ export class HttpProvider implements ApiProvider {
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
-    const url = new URL(
+    let url = new URL(
       parsedRequest.url,
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
@@ -1968,12 +2028,47 @@ export class HttpProvider implements ApiProvider {
       parsedRequest.headers.authorization = `Bearer ${this.lastToken}`;
     }
 
+    // Add Bearer token if configured
+    if (this.config.auth?.type === 'bearer') {
+      parsedRequest.headers.authorization = `Bearer ${this.config.auth.token}`;
+    }
+
     // Add Basic Auth credentials if configured
     if (this.config.auth?.type === 'basic') {
       const credentials = Buffer.from(
         `${this.config.auth.username}:${this.config.auth.password}`,
       ).toString('base64');
       parsedRequest.headers.authorization = `Basic ${credentials}`;
+    }
+
+    // Add API Key to header if configured
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'header') {
+      parsedRequest.headers[this.config.auth.keyName.toLowerCase()] = this.config.auth.value;
+    }
+
+    // Add API Key to query params if configured
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
+      try {
+        const urlObj = new URL(url);
+        urlObj.searchParams.append(this.config.auth.keyName, this.config.auth.value);
+        url = urlObj.toString();
+        // Extract the path and query from the full URL
+        const urlPath = urlObj.pathname + urlObj.search;
+        // Update the request line with the new URL path
+        const requestLines = renderedRequest.split('\n');
+        const firstLine = requestLines[0];
+        const method = firstLine.split(' ')[0];
+        const protocol = firstLine.split(' ').slice(-1)[0];
+        requestLines[0] = `${method} ${urlPath} ${protocol}`;
+        // Re-parse with updated URL
+        const updatedRequest = requestLines.join('\n');
+        const reParsed = parseRawRequest(updatedRequest.trim());
+        Object.assign(parsedRequest, reParsed);
+      } catch (err) {
+        logger.warn(
+          `[HTTP Provider]: Failed to add API key to query params in raw request: ${String(err)}`,
+        );
+      }
     }
 
     logger.debug(
@@ -1988,6 +2083,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
+      ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(parsedRequest.body?.text && { body: parsedRequest.body.text.trim() }),
     };
 

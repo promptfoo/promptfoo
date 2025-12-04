@@ -20,6 +20,7 @@ import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
+  SeveritySchema,
   FRAMEWORK_COMPLIANCE_IDS,
 } from '../redteam/constants';
 import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
@@ -86,7 +87,7 @@ export const RedteamPluginObjectSchema = z.object({
     .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
   config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
-  severity: z.nativeEnum(Severity).optional().describe('Severity level for this plugin'),
+  severity: SeveritySchema.optional().describe('Severity level for this plugin'),
 });
 
 /**
@@ -309,15 +310,15 @@ export const RedteamConfigSchema = z
 
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
         // Lazy require to avoid mock interference in tests during module initialization
-        // Try-catch to handle ESM environments where require may not work
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          // Use eval to prevent bundler issues in browser builds
+          // eslint-disable-next-line no-eval
           const logger = require('../logger').default;
           logger.debug(
             '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
           );
         } catch {
-          // Silently fail in ESM environments - deprecation warning is not critical
+          // Silently fail if require fails - deprecation warning is not critical
         }
 
         if (data.language) {

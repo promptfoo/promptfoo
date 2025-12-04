@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import type { Message } from '../../../../src/redteam/providers/shared';
@@ -130,7 +131,9 @@ describe('CrescendoProvider', () => {
     });
 
     // Set up redteamProviderManager mock
-    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (
+      options: any,
+    ) {
       // When the provider is already an object (not a string), return it for jsonOnly requests
       // For non-jsonOnly requests (scoring), return the scoring provider
       if (options.provider && typeof options.provider === 'object') {
@@ -911,10 +914,12 @@ describe('CrescendoProvider', () => {
 
     await provider.callApi('test prompt', context);
 
-    expect(mockRedTeamProvider.callApi).toHaveBeenCalledWith(
-      expect.stringContaining('test purpose'),
-      expect.any(Object),
+    // Check that at least one call contains the purpose string
+    const calls = mockRedTeamProvider.callApi.mock.calls;
+    const hasCallWithPurpose = calls.some(
+      (call: unknown[]) => typeof call[0] === 'string' && call[0].includes('test purpose'),
     );
+    expect(hasCallWithPurpose).toBe(true);
   });
 
   it('should pass purpose parameter to getAttackPrompt', async () => {
@@ -956,10 +961,13 @@ describe('CrescendoProvider', () => {
 
     await provider.callApi('test prompt', context);
 
-    expect(mockRedTeamProvider.callApi).toHaveBeenCalledWith(
-      expect.stringContaining('test purpose for attack'),
-      expect.any(Object),
+    // Check that at least one call contains the purpose string
+    const calls = mockRedTeamProvider.callApi.mock.calls;
+    const hasCallWithPurpose = calls.some(
+      (call: unknown[]) =>
+        typeof call[0] === 'string' && call[0].includes('test purpose for attack'),
     );
+    expect(hasCallWithPurpose).toBe(true);
   });
 
   it('should default continueAfterSuccess to false', () => {
@@ -1740,6 +1748,271 @@ describe('CrescendoProvider', () => {
   });
 });
 
+describe('CrescendoProvider - Abort Signal Handling', () => {
+  let mockRedTeamProvider: any;
+  let mockScoringProvider: any;
+  let mockTargetProvider: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockRedTeamProvider = {
+      id: () => 'mock-redteam',
+      callApi: vi.fn(),
+      delay: 0,
+    };
+    mockScoringProvider = {
+      id: () => 'mock-scoring',
+      callApi: vi.fn(),
+      delay: 0,
+    };
+    mockTargetProvider = {
+      id: () => 'mock-target',
+      callApi: vi.fn(),
+    };
+
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (
+      options: any,
+    ) {
+      if (options.provider && typeof options.provider === 'object') {
+        return options.jsonOnly ? options.provider : mockScoringProvider;
+      }
+      return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+    });
+
+    vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: { pass: true },
+        })),
+      } as any;
+    });
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should re-throw AbortError and not swallow it in catch block', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 3,
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    // Create an AbortError
+    const abortError = new Error('The operation was aborted');
+    abortError.name = 'AbortError';
+
+    // Mock the redteam provider to throw AbortError
+    mockRedTeamProvider.callApi.mockRejectedValue(abortError);
+
+    // Should re-throw the AbortError, not swallow it
+    await expect(provider.callApi('test prompt', context)).rejects.toThrow(
+      'The operation was aborted',
+    );
+  });
+
+  it('should pass options with abortSignal to internal method calls', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const abortController = new AbortController();
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+    const options = { abortSignal: abortController.signal };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 50,
+        rationale: 'Not successful',
+      }),
+    });
+
+    await provider.callApi('test prompt', context, options);
+
+    // Verify that options with abortSignal was passed to the redteam provider
+    expect(mockRedTeamProvider.callApi).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Object),
+      expect.objectContaining({ abortSignal: abortController.signal }),
+    );
+
+    // Verify that options with abortSignal was passed to the scoring provider
+    expect(mockScoringProvider.callApi).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Object),
+      expect.objectContaining({ abortSignal: abortController.signal }),
+    );
+  });
+
+  it('should stop immediately when abort signal is triggered during attack', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 10,
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const abortController = new AbortController();
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+    const options = { abortSignal: abortController.signal };
+
+    let callCount = 0;
+    mockRedTeamProvider.callApi.mockImplementation(() => {
+      callCount++;
+      if (callCount === 2) {
+        // Simulate abort on second call
+        const abortError = new Error('The operation was aborted');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
+      return Promise.resolve({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 50,
+        rationale: 'Not successful',
+      }),
+    });
+
+    // Should throw AbortError and not complete all 10 rounds
+    await expect(provider.callApi('test prompt', context, options)).rejects.toThrow(
+      'The operation was aborted',
+    );
+
+    // Should have stopped before completing all rounds
+    expect(callCount).toBe(2);
+  });
+
+  it('should not swallow AbortError from scoring provider', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 3,
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    // Create an AbortError from scoring provider
+    const abortError = new Error('The operation was aborted');
+    abortError.name = 'AbortError';
+    mockScoringProvider.callApi.mockRejectedValue(abortError);
+
+    // Should re-throw the AbortError from scoring provider
+    await expect(provider.callApi('test prompt', context)).rejects.toThrow(
+      'The operation was aborted',
+    );
+  });
+
+  it('should swallow non-AbortError exceptions and continue loop', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 2,
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    let callCount = 0;
+    mockRedTeamProvider.callApi.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        // First call throws a regular error (should be swallowed)
+        throw new Error('Regular error');
+      }
+      return Promise.resolve({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 50,
+        rationale: 'Not successful',
+      }),
+    });
+
+    // Should NOT throw - regular errors are swallowed and loop continues
+    const result = await provider.callApi('test prompt', context);
+
+    // Should have completed both rounds (error on first was swallowed)
+    expect(callCount).toBe(2);
+    expect(result.metadata?.crescendoRoundsCompleted).toBe(2);
+  });
+});
+
 describe('CrescendoProvider - Chat Template Support', () => {
   let crescendoProvider: CrescendoProvider;
   let mockRedTeamProvider: any;
@@ -1771,7 +2044,9 @@ describe('CrescendoProvider - Chat Template Support', () => {
       stateful: false, // Key: test with stateful=false to trigger the bug
     });
 
-    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (
+      options: any,
+    ) {
       if (options.provider && typeof options.provider === 'object') {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }

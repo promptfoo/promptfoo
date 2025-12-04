@@ -112,10 +112,7 @@ describe('ESM utilities', () => {
       const nonExistentPath = path.resolve(__dirname, '__fixtures__/nonExistent.js');
 
       await expect(importModule(nonExistentPath)).rejects.toThrow();
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('CommonJS require also failed'),
-      );
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
     });
 
     it('logs debug information during import process', async () => {

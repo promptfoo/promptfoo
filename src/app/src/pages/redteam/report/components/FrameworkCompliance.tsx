@@ -82,7 +82,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
       }
 
       // Find the highest severity among non-compliant plugins
-      let highestSeverity = Severity.Low;
+      let highestSeverity: Severity = Severity.Low;
 
       for (const plugin of nonCompliantPlugins) {
         const pluginSeverity =

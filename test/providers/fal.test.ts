@@ -40,22 +40,27 @@ vi.mock('../../src/envars', async (importOriginal) => {
 describe('Fal Provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(isCacheEnabled).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getCache).mockImplementation(function () {
-      return {
-        get: vi.fn().mockResolvedValue(null),
-        set: vi.fn(),
-        wrap: vi.fn(),
-        del: vi.fn(),
-        reset: vi.fn(),
-        store: {
+    vi.mocked(isCacheEnabled).mockReturnValue(false);
+    vi.mocked(getCache).mockReturnValue({
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+      wrap: vi.fn(),
+      del: vi.fn(),
+      clear: vi.fn(),
+      stores: [
+        {
           get: vi.fn(),
           set: vi.fn(),
         },
-      };
-    });
+      ] as any,
+      mget: vi.fn(),
+      mset: vi.fn(),
+      mdel: vi.fn(),
+      reset: vi.fn(),
+      ttl: vi.fn(),
+      on: vi.fn(),
+      removeAllListeners: vi.fn(),
+    } as any);
   });
 
   afterEach(() => {
@@ -314,15 +319,22 @@ describe('Fal Provider', () => {
           set: vi.fn(),
           wrap: vi.fn(),
           del: vi.fn(),
+          clear: vi.fn(),
+          stores: [
+            {
+              get: vi.fn(),
+              set: vi.fn(),
+            },
+          ] as any,
+          mget: vi.fn(),
+          mset: vi.fn(),
+          mdel: vi.fn(),
           reset: vi.fn(),
-          store: {
-            get: vi.fn(),
-            set: vi.fn(),
-          },
+          ttl: vi.fn(),
+          on: vi.fn(),
+          removeAllListeners: vi.fn(),
         };
-        vi.mocked(getCache).mockImplementation(function () {
-          return mockCache;
-        });
+        vi.mocked(getCache).mockReturnValue(mockCache as any);
 
         const result = await provider.callApi('test prompt');
 
@@ -345,15 +357,22 @@ describe('Fal Provider', () => {
           set: vi.fn(),
           wrap: vi.fn(),
           del: vi.fn(),
+          clear: vi.fn(),
+          stores: [
+            {
+              get: vi.fn(),
+              set: vi.fn(),
+            },
+          ] as any,
+          mget: vi.fn(),
+          mset: vi.fn(),
+          mdel: vi.fn(),
           reset: vi.fn(),
-          store: {
-            get: vi.fn(),
-            set: vi.fn(),
-          },
+          ttl: vi.fn(),
+          on: vi.fn(),
+          removeAllListeners: vi.fn(),
         };
-        vi.mocked(getCache).mockImplementation(function () {
-          return mockCache;
-        });
+        vi.mocked(getCache).mockReturnValue(mockCache as any);
 
         const mockResponse = {
           data: {
@@ -386,15 +405,22 @@ describe('Fal Provider', () => {
           set: vi.fn().mockRejectedValue(new Error('Cache error')),
           wrap: vi.fn(),
           del: vi.fn(),
+          clear: vi.fn(),
+          stores: [
+            {
+              get: vi.fn(),
+              set: vi.fn(),
+            },
+          ] as any,
+          mget: vi.fn(),
+          mset: vi.fn(),
+          mdel: vi.fn(),
           reset: vi.fn(),
-          store: {
-            get: vi.fn(),
-            set: vi.fn(),
-          },
+          ttl: vi.fn(),
+          on: vi.fn(),
+          removeAllListeners: vi.fn(),
         };
-        vi.mocked(getCache).mockImplementation(function () {
-          return mockCache;
-        });
+        vi.mocked(getCache).mockReturnValue(mockCache as any);
 
         const mockResponse = {
           data: {
