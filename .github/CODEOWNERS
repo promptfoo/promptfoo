@@ -69,7 +69,7 @@
 /tsdown.config.ts              @JustinBeckwith           # Build config
 /vitest.config.ts              @JustinBeckwith           # Test config
 /vitest.integration.config.ts  @JustinBeckwith           # Integration test config
-/knip.json                     @JustinBeckwith           # Dead code detection
+/knip.json                     @faizanminhas           # Dead code detection
 /renovate.json                 @JustinBeckwith           # Dependency updates
 /package.json                  @JustinBeckwith           # Dependencies & scripts
 /release-please-config.json    @JustinBeckwith           # Release automation
