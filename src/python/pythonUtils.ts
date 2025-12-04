@@ -15,6 +15,15 @@ function getCurrentDir(): string {
   return currentDir;
 }
 
+// Get the directory containing Python wrapper scripts
+// Handles both development (src/python/) and production (dist/src/python/) paths
+function getPythonScriptDir(): string {
+  const dir = getCurrentDir();
+  // If we're already in a 'python' directory (development), use it as-is
+  // Otherwise, append 'python' subdirectory (production dist build)
+  return path.basename(dir) === 'python' ? dir : path.join(dir, 'python');
+}
+
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
@@ -310,7 +319,7 @@ export async function runPython(
     env: process.env,
     mode: 'binary',
     pythonPath,
-    scriptPath: getCurrentDir(),
+    scriptPath: getPythonScriptDir(),
     // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
     ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
   };
