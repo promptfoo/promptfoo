@@ -117,10 +117,23 @@ export async function importModule(modulePath: string, functionName?: string) {
         }
         return mod;
       } catch (cjsErr) {
-        // If CJS fallback also fails, log both errors and throw
+        // If CJS fallback also fails, throw a combined error with both details
+        const cjsErrorMessage = cjsErr instanceof Error ? cjsErr.message : String(cjsErr);
         logger.error(`ESM import failed for ${modulePath}: ${errorMessage}`);
-        logger.error(`CJS fallback also failed: ${cjsErr}`);
-        throw err;
+        logger.error(`CJS fallback also failed: ${cjsErrorMessage}`);
+
+        // Create a combined error that includes both failure reasons
+        const combinedError = new Error(
+          `Failed to load module ${modulePath}:\n` +
+            `  ESM import error: ${errorMessage}\n` +
+            `  CJS fallback error: ${cjsErrorMessage}\n` +
+            `To fix this, either:\n` +
+            `  1. Rename the file to .cjs (recommended for CommonJS)\n` +
+            `  2. Convert to ESM syntax (import/export)\n` +
+            `  3. Ensure the file has valid JavaScript syntax`,
+        );
+        combinedError.cause = { esmError: err, cjsError: cjsErr };
+        throw combinedError;
       }
     } else {
       logger.error(`ESM import failed: ${err}`);
@@ -154,6 +167,11 @@ export function isCjsInEsmError(message: string): boolean {
 /**
  * Loads a CommonJS module by executing it in a vm context with proper CJS globals.
  * This bypasses Node.js's module type detection which is based on package.json "type" field.
+ *
+ * SECURITY NOTE: This is NOT a security sandbox. The executed code has full access to
+ * the file system, network, etc. via the injected require function and process object.
+ * This is intentional - it's designed for loading trusted user configuration files
+ * (custom providers, assertions, hooks) that need full Node.js capabilities.
  */
 function loadCjsModule(modulePath: string): any {
   const code = fs.readFileSync(modulePath, 'utf-8');
@@ -167,26 +185,112 @@ function loadCjsModule(modulePath: string): any {
   const moduleObj: { exports: any } = { exports: {} };
 
   // Create a context with CJS globals
+  // We include all commonly used Node.js globals to ensure compatibility
   const context = vm.createContext({
+    // CJS-specific globals
     module: moduleObj,
     exports: moduleObj.exports,
     require: moduleRequire,
     __dirname: dirname,
     __filename: filename,
-    // Include common globals
+
+    // Global object references (some CJS modules use these)
+    global: globalThis,
+    globalThis,
+
+    // Console and process
     console,
     process,
+
+    // Binary data
     Buffer,
+
+    // Timers
     setTimeout,
     setInterval,
     setImmediate,
     clearTimeout,
     clearInterval,
     clearImmediate,
+    queueMicrotask,
+
+    // URL handling
     URL,
     URLSearchParams,
+
+    // Text encoding/decoding
     TextEncoder,
     TextDecoder,
+    atob: globalThis.atob,
+    btoa: globalThis.btoa,
+
+    // Fetch API (Node 18+)
+    fetch: globalThis.fetch,
+    Request: globalThis.Request,
+    Response: globalThis.Response,
+    Headers: globalThis.Headers,
+
+    // Abort handling
+    AbortController: globalThis.AbortController,
+    AbortSignal: globalThis.AbortSignal,
+
+    // Events
+    Event: globalThis.Event,
+    EventTarget: globalThis.EventTarget,
+
+    // Errors
+    Error,
+    TypeError,
+    ReferenceError,
+    SyntaxError,
+    RangeError,
+
+    // Other built-ins that CJS modules might use
+    Array,
+    Object,
+    String,
+    Number,
+    Boolean,
+    Symbol,
+    Map,
+    Set,
+    WeakMap,
+    WeakSet,
+    Promise,
+    Proxy,
+    Reflect,
+    JSON,
+    Math,
+    Date,
+    RegExp,
+    Int8Array,
+    Uint8Array,
+    Uint8ClampedArray,
+    Int16Array,
+    Uint16Array,
+    Int32Array,
+    Uint32Array,
+    Float32Array,
+    Float64Array,
+    BigInt64Array,
+    BigUint64Array,
+    DataView,
+    ArrayBuffer,
+    SharedArrayBuffer: globalThis.SharedArrayBuffer,
+    Atomics: globalThis.Atomics,
+    BigInt,
+
+    // Functions
+    eval: undefined, // Disable eval for safety
+    Function,
+    isNaN,
+    isFinite,
+    parseFloat,
+    parseInt,
+    decodeURI,
+    decodeURIComponent,
+    encodeURI,
+    encodeURIComponent,
   });
 
   // Execute the code in the context
