@@ -3,13 +3,20 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import util from 'util';
+import { getCache, isCacheEnabled } from '../cache';
 import { getDirectory } from '../esm';
-
-/**
- * BUILD_FORMAT is a compile-time constant injected by tsup during the build process.
- * @see src/migrate.ts for detailed documentation on BUILD_FORMAT values and usage.
- */
-declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
+import logger from '../logger';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types/providers';
+import { sha256 } from '../util/createHash';
+import { parsePathOrGlob } from '../util/index';
+import { safeJsonStringify } from '../util/json';
 
 /**
  * Lazy initialization wrapper for getDirectory() to avoid module-level side effects.
@@ -23,20 +30,19 @@ function getCurrentDir(): string {
   return currentDir;
 }
 
-import { getCache, isCacheEnabled } from '../cache';
-import logger from '../logger';
-import { sha256 } from '../util/createHash';
-import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
-
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderClassificationResponse,
-  ProviderEmbeddingResponse,
-  ProviderOptions,
-  ProviderResponse,
-} from '../types/providers';
+/**
+ * Get the directory containing Golang wrapper scripts.
+ * Handles both development (src/providers/) and production (dist/src/) paths.
+ */
+function getGolangWrapperDir(): string {
+  const dir = getCurrentDir();
+  // In development, we're in src/providers/ - go up to src/, then into golang/
+  // In production (bundled), we're in dist/src/ - directly append golang/
+  if (path.basename(dir) === 'providers') {
+    return path.join(path.dirname(dir), 'golang');
+  }
+  return path.join(dir, 'golang');
+}
 
 const execFileAsync = util.promisify(execFile);
 
@@ -147,7 +153,7 @@ export class GolangProvider implements ApiProvider {
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(getCurrentDir(), '../golang/wrapper.go'), tempWrapperPath);
+        fs.copyFileSync(path.join(getGolangWrapperDir(), 'wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);

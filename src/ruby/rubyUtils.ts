@@ -2,17 +2,40 @@ import { execFile } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { promisify } from 'util';
 
 import { getEnvString } from '../envars';
+import { getDirectory } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 
 const execFileAsync = promisify(execFile);
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+/**
+ * Lazy initialization wrapper for getDirectory() to avoid module-level side effects.
+ * @see src/migrate.ts for detailed documentation on why this pattern is used.
+ */
+let currentDir: string | undefined;
+function getCurrentDir(): string {
+  if (!currentDir) {
+    currentDir = getDirectory();
+  }
+  return currentDir;
+}
+
+/**
+ * Get the directory containing Ruby wrapper scripts.
+ * Handles both development (src/ruby/) and production (dist/src/) paths.
+ */
+function getRubyWrapperDir(): string {
+  const dir = getCurrentDir();
+  // In development, we're in src/ruby/ - use as-is
+  // In production (bundled), we're in dist/src/ - append ruby/
+  if (path.basename(dir) === 'ruby') {
+    return dir;
+  }
+  return path.join(dir, 'ruby');
+}
 
 /**
  * Global state for Ruby executable path caching.
@@ -297,7 +320,7 @@ export async function runRuby(
 
   rubyPath = await validateRubyPath(rubyPath, typeof customPath === 'string');
 
-  const wrapperPath = path.join(__dirname, 'wrapper.rb');
+  const wrapperPath = path.join(getRubyWrapperDir(), 'wrapper.rb');
 
   try {
     fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
