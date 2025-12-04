@@ -45,9 +45,7 @@ We particularly welcome contributions in the following areas:
    # Use the Node.js version specified in .nvmrc (node >= 20 required)
    nvm use
 
-   # Enable corepack for npm (corepack ships with Node.js)
-   corepack enable npm
-
+   # Install dependencies (npm, pnpm, or yarn all work)
    npm install
    ```
 
