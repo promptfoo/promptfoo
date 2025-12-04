@@ -311,14 +311,10 @@ export const RedteamConfigSchema = z
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
         // Fire-and-forget async import to avoid circular dependency at module load time
         (async () => {
-          try {
-            const { default: logger } = await import('../logger');
-            logger.debug(
-              '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
-            );
-          } catch {
-            // Silently fail if import fails - deprecation warning is not critical
-          }
+          const { default: logger } = await import('../logger');
+          logger.debug(
+            '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
+          );
         })();
 
         if (data.language) {
