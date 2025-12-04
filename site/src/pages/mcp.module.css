@@ -19,7 +19,7 @@ section {
       rgba(0, 74, 153, 0.02) 100%
     ),
     /* Accent gradients */
-      radial-gradient(ellipse at 30% 10%, rgba(0, 74, 153, 0.1) 0%, transparent 40%),
+    radial-gradient(ellipse at 30% 10%, rgba(0, 74, 153, 0.1) 0%, transparent 40%),
     radial-gradient(ellipse at 70% 30%, rgba(0, 122, 204, 0.08) 0%, transparent 40%),
     radial-gradient(ellipse at 20% 60%, rgba(0, 51, 102, 0.06) 0%, transparent 50%),
     radial-gradient(ellipse at 80% 80%, rgba(0, 94, 184, 0.08) 0%, transparent 40%),
@@ -46,7 +46,7 @@ section {
       rgba(16, 25, 28, 0) 100%
     ),
     /* Accent gradients for dark theme */
-      radial-gradient(ellipse at 30% 10%, rgba(0, 122, 204, 0.15) 0%, transparent 40%),
+    radial-gradient(ellipse at 30% 10%, rgba(0, 122, 204, 0.15) 0%, transparent 40%),
     radial-gradient(ellipse at 70% 30%, rgba(0, 94, 184, 0.12) 0%, transparent 40%),
     radial-gradient(ellipse at 20% 60%, rgba(0, 51, 102, 0.1) 0%, transparent 50%),
     radial-gradient(ellipse at 80% 80%, rgba(0, 74, 153, 0.12) 0%, transparent 40%),

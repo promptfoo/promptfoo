@@ -1346,6 +1346,7 @@ export class HttpProvider implements ApiProvider {
   private lastSignature?: string;
   private lastToken?: string;
   private lastTokenExpiresAt?: number;
+  private tokenRefreshPromise?: Promise<void>;
   private httpsAgent?: Agent;
   private httpsAgentPromise?: Promise<Agent>;
 
@@ -1450,8 +1451,55 @@ export class HttpProvider implements ApiProvider {
       return;
     }
 
-    logger.debug('[HTTP Provider Auth]: Refreshing OAuth token');
+    // If a refresh is already in progress, wait for it instead of making a new request
+    if (this.tokenRefreshPromise) {
+      logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
+      try {
+        await this.tokenRefreshPromise;
+        // If we successfully waited for the refresh, verify token is still valid
+        // (it might have expired while we were waiting)
+        const stillValid =
+          this.lastToken &&
+          this.lastTokenExpiresAt &&
+          Date.now() + TOKEN_BUFFER_MS < this.lastTokenExpiresAt;
+        if (stillValid) {
+          return;
+        }
+        // Token expired while waiting, fall through to refresh again
+        logger.debug('[HTTP Provider Auth]: Token expired while waiting, refreshing again...');
+      } catch {
+        // If the in-progress refresh failed, we'll try again below
+        logger.debug('[HTTP Provider Auth]: Previous token refresh failed, retrying...');
+      }
+    }
 
+    // Start a new token refresh and store the promise for deduplication
+    logger.debug('[HTTP Provider Auth]: Refreshing OAuth token');
+    const refreshPromise = this.performTokenRefresh(oauthConfig, now);
+    this.tokenRefreshPromise = refreshPromise;
+
+    try {
+      await refreshPromise;
+    } finally {
+      // Only clear the promise if it's still the one we created (prevents race conditions)
+      if (this.tokenRefreshPromise === refreshPromise) {
+        this.tokenRefreshPromise = undefined;
+      }
+    }
+  }
+
+  private async performTokenRefresh(
+    oauthConfig: {
+      grantType: string;
+      clientId?: string;
+      clientSecret?: string;
+      tokenUrl: string;
+      scopes?: string[];
+      username?: string;
+      password?: string;
+    },
+    now: number,
+  ): Promise<void> {
     try {
       // Prepare the token request body
       const tokenRequestBody = new URLSearchParams();
