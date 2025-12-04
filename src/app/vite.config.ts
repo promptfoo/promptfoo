@@ -49,15 +49,6 @@ export default defineConfig({
     outDir: '../../dist/src/app',
     // Enable source maps for production debugging
     sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
-    // Minification settings
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        // Keep console statements - useful for a local development tool
-        drop_console: false,
-        drop_debugger: process.env.NODE_ENV === 'production',
-      },
-    },
     rollupOptions: {
       onwarn(warning, warn) {
         // Suppress eval warnings from vm-browserify polyfill
