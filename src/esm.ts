@@ -1,6 +1,6 @@
-import { pathToFileURL } from 'node:url';
-import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
@@ -93,17 +93,34 @@ export async function importModule(modulePath: string, functionName?: string) {
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
 
-    // Provide helpful guidance for common CJS-in-ESM-context errors
+    // Fall back to CommonJS loading for .js files that use CJS syntax
     if (modulePath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
-      logger.error(`ESM import failed for ${modulePath}: ${errorMessage}`);
-      logger.warn(
-        `This .js file appears to use CommonJS syntax (require/module.exports). ` +
-          `Since promptfoo v0.120.0, .js files are treated as ESM modules by default. ` +
-          `To fix this, either:\n` +
-          `  1. Rename the file to .cjs (e.g., ${modulePath.replace(/\.js$/, '.cjs')})\n` +
-          `  2. Convert the file to use ESM syntax (import/export)\n` +
-          `See: https://promptfoo.dev/docs/configuration/guide/#custom-providers`,
+      logger.debug(
+        `ESM import failed for ${modulePath}, attempting CommonJS fallback: ${errorMessage}`,
       );
+
+      try {
+        // Use createRequire to load the module as CommonJS
+        const require = createRequire(import.meta.url);
+        const resolvedPath = safeResolve(modulePath);
+        const importedModule = require(resolvedPath);
+
+        const mod = importedModule?.default || importedModule;
+        logger.debug(
+          `Successfully loaded module via CommonJS fallback: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
+        );
+
+        if (functionName) {
+          logger.debug(`Returning named export: ${functionName}`);
+          return mod[functionName];
+        }
+        return mod;
+      } catch (cjsErr) {
+        // If CJS fallback also fails, log both errors and throw
+        logger.error(`ESM import failed for ${modulePath}: ${errorMessage}`);
+        logger.error(`CommonJS fallback also failed: ${cjsErr}`);
+        throw err;
+      }
     } else {
       logger.error(`ESM import failed: ${err}`);
     }
@@ -120,7 +137,7 @@ export async function importModule(modulePath: string, functionName?: string) {
 /**
  * Detects if an error message indicates a CommonJS module being loaded in ESM context.
  */
-function isCjsInEsmError(message: string): boolean {
+export function isCjsInEsmError(message: string): boolean {
   const cjsPatterns = [
     'require is not defined', // Direct require() call
     'module is not defined', // module.exports usage
