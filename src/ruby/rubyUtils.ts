@@ -15,6 +15,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
+ * Get the directory containing Ruby wrapper scripts.
+ * Handles both development (src/ruby/) and production (dist/src/) paths.
+ * @internal Exported for testing only
+ */
+export function getRubyWrapperDir(): string {
+  // In development, we're in src/ruby/ - use as-is
+  // In production (bundled), we're in dist/src/ - append ruby/
+  if (path.basename(__dirname) === 'ruby') {
+    return __dirname;
+  }
+  return path.join(__dirname, 'ruby');
+}
+
+/**
  * Global state for Ruby executable path caching.
  * Ensures consistent Ruby executable usage across multiple provider instances.
  */
@@ -297,7 +311,7 @@ export async function runRuby(
 
   rubyPath = await validateRubyPath(rubyPath, typeof customPath === 'string');
 
-  const wrapperPath = path.join(__dirname, 'wrapper.rb');
+  const wrapperPath = path.join(getRubyWrapperDir(), 'wrapper.rb');
 
   try {
     fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
