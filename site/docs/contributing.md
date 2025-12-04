@@ -42,8 +42,12 @@ We particularly welcome contributions in the following areas:
    3.1. Setup locally
 
    ```bash
-   # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 20)
+   # Use the Node.js version specified in .nvmrc (node >= 20 required)
    nvm use
+
+   # Enable corepack for npm (corepack ships with Node.js)
+   corepack enable npm
+
    npm install
    ```
 
