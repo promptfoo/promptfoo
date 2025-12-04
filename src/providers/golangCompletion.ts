@@ -23,21 +23,6 @@ function getCurrentDir(): string {
   return currentDir;
 }
 
-/**
- * Get the directory containing Golang wrapper scripts.
- * Handles both development (src/providers/) and production (dist/src/) paths.
- * @internal Exported for testing only
- */
-export function getGolangWrapperDir(): string {
-  const dir = getCurrentDir();
-  // In development, we're in src/providers/ - go up to src/, then into golang/
-  // In production (bundled), we're in dist/src/ - directly append golang/
-  if (path.basename(dir) === 'providers') {
-    return path.join(path.dirname(dir), 'golang');
-  }
-  return path.join(dir, 'golang');
-}
-
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
@@ -162,8 +147,7 @@ export class GolangProvider implements ApiProvider {
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        const wrapperPath = path.join(getGolangWrapperDir(), 'wrapper.go');
-        fs.copyFileSync(wrapperPath, tempWrapperPath);
+        fs.copyFileSync(path.join(getCurrentDir(), '../golang/wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
