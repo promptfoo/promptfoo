@@ -23,13 +23,13 @@
 /src/models/     @mldangelo @will-holley @faizanminhas   # 2k lines - Data models
 /src/redteam/    @mldangelo @MrFlounder @will-holley     # 32k lines - Red team
 /src/commands/   @mldangelo @MrFlounder                  # 9k lines - CLI
-/src/types/      @mldangelo @daneschneider @faizanminhas # 2k lines - Type definitions
+/src/types/      @mldangelo @danenania @faizanminhas # 2k lines - Type definitions
 
 # ============================================================================
 # SOURCE - SPECIALIZED OWNERSHIP (clear primary owner)
 # ============================================================================
 
-/src/codeScan/   @daneschneider                          # 2.5k lines - Dane (91%)
+/src/codeScan/   @danenania                          # 2.5k lines - Dane (91%)
 /src/validators/ @faizanminhas @mldangelo                # 1.5k lines - Faizan (55%)
 
 # ============================================================================
@@ -45,7 +45,7 @@
 # TESTS (mirror source ownership)
 # ============================================================================
 
-/test/codeScans/   @daneschneider
+/test/codeScans/   @danenania
 /test/redteam/     @mldangelo @MrFlounder @will-holley
 /test/validators/  @faizanminhas @mldangelo
 /test/providers/   @MrFlounder @mldangelo                # Provider tests
@@ -78,7 +78,7 @@
 # DATABASE
 # ============================================================================
 
-/drizzle/ @mldangelo @faizanminhas                       # Database migrations
+/drizzle/ @mldangelo @will-holley @faizanminhas          # Database migrations (mirrors models)
 
 # ============================================================================
 # AI AGENT INSTRUCTIONS (override all other patterns)
