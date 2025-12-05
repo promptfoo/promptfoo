@@ -588,7 +588,7 @@ npx npm-check-updates --target latest
 
 - Use CommonJS modules (type: "commonjs" in package.json)
 - Node.js version requirement (>=20.0.0). Use `nvm use` to align with `.nvmrc` (currently v24.7.0).
-- npm version is pinned via `packageManager` in package.json. Run `corepack enable npm` once (corepack ships with Node.js) to auto-use the correct version.
+- npm version is constrained via `engines.npm` in package.json. The `.npmrc` sets `engine-strict=true` to enforce this. Alternative package managers (pnpm, yarn) are also supported.
 - Follow file structure: core logic in src/, tests in test/
 - Examples belong in examples/ with clear README.md
 - Document provider configurations following examples in existing code

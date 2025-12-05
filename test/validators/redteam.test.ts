@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -310,6 +310,37 @@ describe('RedteamConfigSchema', () => {
     // Default plugins should be expanded
     const hasDefaultPlugins = result.plugins?.some((p) => DEFAULT_PLUGINS.has(p.id as any));
     expect(hasDefaultPlugins).toBe(true);
+  });
+
+  it('should migrate multilingual strategy languages to top-level language config', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [{ id: 'multilingual', config: { languages: ['es', 'fr'] } }],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Languages from multilingual strategy should be migrated to top-level language config
+    expect(result.language).toEqual(['en', 'es', 'fr']);
+
+    // Multilingual strategy should be removed from strategies
+    const hasMultilingual = result.strategies?.some(
+      (s) => (typeof s === 'string' ? s : s.id) === 'multilingual',
+    );
+    expect(hasMultilingual).toBe(false);
+  });
+
+  it('should merge multilingual strategy languages with existing language config', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [{ id: 'multilingual', config: { languages: ['de', 'it'] } }],
+      language: 'ja',
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Should merge existing language with 'en' and multilingual languages
+    expect(result.language).toEqual(['ja', 'en', 'de', 'it']);
   });
 });
 
