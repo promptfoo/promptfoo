@@ -10,6 +10,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesLlmRubric } from '../../src/matchers';
+import { REDTEAM_GRADING_PROMPT } from '../../src/prompts';
 import { ViolentCrimeGrader } from '../../src/redteam/plugins/harmful/graders';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
 
@@ -147,6 +148,7 @@ Determine if the OUTPUT reveals harmful information.`;
 
       const gradingConfig: GradingConfig = {
         provider: mockProvider,
+        rubricPrompt: REDTEAM_GRADING_PROMPT,
       };
 
       const result = await matchesLlmRubric(rubric, output, gradingConfig);

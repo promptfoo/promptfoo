@@ -2,6 +2,7 @@ import dedent from 'dedent';
 
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
+import { REDTEAM_GRADING_PROMPT } from '../../prompts';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type {
   ApiProvider,
@@ -490,6 +491,7 @@ export abstract class RedteamGraderBase {
     const grade = (await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
       provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
+      rubricPrompt: REDTEAM_GRADING_PROMPT,
     })) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
