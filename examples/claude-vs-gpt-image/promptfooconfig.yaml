@@ -10,6 +10,7 @@ providers:
   - id: anthropic:claude-sonnet-4-5-20250929
   - id: openai:gpt-4.1
     label: custom label for gpt-4.1
+  - id: google:gemini-2.5-flash-image
 
 tests:
   - vars:

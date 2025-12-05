@@ -1323,6 +1323,14 @@ describe('isImageProvider helper function', () => {
     expect(isImageProvider('some-provider:image:model')).toBe(true);
   });
 
+  it('should return true for Gemini image providers', () => {
+    expect(isImageProvider('google:gemini-3-pro-image-preview')).toBe(true);
+  });
+
+  it('should return true for Gemini 2.5 Flash image provider', () => {
+    expect(isImageProvider('google:gemini-2.5-flash-image')).toBe(true);
+  });
+
   it('should return false for text completion providers', () => {
     expect(isImageProvider('openai:gpt-4')).toBe(false);
   });
