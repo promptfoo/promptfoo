@@ -1062,6 +1062,171 @@ describe('EvalOutputPromptDialog redteamHistory messages rendering', () => {
   });
 });
 
+describe('EvalOutputPromptDialog copy conversation', () => {
+  let user: ReturnType<typeof userEvent.setup>;
+  let mockWriteText: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    user = userEvent.setup();
+    mockWriteText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: mockWriteText },
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  it('should display copy conversation button on Messages tab', async () => {
+    const propsWithMessages = {
+      ...defaultProps,
+      metadata: {
+        messages: JSON.stringify([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi there!' },
+        ]),
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithMessages} />);
+
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Messages' }));
+    });
+
+    expect(screen.getByLabelText('Copy conversation')).toBeInTheDocument();
+  });
+
+  it('should copy parsed messages to clipboard in structured format', async () => {
+    const propsWithMessages = {
+      ...defaultProps,
+      metadata: {
+        messages: JSON.stringify([
+          { role: 'user', content: 'What is 2+2?' },
+          { role: 'assistant', content: 'The answer is 4.' },
+        ]),
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithMessages} />);
+
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Messages' }));
+    });
+
+    const copyButton = screen.getByLabelText('Copy conversation');
+    await act(async () => {
+      await user.click(copyButton);
+    });
+
+    expect(mockWriteText).toHaveBeenCalledWith(
+      '[User]\nWhat is 2+2?\n\n[Assistant]\nThe answer is 4.',
+    );
+  });
+
+  it('should copy redteamHistory messages to clipboard in structured format', async () => {
+    const propsWithRedteamHistory = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          { prompt: 'Attack prompt', output: 'Target response' },
+          { prompt: 'Follow-up attack', output: 'Another response' },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithRedteamHistory} />);
+
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Messages' }));
+    });
+
+    const copyButton = screen.getByLabelText('Copy conversation');
+    await act(async () => {
+      await user.click(copyButton);
+    });
+
+    expect(mockWriteText).toHaveBeenCalledWith(
+      '[User]\nAttack prompt\n\n[Assistant]\nTarget response\n\n[User]\nFollow-up attack\n\n[Assistant]\nAnother response',
+    );
+  });
+
+  it('should copy combined parsed messages and redteamHistory messages', async () => {
+    const propsWithBothMessages = {
+      ...defaultProps,
+      metadata: {
+        messages: JSON.stringify([{ role: 'system', content: 'System instruction' }]),
+        redteamHistory: [{ prompt: 'User message', output: 'Assistant reply' }],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithBothMessages} />);
+
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Messages' }));
+    });
+
+    const copyButton = screen.getByLabelText('Copy conversation');
+    await act(async () => {
+      await user.click(copyButton);
+    });
+
+    expect(mockWriteText).toHaveBeenCalledWith(
+      '[System]\nSystem instruction\n\n[User]\nUser message\n\n[Assistant]\nAssistant reply',
+    );
+  });
+
+  it('should show check icon after copying', async () => {
+    const propsWithMessages = {
+      ...defaultProps,
+      metadata: {
+        messages: JSON.stringify([{ role: 'user', content: 'Test message' }]),
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithMessages} />);
+
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Messages' }));
+    });
+
+    const copyButton = screen.getByLabelText('Copy conversation');
+    await act(async () => {
+      await user.click(copyButton);
+    });
+
+    // Check icon should appear after clicking
+    expect(screen.getByTestId('CheckIcon')).toBeInTheDocument();
+  });
+
+  it('should handle multiline message content correctly', async () => {
+    const propsWithMultilineMessages = {
+      ...defaultProps,
+      metadata: {
+        messages: JSON.stringify([
+          { role: 'user', content: 'Line 1\nLine 2\nLine 3' },
+          { role: 'assistant', content: 'Response line 1\nResponse line 2' },
+        ]),
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithMultilineMessages} />);
+
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Messages' }));
+    });
+
+    const copyButton = screen.getByLabelText('Copy conversation');
+    await act(async () => {
+      await user.click(copyButton);
+    });
+
+    expect(mockWriteText).toHaveBeenCalledWith(
+      '[User]\nLine 1\nLine 2\nLine 3\n\n[Assistant]\nResponse line 1\nResponse line 2',
+    );
+  });
+});
+
 describe('EvalOutputPromptDialog traces tab visibility', () => {
   beforeEach(() => {
     vi.clearAllMocks();
