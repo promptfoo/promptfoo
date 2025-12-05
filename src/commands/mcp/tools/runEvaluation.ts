@@ -240,6 +240,40 @@ export function registerRunEvaluationTool(server: McpServer) {
             filteredTestSuite.prompts = filteredPrompts;
           }
 
+          // Filter providers if specified
+          if (providerFilter !== undefined) {
+            const filters = Array.isArray(providerFilter) ? providerFilter : [providerFilter];
+            // Build regex pattern from filters (same approach as doEval's filterProviders)
+            const filterPattern = new RegExp(filters.join('|'), 'i');
+
+            const providers = filteredTestSuite.providers || [];
+            if (providers.length === 0) {
+              return createToolResponse(
+                'run_evaluation',
+                false,
+                undefined,
+                'No providers defined in configuration. Add providers to filter.',
+              );
+            }
+
+            const filteredProviders = providers.filter((provider) => {
+              const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
+              const label = provider.label || providerId || '';
+              return filterPattern.test(label) || filterPattern.test(providerId || '');
+            });
+
+            if (filteredProviders.length === 0) {
+              return createToolResponse(
+                'run_evaluation',
+                false,
+                undefined,
+                `No providers matched filter: ${filters.join(', ')}. Available providers: ${providers.map((p) => (typeof p.id === 'function' ? p.id() : p.id)).join(', ')}`,
+              );
+            }
+
+            filteredTestSuite.providers = filteredProviders;
+          }
+
           // Use the evaluate function directly instead of doEval for filtered cases
           const { evaluate } = await import('../../../evaluator');
           const Eval = (await import('../../../models/eval')).default;
