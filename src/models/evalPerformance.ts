@@ -36,9 +36,9 @@ export async function getCachedResultsCount(evalId: string): Promise<number> {
   const db = getDb();
   const start = Date.now();
 
-  // Use COUNT(*) with the composite index on (eval_id, test_idx)
+  // Count all result rows (not distinct test indices) since we iterate over all results when sharing
   const result = db
-    .select({ count: sql<number>`COUNT(DISTINCT test_idx)` })
+    .select({ count: sql<number>`COUNT(*)` })
     .from(evalResultsTable)
     .where(sql`eval_id = ${evalId}`)
     .all();
