@@ -45,6 +45,7 @@ import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
+import { GeminiImageProvider } from './google/gemini-image';
 import { GoogleImageProvider } from './google/image';
 import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
@@ -1110,13 +1111,20 @@ export const providerMap: ProviderFactory[] = [
           // This is a Live API request
           return new GoogleLiveProvider(modelName, providerOptions);
         } else if (serviceType === 'image') {
-          // This is an Image Generation request
+          // This is an Imagen image generation request
           return new GoogleImageProvider(modelName, providerOptions);
         }
       }
 
       // Default to regular Google API
       const modelName = splits[1];
+
+      // Check if this is a Gemini native image generation model
+      // These models have 'image' in their name (e.g., gemini-2.5-flash-image, gemini-3-pro-image-preview)
+      if (modelName.includes('-image')) {
+        return new GeminiImageProvider(modelName, providerOptions);
+      }
+
       return new AIStudioChatProvider(modelName, providerOptions);
     },
   },
