@@ -61,6 +61,19 @@ describe('migrate', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith('Database migrations completed');
     });
 
+    it('should run migrations from bundled dist/src directory', async () => {
+      const bundledDir = '/project/dist/src/server';
+      mockGetDirectory.mockReturnValue(bundledDir);
+
+      const { runDbMigrations } = await import('../src/migrate');
+      await runDbMigrations();
+
+      expect(mockMigrate).toHaveBeenCalledTimes(1);
+      expect(mockMigrate).toHaveBeenCalledWith(mockDb, {
+        migrationsFolder: path.join('/project/', 'drizzle'),
+      });
+    });
+
     it('should run migrations from bundled server directory (dist/server/src)', async () => {
       const bundledDir = '/project/dist/server/src/some/path';
       mockGetDirectory.mockReturnValue(bundledDir);
