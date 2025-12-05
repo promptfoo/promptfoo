@@ -82,7 +82,6 @@ describe('index.ts exports', () => {
     'isProviderOptions',
     'isResultFailureReason',
     'loadApiProvider',
-    'REDTEAM_GRADING_PROMPT',
     'redteam',
   ];
 

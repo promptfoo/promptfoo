@@ -24,7 +24,6 @@ import type { ApiProvider } from './types/providers';
 import { isApiProvider } from './types/providers';
 
 export { generateTable } from './table';
-export { REDTEAM_GRADING_PROMPT } from './prompts/grading';
 export * from './types/index';
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
