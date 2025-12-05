@@ -2,9 +2,9 @@ import { execFile } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import util from 'util';
 import { getCache, isCacheEnabled } from '../cache';
+import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { parsePathOrGlob } from '../util/index';
@@ -18,9 +18,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const execFileAsync = util.promisify(execFile);
 
@@ -131,7 +128,7 @@ export class GolangProvider implements ApiProvider {
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
+        fs.copyFileSync(path.join(getWrapperDir('golang'), 'wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
