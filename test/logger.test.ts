@@ -743,6 +743,7 @@ describe('logger', () => {
 
     beforeEach(() => {
       originalTransports = [...mockLogger.transports];
+      mockLogger.remove.mockClear();
     });
 
     afterEach(() => {
@@ -751,50 +752,100 @@ describe('logger', () => {
       mockLogger.transports.push(...originalTransports);
     });
 
-    it('should close all file transports', async () => {
-      // Create mock file transports with close methods
-      const mockFileTransport1 = {
+    // Helper to create mock file transport with event emitter behavior
+    // Uses 'flush' event which is more reliable than 'finish' for winston File transport
+    // See: https://github.com/winstonjs/winston/issues/1504
+    function createMockFileTransport(filename: string, options: { emitFlush?: boolean } = {}) {
+      const { emitFlush = true } = options;
+      const eventHandlers: Record<string, Function[]> = {};
+      const mockTransport = {
+        end: vi.fn().mockImplementation(() => {
+          // Simulate async flush event after end is called
+          if (emitFlush) {
+            setTimeout(() => {
+              eventHandlers['flush']?.forEach((handler) => handler());
+            }, 0);
+          }
+        }),
         close: vi.fn(),
-        filename: '/mock/path/debug.log',
+        once: vi.fn().mockImplementation((event: string, handler: Function) => {
+          if (!eventHandlers[event]) {
+            eventHandlers[event] = [];
+          }
+          eventHandlers[event].push(handler);
+        }),
+        filename,
       };
-      const mockFileTransport2 = {
-        close: vi.fn(),
-        filename: '/mock/path/error.log',
-      };
+      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
+      return mockTransport;
+    }
 
-      // Make transports appear as File instances
-      Object.setPrototypeOf(mockFileTransport1, winstonMock.transports.File.prototype);
-      Object.setPrototypeOf(mockFileTransport2, winstonMock.transports.File.prototype);
+    it('should end all file transports and wait for flush', async () => {
+      const mockFileTransport1 = createMockFileTransport('/mock/path/debug.log');
+      const mockFileTransport2 = createMockFileTransport('/mock/path/error.log');
 
-      // Set up transports array with file transports
       mockLogger.transports.length = 0;
       mockLogger.transports.push(mockFileTransport1 as any, mockFileTransport2 as any);
 
-      logger.closeLogger();
+      await logger.closeLogger();
 
-      expect(mockFileTransport1.close).toHaveBeenCalled();
-      expect(mockFileTransport2.close).toHaveBeenCalled();
+      expect(mockFileTransport1.end).toHaveBeenCalled();
+      expect(mockFileTransport2.end).toHaveBeenCalled();
       expect(mockLogger.remove).toHaveBeenCalledTimes(2);
+      // Verify remove is called before end (to prevent new writes)
+      expect(mockLogger.remove).toHaveBeenNthCalledWith(1, mockFileTransport1);
+      expect(mockLogger.remove).toHaveBeenNthCalledWith(2, mockFileTransport2);
     });
 
-    it('should handle transports without close method', async () => {
-      const mockTransportWithoutClose = {
+    it('should fall back to close() if end() is not available', async () => {
+      const eventHandlers: Record<string, Function[]> = {};
+      const mockTransportWithoutEnd = {
+        close: vi.fn().mockImplementation(() => {
+          setTimeout(() => {
+            eventHandlers['flush']?.forEach((handler) => handler());
+          }, 0);
+        }),
+        once: vi.fn().mockImplementation((event: string, handler: Function) => {
+          if (!eventHandlers[event]) {
+            eventHandlers[event] = [];
+          }
+          eventHandlers[event].push(handler);
+        }),
         filename: '/mock/path/test.log',
-        // No close method
+        // No end method
       };
 
-      Object.setPrototypeOf(mockTransportWithoutClose, winstonMock.transports.File.prototype);
+      Object.setPrototypeOf(mockTransportWithoutEnd, winstonMock.transports.File.prototype);
 
       mockLogger.transports.length = 0;
-      mockLogger.transports.push(mockTransportWithoutClose as any);
+      mockLogger.transports.push(mockTransportWithoutEnd as any);
+
+      await logger.closeLogger();
+
+      expect(mockTransportWithoutEnd.close).toHaveBeenCalled();
+      expect(mockLogger.remove).toHaveBeenCalledWith(mockTransportWithoutEnd);
+    });
+
+    it('should handle transports without end or close method', async () => {
+      const mockTransportWithoutMethods = {
+        filename: '/mock/path/test.log',
+        once: vi.fn(),
+        // No end or close method
+      };
+
+      Object.setPrototypeOf(mockTransportWithoutMethods, winstonMock.transports.File.prototype);
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockTransportWithoutMethods as any);
 
       // Should not throw
-      expect(() => logger.closeLogger()).not.toThrow();
-      expect(mockLogger.remove).toHaveBeenCalledWith(mockTransportWithoutClose);
+      await expect(logger.closeLogger()).resolves.toBeUndefined();
+      expect(mockLogger.remove).toHaveBeenCalledWith(mockTransportWithoutMethods);
     });
 
     it('should skip non-file transports', async () => {
       const mockConsoleTransport = {
+        end: vi.fn(),
         close: vi.fn(),
       };
       // Don't set File prototype - this is a console transport
@@ -802,39 +853,46 @@ describe('logger', () => {
       mockLogger.transports.length = 0;
       mockLogger.transports.push(mockConsoleTransport as any);
 
-      logger.closeLogger();
+      await logger.closeLogger();
 
       // Console transport should not be closed
+      expect(mockConsoleTransport.end).not.toHaveBeenCalled();
       expect(mockConsoleTransport.close).not.toHaveBeenCalled();
       expect(mockLogger.remove).not.toHaveBeenCalled();
     });
 
-    it('should handle errors gracefully', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      const mockFailingTransport = {
-        close: vi.fn().mockImplementation(() => {
-          throw new Error('Close failed');
+    it('should handle error event on transport end', async () => {
+      const eventHandlers: Record<string, Function[]> = {};
+      const mockTransportWithError = {
+        end: vi.fn().mockImplementation(() => {
+          // Emit error event instead of flush
+          setTimeout(() => {
+            eventHandlers['error']?.forEach((handler) => handler(new Error('Write failed')));
+          }, 0);
         }),
-        filename: '/mock/path/fail.log',
+        once: vi.fn().mockImplementation((event: string, handler: Function) => {
+          if (!eventHandlers[event]) {
+            eventHandlers[event] = [];
+          }
+          eventHandlers[event].push(handler);
+        }),
+        filename: '/mock/path/error.log',
       };
 
-      Object.setPrototypeOf(mockFailingTransport, winstonMock.transports.File.prototype);
+      Object.setPrototypeOf(mockTransportWithError, winstonMock.transports.File.prototype);
 
       mockLogger.transports.length = 0;
-      mockLogger.transports.push(mockFailingTransport as any);
+      mockLogger.transports.push(mockTransportWithError as any);
 
-      // Should not throw even when close fails
-      expect(() => logger.closeLogger()).not.toThrow();
-
-      consoleErrorSpy.mockRestore();
+      // Should resolve without throwing even when error event fires
+      await expect(logger.closeLogger()).resolves.toBeUndefined();
     });
 
     it('should handle empty transports array', async () => {
       mockLogger.transports.length = 0;
 
       // Should not throw
-      expect(() => logger.closeLogger()).not.toThrow();
+      await expect(logger.closeLogger()).resolves.toBeUndefined();
       expect(mockLogger.remove).not.toHaveBeenCalled();
     });
   });

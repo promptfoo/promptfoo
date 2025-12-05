@@ -203,7 +203,7 @@ const shutdownGracefully = async () => {
   }
 
   logger.debug('Shutdown complete');
-  closeLogger();
+  await closeLogger();
 
   // Give Node.js time to naturally exit if all handles are closed
   // If there are lingering handles (file watchers, connections, etc), force exit
