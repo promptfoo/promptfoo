@@ -3,10 +3,7 @@ import fs from 'fs';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
-import {
-  asMockChildProcess,
-  createMockChildProcess,
-} from '../../util/mockChildProcess';
+import { asMockChildProcess, createMockChildProcess } from '../../util/mockChildProcess';
 
 // Mock dependencies
 vi.mock('child_process');
