@@ -461,7 +461,6 @@ export async function logRequestResponse(options: {
 export async function closeLogger(): Promise<void> {
   // Set shutdown flag FIRST to prevent new writes during cleanup
   setLoggerShuttingDown(true);
-
   try {
     const fileTransports = winstonLogger.transports.filter(
       (transport) => transport instanceof winston.transports.File,

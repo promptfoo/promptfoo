@@ -7,6 +7,76 @@ import { createRequire } from 'node:module';
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
 
+/**
+ * Supported wrapper script types for language-specific providers.
+ */
+export type WrapperType = 'python' | 'ruby' | 'golang';
+
+/**
+ * Mapping of wrapper types to their subdirectory names.
+ * These correspond to the directory structure under src/ and dist/src/.
+ */
+const WRAPPER_SUBDIRS: Record<WrapperType, string> = {
+  python: 'python',
+  ruby: 'ruby',
+  golang: 'golang',
+};
+
+/**
+ * Cache for wrapper directory paths to avoid repeated path construction.
+ */
+const wrapperDirCache: Partial<Record<WrapperType, string>> = {};
+
+/**
+ * Returns the directory containing wrapper scripts for the specified language.
+ *
+ * This function provides a consistent way to locate wrapper scripts (wrapper.py,
+ * wrapper.rb, wrapper.go, etc.) that works correctly in both development and
+ * production (bundled) environments.
+ *
+ * Directory resolution:
+ * - Development (tsx): src/{python|ruby|golang}/
+ * - Production (bundled): dist/src/{python|ruby|golang}/
+ *
+ * Results are cached for performance.
+ *
+ * @param type - The wrapper type ('python', 'ruby', or 'golang')
+ * @returns The absolute path to the wrapper directory
+ *
+ * @example
+ * ```typescript
+ * // Get Python wrapper path
+ * const pythonDir = getWrapperDir('python');
+ * const wrapperPath = path.join(pythonDir, 'wrapper.py');
+ *
+ * // Get Ruby wrapper path
+ * const rubyDir = getWrapperDir('ruby');
+ * const wrapperPath = path.join(rubyDir, 'wrapper.rb');
+ * ```
+ */
+export function getWrapperDir(type: WrapperType): string {
+  if (wrapperDirCache[type]) {
+    return wrapperDirCache[type]!;
+  }
+
+  const baseDir = getDirectory();
+  const result = path.join(baseDir, WRAPPER_SUBDIRS[type]);
+  wrapperDirCache[type] = result;
+
+  logger.debug(`Resolved ${type} wrapper directory: ${result}`);
+  return result;
+}
+
+/**
+ * Clears the wrapper directory cache.
+ * Primarily useful for testing to ensure fresh path resolution.
+ */
+export function clearWrapperDirCache(): void {
+  for (const key of Object.keys(wrapperDirCache) as WrapperType[]) {
+    delete wrapperDirCache[key];
+  }
+}
+
 // Global variable defined by tsup at build time
 // undefined in development (tsx) and Jest tests
 declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
