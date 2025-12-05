@@ -552,13 +552,9 @@ async function processScanResultsFromFile(
   };
 
   // Handle non-zero exit codes (0 and 1 are both valid - 1 means issues found)
+  // Note: stderr already displayed to user via inherited stdio, no need to log
   if (spawnResult.code !== null && spawnResult.code !== 0 && spawnResult.code !== 1) {
     logger.error(`Model scan process exited with code ${spawnResult.code}`);
-    // Note: stderr is typically empty here since we use inherited stdio,
-    // but log it if captured for consistency with stdout workflow
-    if (spawnResult.stderr) {
-      logger.error(spawnResult.stderr);
-    }
     await cleanupTempFile();
     return spawnResult.code;
   }
