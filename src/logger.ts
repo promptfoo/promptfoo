@@ -433,28 +433,50 @@ export async function logRequestResponse(options: {
 /**
  * Close all file transports and cleanup logger resources
  * Should be called during graceful shutdown to prevent event loop hanging
+ * Waits for all pending writes to flush before closing streams
  */
-export function closeLogger(): void {
+export async function closeLogger(): Promise<void> {
   try {
     // Close all file transports
     const fileTransports = winstonLogger.transports.filter(
       (transport) => transport instanceof winston.transports.File,
     );
 
+    if (fileTransports.length === 0) {
+      return;
+    }
+
+    // Remove transports first to stop queuing new writes
     for (const transport of fileTransports) {
-      const filename = (transport as any).filename;
-      if (filename) {
-        logger.debug(`Closing log file: ${filename}`);
-      }
-      if (typeof transport.close === 'function') {
-        transport.close();
-      }
       winstonLogger.remove(transport);
     }
 
-    if (fileTransports.length > 0) {
-      logger.debug('Logger cleanup complete');
-    }
+    // Close each transport and wait for pending writes to flush
+    const closePromises = fileTransports.map((transport) => {
+      return new Promise<void>((resolve) => {
+        const timeoutId = setTimeout(() => {
+          // Timeout after 2 seconds to prevent hanging
+          resolve();
+        }, 2000);
+
+        if (typeof transport.close === 'function') {
+          transport.once('finish', () => {
+            clearTimeout(timeoutId);
+            resolve();
+          });
+          transport.once('error', () => {
+            clearTimeout(timeoutId);
+            resolve(); // Don't throw on close errors
+          });
+          transport.close();
+        } else {
+          clearTimeout(timeoutId);
+          resolve();
+        }
+      });
+    });
+
+    await Promise.all(closePromises);
   } catch (error) {
     // Can't use logger here since we're shutting it down
     console.error(`Error closing logger: ${error}`);
