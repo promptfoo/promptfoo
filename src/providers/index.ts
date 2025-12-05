@@ -150,6 +150,7 @@ export async function loadApiProvider(
 interface LoadApiProviderOptions {
   options?: ProviderOptions;
   env?: any;
+  basePath?: string;
 }
 
 /**
