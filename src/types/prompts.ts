@@ -10,6 +10,8 @@ export type PromptContent = string | any;
 export interface PromptConfig {
   prefix?: string;
   suffix?: string;
+  // Allow provider-specific fields (e.g., response_format, responseSchema)
+  [key: string]: unknown;
 }
 
 export interface PromptFunctionContext {
