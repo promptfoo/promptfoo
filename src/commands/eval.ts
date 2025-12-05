@@ -432,7 +432,9 @@ export async function doEval(
       }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
-      testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
+      testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
+        basePath: cliState.basePath,
+      });
     }
     if (!resumeEval && cmdObj.var) {
       if (typeof testSuite.defaultTest === 'string') {

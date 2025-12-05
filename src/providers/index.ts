@@ -159,7 +159,7 @@ interface LoadApiProviderOptions {
 export async function resolveProvider(
   provider: any,
   providerMap: Record<string, ApiProvider>,
-  context: { env?: any } = {},
+  context: { env?: any; basePath?: string } = {},
 ): Promise<ApiProvider> {
   // Guard clause for null or undefined provider values
   if (provider == null) {
@@ -171,15 +171,23 @@ export async function resolveProvider(
     if (providerMap[provider]) {
       return providerMap[provider];
     }
-    return context.env
-      ? await loadApiProvider(provider, { env: context.env })
-      : await loadApiProvider(provider);
+    const loadOptions: LoadApiProviderOptions = {};
+    if (context.env) {
+      loadOptions.env = context.env;
+    }
+    if (context.basePath) {
+      loadOptions.basePath = context.basePath;
+    }
+    return await loadApiProvider(provider, loadOptions);
   } else if (typeof provider === 'object') {
     const casted = provider as ProviderOptions;
     invariant(casted.id, 'Provider object must have an id');
     const loadOptions: LoadApiProviderOptions = { options: casted };
     if (context.env) {
       loadOptions.env = context.env;
+    }
+    if (context.basePath) {
+      loadOptions.basePath = context.basePath;
     }
     return await loadApiProvider(casted.id, loadOptions);
   } else if (typeof provider === 'function') {
