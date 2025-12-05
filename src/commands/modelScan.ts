@@ -516,8 +516,12 @@ async function processJsonResults(
 
   // Save to user-specified output file if requested
   if (options.output) {
-    fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
-    logger.info(`Results also saved to ${options.output}`);
+    try {
+      fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
+      logger.info(`Results also saved to ${options.output}`);
+    } catch (error) {
+      logger.error(`Failed to save results to ${options.output}: ${error}`);
+    }
   }
 
   return exitCode;
@@ -745,38 +749,49 @@ export function modelScanCommand(program: Command): void {
             const tempOutputPath = createTempOutputPath();
             args.push('--output', tempOutputPath);
 
-            // Register cleanup handler for process termination
+            // Flag to prevent double cleanup (exit event fires on normal exit too)
+            let cleanedUp = false;
             const cleanupOnExit = () => {
+              if (cleanedUp) {
+                return;
+              }
+              cleanedUp = true;
               try {
                 fs.unlinkSync(tempOutputPath);
               } catch {
-                // Ignore - file may already be cleaned up
+                // Ignore - file may already be cleaned up or doesn't exist
               }
             };
-            process.once('exit', cleanupOnExit);
+
+            // Register cleanup handlers for abnormal termination
+            // Note: These handlers ensure cleanup on SIGINT/SIGTERM during scan
+            process.on('exit', cleanupOnExit);
             process.once('SIGINT', cleanupOnExit);
             process.once('SIGTERM', cleanupOnExit);
 
-            // Use inherited stdio so CLI UI displays (spinners, progress, colors)
-            const spawnResult = await spawnModelAudit(args, {
-              captureOutput: false,
-              env: delegationEnv,
-            });
+            try {
+              // Use inherited stdio so CLI UI displays (spinners, progress, colors)
+              const spawnResult = await spawnModelAudit(args, {
+                captureOutput: false,
+                env: delegationEnv,
+              });
 
-            // Remove exit handlers since we'll clean up normally
-            process.removeListener('exit', cleanupOnExit);
-            process.removeListener('SIGINT', cleanupOnExit);
-            process.removeListener('SIGTERM', cleanupOnExit);
-
-            // Read JSON from temp file and process results
-            process.exitCode = await processScanResultsFromFile(
-              spawnResult,
-              tempOutputPath,
-              paths,
-              options,
-              currentScannerVersion,
-              existingAuditToUpdate,
-            );
+              // Read JSON from temp file and process results
+              process.exitCode = await processScanResultsFromFile(
+                spawnResult,
+                tempOutputPath,
+                paths,
+                options,
+                currentScannerVersion,
+                existingAuditToUpdate,
+              );
+            } finally {
+              // Remove handlers and ensure cleanup on normal completion
+              process.removeListener('exit', cleanupOnExit);
+              process.removeListener('SIGINT', cleanupOnExit);
+              process.removeListener('SIGTERM', cleanupOnExit);
+              cleanupOnExit();
+            }
           } else {
             // Fallback for older modelaudit versions: capture stdout for JSON
             logger.debug('Using stdout capture (modelaudit < 0.2.20)');
