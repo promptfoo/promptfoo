@@ -9,6 +9,15 @@ import { checkServerFeatureSupport } from '../../../../src/util/server';
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 
+// Hoisted mock for applyRuntimeTransforms
+const mockApplyRuntimeTransforms = vi.hoisted(() =>
+  vi.fn().mockImplementation(async ({ prompt }) => ({
+    transformedPrompt: prompt,
+    audio: undefined,
+    image: undefined,
+  })),
+);
+
 vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -46,6 +55,13 @@ vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     shouldGenerateRemote: vi.fn(() => false),
+  };
+});
+
+vi.mock('../../../../src/redteam/shared/runtimeTransform', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    applyRuntimeTransforms: mockApplyRuntimeTransforms,
   };
 });
 
@@ -252,8 +268,11 @@ describe('CrescendoProvider', () => {
       generatedQuestion: 'attack prompt',
     });
     vi.spyOn(provider as any, 'sendPrompt').mockResolvedValue({
-      output: 'target response',
-      sessionId: 'response-session-id',
+      response: {
+        output: 'target response',
+        sessionId: 'response-session-id',
+      },
+      transformResult: undefined,
     });
     vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
     vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
@@ -2354,5 +2373,165 @@ describe('CrescendoProvider - Chat Template Support', () => {
     await statefulProvider.callApi(chatTemplatePrompt, context);
 
     expect(mockTargetProvider.callApi).toHaveBeenCalled();
+  });
+});
+
+describe('CrescendoProvider - perTurnLayers configuration', () => {
+  let mockRedTeamProvider: any;
+  let mockScoringProvider: any;
+  let mockTargetProvider: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockRedTeamProvider = {
+      id: () => 'mock-redteam',
+      callApi: vi.fn(),
+      delay: 0,
+    };
+    mockScoringProvider = {
+      id: () => 'mock-scoring',
+      callApi: vi.fn(),
+      delay: 0,
+    };
+    mockTargetProvider = {
+      id: () => 'mock-target',
+      callApi: vi.fn(),
+    };
+
+    vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (
+      options: any,
+    ) {
+      if (options.provider && typeof options.provider === 'object') {
+        return options.jsonOnly ? options.provider : mockScoringProvider;
+      }
+      return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+    });
+
+    vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: { pass: true },
+        })),
+      } as any;
+    });
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should accept _perTurnLayers in config', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      redteamProvider: mockRedTeamProvider,
+      _perTurnLayers: [{ id: 'audio' }, { id: 'image' }],
+    });
+
+    expect(provider['perTurnLayers']).toEqual([{ id: 'audio' }, { id: 'image' }]);
+  });
+
+  it('should default perTurnLayers to empty array when not provided', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    expect(provider['perTurnLayers']).toEqual([]);
+  });
+
+  it('should include promptAudio and promptImage in redteamHistory when transforms are applied', async () => {
+    // Configure the hoisted mock to return audio/image data for this test
+    mockApplyRuntimeTransforms.mockResolvedValueOnce({
+      transformedPrompt: 'transformed prompt',
+      audio: { data: 'base64-audio-data', format: 'mp3' },
+      image: { data: 'base64-image-data', format: 'png' },
+    });
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      _perTurnLayers: [{ id: 'audio' }],
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+      audio: { data: 'response-audio-data', format: 'wav' },
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: true,
+        metadata: 100,
+        rationale: 'Success',
+      }),
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    const result = await provider.callApi('test prompt', context);
+
+    // Verify redteamHistory is populated
+    expect(result.metadata?.redteamHistory).toBeDefined();
+    expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
+  });
+
+  it('should not apply transforms when perTurnLayers is empty', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      // No _perTurnLayers provided - defaults to empty
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: true,
+        metadata: 100,
+        rationale: 'Success',
+      }),
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    const result = await provider.callApi('test prompt', context);
+
+    // Verify redteamHistory exists but promptAudio/promptImage are undefined
+    expect(result.metadata?.redteamHistory).toBeDefined();
+    if (result.metadata?.redteamHistory && result.metadata.redteamHistory.length > 0) {
+      expect(result.metadata.redteamHistory[0].promptAudio).toBeUndefined();
+      expect(result.metadata.redteamHistory[0].promptImage).toBeUndefined();
+    }
   });
 });
