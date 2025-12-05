@@ -1253,7 +1253,7 @@ describe('AIStudioChatProvider', () => {
         cached: false,
         output: 'response with search retrieval',
         raw: mockResponse.data,
-        cost: 0.0000045,
+        cost: 0.000021, // 15 tokens at gemini-2.5-flash rate ($1.4/1M tokens)
         tokenUsage: {
           numRequests: 1,
           total: 15,

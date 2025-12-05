@@ -85,9 +85,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 
   // Initialize truncation state based on whether text actually exceeds maxLength
   // But don't truncate if it contains a base64 image
-  const [isTruncated, setIsTruncated] = React.useState(
-    () => isOverLength && !containsBase64Image,
-  );
+  const [isTruncated, setIsTruncated] = React.useState(() => isOverLength && !containsBase64Image);
 
   // Reset truncation state when content or length threshold changes
   React.useEffect(() => {
