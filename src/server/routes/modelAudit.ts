@@ -391,18 +391,43 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
   }
 });
 
-// Get all model scans
+// Get all model scans with pagination support
 modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
   try {
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
-    const audits = await ModelAudit.getMany(limit);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 100), 100);
+    const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
+    const sort = (req.query.sort as string) || 'createdAt';
+    const order = (req.query.order as string) || 'desc';
+    const search = req.query.search as string | undefined;
+
+    const audits = await ModelAudit.getMany(limit, offset, sort, order, search);
+    const total = await ModelAudit.count(search);
 
     res.json({
       scans: audits.map((audit) => audit.toJSON()),
-      total: audits.length,
+      total,
+      limit,
+      offset,
     });
   } catch (error) {
     logger.error(`Error fetching model audits: ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get the latest/most recent model scan
+modelAuditRouter.get('/scans/latest', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const audits = await ModelAudit.getMany(1, 0, 'createdAt', 'desc');
+
+    if (audits.length === 0) {
+      res.status(404).json({ error: 'No scans found' });
+      return;
+    }
+
+    res.json(audits[0].toJSON());
+  } catch (error) {
+    logger.error(`Error fetching latest model audit: ${error}`);
     res.status(500).json({ error: String(error) });
   }
 });
