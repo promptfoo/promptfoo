@@ -1,5 +1,8 @@
 import type { ChildProcess } from 'child_process';
 import { spawn } from 'child_process';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 import chalk from 'chalk';
 import { z } from 'zod';
@@ -57,6 +60,16 @@ interface ScanOptions {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/**
+ * Create a unique temp file path for JSON output.
+ */
+function createTempOutputPath(): string {
+  const tempDir = os.tmpdir();
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 8);
+  return path.join(tempDir, `promptfoo-modelscan-${timestamp}-${random}.json`);
+}
 
 /**
  * Check if modelaudit is installed and get its version.
@@ -440,26 +453,46 @@ async function saveAuditRecord(
 }
 
 /**
- * Process scan results: parse JSON, save to database, display summary.
+ * Process scan results from a JSON file (used when CLI UI is displayed).
+ * Reads JSON from temp file, processes results, and cleans up the temp file.
  */
-async function processScanResults(
+async function processScanResultsFromFile(
   spawnResult: SpawnResult,
+  jsonFilePath: string,
   paths: string[],
   options: ScanOptions,
   currentScannerVersion: string | null,
   existingAudit: ModelAudit | null,
 ): Promise<number> {
+  // Helper to clean up temp file
+  const cleanupTempFile = () => {
+    try {
+      fs.unlinkSync(jsonFilePath);
+    } catch {
+      // Ignore cleanup errors (file may not exist)
+    }
+  };
+
   // Handle non-zero exit codes (0 and 1 are both valid - 1 means issues found)
   if (spawnResult.code !== null && spawnResult.code !== 0 && spawnResult.code !== 1) {
     logger.error(`Model scan process exited with code ${spawnResult.code}`);
-    if (spawnResult.stderr) {
-      logger.error(`Error output: ${spawnResult.stderr}`);
-    }
+    cleanupTempFile();
     return spawnResult.code;
   }
 
-  // Parse JSON output
-  const jsonOutput = spawnResult.stdout.trim();
+  // Read JSON from temp file
+  let jsonOutput: string;
+  try {
+    jsonOutput = fs.readFileSync(jsonFilePath, 'utf-8').trim();
+  } catch (error) {
+    logger.error(`Failed to read scan results from file: ${error}`);
+    cleanupTempFile();
+    return 1;
+  }
+
+  // Clean up temp file after successful read
+  cleanupTempFile();
+
   if (!jsonOutput) {
     logger.error('No output received from model scan');
     return 1;
@@ -471,7 +504,7 @@ async function processScanResults(
   } catch (error) {
     logger.error(`Failed to parse scan results: ${error}`);
     if (options.verbose) {
-      logger.error(`Raw output: ${spawnResult.stdout}`);
+      logger.error(`Raw output: ${jsonOutput.substring(0, 500)}`);
     }
     return 1;
   }
@@ -487,14 +520,13 @@ async function processScanResults(
     revisionInfo,
   );
 
-  // Display summary (unless JSON format requested)
+  // Display summary (unless JSON format requested by user)
   if (options.format !== 'json') {
     displayScanSummary(results, audit.id, currentScannerVersion, existingAudit !== null);
   }
 
-  // Save to file if requested
+  // Save to user-specified output file if requested
   if (options.output) {
-    const fs = await import('fs');
     fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
     logger.info(`Results also saved to ${options.output}`);
   }
@@ -627,25 +659,21 @@ export function modelScanCommand(program: Command): void {
 
       try {
         if (saveToDatabase) {
-          // Capture output for database storage
+          // Use temp file for JSON output so CLI UI can display
+          // (modelaudit 0.2.20+ shows CLI UI when --output is used)
+          const tempOutputPath = createTempOutputPath();
+          args.push('--output', tempOutputPath);
+
+          // Use inherited stdio so CLI UI displays (spinners, progress, colors)
           const spawnResult = await spawnModelAudit(args, {
-            captureOutput: true,
+            captureOutput: false,
             env: delegationEnv,
-            onStdout: (data) => {
-              // Show raw JSON if user explicitly requested it
-              if (options.format === 'json' && !options.output) {
-                process.stdout.write(data);
-              }
-            },
-            onStderr: (data) => {
-              if (options.verbose) {
-                process.stderr.write(data);
-              }
-            },
           });
 
-          process.exitCode = await processScanResults(
+          // Read JSON from temp file and process results
+          process.exitCode = await processScanResultsFromFile(
             spawnResult,
+            tempOutputPath,
             paths,
             options,
             currentScannerVersion,
