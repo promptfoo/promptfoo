@@ -743,6 +743,7 @@ describe('logger', () => {
 
     beforeEach(() => {
       originalTransports = [...mockLogger.transports];
+      mockLogger.remove.mockClear();
     });
 
     afterEach(() => {
@@ -751,35 +752,52 @@ describe('logger', () => {
       mockLogger.transports.push(...originalTransports);
     });
 
-    it('should close all file transports', async () => {
-      // Create mock file transports with close methods
-      const mockFileTransport1 = {
-        close: vi.fn(),
-        filename: '/mock/path/debug.log',
+    // Helper to create mock file transport with event emitter behavior
+    function createMockFileTransport(filename: string, options: { emitFinish?: boolean } = {}) {
+      const { emitFinish = true } = options;
+      const eventHandlers: Record<string, Function[]> = {};
+      const mockTransport = {
+        close: vi.fn().mockImplementation(() => {
+          // Simulate async finish event after close is called
+          if (emitFinish) {
+            setTimeout(() => {
+              eventHandlers['finish']?.forEach((handler) => handler());
+            }, 0);
+          }
+        }),
+        once: vi.fn().mockImplementation((event: string, handler: Function) => {
+          if (!eventHandlers[event]) {
+            eventHandlers[event] = [];
+          }
+          eventHandlers[event].push(handler);
+        }),
+        filename,
       };
-      const mockFileTransport2 = {
-        close: vi.fn(),
-        filename: '/mock/path/error.log',
-      };
+      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
+      return mockTransport;
+    }
 
-      // Make transports appear as File instances
-      Object.setPrototypeOf(mockFileTransport1, winstonMock.transports.File.prototype);
-      Object.setPrototypeOf(mockFileTransport2, winstonMock.transports.File.prototype);
+    it('should close all file transports and wait for finish', async () => {
+      const mockFileTransport1 = createMockFileTransport('/mock/path/debug.log');
+      const mockFileTransport2 = createMockFileTransport('/mock/path/error.log');
 
-      // Set up transports array with file transports
       mockLogger.transports.length = 0;
       mockLogger.transports.push(mockFileTransport1 as any, mockFileTransport2 as any);
 
-      logger.closeLogger();
+      await logger.closeLogger();
 
       expect(mockFileTransport1.close).toHaveBeenCalled();
       expect(mockFileTransport2.close).toHaveBeenCalled();
       expect(mockLogger.remove).toHaveBeenCalledTimes(2);
+      // Verify remove is called before close (to prevent new writes)
+      expect(mockLogger.remove).toHaveBeenNthCalledWith(1, mockFileTransport1);
+      expect(mockLogger.remove).toHaveBeenNthCalledWith(2, mockFileTransport2);
     });
 
     it('should handle transports without close method', async () => {
       const mockTransportWithoutClose = {
         filename: '/mock/path/test.log',
+        once: vi.fn(),
         // No close method
       };
 
@@ -789,7 +807,7 @@ describe('logger', () => {
       mockLogger.transports.push(mockTransportWithoutClose as any);
 
       // Should not throw
-      expect(() => logger.closeLogger()).not.toThrow();
+      await expect(logger.closeLogger()).resolves.toBeUndefined();
       expect(mockLogger.remove).toHaveBeenCalledWith(mockTransportWithoutClose);
     });
 
@@ -802,39 +820,70 @@ describe('logger', () => {
       mockLogger.transports.length = 0;
       mockLogger.transports.push(mockConsoleTransport as any);
 
-      logger.closeLogger();
+      await logger.closeLogger();
 
       // Console transport should not be closed
       expect(mockConsoleTransport.close).not.toHaveBeenCalled();
       expect(mockLogger.remove).not.toHaveBeenCalled();
     });
 
-    it('should handle errors gracefully', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      const mockFailingTransport = {
+    it('should handle error event on transport close', async () => {
+      const eventHandlers: Record<string, Function[]> = {};
+      const mockTransportWithError = {
         close: vi.fn().mockImplementation(() => {
-          throw new Error('Close failed');
+          // Emit error event instead of finish
+          setTimeout(() => {
+            eventHandlers['error']?.forEach((handler) => handler(new Error('Write failed')));
+          }, 0);
         }),
-        filename: '/mock/path/fail.log',
+        once: vi.fn().mockImplementation((event: string, handler: Function) => {
+          if (!eventHandlers[event]) {
+            eventHandlers[event] = [];
+          }
+          eventHandlers[event].push(handler);
+        }),
+        filename: '/mock/path/error.log',
       };
 
-      Object.setPrototypeOf(mockFailingTransport, winstonMock.transports.File.prototype);
+      Object.setPrototypeOf(mockTransportWithError, winstonMock.transports.File.prototype);
 
       mockLogger.transports.length = 0;
-      mockLogger.transports.push(mockFailingTransport as any);
+      mockLogger.transports.push(mockTransportWithError as any);
 
-      // Should not throw even when close fails
-      expect(() => logger.closeLogger()).not.toThrow();
+      // Should resolve without throwing even when error event fires
+      await expect(logger.closeLogger()).resolves.toBeUndefined();
+    });
 
-      consoleErrorSpy.mockRestore();
+    it('should timeout if transport does not emit finish or error', async () => {
+      vi.useFakeTimers();
+
+      const mockSlowTransport = {
+        close: vi.fn(), // Does not emit any events
+        once: vi.fn(),
+        filename: '/mock/path/slow.log',
+      };
+
+      Object.setPrototypeOf(mockSlowTransport, winstonMock.transports.File.prototype);
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockSlowTransport as any);
+
+      const closePromise = logger.closeLogger();
+
+      // Fast-forward past the timeout
+      await vi.advanceTimersByTimeAsync(2100);
+
+      // Should resolve due to timeout
+      await expect(closePromise).resolves.toBeUndefined();
+
+      vi.useRealTimers();
     });
 
     it('should handle empty transports array', async () => {
       mockLogger.transports.length = 0;
 
       // Should not throw
-      expect(() => logger.closeLogger()).not.toThrow();
+      await expect(logger.closeLogger()).resolves.toBeUndefined();
       expect(mockLogger.remove).not.toHaveBeenCalled();
     });
   });
