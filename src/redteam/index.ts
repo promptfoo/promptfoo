@@ -200,7 +200,10 @@ const formatTestCount = (numTests: number, strategy: boolean): string =>
  * @param test - The test case to get language from.
  * @returns The language string or undefined if not found.
  */
-function getLanguageForTestCase(test: TestCase): string | undefined {
+function getLanguageForTestCase(test: TestCase | undefined): string | undefined {
+  if (!test) {
+    return undefined;
+  }
   return test.metadata?.language || test.metadata?.modifiers?.language;
 }
 
@@ -306,7 +309,7 @@ async function applyStrategies(
       pluginMatchesStrategyTargets(t, strategy.id, targetPlugins),
     );
 
-    const strategyTestCases: TestCase[] = await strategyAction(
+    const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
       applicableTestCases,
       injectVar,
       {

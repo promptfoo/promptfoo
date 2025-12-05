@@ -30,7 +30,8 @@
     "!dist/**/*.map"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0 <11.0.0 || >=11.6.4"
   },
   "bin": {
     "promptfoo": "dist/src/main.js",
@@ -42,8 +43,8 @@
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
     "build:watch": "NODE_OPTIONS='--max-old-space-size=8192' tsdown --watch",
-    "build": "NODE_OPTIONS='--max-old-space-size=8192' tsdown && npm run post-build",
-    "post-build": "shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx cp src/python/persistent_wrapper.py dist/src/python && shx mkdir -p dist/src/golang && shx cp src/golang/wrapper.go dist/src/golang && shx mkdir -p dist/src/ruby && shx cp src/ruby/wrapper.rb dist/src/ruby && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && shx rm -f dist/drizzle/CLAUDE.md dist/drizzle/AGENTS.md && npm run build:app && echo '{\"type\": \"module\"}' > dist/src/package.json && shx chmod +x dist/src/main.js",
+    "build": "concurrently -g \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\"",
+    "postbuild": "tsx scripts/postbuild.ts",
     "citation:generate": "tsx scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
@@ -82,14 +83,14 @@
     "uri-js": "npm:uri-js-replace",
     "chokidar": "5.0.0",
     "whatwg-url": "15.1.0",
-    "esbuild": "0.27.0",
+    "esbuild": "0.27.1",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "react-is": "^19.0.0",
     "*": {
       "whatwg-url": "15.1.0",
       "chokidar": "5.0.0",
-      "esbuild": "0.27.0",
+      "esbuild": "0.27.1",
       "react": "19.2.1",
       "react-dom": "19.2.1"
     },
@@ -241,7 +242,7 @@
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
-    "better-sqlite3": "12.4.6",
+    "better-sqlite3": "^12.5.0",
     "binary-extensions": "^3.1.0",
     "cache-manager": "^7.2.5",
     "chalk": "^5.0.0",
@@ -298,7 +299,7 @@
     "winston": "^3.18.3",
     "ws": "^8.18.3",
     "zod": "^3.25.76",
-    "zod-validation-error": "^5.0.0"
+    "zod-validation-error": "^3.5.4"
   },
   "madge": {
     "detectiveOptions": {
