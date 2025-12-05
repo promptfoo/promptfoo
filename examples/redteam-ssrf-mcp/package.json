@@ -1,0 +1,14 @@
+{
+  "name": "redteam-ssrf-mcp",
+  "version": "1.0.0",
+  "description": "SSRF red team testing with Claude and MCP web tools",
+  "type": "module",
+  "scripts": {
+    "start": "npx tsx server.ts",
+    "internal": "python internal_service.py"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "tsx": "^4.7.0"
+  }
+}
