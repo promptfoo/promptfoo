@@ -1,5 +1,6 @@
-import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { getGlobalDispatcher } from 'undici';
 
@@ -43,6 +44,32 @@ import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
 import { setupEnv } from './util/index';
+
+/**
+ * Checks if the current module is the main entry point.
+ * Handles npm global bin symlinks by resolving real paths.
+ *
+ * @param importMetaUrl - The import.meta.url of the module
+ * @param processArgv1 - The process.argv[1] value (path to executed script)
+ * @returns true if this module is being run directly
+ */
+export function isMainModule(importMetaUrl: string, processArgv1: string | undefined): boolean {
+  if (!processArgv1) {
+    return false;
+  }
+
+  try {
+    // Resolve symlinks for both paths to handle:
+    // 1. npm global bin symlinks (process.argv[1] points to symlink)
+    // 2. macOS /var -> /private/var symlinks
+    const currentModulePath = realpathSync(fileURLToPath(importMetaUrl));
+    const mainModulePath = realpathSync(resolve(processArgv1));
+    return currentModulePath === mainModulePath;
+  } catch {
+    // realpathSync throws if path doesn't exist
+    return false;
+  }
+}
 
 /**
  * Adds verbose and env-file options to all commands recursively
@@ -163,30 +190,63 @@ async function main() {
   await program.parseAsync();
 }
 
+const shutdownGracefully = async () => {
+  logger.debug('Shutting down gracefully...');
+  await telemetry.shutdown();
+  logger.debug('Shutdown complete');
+
+  // Log final messages BEFORE closing logger
+  logger.debug('Closing logger file transports');
+
+  // Now close logger silently (no more logging after this point)
+  await closeLogger();
+  closeDbIfOpen();
+
+  try {
+    const dispatcher = getGlobalDispatcher();
+    await dispatcher.destroy();
+  } catch {
+    // Silently handle dispatcher destroy errors
+  }
+
+  // Give Node.js time to naturally exit if all handles are closed
+  // If there are lingering handles (file watchers, connections, etc), force exit
+  // Using .unref() allows natural exit if everything cleans up properly
+  const FORCE_EXIT_TIMEOUT_MS = 500;
+  setTimeout(() => {
+    process.exit(process.exitCode || 0);
+  }, FORCE_EXIT_TIMEOUT_MS).unref();
+};
+
 // ESM replacement for require.main === module check
 // Check if this module is being run directly (not imported)
+// The isMainModule check may throw in CJS builds where import.meta.url is not available
+let isMain = false;
 try {
-  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] || '')) {
-    checkNodeVersion();
-    main().finally(async () => {
-      logger.debug('Shutting down gracefully...');
-      await telemetry.shutdown();
-      logger.debug('Shutdown complete');
-
-      // Log final messages BEFORE closing logger
-      logger.debug('Closing logger file transports');
-
-      // Now close logger silently (no more logging after this point)
-      await closeLogger();
-      closeDbIfOpen();
-      try {
-        const dispatcher = getGlobalDispatcher();
-        await dispatcher.destroy();
-      } catch {
-        // Silently handle dispatcher destroy errors
-      }
-    });
-  }
+  isMain = isMainModule(import.meta.url, process.argv[1]);
 } catch {
-  // In CJS builds, this will fail silently - CJS entry point is handled differently
+  // In CJS builds, import.meta.url throws - CJS entry point is handled differently
+}
+
+if (isMain) {
+  checkNodeVersion();
+  let mainError: unknown;
+  try {
+    await main();
+  } catch (error) {
+    mainError = error;
+  } finally {
+    try {
+      await shutdownGracefully();
+    } catch (shutdownError) {
+      // Log shutdown error but preserve the original main error if it exists
+      logger.error(
+        `Shutdown error: ${shutdownError instanceof Error ? shutdownError.message : shutdownError}`,
+      );
+    }
+  }
+  // Re-throw the original error after cleanup is complete
+  if (mainError) {
+    throw mainError;
+  }
 }

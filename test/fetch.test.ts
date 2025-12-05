@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
@@ -118,7 +119,7 @@ vi.mock('../src/envars', () => {
   };
 });
 
-vi.mock('fs', () => ({
+vi.mock('node:fs', () => ({
   default: {
     readFileSync: vi.fn(),
   },
@@ -632,6 +633,52 @@ describe('fetchWithProxy', () => {
     );
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
+
+  describe('Abort Signal Handling', () => {
+    it('should pass abortSignal parameter to fetch', async () => {
+      const abortController = new AbortController();
+      const url = 'https://example.com/api';
+
+      await fetchWithProxy(url, {}, abortController.signal);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({
+          signal: abortController.signal,
+        }),
+      );
+    });
+
+    it('should combine abortSignal parameter with options.signal', async () => {
+      const abortController1 = new AbortController();
+      const abortController2 = new AbortController();
+      const url = 'https://example.com/api';
+
+      await fetchWithProxy(url, { signal: abortController1.signal }, abortController2.signal);
+
+      // The combined signal should be passed
+      expect(global.fetch).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({
+          signal: expect.any(Object),
+        }),
+      );
+    });
+
+    it('should use only options.signal when abortSignal parameter is not provided', async () => {
+      const abortController = new AbortController();
+      const url = 'https://example.com/api';
+
+      await fetchWithProxy(url, { signal: abortController.signal });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({
+          signal: abortController.signal,
+        }),
+      );
+    });
+  });
 });
 
 describe('fetchWithTimeout', () => {
@@ -661,6 +708,27 @@ describe('fetchWithTimeout', () => {
     vi.advanceTimersByTime(5000);
 
     await expect(fetchPromise).rejects.toThrow('Request timed out after 5000 ms');
+  });
+
+  it('should combine options.signal with timeout signal using AbortSignal.any', async () => {
+    const userAbortController = new AbortController();
+    const mockResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch).mockImplementationOnce(() => Promise.resolve(mockResponse));
+
+    const fetchPromise = fetchWithTimeout(
+      'https://example.com',
+      { signal: userAbortController.signal },
+      5000,
+    );
+    await expect(fetchPromise).resolves.toBe(mockResponse);
+
+    // The signal passed to fetch should be a combined signal
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        signal: expect.any(Object),
+      }),
+    );
   });
 });
 
@@ -953,6 +1021,53 @@ describe('fetchWithRetries', () => {
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
       'Rate limited: 429 Too Many Requests',
     );
+  });
+
+  describe('Abort Signal Handling', () => {
+    it('should immediately re-throw AbortError without retrying', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      vi.mocked(global.fetch).mockRejectedValue(abortError);
+
+      await expect(fetchWithRetries('https://example.com', {}, 1000, 3)).rejects.toThrow(
+        'The operation was aborted',
+      );
+
+      // Should only be called once - no retries
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
+    it('should pass signal through options to underlying fetch', async () => {
+      const abortController = new AbortController();
+      const successResponse = createMockResponse();
+      vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);
+
+      await fetchWithRetries('https://example.com', { signal: abortController.signal }, 1000, 0);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          signal: expect.any(Object),
+        }),
+      );
+    });
+
+    it('should not retry when abort signal is triggered during request', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // First call throws AbortError
+      vi.mocked(global.fetch).mockRejectedValueOnce(abortError);
+
+      await expect(fetchWithRetries('https://example.com', {}, 1000, 5)).rejects.toThrow(
+        'The operation was aborted',
+      );
+
+      // Should not retry on abort
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

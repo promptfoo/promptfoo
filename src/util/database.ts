@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
-import NodeCache from 'node-cache';
+import { LRUCache } from 'lru-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database/index';
 import {
@@ -498,7 +498,13 @@ export type StandaloneEval = CompletedPrompt & {
   uuid: string;
 };
 
-const standaloneEvalCache = new NodeCache({ stdTTL: 60 * 60 * 2 }); // Cache for 2 hours
+const standaloneEvalCache = new LRUCache<string, StandaloneEval[]>({
+  ttl: 60 * 60 * 2 * 1000, // 2 hours in milliseconds
+  // Cache entries are keyed by (limit, tag, description) filter combinations.
+  // 2000 handles heavy automation scenarios while keeping memory bounded (~few MB).
+  // On eviction, the next request simply re-queries the DB with minimal latency impact.
+  max: 2000,
+});
 
 export async function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
@@ -509,8 +515,8 @@ export async function getStandaloneEvals({
   tag?: { key: string; value: string };
   description?: string;
 } = {}): Promise<StandaloneEval[]> {
-  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}`;
-  const cachedResult = standaloneEvalCache.get<StandaloneEval[]>(cacheKey);
+  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}_${description}`;
+  const cachedResult = standaloneEvalCache.get(cacheKey);
 
   if (cachedResult) {
     return cachedResult;

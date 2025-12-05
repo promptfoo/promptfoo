@@ -455,9 +455,6 @@ export async function logRequestResponse(options: {
  * IMPORTANT: All logging should be done BEFORE calling this function
  */
 export async function closeLogger(): Promise<void> {
-  // Set shutdown flag to prevent new writes
-  setLoggerShuttingDown(true);
-
   try {
     const fileTransports = winstonLogger.transports.filter(
       (transport) => transport instanceof winston.transports.File,
@@ -466,6 +463,14 @@ export async function closeLogger(): Promise<void> {
     if (fileTransports.length === 0) {
       return;
     }
+
+    // Log which files we're closing BEFORE setting shutdown flag
+    // so this message actually gets written to the log files
+    const filenames = fileTransports.map((t) => (t as any).filename).join(', ');
+    logger.debug(`Closing ${fileTransports.length} log file(s): ${filenames}`);
+
+    // Set shutdown flag to prevent new writes
+    setLoggerShuttingDown(true);
 
     // Wait briefly for winston to flush any buffered writes before removing transports
     // This prevents "write after end" errors when winston.remove() triggers stream closure

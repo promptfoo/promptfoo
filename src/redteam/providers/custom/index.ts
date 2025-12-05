@@ -1,27 +1,9 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../../remoteGeneration';
-import { getSessionId, isBasicRefusal } from '../../util';
-import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
-import { getGoalRubric } from '../prompts';
-import {
-  getLastMessageContent,
-  getTargetResponse,
-  messagesToRedteamHistory,
-  redteamProviderManager,
-  type TargetResponse,
-  tryUnblocking,
-} from '../shared';
-
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -34,8 +16,26 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types/index';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject } from '../../../util/json';
+import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
+import { TokenUsageTracker } from '../../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
+import { getSessionId, isBasicRefusal } from '../../util';
+import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
+import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
+import {
+  getLastMessageContent,
+  getTargetResponse,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  type TargetResponse,
+  tryUnblocking,
+} from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -362,6 +362,7 @@ export class CustomProvider implements ApiProvider {
           lastResponse,
           lastFeedback,
           objectiveScore,
+          options,
         );
 
         if (!attackPrompt) {
@@ -452,6 +453,7 @@ export class CustomProvider implements ApiProvider {
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse.output,
+          options,
         );
         logger.debug(
           `[Custom] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -505,7 +507,7 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug(`[Custom] graderPassed: ${graderPassed}`);
 
-        const [evalScore] = await this.getEvalScore(lastResponse.output);
+        const [evalScore] = await this.getEvalScore(lastResponse.output, options);
 
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
@@ -542,6 +544,11 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug('[Custom] Jailbreak Unsuccessful, continuing to next round');
       } catch (error) {
+        // Re-throw abort errors to properly cancel the operation
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.debug('[Custom] Operation aborted');
+          throw error;
+        }
         logger.error(`[Custom] Error Running custom step: ${error}`);
       }
     }
@@ -598,6 +605,7 @@ export class CustomProvider implements ApiProvider {
     lastResponse: TargetResponse,
     lastFeedback: string,
     objectiveScore?: { value: number; rationale: string },
+    options?: CallApiOptionsParams,
   ): Promise<{ generatedQuestion: string | undefined; tokenUsage?: TokenUsage }> {
     logger.debug(
       `[Custom] getAttackPrompt called: round=${roundNum}, evalFlag=${evalFlag}, objectiveScore=${JSON.stringify(
@@ -635,13 +643,17 @@ export class CustomProvider implements ApiProvider {
     logger.debug(`Sending to red teaming chat:`);
     this.logChatHistory(this.redTeamingChatConversationId);
     const redTeamingChat = await this.getRedTeamProvider();
-    const response = await redTeamingChat.callApi(JSON.stringify(redTeamingHistory), {
-      prompt: {
-        raw: JSON.stringify(redTeamingHistory),
-        label: 'history',
+    const response = await redTeamingChat.callApi(
+      JSON.stringify(redTeamingHistory),
+      {
+        prompt: {
+          raw: JSON.stringify(redTeamingHistory),
+          label: 'history',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
     TokenUsageTracker.getInstance().trackUsage(redTeamingChat.id(), response.tokenUsage);
     if (redTeamingChat.delay) {
       logger.debug(`[Custom] Sleeping for ${redTeamingChat.delay}ms`);
@@ -771,6 +783,7 @@ export class CustomProvider implements ApiProvider {
   private async getRefusalScore(
     attackPrompt: string,
     lastResponse: string,
+    options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
     logger.debug(`[Custom] Getting refusal score for prompt: ${attackPrompt}`);
     // Short-circuit refusal grading for standard refusal prefixes
@@ -797,13 +810,17 @@ export class CustomProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await scoringProvider.callApi(refusalBody, {
-      prompt: {
-        raw: refusalBody,
-        label: 'refusal',
+    const refusalResponse = await scoringProvider.callApi(
+      refusalBody,
+      {
+        prompt: {
+          raw: refusalBody,
+          label: 'refusal',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
     TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), refusalResponse.tokenUsage);
     if (scoringProvider.delay) {
       logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);
@@ -834,7 +851,10 @@ export class CustomProvider implements ApiProvider {
     return [parsed.value, parsed.rationale];
   }
 
-  private async getEvalScore(lastResponse: string): Promise<[any, TokenUsage | undefined]> {
+  private async getEvalScore(
+    lastResponse: string,
+    options?: CallApiOptionsParams,
+  ): Promise<[any, TokenUsage | undefined]> {
     logger.debug(`[Custom] Getting eval score for response: ${lastResponse.substring(0, 100)}...`);
     const evalInput = JSON.stringify({
       conversationObjective: this.userGoal,
@@ -851,13 +871,17 @@ export class CustomProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const evalResponse = await scoringProvider.callApi(evalBody, {
-      prompt: {
-        raw: evalBody,
-        label: 'eval',
+    const evalResponse = await scoringProvider.callApi(
+      evalBody,
+      {
+        prompt: {
+          raw: evalBody,
+          label: 'eval',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
     TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), evalResponse.tokenUsage);
     if (scoringProvider.delay) {
       logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);

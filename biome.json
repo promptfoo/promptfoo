@@ -106,6 +106,7 @@
         "useJsxKeyInIterable": "error"
       },
       "style": {
+        "noEnum": "error",
         "noNegationElse": "error",
         "useConst": "error",
         "useBlockStatements": "error",

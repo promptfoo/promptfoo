@@ -212,6 +212,10 @@ export async function evaluateResponse(
       explanation: parsed?.currentResponse?.explanation,
     };
   } catch (e) {
+    // Re-throw abort errors to properly cancel the operation
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw e;
+    }
     logger.debug(`[IterativeTree] Error parsing judge response, using default score: ${e}`);
     return { score: 1, explanation: 'Failed to parse judge response' };
   }
@@ -251,6 +255,10 @@ export async function getNewPrompt(
       // Primary path: extract first JSON object from possibly fenced/prose output
       retObj = extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output);
     } catch (primaryErr) {
+      // Re-throw abort errors to properly cancel the operation
+      if (primaryErr instanceof Error && primaryErr.name === 'AbortError') {
+        throw primaryErr;
+      }
       // Fallback: sometimes models return a JSON-encoded string; try one decode then extract
       try {
         const decoded = JSON.parse(redteamResp.output);
@@ -260,6 +268,10 @@ export async function getNewPrompt(
           retObj = decoded as { improvement: string; prompt: string };
         }
       } catch (fallbackErr) {
+        // Re-throw abort errors to properly cancel the operation
+        if (fallbackErr instanceof Error && fallbackErr.name === 'AbortError') {
+          throw fallbackErr;
+        }
         logger.info(
           `[IterativeTree] Failed to parse attacker response as JSON (primary and fallback). Skipping this turn. primary=${String(
             primaryErr,

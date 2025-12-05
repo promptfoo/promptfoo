@@ -1,6 +1,8 @@
-import { pathToFileURL } from 'node:url';
-import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import vm from 'node:vm';
+import { createRequire } from 'node:module';
 
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
@@ -93,17 +95,46 @@ export async function importModule(modulePath: string, functionName?: string) {
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
 
-    // Provide helpful guidance for common CJS-in-ESM-context errors
+    // Fall back to vm-based CJS execution for .js files that use CJS syntax
+    // Note: createRequire() doesn't work for .js files in "type": "module" packages
+    // because Node.js still treats them as ESM based on package.json.
+    // We use Node's vm module to execute the code with proper CJS globals.
     if (modulePath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
-      logger.error(`ESM import failed for ${modulePath}: ${errorMessage}`);
-      logger.warn(
-        `This .js file appears to use CommonJS syntax (require/module.exports). ` +
-          `Since promptfoo v0.120.0, .js files are treated as ESM modules by default. ` +
-          `To fix this, either:\n` +
-          `  1. Rename the file to .cjs (e.g., ${modulePath.replace(/\.js$/, '.cjs')})\n` +
-          `  2. Convert the file to use ESM syntax (import/export)\n` +
-          `See: https://promptfoo.dev/docs/configuration/guide/#custom-providers`,
+      logger.debug(
+        `ESM import failed for ${modulePath}, attempting vm-based CJS fallback: ${errorMessage}`,
       );
+
+      try {
+        const resolvedPath = safeResolve(modulePath);
+        const mod = loadCjsModule(resolvedPath);
+        logger.debug(
+          `Successfully loaded module via CJS fallback: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
+        );
+
+        if (functionName) {
+          logger.debug(`Returning named export: ${functionName}`);
+          return mod[functionName];
+        }
+        return mod;
+      } catch (cjsErr) {
+        // If CJS fallback also fails, throw a combined error with both details
+        const cjsErrorMessage = cjsErr instanceof Error ? cjsErr.message : String(cjsErr);
+        logger.error(`ESM import failed for ${modulePath}: ${errorMessage}`);
+        logger.error(`CJS fallback also failed: ${cjsErrorMessage}`);
+
+        // Create a combined error that includes both failure reasons
+        const combinedError = new Error(
+          `Failed to load module ${modulePath}:\n` +
+            `  ESM import error: ${errorMessage}\n` +
+            `  CJS fallback error: ${cjsErrorMessage}\n` +
+            `To fix this, either:\n` +
+            `  1. Rename the file to .cjs (recommended for CommonJS)\n` +
+            `  2. Convert to ESM syntax (import/export)\n` +
+            `  3. Ensure the file has valid JavaScript syntax`,
+        );
+        (combinedError as any).cause = { esmError: err, cjsError: cjsErr };
+        throw combinedError;
+      }
     } else {
       logger.error(`ESM import failed: ${err}`);
     }
@@ -120,7 +151,7 @@ export async function importModule(modulePath: string, functionName?: string) {
 /**
  * Detects if an error message indicates a CommonJS module being loaded in ESM context.
  */
-function isCjsInEsmError(message: string): boolean {
+export function isCjsInEsmError(message: string): boolean {
   const cjsPatterns = [
     'require is not defined', // Direct require() call
     'module is not defined', // module.exports usage
@@ -131,4 +162,139 @@ function isCjsInEsmError(message: string): boolean {
     'ERR_REQUIRE_ESM', // Node error for requiring ESM
   ];
   return cjsPatterns.some((pattern) => message.includes(pattern));
+}
+
+/**
+ * Loads a CommonJS module by executing it in a vm context with proper CJS globals.
+ * This bypasses Node.js's module type detection which is based on package.json "type" field.
+ *
+ * SECURITY NOTE: This is NOT a security sandbox. The executed code has full access to
+ * the file system, network, etc. via the injected require function and process object.
+ * This is intentional - it's designed for loading trusted user configuration files
+ * (custom providers, assertions, hooks) that need full Node.js capabilities.
+ */
+function loadCjsModule(modulePath: string): any {
+  const code = fs.readFileSync(modulePath, 'utf-8');
+  const dirname = path.dirname(modulePath);
+  const filename = modulePath;
+
+  // Create a require function scoped to the module's directory
+  const moduleRequire = createRequire(pathToFileURL(modulePath).href);
+
+  // Create module and exports objects
+  const moduleObj: { exports: any } = { exports: {} };
+
+  // Create a context with CJS globals
+  // We include all commonly used Node.js globals to ensure compatibility
+  const context = vm.createContext({
+    // CJS-specific globals
+    module: moduleObj,
+    exports: moduleObj.exports,
+    require: moduleRequire,
+    __dirname: dirname,
+    __filename: filename,
+
+    // Global object references (some CJS modules use these)
+    global: globalThis,
+    globalThis,
+
+    // Console and process
+    console,
+    process,
+
+    // Binary data
+    Buffer,
+
+    // Timers
+    setTimeout,
+    setInterval,
+    setImmediate,
+    clearTimeout,
+    clearInterval,
+    clearImmediate,
+    queueMicrotask,
+
+    // URL handling
+    URL,
+    URLSearchParams,
+
+    // Text encoding/decoding
+    TextEncoder,
+    TextDecoder,
+    atob: globalThis.atob,
+    btoa: globalThis.btoa,
+
+    // Fetch API (Node 18+)
+    fetch: globalThis.fetch,
+    Request: globalThis.Request,
+    Response: globalThis.Response,
+    Headers: globalThis.Headers,
+
+    // Abort handling
+    AbortController: globalThis.AbortController,
+    AbortSignal: globalThis.AbortSignal,
+
+    // Events
+    Event: globalThis.Event,
+    EventTarget: globalThis.EventTarget,
+
+    // Errors
+    Error,
+    TypeError,
+    ReferenceError,
+    SyntaxError,
+    RangeError,
+
+    // Other built-ins that CJS modules might use
+    Array,
+    Object,
+    String,
+    Number,
+    Boolean,
+    Symbol,
+    Map,
+    Set,
+    WeakMap,
+    WeakSet,
+    Promise,
+    Proxy,
+    Reflect,
+    JSON,
+    Math,
+    Date,
+    RegExp,
+    Int8Array,
+    Uint8Array,
+    Uint8ClampedArray,
+    Int16Array,
+    Uint16Array,
+    Int32Array,
+    Uint32Array,
+    Float32Array,
+    Float64Array,
+    BigInt64Array,
+    BigUint64Array,
+    DataView,
+    ArrayBuffer,
+    SharedArrayBuffer: globalThis.SharedArrayBuffer,
+    Atomics: globalThis.Atomics,
+    BigInt,
+
+    // Functions
+    eval: undefined, // Disable eval for safety
+    Function,
+    isNaN,
+    isFinite,
+    parseFloat,
+    parseInt,
+    decodeURI,
+    decodeURIComponent,
+    encodeURI,
+    encodeURIComponent,
+  });
+
+  // Execute the code in the context
+  vm.runInContext(code, context, { filename: modulePath });
+
+  return moduleObj.exports;
 }
