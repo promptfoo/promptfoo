@@ -8,6 +8,8 @@
  * - Drizzle ORM migration files
  * - ESM package.json marker
  * - CLI executable permissions
+ *
+ * @module scripts/postbuild
  */
 
 import fs from 'node:fs';
@@ -20,102 +22,257 @@ const ROOT = path.join(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 const SRC = path.join(ROOT, 'src');
 
+/**
+ * Wrapper types supported by the build.
+ * IMPORTANT: Must match WrapperType in src/esm.ts (used by getWrapperDir()).
+ * If you add a new wrapper type, update both files.
+ */
+const WRAPPER_TYPES = ['python', 'ruby', 'golang'] as const;
+type WrapperType = (typeof WRAPPER_TYPES)[number];
+
+/**
+ * Wrapper files for each language type.
+ * Maps wrapper type to the list of files that should be copied.
+ */
+const WRAPPER_FILES: Record<WrapperType, string[]> = {
+  python: ['wrapper.py', 'persistent_wrapper.py'],
+  ruby: ['wrapper.rb'],
+  golang: ['wrapper.go'],
+};
+
+/**
+ * Files/patterns to exclude when copying the drizzle directory.
+ */
+const DRIZZLE_EXCLUDE_PATTERNS = ['.md', 'CLAUDE', 'AGENTS'];
+
+/**
+ * Critical build outputs that must exist for the build to be valid.
+ */
+const REQUIRED_BUILD_OUTPUTS = [
+  'dist/src/main.js', // CLI entry
+  'dist/src/index.js', // ESM library entry
+  'dist/src/index.cjs', // CJS library entry
+  'dist/src/server/index.js', // Server entry
+];
+
 interface CopyTask {
   src: string;
   dest: string;
   recursive?: boolean;
+  filter?: (src: string) => boolean;
+}
+
+interface PostbuildResult {
+  success: boolean;
+  copied: string[];
+  errors: string[];
 }
 
 /**
- * Find all HTML files in src/ directory
+ * Logs a message to stdout with consistent formatting.
+ */
+function log(message: string): void {
+  console.log(`[postbuild] ${message}`);
+}
+
+/**
+ * Logs an error message to stderr with consistent formatting.
+ */
+function logError(message: string): void {
+  console.error(`[postbuild] ERROR: ${message}`);
+}
+
+/**
+ * Find all HTML files in src/ directory (non-recursive).
  */
 function getHtmlFiles(): CopyTask[] {
-  return fs
-    .readdirSync(SRC)
-    .filter((file) => file.endsWith('.html'))
-    .map((file) => ({
-      src: path.join(SRC, file),
-      dest: path.join(DIST, 'src', file),
-    }));
+  try {
+    return fs
+      .readdirSync(SRC)
+      .filter((file) => file.endsWith('.html'))
+      .map((file) => ({
+        src: path.join(SRC, file),
+        dest: path.join(DIST, 'src', file),
+      }));
+  } catch (error) {
+    logError(`Failed to read src/ directory: ${error}`);
+    return [];
+  }
 }
 
 /**
- * Static copy tasks for wrapper scripts and migrations
+ * Generate copy tasks for all wrapper scripts.
+ * Uses WRAPPER_TYPES and WRAPPER_FILES to ensure consistency with src/esm.ts
  */
-const staticCopyTasks: CopyTask[] = [
-  // Python wrappers
-  {
-    src: path.join(SRC, 'python', 'wrapper.py'),
-    dest: path.join(DIST, 'src', 'python', 'wrapper.py'),
-  },
-  {
-    src: path.join(SRC, 'python', 'persistent_wrapper.py'),
-    dest: path.join(DIST, 'src', 'python', 'persistent_wrapper.py'),
-  },
+function getWrapperTasks(): CopyTask[] {
+  const tasks: CopyTask[] = [];
 
-  // Go wrapper
-  {
-    src: path.join(SRC, 'golang', 'wrapper.go'),
-    dest: path.join(DIST, 'src', 'golang', 'wrapper.go'),
-  },
+  for (const wrapperType of WRAPPER_TYPES) {
+    const files = WRAPPER_FILES[wrapperType];
+    for (const file of files) {
+      tasks.push({
+        src: path.join(SRC, wrapperType, file),
+        dest: path.join(DIST, 'src', wrapperType, file),
+      });
+    }
+  }
 
-  // Ruby wrapper
-  { src: path.join(SRC, 'ruby', 'wrapper.rb'), dest: path.join(DIST, 'src', 'ruby', 'wrapper.rb') },
+  return tasks;
+}
 
-  // Drizzle migrations
-  { src: path.join(ROOT, 'drizzle'), dest: path.join(DIST, 'drizzle'), recursive: true },
-];
+/**
+ * Get the drizzle migration copy task with exclusion filter.
+ */
+function getDrizzleTask(): CopyTask {
+  return {
+    src: path.join(ROOT, 'drizzle'),
+    dest: path.join(DIST, 'drizzle'),
+    recursive: true,
+    filter: (src: string) => {
+      const basename = path.basename(src);
+      return !DRIZZLE_EXCLUDE_PATTERNS.some(
+        (pattern) => basename.includes(pattern) || basename.endsWith(pattern),
+      );
+    },
+  };
+}
 
-const filesToRemove = [
-  path.join(DIST, 'drizzle', 'CLAUDE.md'),
-  path.join(DIST, 'drizzle', 'AGENTS.md'),
-];
+/**
+ * Verify that all critical build outputs exist.
+ */
+function verifyBuildOutputs(): string[] {
+  const missing: string[] = [];
 
-function postbuild(): void {
-  console.log('Running postbuild...');
+  for (const outputPath of REQUIRED_BUILD_OUTPUTS) {
+    const fullPath = path.join(ROOT, outputPath);
+    if (!fs.existsSync(fullPath)) {
+      missing.push(outputPath);
+    }
+  }
 
-  const copyTasks = [...getHtmlFiles(), ...staticCopyTasks];
+  return missing;
+}
 
-  // Copy all assets
-  for (const task of copyTasks) {
+/**
+ * Clean destination directories before copying to prevent stale files.
+ * Only cleans specific subdirectories, not all of dist/.
+ */
+function cleanDestinations(_tasks: CopyTask[]): void {
+  // Clean wrapper directories
+  for (const wrapperType of WRAPPER_TYPES) {
+    const wrapperDest = path.join(DIST, 'src', wrapperType);
+    if (fs.existsSync(wrapperDest)) {
+      fs.rmSync(wrapperDest, { recursive: true, force: true });
+    }
+  }
+
+  // Clean drizzle directory
+  const drizzleDest = path.join(DIST, 'drizzle');
+  if (fs.existsSync(drizzleDest)) {
+    fs.rmSync(drizzleDest, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Execute a single copy task.
+ */
+function executeCopyTask(task: CopyTask): { success: boolean; error?: string } {
+  try {
     if (!fs.existsSync(task.src)) {
-      console.error(`  ERROR: Source not found: ${task.src.replace(ROOT, '.')}`);
-      process.exit(1);
+      return { success: false, error: `Source not found: ${task.src.replace(ROOT, '.')}` };
     }
 
     fs.mkdirSync(path.dirname(task.dest), { recursive: true });
 
-    if (task.recursive) {
-      // For recursive copies, remove existing directory first
-      fs.rmSync(task.dest, { recursive: true, force: true });
-    }
+    fs.cpSync(task.src, task.dest, {
+      recursive: task.recursive ?? false,
+      filter: task.filter,
+    });
 
-    fs.cpSync(task.src, task.dest, { recursive: task.recursive ?? false });
-    console.log(`  Copied: ${task.src.replace(ROOT, '.')} -> ${task.dest.replace(ROOT, '.')}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: `Copy failed: ${error}` };
+  }
+}
+
+/**
+ * Main postbuild function.
+ */
+export function postbuild(): PostbuildResult {
+  const result: PostbuildResult = {
+    success: true,
+    copied: [],
+    errors: [],
+  };
+
+  log('Starting postbuild...');
+
+  // Verify tsdown produced the expected outputs first
+  const missingOutputs = verifyBuildOutputs();
+  if (missingOutputs.length > 0) {
+    for (const missing of missingOutputs) {
+      result.errors.push(`Missing build output: ${missing}`);
+    }
+    logError('tsdown build appears to have failed. Missing outputs:');
+    for (const missing of missingOutputs) {
+      logError(`  - ${missing}`);
+    }
+    result.success = false;
+    return result;
   }
 
-  // Remove files that shouldn't be in dist
-  for (const file of filesToRemove) {
-    fs.rmSync(file, { force: true });
+  // Gather all copy tasks
+  const copyTasks = [...getHtmlFiles(), ...getWrapperTasks(), getDrizzleTask()];
+
+  // Clean destinations to prevent stale files
+  cleanDestinations(copyTasks);
+
+  // Execute copy tasks
+  for (const task of copyTasks) {
+    const copyResult = executeCopyTask(task);
+    if (copyResult.success) {
+      const relativePath = task.dest.replace(ROOT, '.');
+      result.copied.push(relativePath);
+      log(`Copied: ${task.src.replace(ROOT, '.')} -> ${relativePath}`);
+    } else {
+      result.errors.push(copyResult.error!);
+      logError(copyResult.error!);
+      result.success = false;
+    }
   }
 
   // Create ESM package.json marker for dist/src
-  // This ensures Node.js treats .js files in dist/src as ESM
   const distSrcPackageJson = path.join(DIST, 'src', 'package.json');
-  fs.writeFileSync(distSrcPackageJson, JSON.stringify({ type: 'module' }));
-  console.log('  Created: ./dist/src/package.json');
-
-  // Make CLI executable
-  const mainJs = path.join(DIST, 'src', 'main.js');
-  if (!fs.existsSync(mainJs)) {
-    console.error(`  ERROR: CLI not found: ${mainJs.replace(ROOT, '.')}`);
-    console.error('  This usually means tsdown failed. Check the build output above.');
-    process.exit(1);
+  try {
+    fs.writeFileSync(distSrcPackageJson, JSON.stringify({ type: 'module' }, null, 2) + '\n');
+    log('Created: ./dist/src/package.json');
+  } catch (error) {
+    result.errors.push(`Failed to create ESM marker: ${error}`);
+    logError(`Failed to create ESM marker: ${error}`);
+    result.success = false;
   }
-  fs.chmodSync(mainJs, 0o755);
-  console.log('  Made executable: ./dist/src/main.js');
 
-  console.log('Postbuild complete.');
+  // Make CLI executable (no-op on Windows, but doesn't hurt)
+  const mainJs = path.join(DIST, 'src', 'main.js');
+  try {
+    fs.chmodSync(mainJs, 0o755);
+    log('Made executable: ./dist/src/main.js');
+  } catch (error) {
+    // chmod may fail on Windows - this is acceptable
+    log(`Note: chmod failed (expected on Windows): ${error}`);
+  }
+
+  if (result.success) {
+    log(`Postbuild complete. Copied ${result.copied.length} items.`);
+  } else {
+    logError(`Postbuild failed with ${result.errors.length} error(s).`);
+  }
+
+  return result;
 }
 
-postbuild();
+// Run if executed directly
+const result = postbuild();
+if (!result.success) {
+  process.exit(1);
+}
