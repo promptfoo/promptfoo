@@ -2,17 +2,14 @@ import { execFile } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { promisify } from 'util';
 
 import { getEnvString } from '../envars';
+import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 
 const execFileAsync = promisify(execFile);
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 /**
  * Global state for Ruby executable path caching.
@@ -297,7 +294,7 @@ export async function runRuby(
 
   rubyPath = await validateRubyPath(rubyPath, typeof customPath === 'string');
 
-  const wrapperPath = path.join(__dirname, 'wrapper.rb');
+  const wrapperPath = path.join(getWrapperDir('ruby'), 'wrapper.rb');
 
   try {
     fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');

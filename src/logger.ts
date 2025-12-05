@@ -433,28 +433,49 @@ export async function logRequestResponse(options: {
 /**
  * Close all file transports and cleanup logger resources
  * Should be called during graceful shutdown to prevent event loop hanging
+ * Waits for all pending writes to flush before closing streams
+ *
+ * Note: We use the 'flush' event instead of 'finish' because winston's File
+ * transport emits 'finish' before the underlying stream has fully flushed.
+ * See: https://github.com/winstonjs/winston/issues/1504
  */
-export function closeLogger(): void {
+export async function closeLogger(): Promise<void> {
   try {
     // Close all file transports
     const fileTransports = winstonLogger.transports.filter(
       (transport) => transport instanceof winston.transports.File,
     );
 
+    if (fileTransports.length === 0) {
+      return;
+    }
+
+    // Remove transports first to stop queuing new writes
     for (const transport of fileTransports) {
-      const filename = (transport as any).filename;
-      if (filename) {
-        logger.debug(`Closing log file: ${filename}`);
-      }
-      if (typeof transport.close === 'function') {
-        transport.close();
-      }
       winstonLogger.remove(transport);
     }
 
-    if (fileTransports.length > 0) {
-      logger.debug('Logger cleanup complete');
-    }
+    // End each transport and wait for pending writes to flush
+    // Using 'flush' event which fires after data is written to disk
+    const closePromises = fileTransports.map((transport) => {
+      return new Promise<void>((resolve) => {
+        // Listen for 'flush' event which indicates data has been written to disk
+        // This is more reliable than 'finish' which fires before actual flush
+        transport.once('flush', resolve);
+        transport.once('error', resolve);
+
+        // Call end() to trigger the flush - more reliable than close()
+        if (typeof transport.end === 'function') {
+          transport.end();
+        } else if (typeof transport.close === 'function') {
+          transport.close();
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    await Promise.all(closePromises);
   } catch (error) {
     // Can't use logger here since we're shutting it down
     console.error(`Error closing logger: ${error}`);

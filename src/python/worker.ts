@@ -1,23 +1,12 @@
 import { PythonShell } from 'python-shell';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import os from 'os';
+import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
 import { validatePythonPath } from './pythonUtils';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Get the directory containing Python wrapper scripts
-// Handles both development (src/python/) and production (dist/src/python/) paths
-function getPythonScriptDir(): string {
-  // If we're already in a 'python' directory (development), use it as-is
-  // Otherwise, append 'python' subdirectory (production dist build)
-  return path.basename(__dirname) === 'python' ? __dirname : path.join(__dirname, 'python');
-}
 
 export class PythonWorker {
   private process: PythonShell | null = null;
@@ -45,7 +34,7 @@ export class PythonWorker {
   }
 
   private async startWorker(): Promise<void> {
-    const wrapperPath = path.join(getPythonScriptDir(), 'persistent_wrapper.py');
+    const wrapperPath = path.join(getWrapperDir('python'), 'persistent_wrapper.py');
 
     // Validate and resolve Python path using smart detection (tries python3, then python)
     const resolvedPythonPath = await validatePythonPath(
