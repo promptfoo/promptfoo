@@ -174,6 +174,15 @@ export type TargetResponse = {
   guardrails?: GuardrailResponse;
   traceContext?: TraceContextData | null;
   traceSummary?: string;
+  audio?: {
+    data?: string;
+    transcript?: string;
+    format?: string;
+  };
+  image?: {
+    data?: string;
+    format?: string;
+  };
 };
 
 /**
@@ -219,6 +228,7 @@ export async function getTargetResponse(
       sessionId: targetRespRaw.sessionId,
       tokenUsage,
       guardrails: targetRespRaw.guardrails,
+      audio: targetRespRaw.audio,
     };
   }
 
@@ -233,6 +243,7 @@ export async function getTargetResponse(
       sessionId: targetRespRaw.sessionId,
       tokenUsage,
       guardrails: targetRespRaw.guardrails,
+      audio: targetRespRaw.audio,
     };
   }
 
