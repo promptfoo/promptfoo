@@ -1,7 +1,8 @@
 import type { ChildProcess } from 'child_process';
 import { spawn } from 'child_process';
 import crypto from 'crypto';
-import fs from 'fs';
+import fs from 'fs/promises';
+import { unlinkSync } from 'fs';
 import os from 'os';
 import path from 'path';
 
@@ -65,8 +66,9 @@ interface ScanOptions {
 /**
  * Create a unique temp file path for JSON output.
  * Uses crypto.randomUUID() for better security against TOCTOU attacks.
+ * @internal Exported for testing
  */
-function createTempOutputPath(): string {
+export function createTempOutputPath(): string {
   const tempDir = os.tmpdir();
   const uuid = crypto.randomUUID();
   return path.join(tempDir, `promptfoo-modelscan-${uuid}.json`);
@@ -75,8 +77,9 @@ function createTempOutputPath(): string {
 /**
  * Check if modelaudit version supports CLI UI with --output flag.
  * This feature was added in v0.2.20.
+ * @internal Exported for testing
  */
-function supportsCliUiWithOutput(version: string | null): boolean {
+export function supportsCliUiWithOutput(version: string | null): boolean {
   if (!version) {
     return false;
   }
@@ -517,7 +520,7 @@ async function processJsonResults(
   // Save to user-specified output file if requested
   if (options.output) {
     try {
-      fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
+      await fs.writeFile(options.output, JSON.stringify(results, null, 2));
       logger.info(`Results also saved to ${options.output}`);
     } catch (error) {
       logger.error(`Failed to save results to ${options.output}: ${error}`);
@@ -540,9 +543,9 @@ async function processScanResultsFromFile(
   existingAudit: ModelAudit | null,
 ): Promise<number> {
   // Helper to clean up temp file
-  const cleanupTempFile = () => {
+  const cleanupTempFile = async () => {
     try {
-      fs.unlinkSync(jsonFilePath);
+      await fs.unlink(jsonFilePath);
     } catch (error) {
       logger.debug(`Failed to cleanup temp file ${jsonFilePath}: ${error}`);
     }
@@ -551,22 +554,27 @@ async function processScanResultsFromFile(
   // Handle non-zero exit codes (0 and 1 are both valid - 1 means issues found)
   if (spawnResult.code !== null && spawnResult.code !== 0 && spawnResult.code !== 1) {
     logger.error(`Model scan process exited with code ${spawnResult.code}`);
-    cleanupTempFile();
+    // Note: stderr is typically empty here since we use inherited stdio,
+    // but log it if captured for consistency with stdout workflow
+    if (spawnResult.stderr) {
+      logger.error(spawnResult.stderr);
+    }
+    await cleanupTempFile();
     return spawnResult.code;
   }
 
   // Read JSON from temp file
   let jsonOutput: string;
   try {
-    jsonOutput = fs.readFileSync(jsonFilePath, 'utf-8').trim();
+    jsonOutput = (await fs.readFile(jsonFilePath, 'utf-8')).trim();
   } catch (error) {
     logger.error(`Failed to read scan results from file: ${error}`);
-    cleanupTempFile();
+    await cleanupTempFile();
     return 1;
   }
 
   // Clean up temp file after successful read
-  cleanupTempFile();
+  await cleanupTempFile();
 
   return processJsonResults(
     jsonOutput,
@@ -757,15 +765,16 @@ export function modelScanCommand(program: Command): void {
               }
               cleanedUp = true;
               try {
-                fs.unlinkSync(tempOutputPath);
+                // Use sync version for signal handlers which can't be async
+                unlinkSync(tempOutputPath);
               } catch {
                 // Ignore - file may already be cleaned up or doesn't exist
               }
             };
 
             // Register cleanup handlers for abnormal termination
-            // Note: These handlers ensure cleanup on SIGINT/SIGTERM during scan
-            process.on('exit', cleanupOnExit);
+            // Using once() ensures handlers auto-remove after firing
+            process.once('exit', cleanupOnExit);
             process.once('SIGINT', cleanupOnExit);
             process.once('SIGTERM', cleanupOnExit);
 
@@ -786,11 +795,12 @@ export function modelScanCommand(program: Command): void {
                 existingAuditToUpdate,
               );
             } finally {
-              // Remove handlers and ensure cleanup on normal completion
+              // Cleanup first, then remove handlers to avoid race condition
+              // where a signal arrives between handler removal and cleanup
+              cleanupOnExit();
               process.removeListener('exit', cleanupOnExit);
               process.removeListener('SIGINT', cleanupOnExit);
               process.removeListener('SIGTERM', cleanupOnExit);
-              cleanupOnExit();
             }
           } else {
             // Fallback for older modelaudit versions: capture stdout for JSON

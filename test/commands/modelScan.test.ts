@@ -779,7 +779,7 @@ describe('Temp file JSON output (CLI UI fix)', () => {
     process.exitCode = 0;
   });
 
-  it('should use --output flag with temp file when saving to database', async () => {
+  it('should use inherited stdio when --no-write is specified', async () => {
     // Mock inherited stdio process (captureOutput: false)
     const mockChildProcess = {
       killed: false,
@@ -797,11 +797,10 @@ describe('Temp file JSON output (CLI UI fix)', () => {
     modelScanCommand(program);
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
 
-    // Use --no-write to avoid fs operations we can't mock
-    // This test focuses on the spawn arguments
+    // Use --no-write to skip database save and use passthrough mode
     await command.parseAsync(['node', 'scan-model', 'model.pkl', '--no-write']);
 
-    // Should spawn with inherited stdio
+    // Should spawn with inherited stdio for passthrough mode
     const spawnCalls = (spawn as Mock).mock.calls;
     const scanCall = spawnCalls.find((call) => call[1].includes('scan'));
     expect(scanCall).toBeDefined();

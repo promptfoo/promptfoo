@@ -1,16 +1,22 @@
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import os from 'os';
 
 // Mock fs module before importing the module under test
-vi.mock('fs', () => ({
-  default: {
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      readFileSync: vi.fn(),
+      unlinkSync: vi.fn(),
+      writeFileSync: vi.fn(),
+    },
     readFileSync: vi.fn(),
     unlinkSync: vi.fn(),
     writeFileSync: vi.fn(),
-  },
-  readFileSync: vi.fn(),
-  unlinkSync: vi.fn(),
-  writeFileSync: vi.fn(),
-}));
+  };
+});
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -41,8 +47,85 @@ vi.mock('../../src/globalConfig/accounts', () => ({
 
 import fs from 'fs';
 import logger from '../../src/logger';
+import {
+  createTempOutputPath,
+  supportsCliUiWithOutput,
+} from '../../src/commands/modelScan';
 
-describe('processScanResultsFromFile - temp file workflow', () => {
+describe('supportsCliUiWithOutput', () => {
+  it('should return false for null version', () => {
+    expect(supportsCliUiWithOutput(null)).toBe(false);
+  });
+
+  it('should return false for versions below 0.2.20', () => {
+    const oldVersions = ['0.1.0', '0.2.0', '0.2.19', '0.2.10', '0.2.1'];
+    for (const version of oldVersions) {
+      expect(supportsCliUiWithOutput(version)).toBe(false);
+    }
+  });
+
+  it('should return true for version 0.2.20', () => {
+    expect(supportsCliUiWithOutput('0.2.20')).toBe(true);
+  });
+
+  it('should return true for versions above 0.2.20', () => {
+    const newVersions = ['0.2.21', '0.2.30', '0.3.0', '1.0.0', '0.10.0'];
+    for (const version of newVersions) {
+      expect(supportsCliUiWithOutput(version)).toBe(true);
+    }
+  });
+
+  it('should return false for invalid version strings', () => {
+    const invalidVersions = ['invalid', '1.2', 'a.b.c', ''];
+    for (const version of invalidVersions) {
+      expect(supportsCliUiWithOutput(version)).toBe(false);
+    }
+  });
+
+  it('should handle edge cases for version comparison', () => {
+    // Version 0.3.0 should be supported (minor > 2)
+    expect(supportsCliUiWithOutput('0.3.0')).toBe(true);
+    // Version 1.0.0 should be supported (major > 0)
+    expect(supportsCliUiWithOutput('1.0.0')).toBe(true);
+    // Version 0.2.19 should NOT be supported
+    expect(supportsCliUiWithOutput('0.2.19')).toBe(false);
+  });
+});
+
+describe('createTempOutputPath', () => {
+  it('should generate path in system temp directory', () => {
+    const tempPath = createTempOutputPath();
+    expect(tempPath).toContain(os.tmpdir());
+  });
+
+  it('should generate path with promptfoo-modelscan prefix', () => {
+    const tempPath = createTempOutputPath();
+    expect(tempPath).toContain('promptfoo-modelscan-');
+  });
+
+  it('should generate path with .json extension', () => {
+    const tempPath = createTempOutputPath();
+    expect(tempPath).toMatch(/\.json$/);
+  });
+
+  it('should generate UUID-based unique paths', () => {
+    const uuidPattern =
+      /promptfoo-modelscan-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/;
+    const tempPath = createTempOutputPath();
+    expect(tempPath).toMatch(uuidPattern);
+  });
+
+  it('should generate unique paths on each call', () => {
+    const paths = new Set<string>();
+    for (let i = 0; i < 10; i++) {
+      paths.add(createTempOutputPath());
+    }
+    // All paths should be unique
+    expect(paths.size).toBe(10);
+  });
+});
+
+describe('temp file workflow - fs operations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -51,7 +134,7 @@ describe('processScanResultsFromFile - temp file workflow', () => {
     vi.resetAllMocks();
   });
 
-  it('should read JSON from temp file and clean up on success', async () => {
+  it('should read JSON from temp file correctly', () => {
     const mockResults = JSON.stringify({
       total_checks: 10,
       passed_checks: 10,
@@ -62,192 +145,81 @@ describe('processScanResultsFromFile - temp file workflow', () => {
     });
 
     (fs.readFileSync as Mock).mockReturnValue(mockResults);
-    (fs.unlinkSync as Mock).mockReturnValue(undefined);
 
-    // The processScanResultsFromFile function is not exported, so we verify
-    // the fs operations that it would perform through mocks
-    const tempFilePath = '/tmp/promptfoo-modelscan-123-abc.json';
-
-    // Simulate reading
+    const tempFilePath = createTempOutputPath();
     const content = fs.readFileSync(tempFilePath, 'utf-8');
+
     expect(content).toBe(mockResults);
     expect(fs.readFileSync).toHaveBeenCalledWith(tempFilePath, 'utf-8');
-
-    // Simulate cleanup
-    fs.unlinkSync(tempFilePath);
-    expect(fs.unlinkSync).toHaveBeenCalledWith(tempFilePath);
   });
 
-  it('should clean up temp file even when read fails', async () => {
-    (fs.readFileSync as Mock).mockImplementation(() => {
-      throw new Error('ENOENT: no such file or directory');
-    });
+  it('should handle cleanup when unlinkSync succeeds', () => {
     (fs.unlinkSync as Mock).mockReturnValue(undefined);
 
-    const tempFilePath = '/tmp/promptfoo-modelscan-456-def.json';
-
-    // Simulate read failure
-    expect(() => fs.readFileSync(tempFilePath, 'utf-8')).toThrow('ENOENT');
-
-    // Cleanup should still be called
+    const tempFilePath = createTempOutputPath();
     fs.unlinkSync(tempFilePath);
+
     expect(fs.unlinkSync).toHaveBeenCalledWith(tempFilePath);
   });
 
-  it('should log debug message when cleanup fails', async () => {
+  it('should log debug message when cleanup fails', () => {
     const cleanupError = new Error('EPERM: operation not permitted');
     (fs.unlinkSync as Mock).mockImplementation(() => {
       throw cleanupError;
     });
 
-    const tempFilePath = '/tmp/promptfoo-modelscan-789-ghi.json';
+    const tempFilePath = createTempOutputPath();
 
-    // Simulate cleanup failure
+    // Simulate the cleanup behavior from processScanResultsFromFile
     try {
       fs.unlinkSync(tempFilePath);
     } catch (error) {
-      // In the actual code, this would call logger.debug
       logger.debug(`Failed to cleanup temp file ${tempFilePath}: ${error}`);
     }
 
-    expect(logger.debug).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to cleanup temp file'),
-    );
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Failed to cleanup temp file'));
   });
 
-  it('should write to user-specified output file after reading temp file', async () => {
+  it('should write results to user-specified output file', () => {
     const mockResults = JSON.stringify({
       total_checks: 5,
       passed_checks: 5,
       failed_checks: 0,
-      files_scanned: 2,
-      bytes_scanned: 512,
-      duration: 500,
     });
 
-    (fs.readFileSync as Mock).mockReturnValue(mockResults);
     (fs.writeFileSync as Mock).mockReturnValue(undefined);
 
-    const tempFilePath = '/tmp/promptfoo-modelscan-999-xyz.json';
     const userOutputPath = 'results.json';
+    fs.writeFileSync(userOutputPath, mockResults);
 
-    // Simulate reading from temp file
-    const content = fs.readFileSync(tempFilePath, 'utf-8');
-
-    // Simulate writing to user-specified output
-    fs.writeFileSync(userOutputPath, content);
-
-    expect(fs.readFileSync).toHaveBeenCalledWith(tempFilePath, 'utf-8');
     expect(fs.writeFileSync).toHaveBeenCalledWith(userOutputPath, mockResults);
   });
 
-  it('should handle empty JSON output from temp file', async () => {
+  it('should handle empty JSON output', () => {
     (fs.readFileSync as Mock).mockReturnValue('');
 
-    const tempFilePath = '/tmp/promptfoo-modelscan-empty.json';
+    const tempFilePath = createTempOutputPath();
     const content = fs.readFileSync(tempFilePath, 'utf-8');
 
     expect(content).toBe('');
-    // In actual code, this would trigger logger.error('No output received from model scan')
   });
 
-  it('should handle invalid JSON in temp file', async () => {
+  it('should handle invalid JSON in temp file', () => {
     (fs.readFileSync as Mock).mockReturnValue('not valid json {{{');
 
-    const tempFilePath = '/tmp/promptfoo-modelscan-invalid.json';
+    const tempFilePath = createTempOutputPath();
     const content = fs.readFileSync(tempFilePath, 'utf-8');
 
     expect(() => JSON.parse(content)).toThrow();
-    // In actual code, this would trigger logger.error('Failed to parse scan results')
-  });
-});
-
-describe('supportsCliUiWithOutput version check', () => {
-  // Test the version comparison logic that determines if modelaudit supports CLI UI with --output
-  // This feature was added in v0.2.20
-
-  it('should return false for null version', () => {
-    // supportsCliUiWithOutput returns false for null
-    const version: string | null = null;
-    expect(version).toBeNull();
   });
 
-  it('should return false for versions below 0.2.20', () => {
-    // Versions that should NOT support CLI UI with output
-    const oldVersions = ['0.1.0', '0.2.0', '0.2.19', '0.2.10', '0.2.1'];
-    for (const version of oldVersions) {
-      const parts = version.split('.').map((p) => parseInt(p, 10));
-      const [major, minor, patch] = parts;
-      const supports = major > 0 || (major === 0 && (minor > 2 || (minor === 2 && patch >= 20)));
-      expect(supports).toBe(false);
-    }
-  });
+  it('should handle read failure gracefully', () => {
+    (fs.readFileSync as Mock).mockImplementation(() => {
+      throw new Error('ENOENT: no such file or directory');
+    });
 
-  it('should return true for version 0.2.20', () => {
-    const version = '0.2.20';
-    const parts = version.split('.').map((p) => parseInt(p, 10));
-    const [major, minor, patch] = parts;
-    const supports = major > 0 || (major === 0 && (minor > 2 || (minor === 2 && patch >= 20)));
-    expect(supports).toBe(true);
-  });
+    const tempFilePath = createTempOutputPath();
 
-  it('should return true for versions above 0.2.20', () => {
-    // Versions that SHOULD support CLI UI with output
-    const newVersions = ['0.2.21', '0.2.30', '0.3.0', '1.0.0', '0.10.0'];
-    for (const version of newVersions) {
-      const parts = version.split('.').map((p) => parseInt(p, 10));
-      const [major, minor, patch] = parts;
-      const supports = major > 0 || (major === 0 && (minor > 2 || (minor === 2 && patch >= 20)));
-      expect(supports).toBe(true);
-    }
-  });
-
-  it('should return false for invalid version strings', () => {
-    const invalidVersions = ['invalid', '1.2', 'a.b.c', ''];
-    for (const version of invalidVersions) {
-      const parts = version.split('.').map((p) => parseInt(p, 10));
-      if (parts.length < 3 || parts.some(isNaN)) {
-        expect(true).toBe(true); // Should return false for invalid versions
-      }
-    }
-  });
-});
-
-describe('createTempOutputPath', () => {
-  it('should generate unique temp file paths using UUID', async () => {
-    const crypto = await import('crypto');
-    const os = await import('os');
-    const path = await import('path');
-
-    // Test the UUID-based path format
-    const uuidPattern =
-      /^.*promptfoo-modelscan-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/;
-
-    // Generate multiple paths and verify uniqueness
-    const paths = new Set<string>();
-    for (let i = 0; i < 10; i++) {
-      const uuid = crypto.randomUUID();
-      const tempPath = path.join(os.tmpdir(), `promptfoo-modelscan-${uuid}.json`);
-      expect(tempPath).toMatch(uuidPattern);
-      paths.add(tempPath);
-    }
-
-    // All paths should be unique (UUID guarantees uniqueness)
-    expect(paths.size).toBe(10);
-  });
-
-  it('should use system temp directory', async () => {
-    const crypto = await import('crypto');
-    const os = await import('os');
-    const path = await import('path');
-    const tempDir = os.tmpdir();
-
-    // Verify temp dir is used with UUID format
-    const uuid = crypto.randomUUID();
-    const tempPath = path.join(tempDir, `promptfoo-modelscan-${uuid}.json`);
-
-    expect(tempPath).toContain(tempDir);
-    expect(tempPath).toContain('promptfoo-modelscan');
-    expect(tempPath).toMatch(/\.json$/);
+    expect(() => fs.readFileSync(tempFilePath, 'utf-8')).toThrow('ENOENT');
   });
 });
