@@ -1,9 +1,12 @@
-import type { ChildProcess } from 'child_process';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import {
+  asMockChildProcess,
+  createMockChildProcess,
+} from '../../util/mockChildProcess';
 
 // Mock dependencies
 vi.mock('child_process');
@@ -45,33 +48,13 @@ describe('Model Audit Routes', () => {
         checks: [],
       });
 
-      const mockChildProcess = {
-        stdout: {
-          on: vi.fn().mockImplementation((event: string, callback: (data: Buffer) => void) => {
-            if (event === 'data') {
-              callback(Buffer.from(mockScanOutput));
-            }
-          }),
-        },
-        stderr: {
-          on: vi.fn(),
-        },
-        killed: false,
-        kill: vi.fn(),
-        on: vi.fn().mockImplementation(function (
-          this: typeof mockChildProcess,
-          event: string,
-          callback: (...args: unknown[]) => void,
-        ) {
-          if (event === 'close') {
-            // Simulate async close
-            setImmediate(() => callback(0));
-          }
-          return mockChildProcess;
-        }),
-      } as unknown as ChildProcess;
+      // Use the test utility for cleaner mock creation
+      const mockChildProcess = createMockChildProcess({
+        exitCode: 0,
+        stdoutData: mockScanOutput,
+      });
 
-      mockedSpawn.mockReturnValue(mockChildProcess);
+      mockedSpawn.mockReturnValue(asMockChildProcess(mockChildProcess));
 
       // Request WITHOUT options - this would have caused "Cannot read properties of undefined" before the fix
       const response = await request(app)
@@ -104,32 +87,13 @@ describe('Model Audit Routes', () => {
         checks: [],
       });
 
-      const mockChildProcess = {
-        stdout: {
-          on: vi.fn().mockImplementation((event: string, callback: (data: Buffer) => void) => {
-            if (event === 'data') {
-              callback(Buffer.from(mockScanOutput));
-            }
-          }),
-        },
-        stderr: {
-          on: vi.fn(),
-        },
-        killed: false,
-        kill: vi.fn(),
-        on: vi.fn().mockImplementation(function (
-          this: typeof mockChildProcess,
-          event: string,
-          callback: (...args: unknown[]) => void,
-        ) {
-          if (event === 'close') {
-            setImmediate(() => callback(0));
-          }
-          return mockChildProcess;
-        }),
-      } as unknown as ChildProcess;
+      // Use the test utility for cleaner mock creation
+      const mockChildProcess = createMockChildProcess({
+        exitCode: 0,
+        stdoutData: mockScanOutput,
+      });
 
-      mockedSpawn.mockReturnValue(mockChildProcess);
+      mockedSpawn.mockReturnValue(asMockChildProcess(mockChildProcess));
 
       // Request with empty options object
       const response = await request(app)
