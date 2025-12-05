@@ -439,8 +439,8 @@ describe('EvalOutputCell', () => {
     renderWithProviders(<EvalOutputCell {...propsWithAudioNoFormat} />);
 
     const sourceElement = screen.getByTestId('audio-player').querySelector('source');
-    expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64audiodata');
-    expect(sourceElement).toHaveAttribute('type', 'audio/wav');
+    expect(sourceElement).toHaveAttribute('src', 'data:audio/mp3;base64,base64audiodata');
+    expect(sourceElement).toHaveAttribute('type', 'audio/mp3');
   });
 
   it('allows copying row link to clipboard', async () => {

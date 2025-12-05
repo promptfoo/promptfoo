@@ -73,7 +73,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
         return (
           <Box>
             <audio controls style={{ width: '500px' }} data-testid="audio">
-              <source src={`data:audio/wav;base64,${message?.content}`} type="audio/wav" />
+              <source src={`data:audio/mp3;base64,${message?.content}`} type="audio/mp3" />
               Your browser does not support the audio element.
             </audio>
           </Box>

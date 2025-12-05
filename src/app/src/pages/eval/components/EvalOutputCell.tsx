@@ -270,8 +270,8 @@ function EvalOutputCell({
       <div className="audio-output">
         <audio controls style={{ width: '100%' }} data-testid="audio-player">
           <source
-            src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`}
-            type={`audio/${output.audio.format || 'wav'}`}
+            src={`data:audio/${output.audio.format || 'mp3'};base64,${output.audio.data}`}
+            type={`audio/${output.audio.format || 'mp3'}`}
           />
           Your browser does not support the audio element.
         </audio>
@@ -746,8 +746,8 @@ function EvalOutputCell({
             data-testid="response-audio-player"
           >
             <source
-              src={`data:audio/${responseAudio.format || 'wav'};base64,${responseAudio.data}`}
-              type={`audio/${responseAudio.format || 'wav'}`}
+              src={`data:audio/${responseAudio.format || 'mp3'};base64,${responseAudio.data}`}
+              type={`audio/${responseAudio.format || 'mp3'}`}
             />
             Your browser does not support the audio element.
           </audio>

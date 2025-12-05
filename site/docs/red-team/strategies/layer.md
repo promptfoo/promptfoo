@@ -44,15 +44,30 @@ When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbrea
 3. **Multi-Modal Attacks**: Combine conversation-based attacks with audio/image delivery
 
 ```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-4o-audio-preview
+    config:
+      modalities: ['text', 'audio']
+      audio:
+        voice: 'alloy'
+        format: 'mp3'
+
+prompts:
+  - |
+    [{"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": "{{prompt}}", "format": "mp3"}}]}]
+
 redteam:
-  targets:
-    - id: 'file://audio-provider.js'
+  purpose: 'A helpful customer service assistant'
+  plugins:
+    - harmful:hate
   strategies:
     - id: layer
       config:
         steps:
-          - jailbreak:hydra # Agentic strategy (first)
-          - audio # Each turn converted to audio
+          - id: jailbreak
+            config:
+              maxIterations: 2
+          - audio
 ```
 
 ## Ordering Rules
