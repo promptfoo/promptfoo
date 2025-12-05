@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import { useToast } from '@app/hooks/useToast';
@@ -7,11 +7,15 @@ import ClearIcon from '@mui/icons-material/Clear';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import KeyIcon from '@mui/icons-material/Key';
 import UploadIcon from '@mui/icons-material/Upload';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import IconButton from '@mui/material/IconButton';
+import InputAdornment from '@mui/material/InputAdornment';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
@@ -20,6 +24,7 @@ import RadioGroup from '@mui/material/RadioGroup';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { convertStringKeyToPem, validatePrivateKey } from '../../../utils/crypto';
 import type { ProviderOptions } from '@promptfoo/types';
@@ -34,6 +39,15 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
   updateCustomTarget,
 }) => {
   const { showToast } = useToast();
+
+  // Visibility state for password fields
+  const [showClientSecret, setShowClientSecret] = useState(false);
+  const [showOAuthPassword, setShowOAuthPassword] = useState(false);
+  const [showBasicPassword, setShowBasicPassword] = useState(false);
+  const [showBearerToken, setShowBearerToken] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [showKeystorePassword, setShowKeystorePassword] = useState(false);
+  const [showPfxPassword, setShowPfxPassword] = useState(false);
 
   // Auth configuration helpers
   const getAuthType = (): string | undefined => {
@@ -192,16 +206,33 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
           <TextField
             fullWidth
             label="Client Secret"
-            type="password"
+            type={showClientSecret ? 'text' : 'password'}
             value={selectedTarget.config.auth?.clientSecret || ''}
             onChange={(e) => updateAuthField('clientSecret', e.target.value)}
             margin="normal"
             required={selectedTarget.config.auth?.grantType !== 'password'}
+            autoComplete="off"
             helperText={
               selectedTarget.config.auth?.grantType === 'password'
                 ? 'Optional for password grant'
                 : undefined
             }
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Tooltip title={showClientSecret ? 'Hide client secret' : 'Show client secret'}>
+                    <IconButton
+                      aria-label="toggle client secret visibility"
+                      onClick={() => setShowClientSecret(!showClientSecret)}
+                      edge="end"
+                      size="small"
+                    >
+                      {showClientSecret ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </Tooltip>
+                </InputAdornment>
+              ),
+            }}
           />
 
           {/* Show username/password fields only for password grant type */}
@@ -218,11 +249,28 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
               <TextField
                 fullWidth
                 label="Password"
-                type="password"
+                type={showOAuthPassword ? 'text' : 'password'}
                 value={selectedTarget.config.auth?.password || ''}
                 onChange={(e) => updateAuthField('password', e.target.value)}
                 margin="normal"
                 required
+                autoComplete="off"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title={showOAuthPassword ? 'Hide password' : 'Show password'}>
+                        <IconButton
+                          aria-label="toggle password visibility"
+                          onClick={() => setShowOAuthPassword(!showOAuthPassword)}
+                          edge="end"
+                          size="small"
+                        >
+                          {showOAuthPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  ),
+                }}
               />
             </>
           )}
@@ -266,11 +314,28 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
           <TextField
             fullWidth
             label="Password"
-            type="password"
+            type={showBasicPassword ? 'text' : 'password'}
             value={selectedTarget.config.auth?.password || ''}
             onChange={(e) => updateAuthField('password', e.target.value)}
             margin="normal"
             required
+            autoComplete="off"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Tooltip title={showBasicPassword ? 'Hide password' : 'Show password'}>
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowBasicPassword(!showBasicPassword)}
+                      edge="end"
+                      size="small"
+                    >
+                      {showBasicPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </Tooltip>
+                </InputAdornment>
+              ),
+            }}
           />
         </Box>
       )}
@@ -284,13 +349,30 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
           <TextField
             fullWidth
             label="Token"
-            type="password"
+            type={showBearerToken ? 'text' : 'password'}
             value={selectedTarget.config.auth?.token || ''}
             onChange={(e) => updateAuthField('token', e.target.value)}
             margin="normal"
             required
             placeholder="Enter your Bearer token"
+            autoComplete="off"
             helperText="This token will be sent in the Authorization header as: Bearer {token}"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Tooltip title={showBearerToken ? 'Hide token' : 'Show token'}>
+                    <IconButton
+                      aria-label="toggle token visibility"
+                      onClick={() => setShowBearerToken(!showBearerToken)}
+                      edge="end"
+                      size="small"
+                    >
+                      {showBearerToken ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </Tooltip>
+                </InputAdornment>
+              ),
+            }}
           />
         </Box>
       )}
@@ -330,12 +412,29 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
           <TextField
             fullWidth
             label="API Key Value"
-            type="password"
+            type={showApiKey ? 'text' : 'password'}
             value={selectedTarget.config.auth?.value || ''}
             onChange={(e) => updateAuthField('value', e.target.value)}
             margin="normal"
             required
             placeholder="Enter your API key"
+            autoComplete="off"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Tooltip title={showApiKey ? 'Hide API key' : 'Show API key'}>
+                    <IconButton
+                      aria-label="toggle API key visibility"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      edge="end"
+                      size="small"
+                    >
+                      {showApiKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </Tooltip>
+                </InputAdornment>
+              ),
+            }}
           />
         </Box>
       )}
@@ -726,7 +825,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
 
                   <TextField
                     fullWidth
-                    type="password"
+                    type={showKeystorePassword ? 'text' : 'password'}
                     label="Keystore Password"
                     placeholder="Enter keystore password"
                     value={selectedTarget.config.signatureAuth?.keystorePassword || ''}
@@ -736,7 +835,30 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                         keystorePassword: e.target.value,
                       });
                     }}
+                    autoComplete="off"
                     helperText="Password for the JKS keystore. Can also be set via PROMPTFOO_JKS_PASSWORD environment variable."
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <Tooltip
+                            title={
+                              showKeystorePassword
+                                ? 'Hide keystore password'
+                                : 'Show keystore password'
+                            }
+                          >
+                            <IconButton
+                              aria-label="toggle keystore password visibility"
+                              onClick={() => setShowKeystorePassword(!showKeystorePassword)}
+                              edge="end"
+                              size="small"
+                            >
+                              {showKeystorePassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                            </IconButton>
+                          </Tooltip>
+                        </InputAdornment>
+                      ),
+                    }}
                   />
 
                   <TextField
@@ -829,7 +951,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
 
                       <TextField
                         fullWidth
-                        type="password"
+                        type={showPfxPassword ? 'text' : 'password'}
                         label="PFX Password"
                         placeholder="Enter PFX password"
                         value={selectedTarget.config.signatureAuth?.pfxPassword || ''}
@@ -839,7 +961,26 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                             pfxPassword: e.target.value,
                           });
                         }}
+                        autoComplete="off"
                         helperText="Password for the PFX certificate file. Can also be set via PROMPTFOO_PFX_PASSWORD environment variable."
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <Tooltip
+                                title={showPfxPassword ? 'Hide PFX password' : 'Show PFX password'}
+                              >
+                                <IconButton
+                                  aria-label="toggle PFX password visibility"
+                                  onClick={() => setShowPfxPassword(!showPfxPassword)}
+                                  edge="end"
+                                  size="small"
+                                >
+                                  {showPfxPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                                </IconButton>
+                              </Tooltip>
+                            </InputAdornment>
+                          ),
+                        }}
                       />
                     </>
                   )}

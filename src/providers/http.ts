@@ -1466,13 +1466,41 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private async refreshOAuthTokenIfNeeded(): Promise<void> {
+  private async refreshOAuthTokenIfNeeded(vars: Record<string, any> = {}): Promise<void> {
     if (!this.config.auth || this.config.auth.type !== 'oauth') {
       logger.debug('[HTTP Provider Auth]: No OAuth auth configured');
       return;
     }
 
-    const oauthConfig = this.config.auth;
+    // Render OAuth config values with template substitution
+    const nunjucks = getNunjucksEngine();
+    const baseConfig = {
+      ...this.config.auth,
+      clientId: this.config.auth.clientId
+        ? nunjucks.renderString(this.config.auth.clientId, vars)
+        : undefined,
+      clientSecret: this.config.auth.clientSecret
+        ? nunjucks.renderString(this.config.auth.clientSecret, vars)
+        : undefined,
+      tokenUrl: nunjucks.renderString(this.config.auth.tokenUrl, vars),
+      scopes: this.config.auth.scopes
+        ? this.config.auth.scopes.map((scope) => nunjucks.renderString(scope, vars))
+        : undefined,
+    };
+
+    // Add username/password for password grant type
+    const oauthConfig =
+      this.config.auth.grantType === 'password' && 'username' in this.config.auth
+        ? {
+            ...baseConfig,
+            username: this.config.auth.username
+              ? nunjucks.renderString(this.config.auth.username, vars)
+              : undefined,
+            password: this.config.auth.password
+              ? nunjucks.renderString(this.config.auth.password, vars)
+              : undefined,
+          }
+        : baseConfig;
     const now = Date.now();
 
     // Check if token exists and is still valid (with 60 second buffer)
@@ -1610,7 +1638,7 @@ export class HttpProvider implements ApiProvider {
     invariant(this.lastToken, 'OAuth token should be defined at this point');
   }
 
-  private async refreshSignatureIfNeeded(): Promise<void> {
+  private async refreshSignatureIfNeeded(vars: Record<string, any>): Promise<void> {
     if (!this.config.signatureAuth) {
       logger.debug('[HTTP Provider Auth]: No signature auth configured');
       return;
@@ -1630,10 +1658,19 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider Auth]: Generating new signature');
       this.lastSignatureTimestamp = Date.now();
 
+      // Render privateKey with template substitution
+      const nunjucks = getNunjucksEngine();
+      const renderedConfig: any = {
+        ...signatureAuth,
+        privateKey: signatureAuth.privateKey
+          ? nunjucks.renderString(signatureAuth.privateKey, vars)
+          : undefined,
+      };
+
       // Determine the signature auth type for legacy configurations
-      let authConfig = signatureAuth;
-      if (!('type' in signatureAuth)) {
-        authConfig = { ...signatureAuth, type: 'pem' };
+      let authConfig = renderedConfig;
+      if (!('type' in renderedConfig)) {
+        authConfig = { ...renderedConfig, type: 'pem' };
       }
 
       this.lastSignature = await generateSignature(authConfig, this.lastSignatureTimestamp);
@@ -1732,20 +1769,23 @@ export class HttpProvider implements ApiProvider {
 
     // Add Bearer token if configured
     if (this.config.auth?.type === 'bearer') {
-      allHeaders.authorization = `Bearer ${this.config.auth.token}`;
+      const renderedToken = getNunjucksEngine().renderString(this.config.auth.token, vars);
+      allHeaders.authorization = `Bearer ${renderedToken}`;
     }
 
     // Add Basic Auth credentials if configured
     if (this.config.auth?.type === 'basic') {
-      const credentials = Buffer.from(
-        `${this.config.auth.username}:${this.config.auth.password}`,
-      ).toString('base64');
+      const renderedUsername = getNunjucksEngine().renderString(this.config.auth.username, vars);
+      const renderedPassword = getNunjucksEngine().renderString(this.config.auth.password, vars);
+      const credentials = Buffer.from(`${renderedUsername}:${renderedPassword}`).toString('base64');
       allHeaders.authorization = `Basic ${credentials}`;
     }
 
     // Add API Key to header if configured
     if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'header') {
-      allHeaders[this.config.auth.keyName.toLowerCase()] = this.config.auth.value;
+      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+      allHeaders[renderedKeyName.toLowerCase()] = renderedValue;
     }
 
     return allHeaders;
@@ -1762,13 +1802,13 @@ export class HttpProvider implements ApiProvider {
     } as Record<string, any>;
 
     if (this.config.auth?.type === 'oauth') {
-      await this.refreshOAuthTokenIfNeeded();
+      await this.refreshOAuthTokenIfNeeded(vars);
       invariant(this.lastToken, 'OAuth token should be defined at this point');
     }
 
     // Add signature values to vars if signature auth is enabled
     if (this.config.signatureAuth) {
-      await this.refreshSignatureIfNeeded();
+      await this.refreshSignatureIfNeeded(vars);
       invariant(this.lastSignature, 'Signature should be defined at this point');
       invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
 
@@ -1833,7 +1873,9 @@ export class HttpProvider implements ApiProvider {
 
         // Add API Key to query params if configured
         if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
-          baseQueryParams[this.config.auth.keyName] = this.config.auth.value;
+          const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+          const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+          baseQueryParams[renderedKeyName] = renderedValue;
         }
 
         return Object.keys(baseQueryParams).length > 0 ? baseQueryParams : undefined;
@@ -2030,27 +2072,32 @@ export class HttpProvider implements ApiProvider {
 
     // Add Bearer token if configured
     if (this.config.auth?.type === 'bearer') {
-      parsedRequest.headers.authorization = `Bearer ${this.config.auth.token}`;
+      const renderedToken = getNunjucksEngine().renderString(this.config.auth.token, vars);
+      parsedRequest.headers.authorization = `Bearer ${renderedToken}`;
     }
 
     // Add Basic Auth credentials if configured
     if (this.config.auth?.type === 'basic') {
-      const credentials = Buffer.from(
-        `${this.config.auth.username}:${this.config.auth.password}`,
-      ).toString('base64');
+      const renderedUsername = getNunjucksEngine().renderString(this.config.auth.username, vars);
+      const renderedPassword = getNunjucksEngine().renderString(this.config.auth.password, vars);
+      const credentials = Buffer.from(`${renderedUsername}:${renderedPassword}`).toString('base64');
       parsedRequest.headers.authorization = `Basic ${credentials}`;
     }
 
     // Add API Key to header if configured
     if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'header') {
-      parsedRequest.headers[this.config.auth.keyName.toLowerCase()] = this.config.auth.value;
+      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+      parsedRequest.headers[renderedKeyName.toLowerCase()] = renderedValue;
     }
 
     // Add API Key to query params if configured
     if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
       try {
+        const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+        const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
         const urlObj = new URL(url);
-        urlObj.searchParams.append(this.config.auth.keyName, this.config.auth.value);
+        urlObj.searchParams.append(renderedKeyName, renderedValue);
         url = urlObj.toString();
         // Extract the path and query from the full URL
         const urlPath = urlObj.pathname + urlObj.search;
