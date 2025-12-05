@@ -271,8 +271,11 @@ export function postbuild(): PostbuildResult {
   return result;
 }
 
-// Run if executed directly
-const result = postbuild();
-if (!result.success) {
-  process.exit(1);
+// Run if executed directly (not when imported for testing)
+const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMainModule) {
+  const result = postbuild();
+  if (!result.success) {
+    process.exit(1);
+  }
 }

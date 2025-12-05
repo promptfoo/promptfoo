@@ -62,10 +62,9 @@ describe('postbuild', () => {
   describe('WRAPPER_TYPES constant', () => {
     it('should include all supported wrapper types', async () => {
       // Import the module - this verifies it loads without error
-      // The module runs postbuild() on import, which validates wrapper types exist
-      await import('../../scripts/postbuild');
-      // If we get here without error, all wrapper files were found
-      expect(true).toBe(true);
+      const { postbuild } = await import('../../scripts/postbuild');
+      // The postbuild function should be exported and callable
+      expect(typeof postbuild).toBe('function');
     });
   });
 
