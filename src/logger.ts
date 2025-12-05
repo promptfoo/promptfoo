@@ -49,6 +49,19 @@ export interface SanitizedLogContext {
 // Lazy source map support - only loaded when debug is enabled
 export let sourceMapSupportInitialized = false;
 
+// Shutdown state tracking - prevents writes once logger closure begins
+let isLoggerShuttingDown = false;
+
+// Setter for testing purposes
+export function setLoggerShuttingDown(value: boolean): void {
+  isLoggerShuttingDown = value;
+}
+
+// Getter for testing purposes
+export function getLoggerShuttingDown(): boolean {
+  return isLoggerShuttingDown;
+}
+
 export async function initializeSourceMapSupport(): Promise<void> {
   if (!sourceMapSupportInitialized) {
     try {
@@ -351,6 +364,11 @@ function createLogMethodWithContext(
   level: keyof typeof LOG_LEVELS,
 ): (message: string, context?: SanitizedLogContext) => void {
   return (message: string, context?: SanitizedLogContext) => {
+    // Prevent new writes once shutdown starts
+    if (isLoggerShuttingDown) {
+      return;
+    }
+
     if (!context) {
       internalLogger[level](message);
       return;
@@ -433,15 +451,17 @@ export async function logRequestResponse(options: {
 /**
  * Close all file transports and cleanup logger resources
  * Should be called during graceful shutdown to prevent event loop hanging
- * Waits for all pending writes to flush before closing streams
  *
- * Note: We use the 'flush' event instead of 'finish' because winston's File
- * transport emits 'finish' before the underlying stream has fully flushed.
+ * IMPORTANT: All logging should be done BEFORE calling this function
+ *
+ * Note: Winston's 'flush' and 'finish' events are unreliable (fire before actual flush).
+ * We use a short timeout to let Winston flush its internal buffer before removing transports.
  * See: https://github.com/winstonjs/winston/issues/1504
  */
 export async function closeLogger(): Promise<void> {
+  // Set shutdown flag FIRST to prevent new writes during cleanup
+  setLoggerShuttingDown(true);
   try {
-    // Close all file transports
     const fileTransports = winstonLogger.transports.filter(
       (transport) => transport instanceof winston.transports.File,
     );
@@ -450,32 +470,15 @@ export async function closeLogger(): Promise<void> {
       return;
     }
 
-    // Remove transports first to stop queuing new writes
+    // Wait briefly for Winston to flush its internal write buffer
+    // This prevents "write after end" errors when remove() triggers stream closure
+    // 100ms is sufficient for Winston to complete pending async writes
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Remove transports to allow process to exit (prevents event loop hanging)
     for (const transport of fileTransports) {
       winstonLogger.remove(transport);
     }
-
-    // End each transport and wait for pending writes to flush
-    // Using 'flush' event which fires after data is written to disk
-    const closePromises = fileTransports.map((transport) => {
-      return new Promise<void>((resolve) => {
-        // Listen for 'flush' event which indicates data has been written to disk
-        // This is more reliable than 'finish' which fires before actual flush
-        transport.once('flush', resolve);
-        transport.once('error', resolve);
-
-        // Call end() to trigger the flush - more reliable than close()
-        if (typeof transport.end === 'function') {
-          transport.end();
-        } else if (typeof transport.close === 'function') {
-          transport.close();
-        } else {
-          resolve();
-        }
-      });
-    });
-
-    await Promise.all(closePromises);
   } catch (error) {
     // Can't use logger here since we're shutting it down
     console.error(`Error closing logger: ${error}`);

@@ -193,6 +193,13 @@ async function main() {
 const shutdownGracefully = async () => {
   logger.debug('Shutting down gracefully...');
   await telemetry.shutdown();
+  logger.debug('Shutdown complete');
+
+  // Log final messages BEFORE closing logger
+  logger.debug('Closing logger file transports');
+
+  // Now close logger silently (no more logging after this point)
+  await closeLogger();
   closeDbIfOpen();
 
   try {
@@ -201,9 +208,6 @@ const shutdownGracefully = async () => {
   } catch {
     // Silently handle dispatcher destroy errors
   }
-
-  logger.debug('Shutdown complete');
-  await closeLogger();
 
   // Give Node.js time to naturally exit if all handles are closed
   // If there are lingering handles (file watchers, connections, etc), force exit

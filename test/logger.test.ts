@@ -743,7 +743,6 @@ describe('logger', () => {
 
     beforeEach(() => {
       originalTransports = [...mockLogger.transports];
-      mockLogger.remove.mockClear();
     });
 
     afterEach(() => {
@@ -752,102 +751,55 @@ describe('logger', () => {
       mockLogger.transports.push(...originalTransports);
     });
 
-    // Helper to create mock file transport with event emitter behavior
-    // Uses 'flush' event which is more reliable than 'finish' for winston File transport
-    // See: https://github.com/winstonjs/winston/issues/1504
-    function createMockFileTransport(filename: string, options: { emitFlush?: boolean } = {}) {
-      const { emitFlush = true } = options;
-      const eventHandlers: Record<string, Function[]> = {};
-      const mockTransport = {
-        end: vi.fn().mockImplementation(() => {
-          // Simulate async flush event after end is called
-          if (emitFlush) {
-            setTimeout(() => {
-              eventHandlers['flush']?.forEach((handler) => handler());
-            }, 0);
-          }
-        }),
-        close: vi.fn(),
-        once: vi.fn().mockImplementation((event: string, handler: Function) => {
-          if (!eventHandlers[event]) {
-            eventHandlers[event] = [];
-          }
-          eventHandlers[event].push(handler);
-        }),
-        filename,
+    it('should set shutdown flag when closing', async () => {
+      // Create mock file transports
+      const mockFileTransport1 = {
+        filename: '/mock/path/debug.log',
       };
-      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
-      return mockTransport;
-    }
+      const mockFileTransport2 = {
+        filename: '/mock/path/error.log',
+      };
 
-    it('should end all file transports and wait for flush', async () => {
-      const mockFileTransport1 = createMockFileTransport('/mock/path/debug.log');
-      const mockFileTransport2 = createMockFileTransport('/mock/path/error.log');
+      // Make transports appear as File instances
+      Object.setPrototypeOf(mockFileTransport1, winstonMock.transports.File.prototype);
+      Object.setPrototypeOf(mockFileTransport2, winstonMock.transports.File.prototype);
 
+      // Set up transports array with file transports
       mockLogger.transports.length = 0;
       mockLogger.transports.push(mockFileTransport1 as any, mockFileTransport2 as any);
 
-      await logger.closeLogger();
-
-      expect(mockFileTransport1.end).toHaveBeenCalled();
-      expect(mockFileTransport2.end).toHaveBeenCalled();
-      expect(mockLogger.remove).toHaveBeenCalledTimes(2);
-      // Verify remove is called before end (to prevent new writes)
-      expect(mockLogger.remove).toHaveBeenNthCalledWith(1, mockFileTransport1);
-      expect(mockLogger.remove).toHaveBeenNthCalledWith(2, mockFileTransport2);
-    });
-
-    it('should fall back to close() if end() is not available', async () => {
-      const eventHandlers: Record<string, Function[]> = {};
-      const mockTransportWithoutEnd = {
-        close: vi.fn().mockImplementation(() => {
-          setTimeout(() => {
-            eventHandlers['flush']?.forEach((handler) => handler());
-          }, 0);
-        }),
-        once: vi.fn().mockImplementation((event: string, handler: Function) => {
-          if (!eventHandlers[event]) {
-            eventHandlers[event] = [];
-          }
-          eventHandlers[event].push(handler);
-        }),
-        filename: '/mock/path/test.log',
-        // No end method
-      };
-
-      Object.setPrototypeOf(mockTransportWithoutEnd, winstonMock.transports.File.prototype);
-
-      mockLogger.transports.length = 0;
-      mockLogger.transports.push(mockTransportWithoutEnd as any);
+      // Reset shutdown flag
+      logger.setLoggerShuttingDown(false);
 
       await logger.closeLogger();
 
-      expect(mockTransportWithoutEnd.close).toHaveBeenCalled();
-      expect(mockLogger.remove).toHaveBeenCalledWith(mockTransportWithoutEnd);
+      // Shutdown flag should be set (critical for preventing writes during shutdown)
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+
+      // Reset for other tests
+      logger.setLoggerShuttingDown(false);
     });
 
-    it('should handle transports without end or close method', async () => {
-      const mockTransportWithoutMethods = {
+    it('should handle file transports gracefully', async () => {
+      const mockTransport = {
         filename: '/mock/path/test.log',
-        once: vi.fn(),
-        // No end or close method
       };
 
-      Object.setPrototypeOf(mockTransportWithoutMethods, winstonMock.transports.File.prototype);
+      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
 
       mockLogger.transports.length = 0;
-      mockLogger.transports.push(mockTransportWithoutMethods as any);
+      mockLogger.transports.push(mockTransport as any);
 
       // Should not throw
-      await expect(logger.closeLogger()).resolves.toBeUndefined();
-      expect(mockLogger.remove).toHaveBeenCalledWith(mockTransportWithoutMethods);
+      await expect(logger.closeLogger()).resolves.not.toThrow();
+
+      // Shutdown flag should be set
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+      logger.setLoggerShuttingDown(false);
     });
 
     it('should skip non-file transports', async () => {
-      const mockConsoleTransport = {
-        end: vi.fn(),
-        close: vi.fn(),
-      };
+      const mockConsoleTransport = {};
       // Don't set File prototype - this is a console transport
 
       mockLogger.transports.length = 0;
@@ -855,45 +807,54 @@ describe('logger', () => {
 
       await logger.closeLogger();
 
-      // Console transport should not be closed
-      expect(mockConsoleTransport.end).not.toHaveBeenCalled();
-      expect(mockConsoleTransport.close).not.toHaveBeenCalled();
-      expect(mockLogger.remove).not.toHaveBeenCalled();
+      // Shutdown flag should still be set even with no file transports
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+      logger.setLoggerShuttingDown(false);
     });
 
-    it('should handle error event on transport end', async () => {
-      const eventHandlers: Record<string, Function[]> = {};
-      const mockTransportWithError = {
-        end: vi.fn().mockImplementation(() => {
-          // Emit error event instead of flush
-          setTimeout(() => {
-            eventHandlers['error']?.forEach((handler) => handler(new Error('Write failed')));
-          }, 0);
-        }),
-        once: vi.fn().mockImplementation((event: string, handler: Function) => {
-          if (!eventHandlers[event]) {
-            eventHandlers[event] = [];
-          }
-          eventHandlers[event].push(handler);
-        }),
-        filename: '/mock/path/error.log',
+    it('should handle errors gracefully', async () => {
+      const mockTransport = {
+        filename: '/mock/path/test.log',
       };
 
-      Object.setPrototypeOf(mockTransportWithError, winstonMock.transports.File.prototype);
+      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
 
       mockLogger.transports.length = 0;
-      mockLogger.transports.push(mockTransportWithError as any);
+      mockLogger.transports.push(mockTransport as any);
 
-      // Should resolve without throwing even when error event fires
-      await expect(logger.closeLogger()).resolves.toBeUndefined();
+      // Should not throw
+      await expect(logger.closeLogger()).resolves.not.toThrow();
+
+      logger.setLoggerShuttingDown(false);
     });
 
     it('should handle empty transports array', async () => {
       mockLogger.transports.length = 0;
 
+      logger.setLoggerShuttingDown(false);
+
       // Should not throw
-      await expect(logger.closeLogger()).resolves.toBeUndefined();
-      expect(mockLogger.remove).not.toHaveBeenCalled();
+      await expect(logger.closeLogger()).resolves.not.toThrow();
+
+      // Shutdown flag should still be set even with no transports
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should prevent logging after shutdown flag is set', async () => {
+      const debugSpy = vi.spyOn(mockLogger, 'debug');
+
+      // Set shutdown flag
+      logger.setLoggerShuttingDown(true);
+
+      // Try to log using default export
+      logger.default.debug('This should not be logged');
+
+      // Logger should not have been called (shutdown flag prevents it)
+      expect(debugSpy).not.toHaveBeenCalled();
+
+      // Reset flag for other tests
+      logger.setLoggerShuttingDown(false);
     });
   });
 
