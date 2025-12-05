@@ -52,16 +52,17 @@ export async function runDbMigrations(): Promise<void> {
 
         // Use __dirname in CJS context (Jest/tests) or getDirectory() in ESM
         const dir = typeof __dirname !== 'undefined' ? __dirname : getCurrentDir();
-        let migrationsFolder: string;
-        if (dir.includes('dist/src')) {
-          // When running from bundled server (e.g., dist/src/server/index.js)
-          // Navigate to project root and find drizzle folder
-          const projectRoot = dir.split('dist/src')[0];
-          migrationsFolder = path.join(projectRoot, 'drizzle');
-        } else {
-          // When running from source (e.g., src/migrate.ts)
-          migrationsFolder = path.join(dir, '..', 'drizzle');
-        }
+        // Is running from bundled server (e.g., dist/src/server/index.js)?
+        const migrationsFolder = dir.includes('dist/server/src')
+          ? path.join(
+              // Navigate to project root and find drizzle folder
+              dir.split('dist/server/src')[0],
+              'dist',
+              'promptfoo',
+              'drizzle',
+            )
+          : // Otherwise, running from source (e.g., src/migrate.ts)
+            path.join(dir, '..', 'drizzle');
 
         logger.debug(`Running database migrations from: ${migrationsFolder}`);
         migrate(db, { migrationsFolder });
