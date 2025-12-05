@@ -50,8 +50,8 @@ export async function runDbMigrations(): Promise<void> {
       try {
         const db = getDb();
 
-        // Use __dirname in CJS context (Jest/tests) or getDirectory() in ESM
-        const dir = typeof __dirname !== 'undefined' ? __dirname : getCurrentDir();
+        // Get the current directory
+        const dir = getCurrentDir();
         // Is running from bundled server (e.g., dist/src/server/index.js)?
         const migrationsFolder = dir.includes('dist/server/src')
           ? path.join(
