@@ -598,8 +598,7 @@ describe('DigitalSignatureAuthTab', () => {
         />,
       );
 
-      // The TextField for privateKeyPath doesn't have a label, only a placeholder
-      const privateKeyPathInput = screen.getByPlaceholderText('/path/to/private_key.pem');
+      const privateKeyPathInput = screen.getByLabelText('Private Key File Path');
       fireEvent.change(privateKeyPathInput, { target: { value: '/path/to/private.key' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {

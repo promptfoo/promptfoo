@@ -457,11 +457,11 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
 
           <Stack spacing={4}>
             <Box>
-              <Typography variant="subtitle1" gutterBottom>
-                Certificate Type
-              </Typography>
               <FormControl fullWidth>
+                <InputLabel id="certificate-type-label">Certificate Type</InputLabel>
                 <Select
+                  labelId="certificate-type-label"
+                  label="Certificate Type"
                   value={selectedTarget.config.signatureAuth?.certificateType || 'pem'}
                   onChange={(e) => {
                     const certType = e.target.value;
@@ -704,13 +704,17 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
             {selectedTarget.config.signatureAuth?.certificateType === 'pem' &&
               selectedTarget.config.signatureAuth?.keyInputType === 'path' && (
                 <Paper variant="outlined" sx={{ p: 3 }}>
-                  <Typography gutterBottom color="text.secondary">
-                    Specify the path on disk to your PEM format private key file
-                  </Typography>
                   <TextField
                     fullWidth
+                    label="Private Key File Path"
                     placeholder="/path/to/private_key.pem"
                     value={selectedTarget.config.signatureAuth?.privateKeyPath || ''}
+                    helperText=" Specify the path on disk to your PEM format private key file"
+                    slotProps={{
+                      inputLabel: {
+                        shrink: true,
+                      },
+                    }}
                     onChange={(e) => {
                       updateCustomTarget('signatureAuth', {
                         ...selectedTarget.config.signatureAuth,
