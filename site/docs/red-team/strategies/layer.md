@@ -45,6 +45,8 @@ When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbrea
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
+  targets:
+    - id: 'file://audio-provider.js'
   strategies:
     - id: layer
       config:
@@ -53,29 +55,9 @@ redteam:
           - audio # Each turn converted to audio
 ```
 
-This enables testing voice-based AI agents with sophisticated multi-turn jailbreak attempts.
-
-## Step Categories
-
-Understanding step categories helps you build valid layer configurations:
-
-| Category                  | Examples                                  | Behavior                                                 |
-| ------------------------- | ----------------------------------------- | -------------------------------------------------------- |
-| **Agentic Multi-Turn**    | hydra, crescendo, goat, custom            | Orchestrates conversation with target, maintains history |
-| **Agentic Multi-Attempt** | jailbreak, jailbreak:meta, jailbreak:tree | Runs multiple independent attack attempts                |
-| **Multi-Modal**           | audio, image                              | Converts text to audio/image format                      |
-| **Text Transform**        | base64, rot13, leetspeak, hex             | Encodes/transforms text, stays as text                   |
-
 ## Ordering Rules
 
-Follow these rules for valid configurations:
-
-| Rule                    | Enforcement                                              |
-| ----------------------- | -------------------------------------------------------- |
-| **Agentic first**       | Agentic strategies should be the first step (if present) |
-| **One agentic max**     | Only one agentic strategy allowed per layer              |
-| **Multi-modal last**    | Multi-modal strategies must be the last step             |
-| **One multi-modal max** | Only one multi-modal strategy allowed per layer          |
+Agentic strategies (hydra, crescendo, goat, jailbreak) must come first (max 1), and multi-modal strategies (audio, image) must come last (max 1). Text transforms (base64, rot13, leetspeak) can be chained in between.
 
 ### Valid Patterns
 
@@ -109,9 +91,9 @@ steps: [hydra, crescendo]
 steps: [audio, image]
 ```
 
-:::warning Transform Before Agentic
+:::warning
 
-If you place transforms before an agentic strategy, those transforms will modify the **attack goal**, not each turn. The agentic strategy will see an encoded goal (e.g., base64) and generate attacks to achieve that encoded goal—which is rarely useful.
+Transforms before an agentic strategy modify the attack goal, not each turn—rarely useful.
 
 :::
 
