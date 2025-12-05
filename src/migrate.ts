@@ -58,13 +58,12 @@ export async function runDbMigrations(): Promise<void> {
           // Navigate to project root and find drizzle folder
           const projectRoot = dir.split('dist/src')[0];
           migrationsFolder = path.join(projectRoot, 'drizzle');
-        } 
+        }
         // PF Cloud runtime scans:
         else if (dir.includes('dist/server/src')) {
           const projectRoot = dir.split('dist/server/src')[0];
           migrationsFolder = path.join(projectRoot, 'dist', 'promptfoo', 'drizzle');
-        }
-        else {
+        } else {
           // When running from source (e.g., src/migrate.ts)
           migrationsFolder = path.join(dir, '..', 'drizzle');
         }
