@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Red Team Starter
+description: Red Team Target with OAuth Authentication
 
 prompts:
   - '{{prompt}}'
