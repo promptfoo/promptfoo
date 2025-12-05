@@ -230,6 +230,7 @@ export const MEDICAL_PLUGINS = [
   'medical:incorrect-knowledge',
   'medical:off-label-use',
   'medical:prioritization-error',
+  'medical:reproductive-health',
   'medical:sycophancy',
 ] as const;
 
@@ -306,6 +307,7 @@ export const ADDITIONAL_PLUGINS = [
   'medical:incorrect-knowledge',
   'medical:off-label-use',
   'medical:prioritization-error',
+  'medical:reproductive-health',
   'medical:sycophancy',
   'financial:calculation-error',
   'financial:compliance-violation',
