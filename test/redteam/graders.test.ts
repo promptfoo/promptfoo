@@ -16,6 +16,7 @@ import {
 import { MCPPluginGrader } from '../../src/redteam/plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination';
+import { MedicalReproductiveHealthPluginGrader } from '../../src/redteam/plugins/medical/medicalReproductiveHealth';
 import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
@@ -72,6 +73,11 @@ describe('getGraderById', () => {
 
     const medicalHallucinationGrader = getGraderById('promptfoo:redteam:medical:hallucination');
     expect(medicalHallucinationGrader).toBeInstanceOf(MedicalHallucinationPluginGrader);
+
+    const medicalReproductiveHealthGrader = getGraderById(
+      'promptfoo:redteam:medical:reproductive-health',
+    );
+    expect(medicalReproductiveHealthGrader).toBeInstanceOf(MedicalReproductiveHealthPluginGrader);
 
     const offTopicGrader = getGraderById('promptfoo:redteam:off-topic');
     expect(offTopicGrader).toBeInstanceOf(OffTopicPluginGrader);

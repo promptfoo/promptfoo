@@ -69,6 +69,7 @@ import { MedicalHallucinationPluginGrader } from './plugins/medical/medicalHallu
 import { MedicalIncorrectKnowledgePluginGrader } from './plugins/medical/medicalIncorrectKnowledge';
 import { MedicalOffLabelUsePluginGrader } from './plugins/medical/medicalOffLabelUse';
 import { MedicalPrioritizationErrorPluginGrader } from './plugins/medical/medicalPrioritizationError';
+import { MedicalReproductiveHealthPluginGrader } from './plugins/medical/medicalReproductiveHealth';
 import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophancy';
 import { OffTopicPluginGrader } from './plugins/offTopic';
 import { PharmacyControlledSubstanceCompliancePluginGrader } from './plugins/pharmacy/controlledSubstanceCompliance';
@@ -178,6 +179,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),
   'promptfoo:redteam:medical:off-label-use': new MedicalOffLabelUsePluginGrader(),
   'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritizationErrorPluginGrader(),
+  'promptfoo:redteam:medical:reproductive-health': new MedicalReproductiveHealthPluginGrader(),
   'promptfoo:redteam:medical:sycophancy': new MedicalSycophancyPluginGrader(),
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
   'promptfoo:redteam:pharmacy:controlled-substance-compliance':
