@@ -6,7 +6,7 @@ import logger from '../../../logger';
 import { doRedteamRun } from '../../../redteam/shared';
 import type { RedteamRunOptions } from '../../../redteam/types';
 import { loadDefaultConfig } from '../../../util/config/default';
-import { createToolResponse } from '../lib/utils';
+import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
 
 /**
  * Run a redteam scan to test AI systems for vulnerabilities
@@ -125,9 +125,13 @@ export function registerRedteamRunTool(server: McpServer) {
 
         logger.debug(`Running redteam scan with config: ${configPath || 'promptfooconfig.yaml'}`);
 
-        // Run the redteam scan
+        // Run the redteam scan with timeout protection
         const startTime = Date.now();
-        const evalResult = await doRedteamRun(options);
+        const evalResult = await withTimeout(
+          doRedteamRun(options),
+          DEFAULT_TOOL_TIMEOUT_MS,
+          'Redteam scan timed out. This may indicate provider connectivity issues, missing API credentials, or a very large test suite.',
+        );
         const endTime = Date.now();
 
         if (!evalResult) {
@@ -217,6 +221,20 @@ export function registerRedteamRunTool(server: McpServer) {
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         logger.error(`Redteam scan failed: ${errorMessage}`);
+
+        // Handle timeout specifically
+        if (errorMessage.includes('timed out')) {
+          return createToolResponse(
+            'redteam_run',
+            false,
+            {
+              originalError: errorMessage,
+              suggestion:
+                'The scan took too long. Try reducing the test scope, checking API credentials, or increasing timeout.',
+            },
+            'Redteam scan timed out',
+          );
+        }
 
         const errorData = {
           configuration: {

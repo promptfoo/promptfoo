@@ -15,7 +15,7 @@ import {
 import type { RedteamCliGenerateOptions } from '../../../redteam/types';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { RedteamGenerateOptionsSchema } from '../../../validators/redteam';
-import { createToolResponse } from '../lib/utils';
+import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
 
 /**
  * Generate adversarial test cases for redteam security testing
@@ -225,9 +225,13 @@ export function registerRedteamGenerateTool(server: McpServer) {
           `Generating redteam tests with config: ${configPath || 'promptfooconfig.yaml'}`,
         );
 
-        // Generate test cases
+        // Generate test cases with timeout protection
         const startTime = Date.now();
-        const result = await doGenerateRedteam(optionsParse.data);
+        const result = await withTimeout(
+          doGenerateRedteam(optionsParse.data),
+          DEFAULT_TOOL_TIMEOUT_MS,
+          'Redteam test generation timed out. This may indicate provider connectivity issues, missing API credentials, or too many tests requested.',
+        );
         const endTime = Date.now();
 
         if (!result) {
@@ -322,6 +326,20 @@ export function registerRedteamGenerateTool(server: McpServer) {
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         logger.error(`Redteam generation failed: ${errorMessage}`);
+
+        // Handle timeout specifically
+        if (errorMessage.includes('timed out')) {
+          return createToolResponse(
+            'redteam_generate',
+            false,
+            {
+              originalError: errorMessage,
+              suggestion:
+                'The generation took too long. Try reducing numTests, checking API credentials, or using fewer plugins.',
+            },
+            'Redteam test generation timed out',
+          );
+        }
 
         const errorData = {
           configuration: {

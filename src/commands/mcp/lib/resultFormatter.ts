@@ -107,9 +107,7 @@ function formatSingleResult(
   }
 
   // Format prompt raw text
-  const promptRaw = result.prompt.raw
-    ? truncateText(result.prompt.raw, 100)
-    : '';
+  const promptRaw = result.prompt.raw ? truncateText(result.prompt.raw, 100) : '';
 
   // Format assertions if present
   let assertions: FormattedEvalResult['assertions'] = null;
