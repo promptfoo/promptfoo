@@ -46,10 +46,7 @@ vi.mock('../../src/globalConfig/accounts', () => ({
 }));
 
 import logger from '../../src/logger';
-import {
-  createTempOutputPath,
-  supportsCliUiWithOutput,
-} from '../../src/commands/modelScan';
+import { createTempOutputPath, supportsCliUiWithOutput } from '../../src/commands/modelScan';
 
 describe('supportsCliUiWithOutput', () => {
   it('should return false for null version', () => {
@@ -159,7 +156,9 @@ describe('temp file workflow - expected fs behavior patterns', () => {
       logger.debug(`Failed to cleanup temp file ${tempFilePath}: ${error}`);
     }
 
-    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Failed to cleanup temp file'));
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to cleanup temp file'),
+    );
     expect(logger.error).not.toHaveBeenCalled();
   });
 
