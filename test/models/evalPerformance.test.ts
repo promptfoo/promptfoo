@@ -2,10 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
-import {
-  clearCountCache,
-  getCachedResultsCount,
-} from '../../src/models/evalPerformance';
+import { clearCountCache, getCachedResultsCount } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
 
 describe('evalPerformance', () => {
