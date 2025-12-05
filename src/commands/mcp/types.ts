@@ -1,32 +1,49 @@
-export interface ValidationResults {
-  isValid: boolean;
-  errors: string[];
-  warnings: string[];
-  config?: any;
-  testSuite?: any;
-}
+/**
+ * MCP Types - Re-export from lib/types.ts
+ *
+ * All MCP type definitions are consolidated in lib/types.ts
+ * This file exists for backwards compatibility and shorter import paths
+ */
+export {
+  // Core MCP types
+  type McpCommandOptions,
+  type ToolResponse,
+  type ToolResult,
 
-export interface TestResult {
-  providerId: string;
-  success: boolean;
-  responseTime?: number;
-  response?: string;
-  tokenUsage?: any;
-  cost?: number;
-  error?: string;
-  timedOut?: boolean;
-  metadata?: any;
-}
+  // Content types
+  type TextContent,
 
-export interface ToolResponse {
-  tool: string;
-  success: boolean;
-  timestamp: string;
-  data?: any;
-  error?: string;
-}
+  // Validation types
+  type ValidationResults,
 
-export interface McpCommandOptions {
-  port: string;
-  transport: string;
-}
+  // Provider testing types
+  type TestResult,
+  type ProviderTestOptions,
+
+  // Tool registration types
+  type ToolDefinition,
+  type ToolHandler,
+  type ToolRegistry,
+
+  // Error types
+  type ToolError,
+
+  // Health check types
+  type HealthCheckResult,
+
+  // Evaluation types
+  type EvaluationSummary,
+  type EvaluationMetrics,
+
+  // Configuration types
+  type ConfigValidationOptions,
+
+  // Assertion testing types
+  type AssertionTestOptions,
+
+  // Evaluation execution types
+  type EvaluationOptions,
+
+  // Share evaluation types
+  type ShareOptions,
+} from './lib/types';

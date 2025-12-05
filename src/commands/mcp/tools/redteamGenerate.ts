@@ -15,7 +15,7 @@ import {
 import type { RedteamCliGenerateOptions } from '../../../redteam/types';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { RedteamGenerateOptionsSchema } from '../../../validators/redteam';
-import { createToolResponse } from '../utils';
+import { createToolResponse } from '../lib/utils';
 
 /**
  * Generate adversarial test cases for redteam security testing

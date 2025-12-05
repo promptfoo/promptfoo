@@ -1,4 +1,4 @@
-import type { ToolContent, ToolResponse, ToolResult } from './types';
+import type { TextContent, ToolResponse, ToolResult } from './types';
 
 /**
  * Creates a standardized tool response with proper typing
@@ -8,7 +8,7 @@ export function createToolResponse<T = unknown>(
   success: boolean,
   data?: T,
   error?: string,
-): ToolResult<T> {
+): ToolResult {
   const response: ToolResponse<T> = {
     tool,
     success,
@@ -23,7 +23,7 @@ export function createToolResponse<T = unknown>(
     response.error = error;
   }
 
-  const content: ToolContent = {
+  const content: TextContent = {
     type: 'text',
     text: JSON.stringify(response, null, 2),
   };

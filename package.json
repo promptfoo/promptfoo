@@ -236,7 +236,7 @@
     "@inquirer/editor": "^5.0.1",
     "@inquirer/input": "^5.0.1",
     "@inquirer/select": "^5.0.1",
-    "@modelcontextprotocol/sdk": "1.24.0",
+    "@modelcontextprotocol/sdk": "1.24.3",
     "@openai/agents": "^0.3.3",
     "@types/ws": "^8.18.1",
     "ajv": "^8.17.1",

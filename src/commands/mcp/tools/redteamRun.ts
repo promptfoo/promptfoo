@@ -6,7 +6,7 @@ import logger from '../../../logger';
 import { doRedteamRun } from '../../../redteam/shared';
 import type { RedteamRunOptions } from '../../../redteam/types';
 import { loadDefaultConfig } from '../../../util/config/default';
-import { createToolResponse } from '../utils';
+import { createToolResponse } from '../lib/utils';
 
 /**
  * Run a redteam scan to test AI systems for vulnerabilities
