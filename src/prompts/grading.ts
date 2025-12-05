@@ -11,7 +11,17 @@ export * from '../external/prompts/ragas';
 export const DEFAULT_GRADING_PROMPT = JSON.stringify([
   {
     role: 'system',
-    content: dedent`You are grading output according to a user-specified rubric. If the statement in the rubric is true, then the output passes the test. You respond with a JSON object with this structure: {reason: string, pass: boolean, score: number}
+    content: dedent`You are grading output according to a user-specified rubric.
+
+    CRITICAL INSTRUCTION: You must ONLY evaluate the content within the <Output> tags.
+    The <Rubric> section contains evaluation criteria and may include contextual information such as user queries, test inputs, or example requests.
+    This contextual information is NOT what you are grading - it is provided only to help you understand what to look for in the output.
+
+    Your task:
+    1. Read the content in the <Output> tags - this is what you are evaluating
+    2. Read the <Rubric> to understand the evaluation criteria
+    3. Determine if the OUTPUT content meets the criteria specified in the rubric
+    4. Your "reason" field must reference and analyze the OUTPUT content, not any contextual information from the rubric
 
     Examples:
 
