@@ -471,6 +471,59 @@ async function saveAuditRecord(
 }
 
 /**
+ * Common logic for processing scan results after JSON is obtained.
+ * Parses JSON, saves to database, and displays summary.
+ */
+async function processJsonResults(
+  jsonOutput: string,
+  exitCode: number,
+  paths: string[],
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+  existingAudit: ModelAudit | null,
+): Promise<number> {
+  if (!jsonOutput) {
+    logger.error('No output received from model scan');
+    return 1;
+  }
+
+  let results: ModelAuditScanResults;
+  try {
+    results = JSON.parse(jsonOutput);
+  } catch (error) {
+    logger.error(`Failed to parse scan results: ${error}`);
+    if (options.verbose) {
+      logger.error(`Raw output: ${jsonOutput.substring(0, 500)}`);
+    }
+    return 1;
+  }
+
+  // Fetch revision info and save to database
+  const revisionInfo = await fetchRevisionInfo(paths, results);
+  const audit = await saveAuditRecord(
+    paths,
+    results,
+    options,
+    currentScannerVersion,
+    existingAudit,
+    revisionInfo,
+  );
+
+  // Display summary (unless JSON format requested by user)
+  if (options.format !== 'json') {
+    displayScanSummary(results, audit.id, currentScannerVersion, existingAudit !== null);
+  }
+
+  // Save to user-specified output file if requested
+  if (options.output) {
+    fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
+    logger.info(`Results also saved to ${options.output}`);
+  }
+
+  return exitCode;
+}
+
+/**
  * Process scan results from a JSON file (used when CLI UI is displayed).
  * Reads JSON from temp file, processes results, and cleans up the temp file.
  */
@@ -511,45 +564,14 @@ async function processScanResultsFromFile(
   // Clean up temp file after successful read
   cleanupTempFile();
 
-  if (!jsonOutput) {
-    logger.error('No output received from model scan');
-    return 1;
-  }
-
-  let results: ModelAuditScanResults;
-  try {
-    results = JSON.parse(jsonOutput);
-  } catch (error) {
-    logger.error(`Failed to parse scan results: ${error}`);
-    if (options.verbose) {
-      logger.error(`Raw output: ${jsonOutput.substring(0, 500)}`);
-    }
-    return 1;
-  }
-
-  // Fetch revision info and save to database
-  const revisionInfo = await fetchRevisionInfo(paths, results);
-  const audit = await saveAuditRecord(
+  return processJsonResults(
+    jsonOutput,
+    spawnResult.code || 0,
     paths,
-    results,
     options,
     currentScannerVersion,
     existingAudit,
-    revisionInfo,
   );
-
-  // Display summary (unless JSON format requested by user)
-  if (options.format !== 'json') {
-    displayScanSummary(results, audit.id, currentScannerVersion, existingAudit !== null);
-  }
-
-  // Save to user-specified output file if requested
-  if (options.output) {
-    fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
-    logger.info(`Results also saved to ${options.output}`);
-  }
-
-  return spawnResult.code || 0;
 }
 
 /**
@@ -573,46 +595,20 @@ async function processScanResultsFromStdout(
   }
 
   const jsonOutput = spawnResult.stdout.trim();
-  if (!jsonOutput) {
+  if (!jsonOutput && spawnResult.stderr) {
     logger.error('No output received from model scan');
-    if (spawnResult.stderr) {
-      logger.error(spawnResult.stderr);
-    }
+    logger.error(spawnResult.stderr);
     return 1;
   }
 
-  let results: ModelAuditScanResults;
-  try {
-    results = JSON.parse(jsonOutput);
-  } catch (error) {
-    logger.error(`Failed to parse scan results: ${error}`);
-    if (options.verbose) {
-      logger.error(`Raw output: ${jsonOutput.substring(0, 500)}`);
-    }
-    return 1;
-  }
-
-  // Fetch revision info and save to database
-  const revisionInfo = await fetchRevisionInfo(paths, results);
-  const audit = await saveAuditRecord(
+  return processJsonResults(
+    jsonOutput,
+    spawnResult.code || 0,
     paths,
-    results,
     options,
     currentScannerVersion,
     existingAudit,
-    revisionInfo,
   );
-
-  // Display summary
-  displayScanSummary(results, audit.id, currentScannerVersion, existingAudit !== null);
-
-  // Save to user-specified output file if requested
-  if (options.output) {
-    fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
-    logger.info(`Results also saved to ${options.output}`);
-  }
-
-  return spawnResult.code || 0;
 }
 
 // ============================================================================
