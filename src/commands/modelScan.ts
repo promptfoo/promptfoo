@@ -243,241 +243,316 @@ export function modelScanCommand(program: Command): void {
 
       if (saveToDatabase) {
         // When saving to database, capture output
-        let stdout = '';
-        let stderr = '';
+        // Wrap in Promise to ensure we wait for the spawn to complete
+        await new Promise<void>((resolve, reject) => {
+          let stdout = '';
+          let stderr = '';
+          let settled = false; // Prevent double resolution/rejection
 
-        const modelAudit = spawn('modelaudit', args, { env: delegationEnv });
+          const modelAudit = spawn('modelaudit', args, { env: delegationEnv });
 
-        modelAudit.stdout?.on('data', (data) => {
-          stdout += data.toString();
-          // Show human-readable output to user unless format is explicitly JSON
-          if (options.format !== 'json' && !options.output) {
-            // Parse JSON and display summary
-            try {
-              JSON.parse(stdout);
-              // Don't display the raw JSON, we'll show a summary at the end
-            } catch {
-              // If we can't parse it yet, just accumulate
+          // Handle graceful shutdown - kill child process on SIGINT/SIGTERM
+          const cleanup = () => {
+            if (!modelAudit.killed) {
+              modelAudit.kill('SIGTERM');
             }
-          } else if (options.format === 'json' && !options.output) {
-            // If user explicitly requested JSON format, show it
-            process.stdout.write(data);
-          }
-        });
+          };
+          process.once('SIGINT', cleanup);
+          process.once('SIGTERM', cleanup);
 
-        modelAudit.stderr?.on('data', (data) => {
-          stderr += data.toString();
-          if (options.verbose) {
-            process.stderr.write(data);
-          }
-        });
-
-        modelAudit.on('error', (error) => {
-          logger.error(`Failed to start modelaudit: ${error.message}`);
-          logger.info('Make sure modelaudit is installed and available in your PATH.');
-          logger.info('Install it using: pip install modelaudit');
-          process.exit(1);
-        });
-
-        modelAudit.on('close', async (code) => {
-          if (code !== null && code !== 0 && code !== 1) {
-            logger.error(`Model scan process exited with code ${code}`);
-            if (stderr) {
-              logger.error(`Error output: ${stderr}`);
-            }
-            process.exit(code);
-          }
-
-          // Parse JSON output and save to database
-          try {
-            const jsonOutput = stdout.trim();
-            if (!jsonOutput) {
-              logger.error('No output received from model scan');
-              process.exit(1);
-            }
-
-            const results: ModelAuditScanResults = JSON.parse(jsonOutput);
-
-            // Fetch revision tracking info if HuggingFace model
-            let revisionInfo: {
-              modelId?: string;
-              revisionSha?: string;
-              contentHash?: string;
-              modelSource?: string;
-              sourceLastModified?: number;
-            } = {};
-
-            if (paths.length === 1) {
-              const modelPath = paths[0];
-              if (isHuggingFaceModel(modelPath)) {
-                try {
-                  const metadata = await getHuggingFaceMetadata(modelPath);
-                  if (metadata) {
-                    revisionInfo = {
-                      modelId: metadata.modelId,
-                      revisionSha: metadata.sha,
-                      modelSource: 'huggingface',
-                      sourceLastModified: new Date(metadata.lastModified).getTime(),
-                    };
-                  }
-                } catch (error) {
-                  logger.debug(`Failed to fetch revision info: ${error}`);
-                }
+          modelAudit.stdout?.on('data', (data) => {
+            stdout += data.toString();
+            // Show human-readable output to user unless format is explicitly JSON
+            if (options.format !== 'json' && !options.output) {
+              // Parse JSON and display summary
+              try {
+                JSON.parse(stdout);
+                // Don't display the raw JSON, we'll show a summary at the end
+              } catch {
+                // If we can't parse it yet, just accumulate
               }
-
-              // Extract content_hash from modelaudit output if available
-              // modelaudit generates content hash during scan for deduplication
-              if (results.content_hash) {
-                logger.debug(`Using content_hash from modelaudit output: ${results.content_hash}`);
-                revisionInfo.contentHash = results.content_hash;
-              }
+            } else if (options.format === 'json' && !options.output) {
+              // If user explicitly requested JSON format, show it
+              process.stdout.write(data);
             }
+          });
 
-            // Shared metadata for audit records
-            const auditMetadata = {
-              paths,
-              options: {
-                blacklist: options.blacklist,
-                timeout: cliOptions.timeout,
-                maxSize: options.maxSize,
-                verbose: options.verbose,
-                sbom: options.sbom,
-                strict: options.strict,
-                dryRun: options.dryRun,
-                cache: options.cache,
-                quiet: options.quiet,
-                progress: options.progress,
-                stream: options.stream,
-              },
-            };
-
-            // Create or update audit record in database
-            let audit: ModelAudit;
-            if (existingAuditToUpdate) {
-              // Update existing record with new scan results
-              existingAuditToUpdate.results = results;
-              existingAuditToUpdate.checks = results.checks ?? null;
-              existingAuditToUpdate.issues = results.issues ?? null;
-              existingAuditToUpdate.hasErrors = hasErrorsInResults(results);
-              existingAuditToUpdate.totalChecks = results.total_checks ?? null;
-              existingAuditToUpdate.passedChecks = results.passed_checks ?? null;
-              existingAuditToUpdate.failedChecks = results.failed_checks ?? null;
-              existingAuditToUpdate.scannerVersion = currentScannerVersion ?? null;
-              existingAuditToUpdate.metadata = auditMetadata;
-              existingAuditToUpdate.updatedAt = Date.now();
-              if (revisionInfo.contentHash) {
-                existingAuditToUpdate.contentHash = revisionInfo.contentHash;
-              }
-              await existingAuditToUpdate.save();
-              audit = existingAuditToUpdate;
-            } else {
-              audit = await ModelAudit.create({
-                name: options.name || `Model scan ${new Date().toISOString()}`,
-                author: getAuthor() || undefined,
-                modelPath: paths.join(', '),
-                results,
-                metadata: auditMetadata,
-                scannerVersion: currentScannerVersion || undefined,
-                ...revisionInfo,
-              });
-            }
-
-            // Display summary to user (unless they requested JSON format)
-            if (options.format !== 'json') {
-              logger.info('\n' + chalk.bold('Model Audit Summary'));
-              logger.info('=' + '='.repeat(50));
-
-              if (results.has_errors || (results.failed_checks ?? 0) > 0) {
-                logger.info(chalk.yellow(`⚠  Found ${results.failed_checks || 0} issues`));
-
-                // Show issues grouped by severity
-                if (results.issues && results.issues.length > 0) {
-                  const issuesBySeverity = results.issues.reduce(
-                    (acc, issue) => {
-                      const severity = issue.severity || 'info';
-                      if (!acc[severity]) {
-                        acc[severity] = [];
-                      }
-                      acc[severity].push(issue);
-                      return acc;
-                    },
-                    {} as Record<string, typeof results.issues>,
-                  );
-
-                  ['critical', 'error', 'warning', 'info'].forEach((severity) => {
-                    const severityIssues = issuesBySeverity[severity];
-                    if (severityIssues && severityIssues.length > 0) {
-                      const color =
-                        severity === 'critical' || severity === 'error'
-                          ? chalk.red
-                          : severity === 'warning'
-                            ? chalk.yellow
-                            : chalk.blue;
-                      logger.info(
-                        `\n${color.bold(severity.toUpperCase())} (${severityIssues.length}):`,
-                      );
-                      severityIssues.slice(0, 5).forEach((issue) => {
-                        logger.info(`  • ${issue.message}`);
-                        if (issue.location) {
-                          logger.info(`    ${chalk.gray(issue.location)}`);
-                        }
-                      });
-                      if (severityIssues.length > 5) {
-                        logger.info(`  ${chalk.gray(`... and ${severityIssues.length - 5} more`)}`);
-                      }
-                    }
-                  });
-                }
-              } else {
-                logger.info(
-                  chalk.green(`✓ No issues found. ${results.passed_checks || 0} checks passed.`),
-                );
-              }
-
-              logger.info(
-                `\nScanned ${results.files_scanned ?? 0} files (${((results.bytes_scanned ?? 0) / 1024 / 1024).toFixed(2)} MB)`,
-              );
-              logger.info(`Duration: ${((results.duration ?? 0) / 1000).toFixed(2)} seconds`);
-              if (currentScannerVersion) {
-                logger.debug(`Scanner version: ${currentScannerVersion}`);
-              }
-              if (existingAuditToUpdate) {
-                logger.debug(`Updated existing audit record: ${audit.id}`);
-              }
-              logger.info(chalk.green(`\n✓ Results saved to database with ID: ${audit.id}`));
-            }
-
-            // Save to file if requested
-            if (options.output) {
-              const fs = await import('fs');
-              fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
-              logger.info(`Results also saved to ${options.output}`);
-            }
-
-            process.exit(code || 0);
-          } catch (error) {
-            logger.error(`Failed to parse or save scan results: ${error}`);
+          modelAudit.stderr?.on('data', (data) => {
+            stderr += data.toString();
             if (options.verbose) {
-              logger.error(`Raw output: ${stdout}`);
+              process.stderr.write(data);
             }
-            process.exit(1);
-          }
+          });
+
+          modelAudit.on('error', (error) => {
+            // Remove signal handlers since process is done
+            process.removeListener('SIGINT', cleanup);
+            process.removeListener('SIGTERM', cleanup);
+
+            if (settled) {
+              return;
+            }
+            settled = true;
+
+            logger.error(`Failed to start modelaudit: ${error.message}`);
+            logger.info('Make sure modelaudit is installed and available in your PATH.');
+            logger.info('Install it using: pip install modelaudit');
+            process.exitCode = 1;
+            reject(error);
+          });
+
+          modelAudit.on('close', async (code) => {
+            // Remove signal handlers since process is done
+            process.removeListener('SIGINT', cleanup);
+            process.removeListener('SIGTERM', cleanup);
+
+            if (settled) {
+              return;
+            }
+            settled = true;
+
+            if (code !== null && code !== 0 && code !== 1) {
+              logger.error(`Model scan process exited with code ${code}`);
+              if (stderr) {
+                logger.error(`Error output: ${stderr}`);
+              }
+              process.exitCode = code;
+              resolve();
+              return;
+            }
+
+            // Parse JSON output and save to database
+            try {
+              const jsonOutput = stdout.trim();
+              if (!jsonOutput) {
+                logger.error('No output received from model scan');
+                process.exitCode = 1;
+                resolve();
+                return;
+              }
+
+              const results: ModelAuditScanResults = JSON.parse(jsonOutput);
+
+              // Fetch revision tracking info if HuggingFace model
+              let revisionInfo: {
+                modelId?: string;
+                revisionSha?: string;
+                contentHash?: string;
+                modelSource?: string;
+                sourceLastModified?: number;
+              } = {};
+
+              if (paths.length === 1) {
+                const modelPath = paths[0];
+                if (isHuggingFaceModel(modelPath)) {
+                  try {
+                    const metadata = await getHuggingFaceMetadata(modelPath);
+                    if (metadata) {
+                      revisionInfo = {
+                        modelId: metadata.modelId,
+                        revisionSha: metadata.sha,
+                        modelSource: 'huggingface',
+                        sourceLastModified: new Date(metadata.lastModified).getTime(),
+                      };
+                    }
+                  } catch (error) {
+                    logger.debug(`Failed to fetch revision info: ${error}`);
+                  }
+                }
+
+                // Extract content_hash from modelaudit output if available
+                // modelaudit generates content hash during scan for deduplication
+                if (results.content_hash) {
+                  logger.debug(
+                    `Using content_hash from modelaudit output: ${results.content_hash}`,
+                  );
+                  revisionInfo.contentHash = results.content_hash;
+                }
+              }
+
+              // Shared metadata for audit records
+              const auditMetadata = {
+                paths,
+                options: {
+                  blacklist: options.blacklist,
+                  timeout: cliOptions.timeout,
+                  maxSize: options.maxSize,
+                  verbose: options.verbose,
+                  sbom: options.sbom,
+                  strict: options.strict,
+                  dryRun: options.dryRun,
+                  cache: options.cache,
+                  quiet: options.quiet,
+                  progress: options.progress,
+                  stream: options.stream,
+                },
+              };
+
+              // Create or update audit record in database
+              let audit: ModelAudit;
+              if (existingAuditToUpdate) {
+                // Update existing record with new scan results
+                existingAuditToUpdate.results = results;
+                existingAuditToUpdate.checks = results.checks ?? null;
+                existingAuditToUpdate.issues = results.issues ?? null;
+                existingAuditToUpdate.hasErrors = hasErrorsInResults(results);
+                existingAuditToUpdate.totalChecks = results.total_checks ?? null;
+                existingAuditToUpdate.passedChecks = results.passed_checks ?? null;
+                existingAuditToUpdate.failedChecks = results.failed_checks ?? null;
+                existingAuditToUpdate.scannerVersion = currentScannerVersion ?? null;
+                existingAuditToUpdate.metadata = auditMetadata;
+                existingAuditToUpdate.updatedAt = Date.now();
+                if (revisionInfo.contentHash) {
+                  existingAuditToUpdate.contentHash = revisionInfo.contentHash;
+                }
+                await existingAuditToUpdate.save();
+                audit = existingAuditToUpdate;
+              } else {
+                audit = await ModelAudit.create({
+                  name: options.name || `Model scan ${new Date().toISOString()}`,
+                  author: getAuthor() || undefined,
+                  modelPath: paths.join(', '),
+                  results,
+                  metadata: auditMetadata,
+                  scannerVersion: currentScannerVersion || undefined,
+                  ...revisionInfo,
+                });
+              }
+
+              // Display summary to user (unless they requested JSON format)
+              if (options.format !== 'json') {
+                logger.info('\n' + chalk.bold('Model Audit Summary'));
+                logger.info('=' + '='.repeat(50));
+
+                if (results.has_errors || (results.failed_checks ?? 0) > 0) {
+                  logger.info(chalk.yellow(`⚠  Found ${results.failed_checks || 0} issues`));
+
+                  // Show issues grouped by severity
+                  if (results.issues && results.issues.length > 0) {
+                    const issuesBySeverity = results.issues.reduce(
+                      (acc, issue) => {
+                        const severity = issue.severity || 'info';
+                        if (!acc[severity]) {
+                          acc[severity] = [];
+                        }
+                        acc[severity].push(issue);
+                        return acc;
+                      },
+                      {} as Record<string, typeof results.issues>,
+                    );
+
+                    ['critical', 'error', 'warning', 'info'].forEach((severity) => {
+                      const severityIssues = issuesBySeverity[severity];
+                      if (severityIssues && severityIssues.length > 0) {
+                        const color =
+                          severity === 'critical' || severity === 'error'
+                            ? chalk.red
+                            : severity === 'warning'
+                              ? chalk.yellow
+                              : chalk.blue;
+                        logger.info(
+                          `\n${color.bold(severity.toUpperCase())} (${severityIssues.length}):`,
+                        );
+                        severityIssues.slice(0, 5).forEach((issue) => {
+                          logger.info(`  • ${issue.message}`);
+                          if (issue.location) {
+                            logger.info(`    ${chalk.gray(issue.location)}`);
+                          }
+                        });
+                        if (severityIssues.length > 5) {
+                          logger.info(
+                            `  ${chalk.gray(`... and ${severityIssues.length - 5} more`)}`,
+                          );
+                        }
+                      }
+                    });
+                  }
+                } else {
+                  logger.info(
+                    chalk.green(`✓ No issues found. ${results.passed_checks || 0} checks passed.`),
+                  );
+                }
+
+                logger.info(
+                  `\nScanned ${results.files_scanned ?? 0} files (${((results.bytes_scanned ?? 0) / 1024 / 1024).toFixed(2)} MB)`,
+                );
+                logger.info(`Duration: ${((results.duration ?? 0) / 1000).toFixed(2)} seconds`);
+                if (currentScannerVersion) {
+                  logger.debug(`Scanner version: ${currentScannerVersion}`);
+                }
+                if (existingAuditToUpdate) {
+                  logger.debug(`Updated existing audit record: ${audit.id}`);
+                }
+                logger.info(chalk.green(`\n✓ Results saved to database with ID: ${audit.id}`));
+              }
+
+              // Save to file if requested
+              if (options.output) {
+                const fs = await import('fs');
+                fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
+                logger.info(`Results also saved to ${options.output}`);
+              }
+
+              process.exitCode = code || 0;
+              resolve();
+            } catch (error) {
+              logger.error(`Failed to parse or save scan results: ${error}`);
+              if (options.verbose) {
+                logger.error(`Raw output: ${stdout}`);
+              }
+              process.exitCode = 1;
+              resolve();
+            }
+          });
         });
       } else {
-        const modelAudit = spawn('modelaudit', args, { stdio: 'inherit', env: delegationEnv });
+        // Wrap in Promise to ensure we wait for the spawn to complete
+        await new Promise<void>((resolve, reject) => {
+          let settled = false; // Prevent double resolution/rejection
 
-        modelAudit.on('error', (error) => {
-          logger.error(`Failed to start modelaudit: ${error.message}`);
-          logger.info('Make sure modelaudit is installed and available in your PATH.');
-          logger.info('Install it using: pip install modelaudit');
-          process.exit(1);
-        });
+          const modelAudit = spawn('modelaudit', args, { stdio: 'inherit', env: delegationEnv });
 
-        modelAudit.on('close', (code) => {
-          if (code !== null && code !== 0 && code !== 1) {
-            logger.error(`Model scan process exited with code ${code}`);
-          }
-          process.exit(code || 0);
+          // Handle graceful shutdown - kill child process on SIGINT/SIGTERM
+          const cleanup = () => {
+            if (!modelAudit.killed) {
+              modelAudit.kill('SIGTERM');
+            }
+          };
+          process.once('SIGINT', cleanup);
+          process.once('SIGTERM', cleanup);
+
+          modelAudit.on('error', (error) => {
+            // Remove signal handlers since process is done
+            process.removeListener('SIGINT', cleanup);
+            process.removeListener('SIGTERM', cleanup);
+
+            if (settled) {
+              return;
+            }
+            settled = true;
+
+            logger.error(`Failed to start modelaudit: ${error.message}`);
+            logger.info('Make sure modelaudit is installed and available in your PATH.');
+            logger.info('Install it using: pip install modelaudit');
+            process.exitCode = 1;
+            reject(error);
+          });
+
+          modelAudit.on('close', (code) => {
+            // Remove signal handlers since process is done
+            process.removeListener('SIGINT', cleanup);
+            process.removeListener('SIGTERM', cleanup);
+
+            if (settled) {
+              return;
+            }
+            settled = true;
+            if (code !== null && code !== 0 && code !== 1) {
+              logger.error(`Model scan process exited with code ${code}`);
+            }
+            process.exitCode = code || 0;
+            resolve();
+          });
         });
       }
     });

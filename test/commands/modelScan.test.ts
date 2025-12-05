@@ -82,6 +82,8 @@ describe('modelScanCommand', () => {
     // Mock for fallback spawn check - simulate not installed
     const versionCheckProcess = {
       stdout: { on: vi.fn() },
+      killed: false,
+      kill: vi.fn(),
       on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'error') {
           callback(new Error('command not found'));
@@ -95,11 +97,19 @@ describe('modelScanCommand', () => {
     modelScanCommand(program);
 
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
-    await command?.parseAsync(['scan-model', 'path/to/model']);
+    // Use try/catch because the error in spawn now causes rejection
+    try {
+      await command?.parseAsync(['scan-model', 'path/to/model']);
+    } catch {
+      // Expected - error event causes rejection
+    }
 
     expect(loggerErrorSpy).toHaveBeenCalledWith('ModelAudit is not installed.');
-    expect(mockExit).toHaveBeenCalledWith(1);
+    // Now uses process.exitCode instead of process.exit()
+    expect(process.exitCode).toBe(1);
 
+    // Reset exitCode for other tests
+    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 
@@ -113,6 +123,8 @@ describe('modelScanCommand', () => {
       stderr: {
         on: vi.fn(),
       },
+      killed: false,
+      kill: vi.fn(),
       on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
@@ -188,6 +200,8 @@ describe('modelScanCommand', () => {
       stderr: {
         on: vi.fn(),
       },
+      killed: false,
+      kill: vi.fn(),
       on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'error') {
           callback(new Error('spawn error'));
@@ -201,11 +215,19 @@ describe('modelScanCommand', () => {
     modelScanCommand(program);
 
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
-    await command?.parseAsync(['scan-model', 'path/to/model']);
+    // Use try/catch because error event now rejects the promise
+    try {
+      await command?.parseAsync(['scan-model', 'path/to/model']);
+    } catch {
+      // Expected - error event causes rejection
+    }
 
     expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to start modelaudit: spawn error');
-    expect(mockExit).toHaveBeenCalledWith(1);
+    // Now uses process.exitCode instead of process.exit()
+    expect(process.exitCode).toBe(1);
 
+    // Reset exitCode for other tests
+    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 
@@ -245,6 +267,8 @@ describe('modelScanCommand', () => {
       stderr: {
         on: vi.fn(),
       },
+      killed: false,
+      kill: vi.fn(),
       on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(1);
@@ -260,9 +284,11 @@ describe('modelScanCommand', () => {
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
     await command?.parseAsync(['node', 'scan-model', 'path/to/model']);
 
-    // When saving to database (default), the command just exits with the code
-    // without logging a specific error message for exit code 1
-    expect(mockExit).toHaveBeenCalledWith(1);
+    // Now uses process.exitCode instead of process.exit()
+    expect(process.exitCode).toBe(1);
+
+    // Reset exitCode for other tests
+    process.exitCode = 0;
   });
 
   it('should handle exit code 2 (scan process error)', async () => {
@@ -282,6 +308,8 @@ describe('modelScanCommand', () => {
           }
         }),
       },
+      killed: false,
+      kill: vi.fn(),
       on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(2);
@@ -299,8 +327,11 @@ describe('modelScanCommand', () => {
 
     expect(loggerErrorSpy).toHaveBeenCalledWith('Model scan process exited with code 2');
     expect(loggerErrorSpy).toHaveBeenCalledWith('Error output: Some error output');
-    expect(mockExit).toHaveBeenCalledWith(2);
+    // Now uses process.exitCode instead of process.exit()
+    expect(process.exitCode).toBe(2);
 
+    // Reset exitCode for other tests
+    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 });
@@ -409,6 +440,8 @@ describe('Re-scan on version change behavior', () => {
         }),
       },
       stderr: { on: vi.fn() },
+      killed: false,
+      kill: vi.fn(),
       on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
@@ -480,6 +513,8 @@ describe('Re-scan on version change behavior', () => {
         }),
       },
       stderr: { on: vi.fn() },
+      killed: false,
+      kill: vi.fn(),
       on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
@@ -642,6 +677,8 @@ describe('Command Options Validation', () => {
     const mockScanProcess = {
       stdout: { on: vi.fn() },
       stderr: { on: vi.fn() },
+      killed: false,
+      kill: vi.fn(),
       on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
@@ -714,6 +751,8 @@ describe('Command Options Validation', () => {
     const mockScanProcess = {
       stdout: { on: vi.fn() },
       stderr: { on: vi.fn() },
+      killed: false,
+      kill: vi.fn(),
       on: vi.fn().mockImplementation(function (event: string, callback: any) {
         if (event === 'close') {
           callback(0);
