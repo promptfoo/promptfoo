@@ -434,6 +434,10 @@ export async function logRequestResponse(options: {
  * Close all file transports and cleanup logger resources
  * Should be called during graceful shutdown to prevent event loop hanging
  * Waits for all pending writes to flush before closing streams
+ *
+ * Note: We use the 'flush' event instead of 'finish' because winston's File
+ * transport emits 'finish' before the underlying stream has fully flushed.
+ * See: https://github.com/winstonjs/winston/issues/1504
  */
 export async function closeLogger(): Promise<void> {
   try {
@@ -451,7 +455,8 @@ export async function closeLogger(): Promise<void> {
       winstonLogger.remove(transport);
     }
 
-    // Close each transport and wait for pending writes to flush
+    // End each transport and wait for pending writes to flush
+    // Using 'flush' event which fires after data is written to disk
     const closePromises = fileTransports.map((transport) => {
       return new Promise<void>((resolve) => {
         const timeoutId = setTimeout(() => {
@@ -459,19 +464,23 @@ export async function closeLogger(): Promise<void> {
           resolve();
         }, 2000);
 
-        if (typeof transport.close === 'function') {
-          transport.once('finish', () => {
-            clearTimeout(timeoutId);
-            resolve();
-          });
-          transport.once('error', () => {
-            clearTimeout(timeoutId);
-            resolve(); // Don't throw on close errors
-          });
-          transport.close();
-        } else {
+        const cleanup = () => {
           clearTimeout(timeoutId);
           resolve();
+        };
+
+        // Listen for 'flush' event which indicates data has been written to disk
+        // This is more reliable than 'finish' which fires before actual flush
+        transport.once('flush', cleanup);
+        transport.once('error', cleanup);
+
+        // Call end() to trigger the flush - more reliable than close()
+        if (typeof transport.end === 'function') {
+          transport.end();
+        } else if (typeof transport.close === 'function') {
+          transport.close();
+        } else {
+          cleanup();
         }
       });
     });
