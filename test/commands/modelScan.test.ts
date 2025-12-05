@@ -58,16 +58,19 @@ describe('modelScanCommand', () => {
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
     // Parse without path argument - Commander requires paths but the action should handle this
     try {
-      await command?.parseAsync(['scan-model']);
+      await command?.parseAsync(['node', 'scan-model']);
     } catch {
       // Commander may throw for missing required argument
     }
 
     expect(loggerErrorSpy).toHaveBeenCalledWith(
-      'No paths specified. Please provide at least one model file or directory to scan.',
+      'No paths specified. Provide at least one model file or directory to scan.',
     );
-    expect(mockExit).toHaveBeenCalledWith(1);
+    // Now uses process.exitCode instead of process.exit()
+    expect(process.exitCode).toBe(1);
 
+    // Reset exitCode for other tests
+    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 
@@ -99,7 +102,7 @@ describe('modelScanCommand', () => {
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
     // Use try/catch because the error in spawn now causes rejection
     try {
-      await command?.parseAsync(['scan-model', 'path/to/model']);
+      await command?.parseAsync(['node', 'scan-model', 'path/to/model']);
     } catch {
       // Expected - error event causes rejection
     }
@@ -217,7 +220,7 @@ describe('modelScanCommand', () => {
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
     // Use try/catch because error event now rejects the promise
     try {
-      await command?.parseAsync(['scan-model', 'path/to/model']);
+      await command?.parseAsync(['node', 'scan-model', 'path/to/model']);
     } catch {
       // Expected - error event causes rejection
     }
