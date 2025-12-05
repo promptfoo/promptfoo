@@ -32,6 +32,7 @@ vi.mock('../../../src/cache', () => ({
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.com'),
   neverGenerateRemote: vi.fn().mockReturnValue(false),
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('../../../src/database', async (importOriginal) => {

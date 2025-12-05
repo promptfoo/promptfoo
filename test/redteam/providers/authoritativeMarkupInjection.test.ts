@@ -24,6 +24,7 @@ vi.mock('../../../src/globalConfig/accounts', () => ({
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.api/generate'),
   neverGenerateRemote: vi.fn().mockReturnValue(false),
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
 describe('AuthoritativeMarkupInjectionProvider - Abort Signal Handling', () => {
