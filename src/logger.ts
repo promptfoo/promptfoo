@@ -459,20 +459,10 @@ export async function closeLogger(): Promise<void> {
     // Using 'flush' event which fires after data is written to disk
     const closePromises = fileTransports.map((transport) => {
       return new Promise<void>((resolve) => {
-        const timeoutId = setTimeout(() => {
-          // Timeout after 2 seconds to prevent hanging
-          resolve();
-        }, 2000);
-
-        const cleanup = () => {
-          clearTimeout(timeoutId);
-          resolve();
-        };
-
         // Listen for 'flush' event which indicates data has been written to disk
         // This is more reliable than 'finish' which fires before actual flush
-        transport.once('flush', cleanup);
-        transport.once('error', cleanup);
+        transport.once('flush', resolve);
+        transport.once('error', resolve);
 
         // Call end() to trigger the flush - more reliable than close()
         if (typeof transport.end === 'function') {
@@ -480,7 +470,7 @@ export async function closeLogger(): Promise<void> {
         } else if (typeof transport.close === 'function') {
           transport.close();
         } else {
-          cleanup();
+          resolve();
         }
       });
     });

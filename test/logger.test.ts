@@ -888,31 +888,6 @@ describe('logger', () => {
       await expect(logger.closeLogger()).resolves.toBeUndefined();
     });
 
-    it('should timeout if transport does not emit flush or error', async () => {
-      vi.useFakeTimers();
-
-      const mockSlowTransport = {
-        end: vi.fn(), // Does not emit any events
-        once: vi.fn(),
-        filename: '/mock/path/slow.log',
-      };
-
-      Object.setPrototypeOf(mockSlowTransport, winstonMock.transports.File.prototype);
-
-      mockLogger.transports.length = 0;
-      mockLogger.transports.push(mockSlowTransport as any);
-
-      const closePromise = logger.closeLogger();
-
-      // Fast-forward past the timeout
-      await vi.advanceTimersByTimeAsync(2100);
-
-      // Should resolve due to timeout
-      await expect(closePromise).resolves.toBeUndefined();
-
-      vi.useRealTimers();
-    });
-
     it('should handle empty transports array', async () => {
       mockLogger.transports.length = 0;
 
