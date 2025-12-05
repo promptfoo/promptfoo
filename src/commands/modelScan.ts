@@ -114,6 +114,14 @@ function hasErrorsInResults(results: ModelAuditScanResults): boolean {
 }
 
 /**
+ * Check if exit code indicates an error (not 0 or 1).
+ * Exit code 0 = success, 1 = issues found (still valid), other = error.
+ */
+function isErrorExitCode(code: number | null): code is number {
+  return code !== null && code !== 0 && code !== 1;
+}
+
+/**
  * Determine if a model should be re-scanned based on version changes.
  */
 function shouldRescan(
@@ -551,9 +559,8 @@ async function processScanResultsFromFile(
     }
   };
 
-  // Handle non-zero exit codes (0 and 1 are both valid - 1 means issues found)
-  // Note: stderr already displayed to user via inherited stdio, no need to log
-  if (spawnResult.code !== null && spawnResult.code !== 0 && spawnResult.code !== 1) {
+  // Handle error exit codes (stderr already displayed via inherited stdio)
+  if (isErrorExitCode(spawnResult.code)) {
     logger.error(`Model scan process exited with code ${spawnResult.code}`);
     await cleanupTempFile();
     return spawnResult.code;
@@ -593,8 +600,8 @@ async function processScanResultsFromStdout(
   currentScannerVersion: string | null,
   existingAudit: ModelAudit | null,
 ): Promise<number> {
-  // Handle non-zero exit codes (0 and 1 are both valid - 1 means issues found)
-  if (spawnResult.code !== null && spawnResult.code !== 0 && spawnResult.code !== 1) {
+  // Handle error exit codes
+  if (isErrorExitCode(spawnResult.code)) {
     logger.error(`Model scan process exited with code ${spawnResult.code}`);
     if (spawnResult.stderr) {
       logger.error(spawnResult.stderr);

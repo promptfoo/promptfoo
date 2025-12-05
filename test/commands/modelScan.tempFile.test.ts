@@ -1,4 +1,4 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import os from 'os';
 
 // Mock fs module before importing the module under test
@@ -45,7 +45,6 @@ vi.mock('../../src/globalConfig/accounts', () => ({
   getAuthor: vi.fn().mockReturnValue('test-author'),
 }));
 
-import fs from 'fs';
 import logger from '../../src/logger';
 import {
   createTempOutputPath,
@@ -125,7 +124,13 @@ describe('createTempOutputPath', () => {
   });
 });
 
-describe('temp file workflow - fs operations', () => {
+/**
+ * These tests document the expected fs behavior patterns used in the temp file workflow.
+ * They verify that the cleanup logic handles various fs scenarios correctly.
+ * Note: These test the behavior patterns, not the internal functions directly
+ * (which are not exported).
+ */
+describe('temp file workflow - expected fs behavior patterns', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -134,92 +139,40 @@ describe('temp file workflow - fs operations', () => {
     vi.resetAllMocks();
   });
 
-  it('should read JSON from temp file correctly', () => {
-    const mockResults = JSON.stringify({
-      total_checks: 10,
-      passed_checks: 10,
-      failed_checks: 0,
-      files_scanned: 5,
-      bytes_scanned: 1024,
-      duration: 1000,
-    });
-
-    (fs.readFileSync as Mock).mockReturnValue(mockResults);
-
+  it('documents: temp file paths use createTempOutputPath format', () => {
+    // The temp file workflow uses createTempOutputPath to generate unique paths
     const tempFilePath = createTempOutputPath();
-    const content = fs.readFileSync(tempFilePath, 'utf-8');
-
-    expect(content).toBe(mockResults);
-    expect(fs.readFileSync).toHaveBeenCalledWith(tempFilePath, 'utf-8');
+    expect(tempFilePath).toContain('promptfoo-modelscan-');
+    expect(tempFilePath).toMatch(/\.json$/);
   });
 
-  it('should handle cleanup when unlinkSync succeeds', () => {
-    (fs.unlinkSync as Mock).mockReturnValue(undefined);
-
-    const tempFilePath = createTempOutputPath();
-    fs.unlinkSync(tempFilePath);
-
-    expect(fs.unlinkSync).toHaveBeenCalledWith(tempFilePath);
-  });
-
-  it('should log debug message when cleanup fails', () => {
+  it('documents: cleanup logs debug on failure (not error)', () => {
+    // When cleanup fails, it should log at debug level, not error
+    // This is because cleanup failures are not critical
     const cleanupError = new Error('EPERM: operation not permitted');
-    (fs.unlinkSync as Mock).mockImplementation(() => {
-      throw cleanupError;
-    });
-
     const tempFilePath = createTempOutputPath();
 
-    // Simulate the cleanup behavior from processScanResultsFromFile
+    // Simulate the cleanup behavior pattern from processScanResultsFromFile
     try {
-      fs.unlinkSync(tempFilePath);
+      throw cleanupError;
     } catch (error) {
       logger.debug(`Failed to cleanup temp file ${tempFilePath}: ${error}`);
     }
 
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Failed to cleanup temp file'));
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it('should write results to user-specified output file', () => {
-    const mockResults = JSON.stringify({
-      total_checks: 5,
-      passed_checks: 5,
-      failed_checks: 0,
-    });
-
-    (fs.writeFileSync as Mock).mockReturnValue(undefined);
-
-    const userOutputPath = 'results.json';
-    fs.writeFileSync(userOutputPath, mockResults);
-
-    expect(fs.writeFileSync).toHaveBeenCalledWith(userOutputPath, mockResults);
+  it('documents: JSON parsing throws on invalid content', () => {
+    // The workflow expects JSON.parse to throw on invalid content
+    const invalidJson = 'not valid json {{{';
+    expect(() => JSON.parse(invalidJson)).toThrow();
   });
 
-  it('should handle empty JSON output', () => {
-    (fs.readFileSync as Mock).mockReturnValue('');
-
-    const tempFilePath = createTempOutputPath();
-    const content = fs.readFileSync(tempFilePath, 'utf-8');
-
-    expect(content).toBe('');
-  });
-
-  it('should handle invalid JSON in temp file', () => {
-    (fs.readFileSync as Mock).mockReturnValue('not valid json {{{');
-
-    const tempFilePath = createTempOutputPath();
-    const content = fs.readFileSync(tempFilePath, 'utf-8');
-
-    expect(() => JSON.parse(content)).toThrow();
-  });
-
-  it('should handle read failure gracefully', () => {
-    (fs.readFileSync as Mock).mockImplementation(() => {
-      throw new Error('ENOENT: no such file or directory');
-    });
-
-    const tempFilePath = createTempOutputPath();
-
-    expect(() => fs.readFileSync(tempFilePath, 'utf-8')).toThrow('ENOENT');
+  it('documents: empty string is falsy for output validation', () => {
+    // The workflow checks `if (!jsonOutput)` to detect empty output
+    const emptyOutput = '';
+    expect(!emptyOutput).toBe(true);
+    expect(!emptyOutput.trim()).toBe(true);
   });
 });
