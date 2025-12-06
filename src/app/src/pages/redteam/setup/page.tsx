@@ -312,11 +312,6 @@ export default function RedTeamSetupPage() {
     updateHash(2);
   };
 
-  const navigateToStrategies = () => {
-    setValue(4);
-    updateHash(4);
-  };
-
   // Handle browser back/forward
   useEffect(() => {
     const hash = location.hash.replace('#', '');
@@ -752,7 +747,6 @@ export default function RedTeamSetupPage() {
               <ErrorBoundary name="Review Page">
                 <Review
                   navigateToPlugins={navigateToPlugins}
-                  navigateToStrategies={navigateToStrategies}
                   navigateToPurpose={navigateToPurpose}
                 />
               </ErrorBoundary>
