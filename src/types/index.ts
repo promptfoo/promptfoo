@@ -1238,6 +1238,7 @@ export const EvalResultsFilterMode = z.enum([
   'highlights',
   'errors',
   'passes',
+  'user-rated',
 ]);
 
 export type EvalResultsFilterMode = z.infer<typeof EvalResultsFilterMode>;

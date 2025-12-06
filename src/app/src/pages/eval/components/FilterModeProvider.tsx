@@ -5,7 +5,15 @@ import { z } from 'zod';
 
 export const DEFAULT_FILTER_MODE = 'all';
 
-const filterModeSchema = z.enum(['all', 'passes', 'failures', 'errors', 'different', 'highlights']);
+const filterModeSchema = z.enum([
+  'all',
+  'passes',
+  'failures',
+  'errors',
+  'different',
+  'highlights',
+  'user-rated',
+]);
 
 type FilterModeContextType = {
   filterMode: EvalResultsFilterMode;
