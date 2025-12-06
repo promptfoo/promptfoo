@@ -1619,7 +1619,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(mockSystemInstruction);
 
-    provider = new VertexChatProvider('gemini-1.5-flash', {
+    provider = new VertexChatProvider('gemini-2.5-flash', {
       config: {
         systemInstruction: 'file://system-instruction.txt',
       },

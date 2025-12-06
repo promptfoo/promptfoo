@@ -61,7 +61,7 @@ Every provider MUST have tests in `test/providers/`:
 - Mock API responses (don't call real APIs)
 - Test success AND error cases
 - Test rate limits, timeouts, invalid configs
-- Run with: `npx jest providers/my-provider --coverage --randomize`
+- Run with: `npx vitest run providers/my-provider`
 
 ## When Adding a Provider
 

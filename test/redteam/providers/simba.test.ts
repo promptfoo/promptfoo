@@ -857,4 +857,243 @@ describe('SimbaProvider', () => {
     expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     expect(targetProvider.callApi).not.toHaveBeenCalled();
   });
+
+  describe('Abort Signal Handling', () => {
+    it('should re-throw AbortError and not swallow it in catch block', async () => {
+      mockGetUserEmail.mockReturnValue('user@example.com');
+
+      const provider = new SimbaProvider({ injectVar: 'prompt' });
+
+      const targetProvider: ApiProvider = {
+        id: () => 'target-provider',
+        callApi: vi.fn<ApiProvider['callApi']>(),
+      };
+
+      const context: CallApiContextParams = {
+        originalProvider: targetProvider,
+        prompt: { raw: 'base prompt', label: 'Base Label' },
+        vars: {},
+        test: { metadata: { purpose: 'Test abort' } } as any,
+      };
+
+      // Create an AbortError
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // Mock fetchWithRetries to throw AbortError
+      mockFetchWithRetries.mockRejectedValueOnce(abortError);
+
+      // Should re-throw the AbortError, not return an error result
+      await expect(provider.runSimba({ prompt: 'test prompt', context })).rejects.toThrow(
+        'The operation was aborted',
+      );
+
+      expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('Operation aborted'));
+    });
+
+    it('should pass abort signal to startSession API call', async () => {
+      mockGetUserEmail.mockReturnValue('user@example.com');
+
+      const provider = new SimbaProvider({ injectVar: 'prompt' });
+
+      const targetProvider: ApiProvider = {
+        id: () => 'target-provider',
+        callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+          output: 'response',
+          tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
+        }),
+      };
+
+      const abortController = new AbortController();
+      const context: CallApiContextParams = {
+        originalProvider: targetProvider,
+        prompt: { raw: 'base prompt', label: 'Base Label' },
+        vars: {},
+        test: { metadata: { purpose: 'Test abort signal' } } as any,
+      };
+      const options = { abortSignal: abortController.signal };
+
+      const fetchQueue = [
+        createMockResponse({ sessionId: 'session-123' }),
+        createMockResponse({ operations: [], completed: true }),
+        createMockResponse([]),
+      ];
+
+      mockFetchWithRetries.mockImplementation(async () => {
+        const next = fetchQueue.shift();
+        if (!next) {
+          throw new Error('Unexpected fetch call');
+        }
+        return next;
+      });
+
+      await provider.runSimba({ prompt: 'test prompt', context, options });
+
+      // Verify that abort signal was passed to the start session call
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        expect.stringContaining('/start'),
+        expect.objectContaining({
+          signal: abortController.signal,
+        }),
+        expect.any(Number),
+        expect.any(Number),
+      );
+    });
+
+    it('should pass abort signal to next operations API call', async () => {
+      mockGetUserEmail.mockReturnValue('user@example.com');
+
+      const provider = new SimbaProvider({ injectVar: 'prompt' });
+
+      const targetProvider: ApiProvider = {
+        id: () => 'target-provider',
+        callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+          output: 'response',
+          tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
+        }),
+      };
+
+      const abortController = new AbortController();
+      const context: CallApiContextParams = {
+        originalProvider: targetProvider,
+        prompt: { raw: 'base prompt', label: 'Base Label' },
+        vars: {},
+        test: { metadata: { purpose: 'Test abort signal' } } as any,
+      };
+      const options = { abortSignal: abortController.signal };
+
+      const fetchQueue = [
+        createMockResponse({ sessionId: 'session-123' }),
+        createMockResponse({ operations: [], completed: true }),
+        createMockResponse([]),
+      ];
+
+      mockFetchWithRetries.mockImplementation(async () => {
+        const next = fetchQueue.shift();
+        if (!next) {
+          throw new Error('Unexpected fetch call');
+        }
+        return next;
+      });
+
+      await provider.runSimba({ prompt: 'test prompt', context, options });
+
+      // Verify that abort signal was passed to the next operations call
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        expect.stringContaining('/next'),
+        expect.objectContaining({
+          signal: abortController.signal,
+        }),
+        expect.any(Number),
+        expect.any(Number),
+      );
+    });
+
+    it('should pass abort signal to final output API call', async () => {
+      mockGetUserEmail.mockReturnValue('user@example.com');
+
+      const provider = new SimbaProvider({ injectVar: 'prompt' });
+
+      const targetProvider: ApiProvider = {
+        id: () => 'target-provider',
+        callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+          output: 'response',
+          tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
+        }),
+      };
+
+      const abortController = new AbortController();
+      const context: CallApiContextParams = {
+        originalProvider: targetProvider,
+        prompt: { raw: 'base prompt', label: 'Base Label' },
+        vars: {},
+        test: { metadata: { purpose: 'Test abort signal' } } as any,
+      };
+      const options = { abortSignal: abortController.signal };
+
+      const fetchQueue = [
+        createMockResponse({ sessionId: 'session-123' }),
+        createMockResponse({ operations: [], completed: true }),
+        createMockResponse([]),
+      ];
+
+      mockFetchWithRetries.mockImplementation(async () => {
+        const next = fetchQueue.shift();
+        if (!next) {
+          throw new Error('Unexpected fetch call');
+        }
+        return next;
+      });
+
+      await provider.runSimba({ prompt: 'test prompt', context, options });
+
+      // Verify that abort signal was passed to the final output call (GET request)
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        expect.stringContaining('format=attackPlans'),
+        expect.objectContaining({
+          method: 'GET',
+          signal: abortController.signal,
+        }),
+        expect.any(Number),
+        expect.any(Number),
+      );
+    });
+
+    it('should pass options with abortSignal to target provider', async () => {
+      mockGetUserEmail.mockReturnValue('user@example.com');
+
+      const provider = new SimbaProvider({ injectVar: 'prompt' });
+
+      const targetProvider: ApiProvider = {
+        id: () => 'target-provider',
+        callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+          output: 'response',
+          tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
+        }),
+      };
+
+      const abortController = new AbortController();
+      const context: CallApiContextParams = {
+        originalProvider: targetProvider,
+        prompt: { raw: 'base prompt', label: 'Base Label' },
+        vars: {},
+        test: { metadata: { purpose: 'Test abort signal' } } as any,
+      };
+      const options = { abortSignal: abortController.signal };
+
+      const operation = {
+        conversationId: 'conversation-1',
+        nextQuestion: 'Test question',
+        logMessage: 'Test log',
+        phaseComplete: false,
+        name: 'vector-1',
+        round: 1,
+        phase: 'attacking',
+      };
+
+      const fetchQueue = [
+        createMockResponse({ sessionId: 'session-123' }),
+        createMockResponse({ operations: [operation], completed: false }),
+        createMockResponse({ operations: [], completed: true }),
+        createMockResponse([]),
+      ];
+
+      mockFetchWithRetries.mockImplementation(async () => {
+        const next = fetchQueue.shift();
+        if (!next) {
+          throw new Error('Unexpected fetch call');
+        }
+        return next;
+      });
+
+      await provider.runSimba({ prompt: 'test prompt', context, options });
+
+      // Verify that options with abortSignal was passed to the target provider
+      expect(targetProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        expect.objectContaining({ abortSignal: abortController.signal }),
+      );
+    });
+  });
 });

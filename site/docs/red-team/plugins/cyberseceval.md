@@ -74,7 +74,7 @@ Create a configuration file `promptfooconfig.yaml`:
 ```yaml
 targets:
   # You can target a model
-  - openai:chat:gpt-4.1
+  - openai:chat:gpt-5
   # Or an API endpoint
   - id: https
     config:

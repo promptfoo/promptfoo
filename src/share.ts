@@ -250,7 +250,8 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
   }
 
-  const totalResults = await evalRecord.getResultsCount();
+  // Use total row count (not distinct test count) since we iterate over all result rows
+  const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
 
   // Setup progress bar only if not in verbose mode or CI

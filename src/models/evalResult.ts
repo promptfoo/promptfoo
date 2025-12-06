@@ -10,14 +10,15 @@ import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { getCurrentTimestamp } from '../util/time';
 
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  GradingResult,
-  Prompt,
-  ProviderOptions,
-  ProviderResponse,
+import {
+  isResultFailureReason,
   ResultFailureReason,
+  type ApiProvider,
+  type AtomicTestCase,
+  type GradingResult,
+  type Prompt,
+  type ProviderOptions,
+  type ProviderResponse,
 } from '../types/index';
 
 // Removes circular references from the provider object and ensures consistent format
@@ -261,7 +262,7 @@ export default class EvalResult {
     latencyMs?: number | null;
     cost?: number | null;
     metadata?: Record<string, any> | null;
-    failureReason: ResultFailureReason;
+    failureReason: ResultFailureReason | number;
     persisted?: boolean;
   }) {
     this.id = opts.id;
@@ -282,7 +283,9 @@ export default class EvalResult {
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
     this.metadata = opts.metadata || {};
-    this.failureReason = opts.failureReason;
+    this.failureReason = isResultFailureReason(opts.failureReason)
+      ? opts.failureReason
+      : ResultFailureReason.NONE;
     this.persisted = opts.persisted || false;
     this.pluginId = opts.testCase.metadata?.pluginId;
   }

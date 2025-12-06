@@ -737,6 +737,127 @@ describe('logger', () => {
     });
   });
 
+  describe('closeLogger', () => {
+    // Save original transports state and restore after each test
+    let originalTransports: any[];
+
+    beforeEach(() => {
+      originalTransports = [...mockLogger.transports];
+    });
+
+    afterEach(() => {
+      // Restore transports to original state
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(...originalTransports);
+    });
+
+    it('should set shutdown flag when closing', async () => {
+      // Create mock file transports
+      const mockFileTransport1 = {
+        filename: '/mock/path/debug.log',
+      };
+      const mockFileTransport2 = {
+        filename: '/mock/path/error.log',
+      };
+
+      // Make transports appear as File instances
+      Object.setPrototypeOf(mockFileTransport1, winstonMock.transports.File.prototype);
+      Object.setPrototypeOf(mockFileTransport2, winstonMock.transports.File.prototype);
+
+      // Set up transports array with file transports
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockFileTransport1 as any, mockFileTransport2 as any);
+
+      // Reset shutdown flag
+      logger.setLoggerShuttingDown(false);
+
+      await logger.closeLogger();
+
+      // Shutdown flag should be set (critical for preventing writes during shutdown)
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+
+      // Reset for other tests
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should handle file transports gracefully', async () => {
+      const mockTransport = {
+        filename: '/mock/path/test.log',
+      };
+
+      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockTransport as any);
+
+      // Should not throw
+      await expect(logger.closeLogger()).resolves.not.toThrow();
+
+      // Shutdown flag should be set
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should skip non-file transports', async () => {
+      const mockConsoleTransport = {};
+      // Don't set File prototype - this is a console transport
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockConsoleTransport as any);
+
+      await logger.closeLogger();
+
+      // Shutdown flag should still be set even with no file transports
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should handle errors gracefully', async () => {
+      const mockTransport = {
+        filename: '/mock/path/test.log',
+      };
+
+      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockTransport as any);
+
+      // Should not throw
+      await expect(logger.closeLogger()).resolves.not.toThrow();
+
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should handle empty transports array', async () => {
+      mockLogger.transports.length = 0;
+
+      logger.setLoggerShuttingDown(false);
+
+      // Should not throw
+      await expect(logger.closeLogger()).resolves.not.toThrow();
+
+      // Shutdown flag should still be set even with no transports
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should prevent logging after shutdown flag is set', async () => {
+      const debugSpy = vi.spyOn(mockLogger, 'debug');
+
+      // Set shutdown flag
+      logger.setLoggerShuttingDown(true);
+
+      // Try to log using default export
+      logger.default.debug('This should not be logged');
+
+      // Logger should not have been called (shutdown flag prevents it)
+      expect(debugSpy).not.toHaveBeenCalled();
+
+      // Reset flag for other tests
+      logger.setLoggerShuttingDown(false);
+    });
+  });
+
   describe('logRequestResponse', () => {
     let mockResponse: Partial<Response>;
     let consoleSpy: MockInstance;
