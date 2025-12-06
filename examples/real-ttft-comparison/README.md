@@ -15,21 +15,21 @@ npx promptfoo@latest init --example real-ttft-comparison
 - **TTFT Measurement**: Compare streaming response times between models
 - **Real-World Testing**: Uses actual OpenAI API endpoints with current models
 - **Performance Analysis**: Measures both TTFT and total latency across multiple test cases
-- **Model Comparison**: Side-by-side performance evaluation of gpt-5-nano vs gpt-5
+- **Model Comparison**: Side-by-side performance evaluation of gpt-5-mini vs gpt-5
 
 ## Configuration
 
 The example tests both models with:
 
-- **gpt-5-nano**: Fastest, most cost-efficient model
-- **gpt-5**: Flagship model with advanced capabilities
+- **gpt-5-mini**: Fast, cost-efficient model optimized for speed
+- **gpt-5**: Flagship model with advanced reasoning capabilities
 
 Each provider is configured with:
 
 ```yaml
 config:
-  # TTFT measurement is automatically enabled when stream: true
-  stream: true # Enable streaming from OpenAI API
+  body:
+    stream: true # Automatically enables TTFT measurement
 ```
 
 ## Requirements
@@ -68,9 +68,9 @@ config:
 
 ### Performance Characteristics
 
-- **gpt-5-nano TTFT**: ~200-800ms (optimized for speed)
-- **gpt-5 TTFT**: ~300-1000ms (balanced performance)
-- **Total Response Time**: 2-8 seconds depending on complexity
+- **gpt-5-mini TTFT**: ~200-600ms (optimized for speed)
+- **gpt-5 TTFT**: ~300-800ms (balanced performance)
+- **Total Response Time**: 2-8 seconds depending on response length
 
 ### Test Coverage
 

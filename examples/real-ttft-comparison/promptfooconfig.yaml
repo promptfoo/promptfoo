@@ -1,20 +1,20 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Real TTFT comparison between current OpenAI models (Sept 2025)
+description: TTFT comparison between OpenAI models
 
 prompts:
   - 'Write a brief explanation of {{topic}}'
 
 providers:
-  # Use actual OpenAI Chat API with GPT-5 nano (fastest, cheapest)
+  # GPT-5-mini: Fast, cost-efficient model
   - id: https://api.openai.com/v1/chat/completions
-    label: 'gpt-5-nano'
+    label: 'gpt-5-mini'
     config:
       method: 'POST'
       headers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
       body:
-        model: 'gpt-5-nano'
+        model: 'gpt-5-mini'
         messages:
           - role: 'user'
             content: '{{prompt}}'
@@ -47,7 +47,7 @@ providers:
           return content.trim();
         }
 
-  # Use actual OpenAI Chat API with GPT-5 (flagship model)
+  # GPT-5: Flagship model with advanced capabilities
   - id: https://api.openai.com/v1/chat/completions
     label: 'gpt-5'
     config:

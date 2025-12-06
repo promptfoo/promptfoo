@@ -8,7 +8,7 @@ description: HTTP provider streaming with TTFT measurement
 # ✅ User-Perceived Performance: Measure streaming responsiveness
 # ✅ Model Comparison: Compare streaming performance across providers
 #
-# 💡 Alternative: Use built-in providers when available (openai:chat:gpt-4o-mini)
+# 💡 Alternative: Use built-in providers when available (openai:chat:gpt-5-mini)
 # However, HTTP provider with streaming is valuable for:
 # - Custom endpoints that support streaming
 # - TTFT performance measurement

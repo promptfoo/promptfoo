@@ -2,6 +2,8 @@
 
 This example demonstrates how to measure Time to First Token (TTFT) using promptfoo's HTTP provider with OpenAI's Chat Completions API streaming responses.
 
+> **Note**: TTFT measurement is automatically enabled when `stream: true` is set in the request body. No additional configuration is required.
+
 ## Quick Start
 
 Initialize this example with:
@@ -27,14 +29,33 @@ The key configuration options for TTFT measurement:
 
 ```yaml
 providers:
-  - id: https://api.openai.com/v1/completions
+  - id: https://api.openai.com/v1/chat/completions
     config:
       body:
-        model: 'gpt-5-nano'
-        stream: true # Enable streaming from the API
+        model: 'gpt-5-mini'
+        messages:
+          - role: 'user'
+            content: '{{prompt}}'
+        stream: true # Automatically enables TTFT measurement
       transformResponse: |
-        # Parse Server-Sent Events format for completions API
-        # Extract content from streaming chunks
+        # Parse OpenAI streaming SSE format
+        (json, text) => {
+          if (json?.choices?.[0]?.message?.content) {
+            return json.choices[0].message.content;
+          }
+          let content = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              if (data.choices?.[0]?.delta?.content) {
+                content += data.choices[0].delta.content;
+              }
+            } catch {}
+          }
+          return content.trim();
+        }
 ```
 
 ## Assertions
@@ -87,10 +108,11 @@ The evaluation will show:
 
 ## Notes
 
-- **Model Selection**: The example uses `gpt-4o-mini` with the chat completions API endpoint
+- **Model Selection**: The example uses `gpt-5-mini` with the Chat Completions API (`/v1/chat/completions`)
+- **Auto-Detection**: TTFT measurement is automatically enabled when `stream: true` is in the request body
 - **Threshold Tuning**: Adjust TTFT/latency thresholds based on your requirements
-- **Network Impact**: TTFT includes network latency, not just model processing time
-- **Token Counting**: Uses rough approximation (4 chars ≈ 1 token); inaccurate for non-English text or code
+- **Network Impact**: TTFT includes full network latency (TCP handshake, TLS, HTTP headers), not just model processing time
+- **Token Counting**: Uses rough approximation (4 chars ≈ 1 token); may be inaccurate for non-English text or code
 - **Caching Behavior**: When `stream: true` is set, response caching is disabled to ensure live TTFT measurement
 - **Performance Trade-off**: Streaming responses sacrifice caching for real-time timing metrics
 
