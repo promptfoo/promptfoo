@@ -194,7 +194,7 @@ describe('useModelAuditHistoryStore', () => {
       expect(fetchedScan).toBeNull();
     });
 
-    it('should URL-encode IDs with special characters', async () => {
+    it('should handle IDs with special characters', async () => {
       const scanId = 'scan-abc-2025-12-06T10:30:45';
       const mockScan = createMockScan(scanId, 'Test Scan');
 
@@ -209,9 +209,9 @@ describe('useModelAuditHistoryStore', () => {
         await result.current.fetchScanById(scanId);
       });
 
-      // Verify the URL was properly encoded (colons become %3A)
+      // IDs are passed directly - colons are valid in URL paths per RFC 3986
       expect(mockCallApi).toHaveBeenCalledWith(
-        `/model-audit/scans/${encodeURIComponent(scanId)}`,
+        `/model-audit/scans/${scanId}`,
         expect.any(Object),
       );
     });
