@@ -784,8 +784,14 @@ export function modelScanCommand(program: Command): void {
               }
             };
 
-            // Register cleanup handlers for abnormal termination
-            // Using once() ensures handlers auto-remove after firing
+            // Register cleanup handlers for abnormal termination.
+            // We use once() so handlers auto-remove after firing, but we also manually
+            // remove them in finally{} for the normal exit path. The cleanedUp flag
+            // prevents double-cleanup if a signal fires between our manual cleanup call
+            // and removeListener calls. This belt-and-suspenders approach ensures:
+            // 1. Normal exit: finally{} cleans up and removes handlers
+            // 2. Signal during await: once() handler cleans up, auto-removes itself
+            // 3. Signal during finally{}: cleanedUp flag prevents double-cleanup
             process.once('exit', cleanupTempFileOnExit);
             process.once('SIGINT', cleanupTempFileOnExit);
             process.once('SIGTERM', cleanupTempFileOnExit);
@@ -807,8 +813,8 @@ export function modelScanCommand(program: Command): void {
                 existingAuditToUpdate,
               );
             } finally {
-              // Cleanup first, then remove handlers to avoid race condition
-              // where a signal arrives between handler removal and cleanup
+              // Cleanup first, then remove handlers. Order matters: if we removed
+              // handlers first, a signal arriving before cleanup would be missed.
               cleanupTempFileOnExit();
               process.removeListener('exit', cleanupTempFileOnExit);
               process.removeListener('SIGINT', cleanupTempFileOnExit);
