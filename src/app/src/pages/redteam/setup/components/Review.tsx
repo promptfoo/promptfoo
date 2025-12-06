@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Code from '@app/components/Code';
 import { useApiHealth } from '@app/hooks/useApiHealth';
@@ -6,6 +6,7 @@ import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
+import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import CloseIcon from '@mui/icons-material/Close';
@@ -88,6 +89,8 @@ export default function Review({
     data: { status: apiHealthStatus },
     isLoading: isCheckingApiHealth,
   } = useApiHealth();
+  const { jobId: savedJobId, setJob, clearJob } = useRedteamJobStore();
+  const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
@@ -194,6 +197,63 @@ export default function Review({
   useEffect(() => {
     setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
   }, [config.maxConcurrency]);
+
+  // Recover job state on mount (e.g., after navigation)
+  useEffect(() => {
+    const recoverJob = async () => {
+      // Check what the server thinks is running
+      const { hasRunningJob, jobId: serverJobId } = await checkForRunningJob();
+
+      if (hasRunningJob && serverJobId) {
+        // Server has a running job - reconnect to it
+        try {
+          const jobResponse = await callApi(`/eval/job/${serverJobId}`);
+          if (jobResponse.ok) {
+            const job = (await jobResponse.json()) as Job;
+            setLogs(job.logs || []);
+
+            if (job.status === 'in-progress') {
+              setIsRunning(true);
+              setJob(serverJobId);
+              startPolling(serverJobId);
+            } else if (job.status === 'complete' && job.evalId) {
+              setEvalId(job.evalId);
+              clearJob();
+            } else if (job.status === 'error') {
+              setLogs(job.logs || []);
+              clearJob();
+            }
+          }
+        } catch (error) {
+          console.error('Failed to recover job:', error);
+          clearJob();
+        }
+      } else if (savedJobId) {
+        // We have a saved job ID but server says nothing running
+        // Check if it completed while we were away
+        try {
+          const jobResponse = await callApi(`/eval/job/${savedJobId}`);
+          if (jobResponse.ok) {
+            const job = (await jobResponse.json()) as Job;
+            setLogs(job.logs || []);
+
+            if (job.status === 'complete' && job.evalId) {
+              setEvalId(job.evalId);
+              showToast('Your evaluation completed!', 'success');
+            } else if (job.status === 'error') {
+              showToast('Previous job failed. Check logs for details.', 'error');
+            }
+          }
+        } catch {
+          // Job doesn't exist anymore (server restarted or cleaned up)
+        }
+        clearJob();
+      }
+    };
+
+    recoverJob();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
   const handleSaveYaml = () => {
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
@@ -315,6 +375,77 @@ export default function Review({
     }
   };
 
+  const startPolling = useCallback(
+    (jobId: string) => {
+      // Clear any existing interval
+      if (pollIntervalRef.current) {
+        window.clearInterval(pollIntervalRef.current);
+      }
+      if (pollInterval) {
+        window.clearInterval(pollInterval);
+        setPollInterval(null);
+      }
+
+      const interval = window.setInterval(async () => {
+        try {
+          const statusResponse = await callApi(`/eval/job/${jobId}`);
+          if (!statusResponse.ok) {
+            // Job not found - likely server restarted
+            window.clearInterval(interval);
+            pollIntervalRef.current = null;
+            setPollInterval(null);
+            setIsRunning(false);
+            clearJob();
+            showToast('Job was interrupted. Please try again.', 'error');
+            return;
+          }
+
+          const status = (await statusResponse.json()) as Job;
+
+          if (status.logs) {
+            setLogs(status.logs);
+          }
+
+          if (status.status === 'complete' || status.status === 'error') {
+            window.clearInterval(interval);
+            pollIntervalRef.current = null;
+            setPollInterval(null);
+            setIsRunning(false);
+            clearJob();
+
+            if (status.status === 'complete' && status.result && status.evalId) {
+              setEvalId(status.evalId);
+
+              recordEvent('funnel', {
+                type: 'redteam',
+                step: 'webui_evaluation_completed',
+                source: 'webui',
+                evalId: status.evalId,
+              });
+            } else if (status.status === 'complete') {
+              console.warn('No evaluation result was generated');
+              showToast(
+                'The evaluation completed but no results were generated. Please check the logs for details.',
+                'warning',
+              );
+            } else {
+              showToast(
+                'An error occurred during evaluation. Please check the logs for details.',
+                'error',
+              );
+            }
+          }
+        } catch (error) {
+          console.error('Error polling job status:', error);
+        }
+      }, 1000);
+
+      pollIntervalRef.current = interval;
+      setPollInterval(interval);
+    },
+    [pollInterval, clearJob, recordEvent, showToast],
+  );
+
   const handleRunWithSettings = async () => {
     // Check email verification first
     const emailResult = await checkEmailStatus();
@@ -395,45 +526,9 @@ export default function Review({
 
       const { id } = await response.json();
 
-      const interval = window.setInterval(async () => {
-        const statusResponse = await callApi(`/eval/job/${id}`);
-        const status = (await statusResponse.json()) as Job;
-
-        if (status.logs) {
-          setLogs(status.logs);
-        }
-
-        if (status.status === 'complete' || status.status === 'error') {
-          window.clearInterval(interval);
-          setPollInterval(null);
-          setIsRunning(false);
-
-          if (status.status === 'complete' && status.result && status.evalId) {
-            setEvalId(status.evalId);
-
-            // Track funnel milestone - evaluation completed
-            recordEvent('funnel', {
-              type: 'redteam',
-              step: 'webui_evaluation_completed',
-              source: 'webui',
-              evalId: status.evalId,
-            });
-          } else if (status.status === 'complete') {
-            console.warn('No evaluation result was generated');
-            showToast(
-              'The evaluation completed but no results were generated. Please check the logs for details.',
-              'warning',
-            );
-          } else {
-            showToast(
-              'An error occurred during evaluation. Please check the logs for details.',
-              'error',
-            );
-          }
-        }
-      }, 1000);
-
-      setPollInterval(interval);
+      // Save job ID to persistent store and start polling
+      setJob(id);
+      startPolling(id);
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
@@ -451,12 +546,17 @@ export default function Review({
         method: 'POST',
       });
 
+      if (pollIntervalRef.current) {
+        window.clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
       if (pollInterval) {
         window.clearInterval(pollInterval);
         setPollInterval(null);
       }
 
       setIsRunning(false);
+      clearJob();
       showToast('Cancel request submitted', 'success');
     } catch (error) {
       console.error('Error cancelling job:', error);
@@ -479,6 +579,9 @@ export default function Review({
 
   useEffect(() => {
     return () => {
+      if (pollIntervalRef.current) {
+        window.clearInterval(pollIntervalRef.current);
+      }
       if (pollInterval) {
         window.clearInterval(pollInterval);
       }

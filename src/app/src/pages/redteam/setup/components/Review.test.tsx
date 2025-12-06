@@ -4,6 +4,7 @@ import Review from './Review';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { callApi } from '@app/utils/api';
 import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
+import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 // Mock the dependencies
@@ -26,10 +27,29 @@ vi.mock('@app/hooks/useToast', () => ({
 }));
 
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+  callApi: vi.fn().mockImplementation(async (url: string) => {
+    if (url === '/redteam/status') {
+      return {
+        ok: true,
+        json: async () => ({ hasRunningJob: false }),
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  }),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
+
+// Mock the redteamJobStore
+const mockSetJob = vi.fn();
+const mockClearJob = vi.fn();
+vi.mock('@app/stores/redteamJobStore', () => ({
+  useRedteamJobStore: vi.fn(() => ({
+    jobId: null,
+    setJob: mockSetJob,
+    clearJob: mockClearJob,
+  })),
 }));
 
 vi.mock('@app/hooks/useApiHealth', () => ({
@@ -101,6 +121,24 @@ describe('Review Component', () => {
       refetch: vi.fn(),
       isLoading: false,
     } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
+    // Reset the job store mock
+    vi.mocked(useRedteamJobStore).mockReturnValue({
+      jobId: null,
+      setJob: mockSetJob,
+      clearJob: mockClearJob,
+    });
+
+    // Reset callApi mock to default behavior
+    vi.mocked(callApi).mockImplementation(async (url: string) => {
+      if (url === '/redteam/status') {
+        return {
+          ok: true,
+          json: async () => ({ hasRunningJob: false }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
 
     mockUseRedTeamConfig.mockReturnValue({
       config: defaultConfig,
@@ -1142,6 +1180,281 @@ Application Details:
           expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
         });
       }
+    });
+  });
+
+  describe('Job Recovery', () => {
+    beforeEach(() => {
+      vi.useRealTimers();
+
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    });
+
+    it('should check for running job on mount', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for the effect to run
+      await waitFor(() => {
+        expect(callApi).toHaveBeenCalledWith('/redteam/status');
+      });
+    });
+
+    it('should reconnect to running job when server has one', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'server-job-123' }),
+          } as Response;
+        }
+        if (url === '/eval/job/server-job-123') {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'in-progress',
+              logs: ['Test running...'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to complete and button to show running state
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+      });
+
+      // Should have called setJob with the server's job ID
+      expect(mockSetJob).toHaveBeenCalledWith('server-job-123');
+    });
+
+    it('should show completed state when returning to completed job', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'completed-job-456' }),
+          } as Response;
+        }
+        if (url === '/eval/job/completed-job-456') {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'complete',
+              evalId: 'eval-result-789',
+              logs: ['Evaluation complete'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to complete and show View Report link (MUI Button with href renders as link)
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: /view report/i })).toBeInTheDocument();
+      });
+
+      // Should have cleared the job since it's complete
+      expect(mockClearJob).toHaveBeenCalled();
+    });
+
+    it('should check saved job when no server job is running', async () => {
+      // Mock the store to have a saved job ID
+      vi.mocked(useRedteamJobStore).mockReturnValue({
+        jobId: 'saved-job-999',
+        setJob: mockSetJob,
+        clearJob: mockClearJob,
+      });
+
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        if (url === '/eval/job/saved-job-999') {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'complete',
+              evalId: 'completed-eval-123',
+              logs: ['Done'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to complete
+      await waitFor(() => {
+        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-job-999');
+      });
+
+      // Should clear job since it completed while away
+      expect(mockClearJob).toHaveBeenCalled();
+    });
+
+    it('should call setJob when starting a new job', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: true,
+            json: async () => ({ id: 'new-job-id' }),
+          } as Response;
+        }
+        if (url.startsWith('/eval/job/')) {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'in-progress',
+              logs: ['Starting...'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for initial render
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
+      });
+
+      // Click Run Now
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
+
+      // Wait for job to start
+      await waitFor(() => {
+        expect(mockSetJob).toHaveBeenCalledWith('new-job-id');
+      });
+    });
+
+    it('should call clearJob when cancelling a job', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: true,
+            json: async () => ({ id: 'job-to-cancel' }),
+          } as Response;
+        }
+        if (url === '/redteam/cancel') {
+          return {
+            ok: true,
+            json: async () => ({ success: true }),
+          } as Response;
+        }
+        if (url.startsWith('/eval/job/')) {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'in-progress',
+              logs: ['Running...'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for initial render
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
+      });
+
+      // Click Run Now
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
+
+      // Wait for Cancel button to appear
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+      });
+
+      // Click Cancel
+      fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+      // Should call clearJob
+      await waitFor(() => {
+        expect(mockClearJob).toHaveBeenCalled();
+      });
     });
   });
 });

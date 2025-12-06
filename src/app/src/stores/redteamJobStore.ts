@@ -18,6 +18,6 @@ export const useRedteamJobStore = create<RedteamJobState>()(
     }),
     {
       name: 'promptfoo-redteam-job',
-    }
-  )
+    },
+  ),
 );
