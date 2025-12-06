@@ -7,7 +7,15 @@ This example demonstrates how to use OpenTelemetry with Python to trace the inte
 ```bash
 npx promptfoo@latest init --example opentelemetry-tracing-python
 cd opentelemetry-tracing-python
+
+# Create and activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Run the evaluation
 npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
