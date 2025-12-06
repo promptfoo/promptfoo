@@ -13,10 +13,7 @@ export default function FeaturedBlogPost({ post }: FeaturedBlogPostProps): React
   const author = metadata.authors[0];
 
   // Format date with UTC timezone to avoid timezone conversion issues
-  const formattedDate = new Date(date).toLocaleDateString('en-US', {
-    day: 'numeric',
-    month: 'numeric',
-    year: 'numeric',
+  const formattedDate = new Date(date).toLocaleDateString(undefined, {
     timeZone: 'UTC',
   });
 
