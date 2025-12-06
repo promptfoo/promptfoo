@@ -589,4 +589,170 @@ describe('TruncatedText', () => {
 
     expect(mainDiv).toHaveTextContent('Hello, World!');
   });
+
+  // Base64 image handling tests
+  describe('base64 image handling', () => {
+    it('should NOT truncate text containing a markdown base64 image', () => {
+      const base64Image =
+        '![Generated Image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)';
+      const textWithImage = `Here is an image: ${base64Image} and some text after it.`;
+      const maxLength = 20; // Much shorter than the text
+
+      const { container } = render(<TruncatedText text={textWithImage} maxLength={maxLength} />);
+
+      const mainDiv = container.querySelector('#eval-output-cell-text');
+      expect(mainDiv).toBeInTheDocument();
+
+      // Should show the full text including the base64 image, not truncated
+      expect(mainDiv).toHaveTextContent(textWithImage);
+
+      // Should NOT show truncation UI since base64 images should never be truncated
+      expect(screen.queryByText('...')).not.toBeInTheDocument();
+      expect(screen.queryByText('Show less')).not.toBeInTheDocument();
+    });
+
+    it('should NOT truncate React elements containing markdown base64 images', () => {
+      const base64Image = '![Alt Text](data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD)';
+      const elementWithImage = <span>{`Generated: ${base64Image}`}</span>;
+      const maxLength = 10;
+
+      const { container } = render(<TruncatedText text={elementWithImage} maxLength={maxLength} />);
+
+      const mainDiv = container.querySelector('#eval-output-cell-text');
+      expect(mainDiv).toBeInTheDocument();
+
+      // Should contain the full base64 image data
+      expect(mainDiv?.textContent).toContain('data:image/jpeg;base64');
+
+      // Should NOT show truncation UI
+      expect(screen.queryByText('...')).not.toBeInTheDocument();
+    });
+
+    it('should NOT truncate arrays containing markdown base64 images', () => {
+      const base64Image =
+        '![Image](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)';
+      const nodes = ['Text before ', <span key="img">{base64Image}</span>, ' text after'];
+      const maxLength = 5;
+
+      const { container } = render(<TruncatedText text={nodes} maxLength={maxLength} />);
+
+      const mainDiv = container.querySelector('#eval-output-cell-text');
+      expect(mainDiv).toBeInTheDocument();
+
+      // Should contain the full base64 data
+      expect(mainDiv?.textContent).toContain('data:image/gif;base64');
+
+      // Should NOT show truncation UI
+      expect(screen.queryByText('...')).not.toBeInTheDocument();
+    });
+
+    it('should handle markdown images with nested brackets in alt text', () => {
+      const base64Image =
+        '![Image [with brackets]](data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==)';
+      const maxLength = 10;
+
+      const { container } = render(<TruncatedText text={base64Image} maxLength={maxLength} />);
+
+      const mainDiv = container.querySelector('#eval-output-cell-text');
+      expect(mainDiv).toBeInTheDocument();
+
+      // Should show the full content including the base64 image
+      expect(mainDiv?.textContent).toContain('data:image/png;base64');
+      expect(screen.queryByText('...')).not.toBeInTheDocument();
+    });
+
+    it('should still truncate normal text that does not contain base64 images', () => {
+      const normalText = 'This is just regular text without any images that should be truncated.';
+      const maxLength = 20;
+      const expectedTruncated = normalText.slice(0, maxLength);
+
+      const { container } = render(<TruncatedText text={normalText} maxLength={maxLength} />);
+
+      const mainDiv = container.querySelector('#eval-output-cell-text');
+      expect(mainDiv).toBeInTheDocument();
+
+      // Should be truncated since there's no base64 image
+      expect(mainDiv).toHaveTextContent(`${expectedTruncated}...`);
+      expect(screen.getByText('...')).toBeInTheDocument();
+    });
+
+    it('should not be confused by text mentioning images without actual base64 data', () => {
+      const textMentioningImages =
+        'Here is a reference to ![an image](https://example.com/image.png) from the web';
+      const maxLength = 20;
+      const expectedTruncated = textMentioningImages.slice(0, maxLength);
+
+      const { container } = render(
+        <TruncatedText text={textMentioningImages} maxLength={maxLength} />,
+      );
+
+      const mainDiv = container.querySelector('#eval-output-cell-text');
+      expect(mainDiv).toBeInTheDocument();
+
+      // Should be truncated since the image is a URL, not base64
+      expect(mainDiv).toHaveTextContent(`${expectedTruncated}...`);
+      expect(screen.getByText('...')).toBeInTheDocument();
+    });
+  });
+
+  // Edge case tests for truncation boundary handling
+  describe('truncation boundary edge cases', () => {
+    it('should handle truncation when accumulated length already exceeds maxLength', () => {
+      // This tests the guard against negative remaining length
+      const nodes = [
+        'First very long string that exceeds the max length by itself',
+        'Second string',
+        'Third string',
+      ];
+      const maxLength = 10;
+
+      const { container } = render(<TruncatedText text={nodes} maxLength={maxLength} />);
+
+      const mainDiv = container.querySelector('#eval-output-cell-text');
+      expect(mainDiv).toBeInTheDocument();
+
+      // Should be truncated without errors
+      expect(mainDiv).toHaveTextContent('...');
+      // The text content (excluding '...') should be at most maxLength
+      const textContent = mainDiv?.textContent?.replace('...', '') || '';
+      expect(textContent.length).toBeLessThanOrEqual(maxLength);
+    });
+
+    it('should not produce negative slice indices with nested elements exceeding maxLength', () => {
+      const nestedElement = (
+        <div>
+          <span>
+            {'A'.repeat(50)}
+            <strong>{'B'.repeat(50)}</strong>
+          </span>
+        </div>
+      );
+      const maxLength = 20;
+
+      // This should not throw an error due to negative slice index
+      const { container } = render(<TruncatedText text={nestedElement} maxLength={maxLength} />);
+
+      const mainDiv = container.querySelector('#eval-output-cell-text');
+      expect(mainDiv).toBeInTheDocument();
+      expect(mainDiv).toHaveTextContent('...');
+
+      // Verify the truncated content doesn't exceed maxLength
+      const textContent = mainDiv?.textContent?.replace('...', '') || '';
+      expect(textContent.length).toBeLessThanOrEqual(maxLength);
+    });
+
+    it('should return empty string when remaining length is zero', () => {
+      // Array where first element is exactly maxLength
+      const nodes = ['12345', '67890'];
+      const maxLength = 5;
+
+      const { container } = render(<TruncatedText text={nodes} maxLength={maxLength} />);
+
+      const mainDiv = container.querySelector('#eval-output-cell-text');
+      expect(mainDiv).toBeInTheDocument();
+
+      // First node is exactly maxLength, so second node should contribute nothing
+      expect(mainDiv).toHaveTextContent('12345...');
+    });
+  });
 });

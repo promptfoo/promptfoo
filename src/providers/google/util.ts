@@ -471,9 +471,9 @@ export function formatCandidateContents(candidate: Candidate) {
     let hasImages = false;
 
     for (const part of candidate.content.parts) {
-      if ('text' in part) {
+      if (typeof part.text === 'string') {
         textOutput += part.text;
-        outputParts.push(part.text!);
+        outputParts.push(part.text);
       } else if ('inlineData' in part && part.inlineData) {
         hasImages = true;
         const mimeType = part.inlineData.mimeType || 'image/png';
