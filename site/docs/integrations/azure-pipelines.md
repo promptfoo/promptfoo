@@ -162,10 +162,10 @@ Test across multiple configurations or models in parallel:
 ```yaml
 strategy:
   matrix:
-    gpt4:
-      MODEL: 'gpt-4'
+    gpt:
+      MODEL: 'gpt-5.1'
     claude:
-      MODEL: 'claude-3-opus-20240229'
+      MODEL: 'claude-sonnet-4-5-20250929'
 
 steps:
   - script: |

@@ -334,7 +334,7 @@ function CallToActionSection() {
   );
 }
 
-export default function ModelSecurity(): JSX.Element {
+export default function ModelSecurity(): React.ReactElement {
   return (
     <Layout
       title="AI Model Security"

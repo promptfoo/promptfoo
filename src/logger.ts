@@ -49,6 +49,19 @@ export interface SanitizedLogContext {
 // Lazy source map support - only loaded when debug is enabled
 export let sourceMapSupportInitialized = false;
 
+// Shutdown state tracking - prevents writes once logger closure begins
+let isLoggerShuttingDown = false;
+
+// Setter for testing purposes
+export function setLoggerShuttingDown(value: boolean): void {
+  isLoggerShuttingDown = value;
+}
+
+// Getter for testing purposes
+export function getLoggerShuttingDown(): boolean {
+  return isLoggerShuttingDown;
+}
+
 export async function initializeSourceMapSupport(): Promise<void> {
   if (!sourceMapSupportInitialized) {
     try {
@@ -180,10 +193,13 @@ export function isDebugEnabled(): boolean {
 
 /**
  * Creates log directory and cleans up old log files
+ * Respects PROMPTFOO_LOG_DIR environment variable to customize log location
  */
 function setupLogDirectory(): string {
   const configDir = getConfigDirectoryPath(true);
-  const logDir = path.join(configDir, 'logs');
+  const logDir = getEnvString('PROMPTFOO_LOG_DIR')
+    ? path.resolve(getEnvString('PROMPTFOO_LOG_DIR')!)
+    : path.join(configDir, 'logs');
 
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
@@ -348,6 +364,11 @@ function createLogMethodWithContext(
   level: keyof typeof LOG_LEVELS,
 ): (message: string, context?: SanitizedLogContext) => void {
   return (message: string, context?: SanitizedLogContext) => {
+    // Prevent new writes once shutdown starts
+    if (isLoggerShuttingDown) {
+      return;
+    }
+
     if (!context) {
       internalLogger[level](message);
       return;
@@ -424,6 +445,43 @@ export async function logRequestResponse(options: {
     logMethod(sanitizeObject(logObject, { context: 'log object for structured logging' }));
   } else {
     logMethod(`Api Request`, logObject);
+  }
+}
+
+/**
+ * Close all file transports and cleanup logger resources
+ * Should be called during graceful shutdown to prevent event loop hanging
+ *
+ * IMPORTANT: All logging should be done BEFORE calling this function
+ *
+ * Note: Winston's 'flush' and 'finish' events are unreliable (fire before actual flush).
+ * We use a short timeout to let Winston flush its internal buffer before removing transports.
+ * See: https://github.com/winstonjs/winston/issues/1504
+ */
+export async function closeLogger(): Promise<void> {
+  // Set shutdown flag FIRST to prevent new writes during cleanup
+  setLoggerShuttingDown(true);
+  try {
+    const fileTransports = winstonLogger.transports.filter(
+      (transport) => transport instanceof winston.transports.File,
+    );
+
+    if (fileTransports.length === 0) {
+      return;
+    }
+
+    // Wait briefly for Winston to flush its internal write buffer
+    // This prevents "write after end" errors when remove() triggers stream closure
+    // 100ms is sufficient for Winston to complete pending async writes
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Remove transports to allow process to exit (prevents event loop hanging)
+    for (const transport of fileTransports) {
+      winstonLogger.remove(transport);
+    }
+  } catch (error) {
+    // Can't use logger here since we're shutting it down
+    console.error(`Error closing logger: ${error}`);
   }
 }
 

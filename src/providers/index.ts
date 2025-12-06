@@ -150,6 +150,7 @@ export async function loadApiProvider(
 interface LoadApiProviderOptions {
   options?: ProviderOptions;
   env?: any;
+  basePath?: string;
 }
 
 /**
@@ -159,7 +160,7 @@ interface LoadApiProviderOptions {
 export async function resolveProvider(
   provider: any,
   providerMap: Record<string, ApiProvider>,
-  context: { env?: any } = {},
+  context: { env?: any; basePath?: string } = {},
 ): Promise<ApiProvider> {
   // Guard clause for null or undefined provider values
   if (provider == null) {
@@ -171,9 +172,14 @@ export async function resolveProvider(
     if (providerMap[provider]) {
       return providerMap[provider];
     }
-    return context.env
-      ? await loadApiProvider(provider, { env: context.env })
-      : await loadApiProvider(provider);
+    const loadOptions: LoadApiProviderOptions = {};
+    if (context.env) {
+      loadOptions.env = context.env;
+    }
+    if (context.basePath) {
+      loadOptions.basePath = context.basePath;
+    }
+    return await loadApiProvider(provider, loadOptions);
   } else if (typeof provider === 'object') {
     const casted = provider as ProviderOptions;
     invariant(casted.id, 'Provider object must have an id');
@@ -181,11 +187,16 @@ export async function resolveProvider(
     if (context.env) {
       loadOptions.env = context.env;
     }
+    if (context.basePath) {
+      loadOptions.basePath = context.basePath;
+    }
     return await loadApiProvider(casted.id, loadOptions);
   } else if (typeof provider === 'function') {
-    return context.env
-      ? await loadApiProvider(provider, { env: context.env })
-      : await loadApiProvider(provider);
+    // Handle function providers directly instead of passing to loadApiProvider
+    return {
+      id: () => provider.label ?? 'custom-function',
+      callApi: provider,
+    };
   } else {
     throw new Error('Invalid provider type');
   }
@@ -270,7 +281,7 @@ export async function loadApiProviders(
         if (typeof provider === 'function') {
           return [
             {
-              id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
+              id: () => provider.label ?? `custom-function-${idx}`,
               callApi: provider,
             },
           ];

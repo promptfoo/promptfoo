@@ -5,6 +5,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import type { TraceContextData } from '../../tracing/traceContext';
 import {
   type ApiProvider,
   type CallApiContextParams,
@@ -15,13 +16,12 @@ import {
   isProviderOptions,
   type RedteamFileConfig,
   type TokenUsage,
-} from '../../types';
-import type { TraceContextData } from '../../tracing/traceContext';
+} from '../../types/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { type TransformContext, TransformInputType, transform } from '../../util/transform';
+import { transform, type TransformContext, TransformInputType } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 async function loadRedteamProvider({
@@ -174,6 +174,15 @@ export type TargetResponse = {
   guardrails?: GuardrailResponse;
   traceContext?: TraceContextData | null;
   traceSummary?: string;
+  audio?: {
+    data?: string;
+    transcript?: string;
+    format?: string;
+  };
+  image?: {
+    data?: string;
+    format?: string;
+  };
 };
 
 /**
@@ -193,6 +202,10 @@ export async function getTargetResponse(
   try {
     targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
+    // Re-throw abort errors to properly cancel the operation
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     return { output: '', error: (error as Error).message, tokenUsage: { numRequests: 1 } };
   }
   if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
@@ -215,6 +228,7 @@ export async function getTargetResponse(
       sessionId: targetRespRaw.sessionId,
       tokenUsage,
       guardrails: targetRespRaw.guardrails,
+      audio: targetRespRaw.audio,
     };
   }
 
@@ -229,6 +243,7 @@ export async function getTargetResponse(
       sessionId: targetRespRaw.sessionId,
       tokenUsage,
       guardrails: targetRespRaw.guardrails,
+      audio: targetRespRaw.audio,
     };
   }
 
@@ -504,6 +519,10 @@ export async function tryUnblocking({
       };
     }
   } catch (error) {
+    // Re-throw abort errors to properly cancel the operation
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
     return { success: false };
   }

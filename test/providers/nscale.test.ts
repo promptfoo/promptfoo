@@ -1,3 +1,4 @@
+import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
@@ -7,23 +8,26 @@ import { createNscaleProvider } from '../../src/providers/nscale';
 import type { ProviderOptions } from '../../src/types/index';
 import type { EnvOverrides } from '../../src/types/env';
 
-jest.mock('../../src/providers/openai');
-jest.mock('../../src/envars', () => ({
-  getEnvString: jest.fn(),
-  getEnvBool: jest.fn((key: string, defaultValue: boolean) => defaultValue),
-  getEnvInt: jest.fn((key: string, defaultValue: number) => defaultValue),
-  getEnvFloat: jest.fn((key: string, defaultValue: number) => defaultValue),
-  getEvalTimeoutMs: jest.fn((defaultValue: number) => defaultValue),
-  getMaxEvalTimeMs: jest.fn((defaultValue: number) => defaultValue),
-  isCI: jest.fn(() => false),
-}));
+vi.mock('../../src/providers/openai');
+vi.mock('../../src/envars', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getEnvString: vi.fn(),
+    getEnvBool: vi.fn((_key: string, defaultValue: boolean) => defaultValue),
+    getEnvInt: vi.fn((_key: string, defaultValue: number) => defaultValue),
+    getEnvFloat: vi.fn((_key: string, defaultValue: number) => defaultValue),
+    getEvalTimeoutMs: vi.fn((defaultValue: number) => defaultValue),
+    getMaxEvalTimeMs: vi.fn((defaultValue: number) => defaultValue),
+    isCI: vi.fn(() => false),
+  };
+});
 
 import { getEnvString } from '../../src/envars';
 
 describe('createNscaleProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    (getEnvString as jest.Mock).mockReturnValue(undefined);
+    vi.clearAllMocks();
+    (getEnvString as Mock).mockReturnValue(undefined);
   });
 
   it('should create a chat completion provider when type is chat', () => {
@@ -92,7 +96,7 @@ describe('createNscaleProvider', () => {
   });
 
   it('should prefer service tokens over API keys', () => {
-    (getEnvString as jest.Mock).mockReturnValue(undefined);
+    (getEnvString as Mock).mockReturnValue(undefined);
     const options = {
       env: {
         NSCALE_SERVICE_TOKEN: 'service-token-123',
@@ -112,7 +116,7 @@ describe('createNscaleProvider', () => {
   });
 
   it('should fall back to API key if no service token is provided', () => {
-    (getEnvString as jest.Mock).mockReturnValue(undefined);
+    (getEnvString as Mock).mockReturnValue(undefined);
     const options = {
       env: {
         NSCALE_API_KEY: 'api-key-456',
@@ -131,7 +135,7 @@ describe('createNscaleProvider', () => {
   });
 
   it('should use explicit config apiKey over environment variables', () => {
-    (getEnvString as jest.Mock).mockReturnValue(undefined);
+    (getEnvString as Mock).mockReturnValue(undefined);
     const options = {
       config: {
         config: {

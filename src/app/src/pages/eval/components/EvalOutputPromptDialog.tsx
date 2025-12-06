@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -13,7 +14,7 @@ import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import type { GradingResult } from '@promptfoo/types';
 
-import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import type { Trace } from '../../../components/traces/TraceView';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
@@ -21,8 +22,7 @@ import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import type { ResultsFilterType, ResultsFilterOperator } from './store';
-import type { Trace } from '../../../components/traces/TraceView';
+import type { ResultsFilterOperator, ResultsFilterType } from './store';
 
 const copyButtonSx = {
   position: 'absolute',
@@ -370,14 +370,27 @@ export default function EvalOutputPromptDialog({
   const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
     .filter((entry: any) => entry?.prompt && entry?.output)
     .flatMap(
-      (entry: { prompt: string; output: string; score?: number; graderPassed?: boolean }) => [
+      (entry: {
+        prompt: string;
+        promptAudio?: { data?: string; format?: string };
+        promptImage?: { data?: string; format?: string };
+        output: string;
+        outputAudio?: { data?: string; format?: string };
+        outputImage?: { data?: string; format?: string };
+        score?: number;
+        graderPassed?: boolean;
+      }) => [
         {
           role: 'user' as const,
           content: entry.prompt,
+          audio: entry.promptAudio,
+          image: entry.promptImage,
         },
         {
           role: 'assistant' as const,
           content: entry.output,
+          audio: entry.outputAudio,
+          image: entry.outputImage,
         },
       ],
     );
@@ -427,8 +440,8 @@ export default function EvalOutputPromptDialog({
       slotProps={drawerSlotProps}
       sx={{
         '& .MuiDrawer-paper': {
-          width: { xs: '100%', sm: '75%', md: '65%', lg: '65%' },
-          maxWidth: '1200px',
+          width: { xs: '100%', sm: '85%', md: '85%', lg: '85%' },
+          //maxWidth: '1200px',
           boxSizing: 'border-box',
         },
       }}

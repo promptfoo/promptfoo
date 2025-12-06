@@ -3,7 +3,7 @@ import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { ProviderOptionsSchema } from '../validators/providers';
-import { fetchWithProxy } from './fetch';
+import { fetchWithProxy } from './fetch/index';
 import invariant from './invariant';
 import { checkServerFeatureSupport } from './server';
 

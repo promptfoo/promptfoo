@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
+import { callApi } from '@app/utils/api';
+import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -38,7 +40,9 @@ function ErrorFallback({
 }
 
 const EvaluateTestSuiteCreator = () => {
+  const { showToast } = useToast();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [hasCustomConfig, setHasCustomConfig] = useState(false);
 
   const { config, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
@@ -59,6 +63,36 @@ const EvaluateTestSuiteCreator = () => {
 
   useEffect(() => {
     useStore.persist.rehydrate();
+  }, []);
+
+  // Fetch config status to determine if ConfigureEnvButton should be shown
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchConfigStatus = async () => {
+      try {
+        const response = await callApi('/providers/config-status');
+        if (response.ok) {
+          const data = await response.json();
+          if (isMounted) {
+            setHasCustomConfig(data.hasCustomConfig || false);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch provider config status:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+        showToast(`Failed to load configuration status: ${errorMessage}`, 'error');
+        if (isMounted) {
+          setHasCustomConfig(false);
+        }
+      }
+    };
+
+    fetchConfigStatus();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const extractVarsFromPrompts = (prompts: string[]): string[] => {
@@ -107,7 +141,7 @@ const EvaluateTestSuiteCreator = () => {
         <Typography variant="h4">Set up an evaluation</Typography>
         <Stack direction="row" spacing={2}>
           <RunTestSuiteButton />
-          <ConfigureEnvButton />
+          {!hasCustomConfig && <ConfigureEnvButton />}
           <Button variant="outlined" color="primary" onClick={() => setResetDialogOpen(true)}>
             Reset
           </Button>

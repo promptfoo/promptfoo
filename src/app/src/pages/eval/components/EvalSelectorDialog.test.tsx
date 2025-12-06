@@ -117,7 +117,7 @@ describe('EvalSelectorDialog', () => {
         focusedEvalId: focusedEvalId,
         filterByDatasetId: filterByDatasetId,
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
@@ -140,7 +140,7 @@ describe('EvalSelectorDialog', () => {
       expect.objectContaining({
         focusQuickFilterOnMount: true,
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
@@ -186,7 +186,7 @@ describe('EvalSelectorDialog', () => {
         onEvalSelected: mockOnEvalSelected,
         focusQuickFilterOnMount: false,
       }),
-      {},
+      undefined,
     );
   });
 

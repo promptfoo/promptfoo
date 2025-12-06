@@ -38,6 +38,9 @@
                     "type": "string"
                   },
                   {
+                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/1"
+                  },
+                  {
                     "type": "object",
                     "additionalProperties": {
                       "type": "object",
@@ -261,6 +264,9 @@
                             "OPENAI_ORGANIZATION": {
                               "type": "string"
                             },
+                            "CODEX_API_KEY": {
+                              "type": "string"
+                            },
                             "PALM_API_HOST": {
                               "type": "string"
                             },
@@ -383,10 +389,7 @@
                     }
                   },
                   {
-                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
-                  },
-                  {
-                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/1"
+                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties"
                   }
                 ]
               }
@@ -505,7 +508,7 @@
                             "type": "string"
                           },
                           {
-                            "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
+                            "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties"
                           },
                           {
                             "type": "object",
@@ -605,10 +608,14 @@
                                               "rouge-n",
                                               "ruby",
                                               "similar",
+                                              "similar:cosine",
+                                              "similar:dot",
+                                              "similar:euclidean",
                                               "starts-with",
                                               "trace-error-spans",
                                               "trace-span-count",
                                               "trace-span-duration",
+                                              "search-rubric",
                                               "webhook"
                                             ]
                                           },
@@ -1013,7 +1020,7 @@
         "env": {
           "anyOf": [
             {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties/properties/env"
             },
             {
               "type": "object",
@@ -1090,10 +1097,10 @@
                   "type": "string"
                 },
                 {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider/anyOf/2"
                 },
                 {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider/anyOf/2"
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties"
                 }
               ],
               "description": "Provider used for generating adversarial inputs"
@@ -1116,6 +1123,24 @@
                 }
               ],
               "description": "Language(s) of tests to generate for this plugin"
+            },
+            "frameworks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mitre:atlas",
+                  "nist:ai:measure",
+                  "owasp:api",
+                  "owasp:llm",
+                  "owasp:agentic",
+                  "eu:ai-act",
+                  "iso:42001",
+                  "gdpr"
+                ]
+              },
+              "minItems": 1,
+              "description": "Compliance frameworks to include across reports and commands"
             },
             "entities": {
               "type": "array",
@@ -1154,6 +1179,11 @@
                           "default",
                           "divergent-repetition",
                           "donotanswer",
+                          "ecommerce",
+                          "ecommerce:compliance-bypass",
+                          "ecommerce:order-fraud",
+                          "ecommerce:pci-dss",
+                          "ecommerce:price-manipulation",
                           "eu:ai-act",
                           "eu:ai-act:annex3:biometric-id",
                           "eu:ai-act:annex3:critical-infrastructure",
@@ -1385,6 +1415,11 @@
                               "default",
                               "divergent-repetition",
                               "donotanswer",
+                              "ecommerce",
+                              "ecommerce:compliance-bypass",
+                              "ecommerce:order-fraud",
+                              "ecommerce:pci-dss",
+                              "ecommerce:price-manipulation",
                               "eu:ai-act",
                               "eu:ai-act:annex3:biometric-id",
                               "eu:ai-act:annex3:critical-infrastructure",

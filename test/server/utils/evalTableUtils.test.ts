@@ -1,8 +1,12 @@
-import { beforeEach, describe, expect, it } from '@jest/globals';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { evalTableToCsv, evalTableToJson } from '../../../src/server/utils/evalTableUtils';
-import { ResultFailureReason } from '../../../src/types';
+import { ResultFailureReason } from '../../../src/types/index';
 
-import type { CompletedPrompt, EvaluateTableOutput, EvaluateTableRow } from '../../../src/types';
+import type {
+  CompletedPrompt,
+  EvaluateTableOutput,
+  EvaluateTableRow,
+} from '../../../src/types/index';
 
 describe('evalTableUtils', () => {
   let mockTable: {

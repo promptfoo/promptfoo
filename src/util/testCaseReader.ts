@@ -18,6 +18,7 @@ import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { parseXlsxFile } from './xlsx';
 
 import type {
   CsvRow,
@@ -185,6 +186,11 @@ export async function readStandaloneTestsFile(
       }
       throw e;
     }
+  } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+    telemetry.record('feature_used', {
+      feature: 'xlsx tests file - local',
+    });
+    rows = await parseXlsxFile(resolvedVarsPath);
   } else if (fileExtension === 'json') {
     telemetry.record('feature_used', {
       feature: 'json tests file',
@@ -249,25 +255,26 @@ export async function readTest(
   isDefaultTest: boolean = false,
 ): Promise<TestCase> {
   let testCase: TestCase;
+  let effectiveBasePath = basePath;
 
   if (typeof test === 'string') {
     const testFilePath = path.resolve(basePath, test);
-    const testBasePath = path.dirname(testFilePath);
+    effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(fs.readFileSync(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
-    testCase = await loadTestWithVars(rawTestCase, testBasePath);
+    testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
   }
 
   if (testCase.provider && typeof testCase.provider !== 'function') {
-    // Load provider
+    // Load provider - resolve paths relative to the test case's location
     if (typeof testCase.provider === 'string') {
-      testCase.provider = await loadApiProvider(testCase.provider);
+      testCase.provider = await loadApiProvider(testCase.provider, { basePath: effectiveBasePath });
     } else if (typeof testCase.provider.id === 'string') {
       testCase.provider = await loadApiProvider(testCase.provider.id, {
         options: testCase.provider as ProviderOptions,
-        basePath,
+        basePath: effectiveBasePath,
       });
     }
   }
@@ -375,7 +382,7 @@ export async function loadTestsFromGlob(
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      const rawContent = require(testFile);
+      const rawContent = JSON.parse(fs.readFileSync(testFile, 'utf8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {

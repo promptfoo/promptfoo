@@ -69,7 +69,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Get the request body and config
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     // Make the API call directly
     logger.debug(`Calling OpenRouter API: model=${this.modelName}`);

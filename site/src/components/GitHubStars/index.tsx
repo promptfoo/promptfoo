@@ -44,7 +44,7 @@ function setCachedStars(stars: string): void {
   }
 }
 
-export default function GitHubStars(): JSX.Element {
+export default function GitHubStars(): React.ReactElement {
   const [stars, setStars] = useState<string>(() => getCachedStars() || '9k');
 
   useEffect(() => {

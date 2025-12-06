@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { FinancialDataLeakagePluginGrader } from '../../../../src/redteam/plugins/financial/financialDataLeakage';
 
 describe('FinancialDataLeakagePluginGrader', () => {

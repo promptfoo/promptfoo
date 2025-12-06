@@ -1,20 +1,15 @@
-import type { Agent } from 'http';
-
 import Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import telemetry from '../../telemetry';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { outputFromMessage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
+import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import { novaOutputFromMessage, novaParseMessages } from './util';
-import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
-import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -49,18 +44,11 @@ export type BedrockModelFamily =
   | 'openai'
   | 'qwen';
 
-interface BedrockOptions {
-  accessKeyId?: string;
-  apiKey?: string;
-  profile?: string;
-  region?: string;
-  secretAccessKey?: string;
-  sessionToken?: string;
-  guardrailIdentifier?: string;
-  guardrailVersion?: string;
-  trace?: Trace;
-  showThinking?: boolean;
-  endpoint?: string;
+/**
+ * Extended Bedrock options for InvokeModel API
+ * Adds inferenceModelType for inference profile support
+ */
+interface BedrockInvokeModelOptions extends BedrockOptions {
   inferenceModelType?: BedrockModelFamily;
 }
 
@@ -371,7 +359,12 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
 }
 
 export interface IBedrockModel {
-  params: (config: BedrockOptions, prompt: string, stop: string[], modelName?: string) => any;
+  params: (
+    config: BedrockOptions,
+    prompt: string,
+    stop: string[],
+    modelName?: string,
+  ) => Promise<any>;
   output: (config: BedrockOptions, responseJson: any) => any;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
 }
@@ -399,14 +392,15 @@ export function addConfigParam(
   }
 }
 
-export enum LlamaVersion {
-  V2 = 2,
-  V3 = 3,
-  V3_1 = 3.1,
-  V3_2 = 3.2,
-  V3_3 = 3.3,
-  V4 = 4,
-}
+export const LlamaVersion = {
+  V2: 2,
+  V3: 3,
+  V3_1: 3.1,
+  V3_2: 3.2,
+  V3_3: 3.3,
+  V4: 4,
+} as const;
+export type LlamaVersion = (typeof LlamaVersion)[keyof typeof LlamaVersion];
 
 export interface LlamaMessage {
   role: 'system' | 'user' | 'assistant';
@@ -501,7 +495,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
   }
 
   return {
-    params: (
+    params: async (
       config: BedrockLlamaGenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -587,7 +581,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
 
 export const BEDROCK_MODEL = {
   AI21: {
-    params: (
+    params: async (
       config: BedrockAI21GenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -653,7 +647,7 @@ export const BEDROCK_MODEL = {
     },
   },
   AMAZON_NOVA: {
-    params: (
+    params: async (
       config: BedrockAmazonNovaGenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -736,7 +730,7 @@ export const BEDROCK_MODEL = {
     },
   },
   CLAUDE_COMPLETION: {
-    params: (
+    params: async (
       config: BedrockClaudeLegacyCompletionOptions,
       prompt: string,
       stop: string[],
@@ -798,7 +792,7 @@ export const BEDROCK_MODEL = {
     },
   },
   CLAUDE_MESSAGES: {
-    params: (
+    params: async (
       config: BedrockClaudeMessagesCompletionOptions,
       prompt: string,
       _stop?: string[],
@@ -874,7 +868,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(
         params,
         'tools',
-        maybeLoadToolsFromExternalFile(config?.tools),
+        await maybeLoadToolsFromExternalFile(config?.tools),
         undefined,
         undefined,
       );
@@ -928,7 +922,7 @@ export const BEDROCK_MODEL = {
     },
   },
   TITAN_TEXT: {
-    params: (
+    params: async (
       config: BedrockTextGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -993,7 +987,7 @@ export const BEDROCK_MODEL = {
   LLAMA3_3: getLlamaModelHandler(LlamaVersion.V3_3),
   LLAMA4: getLlamaModelHandler(LlamaVersion.V4),
   COHERE_COMMAND: {
-    params: (
+    params: async (
       config: BedrockCohereCommandGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1048,7 +1042,7 @@ export const BEDROCK_MODEL = {
     },
   },
   COHERE_COMMAND_R: {
-    params: (
+    params: async (
       config: BedrockCohereCommandRGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1078,7 +1072,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'presence_penalty', config?.presence_penalty);
       addConfigParam(params, 'seed', config?.seed);
       addConfigParam(params, 'return_prompt', config?.return_prompt);
-      addConfigParam(params, 'tools', maybeLoadToolsFromExternalFile(config?.tools));
+      addConfigParam(params, 'tools', await maybeLoadToolsFromExternalFile(config?.tools));
       addConfigParam(params, 'tool_results', config?.tool_results);
       addConfigParam(params, 'stop_sequences', stop);
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
@@ -1108,7 +1102,7 @@ export const BEDROCK_MODEL = {
     },
   },
   DEEPSEEK: {
-    params: (
+    params: async (
       config: BedrockDeepseekGenerationOptions,
       prompt: string,
       _stop?: string[],
@@ -1181,7 +1175,7 @@ ${prompt}
     },
   },
   MISTRAL: {
-    params: (
+    params: async (
       config: BedrockMistralGenerationOptions,
       prompt: string,
       stop: string[],
@@ -1254,7 +1248,7 @@ ${prompt}
     },
   },
   MISTRAL_LARGE_2407: {
-    params: (
+    params: async (
       config: BedrockMistralGenerationOptions,
       prompt: string,
       stop: string[],
@@ -1334,7 +1328,7 @@ ${prompt}
     },
   },
   OPENAI: {
-    params: (
+    params: async (
       config: BedrockOpenAIGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1420,7 +1414,7 @@ ${prompt}
     },
   },
   QWEN: {
-    params: (
+    params: async (
       config: BedrockQwenGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1465,7 +1459,7 @@ ${prompt}
       addConfigParam(
         params,
         'tools',
-        maybeLoadToolsFromExternalFile(config?.tools),
+        await maybeLoadToolsFromExternalFile(config?.tools),
         undefined,
         undefined,
       );
@@ -1554,6 +1548,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1590,6 +1585,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1605,6 +1601,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1630,6 +1627,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1657,7 +1655,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
-function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedrockModel {
+function getHandlerForModel(modelName: string, config?: BedrockInvokeModelOptions): IBedrockModel {
   // Check if it's an inference profile ARN
   if (modelName.includes('arn:') && modelName.includes('inference-profile')) {
     // For inference profiles, use the model type from config to determine handler
@@ -1763,159 +1761,6 @@ function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedroc
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }
 
-export abstract class AwsBedrockGenericProvider {
-  modelName: string;
-  env?: EnvOverrides;
-  bedrock?: BedrockRuntime;
-  config: BedrockOptions;
-
-  constructor(
-    modelName: string,
-    options: { config?: BedrockOptions; id?: string; env?: EnvOverrides } = {},
-  ) {
-    const { config, id, env } = options;
-    this.env = env;
-    this.modelName = modelName;
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
-
-    if (this.config.guardrailIdentifier) {
-      telemetry.record('feature_used', {
-        feature: 'guardrail',
-        provider: 'bedrock',
-      });
-    }
-  }
-
-  id(): string {
-    return `bedrock:${this.modelName}`;
-  }
-
-  toString(): string {
-    return `[Amazon Bedrock Provider ${this.modelName}]`;
-  }
-
-  protected getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
-  }
-
-  async getCredentials(): Promise<
-    AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
-  > {
-    // 1. Explicit credentials have ABSOLUTE highest priority (as documented)
-    if (this.config.accessKeyId && this.config.secretAccessKey) {
-      logger.debug(`Using credentials from config file`);
-      return {
-        accessKeyId: this.config.accessKeyId,
-        secretAccessKey: this.config.secretAccessKey,
-        sessionToken: this.config.sessionToken,
-      };
-    }
-
-    // 2. API key authentication as second priority
-    const apiKey = this.getApiKey();
-    if (apiKey) {
-      logger.debug(`Using Bedrock API key authentication`);
-      // For Bedrock API keys, we don't need traditional AWS credentials
-      // The API key will be handled in the request headers
-      return undefined;
-    }
-
-    // 3. SSO profile as third priority
-    if (this.config.profile) {
-      logger.debug(`Using SSO profile: ${this.config.profile}`);
-      try {
-        const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
-        return fromSSO({ profile: this.config.profile });
-      } catch (err) {
-        logger.error(`Error loading @aws-sdk/credential-provider-sso: ${err}`);
-        throw new Error(
-          'The @aws-sdk/credential-provider-sso package is required for SSO profiles. Please install it: npm install @aws-sdk/credential-provider-sso',
-        );
-      }
-    }
-
-    // 4. AWS default credential chain (lowest priority)
-    logger.debug(`No explicit credentials in config, falling back to AWS default chain`);
-    return undefined;
-  }
-
-  async getBedrockInstance() {
-    if (!this.bedrock) {
-      let handler;
-      const apiKey = this.getApiKey();
-
-      // Create request handler for proxy or API key scenarios
-      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY') || apiKey) {
-        try {
-          const { NodeHttpHandler } = await import('@smithy/node-http-handler');
-          const { ProxyAgent } = await import('proxy-agent');
-
-          // Create handler with proxy support if needed
-          const proxyAgent =
-            getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')
-              ? new ProxyAgent()
-              : undefined;
-
-          handler = new NodeHttpHandler({
-            ...(proxyAgent ? { httpsAgent: proxyAgent as unknown as Agent } : {}),
-            requestTimeout: 300000, // 5 minutes
-          });
-
-          // Add Bearer token middleware for API key authentication
-          if (apiKey) {
-            const originalHandle = handler.handle.bind(handler);
-            handler.handle = async (request: any, options?: any) => {
-              // Add Authorization header with Bearer token
-              request.headers = {
-                ...request.headers,
-                Authorization: `Bearer ${apiKey}`,
-              };
-              return originalHandle(request, options);
-            };
-          }
-        } catch {
-          const reason = apiKey
-            ? 'API key authentication requires the @smithy/node-http-handler package'
-            : 'Proxy configuration requires the @smithy/node-http-handler package';
-          throw new Error(`${reason}. Please install it in your project or globally.`);
-        }
-      }
-
-      try {
-        const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
-        const credentials = await this.getCredentials();
-
-        const bedrock = new BedrockRuntime({
-          region: this.getRegion(),
-          maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
-          retryMode: 'adaptive',
-          ...(credentials ? { credentials } : {}),
-          ...(handler ? { requestHandler: handler } : {}),
-          ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
-        });
-
-        this.bedrock = bedrock;
-      } catch (err) {
-        logger.error(`Error creating BedrockRuntime: ${err}`);
-        throw new Error(
-          'The @aws-sdk/client-bedrock-runtime package is required as a peer dependency. Please install it in your project or globally.',
-        );
-      }
-    }
-    return this.bedrock;
-  }
-
-  getRegion(): string {
-    return (
-      this.config?.region ||
-      this.env?.AWS_BEDROCK_REGION ||
-      getEnvString('AWS_BEDROCK_REGION') ||
-      'us-east-1'
-    );
-  }
-}
-
 export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider implements ApiProvider {
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
@@ -1934,7 +1779,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(
+    const params = await model.params(
       { ...this.config, ...context?.prompt.config },
       prompt,
       stop,

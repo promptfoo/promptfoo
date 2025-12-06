@@ -2,13 +2,13 @@
 description: 'Cohere benchmark'
 
 providers:
-  - id: cohere:command-r-plus
+  - id: cohere:command-a-03-2025
     config:
       temperature: 0
-  - id: openai:gpt-4o
+  - id: openai:gpt-5
     config:
       temperature: 0
-  - id: anthropic:claude-3-5-sonnet-20241022
+  - id: anthropic:claude-sonnet-4-5-20250929
     config:
       temperature: 0
 

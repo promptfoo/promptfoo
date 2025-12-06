@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import {
   CRESCENDO_SYSTEM_PROMPT,
   EVAL_SYSTEM_PROMPT,
@@ -9,6 +10,7 @@ describe('Crescendo prompts', () => {
     it('should contain required template variables', () => {
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('{{maxTurns}}');
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('{{currentRound}}');
+      expect(CRESCENDO_SYSTEM_PROMPT).toContain('{{successFlag}}');
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('{{conversationObjective}}');
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('{{purpose}}');
     });

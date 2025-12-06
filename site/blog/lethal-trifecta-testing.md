@@ -2,6 +2,22 @@
 title: 'Testing AI’s “Lethal Trifecta” with Promptfoo'
 description: Learn what the lethal trifecta is and how to use promptfoo red teaming to detect prompt injection and data exfiltration risks in AI agents.
 image: /img/blog/lethal-trifecta/lethal-trifecta-venn.png
+keywords:
+  [
+    lethal trifecta,
+    AI security,
+    prompt injection,
+    data exfiltration,
+    AI agents,
+    red teaming,
+    LLM security,
+    untrusted content,
+    private data,
+    AI vulnerabilities,
+  ]
+date: 2025-09-28
+authors: [ian]
+tags: [security-vulnerability, best-practices, agents, red-teaming]
 ---
 
 # Testing AI’s "Lethal Trifecta" with Promptfoo

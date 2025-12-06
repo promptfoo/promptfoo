@@ -19,7 +19,7 @@ jsonpatch==1.33
 jsonpointer==3.0.0
 langchain==0.3.27
 langchain-community==0.3.31
-langchain-core==0.3.78
+langchain-core==0.3.80
 langchain-openai==0.3.35
 langchain-text-splitters==0.3.11
 langsmith==0.4.33
@@ -47,6 +47,6 @@ tqdm==4.67.1
 typing-inspect==0.9.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
-urllib3==2.5.0
+urllib3==2.6.0
 yarl==1.22.0
 zstandard==0.25.0

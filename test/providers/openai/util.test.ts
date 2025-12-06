@@ -1,3 +1,5 @@
+import { describe, expect, it, vi } from 'vitest';
+
 import OpenAI from 'openai';
 import {
   calculateOpenAICost,
@@ -8,7 +10,7 @@ import {
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
 
-jest.mock('../../../src/cache');
+vi.mock('../../../src/cache');
 
 describe('failApiCall', () => {
   it('should format OpenAI API errors', () => {
@@ -111,16 +113,6 @@ describe('getTokenUsage', () => {
 });
 
 describe('calculateOpenAICost', () => {
-  it('should calculate cost correctly for transcription model gpt-4o-transcribe', () => {
-    const cost = calculateOpenAICost('gpt-4o-transcribe', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10) / 1e6, 6);
-  });
-
-  it('should calculate cost correctly for transcription model gpt-4o-mini-transcribe', () => {
-    const cost = calculateOpenAICost('gpt-4o-mini-transcribe', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 1.25 + 500 * 5) / 1e6, 6);
-  });
-
   it('should calculate cost correctly for TTS model gpt-4o-mini-tts', () => {
     const cost = calculateOpenAICost('gpt-4o-mini-tts', {}, 1000, 0, 0, 500);
     expect(cost).toBeCloseTo((1000 * 0.6 + 500 * 12) / 1e6, 6);

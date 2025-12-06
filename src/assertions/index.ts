@@ -23,10 +23,12 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
   type AssertionType,
+  type AssertionValue,
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
@@ -71,10 +73,10 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
-import { handleRuby } from './ruby';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
+import { handleRuby } from './ruby';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
@@ -83,6 +85,7 @@ import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
+import { handleSearchRubric } from './searchRubric';
 import { handleIsXml } from './xml';
 
 import type {
@@ -104,6 +107,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'llm-rubric',
   'model-graded-closedqa',
   'model-graded-factuality',
+  'search-rubric',
 ]);
 
 const ASSERTION_HANDLERS: Record<
@@ -148,7 +152,7 @@ const ASSERTION_HANDLERS: Record<
   'llm-rubric': handleLlmRubric,
   meteor: async (params: AssertionParams) => {
     try {
-      const { handleMeteorAssertion } = await import('./meteor');
+      const { handleMeteorAssertion } = await import('./meteor.js');
       return handleMeteorAssertion(params);
     } catch (error) {
       if (
@@ -177,7 +181,11 @@ const ASSERTION_HANDLERS: Record<
   regex: handleRegex,
   ruby: handleRuby,
   'rouge-n': handleRougeScore,
+  'search-rubric': handleSearchRubric,
   similar: handleSimilar,
+  'similar:cosine': handleSimilar,
+  'similar:dot': handleSimilar,
+  'similar:euclidean': handleSimilar,
   'starts-with': handleStartsWith,
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
@@ -252,12 +260,14 @@ export async function runAssertion({
   // Add trace data if traceId is available
   if (traceId) {
     try {
-      const { getTraceStore } = await import('../tracing/store');
       const traceStore = getTraceStore();
       const traceData = await traceStore.getTrace(traceId);
       if (traceData) {
         context.trace = {
           traceId: traceData.traceId,
+          evaluationId: traceData.evaluationId,
+          testCaseId: traceData.testCaseId,
+          metadata: traceData.metadata,
           spans: traceData.spans || [],
         };
       }
@@ -305,7 +315,7 @@ export async function runAssertion({
         }
       } else if (filePath.endsWith('.rb')) {
         try {
-          const { runRuby } = await import('../ruby/rubyUtils');
+          const { runRuby } = await import('../ruby/rubyUtils.js');
           const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
             output,
             context,
@@ -348,6 +358,51 @@ export async function runAssertion({
       }
       return v;
     });
+  }
+
+  // Centralized script output resolution
+  // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
+  // All other types should use the script output as the comparison value
+  const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
+  const baseType = getAssertionBaseType(assertion);
+
+  if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
+    // Validate the script result type - only javascript/python/ruby can return functions
+    if (typeof valueFromScript === 'function') {
+      throw new Error(
+        `Script for "${assertion.type}" assertion returned a function. ` +
+          `Only javascript/python/ruby assertion types can return functions. ` +
+          `For other assertion types, return the expected value (string, number, array, or object).`,
+      );
+    }
+
+    // Validate the script didn't return boolean or GradingResult
+    // These are only valid for javascript/python/ruby assertion types
+    if (typeof valueFromScript === 'boolean') {
+      throw new Error(
+        `Script for "${assertion.type}" assertion returned a boolean. ` +
+          `Only javascript/python/ruby assertion types can return boolean values. ` +
+          `For other assertion types, return the expected value (string, number, array, or object).`,
+      );
+    }
+
+    // Check if it's a GradingResult object (has 'pass' property)
+    if (
+      valueFromScript &&
+      typeof valueFromScript === 'object' &&
+      !Array.isArray(valueFromScript) &&
+      'pass' in valueFromScript
+    ) {
+      throw new Error(
+        `Script for "${assertion.type}" assertion returned a GradingResult. ` +
+          `Only javascript/python/ruby assertion types can return GradingResult objects. ` +
+          `For other assertion types, return the expected value (string, number, array, or object).`,
+      );
+    }
+
+    // Update renderedValue with the script output
+    // Type assertion is now safe because we've validated the type
+    renderedValue = valueFromScript as AssertionValue;
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider

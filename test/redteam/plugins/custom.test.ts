@@ -1,11 +1,15 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomPlugin, loadCustomPluginDefinition } from '../../../src/redteam/plugins/custom';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider, CallApiFunction } from '../../../src/types/index';
 
-jest.mock('../../../src/util/file', () => ({
-  maybeLoadFromExternalFile: jest.fn(),
-}));
+vi.mock('../../../src/util/file', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadFromExternalFile: vi.fn(),
+  };
+});
 
 describe('CustomPlugin', () => {
   let plugin: CustomPlugin;
@@ -13,13 +17,15 @@ describe('CustomPlugin', () => {
 
   beforeEach(() => {
     mockProvider = {
-      callApi: jest.fn(),
-      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn() as CallApiFunction,
+      id: vi.fn().mockReturnValue('test-provider'),
     };
 
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Generate {{ n }} test prompts for {{ purpose }}',
-      grader: 'Grade the response based on {{ purpose }}',
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Generate {{ n }} test prompts for {{ purpose }}',
+        grader: 'Grade the response based on {{ purpose }}',
+      };
     });
 
     plugin = new CustomPlugin(
@@ -31,12 +37,12 @@ describe('CustomPlugin', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should generate test cases correctly with proper templating', async () => {
     const mockApiResponse = 'Prompt: Test prompt 1\nPrompt: Test prompt 2';
-    jest.spyOn(mockProvider, 'callApi').mockResolvedValue({ output: mockApiResponse });
+    vi.spyOn(mockProvider, 'callApi').mockResolvedValue({ output: mockApiResponse });
 
     await expect(plugin.generateTests(2)).resolves.toEqual(
       expect.arrayContaining([
@@ -78,10 +84,12 @@ describe('CustomPlugin', () => {
   });
 
   it('should include threshold in assertions when specified', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Generate {{ n }} test prompts for {{ purpose }}',
-      grader: 'Grade the response based on {{ purpose }}',
-      threshold: 0.8,
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Generate {{ n }} test prompts for {{ purpose }}',
+        grader: 'Grade the response based on {{ purpose }}',
+        threshold: 0.8,
+      };
     });
 
     const pluginWithThreshold = new CustomPlugin(
@@ -103,9 +111,11 @@ describe('CustomPlugin', () => {
   });
 
   it('should not include threshold in assertions when not specified', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Generate {{ n }} test prompts for {{ purpose }}',
-      grader: 'Grade the response based on {{ purpose }}',
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Generate {{ n }} test prompts for {{ purpose }}',
+        grader: 'Grade the response based on {{ purpose }}',
+      };
     });
 
     const pluginWithoutThreshold = new CustomPlugin(
@@ -123,10 +133,12 @@ describe('CustomPlugin', () => {
   });
 
   it('should use the correct metric name', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Valid generator template',
-      grader: 'Valid grader template',
-      metric: 'my-custom-metric',
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Valid generator template',
+        grader: 'Valid grader template',
+        metric: 'my-custom-metric',
+      };
     });
 
     const pluginWithMetric = new CustomPlugin(
@@ -140,9 +152,11 @@ describe('CustomPlugin', () => {
   });
 
   it('should use the default metric name if not specified', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Valid generator template',
-      grader: 'Valid grader template',
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Valid generator template',
+        grader: 'Valid grader template',
+      };
     });
 
     const pluginWithoutMetric = new CustomPlugin(
@@ -156,10 +170,12 @@ describe('CustomPlugin', () => {
   });
 
   it('should include the metric name in the assertion', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Valid generator template',
-      grader: 'Valid grader template',
-      metric: 'my-custom-metric',
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Valid generator template',
+        grader: 'Valid grader template',
+        metric: 'my-custom-metric',
+      };
     });
 
     const pluginWithMetric = new CustomPlugin(
@@ -182,13 +198,15 @@ describe('CustomPlugin', () => {
 
 describe('loadCustomPluginDefinition', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should load a valid custom plugin definition', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Valid generator template',
-      grader: 'Valid grader template',
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Valid generator template',
+        grader: 'Valid grader template',
+      };
     });
 
     const result = loadCustomPluginDefinition('path/to/valid-plugin.json');
@@ -200,10 +218,12 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should load a valid custom plugin definition with threshold', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Valid generator template',
-      grader: 'Valid grader template',
-      threshold: 0.7,
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Valid generator template',
+        grader: 'Valid grader template',
+        threshold: 0.7,
+      };
     });
 
     const result = loadCustomPluginDefinition('path/to/valid-plugin.json');
@@ -216,11 +236,13 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should load a valid custom plugin definition with optional id', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Valid generator template',
-      grader: 'Valid grader template',
-      threshold: 1.0,
-      id: 'custom-plugin-id',
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Valid generator template',
+        grader: 'Valid grader template',
+        threshold: 1.0,
+        id: 'custom-plugin-id',
+      };
     });
 
     const result = loadCustomPluginDefinition('path/to/valid-plugin.json');
@@ -234,9 +256,11 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should throw an error for an invalid custom plugin definition', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: '',
-      grader: 'Valid grader template',
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: '',
+        grader: 'Valid grader template',
+      };
     });
 
     expect(() => loadCustomPluginDefinition('path/to/invalid-plugin.json')).toThrow(
@@ -245,8 +269,10 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should throw an error when the plugin definition is missing a required field', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Valid generator template',
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Valid generator template',
+      };
     });
 
     expect(() => loadCustomPluginDefinition('path/to/invalid-plugin.json')).toThrow(
@@ -255,10 +281,12 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should throw an error when the plugin definition contains extra fields', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Valid generator template',
-      grader: 'Valid grader template',
-      extraField: 'This should not be here',
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Valid generator template',
+        grader: 'Valid grader template',
+        extraField: 'This should not be here',
+      };
     });
 
     expect(() => loadCustomPluginDefinition('path/to/invalid-plugin.json')).toThrow(
@@ -267,10 +295,12 @@ describe('loadCustomPluginDefinition', () => {
   });
 
   it('should throw an error when threshold is not a number', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Valid generator template',
-      grader: 'Valid grader template',
-      threshold: 'invalid',
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
+      return {
+        generator: 'Valid generator template',
+        grader: 'Valid grader template',
+        threshold: 'invalid',
+      };
     });
 
     expect(() => loadCustomPluginDefinition('path/to/invalid-plugin.json')).toThrow(

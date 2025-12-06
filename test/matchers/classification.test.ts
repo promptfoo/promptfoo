@@ -1,3 +1,4 @@
+import { vi, describe, it, expect } from 'vitest';
 import { matchesClassification } from '../../src/matchers';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
 
@@ -90,7 +91,7 @@ describe('matchesClassification', () => {
       },
     };
 
-    const mockCallApi = jest.spyOn(
+    const mockCallApi = vi.spyOn(
       HuggingfaceTextClassificationProvider.prototype,
       'callClassificationApi',
     );

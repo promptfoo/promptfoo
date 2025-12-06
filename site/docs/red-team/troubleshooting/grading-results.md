@@ -5,7 +5,7 @@ description: Red team LLM grading systems by validating output classification to
 
 # About the Grader
 
-When you run a red team scan against a target, Promptfoo will evaluate the results of the output and determine whether the result passes or fails. These results are determined by a model, which is `gpt-4.1-2025-04-14` by default. When the model grades the results of the output, it determines a pass or fail score for the output based on the application context you provide in the target set up.
+When you run a red team scan against a target, Promptfoo will evaluate the results of the output and determine whether the result passes or fails. These results are determined by a model, which is `gpt-5` by default. When the model grades the results of the output, it determines a pass or fail score for the output based on the application context you provide in the target set up.
 
 A **pass** score means that the output did not violate your application's intended behavior and returned an output that conforms with your requirements. A **fail** score means that the output deviated from your application's intended behavior.
 
@@ -63,6 +63,37 @@ defaultTest:
       config:
         apiHost: 'xxxxxxx.openai.azure.com'
 ```
+
+### Using Local Providers for Grading
+
+The `redteam.provider` configuration controls both attack generation and grading. When you configure a local provider (like Ollama), promptfoo uses it for generating attacks and evaluating results:
+
+```yaml
+redteam:
+  provider: ollama:chat:llama3.2
+  plugins:
+    - harmful:hate
+    - excessive-agency
+```
+
+This configuration:
+
+- Generates adversarial inputs using `ollama:chat:llama3.2`
+- Grades results with the same provider
+- Runs entirely locally when combined with `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`
+
+:::tip Fully Local Testing
+
+To run redteam tests without any remote API calls:
+
+1. Configure a local provider: `redteam.provider: ollama:chat:llama3.2`
+2. Disable remote generation: `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`
+
+Both attack generation and grading will use your local model.
+
+:::
+
+**Balancing quality and cost:** Remote generation produces significantly better attacks than local models, while grading works well locally. To reduce API costs without sacrificing attack quality, configure `redteam.provider` for local grading but leave `PROMPTFOO_DISABLE_REMOTE_GENERATION` unset (default).
 
 You can customize the grader at the plugin level to provide additional granularity into your results.
 
