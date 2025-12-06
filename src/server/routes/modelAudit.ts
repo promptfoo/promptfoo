@@ -460,6 +460,8 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
   }
 });
 
+// IMPORTANT: /scans/latest must be defined BEFORE /scans/:id to prevent
+// "latest" from being matched as an :id parameter
 // Get the latest/most recent model scan
 modelAuditRouter.get('/scans/latest', async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -477,7 +479,7 @@ modelAuditRouter.get('/scans/latest', async (_req: Request, res: Response): Prom
   }
 });
 
-// Get specific model scan by ID
+// Get specific model scan by ID (must be after /scans/latest)
 modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const audit = await ModelAudit.findById(req.params.id);

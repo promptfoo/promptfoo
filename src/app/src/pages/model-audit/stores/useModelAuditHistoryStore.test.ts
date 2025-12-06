@@ -193,6 +193,28 @@ describe('useModelAuditHistoryStore', () => {
 
       expect(fetchedScan).toBeNull();
     });
+
+    it('should URL-encode IDs with special characters', async () => {
+      const scanId = 'scan-abc-2025-12-06T10:30:45';
+      const mockScan = createMockScan(scanId, 'Test Scan');
+
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockScan),
+      } as Response);
+
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      await act(async () => {
+        await result.current.fetchScanById(scanId);
+      });
+
+      // Verify the URL was properly encoded (colons become %3A)
+      expect(mockCallApi).toHaveBeenCalledWith(
+        `/model-audit/scans/${encodeURIComponent(scanId)}`,
+        expect.any(Object),
+      );
+    });
   });
 
   describe('deleteHistoricalScan', () => {

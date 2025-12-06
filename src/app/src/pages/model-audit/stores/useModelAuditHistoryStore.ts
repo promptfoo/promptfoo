@@ -95,7 +95,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
 
   fetchScanById: async (id: string, signal?: AbortSignal) => {
     try {
-      const response = await callApi(`/model-audit/scans/${id}`, { signal });
+      const response = await callApi(`/model-audit/scans/${encodeURIComponent(id)}`, { signal });
       if (!response.ok) {
         if (response.status === 404) {
           return null;
@@ -125,7 +125,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
     }));
 
     try {
-      const response = await callApi(`/model-audit/scans/${id}`, {
+      const response = await callApi(`/model-audit/scans/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       });
 
