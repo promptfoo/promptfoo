@@ -51,6 +51,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.1-mini',
     'gpt-5.1-nano',
     'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
     // Audio models
     'gpt-audio',
     'gpt-audio-2025-08-28',

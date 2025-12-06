@@ -273,23 +273,27 @@ GPT-5.1-Codex-Max is OpenAI's frontier agentic coding model, built on an updated
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-5.1-codex-max
+  - id: openai:responses:gpt-5.1-codex-max
     config:
       reasoning:
         effort: 'medium' # Recommended for most tasks
-      max_completion_tokens: 25000 # Reserve space for reasoning and outputs
+      max_output_tokens: 25000 # Reserve space for reasoning and outputs
 ```
 
 For latency-insensitive tasks requiring maximum quality:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-5.1-codex-max
+  - id: openai:responses:gpt-5.1-codex-max
     config:
       reasoning:
         effort: 'xhigh' # Extra high reasoning for best results
-      max_completion_tokens: 40000
+      max_output_tokens: 40000
 ```
+
+:::warning
+GPT-5.1-Codex-Max is only available through the Responses API (`openai:responses:`). It does not work with the Chat Completions API (`openai:chat:`).
+:::
 
 #### Reasoning Effort Levels
 
