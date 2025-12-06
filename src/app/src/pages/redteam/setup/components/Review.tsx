@@ -102,6 +102,12 @@ export default function Review({
     'idle',
   );
   const [jobStartedAt, setJobStartedAt] = React.useState<number | null>(null);
+  // Enhanced job fields
+  const [jobPhase, setJobPhase] = React.useState<Job['phase']>(undefined);
+  const [jobPhaseDetail, setJobPhaseDetail] = React.useState<string | undefined>(undefined);
+  const [jobMetrics, setJobMetrics] = React.useState<Job['metrics']>(undefined);
+  const [jobErrors, setJobErrors] = React.useState<Job['errors']>(undefined);
+  const [jobSummary, setJobSummary] = React.useState<Job['summary']>(undefined);
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
   const [maxConcurrency, setMaxConcurrency] = React.useState(
@@ -390,6 +396,12 @@ export default function Review({
     setJobStatus('in-progress');
     setJobStartedAt(Date.now());
     setLogsExpanded(false);
+    // Reset enhanced fields
+    setJobPhase('initializing');
+    setJobPhaseDetail('Starting red team evaluation...');
+    setJobMetrics(undefined);
+    setJobErrors(undefined);
+    setJobSummary(undefined);
 
     try {
       const response = await callApi('/redteam/run', {
@@ -424,11 +436,33 @@ export default function Review({
           setTotal(status.total);
         }
 
+        // Update enhanced fields from API response
+        if (status.phase) {
+          setJobPhase(status.phase);
+        }
+        if (status.phaseDetail) {
+          setJobPhaseDetail(status.phaseDetail);
+        }
+        if (status.metrics) {
+          setJobMetrics(status.metrics);
+        }
+        if (status.errors) {
+          setJobErrors(status.errors);
+        }
+        if (status.startedAt) {
+          setJobStartedAt(status.startedAt);
+        }
+
         if (status.status === 'complete' || status.status === 'error') {
           window.clearInterval(interval);
           setPollInterval(null);
           setIsRunning(false);
           setJobStatus(status.status);
+
+          // Capture final enhanced fields
+          if (status.summary) {
+            setJobSummary(status.summary);
+          }
 
           if (status.status === 'complete' && status.result && status.evalId) {
             setEvalId(status.evalId);
@@ -1239,6 +1273,12 @@ export default function Review({
                 logs={logs}
                 logsExpanded={logsExpanded}
                 onToggleLogs={() => setLogsExpanded(!logsExpanded)}
+                phase={jobPhase}
+                phaseDetail={jobPhaseDetail}
+                metrics={jobMetrics}
+                errors={jobErrors}
+                summary={jobSummary}
+                evalId={evalId}
               >
                 <LogViewer logs={logs} />
               </ExecutionProgress>
