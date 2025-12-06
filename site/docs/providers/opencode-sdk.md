@@ -410,7 +410,16 @@ See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/ex
 
 ## See Also
 
+### Other coding agent providers
+
+- [Claude Agent SDK](/docs/providers/claude-agent-sdk/) - Anthropic's agentic framework
+- [OpenAI Codex SDK](/docs/providers/openai-codex-sdk/) - OpenAI's thread-based agent
+
+### Guides
+
+- [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents) - Comparison guide and best practices
+
+### External resources
+
 - [OpenCode Documentation](https://opencode.ai/docs/)
 - [OpenCode SDK Reference](https://opencode.ai/docs/sdk/)
-- [Claude Agent SDK Provider](/docs/providers/claude-agent-sdk/) - Alternative agentic provider
-- [OpenAI Codex SDK Provider](/docs/providers/openai-codex-sdk/) - Alternative agentic provider

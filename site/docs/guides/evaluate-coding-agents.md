@@ -8,7 +8,11 @@ description: Compare AI coding agents for code generation, security analysis, an
 
 Coding agents present a different evaluation challenge than standard LLMs. A chat model transforms input to output in one step. An agent decides what to do, does it, observes the result, and iterates—often dozens of times before producing a final answer.
 
-This guide covers evaluating CLI-based coding agents with promptfoo: [OpenAI Codex SDK](/docs/providers/openai-codex-sdk) and [Claude Agent SDK](/docs/providers/claude-agent-sdk).
+This guide covers evaluating CLI-based coding agents with promptfoo:
+
+- [Claude Agent SDK](/docs/providers/claude-agent-sdk) - Anthropic's agentic framework
+- [OpenAI Codex SDK](/docs/providers/openai-codex-sdk) - OpenAI's thread-based agent
+- [OpenCode SDK](/docs/providers/opencode-sdk) - Multi-provider agent with 75+ LLM support
 
 ## Why agent evals are different
 
@@ -22,22 +26,23 @@ Standard LLM evals test a function: given input X, does output Y meet criteria Z
 
 ## Capability tiers
 
-| Tier           | Example                                                  | Can Do                                       | Cannot Do                |
-| -------------- | -------------------------------------------------------- | -------------------------------------------- | ------------------------ |
-| **0: Text**    | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-5-20250929` | Generate code, discuss patterns, return JSON | Read files, execute code |
-| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk`         | Read/write files, run commands, iterate      | (Full capabilities)      |
+| Tier           | Example                                                          | Can Do                                       | Cannot Do                |
+| -------------- | ---------------------------------------------------------------- | -------------------------------------------- | ------------------------ |
+| **0: Text**    | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-5-20250929`         | Generate code, discuss patterns, return JSON | Read files, execute code |
+| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk`, `opencode:sdk` | Read/write files, run commands, iterate      | (Full capabilities)      |
 
 The same underlying model behaves differently at each tier. A plain `claude-sonnet-4-5-20250929` call can't read your files; wrap it in Claude Agent SDK and it can.
 
-Both agentic providers have similar capabilities. The differences are in defaults and ecosystem:
+All agentic providers have similar capabilities. The differences are in defaults, LLM support, and ecosystem:
 
-| Aspect                  | Codex SDK                        | Claude Agent SDK                 |
-| ----------------------- | -------------------------------- | -------------------------------- |
-| **Default permissions** | Full access (Git repo required)  | Read-only until you opt-in       |
-| **Structured output**   | `output_schema`                  | `output_format.json_schema`      |
-| **State management**    | Thread-based (`persist_threads`) | Stateless (or `resume` sessions) |
-| **Safety**              | Git repo check                   | Tool allowlists                  |
-| **Ecosystem**           | OpenAI Responses API             | MCP servers, CLAUDE.md           |
+| Aspect                  | Codex SDK                        | Claude Agent SDK                 | OpenCode SDK                                      |
+| ----------------------- | -------------------------------- | -------------------------------- | ------------------------------------------------- |
+| **LLM providers**       | OpenAI only                      | Anthropic only                   | 75+ via LiteLLM (Anthropic, OpenAI, Ollama, etc.) |
+| **Default permissions** | Full access (Git repo required)  | Read-only until you opt-in       | Read-only until you opt-in                        |
+| **Structured output**   | `output_schema`                  | `output_format.json_schema`      | Not supported                                     |
+| **State management**    | Thread-based (`persist_threads`) | Stateless (or `resume` sessions) | Session-based with LRU eviction                   |
+| **Safety**              | Git repo check                   | Tool allowlists                  | Permission configuration                          |
+| **Ecosystem**           | OpenAI Responses API             | MCP servers, CLAUDE.md           | MCP servers, AGENTS.md                            |
 
 ## Examples
 
@@ -118,6 +123,54 @@ class PaymentProcessor:
 </details>
 
 A plain LLM given the same prompt will explain how to do a security audit rather than actually doing one—it can't read the files. Expect high token usage (~1M) because Codex loads its system context regardless of codebase size.
+
+### Cross-provider comparison with OpenCode SDK
+
+OpenCode SDK supports 75+ LLM providers, making it ideal for comparing how different models handle the same coding task.
+
+<details>
+<summary>Configuration</summary>
+
+```yaml title="promptfooconfig.yaml"
+description: Compare providers on code analysis
+
+prompts:
+  - Find all SQL injection vulnerabilities in this codebase.
+
+providers:
+  - id: opencode:sdk
+    label: Claude via OpenCode
+    config:
+      provider_id: anthropic
+      model: claude-sonnet-4-5-20250929
+      working_dir: ./vulnerable-app
+  - id: opencode:sdk
+    label: GPT-4 via OpenCode
+    config:
+      provider_id: openai
+      model: gpt-4.1
+      working_dir: ./vulnerable-app
+  - id: opencode:sdk
+    label: Local Ollama
+    config:
+      provider_id: ollama
+      model: qwen2.5-coder:32b
+      working_dir: ./vulnerable-app
+
+tests:
+  - assert:
+      - type: javascript
+        value: |
+          const text = String(output).toLowerCase();
+          const found = text.includes('sql injection') || text.includes('sql vulnerability');
+          return { pass: found, reason: found ? 'Found SQL issues' : 'Missed SQL issues' };
+      - type: cost
+        threshold: 0.50
+```
+
+</details>
+
+This pattern lets you evaluate whether a local model (free) performs adequately versus cloud providers (paid) for your specific use case.
 
 ### Refactoring with test verification
 
@@ -291,10 +344,41 @@ See [Sandboxed code evals](/docs/guides/sandboxed-code-evals) for container-base
 
 **Check token patterns.** Huge prompt + small completion = agent reading files. Small prompt + large completion = you're testing the model, not the agent.
 
+## Choosing a provider
+
+**Use Claude Agent SDK when:**
+
+- You're committed to Anthropic models
+- You want CLAUDE.md-based project instructions
+- You need fine-grained tool permissions
+
+**Use Codex SDK when:**
+
+- You're committed to OpenAI models
+- You need guaranteed JSON schema output
+- Thread-based conversation state fits your workflow
+
+**Use OpenCode SDK when:**
+
+- You need to compare multiple LLM providers
+- You want to use local models (Ollama, LM Studio)
+- You want provider flexibility without vendor lock-in
+
 ## See also
 
-- [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk)
+### Provider documentation
+
 - [Claude Agent SDK provider](/docs/providers/claude-agent-sdk)
+- [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk)
+- [OpenCode SDK provider](/docs/providers/opencode-sdk)
+
+### Examples
+
 - [Agentic SDK comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/agentic-sdk-comparison)
+- [Claude Agent SDK example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk)
+- [OpenCode SDK example](https://github.com/promptfoo/promptfoo/tree/main/examples/opencode-sdk)
+
+### Related guides
+
 - [Sandboxed code evals](/docs/guides/sandboxed-code-evals)
 - [Tracing](/docs/tracing/)

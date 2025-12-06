@@ -536,6 +536,16 @@ See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/ex
 
 ## See Also
 
+### Other coding agent providers
+
+- [Claude Agent SDK](/docs/providers/claude-agent-sdk/) - Anthropic's agentic framework
+- [OpenCode SDK](/docs/providers/opencode-sdk/) - Multi-provider agent with 75+ LLM support
+
+### Guides
+
+- [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents) - Comparison guide and best practices
+
+### External resources
+
 - [OpenAI Platform Documentation](https://platform.openai.com/docs/)
 - [Standard OpenAI provider](/docs/providers/openai/) - For text-only interactions
-- [Claude Agent SDK provider](/docs/providers/claude-agent-sdk/) - Alternative agentic provider

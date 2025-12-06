@@ -413,5 +413,16 @@ Here are a few complete example implementations:
 
 ## See Also
 
+### Other coding agent providers
+
+- [OpenAI Codex SDK](/docs/providers/openai-codex-sdk/) - OpenAI's thread-based agent
+- [OpenCode SDK](/docs/providers/opencode-sdk/) - Multi-provider agent with 75+ LLM support
+
+### Guides
+
+- [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents) - Comparison guide and best practices
+
+### External resources
+
 - [Claude Agent SDK documentation](https://docs.claude.com/en/api/agent-sdk)
 - [Standard Anthropic provider](/docs/providers/anthropic/) - For text-only interactions
