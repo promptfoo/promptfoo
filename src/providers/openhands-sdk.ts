@@ -237,17 +237,21 @@ async function startOpenHandsServer(options: {
   env?: Record<string, string>;
 }): Promise<ManagedServer> {
   const { hostname, port, timeout, env } = options;
-  const healthEndpoint = `http://${hostname}:${port}/api/options/config`;
+  const healthEndpoint = `http://${hostname}:${port}/health`;
 
   logger.debug(`Starting OpenHands server at ${hostname}:${port}`);
 
   // Start the OpenHands agent server using Python
   const serverEnv = { ...process.env, ...env } as Record<string, string>;
 
-  const proc = spawn('python', ['-m', 'openhands.server.listen', '--port', String(port)], {
-    env: serverEnv,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const proc = spawn(
+    'python',
+    ['-m', 'openhands.agent_server', '--port', String(port), '--host', hostname],
+    {
+      env: serverEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
 
   // Log server output
   proc.stdout?.on('data', (data) => {
@@ -478,18 +482,32 @@ export class OpenHandsSDKProvider implements ApiProvider {
   }
 
   /**
+   * Start the agent execution loop for a conversation
+   */
+  private async startConversation(conversationId: string): Promise<void> {
+    const baseUrl = this.getBaseUrl();
+    const response = await fetchWithProxy(`${baseUrl}/api/conversations/${conversationId}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to start conversation: ${response.status} ${response.statusText}`);
+    }
+  }
+
+  /**
    * Send a message to a conversation
    */
   private async sendMessage(conversationId: string, message: string): Promise<void> {
     const baseUrl = this.getBaseUrl();
     const response = await fetchWithProxy(
-      `${baseUrl}/api/conversations/${conversationId}/messages`,
+      `${baseUrl}/api/conversations/${conversationId}/message`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          role: 'user',
-          content: message,
+          message: message,
         }),
       },
     );
@@ -729,6 +747,9 @@ export class OpenHandsSDKProvider implements ApiProvider {
 
       // Send the prompt
       await this.sendMessage(conversationId, prompt);
+
+      // Start the agent loop
+      await this.startConversation(conversationId);
 
       // Wait for completion
       const finalState = await this.waitForCompletion(conversationId, callOptions?.abortSignal);

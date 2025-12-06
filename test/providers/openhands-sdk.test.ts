@@ -63,22 +63,26 @@ describe('OpenHandsSDKProvider', () => {
 
     // Default fetch mock - server health check succeeds
     mockFetchWithProxy.mockImplementation(async (url: string, options?: RequestInit) => {
-      if (url.includes('/api/options/config')) {
+      if (url.includes('/health')) {
         // Health check
         return { ok: true };
       }
-      if (url.includes('/api/conversations') && options?.method === 'POST') {
+      if (url.endsWith('/api/conversations') && options?.method === 'POST') {
         // Create conversation
         return {
           ok: true,
           json: async () => createMockConversationResponse(),
         };
       }
-      if (url.includes('/messages') && options?.method === 'POST') {
+      if (url.includes('/start') && options?.method === 'POST') {
+        // Start agent loop
+        return { ok: true };
+      }
+      if (url.includes('/message') && options?.method === 'POST') {
         // Send message
         return { ok: true };
       }
-      if (url.includes('/api/conversations/') && !options?.method) {
+      if (url.match(/\/api\/conversations\/[^/]+$/) && !options?.method) {
         // Get conversation state
         return {
           ok: true,
@@ -89,7 +93,7 @@ describe('OpenHandsSDKProvider', () => {
             ]),
         };
       }
-      if (url.includes('/api/conversations/') && options?.method === 'DELETE') {
+      if (url.match(/\/api\/conversations\/[^/]+$/) && options?.method === 'DELETE') {
         // Delete conversation
         return { ok: true };
       }
@@ -418,12 +422,9 @@ describe('OpenHandsSDKProvider', () => {
       await provider.callApi('First prompt');
       await provider.callApi('Second prompt');
 
-      // Should have called create conversation twice
+      // Should have called create conversation twice (POST to /api/conversations exactly)
       const createCalls = mockFetchWithProxy.mock.calls.filter(
-        (call) =>
-          call[0].includes('/api/conversations') &&
-          !call[0].includes('/messages') &&
-          call[1]?.method === 'POST',
+        (call) => call[0].endsWith('/api/conversations') && call[1]?.method === 'POST',
       );
       expect(createCalls).toHaveLength(2);
     });
@@ -438,18 +439,15 @@ describe('OpenHandsSDKProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      // Should not have called create conversation
+      // Should not have called create conversation (POST to /api/conversations exactly)
       const createCalls = mockFetchWithProxy.mock.calls.filter(
-        (call) =>
-          call[0].includes('/api/conversations') &&
-          !call[0].includes('/messages') &&
-          call[1]?.method === 'POST',
+        (call) => call[0].endsWith('/api/conversations') && call[1]?.method === 'POST',
       );
       expect(createCalls).toHaveLength(0);
 
       // Should have sent message to the existing session
       const messageCalls = mockFetchWithProxy.mock.calls.filter((call) =>
-        call[0].includes('/messages'),
+        call[0].includes('/message'),
       );
       expect(messageCalls).toHaveLength(1);
       expect(messageCalls[0][0]).toContain('existing-session-id');
@@ -483,11 +481,9 @@ describe('OpenHandsSDKProvider', () => {
       // Verify by calling again - it should create a new session
       await provider.callApi('Another prompt');
 
+      // Should have called create conversation twice (POST to /api/conversations exactly)
       const createCalls = mockFetchWithProxy.mock.calls.filter(
-        (call) =>
-          call[0].includes('/api/conversations') &&
-          !call[0].includes('/messages') &&
-          call[1]?.method === 'POST',
+        (call) => call[0].endsWith('/api/conversations') && call[1]?.method === 'POST',
       );
       expect(createCalls).toHaveLength(2);
     });
