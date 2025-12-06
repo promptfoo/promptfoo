@@ -1,4 +1,3 @@
-import type { ChildProcess } from 'child_process';
 import { spawn } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs/promises';
@@ -169,9 +168,12 @@ function warnDeprecatedOptions(options: Record<string, unknown>): void {
 /**
  * Spawn modelaudit with proper signal handling and Promise wrapper.
  * Returns stdout/stderr content when capturing output, or empty strings for inherited stdio.
+ *
+ * Signal handling note: Node.js does NOT automatically forward signals to child
+ * processes, even with inherited stdio. When the parent receives SIGINT (Ctrl+C)
+ * or SIGTERM, the child keeps running unless we explicitly kill it. This affects
+ * ALL code paths that use this function (--no-write, saveToDatabase, etc.).
  */
-let modelAudit: ChildProcess | null = null;
-
 function spawnModelAudit(
   args: string[],
   options: {
@@ -190,16 +192,12 @@ function spawnModelAudit(
       ? { env: options.env }
       : { stdio: 'inherit' as const, env: options.env };
 
-    modelAudit = spawn('modelaudit', args, spawnOptions);
+    const childProcess = spawn('modelaudit', args, spawnOptions);
 
-    // Graceful shutdown - forward SIGINT/SIGTERM to child process.
-    // This is required even with inherited stdio because Node.js does NOT
-    // automatically forward signals to child processes. When the parent
-    // receives SIGINT (Ctrl+C) or SIGTERM, the child keeps running unless
-    // we explicitly kill it.
+    // Graceful shutdown - forward SIGINT/SIGTERM to child process
     const cleanup = () => {
-      if (modelAudit && !modelAudit.killed) {
-        modelAudit.kill('SIGTERM');
+      if (!childProcess.killed) {
+        childProcess.kill('SIGTERM');
       }
     };
     process.once('SIGINT', cleanup);
@@ -211,20 +209,20 @@ function spawnModelAudit(
     };
 
     if (options.captureOutput) {
-      modelAudit.stdout?.on('data', (data: Buffer) => {
+      childProcess.stdout?.on('data', (data: Buffer) => {
         const str = data.toString();
         stdout += str;
         options.onStdout?.(str);
       });
 
-      modelAudit.stderr?.on('data', (data: Buffer) => {
+      childProcess.stderr?.on('data', (data: Buffer) => {
         const str = data.toString();
         stderr += str;
         options.onStderr?.(str);
       });
     }
 
-    modelAudit.on('error', (error: Error) => {
+    childProcess.on('error', (error: Error) => {
       removeListeners();
       if (settled) {
         return;
@@ -233,7 +231,7 @@ function spawnModelAudit(
       reject(error);
     });
 
-    modelAudit.on('close', (code: number | null) => {
+    childProcess.on('close', (code: number | null) => {
       removeListeners();
       if (settled) {
         return;
@@ -766,18 +764,20 @@ export function modelScanCommand(program: Command): void {
             const tempOutputPath = createTempOutputPath();
             args.push('--output', tempOutputPath);
 
-            // Flag to prevent double cleanup (exit event fires on normal exit too)
+            // Cleanup handler for temp file on abnormal termination.
+            // Note: Child process termination is handled by spawnModelAudit's signal
+            // handlers - this only handles temp file cleanup.
+            //
+            // IMPORTANT: We use unlinkSync (synchronous) instead of fs.promises.unlink
+            // because signal handlers must complete synchronously. Async operations
+            // in signal handlers are unsafe - the process may exit before they complete.
             let cleanedUp = false;
-            const cleanupOnExit = () => {
+            const cleanupTempFileOnExit = () => {
               if (cleanedUp) {
                 return;
               }
               cleanedUp = true;
-              if (modelAudit) {
-                modelAudit.kill('SIGTERM');
-              }
               try {
-                // Use sync version for signal handlers which can't be async
                 unlinkSync(tempOutputPath);
               } catch {
                 // Ignore - file may already be cleaned up or doesn't exist
@@ -786,9 +786,9 @@ export function modelScanCommand(program: Command): void {
 
             // Register cleanup handlers for abnormal termination
             // Using once() ensures handlers auto-remove after firing
-            process.once('exit', cleanupOnExit);
-            process.once('SIGINT', cleanupOnExit);
-            process.once('SIGTERM', cleanupOnExit);
+            process.once('exit', cleanupTempFileOnExit);
+            process.once('SIGINT', cleanupTempFileOnExit);
+            process.once('SIGTERM', cleanupTempFileOnExit);
 
             try {
               // Use inherited stdio so CLI UI displays (spinners, progress, colors)
@@ -809,10 +809,10 @@ export function modelScanCommand(program: Command): void {
             } finally {
               // Cleanup first, then remove handlers to avoid race condition
               // where a signal arrives between handler removal and cleanup
-              cleanupOnExit();
-              process.removeListener('exit', cleanupOnExit);
-              process.removeListener('SIGINT', cleanupOnExit);
-              process.removeListener('SIGTERM', cleanupOnExit);
+              cleanupTempFileOnExit();
+              process.removeListener('exit', cleanupTempFileOnExit);
+              process.removeListener('SIGINT', cleanupTempFileOnExit);
+              process.removeListener('SIGTERM', cleanupTempFileOnExit);
             }
           } else {
             // Fallback for older modelaudit versions: capture stdout for JSON
