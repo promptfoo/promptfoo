@@ -7,6 +7,7 @@ import os from 'os';
 import path from 'path';
 
 import chalk from 'chalk';
+import semver from 'semver';
 import { z } from 'zod';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -83,13 +84,11 @@ export function supportsCliUiWithOutput(version: string | null): boolean {
   if (!version) {
     return false;
   }
-  const parts = version.split('.').map((p) => parseInt(p, 10));
-  if (parts.length < 3 || parts.some(isNaN)) {
+  const parsed = semver.valid(semver.coerce(version));
+  if (!parsed) {
     return false;
   }
-  const [major, minor, patch] = parts;
-  // v0.2.20 or higher
-  return major > 0 || (major === 0 && (minor > 2 || (minor === 2 && patch >= 20)));
+  return semver.gte(parsed, '0.2.20');
 }
 
 /**
@@ -114,11 +113,12 @@ function hasErrorsInResults(results: ModelAuditScanResults): boolean {
 }
 
 /**
- * Check if exit code indicates an error (not 0 or 1).
- * Exit code 0 = success, 1 = issues found (still valid), other = error.
+ * Check if exit code indicates a process error (signal termination or crash).
+ * Exit codes > 1 typically indicate fatal errors (e.g., 2 = crash, 128+ = signal).
+ * Exit codes 0 and 1 are considered valid scan completions (success / issues found).
  */
-function isErrorExitCode(code: number | null): code is number {
-  return code !== null && code !== 0 && code !== 1;
+function isProcessError(code: number | null): code is number {
+  return code !== null && code > 1;
 }
 
 /**
@@ -192,6 +192,19 @@ function spawnModelAudit(
 
     modelAudit = spawn('modelaudit', args, spawnOptions);
 
+    // Graceful shutdown - kill child on SIGINT/SIGTERM
+    const cleanup = () => {
+      if (modelAudit && !modelAudit.killed) {
+        modelAudit.kill('SIGTERM');
+      }
+    };
+    process.once('SIGINT', cleanup);
+    process.once('SIGTERM', cleanup);
+
+    const removeListeners = () => {
+      process.removeListener('SIGINT', cleanup);
+      process.removeListener('SIGTERM', cleanup);
+    };
 
     if (options.captureOutput) {
       modelAudit.stdout?.on('data', (data: Buffer) => {
@@ -548,8 +561,8 @@ async function processScanResultsFromFile(
     }
   };
 
-  // Handle error exit codes (stderr already displayed via inherited stdio)
-  if (isErrorExitCode(spawnResult.code)) {
+  // Handle process errors (stderr already displayed via inherited stdio)
+  if (isProcessError(spawnResult.code)) {
     logger.error(`Model scan process exited with code ${spawnResult.code}`);
     await cleanupTempFile();
     return spawnResult.code;
@@ -589,8 +602,8 @@ async function processScanResultsFromStdout(
   currentScannerVersion: string | null,
   existingAudit: ModelAudit | null,
 ): Promise<number> {
-  // Handle error exit codes
-  if (isErrorExitCode(spawnResult.code)) {
+  // Handle process errors
+  if (isProcessError(spawnResult.code)) {
     logger.error(`Model scan process exited with code ${spawnResult.code}`);
     if (spawnResult.stderr) {
       logger.error(spawnResult.stderr);

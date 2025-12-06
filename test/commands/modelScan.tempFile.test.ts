@@ -72,10 +72,18 @@ describe('supportsCliUiWithOutput', () => {
   });
 
   it('should return false for invalid version strings', () => {
-    const invalidVersions = ['invalid', '1.2', 'a.b.c', ''];
+    // Note: semver.coerce is lenient - '1.2' becomes '1.2.0' which is valid
+    const invalidVersions = ['invalid', 'a.b.c', ''];
     for (const version of invalidVersions) {
       expect(supportsCliUiWithOutput(version)).toBe(false);
     }
+  });
+
+  it('should handle partial version strings with semver.coerce', () => {
+    // semver.coerce('1.2') becomes '1.2.0' which is >= 0.2.20
+    expect(supportsCliUiWithOutput('1.2')).toBe(true);
+    // semver.coerce('0.2') becomes '0.2.0' which is < 0.2.20
+    expect(supportsCliUiWithOutput('0.2')).toBe(false);
   });
 
   it('should handle edge cases for version comparison', () => {
