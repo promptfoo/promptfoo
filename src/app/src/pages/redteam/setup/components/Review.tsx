@@ -44,6 +44,7 @@ import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
+import { ExecutionProgress } from './ExecutionProgress';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
@@ -94,6 +95,13 @@ export default function Review({
   const [isRunning, setIsRunning] = React.useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
   const [evalId, setEvalId] = React.useState<string | null>(null);
+  const [progress, setProgress] = React.useState<number>(0);
+  const [total, setTotal] = React.useState<number>(0);
+  const [logsExpanded, setLogsExpanded] = React.useState(false);
+  const [jobStatus, setJobStatus] = React.useState<'idle' | 'in-progress' | 'complete' | 'error'>(
+    'idle',
+  );
+  const [jobStartedAt, setJobStartedAt] = React.useState<number | null>(null);
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
   const [maxConcurrency, setMaxConcurrency] = React.useState(
@@ -377,6 +385,11 @@ export default function Review({
     setIsRunning(true);
     setLogs([]);
     setEvalId(null);
+    setProgress(0);
+    setTotal(0);
+    setJobStatus('in-progress');
+    setJobStartedAt(Date.now());
+    setLogsExpanded(false);
 
     try {
       const response = await callApi('/redteam/run', {
@@ -403,10 +416,19 @@ export default function Review({
           setLogs(status.logs);
         }
 
+        // Update progress from API response
+        if (typeof status.progress === 'number') {
+          setProgress(status.progress);
+        }
+        if (typeof status.total === 'number') {
+          setTotal(status.total);
+        }
+
         if (status.status === 'complete' || status.status === 'error') {
           window.clearInterval(interval);
           setPollInterval(null);
           setIsRunning(false);
+          setJobStatus(status.status);
 
           if (status.status === 'complete' && status.result && status.evalId) {
             setEvalId(status.evalId);
@@ -437,6 +459,7 @@ export default function Review({
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
+      setJobStatus('error');
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       showToast(
         `An error occurred while starting the evaluation: ${errorMessage}. Please try again.`,
@@ -1207,7 +1230,19 @@ export default function Review({
                 )}
               </Box>
             </Box>
-            {logs.length > 0 && <LogViewer logs={logs} />}
+            {(jobStatus !== 'idle' || logs.length > 0) && (
+              <ExecutionProgress
+                progress={progress}
+                total={total}
+                status={jobStatus}
+                startedAt={jobStartedAt}
+                logs={logs}
+                logsExpanded={logsExpanded}
+                onToggleLogs={() => setLogsExpanded(!logsExpanded)}
+              >
+                <LogViewer logs={logs} />
+              </ExecutionProgress>
+            )}
           </Box>
         </Paper>
 
