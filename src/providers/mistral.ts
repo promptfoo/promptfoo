@@ -1,6 +1,11 @@
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import {
+  withGenAISpan,
+  type GenAISpanContext,
+  type GenAISpanResult,
+} from '../tracing/genaiTracer';
 import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvVarKey } from '../envars';
@@ -243,17 +248,55 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
-      throw new Error(
-        'Mistral API key is not set. Set the MISTRAL_API_KEY environment variable or add `apiKey` or `apiKeyEnvar` to the provider config.',
-      );
-    }
-
     // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
+
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'mistral',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: config?.temperature,
+      topP: config?.top_p,
+      maxTokens: config?.max_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, config),
+      resultExtractor,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+    config?: MistralChatCompletionOptions,
+  ): Promise<ProviderResponse> {
+    if (!this.getApiKey()) {
+      throw new Error(
+        'Mistral API key is not set. Set the MISTRAL_API_KEY environment variable or add `apiKey` or `apiKeyEnvar` to the provider config.',
+      );
+    }
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -265,7 +308,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
       max_tokens: config?.max_tokens || 1024,
       safe_prompt: config?.safe_prompt || false,
       random_seed: config?.random_seed || null,
-      ...(config.response_format ? { response_format: config.response_format } : {}),
+      ...(config?.response_format ? { response_format: config.response_format } : {}),
     };
 
     const cacheKey = `mistral:${JSON.stringify(params)}`;
