@@ -2,6 +2,11 @@ import { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
+import {
+  withGenAISpan,
+  type GenAISpanContext,
+  type GenAISpanResult,
+} from '../../tracing/genaiTracer';
 import { normalizeFinishReason } from '../../util/finishReason';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
@@ -85,6 +90,52 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       throw new Error('Anthropic model name is not set. Please provide a valid model name.');
     }
 
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'anthropic',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      // Optional request parameters
+      maxTokens: this.config.max_tokens,
+      temperature: this.config.temperature,
+      // Promptfoo context from test case if available
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+          cached: response.tokenUsage.cached,
+        };
+      }
+
+      // Extract finish reason if available
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
+      }
+
+      return result;
+    };
+
+    // Wrap the API call in a span
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+  }
+
+  /**
+   * Internal implementation of callApi without tracing wrapper.
+   */
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
     const config: AnthropicMessageOptions = {
       ...this.config,
