@@ -2,21 +2,16 @@ import { callApi } from '@app/utils/api';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import type { ScanOptions, ScanPath, ScanResult } from '../ModelAudit.types';
+import type {
+  InstallationStatus,
+  RecentScan,
+  ScanOptions,
+  ScanPath,
+  ScanResult,
+} from '../ModelAudit.types';
 
-export interface RecentScan {
-  id: string;
-  paths: ScanPath[];
-  timestamp: number;
-  label?: string;
-}
-
-export interface InstallationStatus {
-  checking: boolean;
-  installed: boolean | null;
-  error: string | null;
-  cwd: string | null;
-}
+// Re-export types for convenience
+export type { InstallationStatus, RecentScan };
 
 interface ModelAuditConfigState {
   // Recent scans (persisted)
@@ -237,6 +232,36 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
         scanOptions: state.scanOptions,
       }),
       storage: createJSONStorage(() => localStorage),
+      // Migrate data from old store if it exists
+      migrate: (persistedState, version) => {
+        if (version === 0 || !persistedState) {
+          // Check for old store data and migrate it
+          const oldStoreKey = 'model-audit-store';
+          const oldStoreData = localStorage.getItem(oldStoreKey);
+          if (oldStoreData) {
+            try {
+              const parsed = JSON.parse(oldStoreData);
+              const oldState = parsed.state || {};
+
+              // Merge old data with persisted state
+              const migratedState = {
+                ...(persistedState || {}),
+                recentScans: oldState.recentScans || [],
+                scanOptions: oldState.scanOptions || DEFAULT_SCAN_OPTIONS,
+              };
+
+              // Clean up old store after successful migration
+              localStorage.removeItem(oldStoreKey);
+              console.info('[ModelAuditConfigStore] Migrated data from old store');
+
+              return migratedState as typeof persistedState;
+            } catch (e) {
+              console.warn('[ModelAuditConfigStore] Failed to migrate from old store:', e);
+            }
+          }
+        }
+        return persistedState as typeof persistedState;
+      },
     },
   ),
 );

@@ -1,23 +1,10 @@
 import { callApi } from '@app/utils/api';
 import { create } from 'zustand';
 
-import type { ScanResult } from '../ModelAudit.types';
+import type { HistoricalScan } from '../ModelAudit.types';
 
-export interface HistoricalScan {
-  id: string;
-  createdAt: number;
-  updatedAt: number;
-  name?: string | null;
-  author?: string | null;
-  modelPath: string;
-  modelType?: string | null;
-  results: ScanResult;
-  hasErrors: boolean;
-  totalChecks?: number | null;
-  passedChecks?: number | null;
-  failedChecks?: number | null;
-  metadata?: Record<string, unknown> | null;
-}
+// Re-export types for convenience
+export type { HistoricalScan };
 
 interface SortModel {
   field: string;
@@ -125,6 +112,18 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
   },
 
   deleteHistoricalScan: async (id: string) => {
+    // Optimistic delete: remove from UI immediately
+    const previousScans = get().historicalScans;
+    const previousCount = get().totalCount;
+    const scanToDelete = previousScans.find((scan) => scan.id === id);
+
+    // Optimistically update UI
+    set((state) => ({
+      historicalScans: state.historicalScans.filter((scan) => scan.id !== id),
+      totalCount: Math.max(0, state.totalCount - 1),
+      historyError: null,
+    }));
+
     try {
       const response = await callApi(`/model-audit/scans/${id}`, {
         method: 'DELETE',
@@ -133,13 +132,14 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       if (!response.ok) {
         throw new Error('Failed to delete scan');
       }
-
-      // Remove from local state
-      set((state) => ({
-        historicalScans: state.historicalScans.filter((scan) => scan.id !== id),
-        totalCount: Math.max(0, state.totalCount - 1),
-      }));
     } catch (error) {
+      // Revert optimistic update on failure
+      if (scanToDelete) {
+        set({
+          historicalScans: previousScans,
+          totalCount: previousCount,
+        });
+      }
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete scan';
       set({ historyError: errorMessage });
       throw error;

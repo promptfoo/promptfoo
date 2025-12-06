@@ -25,6 +25,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { ResultPageSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
 import { useModelAuditHistoryStore } from '../model-audit/stores';
@@ -117,16 +118,16 @@ export default function ModelAuditResult() {
       <Box
         sx={{
           minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
           bgcolor: (theme) =>
             theme.palette.mode === 'dark'
               ? theme.palette.background.default
               : theme.palette.grey[50],
+          py: 4,
         }}
       >
-        <CircularProgress />
+        <Container maxWidth="xl">
+          <ResultPageSkeleton />
+        </Container>
       </Box>
     );
   }
@@ -181,7 +182,12 @@ export default function ModelAuditResult() {
             <Link component={RouterLink} to="/model-audit" underline="hover" color="inherit">
               Model Audit
             </Link>
-            <Link component={RouterLink} to="/model-audit/history" underline="hover" color="inherit">
+            <Link
+              component={RouterLink}
+              to="/model-audit/history"
+              underline="hover"
+              color="inherit"
+            >
               History
             </Link>
             <Typography color="text.primary">{scan.name || scan.id.slice(0, 8)}</Typography>
@@ -305,13 +311,13 @@ export default function ModelAuditResult() {
             open={showFilesDialog}
             onClose={() => setShowFilesDialog(false)}
             scanResults={scan.results}
-            paths={
-              ((scan.metadata?.originalPaths as string[] | undefined) ?? []).map((p: string) => ({
+            paths={((scan.metadata?.originalPaths as string[] | undefined) ?? []).map(
+              (p: string) => ({
                 path: p,
                 type: 'file' as const,
                 name: p.split('/').pop() || p,
-              }))
-            }
+              }),
+            )}
           />
         )}
 

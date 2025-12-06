@@ -7,17 +7,8 @@ import {
   History as HistoryIcon,
   Security as SecurityIcon,
 } from '@mui/icons-material';
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Container,
-  Link,
-  Paper,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Alert, Box, Button, Container, Link, Paper, Stack, Typography } from '@mui/material';
+import { LatestScanSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
 
@@ -75,16 +66,16 @@ export default function ModelAuditResultLatestPage() {
       <Box
         sx={{
           minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
           bgcolor: (theme) =>
             theme.palette.mode === 'dark'
               ? theme.palette.background.default
               : theme.palette.grey[50],
+          py: 4,
         }}
       >
-        <CircularProgress />
+        <Container maxWidth="xl">
+          <LatestScanSkeleton />
+        </Container>
       </Box>
     );
   }
@@ -224,15 +215,13 @@ export default function ModelAuditResultLatestPage() {
             open={showFilesDialog}
             onClose={() => setShowFilesDialog(false)}
             scanResults={latestScan.results}
-            paths={
-              ((latestScan.metadata?.originalPaths as string[] | undefined) ?? []).map(
-                (p: string) => ({
-                  path: p,
-                  type: 'file' as const,
-                  name: p.split('/').pop() || p,
-                }),
-              )
-            }
+            paths={((latestScan.metadata?.originalPaths as string[] | undefined) ?? []).map(
+              (p: string) => ({
+                path: p,
+                type: 'file' as const,
+                name: p.split('/').pop() || p,
+              }),
+            )}
           />
         )}
       </Container>
