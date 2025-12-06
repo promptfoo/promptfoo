@@ -19,6 +19,11 @@ import { importModule } from '../../esm';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import {
+  withGenAISpan,
+  type GenAISpanContext,
+  type GenAISpanResult,
+} from '../../tracing/genaiTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
@@ -836,6 +841,69 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * Main API call using Converse API
    */
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Get inference config for tracing context
+    const maxTokens =
+      this.config.maxTokens ||
+      this.config.max_tokens ||
+      getEnvInt('AWS_BEDROCK_MAX_TOKENS') ||
+      undefined;
+    const temperature =
+      this.config.temperature ?? getEnvFloat('AWS_BEDROCK_TEMPERATURE') ?? undefined;
+    const topP = this.config.topP || this.config.top_p || getEnvFloat('AWS_BEDROCK_TOP_P');
+    const stopSequences = this.config.stopSequences || this.config.stop;
+
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'bedrock',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      // Optional request parameters
+      maxTokens,
+      temperature,
+      topP,
+      stopSequences,
+      // Promptfoo context from test case if available
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+
+      // Extract finish reason if available from metadata
+      const stopReason = (response.metadata as { stopReason?: string } | undefined)?.stopReason;
+      if (stopReason) {
+        result.finishReasons = [stopReason];
+      }
+
+      return result;
+    };
+
+    // Wrap the API call in a span
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context),
+      resultExtractor,
+    );
+  }
+
+  /**
+   * Internal implementation of callApi without tracing wrapper.
+   */
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     // Parse the prompt into messages
     const { messages, system } = parseConverseMessages(prompt);
 
