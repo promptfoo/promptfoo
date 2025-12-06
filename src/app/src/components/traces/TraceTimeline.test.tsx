@@ -100,9 +100,15 @@ describe('TraceTimeline', () => {
 
     renderTraceTimeline(mockTrace);
 
-    const durationLabel = screen.getByText('1.50s');
+    // Duration appears in "Total Duration: X" and in the span bar
+    // Use getAllByText and find the one in the timeline bar (has data-mui-internal-clone-element ancestor)
+    const durationElements = screen.getAllByText('1.50s');
+    const spanDurationLabel = durationElements.find((el) =>
+      el.closest('[data-mui-internal-clone-element]'),
+    );
 
-    await userEvent.hover(durationLabel.closest('[data-mui-internal-clone-element]')!);
+    expect(spanDurationLabel).toBeDefined();
+    await userEvent.hover(spanDurationLabel!.closest('[data-mui-internal-clone-element]')!);
 
     const tooltip = await screen.findByRole('tooltip');
 
@@ -170,7 +176,7 @@ describe('TraceTimeline', () => {
     expect(screen.getByText('Trace ID: trace-incomplete-data-123')).toBeInTheDocument();
   });
 
-  it('should display span attributes in tooltip when span has attributes', async () => {
+  it('should display span attributes in expanded details when span has attributes', async () => {
     const mockTrace: TraceData = {
       traceId: 'trace-with-attributes',
       evaluationId: 'test-evaluation-id',
@@ -192,17 +198,17 @@ describe('TraceTimeline', () => {
 
     renderTraceTimeline(mockTrace);
 
-    const timelineBar = screen.getByText('100ms').closest('[class*="css-pv5uhp"]');
+    // Click the expand button to reveal attributes
+    const expandButton = screen.getByTestId('ExpandMoreIcon').closest('button');
+    expect(expandButton).toBeInTheDocument();
+    await userEvent.click(expandButton!);
 
-    if (!timelineBar) {
-      throw new Error('Timeline bar not found');
-    }
-
-    await userEvent.hover(timelineBar);
-
-    expect(await screen.findByText(/Attributes:/)).toBeInTheDocument();
-    expect(await screen.findByText('http.method: "GET"')).toBeInTheDocument();
-    expect(await screen.findByText('http.url: "https://example.com"')).toBeInTheDocument();
+    // After expansion, attributes should be visible
+    expect(await screen.findByText('Attributes')).toBeInTheDocument();
+    expect(await screen.findByText('http.method')).toBeInTheDocument();
+    expect(await screen.findByText('GET')).toBeInTheDocument();
+    expect(await screen.findByText('http.url')).toBeInTheDocument();
+    expect(await screen.findByText('https://example.com')).toBeInTheDocument();
   });
 
   it('should apply error color styling to spans with error status code', () => {
@@ -224,7 +230,12 @@ describe('TraceTimeline', () => {
 
     renderTraceTimeline(mockTrace);
 
-    const typographyElement = screen.getByText('500ms');
+    // Use getAllByText since '500ms' appears in both the span duration and Total Duration
+    const durationElements = screen.getAllByText('500ms');
+    // Find the duration element that's in the span timeline (has data-mui-internal-clone-element ancestor)
+    const typographyElement = durationElements.find((el) =>
+      el.closest('[data-mui-internal-clone-element]'),
+    );
     expect(typographyElement).toBeInTheDocument();
     expect(typographyElement).toHaveStyle(
       `color: ${theme.palette.getContrastText(theme.palette.error.main)}`,
