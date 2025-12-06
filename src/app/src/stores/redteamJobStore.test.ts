@@ -3,18 +3,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedteamJobStore } from './redteamJobStore';
 
 describe('useRedteamJobStore', () => {
-  const initialState = useRedteamJobStore.getState();
-
   beforeEach(() => {
     vi.clearAllMocks();
-    useRedteamJobStore.setState(initialState, true);
+    // Reset to clean state before each test
+    useRedteamJobStore.setState({
+      jobId: null,
+      startedAt: null,
+      _hasHydrated: false,
+    });
   });
 
   describe('initial state', () => {
-    it('should have null jobId and startedAt', () => {
+    it('should have null jobId and startedAt after reset', () => {
       const state = useRedteamJobStore.getState();
       expect(state.jobId).toBeNull();
       expect(state.startedAt).toBeNull();
+      // Note: _hasHydrated is set by onRehydrateStorage callback
+      // In tests it may be true immediately since there's no localStorage delay
     });
   });
 
@@ -45,6 +50,42 @@ describe('useRedteamJobStore', () => {
       });
 
       expect(useRedteamJobStore.getState().jobId).toBe('job-2');
+    });
+
+    it('should update startedAt when overwriting a job', async () => {
+      act(() => {
+        useRedteamJobStore.getState().setJob('job-1');
+      });
+
+      const firstStartedAt = useRedteamJobStore.getState().startedAt;
+      expect(firstStartedAt).not.toBeNull();
+
+      // Wait a small amount of time to ensure different timestamp
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      act(() => {
+        useRedteamJobStore.getState().setJob('job-2');
+      });
+
+      const secondStartedAt = useRedteamJobStore.getState().startedAt;
+      expect(secondStartedAt).not.toBeNull();
+      expect(secondStartedAt).toBeGreaterThan(firstStartedAt!);
+    });
+  });
+
+  describe('setHasHydrated', () => {
+    it('should update _hasHydrated state', () => {
+      // First set to false explicitly
+      act(() => {
+        useRedteamJobStore.getState().setHasHydrated(false);
+      });
+      expect(useRedteamJobStore.getState()._hasHydrated).toBe(false);
+
+      // Then set to true
+      act(() => {
+        useRedteamJobStore.getState().setHasHydrated(true);
+      });
+      expect(useRedteamJobStore.getState()._hasHydrated).toBe(true);
     });
   });
 

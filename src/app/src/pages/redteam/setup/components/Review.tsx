@@ -89,7 +89,7 @@ export default function Review({
     data: { status: apiHealthStatus },
     isLoading: isCheckingApiHealth,
   } = useApiHealth();
-  const { jobId: savedJobId, setJob, clearJob } = useRedteamJobStore();
+  const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
   const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
@@ -197,8 +197,17 @@ export default function Review({
     setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
   }, [config.maxConcurrency]);
 
+  // Track if recovery has been attempted to prevent duplicate runs
+  const hasAttemptedRecovery = useRef(false);
+
   // Recover job state on mount (e.g., after navigation)
+  // Wait for Zustand to hydrate from localStorage before checking savedJobId
   useEffect(() => {
+    if (!_hasHydrated || hasAttemptedRecovery.current) {
+      return;
+    }
+    hasAttemptedRecovery.current = true;
+
     const recoverJob = async () => {
       // Check what the server thinks is running
       const { hasRunningJob, jobId: serverJobId } = await checkForRunningJob();
@@ -225,7 +234,7 @@ export default function Review({
             }
           } else {
             // Server reported a running job but we couldn't fetch it
-            showToast('Could not reconnect to running job.', 'warning');
+            showToast('Could not reconnect to running job.', 'error');
             clearJob();
           }
         } catch (error) {
@@ -258,7 +267,7 @@ export default function Review({
 
     recoverJob();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run on mount
+  }, [_hasHydrated]); // Run once after hydration completes
 
   const handleSaveYaml = () => {
     const blob = new Blob([yamlContent], { type: 'text/yaml' });

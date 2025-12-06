@@ -49,6 +49,7 @@ vi.mock('@app/stores/redteamJobStore', () => ({
     jobId: null,
     setJob: mockSetJob,
     clearJob: mockClearJob,
+    _hasHydrated: true, // Default to hydrated for most tests
   })),
 }));
 
@@ -127,6 +128,7 @@ describe('Review Component', () => {
       jobId: null,
       setJob: mockSetJob,
       clearJob: mockClearJob,
+      _hasHydrated: true,
     });
 
     // Reset callApi mock to default behavior
@@ -1300,6 +1302,7 @@ Application Details:
         jobId: 'saved-job-999',
         setJob: mockSetJob,
         clearJob: mockClearJob,
+        _hasHydrated: true,
       });
 
       vi.mocked(callApi).mockImplementation(async (url: string) => {
@@ -1455,6 +1458,75 @@ Application Details:
       await waitFor(() => {
         expect(mockClearJob).toHaveBeenCalled();
       });
+    });
+
+    it('should handle job recovery failure when server job returns 404', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'missing-job-404' }),
+          } as Response;
+        }
+        if (url === '/eval/job/missing-job-404') {
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({ error: 'Job not found' }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to attempt and clear job
+      await waitFor(() => {
+        expect(mockClearJob).toHaveBeenCalled();
+      });
+
+      // Run Now button should be enabled (not in running state)
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+    });
+
+    it('should not attempt recovery until store is hydrated', async () => {
+      // Mock the store as not hydrated yet
+      vi.mocked(useRedteamJobStore).mockReturnValue({
+        jobId: 'saved-job-before-hydration',
+        setJob: mockSetJob,
+        clearJob: mockClearJob,
+        _hasHydrated: false,
+      });
+
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait a moment - recovery should NOT be called yet because store isn't hydrated
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should NOT have checked the saved job since we're not hydrated
+      expect(callApi).not.toHaveBeenCalledWith('/eval/job/saved-job-before-hydration');
     });
   });
 });
