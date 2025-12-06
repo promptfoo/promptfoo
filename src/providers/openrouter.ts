@@ -11,6 +11,7 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
+  ReasoningContent,
 } from '../types/providers';
 
 /**
@@ -116,6 +117,12 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     const message = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
 
+    // Extract reasoning if present (e.g., from Gemini models)
+    let reasoning: ReasoningContent[] | undefined;
+    if (message.reasoning) {
+      reasoning = [{ type: 'reasoning', content: message.reasoning }];
+    }
+
     // Prioritize tool calls over content and reasoning
     let output = '';
     const hasFunctionCall = !!(message.function_call && message.function_call.name);
@@ -125,7 +132,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       output = hasFunctionCall ? message.function_call : message.tool_calls;
     } else if (message.content && message.content.trim()) {
       output = message.content;
-      // Add reasoning as thinking content if present and showThinking is enabled
+      // Add reasoning as thinking content if present and showThinking is enabled (backwards compatibility)
       if (message.reasoning && (this.config.showThinking ?? true)) {
         output = `Thinking: ${message.reasoning}\n\n${output}`;
       }
@@ -163,6 +170,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         data.usage?.completion_tokens,
       ),
       ...(finishReason && { finishReason }),
+      ...(reasoning && { reasoning }),
     };
   }
 }
