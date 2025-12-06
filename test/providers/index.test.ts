@@ -503,14 +503,14 @@ describe('loadApiProvider', () => {
 
   it('loadApiProvider with yaml filepath', async () => {
     const mockYamlContent = dedent`
-    id: 'openai:gpt-4'
+    id: 'openai:gpt-5.1-mini'
     config:
       key: 'value'`;
     const mockReadFileSync = vi.mocked(fs.readFileSync);
     mockReadFileSync.mockReturnValue(mockYamlContent);
 
     const provider = await loadApiProvider('file://path/to/mock-provider-file.yaml');
-    expect(provider.id()).toBe('openai:gpt-4');
+    expect(provider.id()).toBe('openai:gpt-5.1-mini');
     expect(mockReadFileSync).toHaveBeenCalledWith(
       expect.stringMatching(/path[\\/]to[\\/]mock-provider-file\.yaml/),
       'utf8',
@@ -519,7 +519,7 @@ describe('loadApiProvider', () => {
 
   it('loadApiProvider with json filepath', async () => {
     const mockJsonContent = `{
-  "id": "openai:gpt-4",
+  "id": "openai:gpt-5.1-mini",
   "config": {
     "key": "value"
   }
@@ -529,7 +529,7 @@ describe('loadApiProvider', () => {
     });
 
     const provider = await loadApiProvider('file://path/to/mock-provider-file.json');
-    expect(provider.id()).toBe('openai:gpt-4');
+    expect(provider.id()).toBe('openai:gpt-5.1-mini');
     expect(fs.readFileSync).toHaveBeenCalledWith(
       expect.stringMatching(/path[\\/]to[\\/]mock-provider-file\.json/),
       'utf8',
@@ -681,17 +681,17 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with litellm default (chat)', async () => {
-    const provider = await loadApiProvider('litellm:gpt-4');
-    expect(provider.id()).toBe('litellm:gpt-4');
-    expect(provider.toString()).toBe('[LiteLLM Provider gpt-4]');
+    const provider = await loadApiProvider('litellm:gpt-5.1-mini');
+    expect(provider.id()).toBe('litellm:gpt-5.1-mini');
+    expect(provider.toString()).toBe('[LiteLLM Provider gpt-5.1-mini]');
     expect(provider.config.apiBaseUrl).toBe('http://0.0.0.0:4000');
     expect(provider.config.apiKeyEnvar).toBe('LITELLM_API_KEY');
   });
 
   it('loadApiProvider with litellm:chat', async () => {
-    const provider = await loadApiProvider('litellm:chat:gpt-4');
-    expect(provider.id()).toBe('litellm:gpt-4');
-    expect(provider.toString()).toBe('[LiteLLM Provider gpt-4]');
+    const provider = await loadApiProvider('litellm:chat:gpt-5.1-mini');
+    expect(provider.id()).toBe('litellm:gpt-5.1-mini');
+    expect(provider.toString()).toBe('[LiteLLM Provider gpt-5.1-mini]');
   });
 
   it('loadApiProvider with litellm:completion', async () => {
@@ -1065,8 +1065,8 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with adaline:openai:chat', async () => {
-    const provider = await loadApiProvider('adaline:openai:chat:gpt-4');
-    expect(provider.id()).toBe('adaline:openai:chat:gpt-4');
+    const provider = await loadApiProvider('adaline:openai:chat:gpt-5.1-mini');
+    expect(provider.id()).toBe('adaline:openai:chat:gpt-5.1-mini');
   });
 
   it('loadApiProvider with adaline:openai:embedding', async () => {
@@ -1130,14 +1130,14 @@ describe('loadApiProvider', () => {
       vi.mocked(validateLinkedTargetId).mockResolvedValue();
 
       const mockYamlContent = dedent`
-        id: 'openai:gpt-4'
+        id: 'openai:gpt-5.1-mini'
         config:
           linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'`;
       const mockReadFileSync = vi.mocked(fs.readFileSync);
       mockReadFileSync.mockReturnValue(mockYamlContent);
 
       const provider = await loadApiProvider('file://path/to/provider.yaml');
-      expect(provider.id()).toBe('openai:gpt-4');
+      expect(provider.id()).toBe('openai:gpt-5.1-mini');
       expect(validateLinkedTargetId).toHaveBeenCalledWith(
         'promptfoo://provider/12345678-1234-1234-1234-123456789abc',
       );
@@ -1152,7 +1152,7 @@ describe('loadApiProvider', () => {
       );
 
       const mockYamlContent = dedent`
-        id: 'openai:gpt-4'
+        id: 'openai:gpt-5.1-mini'
         config:
           linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'`;
       const mockReadFileSync = vi.mocked(fs.readFileSync);
@@ -1167,14 +1167,14 @@ describe('loadApiProvider', () => {
       const { validateLinkedTargetId } = await import('../../src/util/cloud');
 
       const mockYamlContent = dedent`
-        id: 'openai:gpt-4'
+        id: 'openai:gpt-5.1-mini'
         config:
           temperature: 0.7`;
       const mockReadFileSync = vi.mocked(fs.readFileSync);
       mockReadFileSync.mockReturnValue(mockYamlContent);
 
       const provider = await loadApiProvider('file://path/to/provider.yaml');
-      expect(provider.id()).toBe('openai:gpt-4');
+      expect(provider.id()).toBe('openai:gpt-5.1-mini');
       expect(validateLinkedTargetId).not.toHaveBeenCalled();
     });
   });
@@ -1303,5 +1303,29 @@ describe('resolveProvider', () => {
 
     expect(result).toBe(mockEchoProvider);
     expect(result.id()).toBe('echo-from-map');
+  });
+
+  it('should accept basePath in context parameter', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    // This test verifies the function signature accepts basePath
+    // The echo provider is used since it doesn't need file resolution
+    const basePath = '/custom/base/path';
+    const result = await resolveProvider('echo', {}, { basePath });
+
+    expect(result).toBeDefined();
+    expect(typeof result.id).toBe('function');
+  });
+
+  it('should accept both env and basePath in context parameter', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    // This test verifies the function signature accepts both env and basePath
+    const basePath = '/custom/base/path';
+    const env = { API_KEY: 'test-key' };
+    const result = await resolveProvider('echo', {}, { basePath, env });
+
+    expect(result).toBeDefined();
+    expect(typeof result.id).toBe('function');
   });
 });
