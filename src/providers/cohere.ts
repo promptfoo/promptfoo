@@ -115,11 +115,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, config),
-      resultExtractor,
-    );
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, config), resultExtractor);
   }
 
   private async callApiInternal(

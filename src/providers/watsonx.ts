@@ -12,7 +12,12 @@ import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 
 import type { EnvVarKey } from '../envars';
-import type { ApiProvider, CallApiContextParams, ProviderResponse, TokenUsage } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderResponse,
+  TokenUsage,
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/providers';
 

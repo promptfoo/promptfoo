@@ -5,7 +5,11 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../../tracing/genaiTracer';
+import {
+  withGenAISpan,
+  type GenAISpanContext,
+  type GenAISpanResult,
+} from '../../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
@@ -195,11 +199,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       return result;
     };
 
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context),
-      resultExtractor,
-    );
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
   private async callApiInternal(
