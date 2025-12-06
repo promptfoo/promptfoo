@@ -10,7 +10,7 @@ prompts:
 
 providers:
   - openai:responses:gpt-5.1
-  - openai:responses:gpt-5.1-mini
+  - openai:responses:gpt-5-mini
   # Or setup models from other providers
   # - anthropic:messages:claude-sonnet-4-5-20250929
   # - vertex:gemini-2.5-pro
