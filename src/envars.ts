@@ -69,6 +69,34 @@ type EnvVars = {
   PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
 
   //=========================================================================
+  // OpenTelemetry tracing configuration
+  //=========================================================================
+  /**
+   * Enable OpenTelemetry tracing for all LLM provider calls.
+   */
+  PROMPTFOO_OTEL_ENABLED?: boolean;
+  /**
+   * Service name to use in OTEL traces. Defaults to 'promptfoo'.
+   */
+  PROMPTFOO_OTEL_SERVICE_NAME?: string;
+  /**
+   * OTLP endpoint URL for exporting traces to external backends.
+   */
+  PROMPTFOO_OTEL_ENDPOINT?: string;
+  /**
+   * Whether to export traces to the local TraceStore (SQLite). Defaults to true.
+   */
+  PROMPTFOO_OTEL_LOCAL_EXPORT?: boolean;
+  /**
+   * Enable OTEL debug logging.
+   */
+  PROMPTFOO_OTEL_DEBUG?: boolean;
+  /**
+   * Standard OTEL environment variable for OTLP endpoint.
+   */
+  OTEL_EXPORTER_OTLP_ENDPOINT?: string;
+
+  //=========================================================================
   // promptfoo configuration options
   //=========================================================================
   PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY?: number;
