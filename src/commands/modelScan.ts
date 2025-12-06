@@ -192,7 +192,11 @@ function spawnModelAudit(
 
     modelAudit = spawn('modelaudit', args, spawnOptions);
 
-    // Graceful shutdown - kill child on SIGINT/SIGTERM
+    // Graceful shutdown - forward SIGINT/SIGTERM to child process.
+    // This is required even with inherited stdio because Node.js does NOT
+    // automatically forward signals to child processes. When the parent
+    // receives SIGINT (Ctrl+C) or SIGTERM, the child keeps running unless
+    // we explicitly kill it.
     const cleanup = () => {
       if (modelAudit && !modelAudit.killed) {
         modelAudit.kill('SIGTERM');
