@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure model comparison
+
+prompts:
+  - |
+    You are a helpful assistant. Answer the following question concisely and accurately.
+
+    Question: {{question}}
+
+providers:
+  # OpenAI GPT-5.1 (Latest flagship)
+  - id: azure:chat:gpt-5.1
+    label: gpt-5.1
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      max_tokens: 1024
+      temperature: 0.7
+
+  # Anthropic Claude Sonnet 4.5
+  - id: azure:chat:claude-sonnet-4-5-20250929
+    label: claude-sonnet
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 1024
+      temperature: 0.7
+
+  # Meta Llama 4 Maverick
+  - id: azure:chat:Llama-4-Maverick-17B-128E-Instruct-FP8
+    label: llama-4
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 1024
+      temperature: 0.7
+
+  # Mistral Large
+  - id: azure:chat:Mistral-Large-2411
+    label: mistral-large
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 1024
+      temperature: 0.7
+
+tests:
+  - vars:
+      question: What are the main differences between machine learning and deep learning?
+    assert:
+      - type: llm-rubric
+        value: Accurately explains the relationship and differences
+      - type: contains-any
+        value: ['neural network', 'subset', 'feature']
+
+  - vars:
+      question: Explain the concept of recursion in programming with a simple example.
+    assert:
+      - type: llm-rubric
+        value: Provides a clear explanation with a working example
+      - type: contains-any
+        value: ['base case', 'function', 'itself']
+
+  - vars:
+      question: What is the difference between REST and GraphQL APIs?
+    assert:
+      - type: llm-rubric
+        value: Accurately compares both API paradigms
+      - type: contains-any
+        value: ['endpoint', 'query', 'schema']
+
+  - vars:
+      question: How does HTTPS encryption work?
+    assert:
+      - type: llm-rubric
+        value: Explains the encryption process accurately
+      - type: contains-any
+        value: ['TLS', 'SSL', 'certificate', 'handshake']

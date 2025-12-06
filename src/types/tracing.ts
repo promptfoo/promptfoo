@@ -11,5 +11,8 @@ export interface TraceSpan {
 
 export interface TraceData {
   traceId: string;
+  evaluationId: string;
+  testCaseId: string;
+  metadata?: Record<string, any>;
   spans: TraceSpan[];
 }

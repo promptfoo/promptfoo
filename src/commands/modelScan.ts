@@ -1,28 +1,510 @@
+import type { ChildProcess } from 'child_process';
 import { spawn } from 'child_process';
 
 import chalk from 'chalk';
+import { z } from 'zod';
 import { getAuthor } from '../globalConfig/accounts';
+import logger from '../logger';
 import ModelAudit from '../models/modelAudit';
-import { checkModelAuditUpdates } from '../updates';
-import type { Command } from 'commander';
-
-import type { ModelAuditScanResults } from '../types/modelAudit';
-import { parseModelAuditArgs, DEPRECATED_OPTIONS_MAP } from '../util/modelAuditCliParser';
+import { checkModelAuditUpdates, getModelAuditCurrentVersion } from '../updates';
 import {
   getHuggingFaceMetadata,
   isHuggingFaceModel,
   parseHuggingFaceModel,
 } from '../util/huggingfaceMetadata';
-import logger from '../logger';
-import { z } from 'zod';
+import { DEPRECATED_OPTIONS_MAP, parseModelAuditArgs } from '../util/modelAuditCliParser';
+import type { Command } from 'commander';
 
-export async function checkModelAuditInstalled(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const proc = spawn('modelaudit', ['--version']);
-    proc.on('error', () => resolve(false));
-    proc.on('close', (code) => resolve(code === 0 || code === 1));
+import type { ModelAuditScanResults, ModelAuditIssue } from '../types/modelAudit';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+interface SpawnResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+interface RevisionInfo {
+  modelId?: string;
+  revisionSha?: string;
+  contentHash?: string;
+  modelSource?: string;
+  sourceLastModified?: number;
+}
+
+interface ScanOptions {
+  blacklist?: string[];
+  timeout?: string;
+  maxSize?: string;
+  verbose?: boolean;
+  sbom?: string;
+  strict?: boolean;
+  dryRun?: boolean;
+  cache?: boolean;
+  quiet?: boolean;
+  progress?: boolean;
+  stream?: boolean;
+  output?: string;
+  format?: string;
+  write?: boolean;
+  name?: string;
+  force?: boolean;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Check if modelaudit is installed and get its version.
+ */
+export async function checkModelAuditInstalled(): Promise<{
+  installed: boolean;
+  version: string | null;
+}> {
+  const version = await getModelAuditCurrentVersion();
+  return { installed: version !== null, version };
+}
+
+/**
+ * Determine if scan results contain errors.
+ */
+function hasErrorsInResults(results: ModelAuditScanResults): boolean {
+  return Boolean(
+    results.has_errors ||
+      results.issues?.some((issue) => issue.severity === 'critical' || issue.severity === 'error'),
+  );
+}
+
+/**
+ * Determine if a model should be re-scanned based on version changes.
+ */
+function shouldRescan(
+  existingVersion: string | null | undefined,
+  currentVersion: string | null,
+): boolean {
+  if (!currentVersion) {
+    return false;
+  }
+  if (!existingVersion) {
+    return true;
+  }
+  return existingVersion !== currentVersion;
+}
+
+/**
+ * Warn about deprecated CLI options.
+ */
+function warnDeprecatedOptions(options: Record<string, unknown>): void {
+  const deprecatedOptionsUsed = Object.keys(options).filter((opt) => {
+    const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+    return DEPRECATED_OPTIONS_MAP[fullOption] !== undefined;
+  });
+
+  for (const opt of deprecatedOptionsUsed) {
+    const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+    const replacement = DEPRECATED_OPTIONS_MAP[fullOption];
+
+    if (replacement) {
+      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated. Use '${replacement}' instead.`);
+    } else if (fullOption === '--jfrog-api-token') {
+      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_API_TOKEN env var.`);
+    } else if (fullOption === '--jfrog-access-token') {
+      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_ACCESS_TOKEN env var.`);
+    } else if (fullOption === '--registry-uri') {
+      logger.warn(
+        `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_URL or MLFLOW_TRACKING_URI env var.`,
+      );
+    } else {
+      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated and has been removed.`);
+    }
+  }
+}
+
+/**
+ * Spawn modelaudit with proper signal handling and Promise wrapper.
+ * Returns stdout/stderr content when capturing output, or empty strings for inherited stdio.
+ */
+function spawnModelAudit(
+  args: string[],
+  options: {
+    captureOutput: boolean;
+    env: NodeJS.ProcessEnv;
+    onStdout?: (data: string) => void;
+    onStderr?: (data: string) => void;
+  },
+): Promise<SpawnResult> {
+  return new Promise((resolve, reject) => {
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    const spawnOptions = options.captureOutput
+      ? { env: options.env }
+      : { stdio: 'inherit' as const, env: options.env };
+
+    const modelAudit: ChildProcess = spawn('modelaudit', args, spawnOptions);
+
+    // Graceful shutdown - kill child on SIGINT/SIGTERM
+    const cleanup = () => {
+      if (!modelAudit.killed) {
+        modelAudit.kill('SIGTERM');
+      }
+    };
+    process.once('SIGINT', cleanup);
+    process.once('SIGTERM', cleanup);
+
+    const removeListeners = () => {
+      process.removeListener('SIGINT', cleanup);
+      process.removeListener('SIGTERM', cleanup);
+    };
+
+    if (options.captureOutput) {
+      modelAudit.stdout?.on('data', (data: Buffer) => {
+        const str = data.toString();
+        stdout += str;
+        options.onStdout?.(str);
+      });
+
+      modelAudit.stderr?.on('data', (data: Buffer) => {
+        const str = data.toString();
+        stderr += str;
+        options.onStderr?.(str);
+      });
+    }
+
+    modelAudit.on('error', (error: Error) => {
+      removeListeners();
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(error);
+    });
+
+    modelAudit.on('close', (code: number | null) => {
+      removeListeners();
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve({ code, stdout, stderr });
+    });
   });
 }
+
+/**
+ * Check for existing scan and determine if re-scan is needed.
+ * Returns the existing audit if found and re-scan should happen.
+ */
+async function checkExistingScan(
+  paths: string[],
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+): Promise<{ shouldSkip: boolean; existingAudit: ModelAudit | null }> {
+  if (paths.length !== 1 || !isHuggingFaceModel(paths[0])) {
+    return { shouldSkip: false, existingAudit: null };
+  }
+
+  try {
+    const metadata = await getHuggingFaceMetadata(paths[0]);
+    if (!metadata) {
+      return { shouldSkip: false, existingAudit: null };
+    }
+
+    const parsed = parseHuggingFaceModel(paths[0]);
+    const modelId = parsed ? `${parsed.owner}/${parsed.repo}` : paths[0];
+    const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
+
+    if (!existing) {
+      return { shouldSkip: false, existingAudit: null };
+    }
+
+    // Force flag - re-scan but update existing record
+    if (options.force) {
+      logger.debug(`Re-scanning (--force): ${modelId}`);
+      return { shouldSkip: false, existingAudit: existing };
+    }
+
+    // Version changed - re-scan
+    if (shouldRescan(existing.scannerVersion, currentScannerVersion)) {
+      const reason = existing.scannerVersion
+        ? `modelaudit upgraded from ${existing.scannerVersion} to ${currentScannerVersion}`
+        : `previous scan missing version info (now using ${currentScannerVersion})`;
+      logger.debug(`Re-scanning: ${reason}`);
+      return { shouldSkip: false, existingAudit: existing };
+    }
+
+    // Already scanned - skip
+    logger.info(chalk.yellow('✓ Model already scanned'));
+    logger.info(`  Model: ${modelId}`);
+    logger.info(`  Revision: ${metadata.sha}`);
+    if (existing.scannerVersion) {
+      logger.info(`  Scanner version: ${existing.scannerVersion}`);
+    }
+    logger.info(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
+    logger.info(`  Scan ID: ${existing.id}`);
+    logger.info(`\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`);
+    logger.info(chalk.green(`  promptfoo view ${existing.id}`));
+
+    return { shouldSkip: true, existingAudit: null };
+  } catch (error) {
+    logger.debug(`Failed to check for existing scan: ${error}`);
+    return { shouldSkip: false, existingAudit: null };
+  }
+}
+
+/**
+ * Fetch revision info for HuggingFace models.
+ */
+async function fetchRevisionInfo(
+  paths: string[],
+  results: ModelAuditScanResults,
+): Promise<RevisionInfo> {
+  const revisionInfo: RevisionInfo = {};
+
+  if (paths.length !== 1) {
+    return revisionInfo;
+  }
+
+  const modelPath = paths[0];
+  if (isHuggingFaceModel(modelPath)) {
+    try {
+      const metadata = await getHuggingFaceMetadata(modelPath);
+      if (metadata) {
+        revisionInfo.modelId = metadata.modelId;
+        revisionInfo.revisionSha = metadata.sha;
+        revisionInfo.modelSource = 'huggingface';
+        revisionInfo.sourceLastModified = new Date(metadata.lastModified).getTime();
+      }
+    } catch (error) {
+      logger.debug(`Failed to fetch revision info: ${error}`);
+    }
+  }
+
+  // Extract content_hash from modelaudit output if available
+  if (results.content_hash) {
+    logger.debug(`Using content_hash from modelaudit output: ${results.content_hash}`);
+    revisionInfo.contentHash = results.content_hash;
+  }
+
+  return revisionInfo;
+}
+
+/**
+ * Display scan summary to user.
+ */
+function displayScanSummary(
+  results: ModelAuditScanResults,
+  auditId: string,
+  currentScannerVersion: string | null,
+  wasUpdated: boolean,
+): void {
+  logger.info('\n' + chalk.bold('Model Audit Summary'));
+  logger.info('=' + '='.repeat(50));
+
+  if (results.has_errors || (results.failed_checks ?? 0) > 0) {
+    logger.info(chalk.yellow(`⚠  Found ${results.failed_checks || 0} issues`));
+    displayIssuesBySeverity(results.issues);
+  } else {
+    logger.info(chalk.green(`✓ No issues found. ${results.passed_checks || 0} checks passed.`));
+  }
+
+  const mbScanned = ((results.bytes_scanned ?? 0) / 1024 / 1024).toFixed(2);
+  const duration = ((results.duration ?? 0) / 1000).toFixed(2);
+
+  logger.info(`\nScanned ${results.files_scanned ?? 0} files (${mbScanned} MB)`);
+  logger.info(`Duration: ${duration} seconds`);
+
+  if (currentScannerVersion) {
+    logger.debug(`Scanner version: ${currentScannerVersion}`);
+  }
+  if (wasUpdated) {
+    logger.debug(`Updated existing audit record: ${auditId}`);
+  }
+
+  logger.info(chalk.green(`\n✓ Results saved to database with ID: ${auditId}`));
+}
+
+/**
+ * Display issues grouped by severity.
+ */
+function displayIssuesBySeverity(issues: ModelAuditIssue[] | undefined): void {
+  if (!issues || issues.length === 0) {
+    return;
+  }
+
+  const issuesBySeverity = issues.reduce(
+    (acc, issue) => {
+      const severity = issue.severity || 'info';
+      if (!acc[severity]) {
+        acc[severity] = [];
+      }
+      acc[severity].push(issue);
+      return acc;
+    },
+    {} as Record<string, ModelAuditIssue[]>,
+  );
+
+  const severityOrder = ['critical', 'error', 'warning', 'info'];
+  const severityColors: Record<string, typeof chalk.red> = {
+    critical: chalk.red,
+    error: chalk.red,
+    warning: chalk.yellow,
+    info: chalk.blue,
+  };
+
+  for (const severity of severityOrder) {
+    const severityIssues = issuesBySeverity[severity];
+    if (!severityIssues || severityIssues.length === 0) {
+      continue;
+    }
+
+    const color = severityColors[severity] || chalk.white;
+    logger.info(`\n${color.bold(severity.toUpperCase())} (${severityIssues.length}):`);
+
+    const displayCount = Math.min(severityIssues.length, 5);
+    for (let i = 0; i < displayCount; i++) {
+      const issue = severityIssues[i];
+      logger.info(`  • ${issue.message}`);
+      if (issue.location) {
+        logger.info(`    ${chalk.gray(issue.location)}`);
+      }
+    }
+
+    if (severityIssues.length > 5) {
+      logger.info(`  ${chalk.gray(`... and ${severityIssues.length - 5} more`)}`);
+    }
+  }
+}
+
+/**
+ * Save or update audit record in database.
+ */
+async function saveAuditRecord(
+  paths: string[],
+  results: ModelAuditScanResults,
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+  existingAudit: ModelAudit | null,
+  revisionInfo: RevisionInfo,
+): Promise<ModelAudit> {
+  const auditMetadata = {
+    paths,
+    options: {
+      blacklist: options.blacklist,
+      timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
+      maxSize: options.maxSize,
+      verbose: options.verbose,
+      sbom: options.sbom,
+      strict: options.strict,
+      dryRun: options.dryRun,
+      cache: options.cache,
+      quiet: options.quiet,
+      progress: options.progress,
+      stream: options.stream,
+    },
+  };
+
+  if (existingAudit) {
+    // Update existing record with new scan results
+    existingAudit.results = results;
+    existingAudit.checks = results.checks ?? null;
+    existingAudit.issues = results.issues ?? null;
+    existingAudit.hasErrors = hasErrorsInResults(results);
+    existingAudit.totalChecks = results.total_checks ?? null;
+    existingAudit.passedChecks = results.passed_checks ?? null;
+    existingAudit.failedChecks = results.failed_checks ?? null;
+    existingAudit.scannerVersion = currentScannerVersion ?? null;
+    existingAudit.metadata = auditMetadata;
+    existingAudit.updatedAt = Date.now();
+    if (revisionInfo.contentHash) {
+      existingAudit.contentHash = revisionInfo.contentHash;
+    }
+    await existingAudit.save();
+    return existingAudit;
+  }
+
+  return ModelAudit.create({
+    name: options.name || `Model scan ${new Date().toISOString()}`,
+    author: getAuthor() || undefined,
+    modelPath: paths.join(', '),
+    results,
+    metadata: auditMetadata,
+    scannerVersion: currentScannerVersion || undefined,
+    ...revisionInfo,
+  });
+}
+
+/**
+ * Process scan results: parse JSON, save to database, display summary.
+ */
+async function processScanResults(
+  spawnResult: SpawnResult,
+  paths: string[],
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+  existingAudit: ModelAudit | null,
+): Promise<number> {
+  // Handle non-zero exit codes (0 and 1 are both valid - 1 means issues found)
+  if (spawnResult.code !== null && spawnResult.code !== 0 && spawnResult.code !== 1) {
+    logger.error(`Model scan process exited with code ${spawnResult.code}`);
+    if (spawnResult.stderr) {
+      logger.error(`Error output: ${spawnResult.stderr}`);
+    }
+    return spawnResult.code;
+  }
+
+  // Parse JSON output
+  const jsonOutput = spawnResult.stdout.trim();
+  if (!jsonOutput) {
+    logger.error('No output received from model scan');
+    return 1;
+  }
+
+  let results: ModelAuditScanResults;
+  try {
+    results = JSON.parse(jsonOutput);
+  } catch (error) {
+    logger.error(`Failed to parse scan results: ${error}`);
+    if (options.verbose) {
+      logger.error(`Raw output: ${spawnResult.stdout}`);
+    }
+    return 1;
+  }
+
+  // Fetch revision info and save to database
+  const revisionInfo = await fetchRevisionInfo(paths, results);
+  const audit = await saveAuditRecord(
+    paths,
+    results,
+    options,
+    currentScannerVersion,
+    existingAudit,
+    revisionInfo,
+  );
+
+  // Display summary (unless JSON format requested)
+  if (options.format !== 'json') {
+    displayScanSummary(results, audit.id, currentScannerVersion, existingAudit !== null);
+  }
+
+  // Save to file if requested
+  if (options.output) {
+    const fs = await import('fs');
+    fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
+    logger.info(`Results also saved to ${options.output}`);
+  }
+
+  return spawnResult.code || 0;
+}
+
+// ============================================================================
+// Main Command
+// ============================================================================
 
 export function modelScanCommand(program: Command): void {
   program
@@ -62,350 +544,131 @@ export function modelScanCommand(program: Command): void {
     .option('-v, --verbose', 'Enable verbose output')
     .option('--force', 'Force scan even if model was already scanned')
 
-    .action(async (paths: string[], options) => {
+    .action(async (paths: string[], options: ScanOptions) => {
+      // Validate input
       if (!paths || paths.length === 0) {
-        logger.error(
-          'No paths specified. Please provide at least one model file or directory to scan.',
-        );
-        process.exit(1);
+        logger.error('No paths specified. Provide at least one model file or directory to scan.');
+        process.exitCode = 1;
+        return;
       }
 
-      // Check for deprecated options and warn users
-      const deprecatedOptionsUsed = Object.keys(options).filter((opt) => {
-        const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
-        return DEPRECATED_OPTIONS_MAP[fullOption] !== undefined;
-      });
+      // Warn about deprecated options
+      warnDeprecatedOptions(options as Record<string, unknown>);
 
-      if (deprecatedOptionsUsed.length > 0) {
-        deprecatedOptionsUsed.forEach((opt) => {
-          const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
-          const replacement = DEPRECATED_OPTIONS_MAP[fullOption];
-          if (replacement) {
-            logger.warn(
-              `⚠️  Warning: The '${fullOption}' option is deprecated. Please use '${replacement}' instead.`,
-            );
-          } else {
-            // Provide specific guidance for common cases
-            if (fullOption === '--jfrog-api-token') {
-              logger.warn(
-                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_API_TOKEN environment variable instead.`,
-              );
-            } else if (fullOption === '--jfrog-access-token') {
-              logger.warn(
-                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_ACCESS_TOKEN environment variable instead.`,
-              );
-            } else if (fullOption === '--registry-uri') {
-              logger.warn(
-                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_URL or MLFLOW_TRACKING_URI environment variable instead.`,
-              );
-            } else {
-              logger.warn(
-                `⚠️  Warning: The '${fullOption}' option is deprecated and has been removed. It may be handled automatically or via environment variables. See documentation for details.`,
-              );
-            }
-          }
-        });
-      }
-
-      // Check if modelaudit is installed
-      const isModelAuditInstalled = await checkModelAuditInstalled();
-      if (!isModelAuditInstalled) {
+      // Check modelaudit installation
+      const { installed, version: currentScannerVersion } = await checkModelAuditInstalled();
+      if (!installed) {
         logger.error('ModelAudit is not installed.');
         logger.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
         logger.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
 
-      // Check for modelaudit updates
+      // Check for updates
       await checkModelAuditUpdates();
+      if (currentScannerVersion) {
+        logger.debug(`Using modelaudit version: ${currentScannerVersion}`);
+      }
 
-      // When saving to database (default), always use JSON format internally
-      // Note: --no-write flag sets options.write to false
+      // Determine if we should save to database
       const saveToDatabase = options.write === undefined || options.write === true;
 
-      // Check for duplicate scans (HuggingFace models only, before download)
-      // Only check if saving to database and not forcing
-      if (saveToDatabase && !options.force && paths.length === 1) {
-        const modelPath = paths[0];
-        if (isHuggingFaceModel(modelPath)) {
-          try {
-            const metadata = await getHuggingFaceMetadata(modelPath);
-            if (metadata) {
-              const parsed = parseHuggingFaceModel(modelPath);
-              const modelId = parsed ? `${parsed.owner}/${parsed.repo}` : modelPath;
-
-              // Check if already scanned with this revision
-              const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
-              if (existing) {
-                logger.info(chalk.yellow('✓ Model already scanned'));
-                logger.info(`  Model: ${modelId}`);
-                logger.info(`  Revision: ${metadata.sha}`);
-                logger.info(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
-                logger.info(`  Scan ID: ${existing.id}`);
-                logger.info(
-                  `\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`,
-                );
-                logger.info(chalk.green(`  promptfoo view ${existing.id}`));
-                process.exitCode = 0;
-                return;
-              }
-            }
-          } catch (error) {
-            logger.debug(`Failed to check for existing scan: ${error}`);
-            // Continue with scan if metadata fetch fails
-          }
+      // Check for existing scan (skip or get audit to update)
+      let existingAuditToUpdate: ModelAudit | null = null;
+      if (saveToDatabase) {
+        const { shouldSkip, existingAudit } = await checkExistingScan(
+          paths,
+          options,
+          currentScannerVersion,
+        );
+        if (shouldSkip) {
+          process.exitCode = 0;
+          return;
         }
+        existingAuditToUpdate = existingAudit;
       }
-      const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
 
-      // Prepare options for CLI parser, excluding output when saving to database
-      // Convert string values from Commander to expected types
+      // Parse CLI arguments
+      const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
       const cliOptions = {
         ...options,
         format: outputFormat,
         output: options.output && !saveToDatabase ? options.output : undefined,
         timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
-        stream: options.stream,
       };
 
-      // Use centralized CLI argument parser with error handling
       let args: string[];
       try {
         const result = parseModelAuditArgs(paths, cliOptions);
         args = result.args;
-
-        // Optional: Handle any unsupported options (though shouldn't occur with our CLI)
         if (result.unsupportedOptions.length > 0) {
           logger.warn(`Unsupported options detected: ${result.unsupportedOptions.join(', ')}`);
         }
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid model audit options provided:');
-          error.errors.forEach((err) => {
+          for (const err of error.errors) {
             logger.error(`  - ${err.path.join('.')}: ${err.message}`);
-          });
-          process.exit(1);
+          }
+          process.exitCode = 1;
+          return;
         }
         throw error;
       }
 
       logger.info(`Running model scan on: ${paths.join(', ')}`);
 
-      // Set up environment for delegation
+      // Set up environment
       const delegationEnv = {
         ...process.env,
-        PROMPTFOO_DELEGATED: 'true', // Signal to modelaudit that it's being delegated
+        PROMPTFOO_DELEGATED: 'true',
       };
 
-      if (saveToDatabase) {
-        // When saving to database, capture output
-        let stdout = '';
-        let stderr = '';
-
-        const modelAudit = spawn('modelaudit', args, { env: delegationEnv });
-
-        modelAudit.stdout?.on('data', (data) => {
-          stdout += data.toString();
-          // Show human-readable output to user unless format is explicitly JSON
-          if (options.format !== 'json' && !options.output) {
-            // Parse JSON and display summary
-            try {
-              JSON.parse(stdout);
-              // Don't display the raw JSON, we'll show a summary at the end
-            } catch {
-              // If we can't parse it yet, just accumulate
-            }
-          } else if (options.format === 'json' && !options.output) {
-            // If user explicitly requested JSON format, show it
-            process.stdout.write(data);
-          }
-        });
-
-        modelAudit.stderr?.on('data', (data) => {
-          stderr += data.toString();
-          if (options.verbose) {
-            process.stderr.write(data);
-          }
-        });
-
-        modelAudit.on('error', (error) => {
-          logger.error(`Failed to start modelaudit: ${error.message}`);
-          logger.info('Make sure modelaudit is installed and available in your PATH.');
-          logger.info('Install it using: pip install modelaudit');
-          process.exit(1);
-        });
-
-        modelAudit.on('close', async (code) => {
-          if (code !== null && code !== 0 && code !== 1) {
-            logger.error(`Model scan process exited with code ${code}`);
-            if (stderr) {
-              logger.error(`Error output: ${stderr}`);
-            }
-            process.exit(code);
-          }
-
-          // Parse JSON output and save to database
-          try {
-            const jsonOutput = stdout.trim();
-            if (!jsonOutput) {
-              logger.error('No output received from model scan');
-              process.exit(1);
-            }
-
-            const results: ModelAuditScanResults = JSON.parse(jsonOutput);
-
-            // Fetch revision tracking info if HuggingFace model
-            let revisionInfo: {
-              modelId?: string;
-              revisionSha?: string;
-              contentHash?: string;
-              modelSource?: string;
-              sourceLastModified?: number;
-            } = {};
-
-            if (paths.length === 1) {
-              const modelPath = paths[0];
-              if (isHuggingFaceModel(modelPath)) {
-                try {
-                  const metadata = await getHuggingFaceMetadata(modelPath);
-                  if (metadata) {
-                    revisionInfo = {
-                      modelId: metadata.modelId,
-                      revisionSha: metadata.sha,
-                      modelSource: 'huggingface',
-                      sourceLastModified: new Date(metadata.lastModified).getTime(),
-                    };
-                  }
-                } catch (error) {
-                  logger.debug(`Failed to fetch revision info: ${error}`);
-                }
+      try {
+        if (saveToDatabase) {
+          // Capture output for database storage
+          const spawnResult = await spawnModelAudit(args, {
+            captureOutput: true,
+            env: delegationEnv,
+            onStdout: (data) => {
+              // Show raw JSON if user explicitly requested it
+              if (options.format === 'json' && !options.output) {
+                process.stdout.write(data);
               }
-
-              // Extract content_hash from modelaudit output if available
-              // modelaudit generates content hash during scan for deduplication
-              if (results.content_hash) {
-                logger.debug(`Using content_hash from modelaudit output: ${results.content_hash}`);
-                revisionInfo.contentHash = results.content_hash;
+            },
+            onStderr: (data) => {
+              if (options.verbose) {
+                process.stderr.write(data);
               }
-            }
+            },
+          });
 
-            // Create audit record in database
-            const audit = await ModelAudit.create({
-              name: options.name || `Model scan ${new Date().toISOString()}`,
-              author: getAuthor() || undefined,
-              modelPath: paths.join(', '),
-              results,
-              metadata: {
-                paths,
-                options: {
-                  blacklist: options.blacklist,
-                  timeout: cliOptions.timeout,
-                  maxSize: options.maxSize,
-                  verbose: options.verbose,
-                  sbom: options.sbom,
-                  strict: options.strict,
-                  dryRun: options.dryRun,
-                  cache: options.cache,
-                  quiet: options.quiet,
-                  progress: options.progress,
-                  stream: options.stream,
-                },
-              },
-              // Revision tracking
-              ...revisionInfo,
-            });
+          process.exitCode = await processScanResults(
+            spawnResult,
+            paths,
+            options,
+            currentScannerVersion,
+            existingAuditToUpdate,
+          );
+        } else {
+          // Pass through to terminal (inherited stdio)
+          const spawnResult = await spawnModelAudit(args, {
+            captureOutput: false,
+            env: delegationEnv,
+          });
 
-            // Display summary to user (unless they requested JSON format)
-            if (options.format !== 'json') {
-              logger.info('\n' + chalk.bold('Model Audit Summary'));
-              logger.info('=' + '='.repeat(50));
-
-              if (results.has_errors || (results.failed_checks ?? 0) > 0) {
-                logger.info(chalk.yellow(`⚠  Found ${results.failed_checks || 0} issues`));
-
-                // Show issues grouped by severity
-                if (results.issues && results.issues.length > 0) {
-                  const issuesBySeverity = results.issues.reduce(
-                    (acc, issue) => {
-                      const severity = issue.severity || 'info';
-                      if (!acc[severity]) {
-                        acc[severity] = [];
-                      }
-                      acc[severity].push(issue);
-                      return acc;
-                    },
-                    {} as Record<string, typeof results.issues>,
-                  );
-
-                  ['critical', 'error', 'warning', 'info'].forEach((severity) => {
-                    const severityIssues = issuesBySeverity[severity];
-                    if (severityIssues && severityIssues.length > 0) {
-                      const color =
-                        severity === 'critical' || severity === 'error'
-                          ? chalk.red
-                          : severity === 'warning'
-                            ? chalk.yellow
-                            : chalk.blue;
-                      logger.info(
-                        `\n${color.bold(severity.toUpperCase())} (${severityIssues.length}):`,
-                      );
-                      severityIssues.slice(0, 5).forEach((issue) => {
-                        logger.info(`  • ${issue.message}`);
-                        if (issue.location) {
-                          logger.info(`    ${chalk.gray(issue.location)}`);
-                        }
-                      });
-                      if (severityIssues.length > 5) {
-                        logger.info(`  ${chalk.gray(`... and ${severityIssues.length - 5} more`)}`);
-                      }
-                    }
-                  });
-                }
-              } else {
-                logger.info(
-                  chalk.green(`✓ No issues found. ${results.passed_checks || 0} checks passed.`),
-                );
-              }
-
-              logger.info(
-                `\nScanned ${results.files_scanned ?? 0} files (${((results.bytes_scanned ?? 0) / 1024 / 1024).toFixed(2)} MB)`,
-              );
-              logger.info(`Duration: ${((results.duration ?? 0) / 1000).toFixed(2)} seconds`);
-              logger.info(chalk.green(`\n✓ Results saved to database with ID: ${audit.id}`));
-            }
-
-            // Save to file if requested
-            if (options.output) {
-              const fs = await import('fs');
-              fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
-              logger.info(`Results also saved to ${options.output}`);
-            }
-
-            process.exit(code || 0);
-          } catch (error) {
-            logger.error(`Failed to parse or save scan results: ${error}`);
-            if (options.verbose) {
-              logger.error(`Raw output: ${stdout}`);
-            }
-            process.exit(1);
+          if (spawnResult.code !== null && spawnResult.code !== 0 && spawnResult.code !== 1) {
+            logger.error(`Model scan process exited with code ${spawnResult.code}`);
           }
-        });
-      } else {
-        const modelAudit = spawn('modelaudit', args, { stdio: 'inherit', env: delegationEnv });
-
-        modelAudit.on('error', (error) => {
-          logger.error(`Failed to start modelaudit: ${error.message}`);
-          logger.info('Make sure modelaudit is installed and available in your PATH.');
-          logger.info('Install it using: pip install modelaudit');
-          process.exit(1);
-        });
-
-        modelAudit.on('close', (code) => {
-          if (code !== null && code !== 0 && code !== 1) {
-            logger.error(`Model scan process exited with code ${code}`);
-          }
-          process.exit(code || 0);
-        });
+          process.exitCode = spawnResult.code || 0;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(`Failed to start modelaudit: ${message}`);
+        logger.info('Make sure modelaudit is installed and available in your PATH.');
+        logger.info('Install it using: pip install modelaudit');
+        process.exitCode = 1;
       }
     });
 }

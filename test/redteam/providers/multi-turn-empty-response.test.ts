@@ -1,3 +1,4 @@
+import { MockedFunction, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CrescendoProvider } from '../../../src/redteam/providers/crescendo/index';
 import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
 import { CustomProvider } from '../../../src/redteam/providers/custom/index';
@@ -6,20 +7,20 @@ import { getTargetResponse } from '../../../src/redteam/providers/shared';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiFunction,
   AtomicTestCase,
-  ProviderResponse,
 } from '../../../src/types/index';
 
 // Mock the shared getTargetResponse to test provider-specific logic
-jest.mock('../../../src/redteam/providers/shared', () => {
-  const actual = jest.requireActual('../../../src/redteam/providers/shared');
+vi.mock('../../../src/redteam/providers/shared', async () => {
+  const actual = await vi.importActual('../../../src/redteam/providers/shared');
   return {
     ...actual,
-    getTargetResponse: jest.fn(),
+    getTargetResponse: vi.fn(),
     redteamProviderManager: {
-      getProvider: jest.fn().mockResolvedValue({
+      getProvider: vi.fn().mockResolvedValue({
         id: () => 'mock-redteam-provider',
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: { generatedQuestion: 'mocked question', rationale: 'mocked rationale' },
         }),
         delay: 0,
@@ -28,12 +29,13 @@ jest.mock('../../../src/redteam/providers/shared', () => {
   };
 });
 
-const mockGetTargetResponse = getTargetResponse as jest.MockedFunction<typeof getTargetResponse>;
+const mockGetTargetResponse = getTargetResponse as MockedFunction<typeof getTargetResponse>;
 
 describe('Multi-turn strategies empty response handling', () => {
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
   const createMockTargetProvider = (): ApiProvider => ({
     id: () => 'mock-target',
-    callApi: jest.fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>(),
+    callApi: vi.fn() as CallApiFunction,
   });
 
   const createTestContext = (targetProvider: ApiProvider): CallApiContextParams => ({
@@ -47,7 +49,16 @@ describe('Multi-turn strategies empty response handling', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    process.env.OPENAI_API_KEY = 'test-api-key';
+  });
+
+  afterEach(() => {
+    if (originalOpenAiApiKey) {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    } else {
+      delete process.env.OPENAI_API_KEY;
+    }
   });
 
   describe('Crescendo strategy', () => {

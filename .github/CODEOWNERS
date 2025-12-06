@@ -1,0 +1,101 @@
+# CODEOWNERS - Automatically request reviews from code owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Rules:
+# - Last matching pattern takes precedence (most specific patterns at bottom)
+# - Team ownership provides coverage and knowledge sharing
+# - Individual ownership for specialized domains with clear expertise
+#
+# Generated from git history analysis (scripts/analyze-ownership.ts)
+# Last updated: 2025-12
+
+# ============================================================================
+# DEFAULT
+# ============================================================================
+* @promptfoo/engineering
+
+# ============================================================================
+# SOURCE - SHARED OWNERSHIP (multiple contributors >15%)
+# ============================================================================
+
+/src/app/        @mldangelo @will-holley @faizanminhas   # 114k lines - Web UI
+/src/server/     @mldangelo @will-holley @faizanminhas   # 4k lines - API server
+/src/models/     @mldangelo @will-holley @faizanminhas   # 2k lines - Data models
+/src/redteam/    @mldangelo @MrFlounder @will-holley     # 32k lines - Red team
+/src/commands/   @mldangelo @MrFlounder                  # 9k lines - CLI
+/src/types/      @mldangelo @danenania @faizanminhas # 2k lines - Type definitions
+
+# ============================================================================
+# SOURCE - SPECIALIZED OWNERSHIP (clear primary owner)
+# ============================================================================
+
+/src/codeScan/   @danenania                          # 2.5k lines - Dane (91%)
+/src/validators/ @faizanminhas @mldangelo                # 1.5k lines - Faizan (55%)
+
+# ============================================================================
+# PROVIDERS - SPECIALIZED OWNERSHIP
+# ============================================================================
+
+/src/providers/openai/     @mldangelo                    # 8.5k lines - OpenAI provider
+/src/providers/anthropic/  @mldangelo                    # 1k lines - Anthropic provider
+/src/providers/azure/      @MrFlounder                   # 4k lines - Azure provider
+/src/providers/http.ts     @MrFlounder @faizanminhas     # 2k lines - HTTP provider
+
+# ============================================================================
+# TESTS (mirror source ownership)
+# ============================================================================
+
+/test/codeScans/   @danenania
+/test/redteam/     @mldangelo @MrFlounder @will-holley
+/test/validators/  @faizanminhas @mldangelo
+/test/providers/   @MrFlounder @mldangelo                # Provider tests
+
+# ============================================================================
+# DOCUMENTATION
+# ============================================================================
+
+/site/                      @typpo @mldangelo            # Documentation site
+/CONTRIBUTING.md            @mldangelo                   # Contributing guide
+/site/docs/contributing.md  @mldangelo                   # Contributing docs
+
+# ============================================================================
+# DEVELOPER PRODUCTIVITY (VP Eng: Justin)
+# ============================================================================
+
+/.github/                      @JustinBeckwith           # CI/CD workflows
+/scripts/                      @JustinBeckwith           # Build & dev scripts
+/biome.json                    @JustinBeckwith           # Linting config
+/tsconfig.json                 @JustinBeckwith           # TypeScript config
+/tsdown.config.ts              @JustinBeckwith           # Build config
+/vitest.config.ts              @JustinBeckwith           # Test config
+/vitest.integration.config.ts  @JustinBeckwith           # Integration test config
+/knip.json                     @faizanminhas           # Dead code detection
+/renovate.json                 @JustinBeckwith           # Dependency updates
+/package.json                  @JustinBeckwith           # Dependencies & scripts
+/release-please-config.json    @JustinBeckwith           # Release automation
+
+# ============================================================================
+# DATABASE
+# ============================================================================
+
+/drizzle/ @mldangelo @will-holley @faizanminhas          # Database migrations (mirrors models)
+
+# ============================================================================
+# MODEL AUDIT (specialized domain - overrides broader patterns)
+# ============================================================================
+
+/src/commands/modelScan.ts           @yash2998chhabria   # Model scan CLI command
+/src/server/routes/modelAudit.ts     @yash2998chhabria   # Model audit API route
+/src/util/modelAuditCliParser.ts     @yash2998chhabria   # CLI parser utility
+/src/types/modelAudit.ts             @yash2998chhabria   # Model audit types
+/src/app/src/pages/model-audit/      @yash2998chhabria   # Model audit UI
+/test/commands/modelScan.test.ts     @yash2998chhabria   # CLI tests
+/test/utils/modelAuditCliParser.test.ts @yash2998chhabria # Parser tests
+
+# ============================================================================
+# AI AGENT INSTRUCTIONS (override all other patterns)
+# ============================================================================
+# These patterns match files anywhere in the repo and must come last
+
+AGENTS.md  @addelong @mldangelo                          # AI agent instructions
+CLAUDE.md  @addelong @mldangelo                          # Claude Code instructions

@@ -246,7 +246,7 @@ describe('FoundationModelConfiguration', () => {
 
   it('should handle transition from older model versions to newer ones', () => {
     const initialTarget: ProviderOptions = {
-      id: 'google:gemini-1.5-pro',
+      id: 'google:gemini-2.5-pro',
       config: {},
     };
 
@@ -259,7 +259,7 @@ describe('FoundationModelConfiguration', () => {
     );
 
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
-    expect(modelIdInput).toHaveValue('google:gemini-1.5-pro');
+    expect(modelIdInput).toHaveValue('google:gemini-2.5-pro');
   });
 
   it('should handle undefined selectedTarget.id without errors', () => {

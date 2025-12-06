@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "tsc": "tsc",
-    "build": "tsc -b && vite build",
+    "build": "concurrently -g \"tsc -b\" \"vite build\"",
     "build:watch": "tsc -b --watch",
     "lint": "cd ../.. && npx @biomejs/biome lint src/app",
     "preview": "vite preview",
@@ -29,7 +29,6 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
-    "@types/fuzzysearch": "^1.0.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.10.1",
     "@types/prismjs": "^1.26.5",
@@ -42,14 +41,13 @@
     "csv-parse": "^6.1.0",
     "csv-stringify": "^6.6.0",
     "diff": "^8.0.2",
-    "fuzzysearch": "^1.0.3",
     "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.1",
     "jsdom": "^26.1.0",
     "posthog-js": "^1.298.0",
     "prismjs": "^1.30.0",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
     "react-error-boundary": "^6.0.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.9.6",
@@ -63,10 +61,5 @@
     "vite-plugin-node-polyfills": "^0.24.0",
     "vitest": "^4.0.14",
     "zustand": "^5.0.8"
-  },
-  "dependencies": {
-    "redent": "^4.0.0",
-    "reselect": "^5.1.1",
-    "set-cookie-parser": "^2.7.2"
   }
 }

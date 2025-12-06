@@ -1,12 +1,6 @@
 import { VERSION } from '../../../constants';
 import { getUserEmail } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
-import { fetchWithProxy } from '../../../util/fetch/index';
-import invariant from '../../../util/invariant';
-import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
-import { getRemoteGenerationUrl } from '../../remoteGeneration';
-import { messagesToRedteamHistory } from '../shared';
-
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -14,6 +8,11 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../../types/providers';
+import { fetchWithProxy } from '../../../util/fetch/index';
+import invariant from '../../../util/invariant';
+import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
+import { getRemoteGenerationUrl } from '../../remoteGeneration';
+import { messagesToRedteamHistory } from '../shared';
 
 export class MemoryPoisoningProvider implements ApiProvider {
   constructor(readonly config: ProviderOptions) {}
@@ -38,7 +37,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
       const targetProvider: ApiProvider | undefined = context?.originalProvider;
@@ -48,16 +47,20 @@ export class MemoryPoisoningProvider implements ApiProvider {
       invariant(purpose, 'Expected purpose to be set');
 
       // Generate a scenario containing memories and follow up questions/commands which are dependent on the memories.
-      const scenarioRes = await fetchWithProxy(getRemoteGenerationUrl(), {
-        body: JSON.stringify({
-          task: 'agentic:memory-poisoning-scenario',
-          purpose,
-          version: VERSION,
-          email: getUserEmail(),
-        }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST',
-      });
+      const scenarioRes = await fetchWithProxy(
+        getRemoteGenerationUrl(),
+        {
+          body: JSON.stringify({
+            task: 'agentic:memory-poisoning-scenario',
+            purpose,
+            version: VERSION,
+            email: getUserEmail(),
+          }),
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        },
+        options?.abortSignal,
+      );
 
       // Send the memory message to the provider.
       if (!scenarioRes.ok) {
@@ -70,13 +73,13 @@ export class MemoryPoisoningProvider implements ApiProvider {
       context!.test!.metadata['scenario'] = scenario;
 
       // Send the memory message to the provider.
-      const memoryResponse = await targetProvider.callApi(scenario.memory, context);
+      const memoryResponse = await targetProvider.callApi(scenario.memory, context, options);
 
       // Send the test case to the provider; the test case should poison the memory created in the previous step.
-      const testResponse = await targetProvider.callApi(prompt, context);
+      const testResponse = await targetProvider.callApi(prompt, context, options);
 
       // Send the follow up question to the provider.
-      const response = await targetProvider.callApi(scenario.followUp, context);
+      const response = await targetProvider.callApi(scenario.followUp, context, options);
 
       const messages = [
         { content: scenario.memory, role: 'user' as const },

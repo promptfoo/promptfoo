@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   assertNotNull,
   createToolResponse,
@@ -240,15 +241,15 @@ describe('MCP Utility Functions', () => {
 
   describe('debounce', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('should debounce function calls', () => {
-      const mockFn = jest.fn();
+      const mockFn = vi.fn();
       const debouncedFn = debounce(mockFn, 100);
 
       debouncedFn('arg1');
@@ -257,25 +258,25 @@ describe('MCP Utility Functions', () => {
 
       expect(mockFn).not.toHaveBeenCalled();
 
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
 
       expect(mockFn).toHaveBeenCalledTimes(1);
       expect(mockFn).toHaveBeenCalledWith('arg3');
     });
 
     it('should reset timer on subsequent calls', () => {
-      const mockFn = jest.fn();
+      const mockFn = vi.fn();
       const debouncedFn = debounce(mockFn, 100);
 
       debouncedFn('arg1');
-      jest.advanceTimersByTime(50);
+      vi.advanceTimersByTime(50);
 
       debouncedFn('arg2');
-      jest.advanceTimersByTime(50);
+      vi.advanceTimersByTime(50);
 
       expect(mockFn).not.toHaveBeenCalled();
 
-      jest.advanceTimersByTime(50);
+      vi.advanceTimersByTime(50);
 
       expect(mockFn).toHaveBeenCalledTimes(1);
       expect(mockFn).toHaveBeenCalledWith('arg2');
@@ -284,7 +285,7 @@ describe('MCP Utility Functions', () => {
 
   describe('retry', () => {
     it('should succeed on first attempt', async () => {
-      const operation = jest.fn().mockResolvedValue('success');
+      const operation = vi.fn().mockResolvedValue('success');
       const result = await retry(operation);
 
       expect(result).toBe('success');
@@ -292,7 +293,7 @@ describe('MCP Utility Functions', () => {
     });
 
     it('should retry on failure and eventually succeed', async () => {
-      const operation = jest
+      const operation = vi
         .fn()
         .mockRejectedValueOnce(new Error('fail1'))
         .mockRejectedValueOnce(new Error('fail2'))
@@ -305,7 +306,7 @@ describe('MCP Utility Functions', () => {
     });
 
     it('should throw last error after max attempts', async () => {
-      const operation = jest.fn().mockRejectedValue(new Error('persistent failure'));
+      const operation = vi.fn().mockRejectedValue(new Error('persistent failure'));
 
       await expect(retry(operation, { maxAttempts: 2, baseDelay: 10 })).rejects.toThrow(
         'persistent failure',
@@ -315,7 +316,7 @@ describe('MCP Utility Functions', () => {
     });
 
     it('should use exponential backoff', async () => {
-      const operation = jest
+      const operation = vi
         .fn()
         .mockRejectedValueOnce(new Error('fail1'))
         .mockRejectedValueOnce(new Error('fail2'))
@@ -324,13 +325,15 @@ describe('MCP Utility Functions', () => {
       const startTime = Date.now();
 
       // Mock Date.now to control timing
-      const mockDateNow = jest.spyOn(Date, 'now');
+      const mockDateNow = vi.spyOn(Date, 'now');
       let timeOffset = 0;
-      mockDateNow.mockImplementation(() => startTime + timeOffset);
+      mockDateNow.mockImplementation(function () {
+        return startTime + timeOffset;
+      });
 
       // Mock setTimeout to simulate delays
-      const mockSetTimeout = jest.spyOn(global, 'setTimeout');
-      mockSetTimeout.mockImplementation((callback, delay) => {
+      const mockSetTimeout = vi.spyOn(global, 'setTimeout');
+      mockSetTimeout.mockImplementation(function (callback, delay) {
         timeOffset += delay ?? 0;
         callback();
         return {} as any;
@@ -346,13 +349,13 @@ describe('MCP Utility Functions', () => {
     });
 
     it('should respect max delay', async () => {
-      const operation = jest
+      const operation = vi
         .fn()
         .mockRejectedValueOnce(new Error('fail1'))
         .mockResolvedValue('success');
 
-      const mockSetTimeout = jest.spyOn(global, 'setTimeout');
-      mockSetTimeout.mockImplementation((callback) => {
+      const mockSetTimeout = vi.spyOn(global, 'setTimeout');
+      mockSetTimeout.mockImplementation(function (callback) {
         callback();
         return {} as any;
       });

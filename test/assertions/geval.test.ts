@@ -1,15 +1,16 @@
+import { vi } from 'vitest';
 import { handleGEval } from '../../src/assertions/geval';
 import { matchesGEval } from '../../src/matchers';
 
-jest.mock('../../src/matchers');
+vi.mock('../../src/matchers');
 
 describe('handleGEval', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should handle string renderedValue', async () => {
-    const mockMatchesGEval = jest.mocked(matchesGEval);
+    const mockMatchesGEval = vi.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValue({
       pass: true,
       score: 0.8,
@@ -79,7 +80,7 @@ describe('handleGEval', () => {
   });
 
   it('should handle array renderedValue', async () => {
-    const mockMatchesGEval = jest.mocked(matchesGEval);
+    const mockMatchesGEval = vi.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValueOnce({
       pass: true,
       score: 0.8,
@@ -145,7 +146,7 @@ describe('handleGEval', () => {
   });
 
   it('should use default threshold if not provided', async () => {
-    const mockMatchesGEval = jest.mocked(matchesGEval);
+    const mockMatchesGEval = vi.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValue({
       pass: true,
       score: 0.8,
@@ -247,7 +248,7 @@ describe('handleGEval', () => {
   });
 
   it('should handle string renderedValue with undefined prompt', async () => {
-    const mockMatchesGEval = jest.mocked(matchesGEval);
+    const mockMatchesGEval = vi.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValue({
       pass: true,
       score: 0.8,
@@ -317,7 +318,7 @@ describe('handleGEval', () => {
   });
 
   it('should handle array renderedValue with undefined prompt', async () => {
-    const mockMatchesGEval = jest.mocked(matchesGEval);
+    const mockMatchesGEval = vi.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValueOnce({
       pass: true,
       score: 0.8,
