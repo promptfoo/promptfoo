@@ -1,7 +1,6 @@
 import { getDefaultPort } from '../constants';
 import logger from '../logger';
 import { startServer } from '../server/server';
-import telemetry from '../telemetry';
 import { setupEnv } from '../util/index';
 import { setConfigDirectoryPath } from '../util/config/manage';
 import { BrowserBehavior } from '../util/server';
@@ -34,9 +33,6 @@ export function viewCommand(program: Command) {
         } & Command,
       ) => {
         setupEnv(cmdObj.envPath);
-        telemetry.record('command_used', {
-          name: 'view',
-        });
 
         if (cmdObj.filterDescription) {
           logger.warn(

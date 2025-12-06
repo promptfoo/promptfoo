@@ -3,7 +3,6 @@ import { Command } from 'commander';
 import { getDefaultPort } from '../../../src/constants';
 import { redteamSetupCommand } from '../../../src/redteam/commands/setup';
 import { startServer } from '../../../src/server/server';
-import telemetry from '../../../src/telemetry';
 import { setupEnv } from '../../../src/util/index';
 import { setConfigDirectoryPath } from '../../../src/util/config/manage';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../../src/util/server';
@@ -22,11 +21,6 @@ vi.mock('../../../src/util/config/manage', async (importOriginal) => {
     setConfigDirectoryPath: vi.fn(),
   };
 });
-vi.mock('../../../src/telemetry', () => ({
-  default: {
-    record: vi.fn(),
-  },
-}));
 
 describe('redteamSetupCommand', () => {
   let program: Command;
@@ -52,9 +46,6 @@ describe('redteamSetupCommand', () => {
     await program.parseAsync(['node', 'test', 'setup', '--port', '3000']);
 
     expect(setupEnv).toHaveBeenCalledWith(undefined);
-    expect(telemetry.record).toHaveBeenCalledWith('command_used', {
-      name: 'redteam setup',
-    });
     expect(startServer).toHaveBeenCalledWith('3000', BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
   });
 
