@@ -12,8 +12,25 @@ vi.mock('../../src/cliState', () => ({
   default: { basePath: '/test/basePath' },
   basePath: '/test/basePath',
 }));
-vi.mock('../../src/esm', () => ({
+vi.mock('../../src/esm', async (importOriginal) => ({
+  ...(await importOriginal()),
   importModule: vi.fn(),
+}));
+// Mock @opencode-ai/sdk to fail on direct import, forcing fallback to smart resolution
+vi.mock('@opencode-ai/sdk', () => {
+  throw new Error('Direct import blocked - use smart ESM resolution');
+});
+// Mock node:module createRequire for ESM package resolution
+vi.mock('node:module', async (importOriginal) => ({
+  ...(await importOriginal()),
+  createRequire: vi.fn(() => ({
+    resolve: vi.fn((pkg: string) => {
+      if (pkg === '@opencode-ai/sdk/package.json') {
+        return '/test/basePath/node_modules/@opencode-ai/sdk/package.json';
+      }
+      throw new Error(`Cannot find module '${pkg}'`);
+    }),
+  })),
 }));
 
 // Mock OpenCode SDK client
@@ -130,6 +147,21 @@ describe('OpenCodeSDKProvider', () => {
     } as fs.Stats);
     rmSyncSpy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {});
     _readdirSyncSpy = vi.spyOn(fs, 'readdirSync').mockReturnValue([]);
+    // Mock readFileSync to return package.json for SDK resolution
+    vi.spyOn(fs, 'readFileSync').mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+      if (String(filePath).includes('@opencode-ai/sdk/package.json')) {
+        return JSON.stringify({
+          name: '@opencode-ai/sdk',
+          exports: {
+            '.': {
+              import: './dist/index.js',
+              types: './dist/index.d.ts',
+            },
+          },
+        });
+      }
+      return '';
+    });
   });
 
   afterEach(async () => {

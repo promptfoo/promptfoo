@@ -1,14 +1,14 @@
-import crypto from 'crypto';
+import { createRequire } from 'node:module';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
+import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 
 import type {
   ApiProvider,
@@ -228,32 +228,145 @@ function isDebugMode(): boolean {
 }
 
 /**
- * Helper to load the OpenCode SDK ESM module
- * Uses importModule utility which handles ESM loading in CommonJS environments
+ * Maximum number of sessions to keep in memory to prevent unbounded growth
  */
-async function loadOpenCodeSDK(): Promise<any> {
+const MAX_SESSIONS = 100;
+
+/**
+ * OpenCode SDK client interface
+ */
+interface OpenCodeClient {
+  session: {
+    create: (options: {
+      body: { title: string };
+    }) => Promise<{ data?: { id: string }; id?: string }>;
+    prompt: (options: {
+      path: { id: string };
+      body: Record<string, unknown>;
+      query?: { directory?: string };
+    }) => Promise<{
+      data?: {
+        info?: {
+          tokens?: { input?: number; output?: number };
+          cost?: number;
+        };
+        parts?: Array<{ type: string; text?: string }>;
+      };
+    }>;
+    delete: (options: { path: { id: string } }) => Promise<void>;
+  };
+}
+
+/**
+ * OpenCode SDK server interface
+ */
+interface OpenCodeServer {
+  url: string;
+  close(): void;
+}
+
+/**
+ * OpenCode SDK module interface
+ */
+interface OpenCodeSDKModule {
+  createOpencode: (options: {
+    hostname?: string;
+    port?: number;
+    timeout?: number;
+    config?: Record<string, unknown>;
+    env?: Record<string, string>;
+  }) => Promise<{ client: OpenCodeClient; server: OpenCodeServer }>;
+  createOpencodeClient: (options: { baseUrl: string }) => OpenCodeClient;
+}
+
+/**
+ * Resolve ESM-only package entry point by reading package.json exports
+ * Handles packages that only have "import" condition (no "require" condition)
+ *
+ * @param packageName - The package name (e.g., '@opencode-ai/sdk')
+ * @param basePath - Base path for resolution
+ * @returns Absolute path to the ESM entry point
+ */
+function resolveEsmPackage(packageName: string, basePath: string): string {
+  const require = createRequire(path.join(basePath, 'package.json'));
+
+  // Try to find package.json using require.resolve with package.json subpath
+  // This handles monorepos, workspaces, pnpm, etc.
+  let packageJsonPath: string;
   try {
-    // Resolve the package path, then use importModule to load it
-    // The SDK is ESM-only, so we need the importModule utility which uses dynamic-import.cjs
+    packageJsonPath = require.resolve(`${packageName}/package.json`);
+  } catch {
+    // Fallback: construct direct path for simple node_modules structure
+    packageJsonPath = path.join(
+      basePath,
+      'node_modules',
+      ...packageName.split('/'),
+      'package.json',
+    );
+    if (!fs.existsSync(packageJsonPath)) {
+      throw new Error(`Cannot find ${packageName}/package.json`);
+    }
+  }
+
+  const packageDir = path.dirname(packageJsonPath);
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+
+  // Extract ESM entry point from exports field
+  // Handle: exports["."].import, exports["."], or exports (string)
+  let esmEntry: string | undefined;
+
+  if (packageJson.exports) {
+    const mainExport = packageJson.exports['.'] || packageJson.exports;
+    if (typeof mainExport === 'string') {
+      esmEntry = mainExport;
+    } else if (typeof mainExport === 'object') {
+      // Prefer "import" condition for ESM
+      esmEntry = mainExport.import || mainExport.default;
+    }
+  }
+
+  // Fallback to module or main field
+  if (!esmEntry) {
+    esmEntry = packageJson.module || packageJson.main;
+  }
+
+  if (!esmEntry) {
+    throw new Error(`Cannot find ESM entry point in ${packageName}/package.json`);
+  }
+
+  return path.join(packageDir, esmEntry);
+}
+
+/**
+ * Helper to load the OpenCode SDK ESM module
+ *
+ * Uses a two-phase approach:
+ * 1. Try simple dynamic import - works when SDK is in same node_modules tree
+ * 2. Fall back to smart ESM resolution for edge cases (pnpm, global installs, monorepos)
+ */
+async function loadOpenCodeSDK(): Promise<OpenCodeSDKModule> {
+  // Phase 1: Try simple dynamic import (works in most cases)
+  try {
+    logger.debug('Attempting simple dynamic import of @opencode-ai/sdk');
+    return await import('@opencode-ai/sdk');
+  } catch {
+    logger.debug('Simple import failed, falling back to smart ESM resolution');
+  }
+
+  // Phase 2: Smart ESM resolution for edge cases
+  try {
     const basePath =
       cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
 
-    // The package only exports ESM, so we construct the direct path
-    // The SDK is installed in node_modules/@opencode-ai/sdk/dist/index.js
-    const modulePath = path.join(
-      basePath,
-      'node_modules',
-      '@opencode-ai',
-      'sdk',
-      'dist',
-      'index.js',
-    );
+    const modulePath = resolveEsmPackage('@opencode-ai/sdk', basePath);
+    logger.debug(`Resolved OpenCode SDK path: ${modulePath}`);
 
     return await importModule(modulePath);
   } catch (err) {
     logger.error(`Failed to load OpenCode SDK: ${err}`);
-    if ((err as any).stack) {
-      logger.error((err as any).stack);
+    const stack = (err as Error).stack;
+    if (stack) {
+      logger.error(stack);
     }
     throw new Error(
       dedent`The @opencode-ai/sdk package is required but not installed.
@@ -266,59 +379,16 @@ async function loadOpenCodeSDK(): Promise<any> {
   }
 }
 
-/**
- * Get a fingerprint for the working directory to use as a cache key
- */
-const FINGERPRINT_TIMEOUT_MS = 2000;
-async function getWorkingDirFingerprint(workingDir: string): Promise<string> {
-  const dirStat = fs.statSync(workingDir);
-  const dirMtime = dirStat.mtimeMs;
-
-  const startTime = Date.now();
-
-  const getAllFiles = (dir: string, files: string[] = []): string[] => {
-    if (Date.now() - startTime > FINGERPRINT_TIMEOUT_MS) {
-      throw new Error('Working directory fingerprint timed out');
-    }
-
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        getAllFiles(fullPath, files);
-      } else if (entry.isFile()) {
-        files.push(fullPath);
-      }
-    }
-    return files;
-  };
-
-  const allFiles = getAllFiles(workingDir);
-
-  const fileMtimes = allFiles
-    .map((file: string) => {
-      const stat = fs.statSync(file);
-      const relativePath = path.relative(workingDir, file);
-      return `${relativePath}:${stat.mtimeMs}`;
-    })
-    .sort();
-
-  const fingerprintData = `dir:${dirMtime};files:${fileMtimes.join(',')}`;
-  const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
-
-  return fingerprint;
-}
-
 export class OpenCodeSDKProvider implements ApiProvider {
   config: OpenCodeSDKConfig;
   env?: EnvOverrides;
 
   private providerId = 'opencode:sdk';
-  private opencodeModule?: any;
-  private client?: any;
-  private server?: { url: string; close(): void };
+  private opencodeModule?: OpenCodeSDKModule;
+  private client?: OpenCodeClient;
+  private server?: OpenCodeServer;
   private sessions: Map<string, string> = new Map(); // cacheKey -> sessionId
+  private sessionOrder: string[] = []; // Track insertion order for LRU eviction
 
   constructor(
     options: {
@@ -382,6 +452,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       }
     }
     this.sessions.clear();
+    this.sessionOrder = [];
 
     // Close server if we started one
     if (this.server) {
@@ -437,26 +508,25 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   /**
-   * Generate cache key for this request
+   * Add a session to the cache with LRU eviction
    */
-  private generateCacheKey(
-    prompt: string,
-    config: OpenCodeSDKConfig,
-    workingDirFingerprint: string | null,
-  ): string {
-    const keyData = {
-      prompt,
-      provider_id: config.provider_id,
-      model: config.model,
-      tools: this.buildToolsConfig(config),
-      permission: config.permission,
-      agent: config.agent,
-      custom_agent: config.custom_agent,
-      workingDirFingerprint,
-    };
-
-    const hash = crypto.createHash('sha256').update(JSON.stringify(keyData)).digest('hex');
-    return `opencode:sdk:${hash}`;
+  private addSession(cacheKey: string, sessionId: string): void {
+    // Remove oldest sessions if we've hit the limit
+    while (this.sessions.size >= MAX_SESSIONS && this.sessionOrder.length > 0) {
+      const oldestKey = this.sessionOrder.shift();
+      if (oldestKey) {
+        const oldSessionId = this.sessions.get(oldestKey);
+        this.sessions.delete(oldestKey);
+        // Best-effort cleanup of old session
+        if (oldSessionId) {
+          this.client?.session?.delete({ path: { id: oldSessionId } }).catch((err) => {
+            logger.debug(`Failed to delete evicted session ${oldSessionId}: ${err}`);
+          });
+        }
+      }
+    }
+    this.sessions.set(cacheKey, sessionId);
+    this.sessionOrder.push(cacheKey);
   }
 
   async callApi(
@@ -497,47 +567,30 @@ export class OpenCodeSDKProvider implements ApiProvider {
       workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-opencode-sdk-'));
     }
 
-    // Cache handling
-    let shouldCache = isCacheEnabled();
-    let cache: Awaited<ReturnType<typeof getCache>> | undefined;
-    let cacheKey: string | undefined;
+    // Cache handling using shared utilities
+    const cacheKeyData = {
+      prompt,
+      provider_id: config.provider_id,
+      model: config.model,
+      tools: this.buildToolsConfig(config),
+      permission: config.permission,
+      agent: config.agent,
+      custom_agent: config.custom_agent,
+    };
 
-    if (shouldCache) {
-      let workingDirFingerprint: string | null = null;
-      if (config.working_dir && workingDir) {
-        try {
-          // Use resolved absolute path for fingerprinting
-          workingDirFingerprint = await getWorkingDirFingerprint(workingDir);
-        } catch (error) {
-          logger.error(
-            dedent`Error getting working directory fingerprint for cache key - ${workingDir}: ${String(error)}
-
-            Caching is disabled.`,
-          );
-          shouldCache = false;
-        }
-      }
-
-      if (shouldCache) {
-        cache = await getCache();
-        cacheKey = this.generateCacheKey(prompt, config, workingDirFingerprint);
-      }
-    }
-
-    const shouldReadCache = shouldCache && !context?.bustCache;
-    const shouldWriteCache = shouldCache;
+    const cacheResult = await initializeAgenticCache(
+      {
+        cacheKeyPrefix: 'opencode:sdk',
+        workingDir: config.working_dir ? workingDir : undefined,
+        bustCache: context?.bustCache,
+      },
+      cacheKeyData,
+    );
 
     // Check cache
-    if (shouldReadCache && cache && cacheKey) {
-      try {
-        const cachedResponse = await cache.get<string | undefined>(cacheKey);
-        if (cachedResponse) {
-          logger.debug(`Returning cached response for OpenCode SDK (cache key: ${cacheKey})`);
-          return JSON.parse(cachedResponse);
-        }
-      } catch (error) {
-        logger.error(`Error getting cached response: ${String(error)}`);
-      }
+    const cachedResponse = await getCachedResponse(cacheResult, 'OpenCode SDK');
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
     // Check abort signal
@@ -561,23 +614,39 @@ export class OpenCodeSDKProvider implements ApiProvider {
             baseUrl: config.baseUrl,
           });
         } else {
-          // Ensure ~/.opencode/bin is in PATH for the SDK to find the opencode CLI
+          // Build environment for the SDK server process
+          // Include ~/.opencode/bin in PATH for CLI discovery without modifying global process.env
           const homeDir = os.homedir();
           const opencodeBinPath = path.join(homeDir, '.opencode', 'bin');
-          if (!process.env.PATH?.includes(opencodeBinPath)) {
-            process.env.PATH = `${opencodeBinPath}:${process.env.PATH}`;
+          const serverEnv: Record<string, string> = { ...process.env } as Record<string, string>;
+
+          if (!serverEnv.PATH?.includes(opencodeBinPath)) {
+            serverEnv.PATH = `${opencodeBinPath}:${serverEnv.PATH ?? ''}`;
             logger.debug(`Added ${opencodeBinPath} to PATH for OpenCode CLI`);
           }
 
+          // Sync debug mode: enable OpenCode debug logging when promptfoo is in debug mode
+          if (config.log_level === 'debug' || isDebugMode()) {
+            serverEnv.DEBUG = serverEnv.DEBUG || 'opencode:*';
+            logger.debug('[OpenCode SDK] Debug mode enabled, synced from promptfoo log level');
+          }
+
           // Start our own server and create client
-          const serverOptions: any = {
+          const serverOptions: {
+            hostname: string;
+            port: number;
+            timeout: number;
+            config?: Record<string, unknown>;
+            env?: Record<string, string>;
+          } = {
             hostname: config.hostname ?? '127.0.0.1',
             port: config.port ?? 0, // 0 = auto-select port
             timeout: config.timeout ?? 30000,
+            env: serverEnv,
           };
 
           // Build config object for advanced features (MCP, custom agents, permissions, etc.)
-          const serverConfig: any = {};
+          const serverConfig: Record<string, unknown> = {};
 
           // Add MCP server configuration if specified
           if (config.mcp && Object.keys(config.mcp).length > 0) {
@@ -618,12 +687,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
             serverConfig.tools = toolsConfig;
           }
 
-          // Sync debug mode: enable OpenCode debug logging when promptfoo is in debug mode
-          if (config.log_level === 'debug' || isDebugMode()) {
-            process.env.DEBUG = process.env.DEBUG || 'opencode:*';
-            logger.debug('[OpenCode SDK] Debug mode enabled, synced from promptfoo log level');
-          }
-
           // Only add config if we have any settings
           if (Object.keys(serverConfig).length > 0) {
             serverOptions.config = serverConfig;
@@ -641,24 +704,29 @@ export class OpenCodeSDKProvider implements ApiProvider {
       }
       // Get or create session
       let sessionId: string;
+      const sessionCacheKey = cacheResult.cacheKey;
 
       if (config.session_id) {
         // Resume existing session
         sessionId = config.session_id;
-      } else if (config.persist_sessions && cacheKey && this.sessions.has(cacheKey)) {
+      } else if (config.persist_sessions && sessionCacheKey && this.sessions.has(sessionCacheKey)) {
         // Reuse persisted session
-        sessionId = this.sessions.get(cacheKey)!;
+        sessionId = this.sessions.get(sessionCacheKey)!;
       } else {
         // Create new session
         // The SDK session.create() accepts { body: { title } }
         const createResult = await this.client.session.create({
           body: { title: `promptfoo-${Date.now()}` },
         });
-        // Response structure: { id, title, version, time }
-        sessionId = createResult?.data?.id ?? createResult?.id ?? createResult;
+        // Response structure: { data: { id, ... }, id, title, version, time }
+        const extractedId = createResult?.data?.id ?? createResult?.id;
+        if (!extractedId) {
+          throw new Error('Failed to get session ID from OpenCode SDK response');
+        }
+        sessionId = extractedId;
 
-        if (config.persist_sessions && cacheKey) {
-          this.sessions.set(cacheKey, sessionId);
+        if (config.persist_sessions && sessionCacheKey) {
+          this.addSession(sessionCacheKey, sessionId);
         }
       }
 
@@ -726,8 +794,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
       logger.debug(`OpenCode SDK response received`);
 
       // The response is { data: { info: AssistantMessage, parts: Part[] } }
-      const responseData = response?.data ?? response;
-      const assistantMessage = responseData?.info ?? responseData;
+      const responseData = response?.data;
+      const assistantMessage = responseData?.info;
       const parts = responseData?.parts ?? [];
 
       // Extract text output from parts
@@ -762,14 +830,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
         sessionId,
       };
 
-      // Cache the response
-      if (shouldWriteCache && cache && cacheKey) {
-        try {
-          await cache.set(cacheKey, JSON.stringify(providerResponse));
-        } catch (error) {
-          logger.error(`Error caching response: ${String(error)}`);
-        }
-      }
+      // Cache the response using shared utilities
+      await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
 
       logger.debug(`OpenCode SDK response: ${output.substring(0, 100)}...`);
 
@@ -806,9 +868,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
         fs.rmSync(workingDir, { recursive: true, force: true });
       }
 
-      // Clean up non-persistent sessions
-      if (!config.persist_sessions && !config.session_id && cacheKey) {
-        this.sessions.delete(cacheKey);
+      // Clean up non-persistent sessions from session tracking
+      const sessionCacheKey = cacheResult.cacheKey;
+      if (!config.persist_sessions && !config.session_id && sessionCacheKey) {
+        this.sessions.delete(sessionCacheKey);
+        const idx = this.sessionOrder.indexOf(sessionCacheKey);
+        if (idx !== -1) {
+          this.sessionOrder.splice(idx, 1);
+        }
       }
     }
   }
