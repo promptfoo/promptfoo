@@ -1,11 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import {
-  withGenAISpan,
-  type GenAISpanContext,
-  type GenAISpanResult,
-} from '../tracing/genaiTracer';
+import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
@@ -339,11 +335,7 @@ export class OllamaChatProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context),
-      resultExtractor,
-    );
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
   private async callApiInternal(

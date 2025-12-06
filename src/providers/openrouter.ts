@@ -1,10 +1,6 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import {
-  withGenAISpan,
-  type GenAISpanContext,
-  type GenAISpanResult,
-} from '../tracing/genaiTracer';
+import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
@@ -105,12 +101,12 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions),
+      () => this.executeOpenRouterCall(prompt, context, callApiOptions),
       resultExtractor,
     );
   }
 
-  private async callApiInternal(
+  private async executeOpenRouterCall(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,

@@ -46,16 +46,14 @@
   - [x] Mistral provider (`src/providers/mistral.ts`)
   - [x] Replicate provider (`src/providers/replicate.ts`)
   - [x] OpenRouter provider (`src/providers/openrouter.ts`)
+  - [x] Vertex provider (`src/providers/google/vertex.ts`)
+  - [x] Watsonx provider (`src/providers/watsonx.ts`)
+  - [x] Cohere provider (`src/providers/cohere.ts`)
+  - [x] Huggingface provider (`src/providers/huggingface.ts`)
+  - [x] Cloudflare AI - inherits from OpenAI (no changes needed)
+  - [x] Voyage provider - only has embedding API (skipped)
 
 ### Remaining Work
-
-- [ ] **Phase 4 (continued): Additional Provider Instrumentation**
-  - [ ] Vertex provider
-  - [ ] Watsonx provider
-  - [ ] Cohere provider
-  - [ ] Huggingface provider
-  - [ ] Voyage provider
-  - [ ] Cloudflare AI provider
 
 - [ ] **Phase 5: Final Testing & Validation**
   - [ ] Manual testing with all providers

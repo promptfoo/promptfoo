@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../tracing/genaiTracer';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -82,15 +83,52 @@ export class CohereChatCompletionProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.apiKey) {
-      return { error: 'Cohere API key is not set. Please provide a valid apiKey.' };
-    }
-
     // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
+
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'cohere',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: config.temperature,
+      topP: config.p,
+      maxTokens: config.max_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, config),
+      resultExtractor,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    config: CohereChatOptions,
+  ): Promise<ProviderResponse> {
+    if (!this.apiKey) {
+      return { error: 'Cohere API key is not set. Please provide a valid apiKey.' };
+    }
 
     const defaultParams = {
       chatHistory: [],

@@ -890,11 +890,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
 
     // Wrap the API call in a span
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context),
-      resultExtractor,
-    );
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
   /**

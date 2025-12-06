@@ -286,7 +286,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   private async callApiInternal(
     prompt: string,
     _context?: CallApiContextParams,
-    config?: MistralChatCompletionOptions,
+    config: MistralChatCompletionOptions = {},
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(

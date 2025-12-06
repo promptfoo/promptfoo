@@ -2,11 +2,7 @@ import { getCache, isCacheEnabled, fetchWithCache } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
-import {
-  withGenAISpan,
-  type GenAISpanContext,
-  type GenAISpanResult,
-} from '../tracing/genaiTracer';
+import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';

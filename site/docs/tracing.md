@@ -38,24 +38,30 @@ Promptfoo automatically instruments its built-in providers with OpenTelemetry sp
 
 The following providers have built-in instrumentation:
 
-| Provider | Automatic Tracing |
-|----------|-------------------|
-| OpenAI | ✓ |
-| Anthropic | ✓ |
-| Azure OpenAI | ✓ |
-| AWS Bedrock | ✓ |
-| Ollama | ✓ |
-| Mistral | ✓ |
-| HTTP | ✓ |
-| OpenRouter | ✓ |
-| Replicate | ✓ |
-| OpenAI-compatible (Deepseek, Perplexity, etc.) | ✓ (inherited) |
+| Provider                                       | Automatic Tracing |
+| ---------------------------------------------- | ----------------- |
+| OpenAI                                         | ✓                 |
+| Anthropic                                      | ✓                 |
+| Azure OpenAI                                   | ✓                 |
+| AWS Bedrock                                    | ✓                 |
+| Google Vertex AI                               | ✓                 |
+| Ollama                                         | ✓                 |
+| Mistral                                        | ✓                 |
+| Cohere                                         | ✓                 |
+| Huggingface                                    | ✓                 |
+| IBM Watsonx                                    | ✓                 |
+| HTTP                                           | ✓                 |
+| OpenRouter                                     | ✓                 |
+| Replicate                                      | ✓                 |
+| OpenAI-compatible (Deepseek, Perplexity, etc.) | ✓ (inherited)     |
+| Cloudflare AI                                  | ✓ (inherited)     |
 
 ### GenAI Span Attributes
 
 Each provider call creates a span with these attributes:
 
 **Request Attributes:**
+
 - `gen_ai.system` - Provider system (e.g., "openai", "anthropic", "azure", "bedrock")
 - `gen_ai.operation.name` - Operation type ("chat", "completion", "embedding")
 - `gen_ai.request.model` - Model name
@@ -65,6 +71,7 @@ Each provider call creates a span with these attributes:
 - `gen_ai.request.stop_sequences` - Stop sequences
 
 **Response Attributes:**
+
 - `gen_ai.usage.input_tokens` - Input/prompt token count
 - `gen_ai.usage.output_tokens` - Output/completion token count
 - `gen_ai.usage.total_tokens` - Total token count
@@ -73,6 +80,7 @@ Each provider call creates a span with these attributes:
 - `gen_ai.response.finish_reasons` - Finish/stop reasons
 
 **Promptfoo-specific Attributes:**
+
 - `promptfoo.provider.id` - Provider identifier
 - `promptfoo.test.index` - Test case index
 - `promptfoo.prompt.label` - Prompt label

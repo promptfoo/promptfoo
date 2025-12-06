@@ -5,6 +5,7 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
+import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
@@ -156,6 +157,55 @@ export class VertexChatProvider extends VertexGenericProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Determine the system based on model name
+    let system = 'vertex';
+    if (this.modelName.includes('claude')) {
+      system = 'vertex:anthropic';
+    } else if (this.modelName.includes('gemini')) {
+      system = 'vertex:gemini';
+    } else if (this.modelName.includes('llama')) {
+      system = 'vertex:llama';
+    } else {
+      system = 'vertex:palm2';
+    }
+
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system,
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: this.config.temperature,
+      topP: this.config.topP,
+      maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context),
+      resultExtractor,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     if (this.modelName.includes('claude')) {
       return this.callClaudeApi(prompt, context);
     } else if (this.modelName.includes('gemini')) {

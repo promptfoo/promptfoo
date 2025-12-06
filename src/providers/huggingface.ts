@@ -1,11 +1,13 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../tracing/genaiTracer';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
   ApiProvider,
   ApiSimilarityProvider,
+  CallApiContextParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -86,7 +88,29 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     );
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'huggingface',
+      operationName: 'completion',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: this.config.temperature,
+      topP: this.config.top_p,
+      maxTokens: this.config.max_new_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+    };
+
+    // Result extractor (Huggingface doesn't return token usage by default)
+    const resultExtractor = (_response: ProviderResponse): GenAISpanResult => {
+      return {};
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+  }
+
+  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
     const params = {
       inputs: prompt,
       parameters: {

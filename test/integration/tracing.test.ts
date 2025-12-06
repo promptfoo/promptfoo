@@ -63,11 +63,7 @@ describe('OpenTelemetry Tracing Integration', () => {
         finishReasons: ['stop'],
       });
 
-      const result = await withGenAISpan(
-        spanContext,
-        async () => mockResult,
-        resultExtractor,
-      );
+      const result = await withGenAISpan(spanContext, async () => mockResult, resultExtractor);
 
       expect(result).toEqual(mockResult);
 
@@ -225,11 +221,7 @@ describe('OpenTelemetry Tracing Integration', () => {
         },
       });
 
-      await withGenAISpan(
-        spanContext,
-        async () => ({ output: 'response' }),
-        resultExtractor,
-      );
+      await withGenAISpan(spanContext, async () => ({ output: 'response' }), resultExtractor);
 
       const spans = memoryExporter.getFinishedSpans();
       expect(spans.length).toBe(1);
@@ -260,11 +252,7 @@ describe('OpenTelemetry Tracing Integration', () => {
         },
       });
 
-      await withGenAISpan(
-        spanContext,
-        async () => ({ output: 'response' }),
-        resultExtractor,
-      );
+      await withGenAISpan(spanContext, async () => ({ output: 'response' }), resultExtractor);
 
       const spans = memoryExporter.getFinishedSpans();
       const span = spans[0];
