@@ -1,5 +1,68 @@
 # OpenTelemetry SDK Integration Plan
 
+## Implementation Status
+
+> **Status: Phase 1-4 Complete (Core Infrastructure + Provider Instrumentation + Migration Layer)**
+>
+> Last updated: December 2024
+
+### Completed
+
+- [x] **Core Infrastructure (Phase 1)**
+  - [x] `src/tracing/otelConfig.ts` - Configuration management
+  - [x] `src/tracing/otelSdk.ts` - OTEL SDK initialization
+  - [x] `src/tracing/localSpanExporter.ts` - Local TraceStore export
+  - [x] `src/tracing/genaiTracer.ts` - GenAI semantic conventions wrapper
+
+- [x] **Unit Tests for Core Infrastructure**
+  - [x] `test/tracing/otelConfig.test.ts` - 8 tests
+  - [x] `test/tracing/otelSdk.test.ts` - 21 tests
+  - [x] `test/tracing/localSpanExporter.test.ts` - 28 tests
+  - [x] `test/tracing/genaiTracer.test.ts` - 43 tests
+
+- [x] **Provider Instrumentation (Phase 2 - Category A)**
+  - [x] OpenAI Chat (`src/providers/openai/chat.ts`)
+  - [x] Anthropic Messages (`src/providers/anthropic/messages.ts`)
+  - [x] Azure Chat (`src/providers/azure/chat.ts`)
+  - [x] Bedrock Converse (`src/providers/bedrock/converse.ts`)
+
+- [x] **Category B Provider Verification**
+  - [x] Verified providers extending OpenAI inherit instrumentation (Deepseek, Perplexity, Alibaba, Cerebras, Databricks, Portkey, etc.)
+
+- [x] **Integration Tests**
+  - [x] `test/integration/tracing.test.ts` - 8 end-to-end tests
+
+- [x] **Documentation**
+  - [x] Updated `site/docs/tracing.md` with built-in provider instrumentation section
+
+- [x] **Phase 3: Migration from TokenUsageTracker**
+  - [x] Add deprecation notice to TokenUsageTracker (`src/util/tokenUsage.ts`)
+  - [x] Create compatibility layer (`src/util/tokenUsageCompat.ts`)
+  - [x] Unit tests for compatibility layer (`test/util/tokenUsageCompat.test.ts` - 22 tests)
+
+- [x] **Phase 4: Additional Provider Instrumentation**
+  - [x] HTTP provider (`src/providers/http.ts`)
+  - [x] Ollama provider (`src/providers/ollama.ts` - completion + chat)
+  - [x] Mistral provider (`src/providers/mistral.ts`)
+  - [x] Replicate provider (`src/providers/replicate.ts`)
+  - [x] OpenRouter provider (`src/providers/openrouter.ts`)
+
+### Remaining Work
+
+- [ ] **Phase 4 (continued): Additional Provider Instrumentation**
+  - [ ] Vertex provider
+  - [ ] Watsonx provider
+  - [ ] Cohere provider
+  - [ ] Huggingface provider
+  - [ ] Voyage provider
+  - [ ] Cloudflare AI provider
+
+- [ ] **Phase 5: Final Testing & Validation**
+  - [ ] Manual testing with all providers
+  - [ ] Performance benchmarks
+
+---
+
 ## Executive Summary
 
 This document outlines a comprehensive plan to replace the existing `TokenUsageTracker` with a full OpenTelemetry SDK implementation. This transformation will provide:
