@@ -101,7 +101,7 @@ export default function ModelAuditResultLatestPage() {
             <Button component={RouterLink} to="/model-audit/setup" variant="contained">
               Go to Setup
             </Button>
-            <Button component={RouterLink} to="/model-audit/history" variant="outlined">
+            <Button component={RouterLink} to="/model-audits" variant="outlined">
               View History
             </Button>
           </Stack>
@@ -194,7 +194,7 @@ export default function ModelAuditResultLatestPage() {
               </Button>
               <Button
                 component={RouterLink}
-                to="/model-audit/history"
+                to="/model-audits"
                 variant="outlined"
                 startIcon={<HistoryIcon />}
               >

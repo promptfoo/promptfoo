@@ -70,12 +70,13 @@ const router = createBrowserRouter(
 
           <Route path="/prompts" element={<PromptsPage />} />
 
-          {/* Model Audit multi-page routes */}
+          {/* Model Audit routes - mirrors eval structure */}
           <Route path="/model-audit" element={<ModelAuditLatestPage />} />
+          <Route path="/model-audits" element={<ModelAuditHistoryPage />} />
           <Route path="/model-audit/setup" element={<ModelAuditSetupPage />} />
-          <Route path="/model-audit/history" element={<ModelAuditHistoryPage />} />
-          <Route path="/model-audit/history/:id" element={<ModelAuditResultPage />} />
           <Route path="/model-audit/:id" element={<ModelAuditResultPage />} />
+          {/* Redirect legacy /model-audit/history route */}
+          <Route path="/model-audit/history" element={<Navigate to="/model-audits" replace />} />
 
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />

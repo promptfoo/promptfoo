@@ -90,7 +90,7 @@ export default function ModelAuditResult() {
     try {
       await deleteHistoricalScan(id);
       setDeleteDialogOpen(false);
-      navigate('/model-audit/history');
+      navigate('/model-audits');
     } catch (err) {
       console.error('Failed to delete scan:', err);
     } finally {
@@ -151,7 +151,7 @@ export default function ModelAuditResult() {
           <Stack direction="row" spacing={2}>
             <Button
               component={RouterLink}
-              to="/model-audit/history"
+              to="/model-audits"
               variant="contained"
               startIcon={<ArrowBackIcon />}
             >
@@ -184,7 +184,7 @@ export default function ModelAuditResult() {
             </Link>
             <Link
               component={RouterLink}
-              to="/model-audit/history"
+              to="/model-audits"
               underline="hover"
               color="inherit"
             >
@@ -230,7 +230,7 @@ export default function ModelAuditResult() {
               </Button>
               <Button
                 component={RouterLink}
-                to="/model-audit/history"
+                to="/model-audits"
                 variant="outlined"
                 size="small"
                 startIcon={<HistoryIcon />}

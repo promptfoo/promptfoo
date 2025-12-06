@@ -230,7 +230,7 @@ describe('ModelAuditResult', () => {
 
     await waitFor(() => {
       expect(mockDeleteHistoricalScan).toHaveBeenCalledWith('test-scan-id');
-      expect(mockNavigate).toHaveBeenCalledWith('/model-audit/history');
+      expect(mockNavigate).toHaveBeenCalledWith('/model-audits');
     });
   });
 
