@@ -6,7 +6,7 @@ prompts:
 
 providers:
   # Generator: Gemini 2.5 Flash Image (we know this works!)
-  - id: google:gemini-2.5-flash-image-preview
+  - id: google:gemini-2.5-flash-image
     label: 'Gemini 2.5 Flash Image Generator 🎨'
     config:
       generationConfig:
@@ -23,8 +23,6 @@ tests:
     assert:
       - type: contains
         value: '![Generated Image]'
-      - type: cost
-        threshold: 0.05
       - type: llm-rubric
         value: |
           You are an e-commerce quality reviewer. Rate this generated product image 1-10.

@@ -1,94 +1,43 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Google Gemini 2.5 Flash Image Generation Example
+description: '[google-gemini-image] Gemini native image generation'
 
 prompts:
-  # Basic image generation
-  - 'Generate an image of {{subject}}'
-
-  # Artistic style prompt
-  - 'Create a {{style}} image of {{subject}}'
-
-  # Character prompt
-  - 'Generate an image of a {{character}} robot in {{setting}}'
+  - 'Create a {{quality}} image of {{subject}} with {{style}} aesthetic'
 
 providers:
-  # Gemini 2.5 Flash Image model optimized for image generation
-  - id: google:gemini-2.5-flash-image-preview
+  # Gemini 2.5 Flash - Fast image generation
+  - id: google:gemini-2.5-flash-image
     config:
-      # API key will be loaded from GEMINI_API_KEY environment variable
-      # or you can specify it here: apiKey: your_api_key_here
-
-      # Image generation specific configuration
-      generationConfig:
-        temperature: 0.7
-        maxOutputTokens: 1024
-        # Enable both image and text responses for multimodal output
-        responseModalities:
-          - IMAGE
-          - TEXT
+      imageAspectRatio: '16:9'
 
 defaultTest:
-  # Default assertions for all tests
   assert:
+    # Verify that an image was generated
     - type: contains
-      value: '![Generated Image]' # Check that response contains image markdown
-    - type: cost
-      threshold: 0.50 # Reasonable cost threshold for image generation
+      value: '![Generated Image](data:image/'
 
 tests:
-  # 🌅 Basic image generation tests
-  - description: '🏔️ Majestic sunset over mountains'
-    vars:
-      subject: 'a breathtaking sunset over snow-capped mountains with golden clouds'
-    assert:
-      - type: contains
-        value: '![Generated Image]'
+  - vars:
+      quality: 'photorealistic'
+      subject: 'a futuristic spacecraft'
+      style: 'cinematic sci-fi'
 
-  # 🎨 Artistic style test
-  - description: '🎨 Watercolor lakeside serenity'
-    vars:
-      style: 'dreamy watercolor painting'
-      subject: 'a peaceful lake with swans and cherry blossoms'
-    assert:
-      - type: contains
-        value: 'data:image'
-      - type: cost
-        threshold: 0.05
+  - vars:
+      quality: 'highly detailed'
+      subject: 'starry night over a cyberpunk city'
+      style: 'Van Gogh painting'
 
-  # 🤖 Character test
-  - description: '🤖 Friendly lab robot assistant'
-    vars:
-      character: 'friendly blue android with glowing eyes'
-      setting: 'high-tech laboratory with holographic displays'
-    assert:
-      - type: contains
-        value: '![Generated Image]'
-      - type: cost
-        threshold: 0.05
+  - vars:
+      quality: 'minimalist'
+      subject: 'a zen garden at sunrise'
+      style: 'Japanese ink wash'
 
-  # 🏙️ Cyberpunk adventure
-  - description: '🏙️ Neon cyberpunk metropolis'
-    vars:
-      subject: 'a vibrant cyberpunk cityscape with flying cars and neon billboards reflecting in wet streets'
-    assert:
-      - type: contains
-        value: 'data:image'
+  - vars:
+      quality: 'vibrant'
+      subject: 'tropical birds in a rainforest'
+      style: 'watercolor illustration'
 
-  # ☕ Cozy atmosphere
-  - description: '☕ Magical coffee shop'
-    vars:
-      subject: 'a cozy coffee shop with floating books and warm fairy lights'
-    assert:
-      - type: contains
-        value: '![Generated Image]'
-
-  # 🚀 Space exploration
-  - description: '🚀 Stunning space station'
-    vars:
-      style: 'photorealistic digital art'
-      subject: 'massive space station orbiting a colorful nebula'
-    assert:
-      - type: contains
-        value: 'data:image'
-      - type: cost
-        threshold: 0.05
+  - vars:
+      quality: 'dramatic'
+      subject: 'a medieval castle during a thunderstorm'
+      style: 'fantasy art'

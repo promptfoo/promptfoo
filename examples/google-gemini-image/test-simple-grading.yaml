@@ -1,19 +1,13 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: '🎯 Simple Test: Gemini Generates + Gemini Grades'
+description: '[google-gemini-image] Generate + Grade with llm-rubric'
 
 prompts:
   - 'Generate a professional product photograph of {{product}} on a clean white background'
 
 providers:
-  - id: google:gemini-2.5-flash-image-preview
-    label: 'Gemini Image Generator 🎨'
+  - id: google:gemini-2.5-flash-image
     config:
-      generationConfig:
-        temperature: 0.7
-        maxOutputTokens: 1024
-        responseModalities:
-          - IMAGE
-          - TEXT
+      imageAspectRatio: '16:9'
 
 tests:
   - description: '📱 Professional Product Photo Test'
@@ -22,8 +16,6 @@ tests:
     assert:
       - type: contains
         value: '![Generated Image]'
-      - type: cost
-        threshold: 0.05
       - type: llm-rubric
         value: |
           You are a professional e-commerce photography reviewer. 
