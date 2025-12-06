@@ -12,7 +12,6 @@ import Chip from '@mui/material/Chip';
 import Collapse from '@mui/material/Collapse';
 import Divider from '@mui/material/Divider';
 import LinearProgress from '@mui/material/LinearProgress';
-import Paper from '@mui/material/Paper';
 import { alpha, useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -175,15 +174,7 @@ export function ExecutionProgress({
   }
 
   return (
-    <Paper
-      elevation={1}
-      sx={{
-        p: 2,
-        mb: 2,
-        maxWidth: 600,
-        backgroundColor: theme.palette.background.paper,
-      }}
-    >
+    <Box>
       {/* Header with status and elapsed time */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -371,6 +362,6 @@ export function ExecutionProgress({
           </Collapse>
         </>
       )}
-    </Paper>
+    </Box>
   );
 }
