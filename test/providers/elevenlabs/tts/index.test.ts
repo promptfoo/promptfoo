@@ -1,15 +1,14 @@
-// @ts-nocheck
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsTTSProvider } from '../../../../src/providers/elevenlabs/tts';
 
 // Mock dependencies
-jest.mock('../../../../src/providers/elevenlabs/client');
-jest.mock('../../../../src/providers/elevenlabs/cache');
-jest.mock('../../../../src/providers/elevenlabs/cost-tracker');
+vi.mock('../../../../src/providers/elevenlabs/client');
+vi.mock('../../../../src/providers/elevenlabs/cache');
+vi.mock('../../../../src/providers/elevenlabs/cost-tracker');
 
 describe('ElevenLabsTTSProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.clearAllMocks();
     process.env.ELEVENLABS_API_KEY = 'test-api-key';
   });
 
@@ -145,7 +144,7 @@ describe('ElevenLabsTTSProvider', () => {
 
       // Mock the client to return a fake audio buffer
       const mockAudioBuffer = Buffer.from('fake-audio-data');
-      (provider as any).client.post = jest.fn().mockResolvedValue(mockAudioBuffer.buffer);
+      (provider as any).client.post = vi.fn().mockResolvedValue(mockAudioBuffer.buffer);
 
       const response = await provider.callApi('Hello world');
 
@@ -156,7 +155,7 @@ describe('ElevenLabsTTSProvider', () => {
       const provider = new ElevenLabsTTSProvider('elevenlabs:tts');
 
       const mockAudioBuffer = Buffer.from('fake-audio-data');
-      (provider as any).client.post = jest.fn().mockResolvedValue(mockAudioBuffer.buffer);
+      (provider as any).client.post = vi.fn().mockResolvedValue(mockAudioBuffer.buffer);
 
       const response = await provider.callApi('Test prompt');
 
@@ -172,7 +171,7 @@ describe('ElevenLabsTTSProvider', () => {
       const provider = new ElevenLabsTTSProvider('elevenlabs:tts');
 
       const mockAudioBuffer = Buffer.from('fake-audio-data');
-      (provider as any).client.post = jest.fn().mockResolvedValue(mockAudioBuffer.buffer);
+      (provider as any).client.post = vi.fn().mockResolvedValue(mockAudioBuffer.buffer);
 
       const response = await provider.callApi('Hello');
 
@@ -185,7 +184,7 @@ describe('ElevenLabsTTSProvider', () => {
       const provider = new ElevenLabsTTSProvider('elevenlabs:tts');
 
       const mockAudioBuffer = Buffer.from('fake-audio-data');
-      (provider as any).client.post = jest.fn().mockResolvedValue(mockAudioBuffer.buffer);
+      (provider as any).client.post = vi.fn().mockResolvedValue(mockAudioBuffer.buffer);
 
       const response = await provider.callApi('Hello');
 
@@ -202,8 +201,8 @@ describe('ElevenLabsTTSProvider', () => {
       const provider = new ElevenLabsTTSProvider('elevenlabs:tts');
 
       // Ensure cache returns null so API is called
-      (provider as any).cache.get = jest.fn().mockResolvedValue(null);
-      (provider as any).client.post = jest.fn().mockRejectedValue(new Error('API Error'));
+      (provider as any).cache.get = vi.fn().mockResolvedValue(null);
+      (provider as any).client.post = vi.fn().mockRejectedValue(new Error('API Error'));
 
       const response = await provider.callApi('Hello');
 

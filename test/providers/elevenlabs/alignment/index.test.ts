@@ -1,19 +1,26 @@
-// @ts-nocheck
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAlignmentProvider } from '../../../../src/providers/elevenlabs/alignment';
-import { promises as fs } from 'fs';
 
 // Mock dependencies
-jest.mock('../../../../src/providers/elevenlabs/client');
-jest.mock('fs');
+vi.mock('../../../../src/providers/elevenlabs/client');
+
+// Create hoisted mock for fs.promises.readFile
+const mockReadFile = vi.hoisted(() => vi.fn());
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    promises: {
+      ...actual.promises,
+      readFile: mockReadFile,
+    },
+  };
+});
 
 describe('ElevenLabsAlignmentProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.clearAllMocks();
     process.env.ELEVENLABS_API_KEY = 'test-api-key';
-
-    // Set up fs.readFile mock
-    (fs.readFile as unknown as jest.Mock) = jest.fn();
   });
 
   afterEach(() => {
@@ -131,8 +138,8 @@ describe('ElevenLabsAlignmentProvider', () => {
         duration_seconds: 1.0,
       };
 
-      (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = jest.fn().mockResolvedValue(mockAlignmentResponse);
+      mockReadFile.mockResolvedValue(mockAudioBuffer);
+      (provider as any).client.upload = vi.fn().mockResolvedValue(mockAlignmentResponse);
 
       const response = await provider.callApi('Hello world', {
         vars: { audioFile: '/path/to/audio.mp3' },
@@ -161,8 +168,8 @@ describe('ElevenLabsAlignmentProvider', () => {
         duration_seconds: 1.0,
       };
 
-      (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = jest.fn().mockResolvedValue(mockAlignmentResponse);
+      mockReadFile.mockResolvedValue(mockAudioBuffer);
+      (provider as any).client.upload = vi.fn().mockResolvedValue(mockAlignmentResponse);
 
       const response = await provider.callApi('Hello world', {
         vars: { audioFile: '/path/to/audio.mp3', format: 'srt' },
@@ -199,8 +206,8 @@ describe('ElevenLabsAlignmentProvider', () => {
         duration_seconds: 1.1,
       };
 
-      (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = jest.fn().mockResolvedValue(mockAlignmentResponse);
+      mockReadFile.mockResolvedValue(mockAudioBuffer);
+      (provider as any).client.upload = vi.fn().mockResolvedValue(mockAlignmentResponse);
 
       const response = await provider.callApi('Hello world', {
         vars: { audioFile: '/path/to/audio.mp3', format: 'vtt' },
@@ -224,8 +231,8 @@ describe('ElevenLabsAlignmentProvider', () => {
         duration_seconds: 0.5,
       };
 
-      (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = jest.fn().mockResolvedValue(mockAlignmentResponse);
+      mockReadFile.mockResolvedValue(mockAudioBuffer);
+      (provider as any).client.upload = vi.fn().mockResolvedValue(mockAlignmentResponse);
 
       const response = await provider.callApi('Hello', {
         vars: {
@@ -255,8 +262,8 @@ describe('ElevenLabsAlignmentProvider', () => {
         duration_seconds: 0.5,
       };
 
-      (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = jest.fn().mockResolvedValue(mockAlignmentResponse);
+      mockReadFile.mockResolvedValue(mockAudioBuffer);
+      (provider as any).client.upload = vi.fn().mockResolvedValue(mockAlignmentResponse);
 
       const response = await provider.callApi('Test transcript', {
         vars: { audioFile: '/path/to/audio.mp3' },
@@ -276,7 +283,7 @@ describe('ElevenLabsAlignmentProvider', () => {
     it('should handle file read errors', async () => {
       const provider = new ElevenLabsAlignmentProvider('elevenlabs:alignment');
 
-      (fs.readFile as jest.Mock).mockRejectedValue(new Error('File not found'));
+      mockReadFile.mockRejectedValue(new Error('File not found'));
 
       const response = await provider.callApi('transcript', {
         vars: { audioFile: '/path/to/missing.mp3' },
@@ -290,8 +297,8 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const mockAudioBuffer = Buffer.from('audio-data');
 
-      (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = jest.fn().mockRejectedValue(new Error('API Error'));
+      mockReadFile.mockResolvedValue(mockAudioBuffer);
+      (provider as any).client.upload = vi.fn().mockRejectedValue(new Error('API Error'));
 
       const response = await provider.callApi('transcript', {
         vars: { audioFile: '/path/to/audio.mp3' },
@@ -326,8 +333,8 @@ describe('ElevenLabsAlignmentProvider', () => {
         duration_seconds: 1.0,
       };
 
-      (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = jest.fn().mockResolvedValue(mockAlignmentResponse);
+      mockReadFile.mockResolvedValue(mockAudioBuffer);
+      (provider as any).client.upload = vi.fn().mockResolvedValue(mockAlignmentResponse);
 
       const response = await provider.callApi('This is a test', {
         vars: { audioFile: '/path/to/audio.mp3', format: 'srt' },

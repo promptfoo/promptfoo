@@ -1,16 +1,26 @@
-// @ts-nocheck
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
 import type { AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
 
 // Mock dependencies
-jest.mock('../../../../src/providers/elevenlabs/client');
-jest.mock('../../../../src/providers/elevenlabs/cache');
-jest.mock('../../../../src/providers/elevenlabs/cost-tracker');
+vi.mock('../../../../src/providers/elevenlabs/client');
+vi.mock('../../../../src/providers/elevenlabs/cache');
+vi.mock('../../../../src/providers/elevenlabs/cost-tracker', () => {
+  return {
+    CostTracker: class MockCostTracker {
+      trackAgent = vi.fn().mockReturnValue(0.005);
+      trackTTS = vi.fn().mockReturnValue(0.001);
+      trackSTT = vi.fn().mockReturnValue(0.002);
+      getSummary = vi.fn().mockReturnValue({ totalCost: 0.005, breakdown: [], byCapability: {} });
+      reset = vi.fn();
+      getBreakdown = vi.fn().mockReturnValue([]);
+    },
+  };
+});
 
 describe('ElevenLabsAgentsProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.clearAllMocks();
     process.env.ELEVENLABS_API_KEY = 'test-api-key';
   });
 
@@ -147,7 +157,7 @@ describe('ElevenLabsAgentsProvider', () => {
       };
 
       // Mock the client's post method on the provider instance
-      (provider as any).client.post = jest.fn().mockResolvedValue(mockApiResponse);
+      (provider as any).client.post = vi.fn().mockResolvedValue(mockApiResponse);
 
       const result = await provider.callApi('What is the weather like today?');
 
@@ -245,7 +255,7 @@ describe('ElevenLabsAgentsProvider', () => {
       };
 
       // Mock the client's post method on the provider instance
-      (provider as any).client.post = jest.fn().mockResolvedValue(mockApiResponse);
+      (provider as any).client.post = vi.fn().mockResolvedValue(mockApiResponse);
 
       const result = await provider.callApi('Hello');
 
@@ -304,7 +314,7 @@ describe('ElevenLabsAgentsProvider', () => {
       };
 
       // Mock the client's post method on the provider instance
-      (provider as any).client.post = jest.fn().mockResolvedValue(mockApiResponse);
+      (provider as any).client.post = vi.fn().mockResolvedValue(mockApiResponse);
 
       await provider.callApi('Check weather');
 
@@ -327,7 +337,7 @@ describe('ElevenLabsAgentsProvider', () => {
       });
 
       // Mock the client's post method to reject
-      (provider as any).client.post = jest
+      (provider as any).client.post = vi
         .fn()
         .mockRejectedValue(new Error('API Error: Rate limit exceeded'));
 
@@ -349,7 +359,7 @@ describe('ElevenLabsAgentsProvider', () => {
       };
 
       // Mock the client's post method on the provider instance
-      (provider as any).client.post = jest.fn().mockResolvedValue(mockApiResponse);
+      (provider as any).client.post = vi.fn().mockResolvedValue(mockApiResponse);
 
       const result = await provider.callApi('Test prompt');
 

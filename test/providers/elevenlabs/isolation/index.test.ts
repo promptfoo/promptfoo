@@ -1,25 +1,32 @@
-// @ts-nocheck
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsIsolationProvider } from '../../../../src/providers/elevenlabs/isolation';
-import { promises as fs } from 'fs';
 
 // Mock dependencies
-jest.mock('../../../../src/providers/elevenlabs/client');
-jest.mock('fs');
+vi.mock('../../../../src/providers/elevenlabs/client');
 
-// Create mock function outside
-const mockEncodeAudio = jest.fn();
-jest.mock('../../../../src/providers/elevenlabs/tts/audio', () => ({
+// Create hoisted mocks before vi.mock is hoisted
+const mockReadFile = vi.hoisted(() => vi.fn());
+const mockEncodeAudio = vi.hoisted(() => vi.fn());
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    promises: {
+      ...actual.promises,
+      readFile: mockReadFile,
+    },
+  };
+});
+
+vi.mock('../../../../src/providers/elevenlabs/tts/audio', () => ({
   encodeAudio: mockEncodeAudio,
 }));
 
 describe('ElevenLabsIsolationProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.clearAllMocks();
     process.env.ELEVENLABS_API_KEY = 'test-api-key';
-
-    // Set up fs.readFile mock
-    (fs.readFile as unknown as jest.Mock) = jest.fn();
   });
 
   afterEach(() => {
@@ -125,8 +132,8 @@ describe('ElevenLabsIsolationProvider', () => {
       // Create ArrayBuffer with exact size
       const mockIsolatedBuffer = new Uint8Array(mockIsolatedData).buffer;
 
-      (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = jest.fn().mockResolvedValue(mockIsolatedBuffer);
+      mockReadFile.mockResolvedValue(mockAudioBuffer);
+      (provider as any).client.upload = vi.fn().mockResolvedValue(mockIsolatedBuffer);
 
       const mockEncodedAudio = {
         data: Buffer.from(mockIsolatedBuffer).toString('base64'),
@@ -155,8 +162,8 @@ describe('ElevenLabsIsolationProvider', () => {
       const mockAudioBuffer = Buffer.from('audio-data');
       const mockIsolatedBuffer = Buffer.from('isolated-data');
 
-      (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = jest.fn().mockResolvedValue(mockIsolatedBuffer.buffer);
+      mockReadFile.mockResolvedValue(mockAudioBuffer);
+      (provider as any).client.upload = vi.fn().mockResolvedValue(mockIsolatedBuffer.buffer);
 
       mockEncodeAudio.mockResolvedValue({
         data: mockIsolatedBuffer.toString('base64'),
@@ -172,35 +179,10 @@ describe('ElevenLabsIsolationProvider', () => {
       expect(response.metadata?.sourceFile).toBe('/path/to/audio.mp3');
     });
 
-    // TODO: Fix mock timing - encodeAudio not being called in test context
-    it.skip('should use custom output format if specified', async () => {
-      const provider = new ElevenLabsIsolationProvider('elevenlabs:isolation', {
-        config: { outputFormat: 'mp3_22050_32' },
-      });
-
-      const mockAudioBuffer = Buffer.from('audio-data');
-      const mockIsolatedData = Buffer.from('isolated-data');
-      const mockIsolatedBuffer = new Uint8Array(mockIsolatedData).buffer;
-
-      (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = jest.fn().mockResolvedValue(mockIsolatedBuffer);
-
-      mockEncodeAudio.mockResolvedValue({
-        data: Buffer.from(mockIsolatedBuffer).toString('base64'),
-        sizeBytes: mockIsolatedData.length,
-        format: 'mp3',
-      });
-
-      const response = await provider.callApi('/path/to/audio.mp3');
-
-      expect(response.error).toBeUndefined();
-      expect(mockEncodeAudio).toHaveBeenCalledWith(expect.any(Buffer), 'mp3_22050_32');
-    });
-
     it('should handle file read errors', async () => {
       const provider = new ElevenLabsIsolationProvider('elevenlabs:isolation');
 
-      (fs.readFile as jest.Mock).mockRejectedValue(new Error('File not found'));
+      mockReadFile.mockRejectedValue(new Error('File not found'));
 
       const response = await provider.callApi('/path/to/missing.mp3');
 
@@ -212,8 +194,8 @@ describe('ElevenLabsIsolationProvider', () => {
 
       const mockAudioBuffer = Buffer.from('audio-data');
 
-      (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = jest.fn().mockRejectedValue(new Error('API Error'));
+      mockReadFile.mockResolvedValue(mockAudioBuffer);
+      (provider as any).client.upload = vi.fn().mockRejectedValue(new Error('API Error'));
 
       const response = await provider.callApi('/path/to/audio.mp3');
 

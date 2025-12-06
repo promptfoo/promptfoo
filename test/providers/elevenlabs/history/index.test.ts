@@ -1,13 +1,12 @@
-// @ts-nocheck
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsHistoryProvider } from '../../../../src/providers/elevenlabs/history';
 
 // Mock dependencies
-jest.mock('../../../../src/providers/elevenlabs/client');
+vi.mock('../../../../src/providers/elevenlabs/client');
 
 describe('ElevenLabsHistoryProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.clearAllMocks();
     process.env.ELEVENLABS_API_KEY = 'test-api-key';
   });
 
@@ -121,7 +120,7 @@ describe('ElevenLabsHistoryProvider', () => {
         ],
       };
 
-      (provider as any).client.get = jest.fn().mockResolvedValue(mockConversation);
+      (provider as any).client.get = vi.fn().mockResolvedValue(mockConversation);
 
       const response = await provider.callApi('conv-123');
 
@@ -148,7 +147,7 @@ describe('ElevenLabsHistoryProvider', () => {
         history: [],
       };
 
-      (provider as any).client.get = jest.fn().mockResolvedValue(mockConversation);
+      (provider as any).client.get = vi.fn().mockResolvedValue(mockConversation);
 
       const response = await provider.callApi('', {
         vars: { conversationId: 'conv-456' },
@@ -161,7 +160,7 @@ describe('ElevenLabsHistoryProvider', () => {
     it('should handle API errors when retrieving conversation', async () => {
       const provider = new ElevenLabsHistoryProvider('elevenlabs:history');
 
-      (provider as any).client.get = jest.fn().mockRejectedValue(new Error('Not found'));
+      (provider as any).client.get = vi.fn().mockRejectedValue(new Error('Not found'));
 
       const response = await provider.callApi('conv-999');
 
@@ -204,7 +203,7 @@ describe('ElevenLabsHistoryProvider', () => {
         ],
       };
 
-      (provider as any).client.get = jest.fn().mockResolvedValue(mockResponse);
+      (provider as any).client.get = vi.fn().mockResolvedValue(mockResponse);
 
       const response = await provider.callApi('');
 
@@ -232,7 +231,7 @@ describe('ElevenLabsHistoryProvider', () => {
         ],
       };
 
-      (provider as any).client.get = jest.fn().mockResolvedValue(mockResponse);
+      (provider as any).client.get = vi.fn().mockResolvedValue(mockResponse);
 
       const response = await provider.callApi('', {
         vars: { agentId: 'agent-456' },
@@ -250,7 +249,7 @@ describe('ElevenLabsHistoryProvider', () => {
 
       const mockResponse = { conversations: [] };
 
-      (provider as any).client.get = jest.fn().mockResolvedValue(mockResponse);
+      (provider as any).client.get = vi.fn().mockResolvedValue(mockResponse);
 
       await provider.callApi('', {
         vars: { status: 'completed' },
@@ -268,7 +267,8 @@ describe('ElevenLabsHistoryProvider', () => {
 
       const mockResponse = { conversations: [] };
 
-      (provider as any).client.get = jest.fn().mockResolvedValue(mockResponse);
+      const mockGet = vi.fn().mockResolvedValue(mockResponse);
+      (provider as any).client.get = mockGet;
 
       await provider.callApi('', {
         vars: {
@@ -277,7 +277,7 @@ describe('ElevenLabsHistoryProvider', () => {
         },
       });
 
-      const callArg = ((provider as any).client.get as jest.Mock).mock.calls[0][0];
+      const callArg = mockGet.mock.calls[0][0];
       expect(callArg).toContain('start_date=2024-01-01');
       expect(callArg).toContain('end_date=2024-01-31');
     });
@@ -287,7 +287,7 @@ describe('ElevenLabsHistoryProvider', () => {
         config: { agentId: 'agent-123' },
       });
 
-      (provider as any).client.get = jest.fn().mockRejectedValue(new Error('API Error'));
+      (provider as any).client.get = vi.fn().mockRejectedValue(new Error('API Error'));
 
       const response = await provider.callApi('');
 

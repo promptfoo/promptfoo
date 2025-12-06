@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsSTTProvider } from '../../../../src/providers/elevenlabs/stt';
 
 // Mock dependencies
-jest.mock('../../../../src/providers/elevenlabs/client');
-jest.mock('../../../../src/providers/elevenlabs/cache');
-jest.mock('../../../../src/providers/elevenlabs/cost-tracker');
+vi.mock('../../../../src/providers/elevenlabs/client');
+vi.mock('../../../../src/providers/elevenlabs/cache');
+vi.mock('../../../../src/providers/elevenlabs/cost-tracker');
 
 describe('ElevenLabsSTTProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.clearAllMocks();
     process.env.ELEVENLABS_API_KEY = 'test-api-key';
   });
 

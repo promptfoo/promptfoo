@@ -1,5 +1,5 @@
-// @ts-nocheck
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { ElevenLabsClient } from '../../../src/providers/elevenlabs/client';
 import {
   ElevenLabsAPIError,
@@ -7,19 +7,15 @@ import {
   ElevenLabsAuthError,
 } from '../../../src/providers/elevenlabs/errors';
 
-// Mock fetchWithProxy at module level
-const mockFetch = jest.fn();
-jest.mock('../../../src/util/fetch/index.ts', () => ({
-  fetchWithProxy: mockFetch,
-}));
+vi.mock('../../../src/util/fetch/index.ts');
 
-// Skip these tests due to complex mocking issues with fetchWithProxy
-// Client functionality is tested via integration tests in other provider tests
-describe.skip('ElevenLabsClient', () => {
+const mockFetch = vi.mocked(fetchWithProxy);
+
+describe('ElevenLabsClient', () => {
   let client: ElevenLabsClient;
 
   beforeEach(() => {
-    mockFetch.mockClear();
+    mockFetch.mockReset();
     client = new ElevenLabsClient({
       apiKey: 'test-api-key',
       timeout: 5000,
@@ -98,12 +94,14 @@ describe.skip('ElevenLabsClient', () => {
     });
 
     it('should throw ElevenLabsRateLimitError on 429', async () => {
-      mockFetch.mockResolvedValueOnce({
+      // Mock all retry attempts - client retries on 429 without Retry-After
+      const rateLimitResponse = {
         ok: false,
         status: 429,
-        headers: new Headers({ 'Retry-After': '60' }),
+        headers: new Headers(),
         text: async () => JSON.stringify({ message: 'Rate limited' }),
-      } as Response);
+      } as Response;
+      mockFetch.mockResolvedValue(rateLimitResponse);
 
       await expect(client.post('/test', {})).rejects.toThrow(ElevenLabsRateLimitError);
     });
@@ -123,12 +121,14 @@ describe.skip('ElevenLabsClient', () => {
     });
 
     it('should throw ElevenLabsAPIError on 500', async () => {
-      mockFetch.mockResolvedValueOnce({
+      // Mock all retry attempts (retries: 2 means 2 total attempts)
+      const errorResponse = {
         ok: false,
         status: 500,
         headers: new Headers(),
         text: async () => JSON.stringify({ message: 'Internal server error' }),
-      } as Response);
+      } as Response;
+      mockFetch.mockResolvedValue(errorResponse);
 
       await expect(client.post('/test', {})).rejects.toThrow(ElevenLabsAPIError);
     });

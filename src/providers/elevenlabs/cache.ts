@@ -73,7 +73,8 @@ export class ElevenLabsCache {
       return;
     }
 
-    await cache.set(key, value, { ttl: this.ttl });
+    // TTL is in milliseconds for cache-manager
+    await cache.set(key, value, this.ttl * 1000);
     this.currentSize += valueSize;
     this.sizesMap.set(key, valueSize);
 
@@ -110,7 +111,7 @@ export class ElevenLabsCache {
     }
 
     const cache = getCache();
-    await cache.reset();
+    await cache.clear();
     this.currentSize = 0;
     this.sizesMap.clear();
 
